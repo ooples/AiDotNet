@@ -29,7 +29,7 @@ namespace AiDotNet.Training.Memory;
 ///     .ConfigureMemoryManagement(TrainingMemoryConfig.ForTransformers());
 ///
 /// // Or with custom settings
-/// var builder = new AiModelBuilder&lt;double, double[], double&gt;()
+/// var builder2 = new AiModelBuilder&lt;double, double[], double&gt;()
 ///     .ConfigureMemoryManagement(new TrainingMemoryConfig
 ///     {
 ///         UseGradientCheckpointing = true,

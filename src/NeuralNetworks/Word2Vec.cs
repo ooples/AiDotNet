@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -43,10 +44,14 @@ namespace AiDotNet.NeuralNetworks
     /// </remarks>
     /// <example>
     /// <code>
-    /// var options = new Word2VecOptions { EmbeddingDim = 300, VocabSize = 50000, WindowSize = 5 };
-    /// var model = new Word2Vec&lt;float&gt;(options);
-    /// var input = Tensor&lt;float&gt;.Random(new[] { 1, 50 });
-    /// var embedding = model.Predict(input);
+    /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+    /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 50 });
+    /// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+    /// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+    /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+    ///     .ConfigureModel(new Word2Vec&lt;float&gt;(architecture))
+    ///     .Build(trainX, trainY);
+    /// var embedding = result.Predict(input);
     /// </code>
     /// </example>
     [ModelDomain(ModelDomain.Language)]
@@ -56,6 +61,10 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.Low)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Efficient Estimation of Word Representations in Vector Space", "https://arxiv.org/abs/1301.3781", Year = 2013, Authors = "Tomas Mikolov, Kai Chen, Greg Corrado, Jeffrey Dean")]
+    [PaperOptimizer(OptimizerKind.Adagrad,
+                    Source = "Mikolov et al. 2013, Sec. 3: mini-batch asynchronous gradient descent with an "
+                            + "adaptive learning rate procedure called Adagrad. The paper states no rate or "
+                            + "batch size, so neither is declared.")]
     public partial class Word2Vec<T> : TextEmbeddingModelLayoutBase<T>, IEmbeddingModel<T>
     {
         private readonly Word2VecOptions _options;
@@ -225,13 +234,14 @@ namespace AiDotNet.NeuralNetworks
             // we accept the deviation because Adam is the tape-supported
             // path in this codebase and the resulting embeddings preserve
             // the paper's training signal modulo Adam's adaptive scaling.
-            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-                this,
-                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-                {
-                    InitialLearningRate = 0.025,
-                    EnableGradientClipping = false,
-                });
+            _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                    this,
+                    new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                    {
+                        InitialLearningRate = 0.025,
+                        EnableGradientClipping = false,
+                    }));
 
             InitializeLayersCore(false);
         }

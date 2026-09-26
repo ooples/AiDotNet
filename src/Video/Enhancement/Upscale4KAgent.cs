@@ -52,6 +52,8 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2312.06640",
     Year = 2024,
     Authors = "Shangchen Zhou, Peiqing Yang, Jianyi Wang, Yihang Luo, Chen Change Loy")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4,
+                Source = "Zhou et al. 2024, Sec. 4: Adam at a learning rate of 1e-4. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
 public partial class Upscale4KAgent<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
@@ -92,12 +94,13 @@ public partial class Upscale4KAgent<T> : VideoSuperResolutionBase<T>
         // The public SR options specify a conservative 1e-4 learning rate. AdamW's
         // generic default is 1e-3, which is too aggressive for the residual
         // pixel-shuffle reconstruction stack and can make repeated updates oscillate.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-            });
+        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
+            optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                }));
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
     }

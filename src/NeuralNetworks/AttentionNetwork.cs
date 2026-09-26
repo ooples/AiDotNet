@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks.Options;
@@ -39,10 +40,14 @@ namespace AiDotNet.NeuralNetworks;
 ///     inputHeight: 10, inputWidth: 64, outputSize: 4);
 ///
 /// var options = new AttentionNetworkOptions { HeadCount = 8, EncoderBlockCount = 3 };
-/// var model = new AttentionNetwork&lt;float&gt;(architecture, sequenceLength: 10, embeddingSize: 64, options: options);
 ///
-/// var input = Tensor&lt;float&gt;.Random(new[] { 10, 64 });   // (sequenceLength, embeddingSize)
-/// var output = model.Predict(input);
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 10, 64 });   // (sequenceLength, embeddingSize)
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new AttentionNetwork&lt;float&gt;(architecture, sequenceLength: 10, embeddingSize: 64, options: options))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(input);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
@@ -54,6 +59,8 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Attention Is All You Need", "https://arxiv.org/abs/1706.03762", Year = 2017, Authors = "Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz Kaiser, Illia Polosukhin")]
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-9,
+                Source = "Vaswani et al. 2017, Sec. 5.3 (Optimizer): Adam with beta1 0.9, beta2 0.98, eps 1e-9. The rate is a formula of step and d_model with warmup_steps=4000, not a constant, so no learning rate or schedule is declared here. Verified against the paper.")]
 public partial class AttentionNetwork<T> : SequenceModelLayoutBase<T>, IAuxiliaryLossLayer<T>
 {
     private readonly AttentionNetworkOptions _options;
@@ -213,7 +220,9 @@ public partial class AttentionNetwork<T> : SequenceModelLayoutBase<T>, IAuxiliar
 
         InitializeLayers();
 
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
     }
 
     /// <summary>
@@ -446,7 +455,7 @@ public partial class AttentionNetwork<T> : SequenceModelLayoutBase<T>, IAuxiliar
                 { "InputShape", new[] { _sequenceLength, _embeddingSize } },
                 { "OutputShape", Layers[Layers.Count - 1].GetOutputShape() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -565,7 +565,20 @@ public static partial class LayerHelper<T>
         // market data). Pick by task type, and never apply softmax to a
         // single-logit output (use identity for regression, sigmoid for a
         // single binary logit).
-        IActivationFunction<T> outputActivation = architecture.TaskType switch
+        IActivationFunction<T> outputActivation = DefaultOutputActivation(architecture.TaskType, outputSize);
+        layers.Add(new DenseLayer<T>(outputSize, outputActivation));
+
+        ChainResolveLazyLayers(layers, new[] { inputSize });
+        foreach (var layer in layers) yield return layer;
+    }
+
+    /// <summary>
+    /// Output activation matching the task, shared by the feed-forward builders: identity for regression and
+    /// embeddings, sigmoid for binary / multi-label (or a single-logit multi-class) output, softmax for a
+    /// multi-class output.
+    /// </summary>
+    private static IActivationFunction<T> DefaultOutputActivation(NeuralNetworkTaskType taskType, int outputSize) =>
+        taskType switch
         {
             NeuralNetworkTaskType.Regression => new IdentityActivation<T>(),
             NeuralNetworkTaskType.Embedding => new IdentityActivation<T>(),
@@ -578,10 +591,58 @@ public static partial class LayerHelper<T>
                 ? new SoftmaxActivation<T>()
                 : new IdentityActivation<T>(),
         };
-        layers.Add(new DenseLayer<T>(outputSize, outputActivation));
 
-        ChainResolveLazyLayers(layers, new[] { inputSize });
-        foreach (var layer in layers) yield return layer;
+    /// <summary>
+    /// Creates a feed-forward network with one dense hidden layer per entry of
+    /// <paramref name="hiddenLayerSizes"/> (so widths may differ layer to layer), followed by a dense output
+    /// layer, with shapes chain-resolved from the architecture's input size.
+    /// </summary>
+    /// <param name="architecture">The architecture supplying the input size and task type.</param>
+    /// <param name="hiddenLayerSizes">Width of each hidden layer, in order. Empty yields a single linear/output layer.</param>
+    /// <param name="outputSize">Number of output neurons.</param>
+    /// <param name="hiddenActivationFactory">Creates each hidden layer's activation (one instance per layer); ReLU when null.</param>
+    /// <param name="outputActivation">Output activation; chosen from the task type (as
+    /// <see cref="CreateDefaultLayers(NeuralNetworkArchitecture{T}, int, int, int)"/> does) when null.</param>
+    /// <remarks>
+    /// With <c>hiddenLayerSizes = [s, s, ...]</c> and default activations this builds exactly the same layer
+    /// chain as the uniform-width <see cref="CreateDefaultLayers(NeuralNetworkArchitecture{T}, int, int, int)"/>.
+    /// </remarks>
+    internal static List<ILayer<T>> CreateFeedForwardLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        IReadOnlyList<int> hiddenLayerSizes,
+        int outputSize,
+        Func<IActivationFunction<T>>? hiddenActivationFactory = null,
+        IActivationFunction<T>? outputActivation = null)
+    {
+        if (architecture is null) throw new ArgumentNullException(nameof(architecture));
+        if (hiddenLayerSizes is null) throw new ArgumentNullException(nameof(hiddenLayerSizes));
+        if (outputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputSize), outputSize, "Output size must be positive.");
+        for (int i = 0; i < hiddenLayerSizes.Count; i++)
+        {
+            if (hiddenLayerSizes[i] <= 0)
+            {
+                throw new ArgumentException(
+                    $"Hidden layer {i} has non-positive width {hiddenLayerSizes[i]}.", nameof(hiddenLayerSizes));
+            }
+        }
+
+        var layers = new List<ILayer<T>>(hiddenLayerSizes.Count + 1);
+        foreach (int width in hiddenLayerSizes)
+        {
+            // One activation instance per layer, never shared across layers.
+            IActivationFunction<T> activation = hiddenActivationFactory is null
+                ? new ReLUActivation<T>()
+                : hiddenActivationFactory();
+            layers.Add(new DenseLayer<T>(width, activation));
+        }
+
+        layers.Add(new DenseLayer<T>(
+            outputSize,
+            outputActivation ?? DefaultOutputActivation(architecture.TaskType, outputSize)));
+
+        ChainResolveLazyLayers(layers, new[] { architecture.CalculatedInputSize });
+        return layers;
     }
 
     /// <summary>
@@ -33750,36 +33811,56 @@ public static partial class LayerHelper<T>
         int numEncoderLayers = 6,
         int numAttentionHeads = 8)
     {
-        // Per Arandjelovic & Zisserman 2017 (L3-Net): VGG-style encoder producing a 512-D
-        // embedding via [Conv-BN-ReLU] blocks with progressive channel expansion. In sequential/1D
-        // mode the convolutions become Dense blocks. The paper's BatchNorm conditions each block so
-        // the activations stay well-scaled; BatchNorm degenerates at batch_size == 1 (its per-batch
-        // statistics make the gradient exactly zero on a single sample, per Ioffe & Szegedy 2015),
-        // so we substitute LayerNormalization — batch-independent and identical at inference. Each
-        // block is therefore Dense -> LayerNorm -> Tanh.
-        //
-        // The normalization is NOT optional polish: without it a deep stack of saturating Tanh
-        // layers vanishes the gradient and the network plateaus after a handful of steps — it cannot
-        // even memorize a single example, its loss flatlines (the #1670/#1675 LossStrictlyDecreases
-        // symptom: loss identical at step 100 and step 600). Pre-activation LayerNorm keeps each Tanh
-        // in its responsive region so the gradient flows through the full depth.
-        var tanhActivation = (IActivationFunction<T>)new TanhActivation<T>();
-        IActivationFunction<T>? nullActivation = null;
+        // Keep the historical argument for source compatibility. This Dense encoder does not
+        // contain attention layers; an attention-head count cannot configure its topology.
+        var layout = CreateAudioVisualCorrespondenceLayout(embeddingDimension, numEncoderLayers);
+        foreach (var layer in layout.Encoder) yield return layer;
+        foreach (var layer in layout.Fusion) yield return layer;
+    }
 
-        // VGG-style encoder: 4 blocks with progressive channel expansion (64/128/256/512 in the
-        // paper; 128/256/512/512 here), each Dense -> LayerNorm -> Tanh.
-        foreach (int width in new[] { 128, 256, 512, 512 })
+    /// <summary>Builds the shared Dense encoder and its separate correspondence fusion path.</summary>
+    /// <param name="embeddingDimension">Width of the shared embedding.</param>
+    /// <param name="numEncoderLayers">Dense/LayerNorm/Tanh encoder blocks.</param>
+    /// <param name="outputSize">Width of the correspondence head that ends the fusion path; the paper's 2-way
+    /// correspondence softmax by default, and a model passes its declared output size.</param>
+    internal static (List<ILayer<T>> Encoder, List<ILayer<T>> Fusion) CreateAudioVisualCorrespondenceLayout(
+        int embeddingDimension,
+        int numEncoderLayers,
+        int outputSize = 2)
+    {
+        if (embeddingDimension <= 0)
+            throw new ArgumentOutOfRangeException(nameof(embeddingDimension));
+        if (numEncoderLayers <= 0)
+            throw new ArgumentOutOfRangeException(nameof(numEncoderLayers));
+        if (outputSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(outputSize));
+
+        var encoder = new List<ILayer<T>>();
+        IActivationFunction<T>? linear = null;
+        for (int block = 0; block < numEncoderLayers; block++)
         {
-            yield return new DenseLayer<T>(width, nullActivation);
-            yield return new LayerNormalizationLayer<T>(width);
-            yield return new ActivationLayer<T>(tanhActivation);
+            // Reach the requested embedding width even for a one- or two-block encoder.
+            // LayerNorm before Tanh preserves the existing single-sample training behavior.
+            int width = block == numEncoderLayers - 1 ? embeddingDimension : block switch
+            {
+                0 => Math.Max(1, embeddingDimension / 4),
+                1 => Math.Max(1, embeddingDimension / 2),
+                _ => embeddingDimension
+            };
+            encoder.Add(new DenseLayer<T>(width, linear));
+            encoder.Add(new LayerNormalizationLayer<T>(width));
+            encoder.Add(new ActivationLayer<T>((IActivationFunction<T>)new TanhActivation<T>()));
         }
 
-        // Fusion FC per paper: 512 -> 128 (normed Tanh) -> 2 (linear correspondence logits).
-        yield return new DenseLayer<T>(128, nullActivation);
-        yield return new LayerNormalizationLayer<T>(128);
-        yield return new ActivationLayer<T>(tanhActivation);
-        yield return new DenseLayer<T>(2, nullActivation);
+        int fusionWidth = Math.Max(1, embeddingDimension / 4);
+        var fusion = new List<ILayer<T>>
+        {
+            new DenseLayer<T>(fusionWidth, linear),
+            new LayerNormalizationLayer<T>(fusionWidth),
+            new ActivationLayer<T>((IActivationFunction<T>)new TanhActivation<T>()),
+            new DenseLayer<T>(outputSize, linear)
+        };
+        return (encoder, fusion);
     }
 
     /// <summary>

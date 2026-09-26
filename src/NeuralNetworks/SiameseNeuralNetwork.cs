@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -46,10 +48,14 @@ namespace AiDotNet.NeuralNetworks
     /// </remarks>
     /// <example>
     /// <code>
-    /// var options = new SiameseNeuralNetworkOptions { InputSize = 784, EmbeddingSize = 128 };
-    /// var model = new SiameseNeuralNetwork&lt;float&gt;(options);
-    /// var input = Tensor&lt;float&gt;.Random(new[] { 1, 784 });
-    /// var embedding = model.Predict(input);
+    /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+    /// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 784 });
+    /// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+    /// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+    /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+    ///     .ConfigureModel(new SiameseNeuralNetwork&lt;float&gt;(architecture))
+    ///     .Build(trainX, trainY);
+    /// var embedding = result.Predict(input);
     /// </code>
     /// </example>
     [ModelDomain(ModelDomain.General)]
@@ -60,6 +66,11 @@ namespace AiDotNet.NeuralNetworks
     [ModelComplexity(ModelComplexity.Medium)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks", "https://arxiv.org/abs/1908.10084", Year = 2019, Authors = "Nils Reimers, Iryna Gurevych")]
+    [PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-5, ReferenceBatchSize = 16,
+                    WarmupFraction = 0.1, Schedule = LearningRateSchedulerType.LinearWarmup,
+                    Source = "Reimers and Gurevych 2019, Sec. 4: Adam with a learning rate of 2e-5, a batch "
+                            + "size of 16, and linear learning rate warm-up over 10 percent of the training "
+                            + "data. The paper states no decay after the warm-up, so none is declared.")]
     public partial class SiameseNeuralNetwork<T> : VectorModelLayoutBase<T>, IEmbeddingModel<T>
     {
         private readonly SiameseNeuralNetworkOptions _options;
@@ -168,7 +179,9 @@ namespace AiDotNet.NeuralNetworks
             _embeddingDimension = embeddingDimension;
             _maxSequenceLength = maxSequenceLength;
             _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-            _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
             InitializeLayersCore(false);
         }

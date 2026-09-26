@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Extensions;
 using AiDotNet.Helpers;
@@ -34,7 +36,7 @@ namespace AiDotNet.VisionLanguage.ThreeD;
 /// // using semantic graphs as structured input for spatial understanding
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
 ///
 /// // ONNX inference mode with pre-trained model
@@ -60,6 +62,11 @@ namespace AiDotNet.VisionLanguage.ThreeD;
     Year = 2025,
     Authors = "Rygalev et al."
 )]
+[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 5e-6, ReferenceBatchSize = 8,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Zemskova and Yudin 2024, Sec. 4: a batch size of 8 trained for 3 epochs at an "
+                        + "initial learning rate of 5e-6 following a cosine annealing schedule. The "
+                        + "optimizer is left unspecified because the paper names none.")]
 public partial class ThreeDGraphLLM<T> : VisionLanguageModelBase<T>, IThreeDVisionLanguageModel<T>
 {
     private readonly ThreeDGraphLLMOptions _options;

@@ -1,3 +1,5 @@
+using AiDotNet.Optimizers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -48,10 +50,15 @@ namespace AiDotNet.NeuralNetworks.Tabular;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new TabTransformerOptions { NumFeatures = 20, EmbeddingDim = 32, NumHeads = 8, NumLayers = 6 };
-/// var model = new TabTransformerNetwork&lt;float&gt;(options);
-/// var input = Tensor&lt;float&gt;.Random(new[] { 1, 20 });
-/// var output = model.Predict(input);
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+/// var options = new TabTransformerOptions&lt;double&gt; { NumFeatures = 20, EmbeddingDimension = 32, NumHeads = 8, NumLayers = 6 };
+/// var input = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 20 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new TabTransformerNetwork&lt;float&gt;(architecture))
+///     .Build(trainX, trainY);
+/// var output = result.Predict(input);
 /// </code>
 /// </example>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
@@ -66,6 +73,8 @@ namespace AiDotNet.NeuralNetworks.Tabular;
     "https://arxiv.org/abs/2012.06678",
     Year = 2020,
     Authors = "Xin Huang, Ashish Khetan, Milan Cvitkovic, Zohar Karnin")]
+[PaperOptimizer(OptimizerKind.AdamW, Provenance = RecipeProvenance.PerDataset,
+                Source = "Huang et al. 2020, Experiments: AdamW with a constant learning rate throughout each training job. No rate is declared because the paper tunes it per dataset by hyperparameter search rather than stating one.")]
 public partial class TabTransformerNetwork<T> : TabularNeuralNetworkBase<T>
 {
     private readonly TabTransformerOptions<T> _options;
@@ -160,14 +169,15 @@ public partial class TabTransformerNetwork<T> : TabularNeuralNetworkBase<T>
         // Huang et al. train every deep baseline with AdamW and a constant learning rate.
         // Keep the optimizer fully replaceable, but make the built-in path match that recipe
         // instead of silently using plain Adam with no decoupled weight decay.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-                UseAdaptiveLearningRate = false
-            });
+        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
+            optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = _options.LearningRate,
+                    WeightDecay = _options.WeightDecay,
+                    UseAdaptiveLearningRate = false
+                }));
 
         // Validate configuration
         if (_options.EmbeddingDimension % _options.NumHeads != 0)
@@ -411,7 +421,7 @@ public partial class TabTransformerNetwork<T> : TabularNeuralNetworkBase<T>
                 { "LayerCount", Layers.Count },
                 { "LayerTypes", Layers.Select(l => l.GetType().Name).ToArray() }
             },
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

@@ -526,7 +526,7 @@ public class DiagnosticsIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task ProfileReport_GetSlowOperations_FiltersCorrectly()
+    public async Task ProfileReport_GetSlowOperations_FiltersFromRecordedPercentiles()
     {
         var session = new ProfilerSession(new ProfilingConfig { Enabled = true });
 
@@ -534,10 +534,20 @@ public class DiagnosticsIntegrationTests
         using (session.Scope("Slow")) { Thread.Sleep(50); }
 
         var report = session.GetReport();
-        var slowOps = report.GetSlowOperations(p95ThresholdMs: 30);
+        var measured = report.GetAllStats().OrderBy(stat => stat.P95Ms).ToArray();
+        Assert.Equal(2, measured.Length);
+        Assert.True(measured[0].P95Ms < measured[1].P95Ms,
+            "The two profiler samples must have distinct measured durations.");
+
+        // Filter against the durations the profiler actually recorded. A fixed 30 ms wall-clock
+        // threshold made the nominal 1 ms sample fail whenever the test process was descheduled for
+        // longer than 30 ms under shard load; that was scheduler latency, not a filtering defect.
+        double threshold = measured[0].P95Ms
+            + ((measured[1].P95Ms - measured[0].P95Ms) / 2.0);
+        var slowOps = report.GetSlowOperations(threshold);
 
         Assert.Single(slowOps);
-        Assert.Equal("Slow", slowOps[0].Name);
+        Assert.Equal(measured[1].Name, slowOps[0].Name);
     }
 
     [Fact(Timeout = 120000)]

@@ -462,16 +462,6 @@ public partial class StableVideoDiffusion<T> : NeuralNetworkBase<T>
 
         var imageLatent = EncodeToLatent(lastFrame);
 
-        // Encode a few context frames for temporal consistency
-        int contextFrames = Math.Min(4, existingFrames.Count);
-        var contextLatents = new List<Tensor<T>>();
-        for (int i = existingFrames.Count - contextFrames; i < existingFrames.Count; i++)
-        {
-            var frame = existingFrames[i];
-            if (frame.Rank == 3) frame = AddBatchDimension(frame);
-            contextLatents.Add(EncodeToLatent(frame));
-        }
-
         // Generate new frames
         var newFrames = GenerateFromImage(lastFrame, 127, 7, seed);
 
@@ -1197,7 +1187,7 @@ public partial class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         return new ModelMetadata<T>
         {
             AdditionalInfo = additionalInfo,
-            ModelData = SerializeForMetadata()
+            ModelDataProvider = () => SerializeForMetadata()
         };
     }
 

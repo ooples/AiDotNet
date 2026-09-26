@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -46,6 +47,10 @@ namespace AiDotNet.Audio.Effects;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Real Time Speech Enhancement in the Waveform Domain", "https://doi.org/10.48550/arXiv.2006.12847", Year = 2020, Authors = "Alexandre Défossez, Gabriel Synnaeve, Yossi Adi")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 3e-4, Beta1 = 0.9, Beta2 = 0.999,
+                Source = "Defossez et al. 2020, Sec. 4: the Adam optimizer with a step size of 3e-4, a "
+                        + "momentum beta1 of 0.9 and a denominator momentum beta2 of 0.999. The paper's "
+                        + "word momentum here names the Adam betas, not a separate momentum term.")]
 public partial class DemucsNoise<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
 {
     /// <inheritdoc />
@@ -102,7 +107,9 @@ public partial class DemucsNoise<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<
     {
         _options = options ?? new DemucsNoiseOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         InitializeLayers();
     }

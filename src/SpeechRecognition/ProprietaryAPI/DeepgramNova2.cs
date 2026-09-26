@@ -27,7 +27,7 @@ namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 /// // Create a Deepgram Nova-2 model for low-latency real-time ASR
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.SpeechRecognition,
 ///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
 /// var model = new DeepgramNova2&lt;double&gt;(architecture);
 ///

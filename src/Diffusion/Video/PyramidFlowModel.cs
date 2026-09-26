@@ -37,10 +37,14 @@ namespace AiDotNet.Diffusion.Video;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new LatentDiffusionOptions&lt;float&gt; { LatentChannels = 16, Height = 768, Width = 1280, NumInferenceSteps = 20 };
-/// var model = new PyramidFlowModel&lt;float&gt;(options);
-/// var noise = Tensor&lt;float&gt;.Random(new[] { 1, 16, 65, 96, 160 });
-/// var video = model.Predict(noise);
+/// var options = new DiffusionModelOptions&lt;float&gt; { LatentChannels = 16, DefaultInferenceSteps = 20 };
+/// var noise = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 16, 65, 96, 160 });
+/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
+/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
+/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+///     .ConfigureModel(new PyramidFlowModel&lt;float&gt;(options: options))
+///     .Build(trainX, trainY);
+/// var video = result.Predict(noise);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]

@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Audio.Features;
 using AiDotNet.Diffusion.Audio;
@@ -62,6 +63,18 @@ namespace AiDotNet.Audio.Classification;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("HTS-AT: A Hierarchical Token-Semantic Audio Transformer for Sound Classification and Detection", "https://arxiv.org/abs/2202.00874", Year = 2022, Authors = "Ke Chen, Xingjian Du, Bilei Zhu, Zejun Ma, Taylor Berg-Kirkpatrick, Shlomo Dubnov")]
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8,
+                WeightDecay = 0.05, ReferenceBatchSize = 128, DecayRate = 0.5,
+                StepSize = 10, Schedule = LearningRateSchedulerType.Step,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                Source = "Chen et al. 2022, Sec. 3.1.1: AdamW with beta1 0.9, beta2 0.999, eps 1e-8 and "
+                        + "a decay of 0.05, at a batch size of 128, warming up over three epochs and "
+                        + "then halving the learning rate every ten epochs. No learning rate is "
+                        + "declared: the paper's warm-up values of 0.05, 0.1 and 0.2 are far above any "
+                        + "workable absolute AdamW rate, and halving from 0.2 returns to 0.05 in exactly "
+                        + "two steps as the paper describes, so they read as multipliers on a base rate "
+                        + "the paper does not state. The halving schedule itself is scale free and is "
+                        + "declared.")]
 public partial class HTSAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields
@@ -129,7 +142,9 @@ public partial class HTSAT<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     {
         _options = options ?? new HTSATOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.NumMels = _options.NumMels;
         ClassLabels = _options.CustomLabels ?? AudioSetLabels;

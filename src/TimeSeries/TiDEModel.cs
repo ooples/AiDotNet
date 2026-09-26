@@ -56,9 +56,9 @@ public partial class TiDEModel<T> : TimeSeriesModelBase<T>
     private double _targetStd = 1.0;
 
     public TiDEModel(TiDEOptions<T>? options = null)
-        : base(options ?? new TiDEOptions<T>())
+        : base(options ??= new TiDEOptions<T>())
     {
-        _options = options ?? new TiDEOptions<T>();
+        _options = options;
         Options = _options;
         _random = RandomHelper.CreateSeededRandom(42);
         _l = Math.Max(2, _options.LookbackWindow);

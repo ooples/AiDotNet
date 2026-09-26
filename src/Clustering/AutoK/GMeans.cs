@@ -68,9 +68,9 @@ public partial class GMeans<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The GMeans options.</param>
     public GMeans(GMeansOptions<T>? options = null)
-        : base(options ?? new GMeansOptions<T>())
+        : base(options ??= new GMeansOptions<T>())
     {
-        _options = options ?? new GMeansOptions<T>();
+        _options = options;
     }
 
     /// <inheritdoc />
@@ -360,7 +360,7 @@ public partial class GMeans<T> : ClusteringBase<T>
         double ad = -n - sum / n;
 
         // Apply correction for small samples
-        ad *= (1 + 4.0 / n - 25.0 / (n * n));
+        ad *= (1 + 4.0 / n - 25.0 / ((double)n * n));
 
         return ad;
     }

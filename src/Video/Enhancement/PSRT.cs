@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -56,6 +57,11 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2207.08494",
     Year = 2022,
     Authors = "Shuwei Shi, Jinjin Gu, Liangbin Xie, Xintao Wang, Yujiu Yang, Chao Dong")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 4e-4, Beta1 = 0.9, Beta2 = 0.999,
+                ReferenceBatchSize = 8,
+                Source = "Shi et al. 2022, Sec. 4.1: Adam with beta1 0.9 and beta2 0.999, a learning "
+                        + "rate of 4e-4 and a mini-batch size of 8. The 64 that appears alongside is the "
+                        + "low-resolution patch size, not a rate.")]
 public partial class PSRT<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
@@ -89,7 +95,9 @@ public partial class PSRT<T> : VideoSuperResolutionBase<T>
     {
         _options = options ?? new PSRTOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
     }

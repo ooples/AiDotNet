@@ -24,8 +24,15 @@ namespace AiDotNet.Solvers.LinearProgramming;
 /// A knapsack: pick items to maximize value without exceeding a weight limit, taking each item
 /// zero or one times.
 /// <code>
+/// // Three items with values 6, 10 and 12, weights 1, 2 and 3, and a knapsack that holds 5.
+/// var values = new Vector&lt;double&gt;(new double[] { -6.0, -10.0, -12.0 });  // negated: the solver minimises
+/// var weightsAsOneRow = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0, 3.0 } });
+/// var capacity = new Vector&lt;double&gt;(new double[] { 5.0 });
+/// var zeros = new Vector&lt;double&gt;(new double[] { 0.0, 0.0, 0.0 });
+/// var ones = new Vector&lt;double&gt;(new double[] { 1.0, 1.0, 1.0 });
+///
 /// var relaxation = new LinearProgram&lt;double&gt;(
-///     objective: values.Negated(),        // maximize value
+///     objective: values,
 ///     inequalityMatrix: weightsAsOneRow,
 ///     inequalityBounds: capacity,
 ///     lowerBounds: zeros,

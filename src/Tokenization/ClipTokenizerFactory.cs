@@ -35,7 +35,7 @@ namespace AiDotNet.Tokenization;
 /// );
 ///
 /// // Or create a simple one for testing
-/// var tokenizer = ClipTokenizerFactory.CreateSimple();
+/// var tokenizer2 = ClipTokenizerFactory.CreateSimple();
 /// </code>
 /// </para>
 /// </remarks>

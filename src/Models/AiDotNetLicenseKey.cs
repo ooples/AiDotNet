@@ -21,21 +21,21 @@ namespace AiDotNet.Models;
 /// // Offline-only: no network at all. Only signed `aidn.{id}.{sig}` keys are accepted;
 /// // server-validated `AIDN-PROD-*` / `AIDN-DEV-*` keys are rejected because the SDK
 /// // can't cryptographically verify them locally.
-/// var license = new AiDotNetLicenseKey("aidn.abc123.secretXYZ")
+/// var license2 = new AiDotNetLicenseKey("aidn.abc123.secretXYZ")
 /// {
 ///     ServerUrl = "",  // explicit empty string == offline-only
 /// };
 ///
 /// // Custom server: validate against your own license endpoint.
-/// var license = new AiDotNetLicenseKey("aidn.abc123.secretXYZ")
+/// var license3 = new AiDotNetLicenseKey("aidn.abc123.secretXYZ")
 /// {
-///     ServerUrl = "https://license.example.com",
+///     ServerUrl = "https://license3.example.com",
 ///     Environment = "production",
 ///     OfflineGracePeriod = TimeSpan.FromDays(14),
 ///     EnableTelemetry = true
 /// };
 ///
-/// var builder = new AiModelBuilder&lt;double, double[], double&gt;(license);
+/// var builder = new AiModelBuilder&lt;double, double[], double&gt;(license3);
 /// </code>
 /// </remarks>
 public sealed class AiDotNetLicenseKey

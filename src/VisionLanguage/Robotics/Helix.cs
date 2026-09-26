@@ -52,9 +52,10 @@ namespace AiDotNet.VisionLanguage.Robotics;
 /// </remarks>
 /// <example>
 /// <code>
+/// var image = Tensor&lt;double&gt;.CreateRandom(1, 3, 32, 32);
 /// var arch = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.Classification,
+///     taskType: NeuralNetworkTaskType.ImageClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 35);
 /// var helix = new Helix&lt;double&gt;(arch, new HelixOptions());
 ///
@@ -63,9 +64,12 @@ namespace AiDotNet.VisionLanguage.Robotics;
 ///
 /// // Streaming: 200 Hz control loop with caller-owned timing.
 /// var runner = helix.CreateDualSystemRunner();
-/// while (running) {
+/// var currentInstruction = "stack the cups";
+/// for (int tick = 0; tick &lt; 200; tick++)
+/// {
+///     var currentImage = image;   // your latest camera frame
 ///     var action = runner.Step(currentImage, currentInstruction);
-///     SendToRobot(action);
+///     // send `action` to the robot
 /// }
 /// </code>
 /// </example>

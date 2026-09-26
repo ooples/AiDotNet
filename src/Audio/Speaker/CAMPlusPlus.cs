@@ -1,3 +1,4 @@
+using AiDotNet.LearningRateSchedulers;
 using System.Collections.Concurrent;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -44,6 +45,9 @@ namespace AiDotNet.Audio.Speaker;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("CAM++: A Fast and Efficient Network for Speaker Verification Using Context-Aware Masking", "https://arxiv.org/abs/2303.00332", Year = 2023, Authors = "Hui Wang, Siqi Zheng, Yafeng Chen, Luyao Cheng, Qian Chen")]
+[PaperOptimizer(OptimizerKind.Sgd, LearningRate = 0.1, MinLearningRate = 1e-4,
+                Schedule = LearningRateSchedulerType.CosineAnnealing,
+                Source = "Wang et al. 2023, Sec. 3: SGD with a cosine annealing scheduler and a linear warm-up scheduler, the learning rate varying between 0.1 and 1e-4. The warm-up length is not stated, so none is declared.")]
 public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifier<T>, ISpeakerEmbeddingExtractor<T>
 {
     #region Fields
@@ -51,7 +55,6 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
     private readonly CAMPlusPlusOptions _options;
     public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ConcurrentDictionary<string, SpeakerProfile<T>> _enrolledSpeakers;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -79,7 +82,6 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
         DefaultThreshold = NumOps.FromDouble(_options.DefaultThreshold);
         _options.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _enrolledSpeakers = new ConcurrentDictionary<string, SpeakerProfile<T>>();
         InitializeLayers();
     }
 
@@ -89,11 +91,12 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
     {
         _options = options ?? new CAMPlusPlusOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         EmbeddingDimension = _options.EmbeddingDim;
         DefaultThreshold = NumOps.FromDouble(_options.DefaultThreshold);
-        _enrolledSpeakers = new ConcurrentDictionary<string, SpeakerProfile<T>>();
         InitializeLayers();
     }
 

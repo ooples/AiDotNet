@@ -5,7 +5,7 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// <summary>
 /// Configuration options for the GriffinLanguageModel.
 /// </summary>
-public class GriffinOptions : NeuralNetworkOptions
+public class GriffinOptions : SequenceModelOptions
 {
     /// <summary>
     /// Gets or sets the RG-LRU width. The default 2560 is the published 1.3B
@@ -38,16 +38,19 @@ public class GriffinOptions : NeuralNetworkOptions
     public double MaxGradientNorm { get; set; } = 1.0;
 
     /// <summary>Initializes an options instance with default values.</summary>
-    public GriffinOptions() { }
+    public GriffinOptions()
+    {
+        VocabSize = 256000;
+        ModelDimension = 2048;
+        NumLayers = 24;
+        MaxSequenceLength = 2048;
+    }
 
     /// <summary>Initializes an options instance by copying inherited configuration.</summary>
     /// <param name="other">The source options.</param>
-    public GriffinOptions(GriffinOptions other)
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="other"/> is null.</exception>
+    public GriffinOptions(GriffinOptions other) : base(other)
     {
-        if (other is null)
-            throw new ArgumentNullException(nameof(other));
-        Seed = other.Seed;
-        EncoderLayerCount = other.EncoderLayerCount;
         RecurrenceDimension = other.RecurrenceDimension;
         LearningRate = other.LearningRate;
         WeightDecay = other.WeightDecay;
@@ -56,5 +59,26 @@ public class GriffinOptions : NeuralNetworkOptions
         Epsilon = other.Epsilon;
         EnableGradientClipping = other.EnableGradientClipping;
         MaxGradientNorm = other.MaxGradientNorm;
+    }
+
+    /// <summary>
+    /// Throws if a required model dimension or consumed training setting is invalid.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when a required dimension is non-positive, or a consumed numeric setting is
+    /// non-finite or outside its supported range. The message identifies the invalid property.
+    /// </exception>
+    internal void Validate()
+    {
+        ValidateCore(requiresHeads: false, requiresState: false);
+        Require(LearningRate, nameof(LearningRate));
+        RequireNonNegative(WeightDecay, nameof(WeightDecay));
+        RequireDecayCoefficient(Beta1, nameof(Beta1));
+        RequireDecayCoefficient(Beta2, nameof(Beta2));
+        Require(Epsilon, nameof(Epsilon));
+        if (EnableGradientClipping)
+        {
+            Require(MaxGradientNorm, nameof(MaxGradientNorm));
+        }
     }
 }

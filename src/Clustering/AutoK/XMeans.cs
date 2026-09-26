@@ -70,10 +70,10 @@ public partial class XMeans<T> : ClusteringBase<T>
     /// </summary>
     /// <param name="options">The XMeans options.</param>
     public XMeans(XMeansOptions<T>? options = null)
-        : base(options ?? new XMeansOptions<T>())
+        : base(options ??= new XMeansOptions<T>())
     {
         _bic = NumOps.Zero;
-        _options = options ?? new XMeansOptions<T>();
+        _options = options;
     }
 
     /// <summary>
@@ -401,7 +401,7 @@ public partial class XMeans<T> : ClusteringBase<T>
             }
         }
 
-        return NumOps.Divide(variance, NumOps.FromDouble(n * d));
+        return NumOps.Divide(variance, NumOps.FromDouble((double)n * d));
     }
 
     /// <inheritdoc />

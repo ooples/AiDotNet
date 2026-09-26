@@ -35,30 +35,28 @@ namespace AiDotNet.MixedPrecision;
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a loss scaler with defaults
 /// var scaler = new LossScaler&lt;float&gt;(
 ///     initialScale: 65536.0,
 ///     dynamicScaling: true
 /// );
 ///
-/// // In training loop:
-/// float loss = lossFunction.Compute(predictions, targets);
+/// // Scale the loss before the backward pass, so gradients too small to survive fp16 stay representable.
+/// float loss = 0.25f;
 /// float scaledLoss = scaler.ScaleLoss(loss);
 ///
-/// // Backpropagation with scaled loss...
-/// var gradients = /* model.Backward(scaledLoss) removed — tape-based */ ;
-///
-/// // Unscale and check for overflow
-/// if (scaler.UnscaleGradientsAndCheck(gradients))
+/// // After the backward pass, check the gradients before trusting them.
+/// var gradients = Tensor&lt;float&gt;.CreateRandom(2, 4);
+/// if (scaler.DetectOverflow(gradients))
 /// {
-///     // Safe to update parameters
-///     optimizer.Update(parameters, gradients);
+///     // Overflow: skip this update. A dynamic scaler backs its scale off on its own.
 /// }
 /// else
 /// {
-///     // Skip this update due to gradient overflow
-///     Console.WriteLine($"Gradient overflow, scale reduced to {scaler.Scale}");
+///     scaler.UnscaleGradients(gradients);
+///     // Safe to update parameters
 /// }
+///
+/// Console.WriteLine($"scale {scaler.Scale}, overflow rate {scaler.OverflowRate:P1}");
 /// </code>
 /// </example>
 public class LossScaler<T>

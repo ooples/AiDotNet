@@ -1,4 +1,5 @@
-﻿using System.IO;
+﻿using AiDotNet.LearningRateSchedulers;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Finance.Interfaces;
@@ -65,6 +66,11 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("N-HiTS: Neural Hierarchical Interpolation for Time Series Forecasting", "https://arxiv.org/abs/2201.12886", Year = 2023, Authors = "Cristian Challu, Kin G. Olivares, Boris N. Oreshkin, Federico Garza Ramirez, Max Mergenthaler Canseco, Artur Dubrawski")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-3, ReferenceBatchSize = 256,
+                Source = "Challu et al. 2023, Sec. 4: trained with the ADAM optimizer and MAE loss at a "
+                        + "batch size of 256 and an initial learning rate of 1e-3, halved three times "
+                        + "across the training procedure. No schedule is declared because the paper "
+                        + "gives neither the interval nor the points at which the halving occurs.")]
 public partial class NHiTSFinance<T> : ForecastingModelBase<T>
 {
     #region Execution Mode
@@ -290,12 +296,13 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer(
         NHiTSOptions<T> options)
     {
-        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = options.LearningRate
-            });
+        return PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = options.LearningRate
+                }));
     }
 
     #region Initialization
@@ -549,7 +556,7 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
     /// <summary>
     /// Tape-aware average pooling. Trims the last-axis length to a
     /// multiple of <paramref name="kernelSize"/> via
-    /// <see cref="IEngine.TensorSliceAxis"/>, reshapes to pull out the
+    /// <see cref="IEngine.TensorNarrow"/>, reshapes to pull out the
     /// kernel dimension, and <see cref="IEngine.ReduceMean"/>s along
     /// it. Equivalent math to <see cref="ApplyPooling"/> — which uses
     /// <c>.Data.Span</c> loops and severs the gradient tape.
@@ -562,27 +569,22 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
         int batchSize = input.Shape[0];
         int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length / batchSize;
         int pooledLen = Math.Max(1, seqLen / kernelSize);
-        int keptLen = pooledLen * kernelSize;
+        // Same windows as ApplyPooling: when the sequence is shorter than the kernel, the single
+        // window averages the whole (shorter) sequence.
+        int windowLen = seqLen < kernelSize ? seqLen : kernelSize;
+        int keptLen = pooledLen * windowLen;
 
         var working = input;
         if (keptLen != seqLen)
         {
-            // Trim the trailing (seqLen % kernelSize) elements so the
-            // reshape splits cleanly. SliceAxis keeps the tape
-            // connected through the trim.
-            var slices = new List<Tensor<T>>();
-            for (int i = 0; i < keptLen; i++)
-                slices.Add(Engine.TensorSliceAxis(working, axis: 1, index: i));
-            // Re-stack into [batchSize, keptLen]. Using Reshape on a
-            // concatenated row would also work; staying with a loop of
-            // slices keeps the tape graph explicit.
-            throw new NotSupportedException(
-                $"N-HiTS tape pooling: seqLen ({seqLen}) must be a multiple of kernelSize ({kernelSize}). " +
-                "Pad the input upstream or configure _poolingKernelSizes so pooledLen*kernelSize covers the full window.");
+            // Trim the trailing (seqLen % kernelSize) elements so the reshape splits cleanly,
+            // exactly as ApplyPooling ignores the incomplete trailing window. TensorNarrow is
+            // tape-recorded, so the gradient scatters back to the kept positions.
+            working = Engine.TensorNarrow(working, 1, 0, keptLen);
         }
 
-        // Reshape [batch, seqLen] → [batch, pooledLen, kernelSize], mean over axis 2.
-        var reshaped = Engine.Reshape(working, new[] { batchSize, pooledLen, kernelSize });
+        // Reshape [batch, keptLen] → [batch, pooledLen, windowLen], mean over axis 2.
+        var reshaped = Engine.Reshape(working, new[] { batchSize, pooledLen, windowLen });
         var pooled = Engine.ReduceMean(reshaped, new[] { 2 }, keepDims: false);
         return pooled;
     }
