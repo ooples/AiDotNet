@@ -146,4 +146,25 @@ public class OpticalFlowDeclaredInputTests
         Assert.Equal(new[] { 2, size, size }, flow.Shape.ToArray());
         AssertSameValues(model.Predict(WithBatchAxis(pair)), flow);
     }
+
+    [Theory]
+    [InlineData(4, false)]   // too few: the second frame's slice overruns
+    [InlineData(8, false)]   // too many: the extra channels were silently dropped
+    [InlineData(4, true)]
+    [InlineData(8, true)]
+    public void RAFT_RejectsAStackedPairWithTheWrongChannelCount(int channels, bool batched)
+    {
+        const int size = 32;
+        var model = new RAFT<double>(
+            new NeuralNetworkArchitecture<double>(
+                inputType: InputType.ThreeDimensional,
+                taskType: NeuralNetworkTaskType.Regression,
+                inputHeight: size, inputWidth: size, inputDepth: 3,
+                outputSize: 2),
+            numFeatures: 16, correlationLevels: 2, correlationRadius: 1, numIterations: 1);
+
+        var pair = Random([channels, size, size], seed: 9);
+        var ex = Assert.Throws<ArgumentException>(() => model.Predict(batched ? WithBatchAxis(pair) : pair));
+        Assert.Contains("6 stacked channels", ex.Message);
+    }
 }

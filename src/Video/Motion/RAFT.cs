@@ -289,6 +289,13 @@ public partial class RAFT<T> : OpticalFlowBase<T>
                 "RAFT expects a stacked frame pair [2*channels, height, width] or [batch, 2*channels, height, width], "
                 + $"got rank {input.Rank}.", nameof(input));
 
+        // Both frames are sliced from fixed offsets, so any other channel count either overruns the slice or
+        // silently drops the extra channels. The rank-3 path promotes and recurses here, so it is covered too.
+        if (input.Shape[1] != 2 * _channels)
+            throw new ArgumentException(
+                $"RAFT expects {2 * _channels} stacked channels (two {_channels}-channel frames), got {input.Shape[1]}.",
+                nameof(input));
+
         var frame1 = SliceChannels(input, 0, _channels);
         var frame2 = SliceChannels(input, _channels, _channels * 2);
         var flowIterations = ForwardIterative(frame1, frame2);
