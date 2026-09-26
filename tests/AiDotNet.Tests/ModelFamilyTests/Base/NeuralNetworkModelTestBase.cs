@@ -1720,9 +1720,19 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
         SetEvalMode(network);
         var input = CreateRandomTensor(EffectiveInputShape, rng);
+        // JIT activity around each call, reported only on failure: a tier-up between two calls shows as
+        // methods compiled between them, which is the evidence the warm-up explanation below needs.
+        long jitBefore = CompiledMethodCount();
         var out1 = network.Predict(input);
+        long jitAfter1 = CompiledMethodCount();
         var out2 = network.Predict(input);
+        long jitAfter2 = CompiledMethodCount();
         var out3 = network.Predict(input);
+        long jitAfter3 = CompiledMethodCount();
+        string jitSummary = jitBefore < 0
+            ? "JIT counts unavailable on this runtime"
+            : $"methods JIT-compiled during call 1={jitAfter1 - jitBefore}, call 2={jitAfter2 - jitAfter1}, "
+              + $"call 3={jitAfter3 - jitAfter2}";
 
         Assert.Equal(out1.Length, out2.Length);
         Assert.Equal(out2.Length, out3.Length);
@@ -1737,7 +1747,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             {
                 Assert.Fail(
                     $"Output[{i}] is not stable across repeated inference: second={out2[i]}, "
-                    + $"third={out3[i]}, delta={settled:R}. The network is non-deterministic.");
+                    + $"third={out3[i]}, delta={settled:R}. The network is non-deterministic."
+                    + DescribeRepeatedInferenceDivergence(network, input, jitSummary));
             }
 
             // The FIRST call is allowed to differ by a rounding step, and only by a
@@ -1766,9 +1777,69 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                     + $"second-third delta={settled:R}, allowed={tolerance:R}. "
                     + "The second and third calls agree, so this is not non-determinism -- "
                     + "the first inference changed the network's own state or took a "
-                    + "materially different path.");
+                    + "materially different path."
+                    + DescribeRepeatedInferenceDivergence(network, input, jitSummary));
             }
         }
+    }
+
+    private static long CompiledMethodCount()
+    {
+#if NET6_0_OR_GREATER
+        return System.Runtime.JitInfo.GetCompiledMethodCount(currentThread: false);
+#else
+        return -1;
+#endif
+    }
+
+    /// <summary>
+    /// Failure-only evidence for <see cref="Predict_ShouldBeDeterministic"/>. The one-ULP divergences it
+    /// catches have only ever appeared inside full CI shards, never in isolation, under local CPU load or
+    /// in a 4-CPU Linux container, so the only place to learn their cause is the failing run itself. This
+    /// reports the environment and the JIT activity between calls, then replays the per-layer activations
+    /// twice and names the first layer whose output differs. It never changes the verdict.
+    /// </summary>
+    private static string DescribeRepeatedInferenceDivergence(INeuralNetworkModel<T> network, Tensor<T> input, string jitSummary)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append($" Diagnostics: ProcessorCount={Environment.ProcessorCount}, ")
+          .Append($"DeterministicMode={AiDotNet.Tensors.Engines.AiDotNetEngine.DeterministicMode}, {jitSummary}.");
+        try
+        {
+            var first = network.GetNamedLayerActivations(input);
+            var second = network.GetNamedLayerActivations(input);
+            foreach (var entry in first)
+            {
+                if (!second.TryGetValue(entry.Key, out var other) || other.Length != entry.Value.Length)
+                {
+                    sb.Append($" Layer replay: '{entry.Key}' changed shape between passes.");
+                    return sb.ToString();
+                }
+
+                int differing = 0;
+                double maxDelta = 0;
+                for (int i = 0; i < entry.Value.Length; i++)
+                {
+                    double delta = Math.Abs(ConvertToDouble(entry.Value[i]) - ConvertToDouble(other[i]));
+                    if (delta > 0) { differing++; maxDelta = Math.Max(maxDelta, delta); }
+                }
+
+                if (differing > 0)
+                {
+                    sb.Append($" Layer replay: first layer whose output differs across two further passes is ")
+                      .Append($"'{entry.Key}' ({differing}/{entry.Value.Length} elements, max delta {maxDelta:R}).");
+                    return sb.ToString();
+                }
+            }
+
+            sb.Append($" Layer replay: all {first.Count} named activations were identical across two further passes.");
+        }
+        catch (Exception ex)
+        {
+            sb.Append($" Layer replay unavailable: {ex.GetType().Name}: {ex.Message}");
+        }
+
+        return sb.ToString();
     }
 
     /// <summary>
