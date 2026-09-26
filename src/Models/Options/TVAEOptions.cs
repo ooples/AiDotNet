@@ -40,7 +40,7 @@ namespace AiDotNet.Models.Options;
 /// Reference: "Modeling Tabular Data using Conditional GAN" (Xu et al., NeurIPS 2019)
 /// </para>
 /// </remarks>
-public class TVAEOptions<T> : RiskModelOptions<T>
+public class TVAEOptions<T> : SyntheticDataGeneratorOptions<T>
 {
     /// <summary>Initializes a new instance with the paper-default TVAE settings.</summary>
     public TVAEOptions() { }
@@ -53,6 +53,7 @@ public class TVAEOptions<T> : RiskModelOptions<T>
         if (other is null)
             throw new ArgumentNullException(nameof(other));
 
+        MaxGradNorm = other.MaxGradNorm;
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
         NumFeatures = other.NumFeatures;

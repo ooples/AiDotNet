@@ -203,10 +203,15 @@ public abstract partial class AutoIntBase<T> : IParameterSource<T>
         int mlpInput = TotalFeatures * Options.EmbeddingDimension;
         foreach (var hiddenDim in Options.MLPHiddenDimensions)
         {
-            _mlpLayers.Add(new FullyConnectedLayer<T>(
-                mlpInput,
-                hiddenDim,
-                Options.HiddenActivation ?? new ReLUActivation<T>()));
+            _mlpLayers.Add(Options.HiddenVectorActivation is null
+                ? new FullyConnectedLayer<T>(
+                    mlpInput,
+                    hiddenDim,
+                    Options.HiddenActivation ?? new ReLUActivation<T>())
+                : FullyConnectedLayer<T>.WithVectorActivation(
+                    mlpInput,
+                    hiddenDim,
+                    Options.HiddenVectorActivation));
             mlpInput = hiddenDim;
         }
 

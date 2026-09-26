@@ -139,21 +139,19 @@ public partial class GMFlow<T> : OpticalFlowBase<T>
 
     public GMFlow(
         NeuralNetworkArchitecture<T> architecture,
-        int numFeatures = 128,
-        int numTransformerLayers = 6,
-        int numHeads = 8,
         GMFlowOptions? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new GMFlowOptions();
+        _options.Validate();
         Options = _options;
 
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numFeatures = numFeatures;
-        _numTransformerLayers = numTransformerLayers;
-        _numHeads = numHeads;
+        _numFeatures = _options.NumFeatures;
+        _numTransformerLayers = _options.NumTransformerLayers;
+        _numHeads = _options.NumHeads;
 
         _encoder = [];
         _selfAttention = [];

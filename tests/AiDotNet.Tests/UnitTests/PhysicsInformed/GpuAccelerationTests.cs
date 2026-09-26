@@ -1,3 +1,4 @@
+using AiDotNet.PhysicsInformed.Options;
 using System;
 using AiDotNet.Engines;
 using AiDotNet.Enums;
@@ -222,11 +223,7 @@ public class GpuAccelerationTests
             new SimpleBoundaryCondition(0.0, 0, 0.0)
         };
 
-        var pinn = new PhysicsInformedNeuralNetwork<double>(
-            architecture,
-            pde,
-            boundaryConditions,
-            numCollocationPoints: 100);
+        var pinn = new PhysicsInformedNeuralNetwork<double>(architecture, pde, boundaryConditions, options: new PhysicsInformedNeuralNetworkOptions { NumCollocationPoints = 100 });
 
         // Act
         var trainer = new GpuPINNTrainer<double>(pinn);
@@ -253,11 +250,7 @@ public class GpuAccelerationTests
             new SimpleBoundaryCondition(0.0, 0, 0.0)
         };
 
-        var pinn = new PhysicsInformedNeuralNetwork<double>(
-            architecture,
-            pde,
-            boundaryConditions,
-            numCollocationPoints: 100);
+        var pinn = new PhysicsInformedNeuralNetwork<double>(architecture, pde, boundaryConditions, options: new PhysicsInformedNeuralNetworkOptions { NumCollocationPoints = 100 });
 
         var options = new GpuPINNTrainingOptions
         {
@@ -297,11 +290,7 @@ public class GpuAccelerationTests
             new SimpleBoundaryCondition(0.0, 0, 0.0)
         };
 
-        var pinn = new PhysicsInformedNeuralNetwork<double>(
-            architecture,
-            pde,
-            boundaryConditions,
-            numCollocationPoints: 100);
+        var pinn = new PhysicsInformedNeuralNetwork<double>(architecture, pde, boundaryConditions, options: new PhysicsInformedNeuralNetworkOptions { NumCollocationPoints = 100 });
 
         var trainer = new GpuPINNTrainer<double>(pinn);
         var newOptions = new GpuPINNTrainingOptions
@@ -334,11 +323,7 @@ public class GpuAccelerationTests
             new SimpleBoundaryCondition(0.0, 0, 0.0)
         };
 
-        var pinn = new PhysicsInformedNeuralNetwork<double>(
-            architecture,
-            pde,
-            boundaryConditions,
-            numCollocationPoints: 100);
+        var pinn = new PhysicsInformedNeuralNetwork<double>(architecture, pde, boundaryConditions, options: new PhysicsInformedNeuralNetworkOptions { NumCollocationPoints = 100 });
 
         var trainer = new GpuPINNTrainer<double>(pinn);
 
@@ -363,11 +348,7 @@ public class GpuAccelerationTests
             new SimpleBoundaryCondition(0.0, 0, 0.0)
         };
 
-        var pinn = new PhysicsInformedNeuralNetwork<double>(
-            architecture,
-            pde,
-            boundaryConditions,
-            numCollocationPoints: 100);
+        var pinn = new PhysicsInformedNeuralNetwork<double>(architecture, pde, boundaryConditions, options: new PhysicsInformedNeuralNetworkOptions { NumCollocationPoints = 100 });
 
         var trainer = new GpuPINNTrainer<double>(pinn, GpuPINNTrainingOptions.CpuOnly);
 
@@ -394,11 +375,7 @@ public class GpuAccelerationTests
             new SimpleBoundaryCondition(0.0, 0, 0.0)
         };
 
-        var pinn = new PhysicsInformedNeuralNetwork<double>(
-            architecture,
-            pde,
-            boundaryConditions,
-            numCollocationPoints: 100);
+        var pinn = new PhysicsInformedNeuralNetwork<double>(architecture, pde, boundaryConditions, options: new PhysicsInformedNeuralNetworkOptions { NumCollocationPoints = 100 });
 
         var trainer = new GpuPINNTrainer<double>(pinn);
 

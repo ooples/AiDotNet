@@ -43,10 +43,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Interactive;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
-/// var model = new SEEM&lt;double&gt;(architecture, numClasses: 150);
+/// var model = new SEEM&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new SEEM&lt;double&gt;(architecture,
+///     options: new SEEMOptions { NumClasses = 133, DropRate = 0.0, ModelSize = SEEMModelSize.Tiny });
 ///
 /// // Or load a pre-trained ONNX model for text and click-guided segmentation
-/// var onnxModel = new SEEM&lt;double&gt;(architecture, "seem.onnx", numClasses: 150);
+/// var onnxModel = new SEEM&lt;double&gt;(architecture, "seem.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -107,9 +110,6 @@ public partial class SEEM<T> : Common.PromptableSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 133, matching the released panoptic configuration).</param>
-    /// <param name="modelSize">Model size variant (default: Tiny).</param>
-    /// <param name="dropRate">Dropout rate (default: 0.0).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -118,8 +118,7 @@ public partial class SEEM<T> : Common.PromptableSegmentationBase<T>
     /// </remarks>
     public SEEM(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 133,
-        SEEMModelSize modelSize = SEEMModelSize.Tiny, double dropRate = 0.0,
+        ILossFunction<T>? lossFunction = null,
         SEEMOptions? options = null)
         // The base resolves height/width/channels/numClasses/native-mode from the architecture and
         // defaults the loss to CrossEntropyWithLogitsLoss - exactly what the deleted lines did by
@@ -127,11 +126,11 @@ public partial class SEEM<T> : Common.PromptableSegmentationBase<T>
         // via CreateDefaultOptimizer(), overridden above to keep SEEM's option-driven AdamW. That
         // default could never be written as a base-constructor argument, because `this` is not
         // available in a constructor initializer.
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, optimizer, lossFunction, (options ??= new SEEMOptions()).NumClasses)
     {
-        _options = options ?? new SEEMOptions(); Options = _options;
-        _modelSize = modelSize; _dropRate = dropRate;
-        var config = GetModelConfig(modelSize);
+        _options = options; Options = _options;
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        var config = GetModelConfig(_options.ModelSize);
         _channelDims = _options.ChannelDimensions?.ToArray() ?? config.ChannelDims;
         _depths = _options.StageDepths?.ToArray() ?? config.Depths;
         _decoderDim = _options.DecoderDimension ?? config.DecoderDim;
@@ -144,8 +143,6 @@ public partial class SEEM<T> : Common.PromptableSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 133).</param>
-    /// <param name="modelSize">Model size for metadata (default: Tiny).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -155,16 +152,16 @@ public partial class SEEM<T> : Common.PromptableSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public SEEM(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 133, SEEMModelSize modelSize = SEEMModelSize.Tiny,
+    public SEEM(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         SEEMOptions? options = null)
         // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
         // geometry and opens the InferenceSession - the same lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, onnxModelPath, (options ??= new SEEMOptions()).NumClasses)
     {
-        _options = options ?? new SEEMOptions(); Options = _options;
-        _modelSize = modelSize; _dropRate = 0.0;
-        var config = GetModelConfig(modelSize);
+        _options = options; Options = _options;
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        var config = GetModelConfig(_options.ModelSize);
         _channelDims = _options.ChannelDimensions?.ToArray() ?? config.ChannelDims;
         _depths = _options.StageDepths?.ToArray() ?? config.Depths;
         _decoderDim = _options.DecoderDimension ?? config.DecoderDim;

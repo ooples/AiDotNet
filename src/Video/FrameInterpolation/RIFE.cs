@@ -203,13 +203,12 @@ public partial class RIFE<T> : FrameInterpolationBase<T>
     /// <param name="optimizer">The optimizer to use, or <see langword="null"/> for AdamW configured from <paramref name="options"/>.</param>
     public RIFE(
         NeuralNetworkArchitecture<T> architecture,
-        int numFeatures = DefaultNumFeatures,
-        int numFlowBlocks = DefaultNumFlowBlocks,
         RIFEOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture, new CharbonnierLoss<T>())
+        : base(architecture: architecture, new CharbonnierLoss<T>())
     {
         _options = options ?? new RIFEOptions();
+        _options.Validate();
         Options = _options;
         _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
             new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
@@ -225,8 +224,8 @@ public partial class RIFE<T> : FrameInterpolationBase<T>
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numFeatures = numFeatures;
-        _numFlowBlocks = numFlowBlocks;
+        _numFeatures = _options.NumFeatures;
+        _numFlowBlocks = _options.NumFlowBlocks;
 
         _encoder = [];
         _flowDecoder = [];

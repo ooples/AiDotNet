@@ -7,6 +7,61 @@ namespace AiDotNet.Document.Options;
 /// </summary>
 public class ABINetOptions : DocumentNeuralNetworkOptions
 {
+    /// <summary>Initializes a new instance carrying the model's published defaults.</summary>
+    /// <remarks>
+    /// <para>
+    /// ImageWidth, ImageHeight, MaxSequenceLength, VisionDim and VisionLayers are declared by
+    /// DocumentNeuralNetworkOptions and were previously left unset, with the values living in
+    /// constructor parameters instead. They carry ABINet's published values here (Fang et al.,
+    /// CVPR 2021: 32x128 input, 26-character sequences, a 512-wide 3-layer vision branch).
+    /// </para>
+    /// </remarks>
+    public ABINetOptions()
+    {
+        ImageWidth = 128;
+        ImageHeight = 32;
+        MaxSequenceLength = 26;
+        VisionDim = 512;
+        VisionLayers = 3;
+        LanguageDim = 512;
+        LanguageLayers = 4;
+        NumIterations = 3;
+    }
+
+    /// <summary>
+    /// Gets or sets the width of the language branch. Default: 512.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> ABINet reads the image and separately reasons about what the
+    /// word is likely to be. This is how wide that language-reasoning part is.</para>
+    /// </remarks>
+    public int LanguageDim { get; set; }
+
+    /// <summary>
+    /// Gets or sets the number of transformer layers in the language branch. Default: 4.
+    /// </summary>
+    public int LanguageLayers { get; set; }
+
+    /// <summary>
+    /// Gets or sets how many times the model refines its reading. Default: 3.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The model guesses the text, then re-reads its own guess to
+    /// correct it, and repeats. This is how many of those passes it makes.</para>
+    /// </remarks>
+    public int NumIterations { get; set; }
+
+    /// <summary>
+    /// Gets or sets the recognisable character set. Null uses the model's default charset.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The character count is the output width of the recognition head, so this changes the
+    /// model's shape and not merely how results are decoded.
+    /// </para>
+    /// </remarks>
+    public string? Charset { get; set; }
+
     /// <summary>
     /// Gets or sets lambda_v, the weight on the vision model's loss term. Defaults to the
     /// paper's 1.0.

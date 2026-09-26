@@ -43,10 +43,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 224, inputWidth: 224, inputDepth: 1, outputSize: 9);
-/// var model = new TransUNet&lt;double&gt;(architecture, numClasses: 9);
+/// var model = new TransUNet&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new TransUNet&lt;double&gt;(architecture,
+///     options: new TransUNetOptions { NumClasses = 9, DropRate = 0.1, ModelSize = TransUNetModelSize.Base });
 ///
 /// // Or load a pre-trained ONNX model for cardiac MRI segmentation
-/// var onnxModel = new TransUNet&lt;double&gt;(architecture, "transunet.onnx", numClasses: 9);
+/// var onnxModel = new TransUNet&lt;double&gt;(architecture, "transunet.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -91,9 +94,6 @@ public partial class TransUNet<T> : Common.MedicalSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyWithLogitsLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 9).</param>
-    /// <param name="modelSize">Model size variant (default: Base).</param>
-    /// <param name="dropRate">Dropout rate (default: 0.1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -102,19 +102,18 @@ public partial class TransUNet<T> : Common.MedicalSegmentationBase<T>
     /// </remarks>
     public TransUNet(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 9,
-        TransUNetModelSize modelSize = TransUNetModelSize.Base, double dropRate = 0.1,
+        ILossFunction<T>? lossFunction = null,
         TransUNetOptions? options = null)
         // `optimizer` is passed straight through - INCLUDING null. The base resolves the default
         // AdamW lazily via CreateDefaultOptimizer(), which a base-constructor argument cannot do.
-        : base(architecture, optimizer, lossFunction, numClasses, ModalitiesSupported)
+        : base(architecture, optimizer, lossFunction, (options ??= new TransUNetOptions()).NumClasses, ModalitiesSupported)
     {
-        _options = options ?? new TransUNetOptions(); Options = _options;
+        _options = options; Options = _options;
         // TransUNet defaults to 224x224, not the base's 512x512, so the geometry fallback stays here.
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 224;
-        _modelSize = modelSize; _dropRate = dropRate;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
 
@@ -123,8 +122,6 @@ public partial class TransUNet<T> : Common.MedicalSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 9).</param>
-    /// <param name="modelSize">Model size for metadata (default: Base).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -134,18 +131,18 @@ public partial class TransUNet<T> : Common.MedicalSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public TransUNet(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 9, TransUNetModelSize modelSize = TransUNetModelSize.Base,
+    public TransUNet(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         TransUNetOptions? options = null)
         // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
         // InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses, ModalitiesSupported)
+        : base(architecture, onnxModelPath, (options ??= new TransUNetOptions()).NumClasses, ModalitiesSupported)
     {
-        _options = options ?? new TransUNetOptions(); Options = _options;
+        _options = options; Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 224;
-        _modelSize = modelSize; _dropRate = 0.1;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
     #endregion

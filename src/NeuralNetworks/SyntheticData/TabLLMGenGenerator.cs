@@ -99,6 +99,9 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
     private readonly List<FullyConnectedLayer<T>> _valueLayers = new();
     private readonly List<FullyConnectedLayer<T>> _outProjLayers = new();
 
+    // Residual dropout, one per transformer layer, driven by TabLLMGenOptions.DropoutRate.
+    private readonly List<DropoutLayer<T>> _ffnDropouts = new();
+
     // Token embedding and output head (auxiliary)
     private FullyConnectedLayer<T>? _tokenEmbedding;
     private FullyConnectedLayer<T>? _outputHead;
@@ -124,7 +127,6 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
     /// <param name="options">TabLLM-Gen-specific options for generation configuration.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
     /// <summary>
     /// Initializes a new instance with default architecture settings.
     /// </summary>
@@ -145,15 +147,13 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
     {
     }
 
-    public TabLLMGenGenerator(
-        NeuralNetworkArchitecture<T> architecture,
+    public TabLLMGenGenerator(NeuralNetworkArchitecture<T> architecture,
         TabLLMGenOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 5.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TabLLMGenOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new TabLLMGenOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
             new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
@@ -198,10 +198,12 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
             var gelu = new GELUActivation<T>() as IActivationFunction<T>;
             var identity = new IdentityActivation<T>() as IActivationFunction<T>;
 
+            _ffnDropouts.Clear();
             for (int layer = 0; layer < _options.NumLayers; layer++)
             {
                 Layers.Add(new FullyConnectedLayer<T>(ffnDim, gelu));
                 Layers.Add(new FullyConnectedLayer<T>(embDim, identity));
+                _ffnDropouts.Add(new DropoutLayer<T>(_options.DropoutRate));
             }
             _usingCustomLayers = false;
         }
@@ -252,8 +254,9 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
     #region ISyntheticTabularGenerator Implementation
 
     /// <inheritdoc />
-    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
+        int epochCount = epochs ?? _options.Epochs;
         _columns = new List<ColumnMetadata>(columns);
 
         // Build vocabulary and tokenization
@@ -268,7 +271,7 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
         int batchSize = Math.Min(_options.BatchSize, data.Rows);
         T lr = NumOps.FromDouble(_options.LearningRate / batchSize);
 
-        for (int epoch = 0; epoch < epochs; epoch++)
+        for (int epoch = 0; epoch < epochCount; epoch++)
         {
             for (int b = 0; b < data.Rows; b += batchSize)
             {
@@ -280,10 +283,11 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
     }
 
     /// <inheritdoc />
-    public Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs,
+    public Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null,
         CancellationToken cancellationToken = default)
     {
-        return Task.Run(() => Fit(data, columns, epochs), cancellationToken);
+        int epochCount = epochs ?? _options.Epochs;
+        return Task.Run(() => Fit(data, columns, epochCount), cancellationToken);
     }
 
     /// <inheritdoc />
@@ -608,6 +612,11 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
                 {
                     var h1 = Layers[ffn1Idx].Forward(VectorToTensor(attended[pos]));
                     h2 = Layers[ffn2Idx].Forward(h1);
+                    if (layer < _ffnDropouts.Count)
+                    {
+                        _ffnDropouts[layer].SetTrainingMode(IsTrainingMode);
+                        h2 = _ffnDropouts[layer].Forward(h2);
+                    }
                 }
                 else
                 {

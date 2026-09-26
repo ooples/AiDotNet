@@ -28,17 +28,20 @@ public class AiModelResultRadianceFieldExtensionsTests
     private static AiModelResult<float, Tensor<float>, Tensor<float>> BuildRadianceFieldResult()
     {
         var nerf = new NeRF<float>(
-            positionEncodingLevels: 4,
-            directionEncodingLevels: 4,
-            hiddenDim: 32,
-            numLayers: 2,
-            colorHiddenDim: 16,
-            colorNumLayers: 1,
-            useHierarchicalSampling: false,
-            renderSamples: 4,
-            renderNearBound: 1.0,
-            renderFarBound: 4.5,
-            learningRate: 1e-3);
+            options: new AiDotNet.Models.Options.NeRFOptions
+            {
+                PositionEncodingLevels = 4,
+                DirectionEncodingLevels = 4,
+                HiddenDim = 32,
+                NumLayers = 2,
+                ColorHiddenDim = 16,
+                ColorNumLayers = 1,
+                UseHierarchicalSampling = false,
+                RenderSamples = 4,
+                RenderNearBound = 1.0,
+                RenderFarBound = 4.5,
+                LearningRate = 1e-3
+            });
 
         // AiDotNetTests has InternalsVisibleTo — construct + set internal Model directly.
         // Mirrors what BuildAsync does when it hands the trained model back.

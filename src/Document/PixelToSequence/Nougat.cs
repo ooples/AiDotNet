@@ -129,18 +129,10 @@ public partial class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         ITokenizer tokenizer,
-        int imageSize = 896,
-        int patchSize = 16,
-        int maxSequenceLength = 4096,
-        int hiddenDim = 1024,
-        int numEncoderLayers = 12,
-        int numDecoderLayers = 10,
-        int numHeads = 16,
-        int vocabSize = 50000,
+        NougatOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        NougatOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new NougatOptions();
         Options = _options;
@@ -153,18 +145,22 @@ public partial class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         Guard.NotNull(tokenizer);
         _tokenizer = tokenizer;
         _useNativeMode = false;
-        _hiddenDim = hiddenDim;
-        _numEncoderLayers = numEncoderLayers;
-        _numDecoderLayers = numDecoderLayers;
-        _numHeads = numHeads;
-        _vocabSize = vocabSize;
-        _patchSize = patchSize;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _hiddenDim = _options.HiddenDim;
+        _numEncoderLayers = _options.NumEncoderLayers;
+        _numDecoderLayers = _options.NumDecoderLayers;
+        _numHeads = _options.NumHeads;
+        _vocabSize = _options.VocabSize;
+        _patchSize = _options.PatchSize;
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
     ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.ImageSize;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -199,36 +195,29 @@ public partial class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
     /// </remarks>
     public Nougat(
         NeuralNetworkArchitecture<T> architecture,
+        NougatOptions? options = null,
         ITokenizer? tokenizer = null,
-        int imageSize = 896,
-        int patchSize = 16,
-        int maxSequenceLength = 4096,
-        int hiddenDim = 1024,
-        int numEncoderLayers = 12,
-        int numDecoderLayers = 10,
-        int numHeads = 16,
-        int vocabSize = 50000,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        NougatOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new NougatOptions();
+        _options.Validate();
         Options = _options;
 
         _useNativeMode = true;
-        _hiddenDim = hiddenDim;
-        _numEncoderLayers = numEncoderLayers;
-        _numDecoderLayers = numDecoderLayers;
-        _numHeads = numHeads;
-        _vocabSize = vocabSize;
-        _patchSize = patchSize;
+        _hiddenDim = _options.HiddenDim;
+        _numEncoderLayers = _options.NumEncoderLayers;
+        _numDecoderLayers = _options.NumDecoderLayers;
+        _numHeads = _options.NumHeads;
+        _vocabSize = _options.VocabSize;
+        _patchSize = _options.PatchSize;
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
     ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.ImageSize;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
         _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
 

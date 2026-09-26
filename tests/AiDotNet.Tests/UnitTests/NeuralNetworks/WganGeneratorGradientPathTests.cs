@@ -90,13 +90,13 @@ public class WganGeneratorGradientPathTests
             inputSize: ImageSize,
             outputSize: 1);
 
-        // criticIterations: 1 keeps the step cheap; the default 5 only adds critic passes, which are
+        // CriticIterations = 1 keeps the step cheap; the default 5 only adds critic passes, which are
         // filtered out below anyway.
         using var wgan = new WGAN<float>(
             generatorArchitecture,
             criticArchitecture,
             InputType.OneDimensional,
-            criticIterations: 1);
+            options: new AiDotNet.NeuralNetworks.Options.WGANOptions { CriticIterations = 1 });
 
         var generatorTensors = TrainableTensors(wgan.Generator);
         var criticTensors = TrainableTensors(wgan.Critic);

@@ -177,6 +177,8 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
                 Options.StateDimension,
                 Options.InnerDimension,
                 Options.ConvKernelSize,
+                Options.DeltaMin,
+                Options.DeltaMax,
                 _random));
         }
 
@@ -188,10 +190,15 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
 
         foreach (var hiddenDim in Options.MLPHiddenDimensions)
         {
-            _mlpLayers.Add(new FullyConnectedLayer<T>(
-                mlpInput,
-                hiddenDim,
-                Options.HiddenActivation ?? new ReLUActivation<T>()));
+            _mlpLayers.Add(Options.HiddenVectorActivation is null
+                ? new FullyConnectedLayer<T>(
+                    mlpInput,
+                    hiddenDim,
+                    Options.HiddenActivation ?? new ReLUActivation<T>())
+                : FullyConnectedLayer<T>.WithVectorActivation(
+                    mlpInput,
+                    hiddenDim,
+                    Options.HiddenVectorActivation));
             mlpInput = hiddenDim;
         }
 
@@ -471,7 +478,14 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
             }
         }
 
-        public MambaBlock(int modelDim, int stateDim, int innerDim, int convKernelSize, Random random)
+        public MambaBlock(
+            int modelDim,
+            int stateDim,
+            int innerDim,
+            int convKernelSize,
+            double deltaMin,
+            double deltaMax,
+            Random random)
         {
             _modelDim = modelDim;
             _stateDim = stateDim;
@@ -509,11 +523,23 @@ public abstract partial class MambularBase<T> : IParameterSource<T>
             _convWeight = new Tensor<T>(new[] { innerDim, convKernelSize });
             InitializeWeights(_convWeight, scale, random);
 
-            // Delta projection
+            // Delta projection -- Mamba's dt_init (Gu & Dao 2023, §3.6 and the reference
+            // implementation): draw the discretization step log-uniformly from
+            // [DeltaMin, DeltaMax], then store its INVERSE SOFTPLUS, because Forward applies
+            // Softplus to this tensor. The constant 0.01 that stood here is the geometric mean
+            // of the declared 0.001 and 0.1 -- the midpoint of the range both options describe,
+            // hardcoded so that neither of them did anything.
             _deltaProj = new Tensor<T>(new[] { innerDim });
+            double logMin = Math.Log(deltaMin);
+            double logMax = Math.Log(deltaMax);
             for (int i = 0; i < _deltaProj.Length; i++)
             {
-                _deltaProj[i] = NumOps.FromDouble(0.01);
+                double dt = Math.Exp(logMin + (random.NextDouble() * (logMax - logMin)));
+                // inverse softplus, written as log(expm1(dt)) so small dt does not cancel.
+                double inverseSoftplus = dt < 1e-3
+                    ? Math.Log(dt) + (dt / 2.0)
+                    : Math.Log(Math.Exp(dt) - 1.0);
+                _deltaProj[i] = NumOps.FromDouble(inverseSoftplus);
             }
         }
 

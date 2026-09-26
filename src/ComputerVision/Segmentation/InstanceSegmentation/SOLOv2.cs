@@ -56,7 +56,7 @@ public class SOLOv2<T> : InstanceSegmenterBase<T>
         _kernelDim = 256; // Dynamic kernel dimension
 
         // Backbone
-        _backbone = new ResNet<T>(ResNetVariant.ResNet50);
+        _backbone = new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetVariant.ResNet50 });
 
         // FPN
         _fpn = new FPN<T>(new[] { 256, 512, 1024, 2048 }, 256);

@@ -87,9 +87,20 @@ public class ImageTrainingPathTests
     public void NeRF_ImplementsIImageTrainable()
     {
         var nerf = new NeRF<float>(
-            positionEncodingLevels: 2, directionEncodingLevels: 2, hiddenDim: 8, numLayers: 1,
-            colorHiddenDim: 4, colorNumLayers: 1, useHierarchicalSampling: false,
-            renderSamples: 2, renderNearBound: 1.0, renderFarBound: 3.0, learningRate: 1e-3);
+            options: new AiDotNet.Models.Options.NeRFOptions
+            {
+                PositionEncodingLevels = 2,
+                DirectionEncodingLevels = 2,
+                HiddenDim = 8,
+                NumLayers = 1,
+                ColorHiddenDim = 4,
+                ColorNumLayers = 1,
+                UseHierarchicalSampling = false,
+                RenderSamples = 2,
+                RenderNearBound = 1.0,
+                RenderFarBound = 3.0,
+                LearningRate = 1e-3
+            });
         Assert.IsAssignableFrom<IImageTrainable<float>>(nerf);
     }
 
@@ -97,9 +108,20 @@ public class ImageTrainingPathTests
     public void NeRF_TrainOnImageBatch_ReturnsFiniteLoss()
     {
         var nerf = new NeRF<float>(
-            positionEncodingLevels: 2, directionEncodingLevels: 2, hiddenDim: 8, numLayers: 1,
-            colorHiddenDim: 4, colorNumLayers: 1, useHierarchicalSampling: false,
-            renderSamples: 2, renderNearBound: 1.0, renderFarBound: 3.0, learningRate: 1e-3);
+            options: new AiDotNet.Models.Options.NeRFOptions
+            {
+                PositionEncodingLevels = 2,
+                DirectionEncodingLevels = 2,
+                HiddenDim = 8,
+                NumLayers = 1,
+                ColorHiddenDim = 4,
+                ColorNumLayers = 1,
+                UseHierarchicalSampling = false,
+                RenderSamples = 2,
+                RenderNearBound = 1.0,
+                RenderFarBound = 3.0,
+                LearningRate = 1e-3
+            });
         var loader = ImageTrainingDataLoaders.FromViews(BuildViews(), seed: 7);
 
         float loss = nerf.TrainOnImageBatch(loader, raysPerBatch: 4, optimizerOptions: null);

@@ -34,6 +34,7 @@ public class SVTROptions : DocumentNeuralNetworkOptions
         TpsControlPointCount = other.TpsControlPointCount;
         TpsMarginX = other.TpsMarginX;
         TpsMarginY = other.TpsMarginY;
+        Charset = other.Charset;
     }
 
     /// <summary>Post-TPS input height used by the reference SVTR-Tiny network.</summary>
@@ -136,5 +137,21 @@ public class SVTROptions : DocumentNeuralNetworkOptions
                 throw new ArgumentOutOfRangeException(
                     nameof(TpsMarginX), "TPS margins must be in [0, 0.5).");
         }
+    }
+
+    /// <summary>
+    /// Gets or sets charset. Default: <c>null</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The set of characters the model can output.</para>
+    /// </remarks>
+    public string? Charset { get; set; } = null;
+
+    /// <summary>
+    /// Throws when a value on this instance cannot produce a working model.
+    /// </summary>
+    public void Validate()
+    {
+        // Every value this class carries accepts its full range; nothing to reject.
     }
 }

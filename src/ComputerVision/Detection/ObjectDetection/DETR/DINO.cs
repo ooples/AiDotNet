@@ -65,7 +65,7 @@ public partial class DINO<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
         _numQueries = numQueries;
 
         // Initialize backbone with FPN for multi-scale features
-        Backbone = new ResNet<T>(ResNetVariant.ResNet50);
+        Backbone = new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetVariant.ResNet50 });
         Neck = new FPN<T>(Backbone.OutputChannels.ToArray(), outputChannels: hiddenDim);
 
         // Project features to hidden dimension (for sequence data)

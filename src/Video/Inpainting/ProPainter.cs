@@ -146,21 +146,19 @@ public partial class ProPainter<T> : VideoInpaintingBase<T>
     /// <param name="numHeads">Number of attention heads per transformer block. Default: 8 (paper standard).</param>
     public ProPainter(
         NeuralNetworkArchitecture<T> architecture,
-        int numFeatures = 128,
-        int numTransformerBlocks = 6,
-        int numHeads = 8,
         ProPainterOptions? options = null)
-        : base(architecture, new CharbonnierLoss<T>())
+        : base(architecture: architecture, new CharbonnierLoss<T>())
     {
         _options = options ?? new ProPainterOptions();
+        _options.Validate();
         Options = _options;
 
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numFeatures = numFeatures;
-        _numTransformerBlocks = numTransformerBlocks;
-        _numHeads = numHeads;
+        _numFeatures = _options.NumFeatures;
+        _numTransformerBlocks = _options.NumTransformerBlocks;
+        _numHeads = _options.NumHeads;
         _headDim = (_numFeatures * 4) / _numHeads;
 
         _flowEncoder = [];

@@ -101,8 +101,13 @@ public sealed class FacadeOptimizationBlockerTests
         var arch = new NeuralNetworkArchitecture<double>(
             InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: lookback, outputSize: 1);
         var model = new global::AiDotNet.Finance.Forecasting.Transformers.PatchTST<double>(
-            arch, sequenceLength: lookback, predictionHorizon: 1, numFeatures: 1,
-            patchSize: 8, stride: 4, numLayers: 1, numHeads: 2, modelDimension: 16, feedForwardDimension: 16);
+            arch,
+            options: new global::AiDotNet.Models.Options.PatchTSTOptions<double>
+            {
+                SequenceLength = lookback, PredictionHorizon = 1, NumFeatures = 1,
+                PatchSize = 8, Stride = 4, NumLayers = 1, NumHeads = 2,
+                ModelDimension = 16, FeedForwardDimension = 16
+            });
 
         var loader = new InMemoryDataLoader<double, Tensor<double>, Tensor<double>>(xTrain, yTrain);
         var result = await new AiModelBuilder<double, Tensor<double>, Tensor<double>>()

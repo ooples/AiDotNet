@@ -267,7 +267,6 @@ public partial class Hippo<T> : ForecastingModelBase<T>
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="options">HiPPO-specific options.</param>
-    /// <param name="numFeatures">Number of input features.</param>
     /// <param name="optimizer">Optional optimizer for training.</param>
     /// <param name="lossFunction">Optional loss function.</param>
     /// <remarks>
@@ -276,10 +275,8 @@ public partial class Hippo<T> : ForecastingModelBase<T>
     /// projection for memory compression.
     /// </para>
     /// </remarks>
-    public Hippo(
-        NeuralNetworkArchitecture<T> architecture,
+    public Hippo(NeuralNetworkArchitecture<T> architecture,
         HippoOptions<T>? options = null,
-        int numFeatures = 1,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -309,7 +306,7 @@ public partial class Hippo<T> : ForecastingModelBase<T>
         _timescaleMax = _options.TimescaleMax;
         _useGate = _options.UseGate;
         _useNormalization = _options.UseNormalization;
-        _numFeatures = numFeatures;
+        _numFeatures = (options ??= new HippoOptions<T>()).NumFeatures;
 
         InitializeLayers();
     }

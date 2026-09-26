@@ -141,7 +141,6 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     /// <param name="options">TabSyn-specific options for VAE and diffusion configuration.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor creates a TabSyn network based on the architecture you provide.
@@ -173,15 +172,13 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     {
     }
 
-    public TabSynGenerator(
-        NeuralNetworkArchitecture<T> architecture,
+    public TabSynGenerator(NeuralNetworkArchitecture<T> architecture,
         TabSynOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 5.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TabSynOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new TabSynOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
@@ -406,7 +403,7 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     /// </summary>
     /// <param name="data">The real data matrix where each row is a sample and each column is a feature.</param>
     /// <param name="columns">Metadata describing each column (type, categories, etc.).</param>
-    /// <param name="epochs">Number of training epochs (used for VAE epochs; diffusion uses DiffusionEpochs from options).</param>
+    /// <param name="epochs">Number of training epochs (used for VAE epochs; diffusion uses DiffusionEpochs from options). When null, the model's published VAEEpochs from its options is used.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This is the "learning" step. The generator studies your real data:
@@ -417,9 +414,10 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     /// After fitting, call Generate() to create new synthetic rows.
     /// </para>
     /// </remarks>
-    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
-        ValidateFitInputs(data, columns, epochs);
+        int epochCount = epochs ?? _options.VAEEpochs;
+        ValidateFitInputs(data, columns, epochCount);
 
         _columns = PrepareColumns(data, columns);
 
@@ -438,7 +436,11 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         int vaeNumBatches = Math.Max(1, data.Rows / vaeBatchSize);
         T vaeLr = NumOps.FromDouble(_options.VAELearningRate / vaeBatchSize);
 
-        int vaeEpochs = _options.VAEEpochs > 0 ? _options.VAEEpochs : epochs;
+        // epochCount already resolves to VAEEpochs when the caller passes nothing, so the old
+        // sentinel (VAEEpochs > 0 ? VAEEpochs : epochs) is now redundant -- and it was the
+        // defect: VAEEpochs defaults to 100, so the condition was always true and the
+        // caller's epochs argument never reached the VAE phase at all.
+        int vaeEpochs = epochCount;
         SetTrainingMode(true);
         try
         {
@@ -484,9 +486,10 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     }
 
     /// <inheritdoc />
-    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs, CancellationToken ct = default)
+    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null, CancellationToken ct = default)
     {
-        ValidateFitInputs(data, columns, epochs);
+        int epochCount = epochs ?? _options.VAEEpochs;
+        ValidateFitInputs(data, columns, epochCount);
 
         _columns = PrepareColumns(data, columns);
 
@@ -506,7 +509,11 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
             int vaeNumBatches = Math.Max(1, data.Rows / vaeBatchSize);
             T vaeLr = NumOps.FromDouble(_options.VAELearningRate / vaeBatchSize);
 
-            int vaeEpochs = _options.VAEEpochs > 0 ? _options.VAEEpochs : epochs;
+            // epochCount already resolves to VAEEpochs when the caller passes nothing, so the old
+            // sentinel (VAEEpochs > 0 ? VAEEpochs : epochs) is now redundant -- and it was the
+            // defect: VAEEpochs defaults to 100, so the condition was always true and the
+            // caller's epochs argument never reached the VAE phase at all.
+            int vaeEpochs = epochCount;
             SetTrainingMode(true);
             try
             {

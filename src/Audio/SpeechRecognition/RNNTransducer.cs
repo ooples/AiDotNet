@@ -112,9 +112,14 @@ public partial class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     {
         _options = options ?? new RNNTransducerOptions();
         _useNativeMode = true;
+        // The rate this model publishes on its own options. Built bare, the optimizer
+        // would use its own default instead and LearningRate would be configuration that
+        // nothing reads — the defect that diverged MusicFlamingo's training.
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        { InitialLearningRate = _options.LearningRate });
         base.SampleRate = _options.SampleRate;
         SupportedLanguages = new[] { _options.Language };
         InitializeLayers();
@@ -139,7 +144,7 @@ public partial class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     #region ISpeechRecognizer
 
     /// <inheritdoc />
-    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool includeTimestamps = false)
+    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null)
     {
         ThrowIfDisposed();
         var features = PreprocessAudio(audio);
@@ -153,13 +158,13 @@ public partial class RNNTransducer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
             Language = language ?? _options.Language,
             Confidence = NumOps.FromDouble(tokens.Count > 0 ? 0.9 : 0.0),
             DurationSeconds = duration,
-            Segments = includeTimestamps ? ExtractSegments(tokens, text, audio.Shape[0]) : Array.Empty<TranscriptionSegment<T>>()
+            Segments = ResolveReturnTimestamps(includeTimestamps) ? ExtractSegments(tokens, text, audio.Shape[0]) : Array.Empty<TranscriptionSegment<T>>()
         };
     }
 
     /// <inheritdoc />
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null,
-        bool includeTimestamps = false, CancellationToken cancellationToken = default)
+        bool? includeTimestamps = null, CancellationToken cancellationToken = default)
         => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
 
     /// <inheritdoc />

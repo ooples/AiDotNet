@@ -121,19 +121,25 @@ public partial class TabRNetwork<T> : TabularNeuralNetworkBase<T>
     {
     }
 
-    public TabRNetwork(
-        NeuralNetworkArchitecture<T> architecture,
+    public TabRNetwork(NeuralNetworkArchitecture<T> architecture,
         TabROptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TabROptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new TabROptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+        // WeightDecay is a published knob on TabROptions; a bare AdamOptimizer
+        // ignored it entirely. AdamW applies it as decoupled decay, and its learning-rate
+        // default matches plain Adam's, so nothing else about training changes. A declared
+        // paper recipe still takes precedence over this default.
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    WeightDecay = _options.WeightDecay,
+                });
 
         if (_options.EmbeddingDimension % _options.NumAttentionHeads != 0)
         {

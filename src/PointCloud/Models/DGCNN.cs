@@ -193,10 +193,7 @@ public partial class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPoin
     /// Initializes a new instance of the DGCNN class.
     /// </summary>
     /// <param name="numClasses">Number of output classes for classification.</param>
-    /// <param name="knnK">Number of nearest neighbors for graph construction.</param>
     /// <param name="edgeConvChannels">Output channel dimensions for each EdgeConv layer.</param>
-    /// <param name="useDropout">Whether to use dropout regularization.</param>
-    /// <param name="dropoutRate">Dropout rate (if dropout is enabled).</param>
     /// <param name="lossFunction">Optional loss function for training.</param>
     /// <remarks>
     /// <b>For Beginners:</b> Creates a DGCNN model for point cloud processing with dynamic graphs.
@@ -231,18 +228,12 @@ public partial class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPoin
     /// </remarks>
     public DGCNN(
         int numClasses,
-        int knnK = 20,
         int[]? edgeConvChannels = null,
-        bool useDropout = true,
-        double dropoutRate = 0.5,
         ILossFunction<T>? lossFunction = null)
         : this(new DGCNNOptions
         {
             NumClasses = numClasses,
-            KnnK = knnK,
-            EdgeConvChannels = edgeConvChannels ?? [64, 64, 128, 256],
-            UseDropout = useDropout,
-            DropoutRate = dropoutRate
+            EdgeConvChannels = edgeConvChannels ?? [64, 64, 128, 256]
         },
             lossFunction)
     {
@@ -652,7 +643,7 @@ public partial class EdgeConvLayer<T> : LayerBase<T>, ILayerSerializationExtras<
         return new[]
         {
             new OutputAxisContract(TensorAxis.Other, AxisRelation.Same(TensorAxis.Other)),
-            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels)),
+            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels))
         };
     }
 

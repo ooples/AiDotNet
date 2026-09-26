@@ -47,10 +47,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
 ///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
-/// var model = new SAMHQ&lt;double&gt;(architecture, numClasses: 1);
+/// var model = new SAMHQ&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new SAMHQ&lt;double&gt;(architecture,
+///     options: new SAMHQOptions { NumClasses = 1, DropRate = 0.1, ModelSize = SAMHQModelSize.ViTBase });
 ///
 /// // Or load a pre-trained ONNX model for precise mask boundaries
-/// var onnxModel = new SAMHQ&lt;double&gt;(architecture, "sam_hq_vit_h.onnx", numClasses: 1);
+/// var onnxModel = new SAMHQ&lt;double&gt;(architecture, "sam_hq_vit_h.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -112,10 +115,6 @@ public partial class SAMHQ<T> : Common.PromptableSegmentationBase<T>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW, as used in the SAM-HQ paper).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss; the paper uses focal loss
     /// + dice loss + IoU loss).</param>
-    /// <param name="numClasses">Number of output mask classes (default: 1 for binary segmentation,
-    /// as SAM-HQ produces per-prompt binary masks).</param>
-    /// <param name="modelSize">ViT backbone size (default: ViTBase, 91M params).</param>
-    /// <param name="dropRate">Dropout rate (default: 0.1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -124,29 +123,25 @@ public partial class SAMHQ<T> : Common.PromptableSegmentationBase<T>
     /// from the HQSeg-44K dataset, making it efficient to fine-tune.
     /// </para>
     /// </remarks>
-    public SAMHQ(
-        NeuralNetworkArchitecture<T> architecture,
+    public SAMHQ(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        int numClasses = 1,
-        SAMHQModelSize modelSize = SAMHQModelSize.ViTBase,
-        double dropRate = 0.1,
         SAMHQOptions? options = null)
         // The base resolves numClasses/native-mode, and defaults `optimizer` LAZILY via
         // CreateDefaultOptimizer() - which is why null is passed straight through instead of
         // `optimizer ?? new AdamWOptimizer<...>(this)`, an expression that cannot appear in a
         // constructor initializer.
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, optimizer, lossFunction, (options ??= new SAMHQOptions()).NumClasses)
     {
-        _options = options ?? new SAMHQOptions();
+        _options = options;
         Options = _options;
         // SAM-HQ's own 1024x1024 input default, which differs from the base's 512x512.
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
-        _modelSize = modelSize;
-        _dropRate = dropRate;
+        _modelSize = _options.ModelSize;
+        _dropRate = _options.DropRate;
 
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
 
@@ -155,8 +150,6 @@ public partial class SAMHQ<T> : Common.PromptableSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of output mask classes (default: 1).</param>
-    /// <param name="modelSize">ViT backbone size for metadata (default: ViTBase).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -167,24 +160,21 @@ public partial class SAMHQ<T> : Common.PromptableSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public SAMHQ(
-        NeuralNetworkArchitecture<T> architecture,
+    public SAMHQ(NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numClasses = 1,
-        SAMHQModelSize modelSize = SAMHQModelSize.ViTBase,
         SAMHQOptions? options = null)
         // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
         // geometry and opens the InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, onnxModelPath, (options ??= new SAMHQOptions()).NumClasses)
     {
-        _options = options ?? new SAMHQOptions();
+        _options = options;
         Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
-        _modelSize = modelSize;
-        _dropRate = 0.0;
+        _modelSize = _options.ModelSize;
+        _dropRate = _options.DropRate;
 
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
 
         InitializeLayers();
     }

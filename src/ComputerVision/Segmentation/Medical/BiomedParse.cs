@@ -44,10 +44,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
 ///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
-/// var model = new BiomedParse&lt;double&gt;(architecture, numClasses: 1);
+/// var model = new BiomedParse&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new BiomedParse&lt;double&gt;(architecture,
+///     options: new BiomedParseOptions { NumClasses = 1, DropRate = 0.1 });
 ///
 /// // Or load a pre-trained ONNX model for multi-modality biomedical parsing
-/// var onnxModel = new BiomedParse&lt;double&gt;(architecture, "biomedparse.onnx", numClasses: 1);
+/// var onnxModel = new BiomedParse&lt;double&gt;(architecture, "biomedparse.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -107,8 +110,6 @@ public partial class BiomedParse<T> : Common.MedicalSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyWithLogitsLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
-    /// <param name="dropRate">Dropout rate (default: 0.1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -117,8 +118,7 @@ public partial class BiomedParse<T> : Common.MedicalSegmentationBase<T>
     /// </remarks>
     public BiomedParse(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 1,
-        double dropRate = 0.1,
+        ILossFunction<T>? lossFunction = null,
         BiomedParseOptions? options = null)
         // The base resolves height/width/channels/numClasses/native-mode from the architecture,
         // defaults the loss to CrossEntropyWithLogitsLoss and stores the modality list - exactly
@@ -126,11 +126,11 @@ public partial class BiomedParse<T> : Common.MedicalSegmentationBase<T>
         // null; the base's lazy CreateDefaultOptimizer() produces the same
         // `new AdamWOptimizer<...>(this)` default, which could never be written as a
         // base-constructor argument because `this` is unavailable there.
-        : base(architecture, optimizer, lossFunction, numClasses, BiomedParseModalities)
+        : base(architecture, optimizer, lossFunction, (options ??= new BiomedParseOptions()).NumClasses, BiomedParseModalities)
     {
-        _options = options ?? new BiomedParseOptions(); Options = _options;
+        _options = options; Options = _options;
         ApplyBiomedParseInputFallback(architecture);
-        _dropRate = dropRate;
+        _dropRate = _options.DropRate;
         _channelDims = DefaultChannelDims;
         _depths = DefaultDepths;
         _decoderDim = DefaultDecoderDim;
@@ -159,7 +159,6 @@ public partial class BiomedParse<T> : Common.MedicalSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -169,17 +168,17 @@ public partial class BiomedParse<T> : Common.MedicalSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public BiomedParse(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 1,
+    public BiomedParse(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         BiomedParseOptions? options = null)
         // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
         // geometry, stores the modality list and opens the InferenceSession - the same lines this
         // used to repeat.
-        : base(architecture, onnxModelPath, numClasses, BiomedParseModalities)
+        : base(architecture, onnxModelPath, (options ??= new BiomedParseOptions()).NumClasses, BiomedParseModalities)
     {
-        _options = options ?? new BiomedParseOptions(); Options = _options;
+        _options = options; Options = _options;
         ApplyBiomedParseInputFallback(architecture);
-        _dropRate = 0.1;
+        _dropRate = _options.DropRate;
         _channelDims = DefaultChannelDims;
         _depths = DefaultDepths;
         _decoderDim = DefaultDecoderDim;

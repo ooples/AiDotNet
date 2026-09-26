@@ -43,10 +43,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 133);
-/// var model = new KMaXDeepLab&lt;double&gt;(architecture, numClasses: 133);
+/// var model = new KMaXDeepLab&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new KMaXDeepLab&lt;double&gt;(architecture,
+///     options: new KMaXDeepLabOptions { NumClasses = 133, DropRate = 0.1, ModelSize = KMaXDeepLabModelSize.R50 });
 ///
 /// // Or load a pre-trained ONNX model for autonomous driving scene parsing
-/// var onnxModel = new KMaXDeepLab&lt;double&gt;(architecture, "kmaxdeeplab.onnx", numClasses: 133);
+/// var onnxModel = new KMaXDeepLab&lt;double&gt;(architecture, "kmaxdeeplab.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -85,9 +88,6 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 133).</param>
-    /// <param name="modelSize">Model size variant (default: R50).</param>
-    /// <param name="dropRate">Dropout rate (default: 0.1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -96,21 +96,20 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
     /// </remarks>
     public KMaXDeepLab(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 133,
-        KMaXDeepLabModelSize modelSize = KMaXDeepLabModelSize.R50, double dropRate = 0.1,
+        ILossFunction<T>? lossFunction = null,
         KMaXDeepLabOptions? options = null)
         // The base resolves height/width/channels/numClasses/native-mode from the architecture and
         // defaults `optimizer` lazily via CreateDefaultOptimizer(), so null is passed straight through.
         // The stuff/thing split is the same one/two-thirds rule the explicit interface members used.
-        : base(architecture, optimizer, lossFunction, numClasses,
-            Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
+        : base(architecture, optimizer, lossFunction, (options ??= new KMaXDeepLabOptions()).NumClasses,
+            Math.Max(1, options.NumClasses / 3), options.NumClasses - Math.Max(1, options.NumClasses / 3))
     {
-        _options = options ?? new KMaXDeepLabOptions(); Options = _options;
+        _options = options; Options = _options;
         // KMaXDeepLab's own fallback input geometry is 640x640, not the base's 512.
         if (architecture.InputHeight <= 0) _height = 640;
         if (architecture.InputWidth <= 0) _width = 640;
-        _modelSize = modelSize; _dropRate = dropRate;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
 
@@ -119,8 +118,6 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 133).</param>
-    /// <param name="modelSize">Model size for metadata (default: R50).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -130,20 +127,20 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public KMaXDeepLab(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 133, KMaXDeepLabModelSize modelSize = KMaXDeepLabModelSize.R50,
+    public KMaXDeepLab(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         KMaXDeepLabOptions? options = null)
         // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
         // InferenceSession.
-        : base(architecture, onnxModelPath, numClasses,
-            Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
+        : base(architecture, onnxModelPath, (options ??= new KMaXDeepLabOptions()).NumClasses,
+            Math.Max(1, options.NumClasses / 3), options.NumClasses - Math.Max(1, options.NumClasses / 3))
     {
-        _options = options ?? new KMaXDeepLabOptions(); Options = _options;
+        _options = options; Options = _options;
         // KMaXDeepLab's own fallback input geometry is 640x640, not the base's 512.
         if (architecture.InputHeight <= 0) _height = 640;
         if (architecture.InputWidth <= 0) _width = 640;
-        _modelSize = modelSize; _dropRate = 0.1;
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
     #endregion

@@ -86,6 +86,12 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
     private readonly int _convKernelSize;
     private readonly int _dtRank;
 
+    /// <summary>Lower bound of the log-uniform dt initialization (Mamba's dt_min).</summary>
+    private readonly double _deltaMin;
+
+    /// <summary>Upper bound of the log-uniform dt initialization (Mamba's dt_max).</summary>
+    private readonly double _deltaMax;
+
     // Input projection: [modelDim, innerDim * 2] (projects to x and z branches)
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
 
@@ -289,7 +295,9 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         int convKernelSize = 4,
         int dtRank = -1,
         IActivationFunction<T>? activationFunction = null,
-        IInitializationStrategy<T>? initializationStrategy = null)
+        IInitializationStrategy<T>? initializationStrategy = null,
+        double deltaMin = 0.001,
+        double deltaMax = 0.1)
         : base(
             // Sequence is a FREE axis: -1, not the configured maximum. sequenceLength is
             // documented as a MAXIMUM and is used here for nothing but validation -- no weight and
@@ -342,6 +350,16 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         _innerDimension = modelDimension * expandFactor;
         _convKernelSize = convKernelSize;
         _dtRank = dtRank < 0 ? (int)Math.Ceiling((double)modelDimension / 16) : dtRank;
+        if (deltaMin <= 0 || deltaMax <= 0 || deltaMin > deltaMax)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(deltaMin),
+                $"deltaMin and deltaMax must be positive with deltaMin <= deltaMax; got "
+                + $"[{deltaMin}, {deltaMax}].");
+        }
+
+        _deltaMin = deltaMin;
+        _deltaMax = deltaMax;
 
         // Input projection: [modelDim, innerDim * 2] (x branch + z branch)
         _inputProjectionWeights = new Tensor<T>([modelDimension, _innerDimension * 2]);
@@ -385,10 +403,21 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         InitializeTensor(_xProjectionWeights);
         InitializeTensor(_dtProjectionWeights);
 
-        // Initialize dt bias with small positive values (ensures initial delta > 0 after softplus)
+        // dt_init (Gu & Dao 2023 §3.6 and the reference implementation): draw the discretization
+        // step LOG-UNIFORMLY from [deltaMin, deltaMax] and store its inverse softplus, since the
+        // forward pass applies softplus to this bias. The constant 0.01 that stood here is the
+        // geometric mean of the default range -- a single point in the middle of the interval the
+        // paper spreads dt across, so every channel started with the same timescale and the whole
+        // point of the range was lost.
+        var dtRandom = RandomHelper.CreateSecureRandom();
+        double logDeltaMin = Math.Log(_deltaMin);
+        double logDeltaMax = Math.Log(_deltaMax);
         for (int i = 0; i < _dtProjectionBias.Length; i++)
         {
-            _dtProjectionBias[i] = NumOps.FromDouble(0.01);
+            double dt = Math.Exp(logDeltaMin + (dtRandom.NextDouble() * (logDeltaMax - logDeltaMin)));
+            // log(expm1(dt)), written so that a small dt does not lose precision to cancellation.
+            double inverseSoftplus = dt < 1e-3 ? Math.Log(dt) + (dt / 2.0) : Math.Log(Math.Exp(dt) - 1.0);
+            _dtProjectionBias[i] = NumOps.FromDouble(inverseSoftplus);
         }
 
         // Initialize A_log: log of the S4D-Lin initialization

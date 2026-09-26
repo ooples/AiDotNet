@@ -18,7 +18,7 @@ public class HamiltonianNeuralNetworkOptions : PhysicsInformedOptions
     {
         if (other is null)
             throw new ArgumentNullException(nameof(other));
-        EncoderLayerCount = other.EncoderLayerCount;
+            EncoderLayerCount = other.EncoderLayerCount;
         HiddenLayerCount = other.HiddenLayerCount;
         HiddenDimension = other.HiddenDimension;
         LearningRate = other.LearningRate;

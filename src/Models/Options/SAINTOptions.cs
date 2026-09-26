@@ -94,7 +94,15 @@ public class SAINTOptions<T> : RiskModelOptions<T>
     /// <summary>
     /// Gets the feed-forward network dimension.
     /// </summary>
-    public int FeedForwardDimension => EmbeddingDimension * FeedForwardMultiplier;
+    /// <remarks>
+    /// Computed from <see cref="HiddenDimension"/>, not <see cref="EmbeddingDimension"/>: the
+    /// feature tokenizer embeds each feature into HiddenDimension, so that is the transformer's
+    /// token width and the base the 4x feed-forward expansion applies to. The previous formula
+    /// used EmbeddingDimension, which this model never passes to layer construction, so the
+    /// computed value (32 x 4 = 128) bore no relation to the width actually built
+    /// (128 x 4 = 512) -- and nothing read it, so the discrepancy was invisible.
+    /// </remarks>
+    public int FeedForwardDimension => HiddenDimension * FeedForwardMultiplier;
 
     /// <summary>
     /// Dropout rate.
@@ -172,12 +180,6 @@ public class SAINTOptions<T> : RiskModelOptions<T>
     /// </summary>
     /// <value>The initialization scale, defaulting to 0.02.</value>
     public double EmbeddingInitScale { get; set; } = 0.02;
-
-    /// <summary>
-    /// Gets or sets the attention dropout rate (separate from general dropout).
-    /// </summary>
-    /// <value>The attention dropout rate, defaulting to 0.0.</value>
-    public double AttentionDropoutRate { get; set; } = 0.0;
 
     /// <summary>
     /// Gets or sets the hidden layer activation function.

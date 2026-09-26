@@ -326,6 +326,16 @@ namespace AiDotNet.PhysicsInformed.Interfaces
         /// Number of samples for uncertainty estimation (if enabled).
         /// </summary>
         public int UncertaintySamples { get; set; } = 100;
+
+        /// <summary>
+        /// Number of collocation points at which the PDE residual is enforced.
+        /// </summary>
+        /// <remarks>
+        /// <para><b>For Beginners:</b> Collocation points are the locations inside the domain where the
+        /// network is asked "does the physics hold here?". More points means the PDE is enforced more
+        /// densely, which improves accuracy but costs proportionally more per training step.</para>
+        /// </remarks>
+        public int NumCollocationPoints { get; set; } = 10000;
     }
 
     /// <summary>

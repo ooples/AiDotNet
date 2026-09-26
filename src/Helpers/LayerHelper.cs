@@ -4784,31 +4784,30 @@ public static partial class LayerHelper<T>
         // ============== DECODER PATH ==============
         // Each decoder block: Upsample3D -> Conv3D -> Conv3D
         //
-        // Note: a full U-Net would concatenate encoder skip-connections at
-        // each decoder level, doubling the channel count into the first
-        // Conv3D. This implementation does NOT actually perform the
-        // concatenation, so the "*2" previously applied to
-        // encoderFilters[block + 1] told the Upsample and first-Conv3D to
-        // expect twice the channels they would actually receive from the
-        // preceding decoder block's Second-Conv3D output. That produced
-        //   "Input channels (128) must match kernel in_channels (256)"
-        // at the first decoder block after the bottleneck-adjacent one.
-        // Matching the actual tensor-channel count (= encoderFilters[block + 1])
-        // keeps the stack consistent; adding real skip concatenation is a
-        // separate architectural improvement tracked independently.
+        // Cicek et al. (2016) decoder: a 2x2x2 up-convolution that doubles the resolution AND
+        // HALVES the channel count, then a channel-wise concatenation of the encoder tap at the
+        // matching resolution, then two convolutions. UNet3D.Forward performs the concatenation;
+        // the halving happens here.
+        //
+        // The halving is what makes the skip affordable. Concatenating onto a non-halved upsample
+        // gave the first decoder block 512 + 128 = 640 input channels, and an 8^3 convolution at
+        // that width ran the suite past its 120 s budget. Halving first gives 256 + 128 = 384,
+        // which is the arithmetic the paper specifies.
         for (int block = numEncoderBlocks - 2; block >= 0; block--)
         {
             int outputFilters = encoderFilters[block];
             int inChannels = block == numEncoderBlocks - 2 ? bottleneckFilters : encoderFilters[block + 1];
 
-            // Upsample3D to increase resolution
-            yield return new Upsample3DLayer<T>(scaleFactor: 2);
+            // Up-convolution: 2x resolution, half the channels.
+            yield return new Conv3DTransposeLayer<T>(
+                outputChannels: inChannels / 2,
+                kernelSize: 2,
+                stride: 2);
             currentResolution *= 2;
 
-            // First Conv3D after upsample (would concatenate with skip in full U-Net)
-            // For simplicity, we assume channels are doubled from skip connection
+            // First Conv3D, fed by the concatenation of the up-convolved features
+            // (inChannels / 2) with this level's encoder tap (encoderFilters[block]).
             yield return new Conv3DLayer<T>(
-                // In full U-Net: inChannels + encoderFilters[block] from skip
                 outputChannels: outputFilters,
                 kernelSize: 3,
                 stride: 1,
@@ -4825,13 +4824,31 @@ public static partial class LayerHelper<T>
         }
 
         // ============== OUTPUT LAYER ==============
-        // 1x1x1 convolution to produce per-voxel class predictions
+        // 1x1x1 convolution to produce per-voxel class predictions.
+        //
+        // The activation is selected from the TASK TYPE, matching
+        // CreateDefaultVoxelCNNLayers just above. Selecting it from numClasses alone -- which
+        // this did, giving Sigmoid whenever numClasses == 1 -- puts a bounded (0, 1) head on a
+        // regression task whose targets are not bounded that way. UNet3D's parameterless
+        // constructor declares Regression with outputSize 1, so it took that branch: chasing a
+        // target of -1 drives the pre-activation toward negative infinity, and once it passes
+        // about -88 the float32 sigmoid underflows to EXACTLY zero for every input. The network
+        // then returns all-zeros regardless of what it is shown, which is the uniform-output
+        // collapse DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs reports as an
+        // L2 distance of exactly 0. Identity leaves the regression head unbounded, so the
+        // gradient keeps depending on the input.
+        IActivationFunction<T> outputActivation = architecture.TaskType == NeuralNetworkTaskType.MultiClassClassification
+            ? new SoftmaxActivation<T>()
+            : architecture.TaskType == NeuralNetworkTaskType.BinaryClassification
+                ? new SigmoidActivation<T>()
+                : new IdentityActivation<T>();
+
         yield return new Conv3DLayer<T>(
             outputChannels: numClasses,
             kernelSize: 1,
             stride: 1,
             padding: 0,
-            activationFunction: numClasses > 1 ? new SoftmaxActivation<T>() : new SigmoidActivation<T>());
+            activationFunction: outputActivation);
     }
 
     /// <summary>
@@ -9491,9 +9508,9 @@ public static partial class LayerHelper<T>
         int inputHeight = 480,
         int inputWidth = 640,
         int numFeatures = 768,
-        int numEncoderBlocks = 12)
+        int numEncoderBlocks = 12,
+        int patchSize = 16)
     {
-        int patchSize = 16;
         int numHeads = System.Math.Max(1, numFeatures / 64); // ViT convention: head dim = 64
         int ffnDim = numFeatures * 4;
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
@@ -12236,13 +12253,13 @@ public static partial class LayerHelper<T>
     /// <param name="imageSize">Input image size (default: 512).</param>
     /// <param name="backboneChannels">Backbone output channels (default: 512).</param>
     /// <param name="featureChannels">Feature map channels (default: 128).</param>
-    /// <param name="geometryType">Geometry output type: RBOX or QUAD (default: RBOX).</param>
+    /// <param name="geometryType">Geometry output type (default: rotated box).</param>
     /// <returns>A collection of layers forming an EAST model.</returns>
     public static IEnumerable<ILayer<T>> CreateDefaultEASTLayers(
         int imageSize = 512,
         int backboneChannels = 512,
         int featureChannels = 128,
-        string geometryType = "RBOX")
+        EASTGeometryType geometryType = EASTGeometryType.RBox)
     {
         IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
@@ -12268,7 +12285,7 @@ public static partial class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(featureChannels, 3, 1, 1);
 
         // Output heads
-        int geometryChannels = geometryType == "QUAD" ? 8 : 5;
+        int geometryChannels = geometryType == EASTGeometryType.Quad ? 8 : 5;
         yield return new ConvolutionalLayer<T>(1, 1, 1, 0); // Score map
         yield return new ConvolutionalLayer<T>(geometryChannels, 1, 1, 0); // Geometry
     }
@@ -17890,6 +17907,24 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
+
+    /// <summary>
+    /// Builds a hidden dense layer, honouring a caller-supplied vector activation when one is given.
+    /// </summary>
+    /// <remarks>
+    /// The tabular options classes declare a nullable <c>HiddenVectorActivation</c>. Before this
+    /// existed nothing read it, so the property advertised an extension point that did nothing.
+    /// When it is null the builder keeps the activation it always used, so the default path is
+    /// unchanged.
+    /// </remarks>
+    private static DenseLayer<T> TabularHiddenDense(
+        int outputSize,
+        IVectorActivationFunction<T>? vectorActivation,
+        IActivationFunction<T> fallback)
+        => vectorActivation is null
+            ? new DenseLayer<T>(outputSize, fallback)
+            : new DenseLayer<T>(outputSize, vectorActivation);
+
     /// <summary>
     /// Creates default layers for a SAINT model.
     /// </summary>
@@ -17901,7 +17936,9 @@ public static partial class LayerHelper<T>
         int numLayers = 2,
         int sequenceLength = 1,
         int numClasses = 2,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int? feedForwardDimension = null,
+        IVectorActivationFunction<T>? hiddenVectorActivation = null)
     {
         // Feature tokenization: embed each feature into its OWN learnable token, producing a real
         // [features, embedding] sequence. SAINT (Somepalli et al. 2021, "SAINT: Improved Neural
@@ -17918,13 +17955,13 @@ public static partial class LayerHelper<T>
         //      defining contribution, letting a sample attend to other rows in the batch.
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(numHeads, hiddenDimension * 4);
+            yield return new TransformerEncoderLayer<T>(numHeads, feedForwardDimension ?? (hiddenDimension * 4));
             yield return new IntersampleAttentionLayer<T>(hiddenDimension, numHeads, dropoutRate);
         }
 
         // GELU readout head (ViT/BERT-style; a ReLU head drives the output projection dead during
         // training). Final activation is task-dependent (GetTabularOutputActivation).
-        yield return new DenseLayer<T>(hiddenDimension / 2, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return TabularHiddenDense(hiddenDimension / 2, hiddenVectorActivation, new GELUActivation<T>());
         yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
@@ -17939,7 +17976,8 @@ public static partial class LayerHelper<T>
         int numLayers = 2,
         int sequenceLength = 1,
         int numClasses = 2,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int? feedForwardDimension = null)
     {
         // Feature tokenization. Turn the flat [features] vector into a real
         // [features, embedding] token sequence so self-attention operates ACROSS
@@ -17958,7 +17996,7 @@ public static partial class LayerHelper<T>
         // stacks trainable — the same encoder block ViT / BERT are built from.
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(numHeads, hiddenDimension * 4);
+            yield return new TransformerEncoderLayer<T>(numHeads, feedForwardDimension ?? (hiddenDimension * 4));
         }
 
         // MLP head, matching the ViT/BERT readout (GELU projection -> output, no dropout). A ReLU
@@ -18090,7 +18128,8 @@ public static partial class LayerHelper<T>
         int numHeads = 2,
         int numLayers = 3,
         int numClasses = 2,
-        double dropoutRate = 0.0)
+        double dropoutRate = 0.0,
+        IVectorActivationFunction<T>? hiddenVectorActivation = null)
     {
         // Feature tokenization: embed each feature into its own learnable vector,
         // producing a real [features, embedding] token sequence. AutoInt (Song et al.
@@ -18108,8 +18147,8 @@ public static partial class LayerHelper<T>
 
         // MLP head (GELU readout; a ReLU head drives the output projection dead
         // during training). Final activation is task-dependent.
-        yield return new DenseLayer<T>(64, (IActivationFunction<T>)new GELUActivation<T>());
-        yield return new DenseLayer<T>(32, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return TabularHiddenDense(64, hiddenVectorActivation, new GELUActivation<T>());
+        yield return TabularHiddenDense(32, hiddenVectorActivation, new GELUActivation<T>());
         yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
@@ -18131,7 +18170,10 @@ public static partial class LayerHelper<T>
         int stateDimension = 16,
         int numLayers = 4,
         int numClasses = 2,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        IVectorActivationFunction<T>? hiddenVectorActivation = null,
+        double deltaMin = 0.001,
+        double deltaMax = 0.1)
     {
         // Feature tokenization: embed each feature into its OWN learnable token, producing a
         // [features, embedding] sequence that the Mamba blocks scan. Mambular (Thielmann et al.
@@ -18148,13 +18190,15 @@ public static partial class LayerHelper<T>
             yield return new MambaBlock<T>(
                 sequenceLength: numFeatures,
                 modelDimension: embeddingDimension,
-                stateDimension: stateDimension);
+                stateDimension: stateDimension,
+                deltaMin: deltaMin,
+                deltaMax: deltaMax);
         }
 
         // Per-token MLP head (GELU readout; tape-safe sequence pooling is unavailable so the head
         // runs per feature-token, matching the sibling tabular models). Final activation is
         // task-dependent (GetTabularOutputActivation).
-        yield return new DenseLayer<T>(64, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return TabularHiddenDense(64, hiddenVectorActivation, new GELUActivation<T>());
         yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
@@ -18176,7 +18220,10 @@ public static partial class LayerHelper<T>
         int numHeads = 4,
         int numLayers = 6,
         int numClasses = 2,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int? feedForwardDimension = null,
+        IVectorActivationFunction<T>? hiddenVectorActivation = null,
+        bool useLayerNorm = true)
     {
         // Feature tokenization: embed each feature into its OWN learnable vector, producing a
         // real [features, embedding] token sequence. TabDPT (Ma et al. 2024, "TabDPT: Scaling
@@ -18192,12 +18239,13 @@ public static partial class LayerHelper<T>
         // the ViT/BERT encoder block that keeps deep attention stacks trainable).
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new TransformerEncoderLayer<T>(numHeads, embeddingDimension * 4);
+            yield return new TransformerEncoderLayer<T>(numHeads, feedForwardDimension ?? (embeddingDimension * 4));
         }
 
         // GELU readout head (ViT/BERT-style; a ReLU head drives the output projection dead during
         // training). Final activation is task-dependent (GetTabularOutputActivation).
-        yield return new DenseLayer<T>(embeddingDimension / 2, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return TabularHiddenDense(embeddingDimension / 2, hiddenVectorActivation, new GELUActivation<T>());
+        if (useLayerNorm) yield return new LayerNormalizationLayer<T>(embeddingDimension / 2);
         yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
@@ -18219,10 +18267,12 @@ public static partial class LayerHelper<T>
         int numHeads = 4,
         int numLayers = 12,
         int numClasses = 2,
-        double dropoutRate = 0.0)
+        double dropoutRate = 0.0,
+        int? feedForwardDimension = null,
+        IVectorActivationFunction<T>? hiddenVectorActivation = null)
     {
         // Input projection
-        yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return TabularHiddenDense(embeddingDimension, hiddenVectorActivation, new GELUActivation<T>());
         yield return new LayerNormalizationLayer<T>();
 
         // Deep transformer encoder. TabPFN's encoder is a residual Transformer;
@@ -18239,13 +18289,13 @@ public static partial class LayerHelper<T>
             yield return new TransformerEncoderBlock<T>(
                 hiddenSize: embeddingDimension,
                 numHeads: numHeads,
-                ffnDim: embeddingDimension * 4,
+                ffnDim: feedForwardDimension ?? (embeddingDimension * 4),
                 dropoutRate: dropoutRate,
                 ffnActivation: new GELUActivation<T>());
         }
 
         // Output head
-        yield return new DenseLayer<T>(64, (IActivationFunction<T>)new GELUActivation<T>());
+        yield return TabularHiddenDense(64, hiddenVectorActivation, new GELUActivation<T>());
         yield return new DenseLayer<T>(numClasses, GetTabularOutputActivation(architecture));
     }
 
@@ -19384,13 +19434,16 @@ public static partial class LayerHelper<T>
     /// <param name="generatorDims">Generator hidden widths, each equal to <paramref name="embeddingDim"/>.</param>
     /// <param name="discriminatorDims">Discriminator hidden widths.</param>
     /// <param name="useMinibatchAveraging">When true the discriminator's input width is doubled.</param>
+    /// <param name="batchNormDecay">EMA decay for the generator BatchNorms' running mean/variance
+    /// (medGAN's paper value is 0.99; <see cref="BatchNormalizationLayer{T}"/> defaults to 0.9).</param>
     public static IEnumerable<ILayer<T>> CreateDefaultMedGANLayers(
         int dataWidth,
         int embeddingDim,
         int[] autoencoderDims,
         int[] generatorDims,
         int[] discriminatorDims,
-        bool useMinibatchAveraging = true)
+        bool useMinibatchAveraging = true,
+        double batchNormDecay = 0.9)
     {
         var identity = (IActivationFunction<T>)new IdentityActivation<T>();
 
@@ -19423,11 +19476,12 @@ public static partial class LayerHelper<T>
         for (int i = 0; i < generatorDims.Length; i++)
         {
             yield return new FullyConnectedLayer<T>(embeddingDim, generatorDims[i], identity);
-            yield return new BatchNormalizationLayer<T>(generatorDims[i]);
+            yield return new BatchNormalizationLayer<T>(
+                generatorDims[i], momentum: batchNormDecay);
         }
         // Final generator projection into the embedding space; also batch-normed, also shortcut.
         yield return new FullyConnectedLayer<T>(embeddingDim, embeddingDim, identity);
-        yield return new BatchNormalizationLayer<T>(embeddingDim);
+        yield return new BatchNormalizationLayer<T>(embeddingDim, momentum: batchNormDecay);
 
         // --- Discriminator: no BatchNorm, no shortcuts (stated by the paper) ---
         // Minibatch averaging concatenates the batch mean onto each sample, doubling the input.

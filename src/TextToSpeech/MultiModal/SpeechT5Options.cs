@@ -25,7 +25,7 @@ public class SpeechT5Options : EndToEndTtsOptions
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
-        OptimizerBeta1 = other.OptimizerBeta1;
+            OptimizerBeta1 = other.OptimizerBeta1;
         OptimizerBeta2 = other.OptimizerBeta2;
         OptimizerEpsilon = other.OptimizerEpsilon;
         MaxGradientNorm = other.MaxGradientNorm;

@@ -74,8 +74,7 @@ public partial class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImage
     /// <summary>
     /// Initializes a new adversarial image evaluator.
     /// </summary>
-    /// <param name="threshold">Detection threshold (0-1). Default: 0.5.</param>
-    public AdversarialImageEvaluator(double threshold = 0.5)
+    public AdversarialImageEvaluator(AdversarialImageEvaluatorOptions? options = null)
         : base(new NeuralNetworkArchitecture<T>(
                 inputType: InputType.ThreeDimensional,
                 taskType: NeuralNetworkTaskType.BinaryClassification,
@@ -83,13 +82,14 @@ public partial class AdversarialImageEvaluator<T> : NeuralNetworkBase<T>, IImage
                 outputSize: 1),
               new BinaryCrossEntropyLoss<T>())
     {
-        if (threshold < 0 || threshold > 1)
+        options ??= new AdversarialImageEvaluatorOptions();
+        if (options.Threshold < 0 || options.Threshold > 1)
         {
-            throw new ArgumentOutOfRangeException(nameof(threshold),
+            throw new ArgumentOutOfRangeException(nameof(options.Threshold),
                 "Threshold must be between 0 and 1.");
         }
 
-        _threshold = threshold;
+        _threshold = options.Threshold;
 
         // Build the layer chain now rather than on first Predict. Until this ran, Layers was
         // EMPTY, so both parameter surfaces described a model with no layers at all while the

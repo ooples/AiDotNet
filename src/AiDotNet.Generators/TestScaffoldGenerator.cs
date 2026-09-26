@@ -533,9 +533,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // is paper-faithful). Runs in the nightly heavy lane.
         "InternViT",
         // #1719 follow-up (#1694 endgame): verified-genuine foundation-scale OOM/120s-timeout on the gate
-        // box — 9B-class generative VLM (same family as LXMERT/METER/SmolVLM) and an audio-LM. The
-        // gradients DO flow; the footprint simply exceeds the runner, so they run in the nightly heavy lane.
-        "IDEFICS", "MusicFlamingo",
+        // box — 9B-class generative VLM (same family as LXMERT/METER/SmolVLM). The gradients DO flow;
+        // the footprint simply exceeds the runner, so it runs in the nightly heavy lane.
+        "IDEFICS",
+        // MusicFlamingo was listed here too, and should not have been. It never timed out: it failed
+        // FAST (11 s and 23 s) with the loss moving the wrong way, because the model built its AdamW
+        // bare and so trained at AdamW's 1e-3 default instead of the 1e-4 its own options declared —
+        // ten times the intended rate on ~105M parameters. That is a real bug, which the note above
+        // this set says explicitly must be fixed rather than tagged, and the "9B-class" description
+        // never fitted a 105M-parameter model. Fixed in the model; the tests now pass in the default
+        // lane, so the tag is gone. If CI shows a genuine OOM on the 16 GB runner, it belongs back
+        // here with an accurate reason — but it ran clean on a 15.4 GB box.
         // MGLDVSR: motion-guided LATENT DIFFUSION for video super-resolution (Yang 2024). Each forward
         // runs 20 denoising steps (20 U-Net passes) over video latents, and the training invariants
         // (MoreData = 200 iterations) multiply that out well past the 120s per-test timeout on CPU.
@@ -4498,7 +4506,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 32, outputSize: 128), " +
-                    "vocabSize: 128, bucketSize: 1024, embeddingDimension: 16, maxTokens: 32)";
+                    "options: new AiDotNet.NeuralNetworks.Options.FastTextOptions { VocabSize = 128, " +
+                    "BucketSize = 1024, EmbeddingDimension = 16, MaxSequenceLength = 32 })";
             }
             else if (model.ClassName is "FunASRNano" or "HuBERTASR" or "InterCTC" or "RobustConformer" or "SALM"
                     or "SpeakerDiarizedASR" or "SPIRAL"
@@ -4643,7 +4652,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 16, inputWidth: 16, inputDepth: 6, outputSize: 2), " +
-                    "numFeatures: 8, numLayers: 1)";
+                    "options: new AiDotNet.Video.Options.RPKNetOptions { NumFeatures = 8, NumLayers = 1 }" + ")";
             }
             else if (model.ClassName == "VideoCLIP" && model.TypeParameterCount == 1
                 && typeName.StartsWith(
@@ -4658,8 +4667,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
-                    "numFrames: 4, embeddingDim: 4, textMaxLength: 8, vocabSize: 64, " +
-                    "options: new AiDotNet.Video.Options.VideoCLIPVideoOptions { HiddenDimension = 32, " +
+                    "options: new AiDotNet.Video.Options.VideoCLIPVideoOptions { NumFrames = 4, EmbeddingDim = 4, TextMaxLength = 8, VocabSize = 64, HiddenDimension = 32, " +
                     "NumSpatialBlocks = 1, NumTemporalBlocks = 1, NumTextBlocks = 1, " +
                     // Paper warm-up is 1000 optimizer steps and the model keeps that default.
                     // These invariants train for one or two steps, where a 1000-step linear
@@ -4781,8 +4789,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceClassification, " +
                     "inputSize: 32000, outputSize: 32), " +
-                    "modelSize: AiDotNet.Audio.Whisper.WhisperModelSize.Tiny, " +
-                    "maxAudioLengthSeconds: 2, maxTokens: 16)";
+                    "options: new AiDotNet.Audio.Whisper.WhisperOptions { ModelSize = AiDotNet.Audio.Whisper.WhisperModelSize.Tiny, MaxAudioLengthSeconds = 2, MaxTokens = 16 }" + ")";
             }
             else if (model.ClassName == "MedSAM2" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.ComputerVision.Segmentation.Medical.", System.StringComparison.Ordinal))
@@ -5062,7 +5069,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 2), " +
-                    "numFeatures: 8, numTransformerLayers: 1, numHeads: 1)";
+                    "options: new AiDotNet.Video.Options.GMFlowOptions { NumFeatures = 8, NumTransformerLayers = 1, NumHeads = 1 }" + ")";
             }
             else if (model.ClassName == "GroundedSAM2" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.VisionLanguage.Grounding.", System.StringComparison.Ordinal))
@@ -5089,9 +5096,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ImageSegmentation, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), " +
                     $"optimizer: {conservativeSmokeAdamWOptimizer}, " +
-                    "lossFunction: new AiDotNet.LossFunctions.MeanSquaredErrorLoss<double>(), numClasses: 1, " +
+                    "lossFunction: new AiDotNet.LossFunctions.MeanSquaredErrorLoss<double>(), " +
                     "options: new AiDotNet.ComputerVision.Segmentation.OpenVocabulary.GroundedSAM2Options { " +
-                    "VisionDim = 32, DecoderDim = 32, NumVisionLayers = 1, NumDecoderLayers = 1, " +
+                    "NumClasses = 1, VisionDim = 32, DecoderDim = 32, NumVisionLayers = 1, NumDecoderLayers = 1, " +
                     "NumHeads = 4, PatchSize = 8 })";
             }
             else if (model.ClassName == "DannaSep" && model.TypeParameterCount == 1)
@@ -5114,8 +5121,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "numStages: 2, baseChannels: 4, lstmHiddenDim: 16, numLstmLayers: 1, " +
-                    "fftSize: 64, hopSize: 32, useComplexMask: true, kernelSize: 3, stride: 2)";
+                    "options: new AiDotNet.Models.Options.DCCRNOptions { NumStages = 2, BaseChannels = 4, LstmHiddenDim = 16, NumLstmLayers = 1, FftSize = 64, HopSize = 32, UseComplexMask = true, KernelSize = 3, Stride = 2 }" + ")";
             }
             else if (model.ClassName == "NaturalSpeech" && model.TypeParameterCount == 1)
             {
@@ -5171,9 +5177,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ImageSegmentation, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), " +
                     $"optimizer: {noDecaySmokeAdamWOptimizer}, " +
-                    "lossFunction: new AiDotNet.LossFunctions.MeanSquaredErrorLoss<double>(), numClasses: 1, " +
+                    "lossFunction: new AiDotNet.LossFunctions.MeanSquaredErrorLoss<double>(), " +
                     "options: new AiDotNet.ComputerVision.Segmentation.Video.DEVAOptions { " +
-                    "ChannelDimensions = new[] { 8, 16, 32, 64 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
+                    "NumClasses = 1, ChannelDimensions = new[] { 8, 16, 32, 64 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
                     "DecoderDimension = 16, UseGroupNormalization = true })";
             }
             else if (model.ClassName == "DepthAnythingV2" && model.TypeParameterCount == 1)
@@ -5371,7 +5377,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 8, inputWidth: 8, inputDepth: 3, outputSize: 3), " +
-                    "numFeatures: 8)";
+                    "options: new AiDotNet.Video.Options.E2FGVIOptions { NumFeatures = 8 }" + ")";
             }
             else if (model.ClassName == "EVACLIP" && model.TypeParameterCount == 1)
             {
@@ -5404,7 +5410,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
-                    "embedDim: 32, numLayers: 4, numFrames: 4, numTimesteps: 16)";
+                    "options: new AiDotNet.Video.Options.CogVideoOptions { EmbedDim = 32, NumLayers = 4, NumFrames = 4, NumTimesteps = 16 }" + ")";
             }
             else if (model.ClassName == "E3TTS" && model.TypeParameterCount == 1)
             {
@@ -5519,16 +5525,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), numClasses: 1, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), " +
                     "options: new AiDotNet.ComputerVision.Segmentation.Efficient.FastSAMOptions { " +
-                    "ChannelDims = new[] { 8, 16, 24, 32 }, Depths = new[] { 1, 1, 1, 1 }, DecoderDim = 8 })";
+                    "NumClasses = 1, ChannelDims = new[] { 8, 16, 24, 32 }, Depths = new[] { 1, 1, 1, 1 }, DecoderDim = 8 })";
             }
             else if (model.ClassName == "EfficientSAM" && model.TypeParameterCount == 1)
             {
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), numClasses: 1, " +
-                    "options: new AiDotNet.ComputerVision.Segmentation.Efficient.EfficientSAMOptions { EncoderLayerCount = 1 })";
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), " +
+                    "options: new AiDotNet.ComputerVision.Segmentation.Efficient.EfficientSAMOptions { NumClasses = 1, EncoderLayerCount = 1 })";
             }
             else if (model.ClassName == "DiffCutSegmentation" && model.TypeParameterCount == 1)
             {
@@ -5538,9 +5544,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), numClasses: 1, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), " +
                     "options: new AiDotNet.ComputerVision.Segmentation.Diffusion.DiffCutSegmentationOptions { " +
-                    "ChannelDimensions = new[] { 8, 16, 24, 32 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
+                    "NumClasses = 1, ChannelDimensions = new[] { 8, 16, 24, 32 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
                     "DecoderDimension = 8 })";
             }
             else if (model.ClassName == "SAM2" && model.TypeParameterCount == 1
@@ -5552,8 +5558,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), memoryBankSize: 2, " +
-                    "options: new AiDotNet.Video.Options.SAM2Options { " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), " +
+                    "options: new AiDotNet.Video.Options.SAM2Options { MemoryBankSize = 2, " +
                     "HieraEmbeddingDimension = 16, HieraStageDepths = new[] { 1, 1, 1, 1 }, " +
                     "HieraInitialHeadCount = 1, HieraWindowSizes = new[] { 8, 4, 2, 1 }, " +
                     "HieraGlobalAttentionBlockIndexes = new[] { 2 }, " +
@@ -5574,9 +5580,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // failed: at 32 the stride-4 stem declared [96, 8, 8] against an actual
                     // [96, 28, 28] (32/4 vs 112/4), taking out nine invariants. Seventh instance.
                     "inputHeight: 112, inputWidth: 112, inputDepth: 3, outputSize: 1), " +
-                    "numClasses: 1, modelSize: AiDotNet.Enums.SAM21ModelSize.Tiny, " +
-                    "dropRate: 0.0, options: new AiDotNet.ComputerVision.Segmentation.Foundation.SAM21Options " +
-                    "{ MemoryBankSize = 2 })";
+                    "options: new AiDotNet.ComputerVision.Segmentation.Foundation.SAM21Options " +
+                    "{ NumClasses = 1, ModelSize = AiDotNet.Enums.SAM21ModelSize.Tiny, DropRate = 0.0, MemoryBankSize = 2 })";
             }
             else if (model.ClassName == "SAM" && model.TypeParameterCount == 1 &&
                      model.FullyQualifiedName.IndexOf(
@@ -5599,9 +5604,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 112, inputWidth: 112, inputDepth: 3, outputSize: 1), " +
-                    "numClasses: 1, modelSize: AiDotNet.Enums.SAMModelSize.ViTBase, " +
-                    "dropRate: 0.0, options: new AiDotNet.ComputerVision.Segmentation.Foundation.SAMOptions " +
-                    "{ LearningRate = 1e-5 })";
+                    "options: new AiDotNet.ComputerVision.Segmentation.Foundation.SAMOptions " +
+                    "{ NumClasses = 1, ModelSize = AiDotNet.Enums.SAMModelSize.ViTBase, DropRate = 0.0, LearningRate = 1e-5 })";
             }
             else if (model.ClassName == "SegGPT" && model.TypeParameterCount == 1)
             {
@@ -5613,8 +5617,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ImageSegmentation, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), " +
-                    "numClasses: 1, modelSize: AiDotNet.Enums.SegGPTModelSize.ViTLarge, dropRate: 0.0, " +
                     "options: new AiDotNet.ComputerVision.Segmentation.Interactive.SegGPTOptions { " +
+                    "NumClasses = 1, ModelSize = AiDotNet.Enums.SegGPTModelSize.ViTLarge, DropRate = 0.0, " +
                     "ChannelDimensions = new[] { 8, 16, 24, 32 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
                     "DecoderDimension = 16 })";
             }
@@ -5635,10 +5639,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // layers claim, not what they compute; the bounded ChannelDimensions /
                     // StageDepths that keep this off the OOM path are untouched.
                     "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 1), " +
-                    "numClasses: 1, dropRate: 0.0, options: " +
+                    "options: " +
                     "new AiDotNet.ComputerVision.Segmentation.Efficient.SlimSAMOptions { " +
-                    "ChannelDimensions = new[] { 8, 16, 24, 32 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
-                    "DecoderDimension = 16, DropoutRate = 0.0, LearningRate = 1e-4, WeightDecay = 0.01 })";
+                    "NumClasses = 1, DropRate = 0.0, ChannelDimensions = new[] { 8, 16, 24, 32 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
+                    "DecoderDimension = 16, LearningRate = 1e-4, WeightDecay = 0.01 })";
             }
             else if (model.ClassName == "SegMamba" && model.TypeParameterCount == 1)
             {
@@ -5651,9 +5655,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 16, inputWidth: 16, inputDepth: 1, outputSize: 14), " +
-                    "numClasses: 14, dropRate: 0.0, " +
                     "options: new AiDotNet.ComputerVision.Segmentation.Medical.SegMambaOptions { " +
-                    "ChannelDimensions = new[] { 8, 16, 32, 64 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
+                    "NumClasses = 14, DropRate = 0.0, ChannelDimensions = new[] { 8, 16, 32, 64 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
                     "StateDimension = 4 })";
             }
             else if (model.ClassName == "EDVR" && model.TypeParameterCount == 1)
@@ -5661,7 +5664,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 8, inputWidth: 8, inputDepth: 3, outputSize: 3), " +
-                    "numFeatures: 8, numFrames: 2, numBlocks: 1, scaleFactor: 2)";
+                    "options: new AiDotNet.Video.Options.EDVROptions { NumFeatures = 8, NumFrames = 2, NumBlocks = 1, ScaleFactor = 2 }" + ")";
             }
             else if (model.ClassName == "DeepSeekVL2" && model.TypeParameterCount == 1)
             {
@@ -5722,8 +5725,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 97), " +
-                    "imageWidth: 32, imageHeight: 32, maxSequenceLength: 8, visionDim: 64, " +
-                    "languageDim: 64, visionLayers: 1, languageLayers: 1, numIterations: 1)";
+                    "options: new AiDotNet.Document.Options.ABINetOptions { ImageWidth = 32, " +
+                    "ImageHeight = 32, MaxSequenceLength = 8, VisionDim = 64, LanguageDim = 64, " +
+                    "VisionLayers = 1, LanguageLayers = 1, NumIterations = 1 })";
             }
             else if (model.ClassName == "FinancialBERT" && model.TypeParameterCount == 1)
             {
@@ -6044,7 +6048,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 6), " +
                     "lossFunction: new AiDotNet.LossFunctions.MeanSquaredErrorLoss<double>(), " +
-                    "numFeatures: 16, numClasses: 1)";
+                    "options: new AiDotNet.Video.Options.ByteTrackOptions { NumFeatures = 16, NumClasses = 1 }" + ")";
             }
             else if (model.ClassName == "ALIGN" && model.TypeParameterCount == 1)
             {
@@ -6141,7 +6145,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 32, outputSize: 8), " +
                     "new AiDotNet.Models.Options.Mamba2Options<double> { ContextLength = 32, ForecastHorizon = 8, " +
-                    "ModelDimension = 32, StateDimension = 8, NumHeads = 4, NumLayers = 2 }, numFeatures: 16)";
+                    "ModelDimension = 32, StateDimension = 8, NumHeads = 4, NumLayers = 2, NumFeatures = 16 })";
             }
             else if (model.ClassName == "LLMTime" && model.TypeParameterCount == 1)
             {
@@ -6184,7 +6188,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 2), numClasses: 2)";
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 2), " +
+                    "options: new AiDotNet.ComputerVision.Segmentation.Medical.MedSAMOptions { NumClasses = 2 })";
             }
             else if (model.ClassName == "MedSAM2" && model.TypeParameterCount == 1)
             {
@@ -6193,7 +6198,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 2), numClasses: 2)";
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 2), " +
+                    "options: new AiDotNet.ComputerVision.Segmentation.Medical.MedSAM2Options { NumClasses = 2 })";
             }
             else if (model.ClassName == "MaskAdapter" && model.TypeParameterCount == 1)
             {
@@ -6204,7 +6210,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     // 128, matching the emitted fixture. Also predicted by ADNTEST002: at 32 the
                     // stride-4 stem declared [64, 8, 8] against an actual [64, 32, 32]. Eighth instance.
-                    "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), numClasses: 4)";
+                    "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), " +
+                    "options: new AiDotNet.ComputerVision.Segmentation.OpenVocabulary.MaskAdapterOptions { NumClasses = 4 })";
             }
             else if (model.ClassName == "Mask2Former" && model.TypeParameterCount == 1)
             {
@@ -6226,7 +6233,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), numClasses: 4, numQueries: 8)";
+                    "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), " +
+                    "options: new AiDotNet.ComputerVision.Segmentation.Foundation.Mask2FormerOptions { " +
+                    "NumClasses = 4, NumQueries = 8 })";
             }
             else if (model.ClassName == "MedicalASR" && model.TypeParameterCount == 1)
             {
@@ -6248,7 +6257,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 2), numClasses: 2)";
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 2), " +
+                    "options: new AiDotNet.ComputerVision.Segmentation.Medical.MedSegDiffV2Options { NumClasses = 2 })";
             }
             else if (model.ClassName == "MoG" && model.TypeParameterCount == 1)
             {
@@ -6378,10 +6388,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "modelSize: AiDotNet.Audio.AudioGen.AudioGenModelSize.Medium, " +
-                    "sampleRate: 8000, durationSeconds: 0.1, maxDurationSeconds: 0.1, " +
-                    "textHiddenDim: 32, lmHiddenDim: 32, numLmLayers: 2, numHeads: 2, " +
-                    "numCodebooks: 1, codebookSize: 4, maxTextLength: 8, seed: 42)";
+                    "options: new AiDotNet.Audio.AudioGen.AudioGenOptions { ModelSize = AiDotNet.Audio.AudioGen.AudioGenModelSize.Medium, SampleRate = 8000, DurationSeconds = 0.1, MaxDurationSeconds = 0.1, TextHiddenDim = 32, LmHiddenDim = 32, NumLmLayers = 2, NumHeads = 2, NumCodebooks = 1, CodebookSize = 4, MaxTextLength = 8 }" + ", seed: 42)";
             }
             else if (model.ClassName == "AssemblyAIUniversal2" && model.TypeParameterCount == 1)
             {
@@ -6496,7 +6503,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.Models.Options.CLAPModelOptions { AudioHiddenDim = 32, " +
                     "AudioEncoderLayers = 1, AudioEncoderHeads = 2, SwinWindowSize = 2, " +
                     "TextHiddenDim = 32, TextEncoderLayers = 1, TextEncoderHeads = 2, " +
-                    "VocabSize = 64, MaxTextLength = 8, ProjectionDim = 4, DropoutRate = 0.0 })";
+                    "VocabSize = 64, MaxTextLength = 8, ProjectionDim = 4 })";
             }
             else if (model.ClassName == "ASTModel" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -6532,8 +6539,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "layers: new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<double>> { " +
                     "new AiDotNet.NeuralNetworks.Layers.FlattenLayer<double>(), " +
                     "new AiDotNet.NeuralNetworks.Layers.DenseLayer<double>(4, activationFunction: new AiDotNet.ActivationFunctions.IdentityActivation<double>()) }), " +
-                    "imageSize: 32, maxSequenceLength: 8, encoderDim: 32, decoderDim: 32, " +
-                    "encoderLayers: 1, decoderLayers: 1, numHeads: 4, vocabSize: 64)";
+                    "options: new AiDotNet.Document.Options.DessurtOptions { ImageSize = 32, MaxSequenceLength = 8, EncoderDim = 32, DecoderDim = 32, EncoderLayers = 1, DecoderLayers = 1, NumHeads = 4, VocabSize = 64 }" + ")";
             }
             else if (model.ClassName == "InfographicVQA" && model.TypeParameterCount == 1)
             {
@@ -6544,8 +6550,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 64), " +
-                    "imageSize: 32, maxSequenceLength: 16, visionDim: 32, textDim: 32, " +
-                    "fusionDim: 32, visionLayers: 1, fusionLayers: 1, numHeads: 4, vocabSize: 64)";
+                    "options: new AiDotNet.Document.Options.InfographicVQAOptions { ImageSize = 32, MaxSequenceLength = 16, VisionDim = 32, TextDim = 32, FusionDim = 32, VisionLayers = 1, FusionLayers = 1, NumHeads = 4, VocabSize = 64 }" + ")";
             }
             else if (model.ClassName == "Pix2Struct" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -6562,9 +6567,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 64), " +
-                    "imageSize: 32, patchSize: 16, maxPatches: 4, maxSequenceLength: 8, " +
-                    "hiddenDim: 32, numEncoderLayers: 1, numDecoderLayers: 1, " +
-                    "numHeads: 2, vocabSize: 64)";
+                    "options: new AiDotNet.Document.Options.Pix2StructOptions { ImageSize = 32, PatchSize = 16, MaxPatches = 4, MaxSequenceLength = 8, HiddenDim = 32, NumEncoderLayers = 1, NumDecoderLayers = 1, NumHeads = 2, VocabSize = 64 }" + ")";
             }
             else if (model.ClassName == "MATCHA" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -6578,9 +6581,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 64), " +
-                    "imageSize: 32, maxSequenceLength: 8, encoderDim: 32, decoderDim: 32, " +
-                    "encoderLayers: 1, decoderLayers: 1, numHeads: 2, vocabSize: 64, " +
-                    "maxPatchesPerImage: 4)";
+                    "options: new AiDotNet.Document.Options.MATCHAOptions { ImageSize = 32, MaxSequenceLength = 8, EncoderDim = 32, DecoderDim = 32, EncoderLayers = 1, DecoderLayers = 1, NumHeads = 2, VocabSize = 64, MaxPatchesPerImage = 4 }" + ")";
             }
             else if (model.ClassName == "REaLTabFormerGenerator" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -6668,7 +6669,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumLayers = 1, DropoutRate = 0.0, HippoMethod = \"legs\", " +
                     "DiscretizationMethod = \"bilinear\", InitialTime = 0, TimeStep = 0.0, " +
                     "TimescaleMin = 0.0, TimescaleMax = double.PositiveInfinity, UseGate = true, " +
-                    "UseNormalization = false }, numFeatures: 1)";
+                    "UseNormalization = false })";
             }
             else if (model.ClassName == "SigLIP2" && model.TypeParameterCount == 1)
             {
@@ -6752,8 +6753,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputSize: 16, outputSize: 4), nodeDim: 16, edgeDim: 8, " +
-                    "gcnLayers: 1, numClasses: 4, maxNodes: 16)";
+                    "inputSize: 16, outputSize: 4), " +
+                    "options: new AiDotNet.Document.Options.DocGCNOptions { NodeDim = 16, EdgeDim = 8, GcnLayers = 1, NumClasses = 4, MaxNodes = 16 }" + ")";
             }
             else if (model.ClassName == "Mamba2LanguageModel" && model.TypeParameterCount == 1)
             {
@@ -6822,9 +6823,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ImageSegmentation, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), " +
-                    "numClasses: 1, dropRate: 0.0, options: " +
+                    "options: " +
                     "new AiDotNet.ComputerVision.Segmentation.Referring.PixelLMOptions { " +
-                    "ChannelDimensions = new[] { 8, 16, 24, 32 }, " +
+                    "NumClasses = 1, DropRate = 0.0, ChannelDimensions = new[] { 8, 16, 24, 32 }, " +
                     "StageDepths = new[] { 1, 1, 1, 1 }, DecoderDimension = 16, " +
                     "OptimizerBatchSize = 1 })";
             }
@@ -7039,11 +7040,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "sampleRate: 16000, numMels: 64, nFft: 1024, hopLength: 256, " +
-                    "inputDurationSeconds: 0.56, numConvBlocks: 2, baseFilters: 8, hiddenDim: 32, " +
-                    "dropoutRate: 0.0, " +
-                    "emotionLabels: new[] { \"neutral\", \"happy\", \"sad\", \"angry\" }, " +
-                    "includeArousalValence: false)";
+                    "options: new AiDotNet.Audio.Emotion.SpeechEmotionRecognizerOptions { " +
+                    "SampleRate = 16000, NumMels = 64, NFft = 1024, HopLength = 256, " +
+                    "InputDurationSeconds = 0.56, NumConvBlocks = 2, BaseFilters = 8, HiddenDim = 32, " +
+                    "DropoutRate = 0.0, " +
+                    "EmotionLabels = new[] { \"neutral\", \"happy\", \"sad\", \"angry\" }, " +
+                    "IncludeArousalValence = false })";
             }
             else if (model.ClassName == "ConformerFP" && model.TypeParameterCount == 1)
             {
@@ -7293,7 +7295,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.Models.Options.TimeGPTOptions<double> { ContextLength = 64, " +
                     "ForecastHorizon = 8, HiddenDimension = 64, NumLayers = 2, NumHeads = 4, " +
                     "DropoutRate = 0.0, UseConformalPrediction = true, ConfidenceLevel = 0.90, " +
-                    "FineTuningSteps = 0, FineTuningLearningRate = 1e-5 }, numFeatures: 1)";
+                    "FineTuningSteps = 0, FineTuningLearningRate = 1e-5 })";
             }
             else if (model.ClassName == "Autoformer" && model.TypeParameterCount == 1)
             {
@@ -7325,7 +7327,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputSize: 32, outputSize: 8), " +
                     "new AiDotNet.Models.Options.RWKVForecastingOptions<double> { ContextLength = 32, " +
                     "ForecastHorizon = 8, ModelDimension = 32, NumHeads = 4, NumLayers = 1, " +
-                    "DropoutRate = 0.0, LearningRate = 1e-4 }, numFeatures: 1)";
+                    "DropoutRate = 0.0, LearningRate = 1e-4 })";
             }
             else if (model.ClassName == "GraniteSpeech" && model.TypeParameterCount == 1)
             {
@@ -7389,7 +7391,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, " +
                     "outputSize: 4), " +
-                    "numClasses: 4, embedDim: 64, numHeads: 4, numLayers: 2, numFrames: 4, patchSize: 8)";
+                    "options: new AiDotNet.Video.Options.TimeSformerOptions { NumClasses = 4, EmbedDim = 64, NumHeads = 4, NumLayers = 2, NumFrames = 4, PatchSize = 8 }" + ")";
             }
             else if (model.ClassName == "Conformer" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -7551,7 +7553,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 32), " +
-                    "embedDim: 32, numHeads: 4, numEncoderLayers: 1, numFrames: 2, patchSize: 8)";
+                    "options: new AiDotNet.Video.Options.InternVideo2Options { EmbedDim = 32, NumHeads = 4, NumEncoderLayers = 1, NumFrames = 2, PatchSize = 8 }" + ")";
             }
             else if (model.ClassName == "Phi4Multimodal" && model.TypeParameterCount == 1)
             {
@@ -7771,9 +7773,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ImageSegmentation, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
-                    "numClasses: 4, dropRate: 0.0, options: " +
+                    "options: " +
                     "new AiDotNet.ComputerVision.Segmentation.Diffusion.ODISESegmentationOptions { " +
-                    "ChannelDimensions = new[] { 8, 16, 24, 32 }, " +
+                    "NumClasses = 4, DropRate = 0.0, ChannelDimensions = new[] { 8, 16, 24, 32 }, " +
                     "StageDepths = new[] { 1, 1, 1, 1 }, DecoderDimension = 16 })";
             }
             else if (model.ClassName == "NaturalSpeech2" && model.TypeParameterCount == 1)
@@ -8065,9 +8067,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ImageSegmentation, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
-                    "optimizer: null, lossFunction: null, numClasses: 4, " +
-                    "modelSize: AiDotNet.Enums.SEEMModelSize.Tiny, dropRate: 0.0, " +
+                    "optimizer: null, lossFunction: null, " +
                     "options: new AiDotNet.ComputerVision.Segmentation.Interactive.SEEMOptions { " +
+                    "NumClasses = 4, ModelSize = AiDotNet.Enums.SEEMModelSize.Tiny, DropRate = 0.0, " +
                     "ChannelDimensions = new[] { 8, 16, 32, 64 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
                     "DecoderDimension = 16, LearningRate = 1e-5, WeightDecay = 0.01 })";
             }
@@ -8082,8 +8084,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ImageSegmentation, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
-                    "numClasses: 4, numQueries: 4, dropRate: 0.0, " +
                     "options: new AiDotNet.ComputerVision.Segmentation.Foundation.OneFormerOptions { " +
+                    "NumClasses = 4, NumQueries = 4, DropRate = 0.0, " +
                     "ChannelDimensions = new[] { 8, 16, 32, 64 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
                     "AttentionHeads = new[] { 1, 2, 4, 8 }, DecoderDimension = 16, " +
                     "WindowSize = 4, PatchSize = 4, MlpRatio = 2 })";
@@ -8664,7 +8666,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "new AiDotNet.Audio.Multimodal.Qwen2AudioOptions { AudioEncoderDim = 32, " +
                     "NumAudioEncoderLayers = 1, NumAudioEncoderHeads = 2, NumMels = 64, LMHiddenDim = 32, " +
-                    "NumLMLayers = 1, NumLMHeads = 2, VocabSize = 64, AdapterDim = 32 })";
+                    "NumLMLayers = 1, NumLMHeads = 2, VocabSize = 64, AdapterDim = 32, " +
+                    // LearningRate belongs to the same scale reduction as the dimensions above. The
+                    // model's default is 1e-5, which suits the foundation-scale stack it ships with;
+                    // across a 32-dim single-layer scaffold it moves the loss too little for
+                    // LossStrictlyDecreasesOnMemorizationTask to see a decrease. 1e-3 is what this
+                    // test actually ran at until the rate was wired through — Qwen2Audio built AdamW
+                    // bare and silently used AdamW's own 1e-3 — so pinning it here preserves the
+                    // training dynamics the test was validated against while production honours 1e-5.
+                    "LearningRate = 1e-3 })";
             }
             else if ((model.ClassName is "Bark" or "BarkModel") && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -9000,10 +9010,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "layers: new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<double>> { " +
                     "new AiDotNet.NeuralNetworks.Layers.ViTCoMerSegmentationLayer<double>(" +
                     "3, 32, 32, 16, new int[] { 8, 12, 16, 24 }, new int[] { 1, 1, 1, 1 }, 8, 4, 0.0) }), " +
-                    "optimizer: null, lossFunction: null, numClasses: 4, " +
-                    "modelSize: AiDotNet.Enums.ViTCoMerModelSize.Small, " +
-                    "dropRate: 0.0, options: new AiDotNet.ComputerVision.Segmentation.Semantic.ViTCoMerOptions " +
-                    "{ LearningRate = 6e-5 })";
+                    "optimizer: null, lossFunction: null, " +
+                    "options: new AiDotNet.ComputerVision.Segmentation.Semantic.ViTCoMerOptions " +
+                    "{ NumClasses = 4, ModelSize = AiDotNet.Enums.ViTCoMerModelSize.Small, DropRate = 0.0, LearningRate = 6e-5 })";
             }
             else if (model.ClassName == "Vocos" && model.TypeParameterCount == 1)
             {
@@ -9056,7 +9065,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 8, inputWidth: 8, inputDepth: 3, outputSize: 3), " +
-                    "inputChannels: 3, numLayers: 1, numFrames: 2)";
+                    "options: new AiDotNet.Video.Options.AnimateDiffOptions { InputChannels = 3, NumLayers = 1, NumFrames = 2 }" + ")";
             }
             else if (model.ClassName == "PICK" && model.TypeParameterCount == 1)
             {
@@ -9072,8 +9081,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 16, outputSize: 4), " +
-                    "numEntityTypes: 4, imageSize: 32, maxSequenceLength: 32, hiddenDim: 32, " +
-                    "numGcnLayers: 1, numHeads: 2, vocabSize: 100)";
+                    "options: new AiDotNet.Document.Options.PICKOptions { NumEntityTypes = 4, ImageSize = 32, MaxSequenceLength = 32, HiddenDim = 32, NumGcnLayers = 1, NumHeads = 2, VocabSize = 100 }" + ")";
             }
             else if (model.ClassName == "Octo" && model.TypeParameterCount == 1)
             {
@@ -9105,8 +9113,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 16, outputSize: 4), " +
-                    "numClasses: 4, maxSequenceLength: 64, hiddenDim: 64, " +
-                    "numLayers: 2, numHeads: 4, vocabSize: 100)";
+                    "options: new AiDotNet.Document.Options.LayoutLMOptions { NumClasses = 4, MaxSequenceLength = 64, HiddenDim = 64, NumLayers = 2, NumHeads = 4, VocabSize = 100 }" + ")";
             }
             else if (model.ClassName == "LayoutLMv2" && model.TypeParameterCount == 1)
             {
@@ -9120,16 +9127,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 16, outputSize: 4), " +
-                    "numClasses: 4, imageSize: 32, maxSequenceLength: 64, hiddenDim: 64, " +
-                    "numLayers: 2, numHeads: 4, vocabSize: 100, visualBackboneChannels: 32, " +
-                    // TEST-ONLY learning rate. The production default is the paper's 2e-5 (Appendix B), but that
-                    // is a FINE-TUNING rate for an already-pretrained backbone. This fixture trains a randomly
-                    // initialized model from scratch, where 2e-5 barely moves it: MoreData_ShouldNotDegrade
-                    // measured 2.2398 after 50 iterations against 2.2491 after 200, both still at the ~2.24
-                    // near-random loss of a 4-class head, so the comparison was dominated by data draw rather
-                    // than by learning. 3e-4 is the ordinary from-scratch rate for a small transformer; the
-                    // production default stays paper-faithful. (#1789)
-                    "options: new AiDotNet.Document.Options.LayoutLMv2Options { LearningRate = 3e-4 })";
+                    "options: new AiDotNet.Document.Options.LayoutLMv2Options { NumClasses = 4, ImageSize = 32, MaxSequenceLength = 64, HiddenDim = 64, NumLayers = 2, NumHeads = 4, VocabSize = 100, VisualBackboneChannels = 32, LearningRate = 3e-4 })";
             }
             else if (model.ClassName == "UDOP" && model.TypeParameterCount == 1)
             {
@@ -9147,8 +9145,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, inputFrames: 4, outputSize: 4), " +
-                    "tokenizer: null, numClasses: 4, imageSize: 32, maxSequenceLength: 64, hiddenDim: 32, " +
-                    "numEncoderLayers: 2, numDecoderLayers: 2, numHeads: 4, vocabSize: 64)";
+                    "tokenizer: null, " +
+                    "options: new AiDotNet.Document.Options.UDOPOptions { NumClasses = 4, ImageSize = 32, MaxSequenceLength = 64, HiddenDim = 32, NumEncoderLayers = 2, NumDecoderLayers = 2, NumHeads = 4, VocabSize = 64 }" + ")";
             }
             else if (model.ClassName == "LayoutXLM" && model.TypeParameterCount == 1)
             {
@@ -9161,8 +9159,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 16, outputSize: 4), " +
-                    "numClasses: 4, imageSize: 32, maxSequenceLength: 64, hiddenDim: 64, " +
-                    "numLayers: 2, numHeads: 4, vocabSize: 100, visualBackboneChannels: 32)";
+                    "options: new AiDotNet.Document.Options.LayoutXLMOptions { NumClasses = 4, ImageSize = 32, MaxSequenceLength = 64, HiddenDim = 64, NumLayers = 2, NumHeads = 4, VocabSize = 100, VisualBackboneChannels = 32 }" + ")";
             }
             else if (model.ClassName == "DocFormer" && model.TypeParameterCount == 1)
             {
@@ -9176,8 +9173,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 16, outputSize: 4), " +
-                    "numClasses: 4, imageSize: 32, maxSequenceLength: 64, hiddenDim: 64, " +
-                    "numLayers: 2, numHeads: 4, vocabSize: 100, spatialDim: 32)";
+                    "options: new AiDotNet.Document.Options.DocFormerOptions { NumClasses = 4, ImageSize = 32, MaxSequenceLength = 64, HiddenDim = 64, NumLayers = 2, NumHeads = 4, VocabSize = 100, SpatialDim = 32 }" + ")";
             }
             else if (model.ClassName == "LiLT" && model.TypeParameterCount == 1)
             {
@@ -9190,8 +9186,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 16, outputSize: 4), " +
-                    "numClasses: 4, maxSequenceLength: 64, hiddenDim: 64, " +
-                    "numLayers: 2, numHeads: 4, vocabSize: 100)";
+                    "options: new AiDotNet.Document.Options.LiLTOptions { NumClasses = 4, MaxSequenceLength = 64, HiddenDim = 64, NumLayers = 2, NumHeads = 4, VocabSize = 100 }" + ")";
             }
             else if (model.ClassName == "LayoutLMv3" && model.TypeParameterCount == 1)
             {
@@ -9207,8 +9202,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputSize: 16, outputSize: 4), " +
-                    "numClasses: 4, imageSize: 32, patchSize: 16, maxSequenceLength: 64, hiddenDim: 64, " +
-                    "numLayers: 2, numHeads: 4, vocabSize: 100)";
+                    "options: new AiDotNet.Document.Options.LayoutLMv3Options { NumClasses = 4, ImageSize = 32, PatchSize = 16, MaxSequenceLength = 64, HiddenDim = 64, NumLayers = 2, NumHeads = 4, VocabSize = 100 }" + ")";
             }
             else if (model.ClassName == "Wav2Vec2Model" && model.TypeParameterCount == 1)
             {
@@ -9224,7 +9218,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "hiddenDim: 64, numTransformerLayers: 2, numHeads: 4, ffDim: 128)";
+                    "options: new AiDotNet.Models.Options.Wav2Vec2ModelOptions { HiddenDim = 64, NumTransformerLayers = 2, NumHeads = 4, FfDim = 128 }" + ")";
             }
             else if ((model.ClassName is "Wav2Vec2" or "HuBERT" or "WavLM") && model.TypeParameterCount == 1)
             {
@@ -9712,10 +9706,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 8, outputSize: 640), " +
-                    "vocabSize: 1024, embeddingDim: 32, encoderDim: 32, decoderDim: 32, " +
-                    "attentionDim: 16, attentionFilters: 8, prenetDim: 16, postnetEmbeddingDim: 32, " +
-                    "numEncoderConvLayers: 1, numPostnetConvLayers: 1, numMelsPerFrame: 2, " +
-                    "maxDecoderSteps: 4, stopThreshold: 1.0)";
+                    "options: new AiDotNet.Models.Options.Tacotron2ModelOptions { VocabSize = 1024, EmbeddingDim = 32, EncoderDim = 32, DecoderDim = 32, AttentionDim = 16, AttentionFilters = 8, PrenetDim = 16, PostnetEmbeddingDim = 32, NumEncoderConvLayers = 1, NumPostnetConvLayers = 1, NumMelsPerFrame = 2, MaxDecoderSteps = 4, StopThreshold = 1.0 }" + ")";
             }
             else if (model.ClassName == "XMem" && model.TypeParameterCount == 1)
             {
@@ -9816,7 +9807,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
-                    "numFrames: 2, embeddingDim: 64, textMaxLength: 16, vocabSize: 512)";
+                    "options: new AiDotNet.Video.Options.VideoCLIPVideoOptions { NumFrames = 2, EmbeddingDim = 64, TextMaxLength = 16, VocabSize = 512 }" + ")";
             }
             else if (model.ClassName == "MOMENT" && model.TypeParameterCount == 1)
             {
@@ -10205,7 +10196,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, inputFrames: 4, outputSize: 4), " +
-                    "numFeatures: 32, memorySize: 8)";
+                    "options: new AiDotNet.Video.Options.CutieOptions { NumFeatures = 32, MemorySize = 8 }" + ")";
             }
             else if (model.ClassName == "CUPS" && model.TypeParameterCount == 1)
             {
@@ -10219,9 +10210,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ImageSegmentation, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
-                    "numClasses: 4, dropRate: 0.0, " +
                     "options: new AiDotNet.ComputerVision.Segmentation.Panoptic.CUPSOptions { " +
-                    "ChannelDimensions = new[] { 16, 32, 64, 128 }, " +
+                    "NumClasses = 4, DropRate = 0.0, ChannelDimensions = new[] { 16, 32, 64, 128 }, " +
                     "StageDepths = new[] { 1, 1, 2, 1 }, DecoderDimension = 32 })";
             }
             else if (model.ClassName == "OpenVocabSAM" && model.TypeParameterCount == 1)
@@ -10237,8 +10227,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 16), " +
-                    "numClasses: 1, options: new AiDotNet.ComputerVision.Segmentation.OpenVocabulary.OpenVocabSAMOptions { " +
-                    "ChannelDimensions = new[] { 8, 16, 24, 32 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
+                    "options: new AiDotNet.ComputerVision.Segmentation.OpenVocabulary.OpenVocabSAMOptions { " +
+                    "NumClasses = 1, ChannelDimensions = new[] { 8, 16, 24, 32 }, StageDepths = new[] { 1, 1, 1, 1 }, " +
                     "NeckEmbeddingDimension = 32, DecoderDimension = 16, LearningRate = 1e-3, " +
                     "WeightDecay = 0.0 })";
             }
@@ -10258,7 +10248,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
-                    "numClasses: 4, numFrames: 4, numFeatures: 32)";
+                    "options: new AiDotNet.Video.Options.VideoMAEOptions { NumClasses = 4, NumFrames = 4, NumFeatures = 32 }" + ")";
             }
             else if (model.ClassName == "WorldModelsAgent" && model.TypeParameterCount == 1)
             {
@@ -10666,8 +10656,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Embedding, " +
                     "inputHeight: 28, inputWidth: 28, inputDepth: 3, outputSize: 4), " +
-                    "imageSize: 28, maxSequenceLength: 16, visionDim: 32, languageDim: 32, " +
-                    "visionLayers: 1, languageLayers: 1, numHeads: 4, vocabSize: 4, visionNumHeads: 4)";
+                    "options: new AiDotNet.Document.Options.DocOwlOptions { ImageSize = 28, MaxSequenceLength = 16, VisionDim = 32, LanguageDim = 32, VisionLayers = 1, LanguageLayers = 1, NumHeads = 4, VocabSize = 4, VisionNumHeads = 4 }" + ")";
             }
             else if (model.ClassName == "Pix2Struct"
                      && typeName.StartsWith(
@@ -10710,9 +10699,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 4), " +
-                    "tokenizer: null, imageSize: 128, patchSize: 16, maxSequenceLength: 32, " +
-                    "hiddenDim: 128, numEncoderLayers: 2, numDecoderLayers: 2, numHeads: 4, " +
-                    "vocabSize: 64)";
+                    "tokenizer: null, " +
+                    "options: new AiDotNet.Document.Options.NougatOptions { ImageSize = 128, PatchSize = 16, MaxSequenceLength = 32, HiddenDim = 128, NumEncoderLayers = 2, NumDecoderLayers = 2, NumHeads = 4, VocabSize = 64 }" + ")";
             }
             else if ((model.ClassName is "GOTOCR2" or "Surya" or "MPLUGDocOwl" or "MPLUGDocOwl15"
                           or "MPLUGDocOwl2" or "TextMonkey" or "UReader" or "DocPedia" or "Nougat")
@@ -10922,8 +10910,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 4), " +
-                    "optimizer: null, lossFunction: null, embedDim: 16, numFrames: 2, " +
-                    "numBlocks: 4, scaleFactor: 2, options: new AiDotNet.Video.Options.VRTOptions())";
+                    "optimizer: null, lossFunction: null, " +
+                    "options: new AiDotNet.Video.Options.VRTOptions { EmbedDim = 16, NumFrames = 2, NumBlocks = 4, ScaleFactor = 2 })";
             }
             else if (model.ClassName == "TableTransformer" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -10939,8 +10927,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 11), " +
-                    "imageSize: 32, hiddenDim: 64, numEncoderLayers: 2, " +
-                    "numDecoderLayers: 2, numHeads: 4, numQueries: 8)";
+                    "options: new AiDotNet.Document.Options.TableTransformerOptions { " +
+                    "ImageSize = 32, HiddenDim = 64, NumEncoderLayers = 2, " +
+                    "NumDecoderLayers = 2, NumHeads = 4, NumQueries = 8 })";
             }
             else if (model.ClassName == "DocBank" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -10957,7 +10946,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 4), " +
-                    "imageSize: 64, backboneChannels: 32, numClasses: 4, hiddenDim: 16)";
+                    "options: new AiDotNet.Document.Options.DocBankOptions { ImageSize = 64, " +
+                    "BackboneChannels = 32, NumClasses = 4, HiddenDim = 16 })";
             }
             else if (model.ClassName == "InstantNGP" && model.TypeParameterCount == 1)
             {
@@ -10970,9 +10960,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // training invariants exercise the real forward/backward path cheaply. Must
                 // precede the parameterless-constructor branch below, which would otherwise
                 // route through the production default.
-                constructorExpr = $"new {typeName}<double>(hashTableSize: 4096, numLevels: 4, " +
-                    "featuresPerLevel: 2, finestResolution: 256, coarsestResolution: 16, " +
-                    "mlpHiddenDim: 16, mlpNumLayers: 2, occupancyGridResolution: 16, learningRate: 1e-2)";
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.InstantNGPOptions<double> {{ " +
+                    "HashTableSize = 4096, NumLevels = 4, FeaturesPerLevel = 2, FinestResolution = 256, " +
+                    "CoarsestResolution = 16, MlpHiddenDim = 16, MlpNumLayers = 2, " +
+                    "OccupancyGridResolution = 16, LearningRate = 1e-2 })";
             }
             else if (model.ClassName == "ProPainter" && model.TypeParameterCount == 1)
             {
@@ -10991,7 +10982,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 2), " +
-                    "numFeatures: 32, numTransformerBlocks: 2, numHeads: 4)";
+                    "options: new AiDotNet.Video.Options.ProPainterOptions { NumFeatures = 32, NumTransformerBlocks = 2, NumHeads = 4 }" + ")";
             }
             else if (model.ClassName == "BasicVSRPlusPlus" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
@@ -11026,8 +11017,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputFrames: 2, inputDepth: 3, inputHeight: 32, inputWidth: 32, " +
                     "outputSize: 4), " +
-                    "scaleFactor: 2, numFeatures: 8, numResidualBlocks: 1, " +
-                    "numPropagations: 1, learningRate: 1e-2)";
+                    "options: new AiDotNet.Video.Options.BasicVSRPlusPlusOptions { ScaleFactor = 2, NumFeatures = 8, NumResidualBlocks = 1, NumPropagations = 1, LearningRate = 1e-2 }" + ")";
             }
             else if (model.ClassName == "SeedVR" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
@@ -11097,7 +11087,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "layers: new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<double>>(" +
                     "AiDotNet.Helpers.LayerHelper<double>.CreateDefaultWhisperLayers(" +
                     "modelDim: 32, numEncoderLayers: 1, numDecoderLayers: 1, numHeads: 4, " +
-                    "ffDim: 64, numMels: 80, maxFrames: 100, maxTokens: 4, " +
+                    "ffDim: 64, " +
+                    "options: new AiDotNet.Audio.Whisper.WhisperOptions { NumMels = 80 }" + ", maxFrames: 100, maxTokens: 4, " +
                     "vocabSize: 51865, dropoutRate: 0.0))), " +
                     "modelSize: AiDotNet.Audio.Whisper.WhisperModelSize.Tiny, " +
                     "maxAudioLengthSeconds: 1, maxTokens: 4)";
@@ -11370,7 +11361,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 64, inputWidth: 64, inputDepth: 6, outputSize: 2), " +
-                    "numFeatures: 8, numLayers: 1)";
+                    "options: new AiDotNet.Video.Options.DPFlowOptions { NumFeatures = 8, NumLayers = 1 }" + ")";
             }
             else if (model.ClassName == "RAFT" && model.TypeParameterCount == 1)
             {
@@ -11387,7 +11378,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 4), " +
-                    "numFeatures: 8, correlationLevels: 2, correlationRadius: 2, numIterations: 2)";
+                    "options: new AiDotNet.Video.Options.RAFTOptions { NumFeatures = 8, CorrelationLevels = 2, CorrelationRadius = 2, NumIterations = 2 }" + ")";
             }
             else if (model.ClassName == "FlashVSR" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
@@ -11416,8 +11407,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // 256px, 64/256-wide defaults for users.
                 string scaleArguments = model.ClassName switch
                 {
-                    "FlowFormer" => "embedDim: 32, numLayers: 1, numIterations: 1",
-                    _ => "numFeatures: 8, numLayers: 1"
+                    "FlowFormer" => "options: new AiDotNet.Video.Options.FlowFormerOptions { EmbedDim = 32, NumLayers = 1, NumIterations = 1 }",
+                    _ => "options: new AiDotNet.Video.Options.FlowFormerPlusPlusOptions { NumFeatures = 8, NumLayers = 1 }"
                 };
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
@@ -11434,7 +11425,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 64, inputWidth: 64, inputDepth: 6, outputSize: 3), " +
-                    "numScales: 2, numFeatures: 8)";
+                    "options: new AiDotNet.Video.Options.FILMOptions { NumScales = 2, NumFeatures = 8 }" + ")";
             }
             else if ((model.ClassName is "DynamiCrafter" or "EMAVFI" or "FLAVR")
                      && model.TypeParameterCount == 1
@@ -17842,7 +17833,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         Compilation compilation)
     {
         const string roleAttribute = "AiDotNet.Attributes.ModelDimensionRoleAttribute";
-        var candidates = new List<(INamedTypeSymbol Type, IMethodSymbol Constructor)>();
+        var candidates = new List<INamedTypeSymbol>();
         CollectConstructorDimensionRoles(
             compilation.Assembly.GlobalNamespace,
             roleAttribute,
@@ -17862,10 +17853,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
 
         candidates = candidates
-            .GroupBy(candidate => candidate.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
-                + "\0" + candidate.Constructor.Parameters.Length)
+            .GroupBy(candidate => candidate.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
             .Select(group => group.First())
-            .OrderBy(candidate => candidate.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            .OrderBy(candidate => candidate.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                 System.StringComparer.Ordinal)
             .ToList();
         if (candidates.Count == 0) return;
@@ -17880,30 +17870,28 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         foreach (var candidate in candidates)
         {
-            string typeName = candidate.Type.IsGenericType
-                ? candidate.Type.ConstructUnboundGenericType()
-                    .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
-                : candidate.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            string methodName = ToGeneratedIdentifier(
-                candidate.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat))
+            string typeName = candidate.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            string methodName = ToGeneratedIdentifier(typeName)
                 + "_PreservesDeclaredAttentionGeometry";
 
+            // The published values now live on the options object rather than in constructor
+            // parameter defaults, so the test reads them off a default-constructed instance. That
+            // is also stronger than the parameter-default version it replaces: a parameter default
+            // is a compile-time constant, whereas this exercises whatever the parameterless
+            // constructor actually assigns, including values a family base sets.
             sb.AppendLine("    [Xunit.Fact]");
             sb.AppendLine($"    public void {methodName}()");
             sb.AppendLine("    {");
-            sb.AppendLine($"        var constructors = typeof({typeName}).GetConstructors();");
-            sb.AppendLine("        var constructor = Xunit.Assert.Single(global::System.Linq.Enumerable.Where(constructors, candidate =>");
-            sb.AppendLine("            global::System.Linq.Enumerable.Count(candidate.GetParameters(), parameter =>");
-            sb.AppendLine("                global::System.Reflection.CustomAttributeExtensions.GetCustomAttribute<global::AiDotNet.Attributes.ModelDimensionRoleAttribute>(parameter) is not null) == 2));");
-            sb.AppendLine("        var parameters = constructor.GetParameters();");
-            sb.AppendLine("        var dimension = Xunit.Assert.Single(global::System.Linq.Enumerable.Where(parameters, parameter =>");
-            sb.AppendLine("            global::System.Reflection.CustomAttributeExtensions.GetCustomAttribute<global::AiDotNet.Attributes.ModelDimensionRoleAttribute>(parameter)?.Role");
+            sb.AppendLine($"        var options = new {typeName}();");
+            sb.AppendLine($"        var properties = typeof({typeName}).GetProperties();");
+            sb.AppendLine("        var dimension = Xunit.Assert.Single(global::System.Linq.Enumerable.Where(properties, property =>");
+            sb.AppendLine("            global::System.Reflection.CustomAttributeExtensions.GetCustomAttribute<global::AiDotNet.Attributes.ModelDimensionRoleAttribute>(property)?.Role");
             sb.AppendLine("                == global::AiDotNet.Attributes.ModelDimensionRole.AttentionDimension));");
-            sb.AppendLine("        var heads = Xunit.Assert.Single(global::System.Linq.Enumerable.Where(parameters, parameter =>");
-            sb.AppendLine("            global::System.Reflection.CustomAttributeExtensions.GetCustomAttribute<global::AiDotNet.Attributes.ModelDimensionRoleAttribute>(parameter)?.Role");
+            sb.AppendLine("        var heads = Xunit.Assert.Single(global::System.Linq.Enumerable.Where(properties, property =>");
+            sb.AppendLine("            global::System.Reflection.CustomAttributeExtensions.GetCustomAttribute<global::AiDotNet.Attributes.ModelDimensionRoleAttribute>(property)?.Role");
             sb.AppendLine("                == global::AiDotNet.Attributes.ModelDimensionRole.AttentionHeadCount));");
-            sb.AppendLine("        int scaledDimension = global::AiDotNet.Testing.ModelTestScale.ScaleDeclaredInteger(Xunit.Assert.IsType<int>(dimension.DefaultValue));");
-            sb.AppendLine("        int scaledHeads = global::AiDotNet.Testing.ModelTestScale.ScaleDeclaredInteger(Xunit.Assert.IsType<int>(heads.DefaultValue));");
+            sb.AppendLine("        int scaledDimension = global::AiDotNet.Testing.ModelTestScale.ScaleDeclaredInteger(Xunit.Assert.IsType<int>(dimension.GetValue(options)));");
+            sb.AppendLine("        int scaledHeads = global::AiDotNet.Testing.ModelTestScale.ScaleDeclaredInteger(Xunit.Assert.IsType<int>(heads.GetValue(options)));");
             sb.AppendLine("        int aligned = global::AiDotNet.Testing.ModelTestScale.AlignDimensionToDivisor(scaledDimension, scaledHeads);");
             sb.AppendLine("        Xunit.Assert.True(aligned > 0 && scaledHeads > 0 && aligned % scaledHeads == 0);");
             sb.AppendLine("    }");
@@ -17917,7 +17905,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static void CollectConstructorDimensionRoles(
         INamespaceSymbol ns,
         string roleAttribute,
-        List<(INamedTypeSymbol Type, IMethodSymbol Constructor)> candidates)
+        List<INamedTypeSymbol> candidates)
     {
         foreach (var member in ns.GetMembers())
         {
@@ -17928,13 +17916,47 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
 
             if (member is not INamedTypeSymbol type) continue;
-            foreach (var constructor in type.InstanceConstructors)
+            if (type.IsAbstract || type.IsGenericType) continue;
+            if (type.DeclaredAccessibility != Accessibility.Public) continue;
+            if (!type.InstanceConstructors.Any(c =>
+                c.DeclaredAccessibility == Accessibility.Public && c.Parameters.Length == 0))
             {
-                if (constructor.DeclaredAccessibility != Accessibility.Public) continue;
-                int roles = constructor.Parameters.Count(parameter => parameter.GetAttributes().Any(
-                    attribute => attribute.AttributeClass?.ToDisplayString() == roleAttribute));
-                if (roles == 2) candidates.Add((type, constructor));
+                continue;
             }
+
+            // The annotated properties are declared once on EmbeddingModelOptions, so EVERY
+            // descendant inherits the annotation -- including Word2Vec, GloVe and FastText, which
+            // have no attention mechanism at all, never assign NumHeads, and therefore fail a
+            // divisibility check against 0. The attribute names each property's ROLE correctly;
+            // what it cannot express is whether a given model HAS attention. That is what
+            // TransformerEmbeddingOptions marks: it is the family base that actually assigns both
+            // values (768 / 12), and its seven descendants -- BGE, ColBERT, Instructor,
+            // Matryoshka, SGPT, SimCSE, SPLADE -- are exactly the models the invariant applies to.
+            //
+            // Skipping types whose NumHeads happens to be 0 would be the wrong fix: it would make
+            // the test silently vacuous for any attention model that forgot to set it, which is
+            // precisely the defect worth catching.
+            bool attentionFamily = false;
+            for (INamedTypeSymbol? t = type.BaseType; t is not null; t = t.BaseType)
+            {
+                if (t.ToDisplayString() == "AiDotNet.NeuralNetworks.Options.TransformerEmbeddingOptions")
+                {
+                    attentionFamily = true;
+                    break;
+                }
+            }
+
+            if (!attentionFamily) continue;
+
+            int roles = 0;
+            for (INamedTypeSymbol? t = type; t is not null; t = t.BaseType)
+            {
+                roles += t.GetMembers().OfType<IPropertySymbol>().Count(
+                    property => property.GetAttributes().Any(
+                        attribute => attribute.AttributeClass?.ToDisplayString() == roleAttribute));
+            }
+
+            if (roles == 2) candidates.Add(type);
         }
     }
 

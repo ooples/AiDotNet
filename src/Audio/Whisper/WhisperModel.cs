@@ -370,20 +370,12 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
         NeuralNetworkArchitecture<T> architecture,
         string encoderPath,
         string decoderPath,
-        WhisperModelSize modelSize = WhisperModelSize.Base,
-        string? language = null,
-        bool translate = false,
-        int sampleRate = 16000,
-        int numMels = 80,
-        int maxAudioLengthSeconds = 30,
-        int maxTokens = 448,
-        int beamSize = 5,
-        double temperature = 0.0,
-        OnnxModelOptions? onnxOptions = null,
-        WhisperOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        WhisperOptions? options = null,
+        OnnxModelOptions? onnxOptions = null)
+        : base(architecture: architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new WhisperOptions();
+        _options.Validate();
         Options = _options;
         if (encoderPath is null)
             throw new ArgumentNullException(nameof(encoderPath));
@@ -393,29 +385,29 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
         _useNativeMode = false;
         _encoderPath = encoderPath;
         _decoderPath = decoderPath;
-        _modelSize = modelSize;
-        _language = language;
-        _translate = translate;
-        _maxAudioLengthSeconds = maxAudioLengthSeconds;
-        _numMels = numMels;
-        _maxTokens = maxTokens;
-        _beamSize = beamSize;
-        _temperature = temperature;
+        _modelSize = _options.ModelSize;
+        _language = _options.Language;
+        _translate = _options.Translate;
+        _maxAudioLengthSeconds = _options.MaxAudioLengthSeconds;
+        _numMels = _options.NumMels;
+        _maxTokens = _options.MaxTokens;
+        _beamSize = _options.BeamSize;
+        _temperature = _options.Temperature;
 
         // Get model dimensions based on size
-        (_modelDim, _numEncoderLayers, _numDecoderLayers, _numHeads, _ffDim) = GetModelParameters(modelSize);
+        (_modelDim, _numEncoderLayers, _numDecoderLayers, _numHeads, _ffDim) = GetModelParameters(_options.ModelSize);
 
         // Set audio properties from base class
-        SampleRate = sampleRate;
-        NumMels = numMels;
+        SampleRate = _options.SampleRate;
+        NumMels = _options.NumMels;
 
         // Create tokenizer
         _tokenizer = new WhisperTokenizer();
 
         // Create mel spectrogram preprocessor with Whisper parameters
         _melSpectrogram = new MelSpectrogram<T>(
-            sampleRate: sampleRate,
-            nMels: numMels,
+            sampleRate: _options.SampleRate,
+            nMels: _options.NumMels,
             nFft: 400,      // Whisper uses 25ms windows at 16kHz
             hopLength: WhisperHopLength, // Whisper uses 10ms hop at 16kHz
             fMin: 0,
@@ -425,7 +417,9 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
         MelSpec = _melSpectrogram;
 
         // Load ONNX models with proper cleanup on failure
-        var onnxOpts = onnxOptions ?? new OnnxModelOptions();
+        // Falls back to the declared option rather than a fresh default, which is what made
+        // WhisperOptions.OnnxOptions impossible to apply.
+        var onnxOpts = onnxOptions ?? _options.OnnxOptions;
         OnnxModel<T>? encoder = null;
 
         try
@@ -503,45 +497,37 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
     /// </remarks>
     public WhisperModel(
         NeuralNetworkArchitecture<T> architecture,
-        WhisperModelSize modelSize = WhisperModelSize.Base,
-        string? language = null,
-        bool translate = false,
-        int sampleRate = 16000,
-        int numMels = 80,
-        int maxAudioLengthSeconds = 30,
-        int maxTokens = 448,
-        int beamSize = 5,
-        double temperature = 0.0,
+        WhisperOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        WhisperOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new WhisperOptions();
+        _options.Validate();
         Options = _options;
         _useNativeMode = true;
-        _modelSize = modelSize;
-        _language = language;
-        _translate = translate;
-        _maxAudioLengthSeconds = maxAudioLengthSeconds;
-        _numMels = numMels;
-        _maxTokens = maxTokens;
-        _beamSize = beamSize;
-        _temperature = temperature;
+        _modelSize = _options.ModelSize;
+        _language = _options.Language;
+        _translate = _options.Translate;
+        _maxAudioLengthSeconds = _options.MaxAudioLengthSeconds;
+        _numMels = _options.NumMels;
+        _maxTokens = _options.MaxTokens;
+        _beamSize = _options.BeamSize;
+        _temperature = _options.Temperature;
 
         // Get model dimensions based on size
-        (_modelDim, _numEncoderLayers, _numDecoderLayers, _numHeads, _ffDim) = GetModelParameters(modelSize);
+        (_modelDim, _numEncoderLayers, _numDecoderLayers, _numHeads, _ffDim) = GetModelParameters(_options.ModelSize);
 
         // Set audio properties from base class
-        SampleRate = sampleRate;
-        NumMels = numMels;
+        SampleRate = _options.SampleRate;
+        NumMels = _options.NumMels;
 
         // Create tokenizer
         _tokenizer = new WhisperTokenizer();
 
         _melSpectrogram = new MelSpectrogram<T>(
-            sampleRate: sampleRate,
-            nMels: numMels,
+            sampleRate: _options.SampleRate,
+            nMels: _options.NumMels,
             nFft: 400,
             hopLength: WhisperHopLength,
             fMin: 0,
@@ -684,11 +670,15 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
     /// </summary>
     /// <param name="audio">Audio waveform tensor [batch, samples] or [samples].</param>
     /// <param name="language">Optional language code. Auto-detected if null.</param>
-    /// <param name="includeTimestamps">Whether to include word-level timestamps.</param>
+    /// <param name="includeTimestamps">Whether to include word-level timestamps. When null,
+    /// the model's configured <c>ReturnTimestamps</c> is used.</param>
     /// <returns>Transcription result containing text and optional timestamps.</returns>
-    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool includeTimestamps = false)
+    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null)
     {
         ThrowIfDisposed();
+
+        // The declared ReturnTimestamps was unreachable while this defaulted to false: a caller
+        // who configured it still got no timestamps unless they also passed the argument.
 
         var stopwatch = Stopwatch.StartNew();
 
@@ -715,7 +705,7 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
             Language = effectiveLanguage,
             Confidence = NumOps.FromDouble(confidence),
             DurationSeconds = (double)audio.Length / SampleRate,
-            Segments = includeTimestamps ? ExtractSegments(tokens, text) : Array.Empty<TranscriptionSegment<T>>()
+            Segments = ResolveReturnTimestamps(includeTimestamps) ? ExtractSegments(tokens, text) : Array.Empty<TranscriptionSegment<T>>()
         };
     }
 
@@ -725,7 +715,7 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
     public Task<TranscriptionResult<T>> TranscribeAsync(
         Tensor<T> audio,
         string? language = null,
-        bool includeTimestamps = false,
+        bool? includeTimestamps = null,
         CancellationToken cancellationToken = default)
     {
         return Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);

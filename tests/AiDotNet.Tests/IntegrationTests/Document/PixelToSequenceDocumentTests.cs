@@ -1,4 +1,6 @@
 using AiDotNet.Document;
+using AiDotNet.Document.Options;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Document.PixelToSequence;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
@@ -63,30 +65,50 @@ public class PixelToSequenceDocumentTests
     // widths run 32/64/128/256 and the 64x64 image's 16x16 patch grid runs 16/8/4/2 - a window of 2
     // tiles every stage. The decoder reads the final 256-wide (embedDim * 8) encoder output.
     private static Donut<double> CreateDonut() => new(
-        CreateArchitecture(), imageHeight: ImageSize, imageWidth: ImageSize,
-        maxGenerationLength: TestSequence, embedDim: 32, depths: new[] { 1, 1, 1, 1 },
-        numHeads: new[] { 1, 2, 4, 8 }, windowSize: 2, patchSize: 4, decoderHiddenDim: TestWidth,
-        numDecoderLayers: TestLayers, decoderHeads: TestHeads, vocabSize: TestVocab);
+        CreateArchitecture(),
+        options: new DonutOptions
+        {
+            ImageHeight = ImageSize, ImageWidth = ImageSize, MaxGenerationLength = TestSequence,
+            EmbedDim = 32, WindowSize = 2, PatchSize = 4, DecoderHiddenDim = TestWidth,
+            NumDecoderLayers = TestLayers, DecoderHeads = TestHeads, VocabSize = TestVocab
+        },
+        depths: new[] { 1, 1, 1, 1 }, numHeads: new[] { 1, 2, 4, 8 });
 
     private static Nougat<double> CreateNougat() => new(
-        CreateArchitecture(), imageSize: ImageSize, patchSize: 16, maxSequenceLength: TestSequence,
-        hiddenDim: TestWidth, numEncoderLayers: TestLayers, numDecoderLayers: TestLayers,
-        numHeads: TestHeads, vocabSize: TestVocab);
+        CreateArchitecture(),
+        options: new NougatOptions
+        {
+            ImageSize = ImageSize, PatchSize = 16, MaxSequenceLength = TestSequence,
+            HiddenDim = TestWidth, NumEncoderLayers = TestLayers, NumDecoderLayers = TestLayers,
+            NumHeads = TestHeads, VocabSize = TestVocab
+        });
 
     private static Pix2Struct<double> CreatePix2Struct() => new(
-        CreateArchitecture(), imageSize: ImageSize, patchSize: 16, maxPatches: 64,
-        maxSequenceLength: TestSequence, hiddenDim: TestWidth, numEncoderLayers: TestLayers,
-        numDecoderLayers: TestLayers, numHeads: TestHeads, vocabSize: TestVocab);
+        CreateArchitecture(),
+        options: new Pix2StructOptions
+        {
+            ImageSize = ImageSize, PatchSize = 16, MaxPatches = 64, MaxSequenceLength = TestSequence,
+            HiddenDim = TestWidth, NumEncoderLayers = TestLayers, NumDecoderLayers = TestLayers,
+            NumHeads = TestHeads, VocabSize = TestVocab
+        });
 
     private static Dessurt<double> CreateDessurt() => new(
-        CreateArchitecture(), imageSize: ImageSize, maxSequenceLength: TestSequence,
-        encoderDim: TestWidth, decoderDim: TestWidth, encoderLayers: TestLayers,
-        decoderLayers: TestLayers, numHeads: TestHeads, vocabSize: TestVocab);
+        CreateArchitecture(),
+        options: new DessurtOptions
+        {
+            ImageSize = ImageSize, MaxSequenceLength = TestSequence, EncoderDim = TestWidth,
+            DecoderDim = TestWidth, EncoderLayers = TestLayers, DecoderLayers = TestLayers,
+            NumHeads = TestHeads, VocabSize = TestVocab
+        });
 
     private static MATCHA<double> CreateMatcha() => new(
-        CreateArchitecture(), imageSize: ImageSize, maxSequenceLength: TestSequence,
-        encoderDim: TestWidth, decoderDim: TestWidth, encoderLayers: TestLayers,
-        decoderLayers: TestLayers, numHeads: TestHeads, vocabSize: TestVocab, maxPatchesPerImage: 64);
+        CreateArchitecture(),
+        options: new MATCHAOptions
+        {
+            ImageSize = ImageSize, MaxSequenceLength = TestSequence, EncoderDim = TestWidth,
+            DecoderDim = TestWidth, EncoderLayers = TestLayers, DecoderLayers = TestLayers,
+            NumHeads = TestHeads, VocabSize = TestVocab, MaxPatchesPerImage = 64
+        });
 
     /// <summary>
     /// Asserts the model's full prediction contract: the exact output shape it publishes, not merely

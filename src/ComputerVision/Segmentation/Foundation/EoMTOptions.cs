@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.ComputerVision.Segmentation.Foundation;
@@ -9,13 +10,22 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// <para>
 /// <b>For Beginners:</b> EoMT removes the pixel and transformer decoders used by Mask2Former,
 /// placing mask queries directly inside a plain ViT (DINOv2). This yields 4.4x faster inference.
-/// Options inherit from NeuralNetworkOptions.
+/// The values here are the ones the paper publishes, so you can use the model without setting
+/// anything.
 /// </para>
 /// </remarks>
-public class EoMTOptions : NeuralNetworkOptions
+public class EoMTOptions : PanopticSegmentationOptions
 {
-    /// <summary>Initializes a new instance with default values.</summary>
-    public EoMTOptions() { }
+    /// <summary>
+    /// Initializes a new instance carrying EoMT's published defaults.
+    /// </summary>
+    public EoMTOptions()
+    {
+        NumClasses = 150;   // ADE20K
+        NumQueries = 100;
+        DropRate = 0.1;
+        ModelSize = EoMTModelSize.Base;
+    }
 
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
@@ -27,6 +37,26 @@ public class EoMTOptions : NeuralNetworkOptions
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
+        NumClasses = other.NumClasses;
+        NumQueries = other.NumQueries;
+        DropRate = other.DropRate;
+        ModelSize = other.ModelSize;
     }
 
+    /// <summary>
+    /// Gets or sets the ViT encoder size variant. Default: <see cref="EoMTModelSize.Base"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Which size of the underlying vision transformer to use. A
+    /// larger one is more accurate and slower.</para>
+    /// </remarks>
+    public EoMTModelSize ModelSize { get; set; }
+
+    /// <summary>
+    /// Throws if a value this model requires has been left unset or is not positive.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when a required dimension is zero or negative.
+    /// </exception>
+    public void Validate() => ValidateCore();
 }

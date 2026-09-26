@@ -49,6 +49,9 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
 {
     private readonly int _numSamples;
 
+    /// <summary>The options this network was built with; a clone rebuilds from them.</summary>
+    private readonly BayesianNeuralNetworkOptions _options;
+
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
@@ -56,19 +59,22 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
     /// Initializes a new instance of the BayesianNeuralNetwork class.
     /// </summary>
     /// <param name="architecture">The network architecture.</param>
-    /// <param name="numSamples">Number of forward passes for uncertainty estimation (default: 30).</param>
     /// <remarks>
     /// <b>For Beginners:</b> The number of samples determines how many times we run the network
     /// with different weight samples to estimate uncertainty. More samples = better uncertainty
     /// estimates but slower inference. 30 is usually a good balance.
     /// </remarks>
-    public BayesianNeuralNetwork(NeuralNetworkArchitecture<T> architecture, int numSamples = 30)
+    public BayesianNeuralNetwork(NeuralNetworkArchitecture<T> architecture,
+        BayesianNeuralNetworkOptions? options = null)
         : base(architecture)
     {
-        if (numSamples < 1)
-            throw new ArgumentException("Number of samples must be at least 1", nameof(numSamples));
+        options ??= new BayesianNeuralNetworkOptions();
+        if (options.NumSamples < 1)
+            throw new ArgumentException("Number of samples must be at least 1", nameof(options.NumSamples));
 
-        _numSamples = numSamples;
+        _options = options;
+        Options = _options;
+        _numSamples = options.NumSamples;
     }
 
     /// <inheritdoc/>

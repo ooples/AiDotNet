@@ -1,4 +1,6 @@
 using AiDotNet.Document;
+using AiDotNet.Document.Options;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Document.VisionLanguage;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
@@ -40,7 +42,7 @@ public class VisionLanguageDocumentTests
     public async Task DocOwl_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        using var model = new DocOwl<double>(arch, imageSize: 64);
+        using var model = new DocOwl<double>(arch, options: new DocOwlOptions { ImageSize = 64 });
         Assert.NotNull(model);
     }
 
@@ -48,7 +50,7 @@ public class VisionLanguageDocumentTests
     public async Task DocOwl_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        using var model = new DocOwl<double>(arch, imageSize: 64);
+        using var model = new DocOwl<double>(arch, options: new DocOwlOptions { ImageSize = 64 });
         using var input = CreateSmallImage();
         using var output = model.Predict(input);
         Assert.NotNull(output);
@@ -57,9 +59,7 @@ public class VisionLanguageDocumentTests
     }
 
     private static DocOwl<double> CreateSmallDocOwl()
-        => new DocOwl<double>(CreateArchitecture(imageSize: 64), imageSize: 64,
-            maxSequenceLength: 64, visionDim: 32, languageDim: 32,
-            visionLayers: 1, languageLayers: 1, numHeads: 4, vocabSize: 64);
+        => new DocOwl<double>(CreateArchitecture(imageSize: 64), options: new DocOwlOptions { ImageSize = 64, MaxSequenceLength = 64, VisionDim = 32, LanguageDim = 32, VisionLayers = 1, LanguageLayers = 1, NumHeads = 4, VocabSize = 64 });
 
     private static Tensor<double> CreateTokenIds(int count, int offset = 0, int vocab = 64)
     {
@@ -242,7 +242,7 @@ public class VisionLanguageDocumentTests
     public async Task DocOwl_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        using var model = new DocOwl<double>(arch, imageSize: 64);
+        using var model = new DocOwl<double>(arch, options: new DocOwlOptions { ImageSize = 64 });
         var meta = model.GetModelMetadata();
         Assert.Equal("DocOwl", meta.Name);
     }
@@ -255,7 +255,7 @@ public class VisionLanguageDocumentTests
     public async Task InfographicVQA_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        using var model = new InfographicVQA<double>(arch, imageSize: 64);
+        using var model = new InfographicVQA<double>(arch, options: new InfographicVQAOptions { ImageSize = 64 });
         Assert.NotNull(model);
     }
 
@@ -263,7 +263,7 @@ public class VisionLanguageDocumentTests
     public async Task InfographicVQA_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        using var model = new InfographicVQA<double>(arch, imageSize: 64);
+        using var model = new InfographicVQA<double>(arch, options: new InfographicVQAOptions { ImageSize = 64 });
         using var input = CreateSmallImage();
         using var output = model.Predict(input);
         Assert.NotNull(output);
@@ -275,7 +275,7 @@ public class VisionLanguageDocumentTests
     public async Task InfographicVQA_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        using var model = new InfographicVQA<double>(arch, imageSize: 64);
+        using var model = new InfographicVQA<double>(arch, options: new InfographicVQAOptions { ImageSize = 64 });
         var meta = model.GetModelMetadata();
         Assert.Equal("InfographicVQA", meta.Name);
     }
@@ -288,7 +288,7 @@ public class VisionLanguageDocumentTests
     public async Task UDOP_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        using var model = new UDOP<double>(arch, imageSize: 64);
+        using var model = new UDOP<double>(arch, options: new UDOPOptions { ImageSize = 64 });
         Assert.NotNull(model);
     }
 
@@ -296,7 +296,7 @@ public class VisionLanguageDocumentTests
     public async Task UDOP_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        using var model = new UDOP<double>(arch, imageSize: 64);
+        using var model = new UDOP<double>(arch, options: new UDOPOptions { ImageSize = 64 });
         using var input = CreateSmallImage();
         using var output = model.Predict(input);
         Assert.NotNull(output);
@@ -308,7 +308,7 @@ public class VisionLanguageDocumentTests
     public async Task UDOP_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        using var model = new UDOP<double>(arch, imageSize: 64);
+        using var model = new UDOP<double>(arch, options: new UDOPOptions { ImageSize = 64 });
         var meta = model.GetModelMetadata();
         Assert.Equal("UDOP", meta.Name);
     }
@@ -323,9 +323,9 @@ public class VisionLanguageDocumentTests
         // Each model owns pooled buffers, so it is declared under its own using scope before the
         // array is built: if a later constructor throws, the array assignment never completes and a
         // finally-based cleanup would never run, leaking every model already constructed.
-        using var docOwl = new DocOwl<double>(CreateArchitecture(), imageSize: 64);
-        using var infographicVqa = new InfographicVQA<double>(CreateArchitecture(), imageSize: 64);
-        using var udop = new UDOP<double>(CreateArchitecture(), imageSize: 64);
+        using var docOwl = new DocOwl<double>(CreateArchitecture(), options: new DocOwlOptions { ImageSize = 64 });
+        using var infographicVqa = new InfographicVQA<double>(CreateArchitecture(), options: new InfographicVQAOptions { ImageSize = 64 });
+        using var udop = new UDOP<double>(CreateArchitecture(), options: new UDOPOptions { ImageSize = 64 });
 
         var models = new DocumentNeuralNetworkBase<double>[] { docOwl, infographicVqa, udop };
 

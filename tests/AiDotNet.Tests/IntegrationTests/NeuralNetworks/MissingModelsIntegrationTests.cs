@@ -131,9 +131,7 @@ public class MissingModelsIntegrationTests
 
         var model = new GraphClassificationModel<float>(
             architecture,
-            hiddenDim: 4,
-            embeddingDim: 6,
-            numGnnLayers: 2);
+            options: new GraphClassificationOptions { HiddenDim = 4, EmbeddingDim = 6, NumGnnLayers = 2 });
 
         model.SetAdjacencyMatrix(CreateAdjacencyMatrix(numNodes));
         var nodeFeatures = CreateRandomTensor(new[] { numNodes, inputFeatures });
@@ -159,9 +157,7 @@ public class MissingModelsIntegrationTests
 
         var model = new LinkPredictionModel<float>(
             architecture,
-            hiddenDim: 6,
-            embeddingDim: embeddingDim,
-            numLayers: 2);
+            options: new LinkPredictionOptions { HiddenDim = 6, EmbeddingDim = embeddingDim, NumLayers = 2 });
 
         model.SetAdjacencyMatrix(CreateAdjacencyMatrix(numNodes));
         var nodeFeatures = CreateRandomTensor(new[] { numNodes, inputFeatures });
@@ -187,8 +183,7 @@ public class MissingModelsIntegrationTests
 
         var model = new NodeClassificationModel<float>(
             architecture,
-            hiddenDim: 4,
-            numLayers: 2);
+            options: new NodeClassificationOptions { HiddenDim = 4, NumLayers = 2 });
 
         model.SetAdjacencyMatrix(CreateAdjacencyMatrix(numNodes));
         var nodeFeatures = CreateRandomTensor(new[] { numNodes, inputFeatures });
@@ -253,7 +248,9 @@ public class MissingModelsIntegrationTests
             inputSize: F,
             outputSize: C);
         var model = new NodeClassificationModel<double>(
-            architecture, hiddenDim: 16, numLayers: 2, dropoutRate: 0.0, maxGradNorm: 0.0);
+            architecture,
+            options: new NodeClassificationOptions
+            { HiddenDim = 16, NumLayers = 2, DropoutRate = 0.0, MaxGradNorm = 0.0 });
 
         var allNodes = Enumerable.Range(0, n).ToArray();
         var task = new NodeClassificationTask<double>

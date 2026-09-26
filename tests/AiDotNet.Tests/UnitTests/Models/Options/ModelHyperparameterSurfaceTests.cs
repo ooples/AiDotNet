@@ -9,11 +9,17 @@ namespace AiDotNet.Tests.UnitTests.Models.Options;
 public class ModelHyperparameterSurfaceTests
 {
     [Fact]
-    public void SharedFamilyOptions_DoNotExposeAnUnusedGradientAlias()
+    public void SharedGradientClippingThreshold_ReachesTheNetworkItConfigures()
     {
-        // This is the removed API member's identity, not a policy-dispatch string.
-        Assert.Null(typeof(ModelHyperparameterOptions).GetProperty("MaxGradNorm",
-            BindingFlags.Instance | BindingFlags.Public));
+        // MaxGradNorm was once an inert alias and was removed for that reason (#2130). The options
+        // migration then routed it into NeuralNetworkBase's clipping threshold for the models that
+        // read it, so it is kept only while it actually configures training - which this asserts.
+        var options = new FeedForwardNeuralNetworkOptions { MaxGradNorm = 2.5 };
+        var architecture = new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+            AiDotNet.Enums.InputType.OneDimensional, AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 4, outputSize: 1);
+        using var network = new AiDotNet.NeuralNetworks.FeedForwardNeuralNetwork<double>(architecture, options: options);
+        Assert.Equal(2.5, network.MaxGradNormValue);
     }
 
     [Theory]

@@ -5,7 +5,7 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// <summary>
 /// Configuration options for the OccupancyNeuralNetwork.
 /// </summary>
-public class OccupancyNeuralNetworkOptions : NeuralNetworkOptions
+public class OccupancyNeuralNetworkOptions : ModelHyperparameterOptions
 {
     /// <summary>
     /// Initial learning rate for the default Adam (AMSGrad) optimizer the network
@@ -19,4 +19,22 @@ public class OccupancyNeuralNetworkOptions : NeuralNetworkOptions
     /// the memorization task. Tune for larger or noisier occupancy datasets.
     /// </summary>
     public double BaseOptimizerInitialLearningRate { get; set; } = 0.0001;
+
+    /// <summary>
+    /// Gets or sets history window size. Default: <c>5</c>.
+    /// </summary>
+    public int HistoryWindowSize { get; set; } = 5;
+
+    /// <summary>
+    /// Gets or sets include temporal data. Default: <c>false</c>.
+    /// </summary>
+    public bool IncludeTemporalData { get; set; } = false;
+
+    /// <summary>
+    /// Throws when a value on this instance cannot produce a working model.
+    /// </summary>
+    public void Validate()
+    {
+        Require(HistoryWindowSize, nameof(HistoryWindowSize));
+    }
 }

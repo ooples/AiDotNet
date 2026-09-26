@@ -65,29 +65,25 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     /// <summary>
     /// Creates a new ResNet backbone.
     /// </summary>
-    /// <param name="variant">ResNet variant (18, 34, 50, 101, or 152).</param>
-    /// <param name="inChannels">Number of input channels (default 3 for RGB).</param>
     /// <param name="activation">
     /// Activation applied between stages and at the stem. <c>null</c> resolves to the
     /// He et al. 2016 paper default <see cref="ReLUActivation{T}"/>.
     /// </param>
-    public ResNet(
-        ResNetVariant variant = ResNetVariant.ResNet50,
-        int inChannels = 3,
-        IActivationFunction<T>? activation = null)
+    public ResNet(IActivationFunction<T>? activation = null,
+        ResNetBackboneOptions? options = null)
         : base(NeuralNetworkArchitecture<T>.CreateDynamicSpatial(
                 inputType: InputType.ThreeDimensional,
                 taskType: NeuralNetworkTaskType.ImageClassification,
-                channels: inChannels,
+                channels: (options ??= new ResNetBackboneOptions()).InChannels,
                 outputSize: 1),
               new MeanSquaredErrorLoss<T>())
     {
-        _variant = variant;
-        _inChannels = inChannels;
+        _variant = options.Variant;
+        _inChannels = options.InChannels;
         _activation = activation ?? new ReLUActivation<T>();
         _stages = new List<ResNetStage<T>>();
 
-        bool useBottleneck = variant >= ResNetVariant.ResNet50;
+        bool useBottleneck = options.Variant >= ResNetVariant.ResNet50;
         int expansion = useBottleneck ? 4 : 1;
         int[] baseChannels = { 64, 128, 256, 512 };
         OutputChannels = baseChannels.Select(c => c * expansion).ToArray();
@@ -98,9 +94,9 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         // ParameterCount and GetParameters are exact before any data flows, and the weights are
         // allocated once rather than materialized mid-forward.
         _conv1 = ConvolutionalLayer<T>.WithInputDepth(
-            inputDepth: inChannels, outputDepth: 64, kernelSize: 7, stride: 2, padding: 3);
+            inputDepth: options.InChannels, outputDepth: 64, kernelSize: 7, stride: 2, padding: 3);
 
-        int[] blockCounts = GetBlockCounts(variant);
+        int[] blockCounts = GetBlockCounts(options.Variant);
         int currentChannels = 64;
         for (int i = 0; i < 4; i++)
         {

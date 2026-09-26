@@ -157,18 +157,18 @@ public partial class RAPIDFlow<T> : OpticalFlowBase<T>
     /// <param name="options">Optional configuration options.</param>
     public RAPIDFlow(
         NeuralNetworkArchitecture<T> architecture,
-        int numRefinementIterations = 12,
         RAPIDFlowOptions? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new RAPIDFlowOptions();
+        _options.Validate();
         Options = _options;
 
-        if (numRefinementIterations <= 0)
+        if (_options.NumRefinementIterations <= 0)
             throw new ArgumentOutOfRangeException(
-                nameof(numRefinementIterations),
-                "numRefinementIterations must be positive.");
-        _numRefinementIterations = numRefinementIterations;
+                nameof(_options.NumRefinementIterations),
+                "_options.NumRefinementIterations must be positive.");
+        _numRefinementIterations = _options.NumRefinementIterations;
         _refinementBlocks = [];
 
         InitializeNativeLayers(architecture);

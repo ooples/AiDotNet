@@ -71,12 +71,6 @@ public class TabDPTOptions<T> : RiskModelOptions<T>
     public double DropoutRate { get; set; } = 0.1;
 
     /// <summary>
-    /// Gets or sets the maximum number of features supported.
-    /// </summary>
-    /// <value>The maximum features, defaulting to 100.</value>
-    public int MaxFeatures { get; set; } = 100;
-
-    /// <summary>
     /// Gets or sets the context length (number of examples for in-context learning).
     /// </summary>
     /// <value>The context length, defaulting to 32.</value>

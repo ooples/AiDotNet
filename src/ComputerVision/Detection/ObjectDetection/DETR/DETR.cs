@@ -72,7 +72,7 @@ public partial class DETR<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
         _detectionLoss = new DETRSetLoss<T>(checked(options.NumClasses + 1), lossOptions);
 
         // Initialize backbone (ResNet-50 by default)
-        Backbone = new ResNet<T>(ResNetVariant.ResNet50);
+        Backbone = new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetVariant.ResNet50 });
 
         // Project backbone features to hidden dimension
         int backboneChannels = Backbone.OutputChannels[^1];

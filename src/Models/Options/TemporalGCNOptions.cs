@@ -123,16 +123,6 @@ public class TemporalGCNOptions<T> : TimeSeriesRegressionOptions<T>
     /// </remarks>
     public int NumNodes { get; set; } = 207;
 
-    /// <summary>
-    /// Gets or sets the number of features per node.
-    /// </summary>
-    /// <value>The number of features, defaulting to 1.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How many measurements at each node per time step.
-    /// Often 1 (e.g., traffic speed), but can be more (speed, volume, occupancy).
-    /// </para>
-    /// </remarks>
-    public int NumFeatures { get; set; } = 1;
 
     /// <summary>
     /// Gets or sets the hidden dimension for GCN and temporal layers.

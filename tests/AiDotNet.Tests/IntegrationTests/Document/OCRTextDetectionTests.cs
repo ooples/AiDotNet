@@ -1,4 +1,5 @@
 using AiDotNet.Document;
+using AiDotNet.Document.Options;
 using AiDotNet.Document.OCR.TextDetection;
 using AiDotNet.Enums;
 using AiDotNet.LinearAlgebra;
@@ -40,7 +41,7 @@ public class OCRTextDetectionTests
     public async Task CRAFT_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        using var model = new CRAFT<double>(arch, imageSize: 64);
+        using var model = new CRAFT<double>(arch, options: new CRAFTOptions { ImageSize = 64 });
         Assert.NotNull(model);
     }
 
@@ -48,7 +49,7 @@ public class OCRTextDetectionTests
     public async Task CRAFT_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        using var model = new CRAFT<double>(arch, imageSize: 64);
+        using var model = new CRAFT<double>(arch, options: new CRAFTOptions { ImageSize = 64 });
         using var input = CreateSmallImage();
         using var output = model.Predict(input);
         Assert.NotNull(output);
@@ -60,7 +61,7 @@ public class OCRTextDetectionTests
     public async Task CRAFT_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        using var model = new CRAFT<double>(arch, imageSize: 64);
+        using var model = new CRAFT<double>(arch, options: new CRAFTOptions { ImageSize = 64 });
         var meta = model.GetModelMetadata();
         Assert.Equal("CRAFT", meta.Name);
         Assert.NotNull(meta.AdditionalInfo);
@@ -70,7 +71,7 @@ public class OCRTextDetectionTests
     public async Task CRAFT_GetModelSummary_ContainsModelName()
     {
         var arch = CreateArchitecture();
-        using var model = new CRAFT<double>(arch, imageSize: 64);
+        using var model = new CRAFT<double>(arch, options: new CRAFTOptions { ImageSize = 64 });
         var summary = model.GetModelSummary();
         Assert.Contains("CRAFT", summary);
     }
@@ -83,7 +84,7 @@ public class OCRTextDetectionTests
     public async Task DBNet_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        using var model = new DBNet<double>(arch, imageSize: 64);
+        using var model = new DBNet<double>(arch, options: new AiDotNet.Document.Options.DBNetOptions { ImageSize = 64 });
         Assert.NotNull(model);
     }
 
@@ -91,7 +92,7 @@ public class OCRTextDetectionTests
     public async Task DBNet_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        using var model = new DBNet<double>(arch, imageSize: 64);
+        using var model = new DBNet<double>(arch, options: new AiDotNet.Document.Options.DBNetOptions { ImageSize = 64 });
         using var input = CreateSmallImage();
         using var output = model.Predict(input);
         Assert.NotNull(output);
@@ -103,7 +104,7 @@ public class OCRTextDetectionTests
     public async Task DBNet_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        using var model = new DBNet<double>(arch, imageSize: 64);
+        using var model = new DBNet<double>(arch, options: new AiDotNet.Document.Options.DBNetOptions { ImageSize = 64 });
         var meta = model.GetModelMetadata();
         Assert.Equal("DBNet", meta.Name);
     }
@@ -116,7 +117,7 @@ public class OCRTextDetectionTests
     public async Task EAST_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        using var model = new EAST<double>(arch, imageSize: 64);
+        using var model = new EAST<double>(arch, options: new AiDotNet.Document.Options.EASTOptions { ImageSize = 64 });
         Assert.NotNull(model);
     }
 
@@ -124,7 +125,7 @@ public class OCRTextDetectionTests
     public async Task EAST_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        using var model = new EAST<double>(arch, imageSize: 64);
+        using var model = new EAST<double>(arch, options: new AiDotNet.Document.Options.EASTOptions { ImageSize = 64 });
         using var input = CreateSmallImage();
         using var output = model.Predict(input);
         Assert.NotNull(output);
@@ -136,7 +137,7 @@ public class OCRTextDetectionTests
     public async Task EAST_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        using var model = new EAST<double>(arch, imageSize: 64);
+        using var model = new EAST<double>(arch, options: new AiDotNet.Document.Options.EASTOptions { ImageSize = 64 });
         var meta = model.GetModelMetadata();
         Assert.Equal("EAST", meta.Name);
     }
@@ -149,7 +150,7 @@ public class OCRTextDetectionTests
     public async Task PSENet_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        using var model = new PSENet<double>(arch, imageSize: 64);
+        using var model = new PSENet<double>(arch, options: new AiDotNet.Document.Options.PSENetOptions { ImageSize = 64 });
         Assert.NotNull(model);
     }
 
@@ -157,7 +158,7 @@ public class OCRTextDetectionTests
     public async Task PSENet_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        using var model = new PSENet<double>(arch, imageSize: 64);
+        using var model = new PSENet<double>(arch, options: new AiDotNet.Document.Options.PSENetOptions { ImageSize = 64 });
         using var input = CreateSmallImage();
         using var output = model.Predict(input);
         Assert.NotNull(output);
@@ -169,7 +170,7 @@ public class OCRTextDetectionTests
     public async Task PSENet_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        using var model = new PSENet<double>(arch, imageSize: 64);
+        using var model = new PSENet<double>(arch, options: new AiDotNet.Document.Options.PSENetOptions { ImageSize = 64 });
         var meta = model.GetModelMetadata();
         Assert.Equal("PSENet", meta.Name);
     }
@@ -184,10 +185,10 @@ public class OCRTextDetectionTests
         // Each model owns pooled buffers, so it is declared under its own using scope before the
         // array is built: if a later constructor throws, the array assignment never completes and a
         // finally-based cleanup would never run, leaking every model already constructed.
-        using var craft = new CRAFT<double>(CreateArchitecture(), imageSize: 64);
-        using var dbNet = new DBNet<double>(CreateArchitecture(), imageSize: 64);
-        using var east = new EAST<double>(CreateArchitecture(), imageSize: 64);
-        using var pseNet = new PSENet<double>(CreateArchitecture(), imageSize: 64);
+        using var craft = new CRAFT<double>(CreateArchitecture(), options: new CRAFTOptions { ImageSize = 64 });
+        using var dbNet = new DBNet<double>(CreateArchitecture(), options: new AiDotNet.Document.Options.DBNetOptions { ImageSize = 64 });
+        using var east = new EAST<double>(CreateArchitecture(), options: new AiDotNet.Document.Options.EASTOptions { ImageSize = 64 });
+        using var pseNet = new PSENet<double>(CreateArchitecture(), options: new AiDotNet.Document.Options.PSENetOptions { ImageSize = 64 });
 
         var models = new DocumentNeuralNetworkBase<double>[] { craft, dbNet, east, pseNet };
 

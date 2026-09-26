@@ -258,7 +258,6 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="options">TimeMachine-specific options.</param>
-    /// <param name="numFeatures">Number of input features.</param>
     /// <param name="optimizer">Optional optimizer for training.</param>
     /// <param name="lossFunction">Optional loss function.</param>
     /// <remarks>
@@ -267,10 +266,8 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
     /// paper's outer/inner arrangement.
     /// </para>
     /// </remarks>
-    public TimeMachine(
-        NeuralNetworkArchitecture<T> architecture,
+    public TimeMachine(NeuralNetworkArchitecture<T> architecture,
         TimeMachineOptions<T>? options = null,
-        int numFeatures = 1,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -290,7 +287,7 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
         _expandFactor = _options.ExpandFactor;
         _convKernelSize = _options.ConvKernelSize;
         _useReversibleNormalization = _options.UseReversibleNormalization;
-        _numFeatures = numFeatures;
+        _numFeatures = (options ??= new TimeMachineOptions<T>()).NumFeatures;
 
         InitializeLayers();
     }

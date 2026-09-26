@@ -27,7 +27,7 @@ public class WhisperSpeechOptions : CodecTtsOptions
     {
         if (other is null)
             throw new ArgumentNullException(nameof(other));
-        AdamBeta1 = other.AdamBeta1;
+            AdamBeta1 = other.AdamBeta1;
         AdamBeta2 = other.AdamBeta2;
         MaxGradientNorm = other.MaxGradientNorm;
     }

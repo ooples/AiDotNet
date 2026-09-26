@@ -35,7 +35,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task KMaXDeepLab_Construction_Succeeds()
     {
-        var model = new KMaXDeepLab<double>(Arch(), modelSize: KMaXDeepLabModelSize.R50);
+        var model = new KMaXDeepLab<double>(Arch(), options: new KMaXDeepLabOptions { ModelSize = KMaXDeepLabModelSize.R50 });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -43,7 +43,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task KMaXDeepLab_Predict_ReturnsOutput()
     {
-        var model = new KMaXDeepLab<double>(Arch(), modelSize: KMaXDeepLabModelSize.R50);
+        var model = new KMaXDeepLab<double>(Arch(), options: new KMaXDeepLabOptions { ModelSize = KMaXDeepLabModelSize.R50 });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -63,7 +63,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ODISE_Construction_Succeeds()
     {
-        var model = new ODISE<double>(Arch(), modelSize: ODISEModelSize.Base);
+        var model = new ODISE<double>(Arch(), options: new ODISEOptions { ModelSize = ODISEModelSize.Base });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -71,7 +71,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ODISE_Predict_ReturnsOutput()
     {
-        var model = new ODISE<double>(Arch(), modelSize: ODISEModelSize.Base);
+        var model = new ODISE<double>(Arch(), options: new ODISEOptions { ModelSize = ODISEModelSize.Base });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -119,7 +119,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task VisionMamba_Construction_Succeeds()
     {
-        var model = new VisionMamba<double>(Arch(), modelSize: VisionMambaModelSize.Tiny);
+        var model = new VisionMamba<double>(Arch(), options: new VisionMambaOptions { ModelSize = VisionMambaModelSize.Tiny });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -127,7 +127,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task VisionMamba_Predict_ReturnsOutput()
     {
-        var model = new VisionMamba<double>(Arch(), modelSize: VisionMambaModelSize.Tiny);
+        var model = new VisionMamba<double>(Arch(), options: new VisionMambaOptions { ModelSize = VisionMambaModelSize.Tiny });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -147,7 +147,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task VMamba_Construction_Succeeds()
     {
-        var model = new VMamba<double>(Arch(), modelSize: VMambaModelSize.Tiny);
+        var model = new VMamba<double>(Arch(), options: new VMambaOptions { ModelSize = VMambaModelSize.Tiny });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -155,7 +155,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task VMamba_Predict_ReturnsOutput()
     {
-        var model = new VMamba<double>(Arch(), modelSize: VMambaModelSize.Tiny);
+        var model = new VMamba<double>(Arch(), options: new VMambaOptions { ModelSize = VMambaModelSize.Tiny });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -203,7 +203,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task PIDNet_Construction_Succeeds()
     {
-        var model = new PIDNet<double>(Arch(), modelSize: PIDNetModelSize.Small);
+        var model = new PIDNet<double>(Arch(), options: new PIDNetOptions { ModelSize = PIDNetModelSize.Small });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -211,7 +211,7 @@ public class PanopticMambaEfficientSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task PIDNet_Predict_ReturnsOutput()
     {
-        var model = new PIDNet<double>(Arch(), modelSize: PIDNetModelSize.Small);
+        var model = new PIDNet<double>(Arch(), options: new PIDNetOptions { ModelSize = PIDNetModelSize.Small });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
