@@ -215,61 +215,84 @@ public abstract class NERModelTestBase<T> : NeuralNetworkModelTestBase<T>
     }
 
     /// <summary>
-    /// NER override of <see cref="NeuralNetworkModelTestBase{T}.MoreData_ShouldNotDegrade"/>,
-    /// for the SAME reason as <see cref="Training_ShouldReduceLoss"/>: the base compares
-    /// <c>MeasureLoss(net, net.Predict(input), target)</c> for net1 (short train) vs net2
-    /// (long train), but NER <c>Predict</c> ARGMAX-DECODES to discrete label IDs, so the base
-    /// compares CrossEntropyWithLogits computed over already-decoded integer labels — a
-    /// meaningless number that wanders with the (non-reproducible) dropout masks and makes the
-    /// invariant flaky (passes in isolation, fails in the full suite). We compare each network's
-    /// ACTUAL training objective via <see cref="INeuralNetworkModel{T}.GetLastLoss"/>; the longer-
-    /// trained clone must not have a worse real loss than the short-trained original. Keeps the
-    /// clone-from-the-same-weights structure (net2 = net1.Clone()) and the same iteration counts.
-    /// (TinyBERTNER/BiLSTMCRF/TransformerNER #1679.)
+    /// NER override of <see cref="NeuralNetworkModelTestBase{T}.MoreData_ShouldNotDegrade"/>.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The override exists for the SAME reason as <see cref="Training_ShouldReduceLoss"/>: the base
+    /// measures <c>MeasureLoss(net, net.Predict(input), target)</c>, but NER <c>Predict</c>
+    /// ARGMAX-DECODES the <c>[seq, NumLabels]</c> emission scores to discrete label IDs, so the base
+    /// computes CrossEntropyWithLogits over already-decoded integer labels — a meaningless number
+    /// that wanders with the dropout masks. We measure the model's ACTUAL training objective via
+    /// <see cref="INeuralNetworkModel{T}.GetLastLoss"/> instead. (#1679.)
+    /// </para>
+    /// <para>
+    /// What this override previously ALSO kept, and no longer does, is the base's superseded
+    /// comparison: a short run against a longer one. That asserts loss falls monotonically between
+    /// two arbitrary iteration counts, which is not a property stochastic optimisation has — with
+    /// Adam the first steps routinely overshoot before settling. The base abandoned it after the
+    /// optical-flow family made it concrete (SEA-RAFT: 0.404 untrained, 38.6, 100.2, 1.26, ...,
+    /// 0.111 by step 15, so step 1 against step 2 read 38.6 against 100.2 and called a model that
+    /// ends 3.6x BETTER than untrained a regression). This override kept the shape and inherited
+    /// the problem: LegalBERTNER failed it nightly at 2 steps (3.992393 against 2.825676) while
+    /// every other invariant on the same model passed, including Training_ShouldReduceLoss over the
+    /// same objective (#2135).
+    /// </para>
+    /// <para>
+    /// The tell was per-model tuning accumulating in the generator to hold the shape up — a
+    /// LegalBERTNER-only tolerance measured at a 0.608 gap that had already grown to 1.167, plus
+    /// hand-picked "2-to-5" and "5-to-15" windows for its siblings. The base's whole point is that
+    /// the invariant should need no per-model knowledge of where an architecture stops oscillating.
+    /// </para>
+    /// <para>
+    /// So this now matches <see cref="Training_ShouldReduceLoss"/> exactly: one network, the
+    /// baseline taken after the first optimizer step (the earliest point <c>GetLastLoss</c> reports
+    /// anything), then one budget, then compare. The budget comes from the base's
+    /// <c>ResolveConformanceTrainingIterations</c>, which scales it to the model's parameter count,
+    /// so it is neither invented here nor fixed per model.
+    /// </para>
+    /// </remarks>
     [Fact(Timeout = 120000)]
     public override async Task MoreData_ShouldNotDegrade()
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
-        var rng1 = ModelTestHelpers.CreateSeededRandom(42);
-        var rng2 = ModelTestHelpers.CreateSeededRandom(42);
-        var input = CreateRandomTensor(InputShape, rng1);
-        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng1);
-        var input2 = CreateRandomTensor(InputShape, rng2);
-        var target2 = CreateRandomTargetTensor(EffectiveOutputShape, rng2);
+        var rng = ModelTestHelpers.CreateSeededRandom(42);
+        var input = CreateRandomTensor(InputShape, rng);
+        var target = CreateRandomTargetTensor(EffectiveOutputShape, rng);
 
-        using var network1 = CreateNetwork();
-        if (TrainingInvariantsNotApplicable(network1)) return;
+        using var network = CreateNetwork();
+        if (TrainingInvariantsNotApplicable(network)) return;
 
-        // Warm up lazy layers from the real InputShape before cloning (mirrors the base).
-        try { network1.Predict(input); }
+        // Warm up lazy layers from the real InputShape (mirrors the base).
+        try { network.Predict(input); }
         catch (System.InvalidOperationException) { /* layer needs training mode for first forward */ }
 
-        var network2 = network1 is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn1
-            ? (INeuralNetworkModel<T>)nn1.Clone()
-            : (INeuralNetworkModel<T>)network1.Clone();
-        try
-        {
-            int shortIters = MoreDataShortIterations;
-            int longIters = MoreDataLongIterations;
-            Assert.True(shortIters > 0 && longIters >= shortIters,
-                $"Invalid iteration contract: short={shortIters}, long={longIters}.");
+        // Cost-aware, via the base's own resolver rather than a budget invented here: it caps at
+        // ten optimizer steps and a 75M parameter-update surface, which is what keeps a BERT-scale
+        // model inside the 120s timeout while still giving mid-sized models the few steps its own
+        // documentation says are needed to clear Adam's first-step transient.
+        int budget = ResolveConformanceTrainingIterations(network, MoreDataLongIterations);
+        Assert.True(budget > 0,
+            $"Resolved training budget must be > 0; got {budget} from "
+            + $"MoreDataLongIterations={MoreDataLongIterations}.");
 
-            for (int i = 0; i < shortIters; i++) network1.Train(input, target);
-            double lossShort = ConvertToDouble(network1.GetLastLoss());
+        // Baseline after the first step, the same reference Training_ShouldReduceLoss uses.
+        network.Train(input, target);
+        double lossBaseline = ConvertToDouble(network.GetLastLoss());
 
-            for (int i = 0; i < longIters; i++) network2.Train(input2, target2);
-            double lossLong = ConvertToDouble(network2.GetLastLoss());
+        for (int i = 0; i < budget; i++) network.Train(input, target);
+        double lossTrained = ConvertToDouble(network.GetLastLoss());
 
-            Assert.False(double.IsNaN(lossShort) || double.IsNaN(lossLong),
-                $"Loss became NaN during training: short={lossShort}, long={lossLong}.");
-            Assert.True(lossLong <= lossShort + MoreDataTolerance,
-                $"{longIters}-iteration clone loss ({lossLong:F6}) > {shortIters}-iteration loss " +
-                $"({lossShort:F6}) — measured via GetLastLoss (the model's own CE over logits). " +
-                "Optimizer may be diverging with more training.");
-        }
-        finally { (network2 as System.IDisposable)?.Dispose(); }
+        Assert.False(double.IsNaN(lossBaseline) || double.IsNaN(lossTrained),
+            $"Loss became NaN during training: baseline={lossBaseline}, trained={lossTrained}. "
+            + "This indicates gradient explosion or numerical instability in the optimizer path.");
+
+        Assert.True(lossTrained <= lossBaseline + MoreDataTolerance,
+            $"After {budget} further iterations the model's own loss ({lossTrained:F6}) is worse "
+            + $"than after its first step ({lossBaseline:F6}) — measured via GetLastLoss (the "
+            + "model's own CE over logits). More training made the model worse, which a transient "
+            + "at this budget no longer explains.");
     }
 
     // =====================================================
