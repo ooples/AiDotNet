@@ -355,6 +355,8 @@ public partial class Concerto<T> : Common.SemanticSegmentationBase<T>
         finally
         {
             SetTrainingMode(false);
+            // The DINO centering buffer lives only for this run: every step's tape is consumed inside the loop.
+            center?.Dispose();
         }
 
         return lastEpochLoss;
