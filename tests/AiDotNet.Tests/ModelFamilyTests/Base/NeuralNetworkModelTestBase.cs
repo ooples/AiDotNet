@@ -581,53 +581,6 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         INeuralNetworkModel<T> network,
         Tensor<T> input)
     {
-        CalibrateBatchNormRunningStatistics(network, input);
-    }
-
-    /// <summary>Training-mode forwards used to calibrate BatchNorm running statistics (1 - 0.9^60 = 99.8%).</summary>
-    private const int BatchNormCalibrationPasses = 60;
-
-    /// <summary>
-    /// BatchNorm evaluates with running statistics initialised to mean 0 and variance 1 until it has
-    /// seen data, while training optimises the loss under the data's own batch statistics. A baseline
-    /// measured before calibration therefore scores a different normalisation from the one training
-    /// improves: EfficientConformer read 4.595 uncalibrated against 4.700 calibrated, and training then
-    /// lowered the calibrated loss to 4.680. Calibrate the running statistics on the invariant's input
-    /// (forwards only, no weight update) so the baseline and the final measurement share one regime.
-    /// Models without BatchNorm are untouched.
-    /// </summary>
-    private static void CalibrateBatchNormRunningStatistics(INeuralNetworkModel<T> network, Tensor<T> input)
-    {
-        if (network is not AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn || !ContainsBatchNorm(nn.Layers))
-            return;
-
-        // Resolve lazily sized layers first; a training-mode forward before the first Predict can
-        // run against unresolved declared shapes.
-        nn.Predict(input);
-        nn.SetTrainingMode(true);
-        try
-        {
-            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
-            {
-                for (int pass = 0; pass < BatchNormCalibrationPasses; pass++)
-                    nn.ForwardForTraining(input);
-            }
-        }
-        finally
-        {
-            nn.SetTrainingMode(false);
-        }
-    }
-
-    private static bool ContainsBatchNorm(IEnumerable<ILayer<T>> layers)
-    {
-        foreach (var layer in layers)
-        {
-            if (layer is AiDotNet.NeuralNetworks.Layers.BatchNormalizationLayer<T>
-                || ContainsBatchNorm(layer.GetSubLayers()))
-                return true;
-        }
-        return false;
     }
 
     /// <summary>
