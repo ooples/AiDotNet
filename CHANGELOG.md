@@ -19,6 +19,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.233.1](https://github.com/ooples/AiDotNet/compare/v0.233.0...v0.233.1) (2026-09-26)
+
+
+### Bug Fixes
+
+* **ci:** stop the heavy-timeout lane OOM-killing its own runner ([3f9bbde](https://github.com/ooples/AiDotNet/commit/3f9bbde222daa6d5f9e4dae9ceba47080b35ba51))
+* persist deep gaussian process layer state and drop the shallow gp clone ([4d27188](https://github.com/ooples/AiDotNet/commit/4d2718825f06b5429163fec124197853d06222ae))
+* **release:** cap build parallelism so the release runner survives the compile ([3db9675](https://github.com/ooples/AiDotNet/commit/3db9675b0c127dcae17b87dcf73df41716c77d7d))
+* **release:** cap build parallelism so the release runner survives the compile ([7b2f204](https://github.com/ooples/AiDotNet/commit/7b2f204c100722a0f3043623e07bd3b3fe82a7ff))
+* **video:** reject raft frame pairs with the wrong stacked channel count ([ba798ad](https://github.com/ooples/AiDotNet/commit/ba798ad1e5a325941086e375fceb18ecde10dfa0))
+* **video:** route VideoMAE pretraining through its decoder and declare TimeSformer's clip input ([a9d755e](https://github.com/ooples/AiDotNet/commit/a9d755ee24302e2de82606bf50a26d9108984f59))
+
+
+### Refactoring
+
+* **video:** name videomae's target-normalization offset; assert videoclip shape ([028e606](https://github.com/ooples/AiDotNet/commit/028e6061474930c711a6fc2ce8b82bffe5e7e703))
+
+
+### Documentation
+
+* **activation:** clarify temperature conversion ([3eb874f](https://github.com/ooples/AiDotNet/commit/3eb874f666587669f6c5e5712fd8c15171e7ce40))
+
 ## [0.233.0](https://github.com/ooples/AiDotNet/compare/v0.232.0...v0.233.0) (2026-09-25)
 
 
