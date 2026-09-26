@@ -2129,20 +2129,6 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     }
 
     /// <summary>
-    /// Steps the learning rate scheduler and updates the current learning rate.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method advances the scheduler by one step and synchronizes the optimizer's
-    /// learning rate with the scheduler's current value.
-    /// </para>
-    /// <para><b>For Beginners:</b> Call this method to update the learning rate according
-    /// to the scheduler's policy. The scheduler will automatically adjust the learning rate
-    /// based on how many steps have been taken.
-    /// </para>
-    /// </remarks>
-    /// <returns>The new learning rate after stepping.</returns>
-    /// <summary>
     /// Installs (or clears) the learning-rate scheduler on an already-constructed optimizer.
     /// </summary>
     /// <param name="scheduler">The scheduler to drive the learning rate, or <c>null</c> to remove it.</param>
@@ -2156,7 +2142,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </para>
     /// <para><b>For Beginners:</b> Use this to change how the learning rate evolves after the optimizer exists.</para>
     /// </remarks>
-    public void SetLearningRateScheduler(ILearningRateScheduler? scheduler)
+    internal void SetLearningRateScheduler(ILearningRateScheduler? scheduler)
     {
         _learningRateScheduler = scheduler;
         _adaptiveSchedulerStepsOnFitness = false;
@@ -2164,6 +2150,20 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         SetLearningRate(scheduler?.CurrentLearningRate ?? GradientOptions.InitialLearningRate);
     }
 
+    /// <summary>
+    /// Steps the learning rate scheduler and updates the current learning rate.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This method advances the scheduler by one step and synchronizes the optimizer's
+    /// learning rate with the scheduler's current value.
+    /// </para>
+    /// <para><b>For Beginners:</b> Call this method to update the learning rate according
+    /// to the scheduler's policy. The scheduler will automatically adjust the learning rate
+    /// based on how many steps have been taken.
+    /// </para>
+    /// </remarks>
+    /// <returns>The new learning rate after stepping.</returns>
     public double StepScheduler()
     {
         if (_learningRateScheduler != null)

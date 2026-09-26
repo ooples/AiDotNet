@@ -81,7 +81,7 @@ public class WarmupStableDecayScheduler : LearningRateSchedulerBase
         _decaySteps = decaySteps;
         _decayShape = decayShape;
         _endLr = endLr;
-        _currentLearningRate = ComputeLearningRate(0);
+        _currentLearningRate = LearningRateAt(0);
     }
 
     /// <summary>Gets the number of warmup steps.</summary>
@@ -107,7 +107,10 @@ public class WarmupStableDecayScheduler : LearningRateSchedulerBase
     }
 
     /// <inheritdoc />
-    protected override double ComputeLearningRate(int step)
+    protected override double ComputeLearningRate(int step) => LearningRateAt(step);
+
+    // Non-virtual so the constructor can compute the initial rate without calling an overridable member.
+    private double LearningRateAt(int step)
     {
         if (step < _warmupSteps)
         {

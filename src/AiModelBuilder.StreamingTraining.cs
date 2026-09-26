@@ -115,12 +115,14 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 $"Checkpoint '{latest.CheckpointId}' has no saved model state to resume from.");
         }
 
-        var gradientOptimizer = _optimizer as GradientBasedOptimizerBase<T, TInput, TOutput>;
-        ILearningRateScheduler? configuredScheduler = gradientOptimizer?.LearningRateScheduler;
+        // Captured before the restore replaces it with the checkpoint's scheduler.
+        ILearningRateScheduler? configuredScheduler =
+            (_optimizer as GradientBasedOptimizerBase<T, TInput, TOutput>)?.LearningRateScheduler;
 
         latest.RestoreOptimizer(_optimizer);
 
-        if (options.UseConfiguredSchedulerOnResume && configuredScheduler is not null && gradientOptimizer is not null)
+        if (options.UseConfiguredSchedulerOnResume && configuredScheduler is not null
+            && _optimizer is GradientBasedOptimizerBase<T, TInput, TOutput> gradientOptimizer)
         {
             int restoredSchedulerStep = gradientOptimizer.LearningRateScheduler is LearningRateSchedulerBase restored
                 ? restored.CurrentStep
