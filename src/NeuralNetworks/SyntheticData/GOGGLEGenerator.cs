@@ -745,7 +745,7 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
                         trainableLayers, input, expectedOutput,
                         forward: Fwd, computeLoss: Loss,
                         optimizer: _optimizer,
-                        out T _,
+                        out T _, owner: this,
                         extraTensors: extras))
                 {
                     ProjectAdjacencyConstraints();

@@ -80,20 +80,111 @@ public static class CompiledTapeTrainingStep<T>
         }
     }
 
+    /// <summary>
+    /// The compiled-training state of ONE model: its traced plan, the fused optimizer's configuration and
+    /// moment-carrying plan, the persistent input/target leaves, the fused step counter (Adam's bias-correction
+    /// step), and the mixed-precision plans.
+    /// </summary>
+    /// <remarks>
+    /// This used to live in <c>[ThreadStatic]</c> fields, which tied a model's optimizer trajectory to whichever
+    /// thread happened to run its step. An <c>await</c> between two steps (the streaming builder awaits every
+    /// batch) resumes on an arbitrary pool thread, so a step could see a fresh plan (moments and step count back
+    /// at zero) or a stale plan another model left on that thread. Identical runs then disagreed by a full
+    /// learning-rate step per affected parameter: Adam's m/sqrt(v) is about +/-1 for any non-zero gradient.
+    /// Keying the state by its owner makes a model's trajectory independent of the thread that trains it, while
+    /// different models still never share state.
+    /// </remarks>
+    private sealed class TrainingState
+    {
+        internal CompiledModelCache<T>? cache;
+        internal Tensor<T>[]? cachedParameters;
+        internal Tensor<T>[]? cachedSelectionIdentities;
+        internal bool cachedUsesExplicitSelection;
+        internal object?[]? cachedLayerSetIdentities;
+        internal Tensor<T>? persistentInput;
+        internal Tensor<T>? persistentTarget;
+        internal object? configuredPlan;
+        internal (int OptType, float Lr, float B1, float B2, float Eps, float Wd)? configuredOptimizerConfig;
+        internal long fusedStepCount;
+        internal System.Collections.Generic.HashSet<AiDotNet.Tensors.Engines.Compilation.OptimizerType>? fusedUnavailableTypes;
+        internal System.Exception? lastFallbackException;
+        internal object? mpPlan;
+        internal int[]? mpKey;
+        [AiDotNet.Attributes.Scratch] internal Tensor<float>? mpInput;
+        [AiDotNet.Attributes.Scratch] internal Tensor<float>? mpTarget;
+        internal object? mpAdamPlan;
+        internal int[]? mpAdamKey;
+        internal object? mpScaler;
+        internal object? mpGenericPlan;
+        internal int[]? mpGenericKey;
+    }
+
+    /// <summary>Per-owner training state. Weak keys: a collected model takes its compiled plan with it.</summary>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, TrainingState> States = new();
+
+    /// <summary>
+    /// The state the current step is operating on. Set on entry to every step from the owner, so it is only a
+    /// pointer to per-owner state, never state itself; the thread it is read on does not matter.
+    /// </summary>
     [ThreadStatic]
-    private static CompiledModelCache<T>? _cache;
+    private static TrainingState? _currentState;
+
     [ThreadStatic]
-    private static Tensor<T>[]? _cachedParameters;
+    private static int _stepDepth;
+
+    private static TrainingState CurrentState => _currentState ??= new TrainingState();
+
+    /// <summary>
+    /// Selects the owner's state for the step that follows. The owner is the model when the caller passes one;
+    /// otherwise the first layer, which belongs to exactly one model.
+    /// </summary>
+    private static TrainingState EnterState<TLayer>(object? owner, IReadOnlyList<TLayer> layers) where TLayer : class
+    {
+        object? key = owner ?? (layers.Count > 0 ? layers[0] : null);
+        var state = key is null ? new TrainingState() : States.GetValue(key, _ => new TrainingState());
+        _currentState = state;
+        return state;
+    }
+
+    /// <summary>Drops the compiled plan, optimizer moments and step counter of <paramref name="owner"/>.</summary>
+    /// <param name="owner">The model (or, for owner-less callers, the first layer) the state belongs to.</param>
+    public static void Invalidate(object owner)
+    {
+        if (owner is null) throw new System.ArgumentNullException(nameof(owner));
+        if (!States.TryGetValue(owner, out var state)) return;
+        var previous = _currentState;
+        _currentState = state;
+        try { Invalidate(); }
+        finally { _currentState = previous; }
+    }
+
+    /// <summary>Forgets <paramref name="owner"/>'s state entirely, e.g. when the model is disposed.</summary>
+    /// <param name="owner">The model whose state to drop.</param>
+    internal static void Forget(object owner)
+    {
+        if (owner is null) throw new System.ArgumentNullException(nameof(owner));
+        Invalidate(owner);
+        States.Remove(owner);
+    }
+
+    /// <summary>Resets <paramref name="owner"/>'s fused step counter.</summary>
+    /// <param name="owner">The model (or first layer) the counter belongs to.</param>
+    public static void ResetFusedStepCount(object owner)
+    {
+        if (owner is null) throw new System.ArgumentNullException(nameof(owner));
+        if (States.TryGetValue(owner, out var state)) state.fusedStepCount = 0;
+    }
+
+    private static CompiledModelCache<T>? _cache { get => CurrentState.cache; set => CurrentState.cache = value; }
+    private static Tensor<T>[]? _cachedParameters { get => CurrentState.cachedParameters; set => CurrentState.cachedParameters = value; }
 
     /// <summary>
     /// Tensor identities of the explicit partial-freeze selection that produced
     /// <see cref="_cachedParameters"/>. Count alone is insufficient: two paper-defined
     /// stages may select different tensors while keeping the same cardinality.
     /// </summary>
-    [ThreadStatic]
-    private static Tensor<T>[]? _cachedSelectionIdentities;
-    [ThreadStatic]
-    private static bool _cachedUsesExplicitSelection;
+    private static Tensor<T>[]? _cachedSelectionIdentities { get => CurrentState.cachedSelectionIdentities; set => CurrentState.cachedSelectionIdentities = value; }
+    private static bool _cachedUsesExplicitSelection { get => CurrentState.cachedUsesExplicitSelection; set => CurrentState.cachedUsesExplicitSelection = value; }
 
     /// <summary>
     /// AiDotNet#1406: identity of the trainable-layer set that produced
@@ -113,8 +204,7 @@ public static class CompiledTapeTrainingStep<T>
     /// one. Per-instance optimizer state is reset as part of Invalidate, so
     /// the next model gets a clean compile.
     /// </summary>
-    [ThreadStatic]
-    private static object?[]? _cachedLayerSetIdentities;
+    private static object?[]? _cachedLayerSetIdentities { get => CurrentState.cachedLayerSetIdentities; set => CurrentState.cachedLayerSetIdentities = value; }
 
     /// <summary>
     /// AiDotNet#1331: persistent input tensor reused across <see cref="TryStepWithFusedOptimizer"/>
@@ -127,8 +217,7 @@ public static class CompiledTapeTrainingStep<T>
     /// fresh data into it on every step. See <c>InputDataMustRefreshAcrossStep_NotFrozenAtCompileTime</c>
     /// in the Tensors test suite for the diagnostic that proves this pattern.
     /// </summary>
-    [ThreadStatic]
-    private static Tensor<T>? _persistentInput;
+    private static Tensor<T>? _persistentInput { get => CurrentState.persistentInput; set => CurrentState.persistentInput = value; }
 
     /// <summary>
     /// AiDotNet#1331: persistent target tensor. Same rationale as <see cref="_persistentInput"/> —
@@ -137,8 +226,7 @@ public static class CompiledTapeTrainingStep<T>
     /// this single tensor (with in-place data copy) keeps the captured graph leaf in sync with
     /// the caller's data.
     /// </summary>
-    [ThreadStatic]
-    private static Tensor<T>? _persistentTarget;
+    private static Tensor<T>? _persistentTarget { get => CurrentState.persistentTarget; set => CurrentState.persistentTarget = value; }
 
     /// <summary>
     /// The single plan that has been configured with an optimizer on this
@@ -154,8 +242,7 @@ public static class CompiledTapeTrainingStep<T>
     /// NeuralNetworkBase caller enforces a strict commitment so the
     /// state-loss cannot happen silently).
     /// </summary>
-    [ThreadStatic]
-    private static object? _configuredPlan;
+    private static object? _configuredPlan { get => CurrentState.configuredPlan; set => CurrentState.configuredPlan = value; }
 
     /// <summary>
     /// Snapshot of the hyperparameters passed to
@@ -165,8 +252,7 @@ public static class CompiledTapeTrainingStep<T>
     /// reset m/v buffers and silently corrupt training, so on drift we
     /// also return <c>false</c>.
     /// </summary>
-    [ThreadStatic]
-    private static (int OptType, float Lr, float B1, float B2, float Eps, float Wd)? _configuredOptimizerConfig;
+    private static (int OptType, float Lr, float B1, float B2, float Eps, float Wd)? _configuredOptimizerConfig { get => CurrentState.configuredOptimizerConfig; set => CurrentState.configuredOptimizerConfig = value; }
 
     /// <summary>
     /// Counter of successful fused-step executions on this thread. Exposed
@@ -175,8 +261,7 @@ public static class CompiledTapeTrainingStep<T>
     /// <i>actually engaged</i> rather than silently falling back to eager
     /// (a test that only checks "finite loss" cannot distinguish the two).
     /// </summary>
-    [ThreadStatic]
-    private static long _fusedStepCount;
+    private static long _fusedStepCount { get => CurrentState.fusedStepCount; set => CurrentState.fusedStepCount = value; }
 
     /// <summary>
     /// Set once on the calling thread when an AMSGrad fused step fails because the
@@ -185,8 +270,7 @@ public static class CompiledTapeTrainingStep<T>
     /// tape) instead of reconfiguring → throwing → catching → warning every step,
     /// which would turn a one-time capability gap into per-step exception + log churn.
     /// </summary>
-    [ThreadStatic]
-    private static System.Collections.Generic.HashSet<AiDotNet.Tensors.Engines.Compilation.OptimizerType>? _fusedUnavailableTypes;
+    private static System.Collections.Generic.HashSet<AiDotNet.Tensors.Engines.Compilation.OptimizerType>? _fusedUnavailableTypes { get => CurrentState.fusedUnavailableTypes; set => CurrentState.fusedUnavailableTypes = value; }
 
     /// <summary>Gets the count of successful fused-step executions on the calling thread.</summary>
     public static long GetFusedStepCount() => _fusedStepCount;
@@ -206,8 +290,7 @@ public static class CompiledTapeTrainingStep<T>
     /// caller can quote the original exception's type + message + stack so the
     /// error is self-diagnosing.
     /// </summary>
-    [ThreadStatic]
-    private static System.Exception? _lastFallbackException;
+    private static System.Exception? _lastFallbackException { get => CurrentState.lastFallbackException; set => CurrentState.lastFallbackException = value; }
 
     /// <summary>
     /// AiDotNet#1395: read the last exception that caused
@@ -266,6 +349,35 @@ public static class CompiledTapeTrainingStep<T>
     /// Falls back to eager execution if compilation fails.
     /// </summary>
     public static T Step(
+        IReadOnlyList<ITrainableLayer<T>> layers,
+        Tensor<T> input,
+        Tensor<T> target,
+        T learningRate,
+        Func<Tensor<T>, Tensor<T>> forward,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss,
+        object? owner = null)
+    {
+        if (layers is null) throw new ArgumentNullException(nameof(layers));
+        var previous = _currentState;
+        var state = EnterState(owner, layers);
+        _stepDepth++;
+        try
+        {
+            lock (state)
+            {
+                _currentState = state;
+                return StepCore(layers, input, target, learningRate, forward, computeLoss);
+            }
+        }
+        finally
+        {
+            // A step nested inside another model's forward must hand the outer step its own state back; the
+            // outermost step leaves its state current for GetLastFallbackException / GetFusedStepCount.
+            if (--_stepDepth > 0) _currentState = previous;
+        }
+    }
+
+    private static T StepCore(
         IReadOnlyList<ITrainableLayer<T>> layers,
         Tensor<T> input,
         Tensor<T> target,
@@ -606,6 +718,60 @@ public static class CompiledTapeTrainingStep<T>
     }
 
     internal static bool TryStepWithFusedOptimizer(
+        IReadOnlyList<ITrainableLayer<T>> layers,
+        Tensor<T> input,
+        Tensor<T> target,
+        Func<Tensor<T>, Tensor<T>> forward,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss,
+        AiDotNet.Tensors.Engines.Compilation.OptimizerType optimizerType,
+        float learningRate,
+        float beta1,
+        float beta2,
+        float epsilon,
+        float weightDecay,
+        out T lossValue,
+        double maxGradNorm = 0.0,
+        AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? eagerOptimizer = null,
+        bool useBf16Moments = false,
+        IReadOnlyList<Tensor<T>>? extraTensors = null,
+        // Optimizer-specific coefficients for the kernels that do not read them from the
+        // beta/epsilon slots: LARS (momentum, trust coefficient), FTRL (L1, L2, lr power),
+        // ASGD and Rprop. Null for every other kernel — see FusedOptimizerConfig.Extras for
+        // why this is not defaulted to a fresh instance.
+        AiDotNet.Tensors.Engines.Compilation.FusedOptimizerExtras? fusedExtras = null,
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients = null,
+        // The subset of layer/extra tensors the model's published recipe actually optimizes
+        // (see NeuralNetworkBase.SelectTrainableParametersForTraining). Null = optimize
+        // everything, which is what all but the partial-freeze models want.
+        IReadOnlyCollection<Tensor<T>>? trainableSelection = null,
+        // The model the step trains. Its compiled plan and optimizer moments are kept per owner, not per
+        // thread; null uses the first layer, which belongs to exactly one model.
+        object? owner = null)
+    {
+        if (layers is null) throw new ArgumentNullException(nameof(layers));
+        var previous = _currentState;
+        // A model whose whole training surface is raw extra tensors passes no layers; its first extra tensor
+        // then identifies it, so its plan and moments still persist across steps.
+        var state = EnterState(owner ?? (layers.Count == 0 && extraTensors is { Count: > 0 } ? extraTensors[0] : null), layers);
+        _stepDepth++;
+        try
+        {
+            lock (state)
+            {
+                _currentState = state;
+                return TryStepWithFusedOptimizerCore(layers: layers, input: input, target: target, forward: forward, computeLoss: computeLoss, optimizerType: optimizerType, learningRate: learningRate, beta1: beta1, beta2: beta2, epsilon: epsilon, weightDecay: weightDecay, lossValue: out lossValue, maxGradNorm: maxGradNorm, lrSchedule: lrSchedule, eagerOptimizer: eagerOptimizer, useBf16Moments: useBf16Moments, extraTensors: extraTensors, fusedExtras: fusedExtras, onGradients: onGradients, trainableSelection: trainableSelection);
+            }
+        }
+        finally
+        {
+            // A step nested inside another model's forward must hand the outer step its own state back; the
+            // outermost step leaves its state current for GetLastFallbackException / GetFusedStepCount.
+            if (--_stepDepth > 0) _currentState = previous;
+        }
+    }
+
+    private static bool TryStepWithFusedOptimizerCore(
         IReadOnlyList<ITrainableLayer<T>> layers,
         Tensor<T> input,
         Tensor<T> target,
@@ -1231,21 +1397,19 @@ public static class CompiledTapeTrainingStep<T>
     // Tensors `main` but not yet in the latest published NuGet (0.91.12). The reflection-based bridge in
     // MixedPrecisionReflection.cs resolves the actual type at runtime; until Tensors publishes a release
     // containing #557, the IsAvailable probe returns false and the FP16 path is skipped at runtime.
-    private static object? _mpPlan;
-    private static int[]? _mpKey;
-    [AiDotNet.Attributes.Scratch]
-    private static Tensor<float>? _mpInput;
-    [AiDotNet.Attributes.Scratch]
-    private static Tensor<float>? _mpTarget;
+    private static object? _mpPlan { get => CurrentState.mpPlan; set => CurrentState.mpPlan = value; }
+    private static int[]? _mpKey { get => CurrentState.mpKey; set => CurrentState.mpKey = value; }
+    private static Tensor<float>? _mpInput { get => CurrentState.mpInput; set => CurrentState.mpInput = value; }
+    private static Tensor<float>? _mpTarget { get => CurrentState.mpTarget; set => CurrentState.mpTarget = value; }
     // Fused-Adam mixed-precision plan (traces against the fused path's persistent input/target).
-    private static object? _mpAdamPlan;
-    private static int[]? _mpAdamKey;
-    private static object? _mpScaler;
+    private static object? _mpAdamPlan { get => CurrentState.mpAdamPlan; set => CurrentState.mpAdamPlan = value; }
+    private static int[]? _mpAdamKey { get => CurrentState.mpAdamKey; set => CurrentState.mpAdamKey = value; }
+    private static object? _mpScaler { get => CurrentState.mpScaler; set => CurrentState.mpScaler = value; }
     // Generic mixed-precision plan: ComputeGradients returns FP32 grads, the eager optimizer INSTANCE
     // applies its own master update — covers every fused optimizer other than the inline Adam/SGD paths
     // (Lion, RMSprop, LAMB, Adagrad, AdaMax, AdaDelta, Nadam) without duplicating optimizer math.
-    private static object? _mpGenericPlan;
-    private static int[]? _mpGenericKey;
+    private static object? _mpGenericPlan { get => CurrentState.mpGenericPlan; set => CurrentState.mpGenericPlan = value; }
+    private static int[]? _mpGenericKey { get => CurrentState.mpGenericKey; set => CurrentState.mpGenericKey = value; }
 
     /// <summary>
     /// One mixed-precision (FP16 activation storage) compiled training step. Compiles once per

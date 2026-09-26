@@ -630,7 +630,7 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
                     trainableLayers, input, input,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _optimizer,
-                    out T _))
+                    out T _, owner: this))
             {
                 return;
             }

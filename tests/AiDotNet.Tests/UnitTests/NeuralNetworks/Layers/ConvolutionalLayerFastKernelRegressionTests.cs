@@ -221,7 +221,8 @@ public class ConvolutionalLayerFastKernelRegressionTests
     {
         const System.Reflection.BindingFlags flags =
             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic;
-        var cacheField = typeof(CompiledTapeTrainingStep<float>).GetField("_cache", flags);
+        // The plan cache of the model this thread last stepped (training state is kept per model).
+        var cacheField = typeof(CompiledTapeTrainingStep<float>).GetProperty("_cache", flags);
         Assert.NotNull(cacheField);
         var cache = cacheField.GetValue(null);
         Assert.NotNull(cache);

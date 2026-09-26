@@ -2885,7 +2885,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         _compileHost.Invalidate();
         // Also drop compiled fused training plans and reset sticky-disable
         // so the next training run gets a fresh chance at the fused path.
-        Training.CompiledTapeTrainingStep<T>.Invalidate();
+        Training.CompiledTapeTrainingStep<T>.Invalidate(this);
         _fusedTrainingDisabled = false;
         _fusedTrainingCommitted = false;
         _fusedPersistenceVerified = false;
@@ -12561,7 +12561,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 // gradient code below, which is why the surface stayed empty for every model that
                 // engages fusion -- the largest single cause of the all-zero gradient reports.
                 onGradients: ScatterFusedGradients,
-                trainableSelection: selectedParameters);
+                trainableSelection: selectedParameters,
+                owner: this);
         }
         finally
         {
@@ -13620,7 +13621,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // reach the forward; the moments left over from the first target simply outweighed the second's
         // gradient and held the update's sign. Six unrelated families reported that same cosine of
         // exactly 1.000000 in CI for this reason.
-        Training.CompiledTapeTrainingStep<T>.Invalidate();
+        Training.CompiledTapeTrainingStep<T>.Invalidate(this);
         _fusedTrainingCommitted = false;
         _fusedPersistenceVerified = false;
 
@@ -13681,8 +13682,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // previous trajectory's moments into the next run even though its optimizer object was Reset.
         // Idempotent, so re-clearing the root's flags here costs nothing.
         //
-        // CompiledTapeTrainingStep<T>.Invalidate() is static and the caller already ran it, so the
-        // plan cache is invalidated once for the whole walk rather than once per model.
+        // Compiled training state is kept per model, so each model the walk reaches drops its own plan
+        // (and the moments inside it); invalidating only the root would leave nested models' plans alive.
+        Training.CompiledTapeTrainingStep<T>.Invalidate(this);
         _fusedTrainingCommitted = false;
         _fusedPersistenceVerified = false;
 
@@ -18406,23 +18408,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (disposing)
         {
             // Release inference plans plus training plans/caches before layer disposal.
-            // CompiledTapeTrainingStep is thread-local/static and captures the
-            // live layer parameter tensors in its plan. Leaving that plan alive
+            // CompiledTapeTrainingStep keeps this model's plan (keyed by the model) and
+            // the plan captures the live layer parameter tensors. Leaving that plan alive
             // while the layers return their buffers to TensorAllocator lets the
             // next model reuse those buffers before the stale plan is invalidated;
             // disposing/replaying the old plan can then corrupt the new model's
             // first step (observed as NaN -> GetLastLoss() == 0 in consecutive
             // transformer-NER tests). It also pins the compiled activation and
             // optimizer buffers after the owning model has been disposed.
-            if (Layers is not null)
-            {
-                // Ownership comparison needs reference identities only. The ordinary cached collector
-                // fingerprints ParameterCount, and some paper-scale lazy layers materialize weights
-                // from that getter; cleanup must never allocate the model it is tearing down.
-                var ownedTrainableLayers = Training.TapeTrainingStep<T>
-                    .SnapshotTrainableLayerIdentities(Layers);
-                Training.CompiledTapeTrainingStep<T>.InvalidateIfOwnedBy(ownedTrainableLayers);
-            }
+            // Keyed by the model itself, so no layer walk is needed: cleanup never touches (and so never
+            // materializes) the layers of the model it is tearing down.
+            Training.CompiledTapeTrainingStep<T>.Forget(this);
             Training.TapeTrainingStep<T>.InvalidateCache();
             _compileHost.Dispose();
 

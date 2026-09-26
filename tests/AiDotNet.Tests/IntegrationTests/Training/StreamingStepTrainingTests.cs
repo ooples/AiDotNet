@@ -97,6 +97,15 @@ public class StreamingStepTrainingTests : IDisposable
         return new FeedForwardNeuralNetwork<float>(arch, optimizer: optimizer, lossFunction: new MeanSquaredErrorLoss<float>());
     }
 
+    private static Tensor<float> Stack(Tensor<float>[] rows)
+    {
+        int width = rows[0].Length;
+        var data = new float[rows.Length * width];
+        for (int i = 0; i < rows.Length; i++) rows[i].Data.Span.CopyTo(data.AsSpan(i * width, width));
+        return new Tensor<float>(new[] { rows.Length, width }, new Vector<float>(data));
+    }
+
+
     /// <summary>A fixed initial weight vector shared by every run, so runs differ only in how they were trained.</summary>
     private static Vector<float> InitialWeights()
     {
@@ -183,6 +192,44 @@ public class StreamingStepTrainingTests : IDisposable
             "resumed run diverged from the uninterrupted run");
         Assert.Equal(straight.Opt.GetCurrentLearningRate(), resumed.Opt.GetCurrentLearningRate(), 12);
     }
+
+    [Fact(Timeout = 180000)]
+    public async Task Training_IsIdenticalWhetherStepsRunOnOneThreadOrHopBetweenThreads()
+    {
+        // An await between two steps resumes on an arbitrary pool thread (the streaming builder awaits every
+        // batch). The compiled plan, Adam's moments and its bias-correction step count used to be per-thread,
+        // so a hop gave the step a fresh or stale plan and identical runs drifted by a full learning-rate step.
+        var (x, y) = Data(1);
+        var init = InitialWeights();
+        var batches = Enumerable.Range(0, 13).Select(step =>
+        {
+            int start = (step * BatchSize) % (N - BatchSize + 1);
+            return (X: Stack(x.Skip(start).Take(BatchSize).ToArray()), Y: Stack(y.Skip(start).Take(BatchSize).ToArray()));
+        }).ToArray();
+
+        FeedForwardNeuralNetwork<float> Fresh()
+        {
+            var optimizer = Optimizer(100);
+            var model = Model(optimizer);
+            model.SetParameters(init.Clone());
+            model.SetBaseTrainOptimizer(optimizer);
+            return model;
+        }
+
+        var sameThread = Fresh();
+        foreach (var (bx, by) in batches) sameThread.Train(bx, by);
+        var reference = sameThread.GetParameters();
+
+        for (int rep = 0; rep < 8; rep++)
+        {
+            var hopping = Fresh();
+            foreach (var (bx, by) in batches) await Task.Run(() => hopping.Train(bx, by));
+            Assert.True(MaxAbsDiff(hopping.GetParameters(), reference) == 0.0,
+                $"run {rep}: training that hopped threads diverged from the single-thread run by " +
+                $"{MaxAbsDiff(hopping.GetParameters(), reference)}");
+        }
+    }
+
 
     /// <summary>
     /// Subtracts the mean of whichever batch it was fitted on. Fitting on a different batch gives a different
