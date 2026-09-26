@@ -196,6 +196,7 @@ public class StreamingStepTrainingTests : IDisposable
     [Fact(Timeout = 180000)]
     public async Task Training_IsIdenticalWhetherStepsRunOnOneThreadOrHopBetweenThreads()
     {
+        await Task.Yield();
         // An await between two steps resumes on an arbitrary pool thread (the streaming builder awaits every
         // batch). The compiled plan, Adam's moments and its bias-correction step count used to be per-thread,
         // so a hop gave the step a fresh or stale plan and identical runs drifted by a full learning-rate step.
@@ -220,13 +221,57 @@ public class StreamingStepTrainingTests : IDisposable
         foreach (var (bx, by) in batches) sameThread.Train(bx, by);
         var reference = sameThread.GetParameters();
 
-        for (int rep = 0; rep < 8; rep++)
+        // Two dedicated threads, alternating every step. Task.Run could legally reuse one pool thread for every step
+        // (each is awaited before the next starts), which would let per-thread state pass unnoticed.
+        using var even = new SingleThreadWorker();
+        using var odd = new SingleThreadWorker();
+        Assert.NotEqual(even.ThreadId, odd.ThreadId);
+
+        var hopping = Fresh();
+        for (int step = 0; step < batches.Length; step++)
         {
-            var hopping = Fresh();
-            foreach (var (bx, by) in batches) await Task.Run(() => hopping.Train(bx, by));
-            Assert.True(MaxAbsDiff(hopping.GetParameters(), reference) == 0.0,
-                $"run {rep}: training that hopped threads diverged from the single-thread run by " +
-                $"{MaxAbsDiff(hopping.GetParameters(), reference)}");
+            var (bx, by) = batches[step];
+            (step % 2 == 0 ? even : odd).Run(() => hopping.Train(bx, by));
+        }
+
+        Assert.True(MaxAbsDiff(hopping.GetParameters(), reference) == 0.0,
+            "training that alternated between two threads diverged from the single-thread run by " +
+            $"{MaxAbsDiff(hopping.GetParameters(), reference)}");
+    }
+
+    /// <summary>Runs work items one at a time on its own dedicated thread.</summary>
+    private sealed class SingleThreadWorker : IDisposable
+    {
+        private readonly System.Collections.Concurrent.BlockingCollection<(Action Work, TaskCompletionSource<bool> Done)> _queue = new();
+        private readonly System.Threading.Thread _thread;
+
+        public SingleThreadWorker()
+        {
+            _thread = new System.Threading.Thread(() =>
+            {
+                foreach (var (work, done) in _queue.GetConsumingEnumerable())
+                {
+                    try { work(); done.SetResult(true); }
+                    catch (Exception ex) { done.SetException(ex); }
+                }
+            }) { IsBackground = true };
+            _thread.Start();
+        }
+
+        public int ThreadId => _thread.ManagedThreadId;
+
+        public void Run(Action work)
+        {
+            var done = new TaskCompletionSource<bool>();
+            _queue.Add((work, done));
+            done.Task.GetAwaiter().GetResult();
+        }
+
+        public void Dispose()
+        {
+            _queue.CompleteAdding();
+            _thread.Join();
+            _queue.Dispose();
         }
     }
 

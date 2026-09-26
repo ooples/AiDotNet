@@ -2515,16 +2515,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                 pipelineFitted = true;
             }
 
-            if (_targetPipeline is not null)
+            if (_targetPipeline is { IsFitted: false } && outputs.Length > 0)
             {
-                if (!_targetPipeline.IsFitted && outputs.Length > 0)
-                {
-                    _targetPipeline.Fit(outputs[0] is Tensor<T> && outputs.Length > 1
-                        && TryStackTensorBatch(outputs.Cast<Tensor<T>>().ToArray(), out var batchedY)
-                        && batchedY is TOutput typedY
-                            ? typedY
-                            : outputs[0]);
-                }
+                _targetPipeline.Fit(outputs[0] is Tensor<T> && outputs.Length > 1
+                    && TryStackTensorBatch(outputs.Cast<Tensor<T>>().ToArray(), out var batchedY)
+                    && batchedY is TOutput typedY
+                        ? typedY
+                        : outputs[0]);
             }
         }
 
@@ -2532,8 +2529,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // store their statistics, so a resumed run would otherwise fit them on the first batch AFTER the skip and
         // scale every later batch differently from the run it resumes. Refit on that same batch (same epoch-0 seed)
         // before skipping ahead. With no Seed the shuffle is not reproducible, so no run could match exactly.
-        if ((startEpoch > 0 || resumeSkipBatches > 0)
-            && (!pipelineFitted || (_targetPipeline is not null && !_targetPipeline.IsFitted)))
+        bool resumedPastFirstBatch = startEpoch > 0 || resumeSkipBatches > 0;
+        bool targetPipelineUnfitted = _targetPipeline is { IsFitted: false };
+        bool anyPipelineUnfitted = !pipelineFitted || targetPipelineUnfitted;
+        if (resumedPastFirstBatch && anyPipelineUnfitted)
         {
             int? firstEpochSeed = streamingOptions?.Seed;
             await foreach (var (fitInputs, fitOutputs) in streamingLoader.GetBatchesAsync(shuffle: true, seed: firstEpochSeed))

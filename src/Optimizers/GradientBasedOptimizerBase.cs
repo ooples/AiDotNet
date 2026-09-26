@@ -2897,6 +2897,10 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
         scheduler.LoadState(state);
         _learningRateScheduler = scheduler;
+        // The per-fitness cadence belongs to the auto-installed adaptive scheduler only. A target built with
+        // UseAdaptiveLearningRate that restores any other scheduler must step it on its SchedulerStepMode cadence,
+        // not skip OnEpochEnd and advance it per fitness observation.
+        _adaptiveSchedulerStepsOnFitness &= scheduler is LearningRateSchedulers.AdaptiveFitnessScheduler;
         GradientOptions.LearningRateScheduler = scheduler;
         SetLearningRate(scheduler.CurrentLearningRate);
     }

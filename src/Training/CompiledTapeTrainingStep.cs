@@ -119,8 +119,35 @@ public static class CompiledTapeTrainingStep<T>
         internal int[]? mpGenericKey;
     }
 
-    /// <summary>Per-owner training state. Weak keys: a collected model takes its compiled plan with it.</summary>
-    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, TrainingState> States = new();
+    /// <summary>
+    /// Every compiled-training state of ONE owner (a model), one per layer set it trains. A GAN's discriminator and
+    /// generator phases, or TimeGAN's embedding and supervisor phases, are different layer sets of the same model;
+    /// each keeps its own plan and optimizer moments, so alternating phases never discards the other's state.
+    /// </summary>
+    private sealed class OwnerStates
+    {
+        /// <summary>Keyed by the layer set's identity: its first layer, or its first extra tensor.</summary>
+        internal readonly Dictionary<object, TrainingState> ByLayerSet = new(ReferenceIdentityComparer.Instance);
+
+        /// <summary>Guards the bookkeeping below; never held while a step runs.</summary>
+        internal readonly object Sync = new();
+
+        /// <summary>Managed id of the thread currently stepping this owner, or 0.</summary>
+        internal int BusyThread;
+
+        /// <summary>Nesting depth of that thread's steps for this owner (a step may run inside another's forward).</summary>
+        internal int Depth;
+    }
+
+    private sealed class ReferenceIdentityComparer : IEqualityComparer<object>
+    {
+        internal static readonly ReferenceIdentityComparer Instance = new();
+        public new bool Equals(object? x, object? y) => ReferenceEquals(x, y);
+        public int GetHashCode(object obj) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
+    }
+
+    /// <summary>Per-owner training states. Weak keys: a collected model takes its compiled plans with it.</summary>
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, OwnerStates> States = new();
 
     /// <summary>
     /// The state the current step is operating on. Set on entry to every step from the owner, so it is only a
@@ -135,26 +162,73 @@ public static class CompiledTapeTrainingStep<T>
     private static TrainingState CurrentState => _currentState ??= new TrainingState();
 
     /// <summary>
-    /// Selects the owner's state for the step that follows. The owner is the model when the caller passes one;
-    /// otherwise the first layer, which belongs to exactly one model.
+    /// Claims <paramref name="owner"/> for a step on this thread and selects the state of the layer set it trains.
+    /// Returns <c>false</c>, claiming nothing, when another thread is already stepping the same owner: training one
+    /// model from two threads at once would race on a single plan, so that caller takes the eager path instead. The
+    /// claim never blocks, so it cannot deadlock against the first-compiled-step allocation gate.
     /// </summary>
-    private static TrainingState EnterState<TLayer>(object? owner, IReadOnlyList<TLayer> layers) where TLayer : class
+    private static bool TryEnterState(object owner, object layerSetKey, out OwnerStates ownerStates, out TrainingState state)
     {
-        object? key = owner ?? (layers.Count > 0 ? layers[0] : null);
-        var state = key is null ? new TrainingState() : States.GetValue(key, _ => new TrainingState());
-        _currentState = state;
-        return state;
+        ownerStates = States.GetValue(owner, _ => new OwnerStates());
+        int me = System.Environment.CurrentManagedThreadId;
+        lock (ownerStates.Sync)
+        {
+            if (ownerStates.BusyThread != 0 && ownerStates.BusyThread != me)
+            {
+                state = null!;
+                return false;
+            }
+
+            ownerStates.BusyThread = me;
+            ownerStates.Depth++;
+            if (!ownerStates.ByLayerSet.TryGetValue(layerSetKey, out state!))
+            {
+                state = new TrainingState();
+                ownerStates.ByLayerSet[layerSetKey] = state;
+            }
+        }
+
+        return true;
     }
 
-    /// <summary>Drops the compiled plan, optimizer moments and step counter of <paramref name="owner"/>.</summary>
+    private static void ExitState(OwnerStates ownerStates)
+    {
+        lock (ownerStates.Sync)
+        {
+            if (--ownerStates.Depth == 0) ownerStates.BusyThread = 0;
+        }
+    }
+
+    /// <summary>The identity of a layer set: its first layer, else its first extra tensor, else the owner itself.</summary>
+    private static object LayerSetKey<TLayer>(object owner, IReadOnlyList<TLayer> layers, IReadOnlyList<Tensor<T>>? extraTensors)
+        where TLayer : class
+        => layers.Count > 0 ? layers[0] : extraTensors is { Count: > 0 } ? extraTensors[0] : owner;
+
+    private static TrainingState[] SnapshotStates(object owner)
+    {
+        if (!States.TryGetValue(owner, out var ownerStates)) return System.Array.Empty<TrainingState>();
+        lock (ownerStates.Sync)
+        {
+            var result = new TrainingState[ownerStates.ByLayerSet.Count];
+            ownerStates.ByLayerSet.Values.CopyTo(result, 0);
+            return result;
+        }
+    }
+
+    /// <summary>Drops every compiled plan, optimizer moment and step counter of <paramref name="owner"/>.</summary>
     /// <param name="owner">The model (or, for owner-less callers, the first layer) the state belongs to.</param>
-    public static void Invalidate(object owner)
+    internal static void Invalidate(object owner)
     {
         if (owner is null) throw new System.ArgumentNullException(nameof(owner));
-        if (!States.TryGetValue(owner, out var state)) return;
         var previous = _currentState;
-        _currentState = state;
-        try { Invalidate(); }
+        try
+        {
+            foreach (var state in SnapshotStates(owner))
+            {
+                _currentState = state;
+                Invalidate();
+            }
+        }
         finally { _currentState = previous; }
     }
 
@@ -167,12 +241,12 @@ public static class CompiledTapeTrainingStep<T>
         States.Remove(owner);
     }
 
-    /// <summary>Resets <paramref name="owner"/>'s fused step counter.</summary>
-    /// <param name="owner">The model (or first layer) the counter belongs to.</param>
-    public static void ResetFusedStepCount(object owner)
+    /// <summary>Resets every fused step counter of <paramref name="owner"/>.</summary>
+    /// <param name="owner">The model (or first layer) the counters belong to.</param>
+    internal static void ResetFusedStepCount(object owner)
     {
         if (owner is null) throw new System.ArgumentNullException(nameof(owner));
-        if (States.TryGetValue(owner, out var state)) state.fusedStepCount = 0;
+        foreach (var state in SnapshotStates(owner)) state.fusedStepCount = 0;
     }
 
     private static CompiledModelCache<T>? _cache { get => CurrentState.cache; set => CurrentState.cache = value; }
@@ -358,22 +432,26 @@ public static class CompiledTapeTrainingStep<T>
         object? owner = null)
     {
         if (layers is null) throw new ArgumentNullException(nameof(layers));
+        object ownerKey = owner ?? (layers.Count > 0 ? layers[0] : new object());
+        if (!TryEnterState(ownerKey, LayerSetKey(ownerKey, layers, null), out var ownerStates, out var state))
+        {
+            // Another thread is training this model right now; its compiled plan is not ours to touch.
+            return TapeTrainingStep<T>.Step(layers, input, target, learningRate, forward, computeLoss);
+        }
+
         var previous = _currentState;
-        var state = EnterState(owner, layers);
         _stepDepth++;
         try
         {
-            lock (state)
-            {
-                _currentState = state;
-                return StepCore(layers, input, target, learningRate, forward, computeLoss);
-            }
+            _currentState = state;
+            return StepCore(layers, input, target, learningRate, forward, computeLoss);
         }
         finally
         {
             // A step nested inside another model's forward must hand the outer step its own state back; the
             // outermost step leaves its state current for GetLastFallbackException / GetFusedStepCount.
             if (--_stepDepth > 0) _currentState = previous;
+            ExitState(ownerStates);
         }
     }
 
@@ -750,24 +828,29 @@ public static class CompiledTapeTrainingStep<T>
         object? owner = null)
     {
         if (layers is null) throw new ArgumentNullException(nameof(layers));
+        // A model whose whole training surface is raw extra tensors passes no layers; its first extra tensor then
+        // identifies it, so its plan and moments still persist across steps.
+        object ownerKey = owner
+            ?? (layers.Count > 0 ? layers[0] : extraTensors is { Count: > 0 } ? extraTensors[0] : new object());
+        if (!TryEnterState(ownerKey, LayerSetKey(ownerKey, layers, extraTensors), out var ownerStates, out var state))
+        {
+            // Another thread is training this model right now; its compiled plan is not ours to touch, so this call
+            // takes the caller's eager path.
+            lossValue = MathHelper.GetNumericOperations<T>().Zero;
+            return false;
+        }
+
         var previous = _currentState;
-        // A model whose whole training surface is raw extra tensors passes no layers; its first extra tensor
-        // then identifies it, so its plan and moments still persist across steps.
-        var state = EnterState(owner ?? (layers.Count == 0 && extraTensors is { Count: > 0 } ? extraTensors[0] : null), layers);
         _stepDepth++;
         try
         {
-            lock (state)
-            {
-                _currentState = state;
-                return TryStepWithFusedOptimizerCore(layers: layers, input: input, target: target, forward: forward, computeLoss: computeLoss, optimizerType: optimizerType, learningRate: learningRate, beta1: beta1, beta2: beta2, epsilon: epsilon, weightDecay: weightDecay, lossValue: out lossValue, maxGradNorm: maxGradNorm, lrSchedule: lrSchedule, eagerOptimizer: eagerOptimizer, useBf16Moments: useBf16Moments, extraTensors: extraTensors, fusedExtras: fusedExtras, onGradients: onGradients, trainableSelection: trainableSelection);
-            }
+            _currentState = state;
+            return TryStepWithFusedOptimizerCore(layers: layers, input: input, target: target, forward: forward, computeLoss: computeLoss, optimizerType: optimizerType, learningRate: learningRate, beta1: beta1, beta2: beta2, epsilon: epsilon, weightDecay: weightDecay, lossValue: out lossValue, maxGradNorm: maxGradNorm, lrSchedule: lrSchedule, eagerOptimizer: eagerOptimizer, useBf16Moments: useBf16Moments, extraTensors: extraTensors, fusedExtras: fusedExtras, onGradients: onGradients, trainableSelection: trainableSelection);
         }
         finally
         {
-            // A step nested inside another model's forward must hand the outer step its own state back; the
-            // outermost step leaves its state current for GetLastFallbackException / GetFusedStepCount.
             if (--_stepDepth > 0) _currentState = previous;
+            ExitState(ownerStates);
         }
     }
 

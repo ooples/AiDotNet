@@ -1883,8 +1883,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             throw new ArgumentNullException(nameof(options));
         }
 
-        options.Validate();
-        _streamingTrainingOptions = options;
+        // Store a validated snapshot. Keeping the caller's instance would let a later change (for example Seed set
+        // back to null while ResumeFromLatestCheckpoint stays on) reach the build without ever being validated.
+        var snapshot = new StreamingTrainingOptions<T, TInput, TOutput>(options);
+        snapshot.Validate();
+        _streamingTrainingOptions = snapshot;
         return this;
     }
 
