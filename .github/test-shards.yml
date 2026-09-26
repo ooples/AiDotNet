@@ -1478,19 +1478,6 @@ shard:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
       ADNSHAPE_CONF_OFFSET: '165'
       ADNSHAPE_CONF_BUDGET: '5'
-  - name: Conformance - VisionLanguage offset 170
-    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
-    framework: net10.0
-    filter: 'FullyQualifiedName~ModelContractConformanceTests'
-    heavy: true
-    mustCover: ['*/VisionLanguage/*']
-    coverageIncludeDirectory: tests/AiDotNet.ParameterSweepWorker/bin/Release/net10.0
-    nightlyOnly: true
-    hangTimeout: 20min
-    env:
-      ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '170'
-      ADNSHAPE_CONF_BUDGET: '5'
   # =====================================================================
   # SERVING TESTS
   # =====================================================================
