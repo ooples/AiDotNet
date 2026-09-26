@@ -70,6 +70,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         if (covariates is null) throw new ArgumentNullException(nameof(covariates));
         if (treatment is null) throw new ArgumentNullException(nameof(treatment));
         if (outcome is null) throw new ArgumentNullException(nameof(outcome));
+        ThrowIfStreamingTrainingConfigured("a causal Build(covariates, treatment, outcome)");
 
         if (_model is null)
         {

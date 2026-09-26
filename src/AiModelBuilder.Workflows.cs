@@ -1882,6 +1882,22 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Only the streaming supervised build honours <see cref="StreamingTrainingOptions{T, TInput, TOutput}"/>.
+    /// Every other build path would silently ignore its seed, step budget, validation and resume settings,
+    /// so they refuse the configuration instead.
+    /// </summary>
+    private void ThrowIfStreamingTrainingConfigured(string buildPath)
+    {
+        if (_streamingTrainingOptions is not null)
+        {
+            throw new NotSupportedException(
+                $"ConfigureStreamingTraining applies only to streaming supervised builds, but this is {buildPath}. " +
+                "Configure an IStreamingDataLoader via ConfigureDataLoader and call BuildAsync(), or remove the " +
+                "streaming training configuration.");
+        }
+    }
+
+    /// <summary>
     /// Configures memory management for training including gradient checkpointing,
     /// activation pooling, and model sharding.
     /// </summary>
