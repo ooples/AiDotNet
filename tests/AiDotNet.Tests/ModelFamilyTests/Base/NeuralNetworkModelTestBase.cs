@@ -1731,8 +1731,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         long jitAfter3 = CompiledMethodCount();
         string jitSummary = jitBefore < 0
             ? "JIT counts unavailable on this runtime"
-            : $"methods JIT-compiled during call 1={jitAfter1 - jitBefore}, call 2={jitAfter2 - jitAfter1}, "
-              + $"call 3={jitAfter3 - jitAfter2}";
+            : $"methods JIT-compiled process-wide (any thread) while call 1 ran={jitAfter1 - jitBefore}, "
+              + $"call 2={jitAfter2 - jitAfter1}, call 3={jitAfter3 - jitAfter2}";
 
         Assert.Equal(out1.Length, out2.Length);
         Assert.Equal(out2.Length, out3.Length);
@@ -1808,11 +1808,24 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         {
             var first = network.GetNamedLayerActivations(input);
             var second = network.GetNamedLayerActivations(input);
+            var onlyFirst = first.Keys.Where(k => !second.ContainsKey(k)).ToList();
+            var onlySecond = second.Keys.Where(k => !first.ContainsKey(k)).ToList();
+            if (onlyFirst.Count > 0 || onlySecond.Count > 0)
+            {
+                sb.Append($" Layer replay: the passes named different activations (only in the first: ")
+                  .Append($"[{string.Join(", ", onlyFirst)}]; only in the second: [{string.Join(", ", onlySecond)}]).");
+                return sb.ToString();
+            }
+
             foreach (var entry in first)
             {
-                if (!second.TryGetValue(entry.Key, out var other) || other.Length != entry.Value.Length)
+                var other = second[entry.Key];
+                int[] shapeA = entry.Value.Shape.ToArray();
+                int[] shapeB = other.Shape.ToArray();
+                if (!shapeA.SequenceEqual(shapeB))
                 {
-                    sb.Append($" Layer replay: '{entry.Key}' changed shape between passes.");
+                    sb.Append($" Layer replay: '{entry.Key}' changed shape between passes ")
+                      .Append($"([{string.Join(", ", shapeA)}] vs [{string.Join(", ", shapeB)}]).");
                     return sb.ToString();
                 }
 
