@@ -297,6 +297,12 @@ public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T
     /// multi-task structure, so overriding the loss still trains all three branches. A loss that
     /// is not a <see cref="LossFunctionBase{T}"/> cannot expose the tape entry point the sum
     /// needs, so it is used as-is and only the fused output is graded.
+    /// <para>
+    /// Wrapping is idempotent: a loss that already is the multi-task objective is returned as it
+    /// is. The clone path replays this constructor with the model's own <c>LossFunction</c>, which
+    /// is the objective built here; wrapping it again nested one multi-task loss inside another,
+    /// and the clone's training objective then split an already-split prediction and threw.
+    /// </para>
     /// </remarks>
     private static ILossFunction<T> BuildMultiTaskObjective(
         ILossFunction<T>? lossFunction,
@@ -304,6 +310,9 @@ public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T
         double? visionLossWeight,
         double? languageLossWeight)
     {
+        if (lossFunction is ABINetMultiTaskLoss<T> alreadyMultiTask)
+            return alreadyMultiTask;
+
         var characterLoss = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
         if (characterLoss is not LossFunctionBase<T> tapeCapable)
             return characterLoss;
