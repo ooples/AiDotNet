@@ -1040,6 +1040,12 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
     }
 
     /// <summary>
+    /// Offset added to a patch's standard deviation when normalizing the reconstruction target, as in the
+    /// reference <c>normlize_target</c>: <c>(x - mean) / (std + 1e-6)</c>. Keeps flat patches finite.
+    /// </summary>
+    private const double ReconstructionTargetStdOffset = 1e-6;
+
+    /// <summary>
     /// The per-patch reconstruction target for a clip, laid out like the reconstruction head's output.
     /// </summary>
     /// <param name="original">The clip [B, T, C, H, W].</param>
@@ -1122,7 +1128,7 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
                                 }
 
                                 double unbiasedVariance = values.Length > 1 ? sumSquares / (values.Length - 1) : 0.0;
-                                scale = 1.0 / (Math.Sqrt(unbiasedVariance) + 1e-6);
+                                scale = 1.0 / (Math.Sqrt(unbiasedVariance) + ReconstructionTargetStdOffset);
                             }
 
                             k = 0;

@@ -182,7 +182,7 @@ public class VideoModelDeclaredInputTests
         Assert.Equal(new[] { 4, 3, 32, 32 }, declared);
 
         var embedding = model.Predict(Random(declared, seed: 4, v => (float)v));
-        Assert.Equal(4, embedding.Length); // one embeddingDim-wide vector for the one clip
+        Assert.Equal(new[] { 4 }, embedding.Shape.ToArray()); // one unbatched embeddingDim-wide vector for the one clip
     }
 
     [Fact]
