@@ -1251,6 +1251,13 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var initialOutput = network.Predict(input);
         double initialLoss = MeasureLoss(network, input, initialOutput, target);
 
+        // BatchNorm: keep an untrained copy, to re-measure the starting weights under the trained running
+        // statistics (see ContainsBatchNormalization).
+        using var untrained = network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nnBase
+            && ContainsBatchNormalization(nnBase.Layers)
+                ? (INeuralNetworkModel<T>)network.Clone()
+                : null;
+
         int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations * 3);
         for (int i = 0; i < iterations; i++)
             network.Train(input, target);
@@ -1259,12 +1266,80 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var finalOutput = network.Predict(input);
         double finalLoss = MeasureLoss(network, input, finalOutput, target);
 
+        string regime = string.Empty;
+        if (untrained is not null)
+        {
+            AdoptBatchNormalizationStatistics(
+                (AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)untrained,
+                (AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)network);
+            initialLoss = MeasureLoss(untrained, input, untrained.Predict(input), target);
+            regime = " (both measured in eval mode under the trained BatchNorm running statistics)";
+        }
+
         if (!double.IsNaN(initialLoss) && !double.IsNaN(finalLoss))
         {
             Assert.True(finalLoss <= initialLoss + TrainingLossReductionTolerance,
-                $"Training did not reduce loss: initial={initialLoss:F6}, final={finalLoss:F6}. " +
+                $"Training did not reduce loss: initial={initialLoss:F6}, final={finalLoss:F6}{regime}. " +
                 "Gradient computation or parameter update may be broken.");
         }
+    }
+
+    /// <summary>
+    /// Whether any layer, at any depth, is a <see cref="BatchNormalizationLayer{T}"/> - the one layer whose
+    /// evaluation depends on statistics that training itself changes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// BatchNorm evaluates with running statistics that start at mean 0 / variance 1 and move toward the
+    /// data's batch statistics on every training forward (momentum 0.1). An eval loss measured before training
+    /// and one measured after therefore differ by two things at once: the weights, and the normalization. A
+    /// few steps in, the normalization change can dominate. On EfficientConformer (3 BatchNorm layers,
+    /// 6 updates) the training objective fell every step, 6.3502 to 6.3185, while the eval loss rose from
+    /// 6.2433 to 6.2854, so <see cref="Training_ShouldReduceLoss"/> failed although training worked.
+    /// </para>
+    /// <para>
+    /// The fix holds the normalization fixed: an untrained clone taken before training adopts the running
+    /// statistics training ended with, and is evaluated beside the trained network, so the comparison sees
+    /// only what the weights did. Both measurements stay in eval mode, and so stay deterministic.
+    /// </para>
+    /// <para>
+    /// Two alternatives were measured and rejected. The training-mode loss a model reports includes a fresh
+    /// dropout mask per step, which on KyutaiMoshi (AdamW, peak LR 2e-6) moved the reported loss by 0.026
+    /// over updates that barely changed a weight. And restoring the starting weights with SetParameters is
+    /// not a stable round trip for lazily sized networks: on EfficientConformer it refused the vector taken
+    /// before training ("expected at least 121344 parameters from the materialized fixed layout ... got
+    /// 134504").
+    /// </para>
+    /// </remarks>
+    private static bool ContainsBatchNormalization(IEnumerable<ILayer<T>> layers)
+        => BatchNormalizationLayers(layers).Any();
+
+    /// <summary>Every BatchNorm layer at any depth, in a stable depth-first order.</summary>
+    private static IEnumerable<BatchNormalizationLayer<T>> BatchNormalizationLayers(IEnumerable<ILayer<T>> layers)
+    {
+        foreach (var layer in layers)
+        {
+            if (layer is BatchNormalizationLayer<T> batchNorm) yield return batchNorm;
+            var subLayers = layer.GetSubLayers();
+            if (subLayers is null) continue;
+            foreach (var nested in BatchNormalizationLayers(subLayers)) yield return nested;
+        }
+    }
+
+    /// <summary>
+    /// Installs the running statistics of each of <paramref name="source"/>'s BatchNorm layers into the
+    /// matching layer of <paramref name="destination"/> (a clone of the same network, so the depth-first order
+    /// pairs them), through the same copy-on-write buffer adoption the clone path uses.
+    /// </summary>
+    private static void AdoptBatchNormalizationStatistics(
+        AiDotNet.NeuralNetworks.NeuralNetworkBase<T> destination, AiDotNet.NeuralNetworks.NeuralNetworkBase<T> source)
+    {
+        var to = BatchNormalizationLayers(destination.Layers).ToList();
+        var from = BatchNormalizationLayers(source.Layers).ToList();
+        Assert.True(to.Count == from.Count,
+            $"The untrained clone has {to.Count} BatchNorm layers but the trained network has {from.Count}.");
+        for (int i = 0; i < to.Count; i++)
+            to[i].AdoptRegisteredBuffersFrom(from[i]);
     }
 
     /// <summary>
@@ -2205,6 +2280,42 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         }
 
         AssertCloneOwnsIndependentParameterStorage(network, cloned);
+        AssertClonePreservesTrainingObjective(network, (INeuralNetworkModel<T>)cloned, input, rng);
+    }
+
+    /// <summary>
+    /// Proves that a clone can evaluate its training objective, to a finite value, for a model that
+    /// declares one.
+    /// </summary>
+    /// <remarks>
+    /// Predict equality cannot see the objective: the loss is configuration, not weights, and a clone that
+    /// gets it wrong still predicts identically. ABINet's did. Its constructor wraps the supplied loss in
+    /// the three-branch multi-task objective, and the clone path replays that constructor with the model's
+    /// own LossFunction, which is already the wrapper, so the clone nested one multi-task loss inside
+    /// another. Its Predict matched to the last bit while its objective threw on the first evaluation.
+    /// Any model whose constructor transforms a loss it then stores can fail the same way, so this is
+    /// checked for every model that declares an objective.
+    /// </remarks>
+    private void AssertClonePreservesTrainingObjective(
+        INeuralNetworkModel<T> network, INeuralNetworkModel<T> cloned, Tensor<T> input, Random rng)
+    {
+        if (network is not ITrainingObjectiveProvider<T>) return;
+
+        var target = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
+        target = ResolveTrainingObjectiveTarget(network, input, target);
+        double originalObjective = MeasureLoss(network, input, network.Predict(input), target);
+        double clonedObjective = MeasureLoss(cloned, input, cloned.Predict(input), target);
+
+        // Finiteness, not equality. The objective runs the training forward, and on 10 of the 24 models
+        // that declare one (the AudioClassifierBase family, HamiltonianNeuralNetwork, SeACo, ABINet) a clone's
+        // value differs from the original's by 0.2-1% even though the original reproduces its own value and
+        // the clone predicts identically. That difference is not yet explained - per-layer RandomSeed is
+        // copied by the clone path, the dropout forward counter is not - so asserting equality here would
+        // fail those models on an open question. What a clone must never do is fail to evaluate its
+        // objective at all, which is what ABINet's did.
+        Assert.False(double.IsNaN(clonedObjective) || double.IsInfinity(clonedObjective),
+            $"{network.GetType().Name}'s clone evaluates a non-finite training objective ({clonedObjective}) "
+            + $"where the original evaluates {originalObjective:G9}.");
     }
 
     /// <summary>
