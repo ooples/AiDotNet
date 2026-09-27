@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
@@ -184,6 +185,61 @@ public class CompiledTapeTrainingStepTests
     }
 
     [Fact]
+    public void FusedStep_OneOwnerAlternatingTwoLayerSets_KeepsEachPhasesPlanAndMoments()
+    {
+        // A GAN trains its discriminator and generator as two layer sets of ONE model. Alternating them must leave
+        // each phase exactly where it would be had it trained alone: its compiled plan and Adam moments survive the
+        // other phase's steps instead of being invalidated at every switch.
+        var originalOptions = TensorCodecOptions.Current;
+        try
+        {
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
+            var input = CreateRandomTensor(new[] { 8, 4 }, 42);
+            var target = CreateRandomTensor(new[] { 8, 2 }, 43);
+            var mseLoss = MakeMSELoss();
+
+            var (phaseA, forwardA) = BuildMLP();
+            var (phaseB, forwardB) = BuildMLP();
+            var (aloneA, forwardAloneA) = BuildMLP();
+            var (aloneB, forwardAloneB) = BuildMLP();
+            // Materialize every layer through the model's own forward first: a dense layer sizes (and re-creates) its
+            // weights on the first real forward, which would discard weights copied in before it.
+            forwardA(input); forwardB(input); forwardAloneA(input); forwardAloneB(input);
+            CopyTrainableParameters(phaseA, aloneA);
+            CopyTrainableParameters(phaseB, aloneB);
+
+            bool Step(List<DenseLayer<float>> layers, Func<Tensor<float>, Tensor<float>> forward, object owner) =>
+                CompiledTapeTrainingStep<float>.TryStepWithFusedOptimizer(
+                    layers, input, target, forward, mseLoss, OptimizerType.Adam,
+                    learningRate: 0.01f, beta1: 0.9f, beta2: 0.999f, epsilon: 1e-8f, weightDecay: 0.0f,
+                    out float _, owner: owner);
+
+            var sharedOwner = new object();
+            for (int round = 0; round < 4; round++)
+            {
+                Assert.True(Step(phaseA, forwardA, sharedOwner));
+                Assert.True(Step(phaseB, forwardB, sharedOwner));
+            }
+
+            var ownerA = new object();
+            var ownerB = new object();
+            for (int round = 0; round < 4; round++) Assert.True(Step(aloneA, forwardAloneA, ownerA));
+            for (int round = 0; round < 4; round++) Assert.True(Step(aloneB, forwardAloneB, ownerB));
+
+            AssertTensorsExactlyEqual(
+                Snapshot(aloneA.SelectMany(l => l.GetTrainableParameters()).ToList()),
+                phaseA.SelectMany(l => l.GetTrainableParameters()).ToList());
+            AssertTensorsExactlyEqual(
+                Snapshot(aloneB.SelectMany(l => l.GetTrainableParameters()).ToList()),
+                phaseB.SelectMany(l => l.GetTrainableParameters()).ToList());
+        }
+        finally
+        {
+            TensorCodecOptions.SetCurrent(originalOptions);
+        }
+    }
+
+    [Fact]
     public void CompiledStep_IsFasterThanEager_AfterWarmup()
     {
         CompiledTapeTrainingStep<float>.Invalidate();
@@ -257,6 +313,18 @@ public class CompiledTapeTrainingStepTests
         }
 
         return (layers, Forward);
+    }
+
+    private static void CopyTrainableParameters(List<DenseLayer<float>> src, List<DenseLayer<float>> dst)
+    {
+        var from = src.SelectMany(l => l.GetTrainableParameters()).ToList();
+        var to = dst.SelectMany(l => l.GetTrainableParameters()).ToList();
+        Assert.Equal(from.Count, to.Count);
+        for (int i = 0; i < from.Count; i++)
+        {
+            Assert.Equal(from[i].Length, to[i].Length);
+            from[i].AsSpan().CopyTo(to[i].Data.Span);
+        }
     }
 
     private static void CopyWeights(List<DenseLayer<float>> src, List<DenseLayer<float>> dst)

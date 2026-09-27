@@ -107,7 +107,8 @@ internal static class GpuResidentFusedStep<T>
         out T lossValue,
         double maxGradNorm = 1.0,
         IReadOnlyList<Tensor<T>>? extraTensors = null,
-        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients = null)
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients = null,
+        object? owner = null)
     {
         lossValue = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().Zero;
         if (!IsGpuResidentAvailable) return false;
@@ -123,7 +124,8 @@ internal static class GpuResidentFusedStep<T>
             type, lr, b1, b2, eps, wd, out lossValue,
             maxGradNorm: maxGradNorm,
             extraTensors: extraTensors,
-            onGradients: onGradients);
+            onGradients: onGradients,
+            owner: owner);
     }
 
     /// <summary>

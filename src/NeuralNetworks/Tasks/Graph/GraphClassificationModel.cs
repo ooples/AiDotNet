@@ -727,7 +727,7 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
                 forward: Forward,
                 computeLoss: tapeLoss.ComputeTapeLoss,
                 optimizer: _optimizer,
-                out T fusedLoss))
+                out T fusedLoss, owner: this))
         {
             LastLoss = fusedLoss;
             return;

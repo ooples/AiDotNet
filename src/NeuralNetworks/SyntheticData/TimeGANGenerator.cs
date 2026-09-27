@@ -599,7 +599,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
                     trainableEmbRec, xBatch, xBatch,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _embedderOptimizer,
-                    out T _))
+                    out T _, owner: this))
             {
                 return;
             }
@@ -672,7 +672,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
                     trainableSup, ht, htNext,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _supervisorOptimizer,
-                    out T _))
+                    out T _, owner: this))
             {
                 return;
             }

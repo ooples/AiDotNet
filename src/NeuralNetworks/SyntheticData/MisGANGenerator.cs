@@ -641,7 +641,7 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
                     trainableDataGen, packedTensor, target,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _dataGenOptimizer,
-                    out T _);
+                    out T _, owner: this);
                 if (!ran) { if (!fusedEngaged) break; continue; }
                 fusedEngaged = true;
             }
@@ -680,7 +680,7 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
                     trainableMaskGen, noiseTensor, target,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _maskGenOptimizer,
-                    out T _);
+                    out T _, owner: this);
                 if (!ran) { if (!fusedEngaged) break; continue; }
                 fusedEngaged = true;
             }

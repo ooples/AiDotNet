@@ -2040,6 +2040,25 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureCheckpointManager(ICheckpointManager<T, TInput, TOutput> manager);
 
     /// <summary>
+    /// Configures step-level streaming training: a seeded data order, a global step budget, periodic held-out
+    /// validation, and resuming from the checkpoint manager's latest checkpoint.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Applies to the streaming path (<c>ConfigureDataLoader</c> with an <see cref="IStreamingDataLoader{T, TInput, TOutput}"/>).
+    /// When a checkpoint manager is configured, the streaming loop offers a checkpoint after every optimizer step
+    /// (model state, optimizer state including the learning-rate schedule, global step and data position) and
+    /// the manager's auto-checkpoint settings decide whether it is written.
+    /// </para>
+    /// <para><b>For Beginners:</b> Use this for long runs such as language-model pretraining: the run becomes
+    /// reproducible, can stop after a fixed number of steps, reports held-out loss as it goes, and can be stopped
+    /// and restarted without losing progress.</para>
+    /// </remarks>
+    /// <param name="options">The streaming training options.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureStreamingTraining(StreamingTrainingOptions<T, TInput, TOutput> options);
+
+    /// <summary>
     /// Configures training monitoring for real-time visibility into training progress.
     /// </summary>
     /// <remarks>

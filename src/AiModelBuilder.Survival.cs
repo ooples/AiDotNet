@@ -71,6 +71,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         if (features is null) throw new ArgumentNullException(nameof(features));
         if (times is null) throw new ArgumentNullException(nameof(times));
         if (events is null) throw new ArgumentNullException(nameof(events));
+        ThrowIfStreamingTrainingConfigured("a survival Build(features, times, events)");
 
         if (_model is null)
         {

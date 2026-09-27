@@ -716,7 +716,7 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
                     trainableDisc, stacked, target,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _discriminatorOptimizer,
-                    out T _))
+                    out T _, owner: this))
             {
                 return;
             }
@@ -906,7 +906,7 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
                     trainableGen, noiseBatch, target,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _generatorOptimizer,
-                    out T _))
+                    out T _, owner: this))
             {
                 return;
             }
