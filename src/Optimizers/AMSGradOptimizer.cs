@@ -302,6 +302,10 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         T oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
         T epsilon = NumOps.FromDouble(_options.Epsilon);
         T biasCorrectionFactor = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t));
+        // The running max of v is bias-corrected like Adam's v (PyTorch amsgrad=True, and this optimizer's own
+        // sparse, GPU and fused paths). Without it the first step divides by sqrt((1 - beta2) g^2), which is about
+        // 32x the Adam step at beta2 = 0.999.
+        T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t));
 
         // Update all three state vectors in place and write the result directly. This retains
         // AMSGrad's raw-second-moment maximum while eliminating the former vector-op chain.
@@ -332,7 +336,7 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
             vHatSpan[i] = vHat;
 
             T mHat = NumOps.Divide(m, biasCorrectionFactor);
-            T denominator = NumOps.Add(NumOps.Sqrt(vHat), epsilon);
+            T denominator = NumOps.Add(NumOps.Sqrt(NumOps.Divide(vHat, biasCorrection2)), epsilon);
             T update = NumOps.Divide(NumOps.Multiply(mHat, learningRate), denominator);
             outSpan[i] = NumOps.Subtract(pSpan[i], update);
         }
@@ -359,6 +363,7 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         T oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
         T epsilon = NumOps.FromDouble(_options.Epsilon);
         T biasCorrection1 = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _tapeStep));
+        T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _tapeStep));
 
         // GPU-resident step (AIDOTNET_GPU_ADAM=1); gated off, CPU fallback per-param when not GPU-resident.
         bool gpuAdam = typeof(T) == typeof(float)
@@ -412,7 +417,7 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
             var mHat = Engine.TensorDivideScalar(m, biasCorrection1);
 
             // update = lr * mHat / (sqrt(vHat) + epsilon)
-            var denom = Engine.TensorAddScalar(Engine.TensorSqrt(vHat), epsilon);
+            var denom = Engine.TensorAddScalar(Engine.TensorSqrt(Engine.TensorDivideScalar(vHat, biasCorrection2)), epsilon);
             var update = Engine.TensorMultiplyScalar(Engine.TensorDivide(mHat, denom), CurrentLearningRate);
             Engine.TensorSubtractInPlace(param, update);
         }
@@ -461,11 +466,12 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         var biasCorrection1Vec = Vector<T>.CreateDefault(_m.Length, biasCorrection1);
         var mHat = (Vector<T>)Engine.Divide(_m, biasCorrection1Vec);
 
-        // Recalculate the update: update = (lr * mHat) / (sqrt(vHat) + epsilon)
+        // Recalculate the update: update = (lr * mHat) / (sqrt(vHat / (1 - beta2^t)) + epsilon)
         var currentLrVec = Vector<T>.CreateDefault(_m.Length, CurrentLearningRate);
         var lrTimesMHat = (Vector<T>)Engine.Multiply(currentLrVec, mHat);
 
-        var vHatSqrt = (Vector<T>)Engine.Sqrt(_vHat);
+        T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t));
+        var vHatSqrt = (Vector<T>)Engine.Sqrt((Vector<T>)Engine.Divide(_vHat, Vector<T>.CreateDefault(_vHat.Length, biasCorrection2)));
         var epsilonVec = Vector<T>.CreateDefault(_vHat.Length, NumOps.FromDouble(_options.Epsilon));
         var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
 
