@@ -60,10 +60,21 @@ public static partial class CloneEngine
             throw new ArgumentNullException(nameof(getDestinationParameterCount));
         if (source.GetType() != destination.GetType()) return;
 
-        // A fresh shell whose fitted state lives in buffers (a detector's standardisation statistics,
-        // say) has a deferred layout until Deserialize restores that state, and reading its count throws.
-        // Unknown is a mismatch like any other; Deserialize restores declared state before parameters.
-        long? currentCount = CountOrUnknown(getDestinationParameterCount);
+        // A fresh configuration shell has no resolved parameter layout until it is fitted, and a
+        // fit-deferred layout cannot report a count at all -- it throws rather than answer zero,
+        // precisely so an unfitted model is never mistaken for one with no parameters. There is
+        // then no count mismatch to bridge, and the caller's Deserialize installs the fitted state
+        // and resolves the layout straight after, so leave the destination alone.
+        int currentCount;
+        try
+        {
+            currentCount = getDestinationParameterCount();
+        }
+        catch (AiDotNet.Models.Parameters.ParameterLayoutNotReadyException)
+        {
+            return;
+        }
+
         if (currentCount == expectedParameterCount) return;
 
         const BindingFlags Flags =
@@ -112,15 +123,13 @@ public static partial class CloneEngine
                     long? candidateCount = CountOrUnknown(getDestinationParameterCount);
                     if (candidateCount == expectedParameterCount) return;
 
-                    // While the layout is deferred, a candidate that leaves it deferred is progress, not a
-                    // regression: every fitted slot has to be supplied before the count can resolve at all.
-                    bool keep = candidateCount is long candidate
-                        ? currentCount is not long closest
-                          || Math.Abs(expectedParameterCount - candidate) < Math.Abs(expectedParameterCount - closest)
-                        : currentCount is null;
-                    if (keep)
+                    // The destination's count is known here (a deferred layout returned above), so keep a
+                    // candidate only when it resolves to a count closer to the expected one. A candidate
+                    // that defers the layout again is a regression and is undone like any other.
+                    if (candidateCount is long candidate
+                        && Math.Abs(expectedParameterCount - candidate) < Math.Abs((long)expectedParameterCount - currentCount))
                     {
-                        currentCount = candidateCount;
+                        currentCount = (int)candidate;
                     }
                     else
                     {

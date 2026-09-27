@@ -205,13 +205,18 @@ jobs:
           openssl dgst -sha256 -mac HMAC -macopt "hexkey:${BUILD_KEY_HEX}" -binary < src/BuildKey/BuildKey.bin > src/IntegrityHash/IntegrityHash.bin
           echo "Integrity hash generated ($(wc -c < src/IntegrityHash/IntegrityHash.bin) bytes)"
 
+      # -m:2 for the reason sonarcloud.yml's "Build (Release, compat frameworks)" gives: building
+      # AiDotNet's net8/net10/net471 inner builds at full parallelism runs three csc processes at
+      # once, which reached the 16-GB ceiling there and got a compiler killed with exit 137. This
+      # job had no limit, and v0.233.0's runner was shut down 14 minutes into compiling
+      # src/AiDotNet.csproj ("The runner has received a shutdown signal"), so nothing was packed.
       - name: Restore and Build
         run: |
           set -e
           for proj in $PACKED_PROJECTS; do
             echo "Building $proj"
             dotnet restore "$proj"
-            dotnet build "$proj" -c Release --no-restore
+            dotnet build "$proj" -c Release --no-restore -m:2
           done
 
       - name: Pack NuGet

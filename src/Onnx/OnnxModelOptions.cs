@@ -19,10 +19,15 @@ namespace AiDotNet.Onnx;
 /// </code>
 /// </para>
 /// </remarks>
-public class OnnxModelOptions
+public class OnnxModelOptions : AiDotNet.Models.IConfigurationCloneable
 {
     /// <summary>Initializes a new instance with default values.</summary>
     public OnnxModelOptions() { }
+
+    // A model clone must own its nested provider configuration and mutable collections.
+    // Use the central property plan rather than a separate, manually maintained copy list.
+    object AiDotNet.Models.IConfigurationCloneable.CloneConfiguration() =>
+        AiDotNet.Models.CloneEngine.CopyConfiguration(this);
 
     /// <summary>
     /// Gets or sets the preferred execution provider.
