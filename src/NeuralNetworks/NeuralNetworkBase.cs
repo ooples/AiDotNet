@@ -10698,17 +10698,19 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // the two-pass-over-a-persistent-tape dance; fast-clip and unclipped are single-pass.
         bool twoPass = clip && !FastApproxGradClip;
 
-        using var tape = new GradientTape<T>(
-            twoPass ? new GradientTapeOptions { Persistent = true } : null);
         // The exact-clip two-pass path reuses the persistent tape across the norm pass and the
-        // apply pass. ComputeGradientsStreaming releases activations by default (the process-
-        // global GradientTape<T>.ReleaseStreamingActivations), which would make the second pass
-        // throw "activations released" — so for that path keep them resident, saving/restoring
-        // the flag so the setting never leaks. (Single-pass paths keep the default release.)
-        bool savedStreamingRelease = GradientTape<T>.ReleaseStreamingActivations;
-        if (twoPass) GradientTape<T>.ReleaseStreamingActivations = false;
-        try
-        {
+        // apply pass. ComputeGradientsStreaming releases activations after backward by default,
+        // which would make the second pass throw "activations released" — so that tape retains
+        // its graph until disposal. The retention is per tape, so nothing leaks to other tapes.
+        // (Single-pass paths keep the default release.)
+        using var tape = new GradientTape<T>(
+            twoPass
+                ? new GradientTapeOptions
+                {
+                    Persistent = true,
+                    StreamingGraphRetention = StreamingGraphRetentionMode.RetainUntilTapeDisposal
+                }
+                : null);
         var output = ForwardForTraining(input);
 
         // Align target rank to the tape-tracked output (reshape the leaf target,
@@ -10892,11 +10894,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // update paths (TrainWithTape, batch eager) call this at the same point.
         InvalidateWeightCachesAfterSuccessfulWeightUpdate();
         StepSchedulerIfSupported(resolvedOptimizer);
-        }
-        finally
-        {
-            if (twoPass) GradientTape<T>.ReleaseStreamingActivations = savedStreamingRelease;
-        }
     }
 
     protected void TrainWithTape(Tensor<T> input, Tensor<T> expected,
