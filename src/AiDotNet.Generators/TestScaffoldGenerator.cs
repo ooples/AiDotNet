@@ -5245,7 +5245,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "EncoderDim = 32, NumEncoderLayers = 3, NumAttentionHeads = 2, " +
                     "FeedForwardExpansionFactor = 2, ConvKernelSize = 5, InitialAttentionGroupSize = 2, " +
                     "DownsamplingFactor = 8, NumMels = 32, VocabSize = 4, " +
-                    "DropoutRate = 0.0, UseLayerNormalization = true })";
+                    // WarmupSteps: the paper's 10000-step Noam warmup keeps the rate near 2e-6 for a
+                    // handful of conformance steps, so training cannot move the model. 100 reaches a
+                    // normal Adam rate (~2e-3) by step 6; the paper default stays on the options.
+                    "DropoutRate = 0.0, UseLayerNormalization = true, WarmupSteps = 100 })";
             }
             else if ((model.ClassName is "EmformerRNNT" or "FastEmit") && model.TypeParameterCount == 1)
             {
