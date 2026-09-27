@@ -166,6 +166,9 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         _t = 0;
     }
 
+    /// <inheritdoc/>
+    protected override bool SupportsModelOwnStep => true;
+
     /// <summary>
     /// Performs the optimization process using the Nadam algorithm.
     /// </summary>
@@ -213,6 +216,7 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
                 _t++;
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;   // the network's own step; see GradientBasedOptimizerBase
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
                 var newSolution = UpdateSolution(currentSolution, gradient);
                 currentSolution = newSolution;

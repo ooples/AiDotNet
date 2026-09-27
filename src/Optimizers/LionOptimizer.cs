@@ -145,6 +145,9 @@ public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         _currentBeta2 = NumOps.FromDouble(_options.Beta2);
     }
 
+    /// <inheritdoc/>
+    protected override bool SupportsModelOwnStep => true;
+
     /// <summary>
     /// Performs the optimization process using the Lion algorithm.
     /// </summary>
@@ -180,6 +183,7 @@ public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
                 _t++;
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;   // the network's own step; see GradientBasedOptimizerBase
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
                 var newSolution = UpdateSolution(currentSolution, gradient);
                 currentSolution = newSolution;

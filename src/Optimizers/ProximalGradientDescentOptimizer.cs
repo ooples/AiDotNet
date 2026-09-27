@@ -388,6 +388,9 @@ public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : Grad
         _iteration = 0;
     }
 
+    /// <inheritdoc/>
+    protected override bool SupportsModelOwnStep => true;
+
     /// <summary>
     /// Performs the proximal gradient descent optimization to find the best solution for the given input data.
     /// </summary>
@@ -439,6 +442,7 @@ public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : Grad
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
                 _iteration++;
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;   // the network's own step; see GradientBasedOptimizerBase
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
                 currentSolution = UpdateSolution(currentSolution, gradient);
             }

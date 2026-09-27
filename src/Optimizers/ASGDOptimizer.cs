@@ -156,6 +156,9 @@ public partial class ASGDOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         mu = 1.0 / Math.Max(1.0, step - _options.T0);
     }
 
+    /// <inheritdoc/>
+    protected override bool SupportsModelOwnStep => true;
+
     /// <summary>
     /// Performs the optimization process using the ASGD algorithm.
     /// </summary>
@@ -201,6 +204,7 @@ public partial class ASGDOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
                 // Note: _t is incremented inside UpdateParameters, not here.
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;   // the network's own step; see GradientBasedOptimizerBase
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
                 var newSolution = UpdateSolution(currentSolution, gradient);
                 currentSolution = newSolution;

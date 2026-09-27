@@ -198,6 +198,9 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         return true;
     }
 
+    /// <inheritdoc/>
+    protected override bool SupportsModelOwnStep => true;
+
     /// <summary>
     /// Performs the optimization process using the AdamW algorithm.
     /// </summary>
@@ -249,6 +252,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             {
                 _t++;
                 // Calculate gradient on the batch
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;   // the network's own step; see GradientBasedOptimizerBase
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
 
                 // Update solution using AdamW algorithm

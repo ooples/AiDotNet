@@ -197,6 +197,9 @@ public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// </summary>
     public double Beta2 => _options.Beta2;
 
+    /// <inheritdoc/>
+    protected override bool SupportsModelOwnStep => true;
+
     /// <summary>
     /// Performs the optimization process using the LAMB algorithm.
     /// </summary>
@@ -234,6 +237,7 @@ public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 _t++;
 
                 // Calculate gradient on the batch
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;   // the network's own step; see GradientBasedOptimizerBase
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
 
                 // Route through UpdateSolution (NOT UpdateSolutionWithLAMB

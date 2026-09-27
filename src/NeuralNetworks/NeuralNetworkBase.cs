@@ -2883,9 +2883,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         _hasCrossBatchNormCached = null;
         // Layer structure changed — drop stale compiled inference plans.
         _compileHost.Invalidate();
-        // Also drop compiled fused training plans and reset sticky-disable
-        // so the next training run gets a fresh chance at the fused path.
-        Training.CompiledTapeTrainingStep<T>.Invalidate();
+        // Also drop THIS model's compiled fused training plan and reset sticky-disable so the next training run gets
+        // a fresh chance at the fused path. Only a plan this model owns: the plan cache is per-thread, not per-model,
+        // and a global Invalidate here let any OTHER network reset it - measured: the facade's per-epoch evaluation
+        // deep-copies the model, the copy's construction lands here, and the original's plan (with its Adam moments)
+        // was rebuilt every epoch, so fused training restarted its moments from zero each epoch. A plan compiled for a
+        // different layer set is dropped by the fused step's own layer-set check on its next call.
+        if (_layers is not null)
+            Training.CompiledTapeTrainingStep<T>.InvalidateIfOwnedBy(
+                Training.TapeTrainingStep<T>.SnapshotTrainableLayerIdentities(_layers));
         _fusedTrainingDisabled = false;
         _fusedTrainingCommitted = false;
         _fusedPersistenceVerified = false;
@@ -7136,6 +7142,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // probe caught exactly this). Clips over the layer-collected
             // params only — the same set TrainWithTape clips — using the
             // deterministic list order for the norm reduction.
+            // The optimizer's regularization goes on BEFORE the clip, as its flat path orders it.
+            ApplyOptimizerRegularization(optimizer, paramsList, avgGrads);
             double maxGradNorm = MaxGradNormValue;
             if (maxGradNorm > 0.0 && avgGrads.Count > 0)
             {
@@ -10753,6 +10761,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             fullPrecisionStreaming);
         streamingOptimizer.BeginStep();
 
+        // The optimizer's regularization joins each gradient before the clip norm and the update, as in the eager
+        // path (ApplyOptimizerRegularization) - streaming used to drop it, so ForceOn trained a different objective.
+        var regularization = OptimizerRegularizationOf(resolvedOptimizer);
+
         if (!clip)
         {
             // Memory-bounded optimizer-in-backward: tape.ComputeGradientsStreaming
@@ -10769,6 +10781,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 {
                     if (grad is null || grad.Length == 0) return;
                     RetainStreamingGradient(source, grad);
+                    if (regularization is not null) grad = RegularizeGradient(regularization, source, grad);
                     // Streaming optimizer writes this source's weights in place (#1624 OOM-retry gate).
                     MarkTrainMutationStarted();
                     streamingOptimizer.Apply(source, grad);
@@ -10795,6 +10808,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 {
                     if (grad is not null && grad.Length > 0) RetainStreamingGradient(source, grad);
                     if (grad is null || grad.Length == 0 || !clipSet.Contains(source)) return;
+                    if (regularization is not null) grad = RegularizeGradient(regularization, source, grad);
                     var span = grad.Data.Span;
                     int len = grad.Length;
                     for (int i = 0; i < len; i++)
@@ -10821,6 +10835,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 {
                     if (grad is null || grad.Length == 0) return;
                     RetainStreamingGradient(source, grad);
+                    if (regularization is not null) grad = RegularizeGradient(regularization, source, grad);
                     if (scaleDown && clipSet.Contains(source))
                     {
                         var span = grad.Data.Span;
@@ -10857,6 +10872,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 {
                     if (grad is null || grad.Length == 0) return;
                     RetainStreamingGradient(source, grad);
+                    if (regularization is not null) grad = RegularizeGradient(regularization, source, grad);
                     if (clipSet.Contains(source))
                     {
                         var span = grad.Data.Span;
@@ -11525,6 +11541,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // GraFPrint at batch=1) can produce single-step Adam explosions
             // that drive loss up by orders of magnitude on the very first
             // iteration. Skipped when MaxGradNorm <= 0 (the default).
+            // The optimizer's regularization goes on BEFORE the clip, as its flat path orders it.
+            ApplyOptimizerRegularization(opt, trainableParams, grads);
             double maxGradNorm = MaxGradNormValue;
             if (maxGradNorm > 0.0 && grads.Count > 0)
             {
@@ -12511,6 +12529,22 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         //
         // Re-checking costs one strided checksum, already bounded to ~FusedChecksumTargetSamples
         // regardless of model size, amortized over FusedPersistenceRecheckInterval steps.
+        // The optimizer's regularization, applied the way its flat path applies it: to the gradient, BEFORE clipping.
+        // L2 has a fused form (the plan adds strength * theta ahead of its clip); any other regularizer runs on the
+        // eager tape, which applies it (ApplyOptimizerRegularization).
+        double fusedL2 = 0.0;
+        if (OptimizerRegularizationOf(resolvedOptimizer) is { } fusedRegularization)
+        {
+            if (fusedRegularization is AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>> fusedL2Regularization)
+                fusedL2 = fusedL2Regularization.GetOptions().Strength;
+            else
+            {
+                _pendingFusedMissReason = "regularization " + fusedRegularization.GetType().Name
+                    + " has no fused form; the eager tape applies it";
+                return false;
+            }
+        }
+
         bool verifyFusedPersistence =
             (!_fusedPersistenceVerified && !_fusedTrainingCommitted)
             || (++_fusedStepsSincePersistenceCheck >= FusedPersistenceRecheckInterval);
@@ -12559,7 +12593,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 // gradient code below, which is why the surface stayed empty for every model that
                 // engages fusion -- the largest single cause of the all-zero gradient reports.
                 onGradients: ScatterFusedGradients,
-                trainableSelection: selectedParameters);
+                trainableSelection: selectedParameters,
+                l2Regularization: fusedL2);
         }
         finally
         {
@@ -13016,6 +13051,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
             // Tape optimizer step writes weights in place (#1624 OOM-retry gate).
             MarkTrainMutationStarted();
+            ApplyOptimizerRegularization(opt, context);
             opt.Step(context);
             // GPU weight-cache coherence after the custom-loss step.
             // See InvalidateWeightCachesAfterSuccessfulWeightUpdate.
@@ -13086,6 +13122,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 trainableParams, grads, lossValue, input, expected, RecomputeObjective, ReadObjective);
 
             MarkTrainMutationStarted();
+            ApplyOptimizerRegularization(opt, context);
             opt.Step(context);
             InvalidateWeightCachesAfterSuccessfulWeightUpdate();
             StepSchedulerIfSupported(opt);
@@ -13163,6 +13200,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         // Tape optimizer step writes weights in place (#1624 OOM-retry gate).
         MarkTrainMutationStarted();
+        ApplyOptimizerRegularization(opt, context);
         opt.Step(context);
         // GPU weight-cache coherence after the precomputed-loss step.
         // See InvalidateWeightCachesAfterSuccessfulWeightUpdate.
@@ -13298,6 +13336,32 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <see cref="GetOrCreateBaseOptimizer"/> bypasses this entirely. (#1789)
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// One training step on the tape with the GIVEN optimizer - the facade's model step
+    /// (GradientBasedOptimizerBase.TryModelOwnStep). Returns false without doing anything when this network's Train is
+    /// not the generic tape step (a subclass with its own training logic), because then the step would not be the
+    /// objective the optimizer's flat path trains. Needed because Train cannot be trusted to use a supplied optimizer:
+    /// NeuralNetwork.Train passes its own constructor-time optimizer, so a model step through Train trained with
+    /// AMSGrad at 5e-4 instead of the configured optimizer.
+    /// </summary>
+    internal bool TryTrainStepWithOptimizer(
+        Tensor<T> input, Tensor<T> expectedOutput, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
+    {
+        var train = GetType().GetMethod(nameof(Train), new[] { typeof(Tensor<T>), typeof(Tensor<T>) });
+        var declaring = train?.DeclaringType;
+        bool genericTrain = declaring is not null && declaring.IsGenericType
+            && (declaring.GetGenericTypeDefinition() == typeof(NeuralNetworkBase<>)
+                || declaring.GetGenericTypeDefinition() == typeof(NeuralNetwork<>));
+        if (!genericTrain) return false;
+        _hasBeenTrained = true;
+        _trainMutationStarted = false;
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(true);
+        try { TrainWithTape(input, expectedOutput, optimizer); }
+        finally { if (!wasTraining) SetTrainingMode(false); }
+        return true;
+    }
+
     internal void AdoptConfiguredOptimizer(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
     {
         _baseTrainOptimizer ??= optimizer;
@@ -13532,6 +13596,47 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     protected void InvalidateWeightCachesAfterSuccessfulWeightUpdate()
         => InvalidateWeightCachesAfterSuccessfulWeightUpdate(updatedOnDevice: false);
+
+    /// <summary>The optimizer's configured regularization, or null when it has none.</summary>
+    private static IRegularization<T, Tensor<T>, Tensor<T>>? OptimizerRegularizationOf(
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
+    {
+        if (optimizer is not Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradientBased) return null;
+        var regularization = gradientBased.ActiveRegularization;
+        return regularization is null or AiDotNet.Regularization.NoRegularization<T, Tensor<T>, Tensor<T>> ? null : regularization;
+    }
+
+    /// <summary>
+    /// Applies the optimizer's regularization to the tape gradients before <c>Step</c> - which clips - so the eager
+    /// training step regularizes exactly as the optimizer's flat path does (gradient first, then clip). Train used to
+    /// ignore the optimizer's regularization entirely while the facade applied it, so the same optimizer trained
+    /// differently depending on how training was invoked. L2 runs as device tensor ops.
+    /// </summary>
+    private void ApplyOptimizerRegularization(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer, TapeStepContext<T> context)
+        => ApplyOptimizerRegularization(optimizer, context.Parameters, context.Gradients);
+
+    private void ApplyOptimizerRegularization(
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
+        IEnumerable<Tensor<T>> parameters,
+        Dictionary<Tensor<T>, Tensor<T>> gradients)
+    {
+        if (OptimizerRegularizationOf(optimizer) is not { } regularization) return;
+        foreach (var parameter in parameters)
+        {
+            if (!gradients.TryGetValue(parameter, out var gradient) || gradient is null) continue;
+            gradients[parameter] = RegularizeGradient(regularization, parameter, gradient);
+        }
+    }
+
+    /// <summary>One parameter's gradient with the regularization term added (L2 as device tensor ops).</summary>
+    private Tensor<T> RegularizeGradient(
+        IRegularization<T, Tensor<T>, Tensor<T>> regularization, Tensor<T> parameter, Tensor<T> gradient)
+    {
+        var theta = parameter._shape.SequenceEqual(gradient._shape) ? parameter : Engine.Reshape(parameter, gradient._shape);
+        return regularization is AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>> l2
+            ? Engine.TensorAdd(gradient, Engine.TensorMultiplyScalar(theta, NumOps.FromDouble(l2.GetOptions().Strength)))
+            : regularization.Regularize(gradient, theta);
+    }
 
     /// <param name="updatedOnDevice">
     /// True when the optimizer that just ran updated the parameters ON THE DEVICE (the compiled fused step with
