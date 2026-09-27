@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using System.Linq;
+using System;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -24,6 +27,7 @@ public class Adam8BitOptimizerIntegrationTests
         // Arrange
         var options = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
+            Min8BitSize = 0,
             InitialLearningRate = 0.1,
             BlockSize = 8,
             MaxIterations = 100
@@ -53,6 +57,7 @@ public class Adam8BitOptimizerIntegrationTests
         // Arrange
         var options = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
+            Min8BitSize = 0,
             InitialLearningRate = 0.1,
             BlockSize = 4,
             MaxIterations = 200
@@ -87,6 +92,7 @@ public class Adam8BitOptimizerIntegrationTests
         const double b = 100.0;
         var options = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
+            Min8BitSize = 0,
             InitialLearningRate = 0.001, // Small learning rate for this challenging function
             BlockSize = 4,
             MaxIterations = 1000
@@ -129,6 +135,7 @@ public class Adam8BitOptimizerIntegrationTests
         // Arrange
         var adam8BitOptions = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
+            Min8BitSize = 0,
             InitialLearningRate = 0.01,
             Beta1 = 0.9,
             Beta2 = 0.999,
@@ -188,6 +195,7 @@ public class Adam8BitOptimizerIntegrationTests
         const int paramCount = 10000;
         var options = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
+            Min8BitSize = 0,
             InitialLearningRate = 0.01,
             BlockSize = 256
         };
@@ -241,6 +249,7 @@ public class Adam8BitOptimizerIntegrationTests
         {
             var options = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
             {
+                Min8BitSize = 0,
                 BlockSize = blockSize,
                 CompressBothMoments = true
             };
@@ -373,6 +382,7 @@ public class Adam8BitOptimizerIntegrationTests
         // Arrange
         var options = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
+            Min8BitSize = 0,
             InitialLearningRate = 0.01,
             BlockSize = 8
         };
@@ -410,6 +420,94 @@ public class Adam8BitOptimizerIntegrationTests
         }
     }
 
+    /// <summary>
+    /// A version-2 checkpoint stored LINEAR quantized moments. Loading it must re-encode them into the dynamic
+    /// codebook; decoding the old bytes as codebook indices would silently replace every moment with a different one.
+    /// </summary>
+    [Fact]
+    public void Deserialize_LegacyLinearCheckpoint_ConvertsMomentsToDynamicCodebook()
+    {
+        const int blockSize = 8;
+        var options = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.01,
+            BlockSize = blockSize,
+            CompressBothMoments = true,
+            Min8BitSize = 0,
+        };
+        var optimizer = new Adam8BitOptimizer<double, Matrix<double>, Vector<double>>(null, options);
+        var rng = new Random(5);
+        var parameters = new Vector<double>(Enumerable.Range(0, 20).Select(_ => rng.NextDouble() * 4 - 2).ToArray());
+        for (int step = 0; step < 6; step++)
+        {
+            var gradient = new Vector<double>(parameters.Select(x => 2.0 * x + 0.3 * rng.NextDouble()).ToArray());
+            parameters = optimizer.UpdateParameters(parameters, gradient);
+        }
+
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var type = optimizer.GetType();
+        System.Reflection.FieldInfo Field(string name) => type.GetField(name, flags)
+            ?? throw new InvalidOperationException($"field {name} not found");
+
+        // Rewrite the live state in the version-2 linear encoding, exactly as the old encoder produced it, and keep
+        // the values that encoding represents.
+        var expected = new Dictionary<string, double[]>();
+        foreach (var (bytesName, scalesName, signed) in new[] { ("_mQuantized", "_mScales", true), ("_vQuantized", "_vScales", false) })
+        {
+            var q = (Vector<byte>)Field(bytesName).GetValue(optimizer)!;
+            var scales = (Vector<double>)Field(scalesName).GetValue(optimizer)!;
+            double[] code = signed ? DynamicQuantizationMap.Signed : DynamicQuantizationMap.Unsigned;
+            var values = new double[q.Length];
+            for (int b = 0; b * blockSize < q.Length; b++)
+            {
+                int start = b * blockSize, count = Math.Min(blockSize, q.Length - start);
+                double absMax = 0;
+                for (int i = 0; i < count; i++)
+                    absMax = Math.Max(absMax, Math.Abs(code[q[start + i]] * scales[b]));
+                double linearScale = absMax / (signed ? 127.0 : 255.0);
+                for (int i = 0; i < count; i++)
+                {
+                    double value = code[q[start + i]] * scales[b];
+                    int level = linearScale > 0 ? (int)Math.Round(value / linearScale) : 0;
+                    q[start + i] = signed ? (byte)(Math.Clamp(level, -127, 127) + 128) : (byte)Math.Clamp(level, 0, 255);
+                    values[start + i] = signed ? (q[start + i] - 128) * linearScale : q[start + i] * linearScale;
+                }
+                scales[b] = linearScale;
+            }
+            expected[bytesName] = values;
+        }
+
+        byte[] checkpoint = optimizer.Serialize();
+        // The format version is the int that follows the "A8B1" magic.
+        int magicAt = -1;
+        for (int i = 0; i + 8 <= checkpoint.Length && magicAt < 0; i++)
+            if (checkpoint[i] == 0x41 && checkpoint[i + 1] == 0x38 && checkpoint[i + 2] == 0x42 && checkpoint[i + 3] == 0x31)
+                magicAt = i;
+        Assert.True(magicAt >= 0, "magic not found");
+        Assert.Equal(3, BitConverter.ToInt32(checkpoint, magicAt + 4));
+        BitConverter.GetBytes(2).CopyTo(checkpoint, magicAt + 4);
+
+        var restored = new Adam8BitOptimizer<double, Matrix<double>, Vector<double>>(null, options);
+        restored.Deserialize(checkpoint);
+
+        foreach (var (bytesName, scalesName, signed) in new[] { ("_mQuantized", "_mScales", true), ("_vQuantized", "_vScales", false) })
+        {
+            var q = (Vector<byte>)Field(bytesName).GetValue(restored)!;
+            var scales = (Vector<double>)Field(scalesName).GetValue(restored)!;
+            double[] code = signed ? DynamicQuantizationMap.Signed : DynamicQuantizationMap.Unsigned;
+            double maxGap = 0;
+            for (int i = 1; i < code.Length; i++) maxGap = Math.Max(maxGap, code[i] - code[i - 1]);
+            for (int i = 0; i < q.Length; i++)
+            {
+                int b = i / blockSize;
+                double decoded = code[q[i]] * scales[b];
+                double tolerance = maxGap / 2 * scales[b] + 1e-15;
+                Assert.True(Math.Abs(decoded - expected[bytesName][i]) <= tolerance,
+                    $"{bytesName}[{i}]: converted {decoded:R}, checkpoint held {expected[bytesName][i]:R}, tolerance {tolerance:R}");
+            }
+        }
+    }
+
     #endregion
 
     #region Configuration Variant Tests
@@ -427,6 +525,7 @@ public class Adam8BitOptimizerIntegrationTests
         // Arrange
         var options = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
+            Min8BitSize = 0,
             UseDynamicQuantization = useDynamic,
             CompressBothMoments = compressBoth,
             InitialLearningRate = 0.1,
@@ -465,6 +564,7 @@ public class Adam8BitOptimizerIntegrationTests
         // Arrange
         var options = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
+            Min8BitSize = 0,
             UseStochasticRounding = useStochastic,
             InitialLearningRate = 0.1,
             BlockSize = 4
@@ -504,6 +604,7 @@ public class Adam8BitOptimizerIntegrationTests
         // Arrange
         var options = new Adam8BitOptimizerOptions<float, Matrix<float>, Vector<float>>
         {
+            Min8BitSize = 0,
             InitialLearningRate = 0.1f,
             BlockSize = 4
         };

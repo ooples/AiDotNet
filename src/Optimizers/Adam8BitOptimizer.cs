@@ -94,7 +94,12 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// after the magic header changes in a non-backward-compatible way;
     /// readers reject mismatched versions with a clear migration message.
     /// </summary>
-    private const int StateFormatVersion = 2;
+    // 3: quantized bytes are indices into the block-wise DYNAMIC codebook (DynamicQuantizationMap) with the block
+    // absmax as the scale. Version 2 stored LINEAR values (m as q - 128 times absmax/127, v as q times absmax/255);
+    // those are still read and converted on load, because decoding them as codebook indices would silently corrupt
+    // every moment.
+    private const int StateFormatVersion = 3;
+    private const int LegacyLinearStateFormatVersion = 2;
 
     /// <summary>
     /// The options specific to the 8-bit Adam optimizer.
@@ -129,6 +134,10 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// Full-precision first moment vector (used when CompressBothMoments is false).
     /// </summary>
     private Vector<T>? _mFullPrecision;
+
+    // Non-null when the flat parameter vector is shorter than Min8BitSize: both moments are then full precision
+    // (_mFullPrecision holds m) and the quantized fields are null.
+    private Vector<T>? _vFullPrecision;
 
     /// <summary>
     /// The current time step (iteration count).
@@ -214,6 +223,18 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     {
         _parameterLength = length;
         _numBlocks = (length + _options.BlockSize - 1) / _options.BlockSize;
+
+        if (length < _options.Min8BitSize)
+        {
+            _mQuantized = null;
+            _vQuantized = null;
+            _mScales = null;
+            _vScales = null;
+            _mFullPrecision = new Vector<T>(length);
+            _vFullPrecision = new Vector<T>(length);
+            return;
+        }
+        _vFullPrecision = null;
 
         // Always-quantized second moment. Vector<byte> is the span-aware
         // wrapper over the byte buffer the engine kernels can address
@@ -447,6 +468,11 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         public ushort[]? MBf16;
         public ushort[]? VBf16;
 
+        // Parameter below Min8BitSize: both moments are full precision (MFullPrecision, VFullPrecision, allocated
+        // at the parameter's shape on its first step) and every quantized/BF16 field is null.
+        public bool FullPrecisionMoments;
+        public Tensor<T>? VFullPrecision;
+
         // GPU-resident 8-bit state (AIDOTNET_GPU_ADAM=1, CUDA): int8 m/v + per-block
         // double scales kept on the device across steps so the adam8bit_update kernel
         // runs the whole dequant→Adam→requant cycle with no host download. Allocated
@@ -541,7 +567,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                     stateSp = AllocateTapeState(param.Length);
                     _tapeStates[param] = stateSp;
                 }
-                if (SparseEmbeddingOptimizerHelpers.TryApplyAdam8BitSparse(
+                if (!stateSp.FullPrecisionMoments && SparseEmbeddingOptimizerHelpers.TryApplyAdam8BitSparse(
                         param,
                         stateSp.MQuantized, stateSp.MScales,
                         stateSp.VQuantized, stateSp.VScales,
@@ -638,10 +664,30 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 continue;
             }
 
+            // Below Min8BitSize: plain Adam on full-precision moments (bitsandbytes' min_8bit_size).
+            if (state.FullPrecisionMoments)
+            {
+                var mF = state.MFullPrecision = ShapeMomentLike(state.MFullPrecision, param._shape);
+                var vF = state.VFullPrecision = ShapeMomentLike(state.VFullPrecision, param._shape);
+                var gradScaledF = Engine.TensorMultiplyScalar(grad, oneMinusBeta1);
+                Engine.TensorMultiplyScalarInPlace(mF, beta1);
+                Engine.TensorAddInPlace(mF, gradScaledF);
+                var gradSqF = Engine.TensorMultiply(grad, grad);
+                Engine.TensorMultiplyScalarInPlace(gradSqF, oneMinusBeta2);
+                Engine.TensorMultiplyScalarInPlace(vF, beta2);
+                Engine.TensorAddInPlace(vF, gradSqF);
+                var mHatF = Engine.TensorDivideScalar(mF, biasCorrection1);
+                var vHatF = Engine.TensorDivideScalar(vF, biasCorrection2);
+                var denomF = Engine.TensorAddScalar(Engine.TensorSqrt(vHatF), epsilon);
+                Engine.TensorSubtractInPlace(param,
+                    Engine.TensorMultiplyScalar(Engine.TensorDivide(mHatF, denomF), CurrentLearningRate));
+                continue;
+            }
+
             // GPU-resident 8-bit step: lazily allocate the device quant state on
             // first sight of this parameter, then run the in-place kernel. Skips the
             // CPU dequant/quant path entirely when param/grad resolve to GPU buffers.
-            if (gpu8 && param.Length == grad.Length)
+            if (gpu8 && !state.FullPrecisionMoments && param.Length == grad.Length)
             {
                 if (!state.GpuResident
                     && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAllocAdam8BitState(param.Length, _options.BlockSize,
@@ -754,6 +800,19 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// block carries its own scale so per-block magnitude variation doesn't get
     /// crushed into a single global scale.
     /// </summary>
+    /// <summary>
+    /// Returns a full-precision moment tensor at <paramref name="shape"/>: zeros on first use, the same values
+    /// re-laid out when only the shape changed (element count is guaranteed equal by the caller's length check).
+    /// </summary>
+    private Tensor<T> ShapeMomentLike(Tensor<T>? moment, int[] shape)
+    {
+        if (moment is null) return new Tensor<T>(shape);
+        if (moment._shape.SequenceEqual(shape)) return moment;
+        var rebuilt = new Tensor<T>(shape);
+        moment.AsSpan().CopyTo(rebuilt.AsWritableSpan());
+        return rebuilt;
+    }
+
     private QuantizedTapeState AllocateTapeState(int paramLength)
     {
         if (_options.UseBFloat16MomentStorage)
@@ -765,6 +824,16 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 NumBlocks = 0,
                 MBf16 = new ushort[paramLength],
                 VBf16 = new ushort[paramLength],
+            };
+        }
+
+        if (paramLength < _options.Min8BitSize)
+        {
+            return new QuantizedTapeState
+            {
+                Length = paramLength,
+                NumBlocks = 0,
+                FullPrecisionMoments = true,
             };
         }
 
@@ -1120,16 +1189,19 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         }
 
         // Dequantize current moment estimates
+        bool fullPrecisionMoments = _vFullPrecision is not null;
         Vector<T> m;
-        if (_options.CompressBothMoments)
+        Vector<T> v;
+        if (fullPrecisionMoments)
         {
-            m = Dequantize(_mQuantized!, _mScales!, isSigned: true);
+            m = _mFullPrecision!;
+            v = _vFullPrecision!;
         }
         else
         {
-            m = _mFullPrecision!;
+            m = _options.CompressBothMoments ? Dequantize(_mQuantized!, _mScales!, isSigned: true) : _mFullPrecision!;
+            v = Dequantize(_vQuantized!, _vScales!, isSigned: false);
         }
-        var v = Dequantize(_vQuantized!, _vScales!, isSigned: false);
 
         // Compute Adam update using full precision
         T beta1 = _currentBeta1;
@@ -1152,15 +1224,23 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         v = (Vector<T>)Engine.Add(vScaled, gradSquaredScaled);
 
         // Re-quantize the updated moments
-        if (_options.CompressBothMoments)
+        if (fullPrecisionMoments)
         {
-            Quantize(m, _mQuantized!, _mScales!, isSigned: true);
+            _mFullPrecision = m;
+            _vFullPrecision = v;
         }
         else
         {
-            _mFullPrecision = m;
+            if (_options.CompressBothMoments)
+            {
+                Quantize(m, _mQuantized!, _mScales!, isSigned: true);
+            }
+            else
+            {
+                _mFullPrecision = m;
+            }
+            Quantize(v, _vQuantized!, _vScales!, isSigned: false);
         }
-        Quantize(v, _vQuantized!, _vScales!, isSigned: false);
 
         // Compute bias-corrected first moment: mHat = m / (1 - beta1^t)
         var mHat = (Vector<T>)Engine.Divide(m, biasCorrection1);
@@ -1215,6 +1295,23 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         var parameterSpan = parameters.AsSpan();
         var gradientSpan = gradient.AsSpan();
         var updatedSpan = updatedParameters.AsWritableSpan();
+
+        if (_vFullPrecision is not null)
+        {
+            // Below Min8BitSize: plain Adam on full-precision moments.
+            var mSpan = _mFullPrecision!.AsWritableSpan();
+            var vSpan = _vFullPrecision.AsWritableSpan();
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                T g = gradientSpan[i];
+                mSpan[i] = NumOps.Add(NumOps.Multiply(beta1, mSpan[i]), NumOps.Multiply(oneMinusBeta1, g));
+                vSpan[i] = NumOps.Add(NumOps.Multiply(beta2, vSpan[i]), NumOps.Multiply(oneMinusBeta2, NumOps.Multiply(g, g)));
+                T denominator = NumOps.Add(NumOps.Sqrt(NumOps.Divide(vSpan[i], biasCorrection2)), epsilon);
+                T update = NumOps.Multiply(CurrentLearningRate, NumOps.Divide(NumOps.Divide(mSpan[i], biasCorrection1), denominator));
+                updatedSpan[i] = NumOps.Subtract(parameterSpan[i], update);
+            }
+            return updatedParameters;
+        }
         Span<T> fullPrecisionMSpan = _options.CompressBothMoments
             ? Span<T>.Empty
             : _mFullPrecision!.AsWritableSpan();
@@ -1377,6 +1474,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         _mScales = null;
         _vScales = null;
         _mFullPrecision = null;
+        _vFullPrecision = null;
         _t = 0;
         _parameterLength = 0;
         _numBlocks = 0;
@@ -1434,6 +1532,10 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         {
             fullPrecisionMemory += _mFullPrecision.Length * bytesPerElement;
         }
+        if (_vFullPrecision != null)
+        {
+            fullPrecisionMemory += _vFullPrecision.Length * bytesPerElement;
+        }
 
         // Tape-mode state memory: Step(TapeStepContext<T>) writes its
         // per-parameter Adam moments into _tapeStates rather than the
@@ -1465,6 +1567,10 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             if (tapeState.MFullPrecision != null)
             {
                 fullPrecisionMemory += tapeState.MFullPrecision.Length * bytesPerElement;
+            }
+            if (tapeState.VFullPrecision != null)
+            {
+                fullPrecisionMemory += tapeState.VFullPrecision.Length * bytesPerElement;
             }
         }
 
@@ -1509,6 +1615,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         public int MFullPrecisionLength { get; init; }
         public int VQuantizedLength { get; init; }
         public int VScalesLength { get; init; }
+        public bool HasVFullPrecision { get; init; }
     }
 
     /// <summary>
@@ -1544,6 +1651,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 // doesn't throw a NullReferenceException.
                 VQuantizedLength = s.VQuantized?.Length ?? 0,
                 VScalesLength = s.VScales?.Length ?? 0,
+                HasVFullPrecision = s.VFullPrecision is not null,
             };
         }
         return snapshot;
@@ -1579,7 +1687,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         }
     }
 
-    private void ReadTapeStates(BinaryReader reader)
+    private void ReadTapeStates(BinaryReader reader, bool hasFullPrecisionLayout)
     {
         // Parse into a LOCAL map first so the stream I/O runs outside _pendingTapeStatesLock, then swap the
         // contents in atomically under the lock (WriteTapeStates snapshots the shared map under the same
@@ -1606,7 +1714,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 throw new InvalidOperationException(
                     $"Adam8BitOptimizer: duplicate tape-state parameter index {parameterIndex} in checkpoint.");
             }
-            pending[parameterIndex] = ReadTapeState(reader);
+            pending[parameterIndex] = ReadTapeState(reader, hasFullPrecisionLayout);
         }
 
         lock (_pendingTapeStatesLock)
@@ -1647,9 +1755,12 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         WriteDoubleVector(writer, state.VScales);
         WriteUShortArray(writer, state.MBf16);
         WriteUShortArray(writer, state.VBf16);
+        // Format version 3: the below-Min8BitSize full-precision layout.
+        writer.Write(state.FullPrecisionMoments);
+        WriteTensor(writer, state.VFullPrecision);
     }
 
-    private QuantizedTapeState ReadTapeState(BinaryReader reader)
+    private QuantizedTapeState ReadTapeState(BinaryReader reader, bool hasFullPrecisionLayout)
     {
         var state = new QuantizedTapeState
         {
@@ -1664,6 +1775,11 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             VBf16 = ReadUShortArray(reader),
             GpuResident = false
         };
+        if (hasFullPrecisionLayout)
+        {
+            state.FullPrecisionMoments = reader.ReadBoolean();
+            state.VFullPrecision = ReadTensor(reader);
+        }
 
         if (state.Length < 0)
         {
@@ -1675,6 +1791,24 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         // later or silently apply partial moment data. Quantized moments are one byte per element;
         // per-block scales are one double per block; BF16 moments are one ushort per element.
         int expectedBlocks = state.Length == 0 ? 0 : (state.Length + _options.BlockSize - 1) / _options.BlockSize;
+
+        if (state.FullPrecisionMoments)
+        {
+            // The layout is recorded per state, so a checkpoint restores the layout it was trained with even if
+            // Min8BitSize has since changed. Both moments are allocated together on the parameter's first step.
+            if ((state.MFullPrecision is null) != (state.VFullPrecision is null)
+                || (state.MFullPrecision is not null && state.MFullPrecision.Length != state.Length)
+                || (state.VFullPrecision is not null && state.VFullPrecision.Length != state.Length)
+                || state.MQuantized is not null || state.VQuantized is not null || state.MBf16 is not null || state.VBf16 is not null)
+            {
+                throw new InvalidOperationException("Adam8BitOptimizer: full-precision tape-state payload is inconsistent.");
+            }
+            return state;
+        }
+        if (state.VFullPrecision is not null)
+        {
+            throw new InvalidOperationException("Adam8BitOptimizer: quantized tape state carries a full-precision v payload.");
+        }
 
         if (_options.UseBFloat16MomentStorage)
         {
@@ -1753,12 +1887,10 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                     $"{state.Length}, but the current parameter has length {parameter.Length}.");
             }
 
-            if (state.MFullPrecision is not null && !state.MFullPrecision._shape.SequenceEqual(parameter._shape))
-            {
-                var reshaped = new Tensor<T>(parameter._shape);
-                state.MFullPrecision.AsSpan().CopyTo(reshaped.AsWritableSpan());
-                state.MFullPrecision = reshaped;
-            }
+            if (state.MFullPrecision is not null)
+                state.MFullPrecision = ShapeMomentLike(state.MFullPrecision, parameter._shape);
+            if (state.VFullPrecision is not null)
+                state.VFullPrecision = ShapeMomentLike(state.VFullPrecision, parameter._shape);
 
             _tapeStates[parameter] = state;
             _pendingTapeStatesByParameterIndex.Remove(parameterIndex);
@@ -2023,9 +2155,10 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             // mode-mismatched payload before allocating the wrong moment
             // representation.
             writer.Write(_options.CompressBothMoments);
-            bool hasMState = _options.CompressBothMoments
+            // Below Min8BitSize both moments are full precision and are written after v instead (version 3).
+            bool hasMState = _vFullPrecision is null && (_options.CompressBothMoments
                 ? _mQuantized is not null
-                : _mFullPrecision is not null;
+                : _mFullPrecision is not null);
             writer.Write(hasMState);
             if (hasMState)
             {
@@ -2058,6 +2191,14 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 {
                     writer.Write(scale);
                 }
+            }
+
+            writer.Write(_vFullPrecision is not null);
+            if (_vFullPrecision is not null)
+            {
+                writer.Write(_vFullPrecision.Length);
+                foreach (var value in _mFullPrecision!) writer.Write(Convert.ToDouble(value));
+                foreach (var value in _vFullPrecision) writer.Write(Convert.ToDouble(value));
             }
 
             // Tape-state checkpoint: persist both the bias-correction step
@@ -2135,7 +2276,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                     $"options JSON.");
             }
             int stateFormatVersion = reader.ReadInt32();
-            if (stateFormatVersion != StateFormatVersion)
+            bool legacyLinearEncoding = stateFormatVersion == LegacyLinearStateFormatVersion;
+            if (stateFormatVersion != StateFormatVersion && !legacyLinearEncoding)
             {
                 throw new InvalidOperationException(
                     $"Adam8BitOptimizer: unrecognized format version {stateFormatVersion} " +
@@ -2329,6 +2471,21 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 _vScales = null;
             }
 
+            _vFullPrecision = null;
+            if (!legacyLinearEncoding && reader.ReadBoolean())
+            {
+                int fullLength = reader.ReadInt32();
+                if (fullLength != _parameterLength)
+                    throw new InvalidOperationException(
+                        $"Adam8BitOptimizer: full-precision moment length {fullLength} does not " +
+                        $"match _parameterLength={_parameterLength}.");
+                ValidateDeclaredCount(reader, fullLength, 2 * sizeof(double), "full-precision moments");
+                _mFullPrecision = new Vector<T>(fullLength);
+                _vFullPrecision = new Vector<T>(fullLength);
+                for (int i = 0; i < fullLength; i++) _mFullPrecision[i] = NumOps.FromDouble(reader.ReadDouble());
+                for (int i = 0; i < fullLength; i++) _vFullPrecision[i] = NumOps.FromDouble(reader.ReadDouble());
+            }
+
             // Tape-state checkpoint (matches Serialize): read the global
             // step counter plus per-parameter quantized moments. Some older
             // v2 payloads ended before any tape-step data existed; those
@@ -2342,6 +2499,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             if (tapePayloadBytes == 0)
             {
                 _tapeStep = 0;
+                if (legacyLinearEncoding)
+                    ConvertLegacyLinearState();
                 InitializeAdaptiveParameters();
                 return;
             }
@@ -2364,7 +2523,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             {
                 try
                 {
-                    ReadTapeStates(reader);
+                    ReadTapeStates(reader, hasFullPrecisionLayout: !legacyLinearEncoding);
                 }
                 catch (EndOfStreamException ex)
                 {
@@ -2374,7 +2533,59 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 }
             }
 
+            if (legacyLinearEncoding)
+                ConvertLegacyLinearState();
+
             InitializeAdaptiveParameters();
+        }
+    }
+
+    /// <summary>
+    /// Re-encodes quantized state read from a version-2 checkpoint (linear per-block quantization) into the dynamic
+    /// codebook this optimizer now uses, block by block, so a resumed run continues from the same moments.
+    /// </summary>
+    private void ConvertLegacyLinearState()
+    {
+        int blockSize = _options.BlockSize;
+        if (_mQuantized is not null && _mScales is not null)
+            ConvertLegacyLinearBlocks(_mQuantized, _mScales, _mQuantized.Length, blockSize, signed: true);
+        if (_vQuantized is not null && _vScales is not null)
+            ConvertLegacyLinearBlocks(_vQuantized, _vScales, _vQuantized.Length, blockSize, signed: false);
+
+        lock (_pendingTapeStatesLock)
+        {
+            foreach (var state in _pendingTapeStatesByParameterIndex.Values)
+            {
+                if (state.MQuantized is not null && state.MScales is not null)
+                    ConvertLegacyLinearBlocks(state.MQuantized, state.MScales, state.Length, blockSize, signed: true);
+                if (state.VQuantized is not null && state.VScales is not null)
+                    ConvertLegacyLinearBlocks(state.VQuantized, state.VScales, state.Length, blockSize, signed: false);
+            }
+        }
+    }
+
+    private static void ConvertLegacyLinearBlocks(
+        Vector<byte> quantized, Vector<double> scales, int length, int blockSize, bool signed)
+    {
+        double[] code = signed ? DynamicQuantizationMap.Signed : DynamicQuantizationMap.Unsigned;
+        var block = new double[blockSize];
+        for (int b = 0, start = 0; start < length && b < scales.Length; b++, start += blockSize)
+        {
+            int count = Math.Min(blockSize, length - start);
+            double oldScale = scales[b];
+            double absMax = 0.0;
+            for (int i = 0; i < count; i++)
+            {
+                byte q = quantized[start + i];
+                double value = signed ? (q - 128) * oldScale : q * oldScale;
+                block[i] = value;
+                if (Math.Abs(value) > absMax) absMax = Math.Abs(value);
+            }
+
+            double scale = DynamicQuantizationMap.Scale(absMax);
+            scales[b] = scale;
+            for (int i = 0; i < count; i++)
+                quantized[start + i] = DynamicQuantizationMap.Encode(block[i], scale, code);
         }
     }
 
