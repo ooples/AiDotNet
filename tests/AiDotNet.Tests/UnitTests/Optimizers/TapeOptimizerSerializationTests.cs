@@ -330,6 +330,29 @@ public class TapeOptimizerSerializationTests
     }
 
     [Fact]
+    public void Adam8BitDeserialize_Version2Payload_IsRejectedNotMisread()
+    {
+        // Version 2 stored LINEAR moment bytes; this build reads codebook indices. Decoding a v2 payload would resume
+        // training with silently wrong moments, so it must be refused with a message that says why.
+        var optimizer = CreateAdam8BitOptimizer();
+        Step(optimizer, CreateParameters(), CreateFirstGradients(CreateParameters()));
+        byte[] payload = optimizer.Serialize();
+
+        // The format version is the int right after the 'A8B1' magic (0x31423841, little-endian).
+        byte[] magic = BitConverter.GetBytes(0x31423841);
+        int at = -1;
+        for (int i = 0; i + 8 <= payload.Length && at < 0; i++)
+            if (payload[i] == magic[0] && payload[i + 1] == magic[1] && payload[i + 2] == magic[2] && payload[i + 3] == magic[3])
+                at = i + 4;
+        Assert.True(at >= 0, "no v2+ magic header in the serialized payload");
+        Assert.Equal(3, BitConverter.ToInt32(payload, at));
+        BitConverter.GetBytes(2).CopyTo(payload, at);
+
+        var exception = Assert.Throws<InvalidOperationException>(() => CreateAdam8BitOptimizer().Deserialize(payload));
+        Assert.Contains("version 2", exception.Message);
+        Assert.Contains("LINEAR", exception.Message);
+    }
+    [Fact]
     public void Adam8BitDeserialize_TruncatedTapeStatePayload_ThrowsInvalidOperationException()
     {
         var optimizer = CreateAdam8BitOptimizer();
