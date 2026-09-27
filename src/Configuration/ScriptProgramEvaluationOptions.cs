@@ -1,4 +1,5 @@
 using AiDotNet.Enums;
+using AiDotNet.Evolution;
 using AiDotNet.ProgramSynthesis.Enums;
 
 namespace AiDotNet.Configuration;
