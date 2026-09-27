@@ -74,27 +74,38 @@ public class FusedOptimizerParityTests
         eager.SetTrainingMode(true);
         var (x, y) = MakeData();
 
-        bool saved = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation;
+        // Install the options with SetCurrent. TensorCodecOptions.Current returns a fresh copy of the defaults on a
+        // thread that never called SetCurrent, so assigning Current.EnableCompilation there changed nothing: the
+        // "eager" run trained fused as well and every optimizer reported a divergence of exactly zero.
+        var saved = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
         long fusedSteps;
+        long eagerFusedSteps;
         try
         {
             // Fused run.
-            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = true;
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(
+                new AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions { EnableCompilation = true });
             CompiledTapeTrainingStep<float>.Invalidate();
             CompiledTapeTrainingStep<float>.ResetFusedStepCount();
             for (int i = 0; i < Steps; i++) fused.Train(x, y);
             fusedSteps = CompiledTapeTrainingStep<float>.GetFusedStepCount();
 
             // Eager run (compilation disabled → pure tape path).
-            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = false;
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(
+                new AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions { EnableCompilation = false });
             CompiledTapeTrainingStep<float>.Invalidate();
+            CompiledTapeTrainingStep<float>.ResetFusedStepCount();
             for (int i = 0; i < Steps; i++) eager.Train(x, y);
+            eagerFusedSteps = CompiledTapeTrainingStep<float>.GetFusedStepCount();
         }
         finally
         {
-            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = saved;
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(saved);
             CompiledTapeTrainingStep<float>.Invalidate();
         }
+
+        // The comparison is only meaningful when the reference really ran eagerly.
+        Assert.Equal(0, eagerFusedSteps);
 
         var pf = fused.GetParameters();
         var pe = eager.GetParameters();

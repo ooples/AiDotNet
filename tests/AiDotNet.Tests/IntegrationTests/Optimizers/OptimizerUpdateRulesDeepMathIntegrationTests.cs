@@ -493,14 +493,14 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
             var result = optimizer.UpdateParameters(parameters, gradient);
 
             // Step 1: m = 0.1*g, v = 0.001*g^2, vHat = max(0, v) = v
-            // mHat = m / (1-0.9) = g
-            // Note: AMSGrad only corrects first moment bias, not second
-            // update = lr * mHat / (sqrt(vHat) + eps)
+            // mHat = m / (1-0.9) = g, and the running max is bias-corrected like Adam's v (PyTorch amsgrad=True):
+            // vHatCorrected = vHat / (1-0.999) = g^2. So step 1 is exactly Adam's step, about lr in magnitude.
+            // (Leaving vHat uncorrected made this step 0.0316, i.e. ~32x the learning rate.)
             double m0 = 0.1 * 0.1;
             double v0 = 0.001 * 0.01;
             double mHat0 = m0 / (1 - 0.9);
-            // vHat = max(0, v0) = v0 (no bias correction for v in AMSGrad)
-            double update0 = 0.001 * mHat0 / (Math.Sqrt(v0) + 1e-8);
+            double vHatCorrected0 = v0 / (1 - 0.999);
+            double update0 = 0.001 * mHat0 / (Math.Sqrt(vHatCorrected0) + 1e-8);
             double expected0 = 1.0 - update0;
 
             Assert.Equal(expected0, result[0], RelaxedTol);
