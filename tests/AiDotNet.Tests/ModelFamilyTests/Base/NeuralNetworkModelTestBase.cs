@@ -2363,12 +2363,13 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 $"Clone output[{i}] differs beyond {(isFloat ? "float" : "double")} tolerance: original={original[i]}, cloned={clonedOutput[i]}");
         }
 
-        AssertCloneOwnsIndependentParameterStorage(network, cloned);
+        // Before the storage probe, which writes to the clone's parameters.
         AssertClonePreservesTrainingObjective(network, (INeuralNetworkModel<T>)cloned, input, rng);
+        AssertCloneOwnsIndependentParameterStorage(network, cloned);
     }
 
     /// <summary>
-    /// Proves that a clone can evaluate its training objective, to a finite value, for a model that
+    /// Proves that a clone evaluates the same training objective as its original, for a model that
     /// declares one.
     /// </summary>
     /// <remarks>
@@ -2388,18 +2389,24 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var target = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
         target = ResolveTrainingObjectiveTarget(network, input, target);
         double originalObjective = MeasureLoss(network, input, network.Predict(input), target);
+        double originalAgain = MeasureLoss(network, input, network.Predict(input), target);
         double clonedObjective = MeasureLoss(cloned, input, cloned.Predict(input), target);
 
-        // Finiteness, not equality. The objective runs the training forward, and on 10 of the 24 models
-        // that declare one (the AudioClassifierBase family, HamiltonianNeuralNetwork, SeACo, ABINet) a clone's
-        // value differs from the original's by 0.2-1% even though the original reproduces its own value and
-        // the clone predicts identically. That difference is not yet explained - per-layer RandomSeed is
-        // copied by the clone path, the dropout forward counter is not - so asserting equality here would
-        // fail those models on an open question. What a clone must never do is fail to evaluate its
-        // objective at all, which is what ABINet's did.
         Assert.False(double.IsNaN(clonedObjective) || double.IsInfinity(clonedObjective),
             $"{network.GetType().Name}'s clone evaluates a non-finite training objective ({clonedObjective}) "
             + $"where the original evaluates {originalObjective:G9}.");
+
+        // The objective runs the training forward. A model whose training forward is stochastic (a dropout
+        // stream advanced per call) does not reproduce its own value, and then a clone's value cannot be
+        // compared to it; finiteness, checked above, is what remains assertable.
+        bool isFloat = typeof(T) == typeof(float);
+        double tolerance = (isFloat ? 1e-4 : 1e-10) + (isFloat ? 1e-3 : 0.0) * Math.Abs(originalObjective);
+        if (Math.Abs(originalObjective - originalAgain) > tolerance) return;
+
+        Assert.True(Math.Abs(originalObjective - clonedObjective) <= tolerance,
+            $"{network.GetType().Name}'s clone evaluates a different training objective: original="
+            + $"{originalObjective:G9} (reproduced), clone={clonedObjective:G9}. The clone predicts the same, so "
+            + "its loss configuration, not its weights, differs from the original's.");
     }
 
     /// <summary>
@@ -2471,6 +2478,11 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         Assert.Equal(originalValue, originalTensor[0]);
         Assert.Equal(mutated, cloneTensor[0]);
+
+        // Undo the probe. Left in place, it silently changed a weight of the clone, and any clone check
+        // that ran afterwards measured a different model: the training-objective check read that as
+        // 0.2-1% objective gaps on 10 models whose clones were in fact exact.
+        cloneTensor[0] = cloneValue;
     }
 
     // =====================================================
