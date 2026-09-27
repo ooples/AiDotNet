@@ -227,9 +227,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             _mScales = new Vector<double>(_numBlocks);
             _mFullPrecision = null;
 
-            // For signed quantization, 128 represents 0 (since we map
-            // [-127, 127] to [1, 255] with 128 = 0).
-            for (int i = 0; i < length; i++) _mQuantized[i] = 128;
+            // m starts at zero: the signed dynamic codebook's zero entry.
+            for (int i = 0; i < length; i++) _mQuantized[i] = DynamicQuantizationMap.SignedZeroIndex;
         }
         else
         {
@@ -300,41 +299,20 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 }
             }
 
-            // Compute scale (with small epsilon to avoid division by zero)
-            double scale = maxAbs / (isSigned ? 127.0 : 255.0);
-            if (scale < 1e-10) scale = 1e-10;
+            // Block-wise dynamic quantization (Dettmers et al., ICLR 2022): the scale is the block absmax (or the configured
+            // percentile) and each value is stored as its nearest dynamic-codebook entry. Linear absmax quantization rounded
+            // every second moment below ~1/510 of its block maximum to zero, collapsing Adam's denominator to epsilon.
+            double scale = DynamicQuantizationMap.Scale(maxAbs);
             scales[b] = scale;
+            double[] code = isSigned ? DynamicQuantizationMap.Signed : DynamicQuantizationMap.Unsigned;
 
             // Quantize values in this block
             for (int i = blockStart; i < blockEnd; i++)
             {
-                double val = NumOps.ToDouble(values[i]);
-                double scaled = val / scale;
-
-                // Apply rounding
-                int quantizedVal;
-                if (_options.UseStochasticRounding)
-                {
-                    double floor = Math.Floor(scaled);
-                    double frac = scaled - floor;
-                    quantizedVal = (int)(floor + (RandomHelper.ThreadSafeRandom.NextDouble() < frac ? 1 : 0));
-                }
-                else
-                {
-                    quantizedVal = (int)Math.Round(scaled);
-                }
-
-                // Clamp to valid range
-                if (isSigned)
-                {
-                    quantizedVal = MathHelper.Clamp(quantizedVal, -127, 127);
-                    quantized[i] = (byte)(quantizedVal + 128); // Map [-127, 127] to [1, 255], with 128 representing 0 (0 is unused in the stored range)
-                }
-                else
-                {
-                    quantizedVal = MathHelper.Clamp(quantizedVal, 0, 255);
-                    quantized[i] = (byte)quantizedVal;
-                }
+                double value = NumOps.ToDouble(values[i]);
+                quantized[i] = _options.UseStochasticRounding
+                    ? DynamicQuantizationMap.EncodeStochastic(value, scale, code, RandomHelper.ThreadSafeRandom.NextDouble())
+                    : DynamicQuantizationMap.Encode(value, scale, code);
             }
         });
     }
@@ -359,20 +337,11 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             int blockStart = b * blockSize;
             int blockEnd = Math.Min(blockStart + blockSize, length);
             double scale = scales[b];
+            double[] code = isSigned ? DynamicQuantizationMap.Signed : DynamicQuantizationMap.Unsigned;
 
             for (int i = blockStart; i < blockEnd; i++)
             {
-                double quantizedVal;
-                if (isSigned)
-                {
-                    quantizedVal = (int)quantized[i] - 128; // Map [1, 255] back to [-127, 127]
-                }
-                else
-                {
-                    quantizedVal = quantized[i];
-                }
-
-                result[i] = NumOps.FromDouble(quantizedVal * scale);
+                result[i] = NumOps.FromDouble(DynamicQuantizationMap.Decode(quantized[i], scale, code));
             }
         });
 
@@ -500,6 +469,14 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     private int _tapeStep;
 
     /// <inheritdoc />
+    /// <summary>
+    /// Whether the AiDotNet.Tensors <c>adam8bit_update</c> GPU kernel encodes moments with the block-wise DYNAMIC
+    /// codebook this optimizer's CPU paths now use. It does not yet: the kernel still quantizes linearly
+    /// (<c>absmax / 127</c> and <c>/ 255</c>), which rounds small second moments to zero and diverges. Until the kernel
+    /// matches, the opt-in GPU fast path stays off and training runs the CPU path, whose math is correct.
+    /// </summary>
+    private const bool GpuAdam8BitKernelUsesDynamicCodebook = false;
+
     public override void Step(TapeStepContext<T> context)
     {
         PrepareTapeState(context);
@@ -519,7 +496,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         // host download. Only the kernel-matched config (both moments compressed,
         // absolute-max scale, deterministic rounding) is eligible; otherwise the CPU
         // path runs. Quantized state is kept GPU-resident per parameter across steps.
-        bool gpu8 = typeof(T) == typeof(float)
+        bool gpu8 = GpuAdam8BitKernelUsesDynamicCodebook
+            && typeof(T) == typeof(float)
             && !_options.UseBFloat16MomentStorage
             && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine
@@ -808,9 +786,8 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         {
             state.MQuantized = new Vector<byte>(paramLength);
             state.MScales = new Vector<double>(numBlocks);
-            // m starts at zero. For signed quantization 0 is encoded as 128
-            // (the [-127, 127] → [1, 255] offset), so initialize to 128.
-            for (int i = 0; i < paramLength; i++) state.MQuantized[i] = 128;
+            // m starts at zero: the signed dynamic codebook's zero entry.
+            for (int i = 0; i < paramLength; i++) state.MQuantized[i] = DynamicQuantizationMap.SignedZeroIndex;
             for (int b = 0; b < numBlocks; b++) state.MScales[b] = 1.0;
         }
         else
@@ -896,37 +873,19 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                     maxAbs = rentedBuffer[percentileIdx];
                 }
 
-                double scale = maxAbs / (isSigned ? 127.0 : 255.0);
-                if (scale < 1e-10) scale = 1e-10;
+                // Block-wise dynamic quantization (Dettmers et al., ICLR 2022): the scale is the block absmax (or the configured
+                // percentile) and each value is stored as its nearest dynamic-codebook entry. Linear absmax quantization rounded
+                // every second moment below ~1/510 of its block maximum to zero, collapsing Adam's denominator to epsilon.
+                double scale = DynamicQuantizationMap.Scale(maxAbs);
                 scales[b] = scale;
+                double[] code = isSigned ? DynamicQuantizationMap.Signed : DynamicQuantizationMap.Unsigned;
 
                 for (int i = blockStart; i < blockEnd; i++)
                 {
-                    double val = NumOps.ToDouble(values[i]);
-                    double scaled = val / scale;
-
-                    int quantizedVal;
-                    if (_options.UseStochasticRounding)
-                    {
-                        double floor = Math.Floor(scaled);
-                        double frac = scaled - floor;
-                        quantizedVal = (int)(floor + (RandomHelper.ThreadSafeRandom.NextDouble() < frac ? 1 : 0));
-                    }
-                    else
-                    {
-                        quantizedVal = (int)Math.Round(scaled);
-                    }
-
-                    if (isSigned)
-                    {
-                        quantizedVal = MathHelper.Clamp(quantizedVal, -127, 127);
-                        quantized[i] = (byte)(quantizedVal + 128);
-                    }
-                    else
-                    {
-                        quantizedVal = MathHelper.Clamp(quantizedVal, 0, 255);
-                        quantized[i] = (byte)quantizedVal;
-                    }
+                    double value = NumOps.ToDouble(values[i]);
+                    quantized[i] = _options.UseStochasticRounding
+                        ? DynamicQuantizationMap.EncodeStochastic(value, scale, code, RandomHelper.ThreadSafeRandom.NextDouble())
+                        : DynamicQuantizationMap.Encode(value, scale, code);
                 }
 
                 return rentedBuffer;
@@ -955,11 +914,11 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             int blockStart = b * blockSize;
             int blockEnd = Math.Min(blockStart + blockSize, totalLength);
             double scale = scales[b];
+            double[] code = isSigned ? DynamicQuantizationMap.Signed : DynamicQuantizationMap.Unsigned;
 
             for (int i = blockStart; i < blockEnd; i++)
             {
-                double quantizedVal = isSigned ? (int)quantized[i] - 128 : (int)quantized[i];
-                result[i] = NumOps.FromDouble(quantizedVal * scale);
+                result[i] = NumOps.FromDouble(DynamicQuantizationMap.Decode(quantized[i], scale, code));
             }
         });
         return result;
@@ -1278,9 +1237,9 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                     int i = blockStart + j;
                     T g = gradientSpan[i];
                     T oldM = _options.CompressBothMoments
-                        ? NumOps.FromDouble(((int)_mQuantized![i] - 128) * oldMScale)
+                        ? NumOps.FromDouble(DynamicQuantizationMap.Decode(_mQuantized![i], oldMScale, DynamicQuantizationMap.Signed))
                         : fullPrecisionMSpan[i];
-                    T oldV = NumOps.FromDouble(_vQuantized![i] * oldVScale);
+                    T oldV = NumOps.FromDouble(DynamicQuantizationMap.Decode(_vQuantized![i], oldVScale, DynamicQuantizationMap.Unsigned));
                     T newM = NumOps.Add(
                         NumOps.Multiply(beta1, oldM),
                         NumOps.Multiply(oneMinusBeta1, g));
@@ -1351,35 +1310,19 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             maxAbs = absoluteValues[percentileIndex];
         }
 
-        double scale = maxAbs / (isSigned ? 127.0 : 255.0);
-        if (scale < 1e-10) scale = 1e-10;
+        // Block-wise dynamic quantization (Dettmers et al., ICLR 2022): the scale is the block absmax (or the configured
+        // percentile) and each value is stored as its nearest dynamic-codebook entry. Linear absmax quantization rounded
+        // every second moment below ~1/510 of its block maximum to zero, collapsing Adam's denominator to epsilon.
+        double scale = DynamicQuantizationMap.Scale(maxAbs);
         scales[block] = scale;
+        double[] code = isSigned ? DynamicQuantizationMap.Signed : DynamicQuantizationMap.Unsigned;
 
         for (int i = 0; i < count; i++)
         {
-            double scaled = NumOps.ToDouble(values[i]) / scale;
-            int quantizedValue;
-            if (_options.UseStochasticRounding)
-            {
-                double floor = Math.Floor(scaled);
-                double fraction = scaled - floor;
-                quantizedValue = (int)(floor + (RandomHelper.ThreadSafeRandom.NextDouble() < fraction ? 1 : 0));
-            }
-            else
-            {
-                quantizedValue = (int)Math.Round(scaled);
-            }
-
-            if (isSigned)
-            {
-                quantizedValue = MathHelper.Clamp(quantizedValue, -127, 127);
-                quantized[targetOffset + i] = (byte)(quantizedValue + 128);
-            }
-            else
-            {
-                quantizedValue = MathHelper.Clamp(quantizedValue, 0, 255);
-                quantized[targetOffset + i] = (byte)quantizedValue;
-            }
+            double value = NumOps.ToDouble(values[i]);
+            quantized[targetOffset + i] = _options.UseStochasticRounding
+                ? DynamicQuantizationMap.EncodeStochastic(value, scale, code, RandomHelper.ThreadSafeRandom.NextDouble())
+                : DynamicQuantizationMap.Encode(value, scale, code);
         }
     }
 
