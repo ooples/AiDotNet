@@ -107,7 +107,13 @@ jobs:
       contents: read # Required to check out the release tag.
     runs-on: ubuntu-latest
     needs: release-target
-    if: needs.release-target.outputs.publish == 'true'
+    # !cancelled() is REQUIRED, not decoration. On a dispatch, release-please is skipped by design, and GitHub
+    # skips every job downstream of a skipped job unless its `if` calls a status function - a bare
+    # `if: <expr>` is evaluated as `success() && <expr>`, and success() is false once any ancestor was
+    # skipped. Without it the v0.232.0 recovery dispatch (run 36135952615) resolved the tag, then skipped
+    # build and publish and still reported success. The result check keeps a FAILED resolve from building.
+    # !cancelled() rather than always(): always() would keep going after someone cancels the run.
+    if: "!cancelled() && needs.release-target.result == 'success' && needs.release-target.outputs.publish == 'true'"
     # Sized from measurement, not guessed. The same packed core, built alone for the same frameworks in
     # "Build (compat frameworks + pack)", took 11-18 min (job 15-21 min) across five master runs on
     # 2026-09-24; this job also builds and packs seven metapackages and runs the generator consumer check.
@@ -199,13 +205,18 @@ jobs:
           openssl dgst -sha256 -mac HMAC -macopt "hexkey:${BUILD_KEY_HEX}" -binary < src/BuildKey/BuildKey.bin > src/IntegrityHash/IntegrityHash.bin
           echo "Integrity hash generated ($(wc -c < src/IntegrityHash/IntegrityHash.bin) bytes)"
 
+      # -m:2 for the reason sonarcloud.yml's "Build (Release, compat frameworks)" gives: building
+      # AiDotNet's net8/net10/net471 inner builds at full parallelism runs three csc processes at
+      # once, which reached the 16-GB ceiling there and got a compiler killed with exit 137. This
+      # job had no limit, and v0.233.0's runner was shut down 14 minutes into compiling
+      # src/AiDotNet.csproj ("The runner has received a shutdown signal"), so nothing was packed.
       - name: Restore and Build
         run: |
           set -e
           for proj in $PACKED_PROJECTS; do
             echo "Building $proj"
             dotnet restore "$proj"
-            dotnet build "$proj" -c Release --no-restore
+            dotnet build "$proj" -c Release --no-restore -m:2
           done
 
       - name: Pack NuGet
@@ -274,7 +285,10 @@ jobs:
       id-token: write # Required for NuGet trusted publishing.
     runs-on: ubuntu-latest
     needs: [release-target, build-release]
-    if: needs.release-target.outputs.publish == 'true'
+    # Same skip propagation as build-release. Publishing additionally requires the verified build to have
+    # SUCCEEDED, and a cancelled run must stop here: always() would let the NuGet push continue after a
+    # cancellation once the build had already succeeded.
+    if: "!cancelled() && needs.release-target.result == 'success' && needs.build-release.result == 'success' && needs.release-target.outputs.publish == 'true'"
     timeout-minutes: 10
     steps:
       - name: Setup .NET

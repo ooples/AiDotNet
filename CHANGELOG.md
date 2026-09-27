@@ -19,6 +19,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.233.0](https://github.com/ooples/AiDotNet/compare/v0.232.0...v0.233.0) (2026-09-25)
+
+
+### Features
+
+* **cv:** detection/OCR test families, evaluation metrics, and train/clone/predict fixes ([7c9cf1c](https://github.com/ooples/AiDotNet/commit/7c9cf1c97e34c87f61506652beb6fcdf1e8beea6))
+
+
+### Bug Fixes
+
+* **build:** drop the missing win-arm asset SQLitePCLRaw 2.1.12 still declares ([bdf9b8d](https://github.com/ooples/AiDotNet/commit/bdf9b8d55026f9bc2f2eb65b16e44df0377fd6d5))
+* **cv:** register swin stage tensors without claiming the stage list as state ([9daac21](https://github.com/ooples/AiDotNet/commit/9daac212bf8fb482e21ff2836764d658455dc363))
+* **cv:** train yolov10's one-to-many head through the generic train path ([9831688](https://github.com/ooples/AiDotNet/commit/9831688077ee2b25a2f08bc66cdf9da10627ed63))
+* **generators:** copy param model before setting writer-only flag ([98b964e](https://github.com/ooples/AiDotNet/commit/98b964e697af85fe6d090606c48faec345cbf61e))
+* **generators:** omit null json and expression state from later constructors ([d5eab65](https://github.com/ooples/AiDotNet/commit/d5eab656184f5b38238f28d2b2840783b5239589))
+* **metadata:** defer blip and videoclip onnx model data to a provider ([2a747cb](https://github.com/ooples/AiDotNet/commit/2a747cbb0a27991a0221407d03bced7a3f374db4))
+* **metadata:** stop 290 models serializing their weights on every build ([7dfc96c](https://github.com/ooples/AiDotNet/commit/7dfc96ced43e15012b73524bca7f4f38c6aa88cf))
+* **release:** add a dispatch path that publishes an existing release tag ([72c262a](https://github.com/ooples/AiDotNet/commit/72c262a413c6e0d243250cfc36ac9d32be5d9a85))
+* **release:** build only the packed projects, and size the job timeout from measurement ([7ab4a80](https://github.com/ooples/AiDotNet/commit/7ab4a80287ec3159cbe5319bac9968a3c6865a34))
+* **release:** build only the packed projects, and size the job timeout from measurement ([86053a3](https://github.com/ooples/AiDotNet/commit/86053a388f5fc045a1b6c8201b6423ab83ba0ded))
+* **release:** let a dispatched recovery run reach build and publish ([55246d8](https://github.com/ooples/AiDotNet/commit/55246d88d4e644ed8b060ac12ec30cc9215549d1))
+* **release:** let a dispatched recovery run reach build and publish ([829ebc0](https://github.com/ooples/AiDotNet/commit/829ebc02047853b8041d2b98142c69430be1b259))
+* **release:** never republish or replace a published package ([ae3a57a](https://github.com/ooples/AiDotNet/commit/ae3a57a1eb78516ea332c4203f5c069a06541c4c))
+* **release:** respect cancellation in the dispatched build and publish jobs ([d550de6](https://github.com/ooples/AiDotNet/commit/d550de67ab6e88d516103ec163e9fa36fa776959))
+* **tests:** fix 3 flaky tests and 2 never-run sweeps (DBN, CompiledMlp, Integration D OOM) ([2b5c60f](https://github.com/ooples/AiDotNet/commit/2b5c60ffe6041561196daad212fed35c9eaf525d))
+
+
+### Performance
+
+* **cv:** pool roialign bins with one batched product instead of a broadcast mask ([c5ee447](https://github.com/ooples/AiDotNet/commit/c5ee44703cecac6f041b1450ad3f4af7fcfd55b3))
+* **release:** check NuGet with HEAD instead of downloading each package ([25ca56b](https://github.com/ooples/AiDotNet/commit/25ca56be5d8909d526a71d48cb51aef5acfff3d1))
+
 ## [0.232.0](https://github.com/ooples/AiDotNet/compare/v0.231.0...v0.232.0) (2026-09-24)
 
 
