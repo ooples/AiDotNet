@@ -49,6 +49,13 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
 
     private int _step;
 
+    /// <summary>
+    /// Step count of the flat-vector path (<see cref="UpdateParameters"/>), kept apart from the tape path's
+    /// <see cref="_step"/>: the two paths keep separate state, so switching between them must not restart the
+    /// other's step size, averaging weight or bias correction.
+    /// </summary>
+    private int _flatStep;
+
     /// <summary>Creates a schedule-free AdamW optimizer for a model.</summary>
     public ScheduleFreeAdamWOptimizer(
         IFullModel<T, TInput, TOutput>? model = null,
@@ -175,9 +182,11 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
                 nameof(gradient));
         }
 
-        _step++;
         if (_flatZ.Length != parameters.Length)
         {
+            // A differently sized vector is a different parameter set, so its schedule restarts too: the step
+            // count drives the step size, the averaging weight c = 1/t and the second-moment bias correction.
+            _flatStep = 0;
             _flatZ = new double[parameters.Length];
             _flatX = new double[parameters.Length];
             _flatV = new double[parameters.Length];
@@ -188,13 +197,14 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
             }
         }
 
+        _flatStep++;
         double beta = _options.Interpolation;
         double beta2 = _options.Beta2;
         double epsilon = _options.Epsilon;
         double decay = _options.WeightDecay;
         bool applyWeightDecay = double.IsNaN(decay) || Math.Abs(decay) > 0.0;
-        double gamma = StepSize(_step);
-        double c = 1.0 / _step;
+        double gamma = StepSize(_flatStep);
+        double c = 1.0 / _flatStep;
 
         var updated = new Vector<T>(parameters.Length);
         for (int i = 0; i < parameters.Length; i++)
@@ -202,7 +212,7 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
             double g = NumOps.ToDouble(gradient[i]);
 
             _flatV[i] = beta2 * _flatV[i] + (1 - beta2) * g * g;
-            double corrected = _flatV[i] / (1 - Math.Pow(beta2, _step));
+            double corrected = _flatV[i] / (1 - Math.Pow(beta2, _flatStep));
 
             _flatZ[i] -= gamma * g / (Math.Sqrt(corrected) + epsilon);
             if (applyWeightDecay) _flatZ[i] -= gamma * decay * _flatZ[i];
@@ -247,6 +257,7 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
         _flatX = [];
         _flatV = [];
         _step = 0;
+        _flatStep = 0;
         InitializeAdaptiveParameters();
 
         for (int epoch = 0; epoch < _options.MaxIterations; epoch++)

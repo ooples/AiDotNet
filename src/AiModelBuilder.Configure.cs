@@ -1185,6 +1185,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     {
         if (features is null) throw new ArgumentNullException(nameof(features));
         if (labels is null) throw new ArgumentNullException(nameof(labels));
+        ThrowIfStreamingTrainingConfigured("BuildAsync(features, labels) with in-memory data");
         if (_dataLoader is not null)
         {
             throw new InvalidOperationException(
@@ -1596,6 +1597,8 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public async Task<AiModelResult<T, TInput, TOutput>> BuildAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (_dataLoader is not IStreamingDataLoader<T, TInput, TOutput>)
+            ThrowIfStreamingTrainingConfigured("BuildAsync without a streaming data loader");
 
         // Propagate the builder's license key to ModelPersistenceGuard so it can
         // validate during serialize/deserialize operations within BuildAsync.

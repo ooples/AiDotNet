@@ -53,6 +53,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     public AiModelResult<T, TInput, TOutput> Build(TInput features)
     {
         if (features is null) throw new ArgumentNullException(nameof(features));
+        ThrowIfStreamingTrainingConfigured("an unsupervised Build(features)");
 
         if (_model is null)
         {

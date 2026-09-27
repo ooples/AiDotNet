@@ -494,8 +494,8 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         float lr = (float)_options.LearningRate;
         const float beta1 = 0.9f, beta2 = 0.999f, epsilon = 1e-8f, weightDecay = 0f;
 
-        AiDotNet.Training.CompiledTapeTrainingStep<T>.Invalidate();
-        AiDotNet.Training.CompiledTapeTrainingStep<T>.ResetFusedStepCount();
+        AiDotNet.Training.CompiledTapeTrainingStep<T>.Invalidate(this);
+        AiDotNet.Training.CompiledTapeTrainingStep<T>.ResetFusedStepCount(this);
 
         var random = RandomHelper.CreateSeededRandom(42);
         int maxEpochs = _options.Epochs;

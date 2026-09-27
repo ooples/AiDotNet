@@ -697,7 +697,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                             forward: Forward, computeLoss: ComputeLoss,
                             optimizerType: AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD,
                             learningRate: 0.001f, beta1: 0.9f, beta2: 0.999f, epsilon: 1e-8f, weightDecay: 0f,
-                            out T fusedLoss))
+                            out T fusedLoss, owner: this))
                     {
                         LastLoss = fusedLoss;
                         return;
