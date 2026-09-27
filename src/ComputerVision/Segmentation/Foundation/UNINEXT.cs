@@ -200,7 +200,7 @@ public partial class UNINEXT<T> : Common.PanopticSegmentationBase<T>
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1333;
         _numQueries = options.NumQueries;
         _modelSize = options.ModelSize;
-        _dropRate = 0.0;
+        _dropRate = options.DropRate;
 
         (_channelDims, _depths, _decoderDim) = GetModelConfig(options.ModelSize);
 

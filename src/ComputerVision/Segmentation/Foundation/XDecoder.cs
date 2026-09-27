@@ -239,7 +239,7 @@ public partial class XDecoder<T> : Common.PanopticSegmentationBase<T>
         _modelSize = options.ModelSize;
 
         // Inference runs deterministically, so dropout is off whatever DropRate says.
-        _dropRate = 0.0;
+        _dropRate = options.DropRate;
 
         (_channelDims, _depths, _decoderDim) = GetModelConfig(options.ModelSize);
 

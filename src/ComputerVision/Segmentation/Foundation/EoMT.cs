@@ -207,7 +207,7 @@ public partial class EoMT<T> : Common.PanopticSegmentationBase<T>
 
         // Inference mode runs the network deterministically, so dropout is off whatever
         // DropRate says. This was hardcoded to 0.0 before the migration too.
-        _dropRate = 0.0;
+        _dropRate = options.DropRate;
 
         (_embedDim, _depths, _decoderDim) = GetModelConfig(options.ModelSize);
 

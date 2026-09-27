@@ -48,26 +48,18 @@ public class ConstructorAgreementRatchetTests
     /// added or edited to hardcode a value its sibling reads from options.
     /// </para>
     /// <para>
-    /// Established at 4 after 129 fields across 33 files were migrated to read their options. The
-    /// four that remain are deliberate and must NOT be "fixed": <c>DropRate = 0.0</c> in the ONNX
-    /// inference constructors of Mask2Former, MixedQueryTransformer, OneFormer and XDecoder.
-    /// Dropout must be off at inference, so applying the declared 0.1 there would introduce dropout
-    /// into inference — a real defect dressed as consistency. They are listed by name below so a
-    /// future sweep does not silently absorb them.
+    /// Zero. It was once 4, with <c>DropRate = 0.0</c> in the ONNX constructors of Mask2Former,
+    /// MixedQueryTransformer, OneFormer and XDecoder allowlisted as deliberate "so dropout stays off at
+    /// inference". That premise was false: in ONNX mode <c>InitializeLayers</c> returns before building
+    /// any layer, so no dropout exists to switch off, and the literal's only effect was that
+    /// <c>GetModelMetadata</c> reported <c>DropRate = 0</c> while the options said otherwise - the very
+    /// "describes itself two ways" defect this guard exists for. The same pattern then spread to EoMT,
+    /// UNINEXT, MaskDINO and OMGSeg, and VideoCLIP's ONNX constructor hardcoded eight dimensions its
+    /// native sibling reads from options. All thirteen now read their options, and there is no allowlist:
+    /// dropout at inference is governed by training mode, never by a constructor literal.
     /// </para>
     /// </remarks>
-    private const int AgreementBaseline = 4;
-
-    /// <summary>
-    /// Sites where a literal is correct and the options value would be wrong.
-    /// </summary>
-    private static readonly HashSet<string> DeliberateDivergence = new(StringComparer.Ordinal)
-    {
-        "Mask2Former._dropRate",
-        "MixedQueryTransformer._dropRate",
-        "OneFormer._dropRate",
-        "XDecoder._dropRate",
-    };
+    private const int AgreementBaseline = 0;
 
     private static readonly Regex LiteralAssignment = new(
         @"^\s*(_\w+)\s*=\s*(?:[0-9][0-9_.eE+\-]*[fdmFDM]?|true|false)\s*;\s*$",
@@ -153,10 +145,7 @@ public class ConstructorAgreementRatchetTests
                 // only a constructor that hardcodes AND never reads the option is a divergence
                 if (!pair.Value.Except(optionCtors).Any()) continue;
 
-                string site = $"{typeName}.{pair.Key}";
-                if (DeliberateDivergence.Contains(site)) continue;
-
-                divergences.Add(site);
+                divergences.Add($"{typeName}.{pair.Key}");
             }
         }
 
