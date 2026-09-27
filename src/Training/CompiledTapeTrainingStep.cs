@@ -1287,6 +1287,7 @@ public static class CompiledTapeTrainingStep<T>
                 // fused. Pass 0 to disable.
                 if (maxGradNorm > 0.0)
                     TrySetPlanMaxGradNorm(plan, maxGradNorm);
+                LinkFusedOptimizerState(plan, eagerOptimizer);
             }
             else if (!ReferenceEquals(_configuredPlan, plan))
             {
@@ -1379,6 +1380,41 @@ public static class CompiledTapeTrainingStep<T>
             _configuredOptimizerConfig = null;
             return false;
         }
+    }
+
+    /// <summary>
+    /// Connects a freshly configured plan to the optimizer whose update it runs. A fused optimizer's moments, step
+    /// counter and schedule position live inside the plan, so the optimizer must be able to read them when it is
+    /// serialized, and a state restored from a checkpoint must be installed into the plan before its first step.
+    /// </summary>
+    private static void LinkFusedOptimizerState(
+        ICompiledTrainingPlan<T> plan,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? eagerOptimizer)
+    {
+        if (eagerOptimizer is not AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> optimizer)
+            return;
+
+        if (optimizer.TakePendingFusedOptimizerState() is { } restored)
+        {
+            // Reconfigures the plan's optimizer from the checkpoint (hyperparameters, schedule position, step and
+            // moments), so the next Step continues the checkpointed trajectory exactly.
+            plan.ImportOptimizerState(restored);
+        }
+
+        var state = CurrentState;
+        optimizer.AttachFusedOptimizerState(new AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>.FusedOptimizerStateLink(
+            export: () => ReferenceEquals(state.configuredPlan, plan) ? plan.ExportOptimizerState() : null,
+            release: () =>
+            {
+                var previous = _currentState;
+                _currentState = state;
+                try
+                {
+                    if (ReferenceEquals(state.configuredPlan, plan))
+                        Invalidate();
+                }
+                finally { _currentState = previous; }
+            }));
     }
 
     private static void RefreshCompiledStochasticState(IReadOnlyList<ITrainableLayer<T>> layers)

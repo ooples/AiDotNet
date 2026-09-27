@@ -194,6 +194,58 @@ public class StreamingStepTrainingTests : IDisposable
     }
 
     [Fact(Timeout = 180000)]
+    public async Task StoppedAndResumedRun_OnTheFusedPath_ContinuesTheOptimizerExactly()
+    {
+        // Without a scheduler the builder trains on the FUSED compiled path, where Adam's moments and step counter
+        // live inside the compiled plan rather than the optimizer object. The checkpoint must carry the plan's state:
+        // before it did, the resumed run restarted Adam and diverged on its very first step.
+        await Task.Yield();
+        var init = InitialWeights();
+        var straight = await Train(25, resume: false, Checkpoints("fused-straight", saveEvery: 1000), init);
+
+        // Guard against a vacuous pass: this test is about the fused path, so prove the run took it. The eager tape
+        // path advances the optimizer's own step counter; the fused path leaves it at zero.
+        var tapeStep = typeof(AdamOptimizer<float, Tensor<float>, Tensor<float>>).GetField(
+            "_tapeStep", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        Assert.Equal(0, (int)tapeStep.GetValue(straight.Opt)!);
+
+        var first = await Train(13, resume: true, Checkpoints("fused-resumed", saveEvery: 4), init);
+        Assert.True(MaxAbsDiff(first.Model.GetParameters(), straight.Model.GetParameters()) > 1e-3,
+            "the stop point must differ from the end point, or the equality below proves nothing");
+
+        var scrambled = new Vector<float>(Enumerable.Repeat(0.123f, init.Length).ToArray());
+        var resumed = await Train(25, resume: true, Checkpoints("fused-resumed", saveEvery: 4), scrambled);
+        Assert.True(MaxAbsDiff(resumed.Model.GetParameters(), straight.Model.GetParameters()) == 0.0,
+            "resumed fused run diverged from the uninterrupted run by " +
+            $"{MaxAbsDiff(resumed.Model.GetParameters(), straight.Model.GetParameters())}");
+    }
+
+    [Fact(Timeout = 180000)]
+    public async Task FusedCheckpoint_ResumedOnTheEagerPath_IsRefusedRatherThanRestartingTheOptimizer()
+    {
+        await Task.Yield();
+        var init = InitialWeights();
+        var fused = await Train(13, resume: false, Checkpoints("fused-to-eager", saveEvery: 1000), init);
+        byte[] optimizerState = fused.Opt.Serialize();
+
+        var optimizer = Optimizer(epochs: 100);
+        var model = Model(optimizer);
+        model.SetParameters(fused.Model.GetParameters());
+        model.SetBaseTrainOptimizer(optimizer);
+        optimizer.Deserialize(optimizerState);
+
+        // Force the eager path: the checkpoint's Adam state lives in a compiled-plan payload the eager optimizer
+        // cannot use, so training on would restart Adam silently.
+        typeof(NeuralNetworkBase<float>).GetField(
+                "_fusedTrainingDisabled", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+            .SetValue(model, true);
+        var (x, y) = Data(1);
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => model.Train(Stack(x.Take(BatchSize).ToArray()), Stack(y.Take(BatchSize).ToArray())));
+        Assert.Contains("fused compiled training", ex.Message);
+    }
+
+    [Fact(Timeout = 180000)]
     public async Task Training_IsIdenticalWhetherStepsRunOnOneThreadOrHopBetweenThreads()
     {
         await Task.Yield();

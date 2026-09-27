@@ -109,6 +109,49 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
     private const string TapeStateExtensionMarker = "AiDotNet.GradientTapeOptimizerState.v1";
     private const string SchedulerStateExtensionMarker = "AiDotNet.LearningRateSchedulerState.v1";
+    private const string FusedPlanStateExtensionMarker = "AiDotNet.FusedPlanOptimizerState.v1";
+
+    /// <summary>
+    /// The compiled training plan currently running this optimizer's update, when training takes the fused path.
+    /// A fused optimizer keeps its moments and step counter inside that plan, not in this object, so serializing
+    /// only this object would record an empty state and a resumed run would restart the optimizer.
+    /// </summary>
+    private FusedOptimizerStateLink? _fusedStateLink;
+
+    /// <summary>
+    /// Fused-plan state read from a checkpoint and not yet installed: the next fused step imports it into its
+    /// freshly configured plan. While it is pending, an eager step would silently restart the optimizer, so the
+    /// eager path refuses to run instead.
+    /// </summary>
+    private byte[]? _pendingFusedPlanState;
+
+    /// <summary>How the compiled plan running this optimizer exports its state and is released.</summary>
+    internal sealed class FusedOptimizerStateLink
+    {
+        internal FusedOptimizerStateLink(Func<byte[]?> export, Action release)
+        {
+            Export = export ?? throw new ArgumentNullException(nameof(export));
+            Release = release ?? throw new ArgumentNullException(nameof(release));
+        }
+
+        /// <summary>The plan's optimizer state, or <c>null</c> when that plan is no longer the live one.</summary>
+        internal Func<byte[]?> Export { get; }
+
+        /// <summary>Drops the plan so the next fused step configures (and imports into) a fresh one.</summary>
+        internal Action Release { get; }
+    }
+
+    /// <summary>Records the compiled plan that now runs this optimizer's update.</summary>
+    internal void AttachFusedOptimizerState(FusedOptimizerStateLink link)
+        => _fusedStateLink = link ?? throw new ArgumentNullException(nameof(link));
+
+    /// <summary>Returns and clears the fused-plan state restored from a checkpoint, if any.</summary>
+    internal byte[]? TakePendingFusedOptimizerState()
+    {
+        var pending = _pendingFusedPlanState;
+        _pendingFusedPlanState = null;
+        return pending;
+    }
 
     private readonly ConcurrentDictionary<Tensor<T>, int> _tapeParameterIndices =
         new(TensorReferenceComparer<Tensor<T>>.Instance);
@@ -2428,6 +2471,14 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     protected void PrepareTapeState(TapeStepContext<T> context)
     {
         Guard.NotNull(context);
+        if (_pendingFusedPlanState is not null)
+        {
+            throw new InvalidOperationException(
+                $"{GetType().Name} was restored from a checkpoint written during fused compiled training, whose " +
+                "optimizer state lives in the compiled plan, but this step is running on the eager path, which " +
+                "cannot use it. Continuing would silently restart the optimizer. Resume with the same model, " +
+                "optimizer and device so the fused path engages, or restore from a checkpoint written on the eager path.");
+        }
 
         lock (_tapeStateSync)
         {
@@ -2754,6 +2805,17 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 LearningRateSchedulerCheckpointFactory.CaptureState(_learningRateScheduler)));
         }
         writer.Write((int)_schedulerStepMode);
+
+        // The fused plan's own state (moments, step counter, schedule position). A checkpoint restored but not yet
+        // installed is carried forward unchanged, so saving again before the first resumed step loses nothing.
+        byte[]? fusedState = _fusedStateLink?.Export() ?? _pendingFusedPlanState;
+        writer.Write(FusedPlanStateExtensionMarker);
+        writer.Write(fusedState is not null);
+        if (fusedState is not null)
+        {
+            writer.Write(fusedState.Length);
+            writer.Write(fusedState);
+        }
     }
 
     /// <inheritdoc />
@@ -2851,6 +2913,33 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
                     _schedulerStepMode = (SchedulerStepMode)serializedStepMode;
                     GradientOptions.SchedulerStepMode = _schedulerStepMode;
+                }
+            }
+
+            // Whatever plan was running this optimizer is now out of date: release it, so the next fused step
+            // configures a fresh plan and installs the restored state into it.
+            _fusedStateLink?.Release();
+            _fusedStateLink = null;
+            _pendingFusedPlanState = null;
+            if (reader.BaseStream.Position < reader.BaseStream.Length)
+            {
+                string fusedMarker = reader.ReadString();
+                if (!string.Equals(fusedMarker, FusedPlanStateExtensionMarker, StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException($"Unknown optimizer extension payload '{fusedMarker}'.");
+                }
+
+                if (reader.ReadBoolean())
+                {
+                    int length = reader.ReadInt32();
+                    long remaining = reader.BaseStream.Length - reader.BaseStream.Position;
+                    if (length <= 0 || length > remaining)
+                    {
+                        throw new InvalidOperationException(
+                            $"Optimizer checkpoint declares a fused-plan state of {length} bytes but only {remaining} remain.");
+                    }
+
+                    _pendingFusedPlanState = reader.ReadBytes(length);
                 }
             }
         }
