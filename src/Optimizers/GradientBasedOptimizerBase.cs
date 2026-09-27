@@ -125,6 +125,13 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </summary>
     private byte[]? _pendingFusedPlanState;
 
+    /// <summary>
+    /// Set when a checkpoint restored optimizer moments for the EAGER path (a tape step counter or tape tensor
+    /// state) but no fused-plan state. A fused plan cannot use the eager moments, so the first fused step refuses
+    /// instead of silently restarting the optimizer; the first eager step clears it.
+    /// </summary>
+    private bool _restoredEagerStateAwaitingEagerPath;
+
     /// <summary>How the compiled plan running this optimizer exports its state and is released.</summary>
     internal sealed class FusedOptimizerStateLink
     {
@@ -145,12 +152,28 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     internal void AttachFusedOptimizerState(FusedOptimizerStateLink link)
         => _fusedStateLink = link ?? throw new ArgumentNullException(nameof(link));
 
-    /// <summary>Returns and clears the fused-plan state restored from a checkpoint, if any.</summary>
-    internal byte[]? TakePendingFusedOptimizerState()
+    /// <summary>The fused-plan state restored from a checkpoint and not yet installed, if any.</summary>
+    internal byte[]? PeekPendingFusedOptimizerState() => _pendingFusedPlanState;
+
+    /// <summary>
+    /// Records that the pending fused-plan state is now installed in a plan. Called only after the import
+    /// succeeded, so a failed import leaves the state pending and the eager-path guard still refuses to restart.
+    /// </summary>
+    internal void MarkPendingFusedOptimizerStateInstalled() => _pendingFusedPlanState = null;
+
+    /// <summary>
+    /// Throws when this optimizer holds eager-path moments from a checkpoint that a fused plan would discard.
+    /// </summary>
+    internal void EnsureRestoredStateUsableByFusedPlan()
     {
-        var pending = _pendingFusedPlanState;
-        _pendingFusedPlanState = null;
-        return pending;
+        if (_restoredEagerStateAwaitingEagerPath)
+        {
+            throw new InvalidOperationException(
+                $"{GetType().Name} was restored from a checkpoint written on the eager path, whose optimizer moments " +
+                "live in the optimizer itself, but training is now taking the fused compiled path, which cannot use " +
+                "them. Continuing would silently restart the optimizer. Resume with the same configuration so the " +
+                "eager path is taken, or restore from a checkpoint written during fused training.");
+        }
     }
 
     private readonly ConcurrentDictionary<Tensor<T>, int> _tapeParameterIndices =
@@ -2480,6 +2503,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 "optimizer and device so the fused path engages, or restore from a checkpoint written on the eager path.");
         }
 
+        // The eager path is consuming the restored eager moments, which is exactly what they are for.
+        _restoredEagerStateAwaitingEagerPath = false;
+
         lock (_tapeStateSync)
         {
             var parameters = context.Parameters;
@@ -2808,7 +2834,15 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
         // The fused plan's own state (moments, step counter, schedule position). A checkpoint restored but not yet
         // installed is carried forward unchanged, so saving again before the first resumed step loses nothing.
-        byte[]? fusedState = _fusedStateLink?.Export() ?? _pendingFusedPlanState;
+        byte[]? liveFusedState = _fusedStateLink?.Export();
+        if (_fusedStateLink is not null && liveFusedState is null)
+        {
+            // The linked plan is no longer live (invalidated, or dropped after a fused-path failure, from which the
+            // eager path took over with its own state). Detach it so this optimizer no longer claims a live plan.
+            _fusedStateLink = null;
+        }
+
+        byte[]? fusedState = liveFusedState ?? _pendingFusedPlanState;
         writer.Write(FusedPlanStateExtensionMarker);
         writer.Write(fusedState is not null);
         if (fusedState is not null)
@@ -2840,6 +2874,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             }
 
             ClearSerializedTapeState();
+            bool restoredEagerMoments = false;
 
             // Validate the declared table sizes against what the writer can
             // legally emit BEFORE looping/allocating, so a truncated or hostile
@@ -2858,6 +2893,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             {
                 string fieldName = reader.ReadString();
                 int value = reader.ReadInt32();
+                restoredEagerMoments |= value > 0;
                 var field = EnumerateOptimizerFields()
                     .FirstOrDefault(candidate => candidate.Name == fieldName && candidate.FieldType == typeof(int));
                 field?.SetValue(this, value);
@@ -2874,7 +2910,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 for (int i = 0; i < tensorStateFieldCount; i++)
                 {
                     string fieldName = reader.ReadString();
-                    _pendingTapeTensorStates[fieldName] = ReadTapeTensorStateDictionary(reader);
+                    var entries = ReadTapeTensorStateDictionary(reader);
+                    restoredEagerMoments |= entries.Count > 0;
+                    _pendingTapeTensorStates[fieldName] = entries;
                 }
             }
             if (reader.BaseStream.Position < reader.BaseStream.Length)
@@ -2942,6 +2980,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                     _pendingFusedPlanState = reader.ReadBytes(length);
                 }
             }
+
+            _restoredEagerStateAwaitingEagerPath = restoredEagerMoments && _pendingFusedPlanState is null;
         }
         catch (Exception ex) when (ex is System.IO.EndOfStreamException or System.IO.IOException)
         {

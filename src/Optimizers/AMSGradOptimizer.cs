@@ -416,7 +416,7 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
             // mHat = m / (1 - beta1^t)
             var mHat = Engine.TensorDivideScalar(m, biasCorrection1);
 
-            // update = lr * mHat / (sqrt(vHat) + epsilon)
+            // update = lr * mHat / (sqrt(vHat / (1 - beta2^t)) + epsilon)
             var denom = Engine.TensorAddScalar(Engine.TensorSqrt(Engine.TensorDivideScalar(vHat, biasCorrection2)), epsilon);
             var update = Engine.TensorMultiplyScalar(Engine.TensorDivide(mHat, denom), CurrentLearningRate);
             Engine.TensorSubtractInPlace(param, update);

@@ -299,7 +299,7 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         var oneMinusBeta2TimesGradSq = (Vector<T>)Engine.Multiply(gradSquared, oneMinusBeta2);
         _v = (Vector<T>)Engine.Add(beta2TimesV, oneMinusBeta2TimesGradSq);
 
-        // Compute bias-corrected first moment estimate: mHat = m / (1 - beta1^t)
+        // Bias-correct the momentum term with the NEXT step's factor: mHat = m / (1 - beta1^(t+1))
         var mHat = (Vector<T>)Engine.Divide(_m, biasCorrectionMNext);
 
         // Compute bias-corrected second raw moment estimate: vHat = v / (1 - beta2^t)
@@ -397,7 +397,7 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         // Per-element operand and association order preserved exactly (Dozat 2016), including the
         // Nesterov term built from the bias-corrected mHat and the raw gradient:
         //   m = b1*m + (1-b1)*g ;  v = b2*v + ((g*g)*(1-b2))
-        //   mHatNesterov = b1*(m/bcM) + nesterovFactor*g
+        //   mHatNesterov = b1*(m/bcMNext) + nesterovFactor*g   (bcMNext = 1 - b1^(t+1), nesterovFactor = (1-b1)/(1 - b1^t))
         //   out = p - (mHatNesterov*lr) / (sqrt(v/bcV) + eps)
         var updatedParams = new Vector<T>(parameters.Length, skipZeroInit: true);
         var pSpan = parameters.AsSpan();

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
