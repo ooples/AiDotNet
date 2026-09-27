@@ -200,7 +200,9 @@ public class TapeOptimizerSerializationTests
         yield return new object[] { "Adam", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new AdamOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>> { UseAMSGrad = false }))) };
         yield return new object[] { "AdamAMSGrad", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new AdamOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>> { UseAMSGrad = true }))) };
         yield return new object[] { "AdamW", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new AdamWOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>> { WeightDecay = 0.0 }))) };
-        yield return new object[] { "Adam8Bit", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new Adam8BitOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new Adam8BitOptimizerOptions<double, Tensor<double>, Tensor<double>> { BlockSize = 2, CompressBothMoments = true, QuantizationPercentile = 100.0, UseStochasticRounding = false, UseBFloat16MomentStorage = false }))) };
+        yield return new object[] { "Adam8Bit", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new Adam8BitOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new Adam8BitOptimizerOptions<double, Tensor<double>, Tensor<double>> { Min8BitSize = 0, BlockSize = 2, CompressBothMoments = true, QuantizationPercentile = 100.0, UseStochasticRounding = false, UseBFloat16MomentStorage = false }))) };
+        // Default Min8BitSize: these small parameters take the full-precision moment layout.
+        yield return new object[] { "Adam8BitBelowMin8BitSize", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new Adam8BitOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new Adam8BitOptimizerOptions<double, Tensor<double>, Tensor<double>> { BlockSize = 2, CompressBothMoments = true }))) };
         yield return new object[] { "AMSGrad", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new AMSGradOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new AMSGradOptimizerOptions<double, Tensor<double>, Tensor<double>>()))) };
         yield return new object[] { "AdaMax", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new AdaMaxOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new AdaMaxOptimizerOptions<double, Tensor<double>, Tensor<double>>()))) };
         yield return new object[] { "AdaDelta", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new AdaDeltaOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new AdaDeltaOptimizerOptions<double, Tensor<double>, Tensor<double>>()))) };
@@ -357,6 +359,7 @@ public class TapeOptimizerSerializationTests
             null,
             Common(new Adam8BitOptimizerOptions<double, Tensor<double>, Tensor<double>>
             {
+                Min8BitSize = 0,
                 BlockSize = 2,
                 CompressBothMoments = true,
                 QuantizationPercentile = 100.0,
@@ -376,7 +379,8 @@ public class TapeOptimizerSerializationTests
         stream.Position += baseDataLength;
 
         _ = reader.ReadString();
-        _ = reader.ReadInt32();
+        _ = reader.ReadInt32(); // magic
+        int versionOffset = checked((int)stream.Position);
         _ = reader.ReadInt32();
         _ = reader.ReadInt32();
         _ = reader.ReadInt32();
@@ -404,6 +408,9 @@ public class TapeOptimizerSerializationTests
         int tapeOffset = checked((int)stream.Position);
         var legacyPayload = new byte[tapeOffset];
         Array.Copy(serialized, legacyPayload, tapeOffset);
+        // Payloads that ended before the tape section were written by format version 2, which also had no
+        // full-precision (below Min8BitSize) section; label it as such so it is a genuine legacy payload.
+        BitConverter.GetBytes(2).CopyTo(legacyPayload, versionOffset);
         return legacyPayload;
     }
 
