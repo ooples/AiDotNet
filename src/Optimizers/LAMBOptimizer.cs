@@ -68,14 +68,17 @@ public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// Describes this LAMB instance for the fused kernel (Tensors
     /// <c>OptimizerType.LAMB</c> = <c>LAMBUpdateSimd(lr, b1, b2, eps, wd)</c>):
     /// Beta1/Beta2 → β1/β2, Epsilon → eps, WeightDecay → wd. Declines (eager) on
-    /// adaptive LR or an unmappable scheduler. Parity-gated — if AiDotNet's
-    /// trust-ratio clamp (MaxTrustRatio) differs from the kernel's the parity
-    /// test fails and this stays unwired.
+    /// adaptive LR, an unmappable scheduler, or a trust-ratio clamp: the kernel computes
+    /// the unclamped ||w|| / ||r||, so with ClipTrustRatio (the default, MaxTrustRatio 10)
+    /// fused and eager training diverge (measured 2.9e-4 over 40 steps against 6.7e-7 for
+    /// the Adam control; 4.6e-5 with the clamp off). Parity-gated by
+    /// FusedOptimizerParityTests.
     /// </summary>
     bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
     {
         config = default;
         if (_options.UseAdaptiveLearningRate) return false;
+        if (_options.ClipTrustRatio) return false;
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.LAMB,
