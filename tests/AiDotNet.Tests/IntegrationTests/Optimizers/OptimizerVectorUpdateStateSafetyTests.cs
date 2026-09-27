@@ -116,6 +116,10 @@ public class OptimizerVectorUpdateStateSafetyTests
             null!, new AdaMaxOptimizerOptions<double, Matrix<double>, Vector<double>> { InitialLearningRate = 0.01 })),
         ("AdaDelta", () => new AdaDeltaOptimizer<double, Matrix<double>, Vector<double>>(
             null!, new AdaDeltaOptimizerOptions<double, Matrix<double>, Vector<double>> { InitialLearningRate = 0.01 })),
+        ("Adafactor", () => new AdafactorOptimizer<double, Matrix<double>, Vector<double>>(
+            null, new AdafactorOptimizerOptions<double, Matrix<double>, Vector<double>> { InitialLearningRate = 0.01 })),
+        ("ScheduleFreeAdamW", () => new ScheduleFreeAdamWOptimizer<double, Matrix<double>, Vector<double>>(
+            null, new ScheduleFreeAdamWOptimizerOptions<double, Matrix<double>, Vector<double>> { InitialLearningRate = 0.01 })),
         ("RMSprop", () => new RootMeanSquarePropagationOptimizer<double, Matrix<double>, Vector<double>>(
             null!, new RootMeanSquarePropagationOptimizerOptions<double, Matrix<double>, Vector<double>>
             {

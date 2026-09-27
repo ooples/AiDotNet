@@ -566,7 +566,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
                         trainableLayers, input, expected,
                         forward: FwdCLAP, computeLoss: LossCLAP,
                         optimizer: optimizer,
-                        out T fusedLoss,
+                        out T fusedLoss, owner: this,
                         extraTensors: extras,
                         onGradients: gradients => PublishParameterGradients(gradients)))
                 {
