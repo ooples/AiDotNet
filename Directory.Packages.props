@@ -1,5 +1,6 @@
 ﻿<Project>
   <PropertyGroup>
+    <LocalTensorsVersion Condition="'$(LocalTensorsVersion)' == ''">0.132.2-local.29e61a1</LocalTensorsVersion>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
@@ -357,7 +358,7 @@
          on the same release. -->
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.130.3" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.130.3" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.132.2-local.29e61a1" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="$(LocalTensorsVersion)" />
     <PackageVersion Include="AiDotNet.Evolution" Version="0.1.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.130.3" />
     <!-- Microsoft / .NET -->

@@ -12650,7 +12650,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // kernels) are equally stale here. Every other in-place update path
             // flushes via this helper; without it, fused-compatible training reuses
             // frozen pre-step weights on the next forward and never learns.
-            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+            // GPU-resident parameters were updated ON the device by the plan's optimizer, which is exactly
+            // the case the host-authoritative invalidation must skip.
+            InvalidateWeightCachesAfterSuccessfulWeightUpdate(updatedOnDevice: true);
 
             // Emit diagnostic events for the fused-path hit. This is the
             // ONLY place we can observe that the fused path ran without
@@ -13529,6 +13531,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// always live. Mirrors the OnParametersUpdated contract.
     /// </remarks>
     protected void InvalidateWeightCachesAfterSuccessfulWeightUpdate()
+        => InvalidateWeightCachesAfterSuccessfulWeightUpdate(updatedOnDevice: false);
+
+    /// <param name="updatedOnDevice">
+    /// True when the optimizer that just ran updated the parameters ON THE DEVICE (the compiled fused step with
+    /// GPU-resident parameters). Those parameters' device buffers already hold the new values and the plan re-armed
+    /// their host download, so they must NOT be treated as host-authoritative: doing so dropped the device update and
+    /// detached the buffer the plan keeps writing, and GPU Train() stopped learning after its first step.
+    /// </param>
+    private void InvalidateWeightCachesAfterSuccessfulWeightUpdate(bool updatedOnDevice)
     {
         GpuEngine?.InvalidateAllWeightCaches();
         // InvalidateAllWeightCaches only clears the PERSISTENT + activation caches. It does NOT
@@ -13544,7 +13555,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (GpuEngine is { } gpuForInvalidate)
         {
             foreach (var wtensor in Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion))
+            {
+                if (updatedOnDevice && wtensor.IsGpuResident && wtensor.TryGetGpuBuffer() is not null)
+                    continue;
                 gpuForInvalidate.InvalidateResidentWeightBuffer(wtensor);
+            }
         }
         // CPU-side mirror of the same contract: the CPU engine's inference
         // fast paths cache DERIVED weight forms (SgemmWithCachedB's
