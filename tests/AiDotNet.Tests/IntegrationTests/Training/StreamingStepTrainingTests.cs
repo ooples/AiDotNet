@@ -246,6 +246,85 @@ public class StreamingStepTrainingTests : IDisposable
     }
 
     [Fact(Timeout = 180000)]
+    public async Task FusedCheckpoint_WhoseImportFails_IsRefusedRatherThanRestartingTheOptimizer()
+    {
+        // A fused-plan payload that cannot be installed must stay pending: the fused step falls back to the eager
+        // path, and the eager path must then refuse instead of restarting Adam from nothing.
+        await Task.Yield();
+        var init = InitialWeights();
+        var fused = await Train(13, resume: false, Checkpoints("fused-bad-import", saveEvery: 1000), init);
+        byte[] optimizerState = fused.Opt.Serialize();
+
+        // Corrupt the compiled-plan payload's magic ("AOPT") so ImportOptimizerState rejects it.
+        int magic = IndexOf(optimizerState, new byte[] { 0x41, 0x4F, 0x50, 0x54 });
+        Assert.True(magic >= 0, "the checkpoint must carry a fused-plan payload");
+        optimizerState[magic] = (byte)'X';
+
+        var optimizer = Optimizer(epochs: 100);
+        var model = Model(optimizer);
+        model.SetParameters(fused.Model.GetParameters());
+        model.SetBaseTrainOptimizer(optimizer);
+        optimizer.Deserialize(optimizerState);
+        var (x, y) = Data(1);
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => model.Train(Stack(x.Take(BatchSize).ToArray()), Stack(y.Take(BatchSize).ToArray())));
+        Assert.Contains("fused compiled training", ex.Message);
+    }
+
+    [Fact(Timeout = 180000)]
+    public async Task EagerCheckpoint_ResumedWithFusedEnabled_ContinuesFromTheRestoredEagerMoments()
+    {
+        // The mirror case: moments written on the eager path live in the optimizer, which a fused plan cannot use.
+        // The fused step must decline so the eager path consumes them; the resumed step then matches an eager
+        // continuation from the same checkpoint exactly, instead of restarting Adam inside a fresh plan.
+        await Task.Yield();
+        var (x, y) = Data(1);
+        var bx = Stack(x.Take(BatchSize).ToArray());
+        var by = Stack(y.Take(BatchSize).ToArray());
+        var fusedDisabled = typeof(NeuralNetworkBase<float>).GetField(
+            "_fusedTrainingDisabled", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+
+        var sourceOptimizer = Optimizer(epochs: 100);
+        var source = Model(sourceOptimizer);
+        source.SetParameters(InitialWeights());
+        source.SetBaseTrainOptimizer(sourceOptimizer);
+        fusedDisabled.SetValue(source, true);
+        for (int i = 0; i < 5; i++) source.Train(bx, by);
+        byte[] eagerState = sourceOptimizer.Serialize();
+        var weights = source.GetParameters();
+
+        FeedForwardNeuralNetwork<float> Restore(bool fused)
+        {
+            var optimizer = Optimizer(epochs: 100);
+            var model = Model(optimizer);
+            model.SetParameters(weights.Clone());
+            model.SetBaseTrainOptimizer(optimizer);
+            optimizer.Deserialize(eagerState);
+            if (!fused) fusedDisabled.SetValue(model, true);
+            return model;
+        }
+
+        var eagerContinuation = Restore(fused: false);
+        eagerContinuation.Train(bx, by);
+        var withFusedEnabled = Restore(fused: true);
+        withFusedEnabled.Train(bx, by);
+        Assert.True(MaxAbsDiff(withFusedEnabled.GetParameters(), eagerContinuation.GetParameters()) == 0.0,
+            "resuming an eager checkpoint with fused enabled discarded the restored moments; diverged by " +
+            $"{MaxAbsDiff(withFusedEnabled.GetParameters(), eagerContinuation.GetParameters())}");
+    }
+
+    private static int IndexOf(byte[] haystack, byte[] needle)
+    {
+        for (int i = 0; i <= haystack.Length - needle.Length; i++)
+        {
+            int j = 0;
+            while (j < needle.Length && haystack[i + j] == needle[j]) j++;
+            if (j == needle.Length) return i;
+        }
+        return -1;
+    }
+
+    [Fact(Timeout = 180000)]
     public async Task Training_IsIdenticalWhetherStepsRunOnOneThreadOrHopBetweenThreads()
     {
         await Task.Yield();

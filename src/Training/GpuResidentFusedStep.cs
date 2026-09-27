@@ -125,7 +125,10 @@ internal static class GpuResidentFusedStep<T>
             maxGradNorm: maxGradNorm,
             extraTensors: extraTensors,
             onGradients: onGradients,
-            owner: owner);
+            owner: owner,
+            // The optimizer INSTANCE, not just its hyperparameters: its moments live in the compiled plan, and the
+            // plan links itself to this instance so a checkpoint of the optimizer carries them.
+            eagerOptimizer: optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>);
     }
 
     /// <summary>

@@ -1394,11 +1394,17 @@ public static class CompiledTapeTrainingStep<T>
         if (eagerOptimizer is not AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> optimizer)
             return;
 
-        if (optimizer.TakePendingFusedOptimizerState() is { } restored)
+        if (optimizer.PeekPendingFusedOptimizerState() is { } restored)
         {
             // Reconfigures the plan's optimizer from the checkpoint (hyperparameters, schedule position, step and
-            // moments), so the next Step continues the checkpointed trajectory exactly.
+            // moments), so the next Step continues the checkpointed trajectory exactly. Marked installed only after
+            // the import succeeds: a failed import leaves it pending, so the eager fallback still refuses to run.
             plan.ImportOptimizerState(restored);
+            optimizer.MarkPendingFusedOptimizerStateInstalled();
+        }
+        else
+        {
+            optimizer.EnsureRestoredStateUsableByFusedPlan();
         }
 
         var state = CurrentState;
