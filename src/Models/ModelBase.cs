@@ -358,14 +358,37 @@ public abstract partial class ModelBase<T, TInput, TOutput> : IFullModel<T, TInp
             byte[] state = Serialize();
             var copy = (ModelBase<T, TInput, TOutput>)AiDotNet.Models.CloneEngine.CopyConfiguration(this);
             PrepareCopyForStateRestore(copy);
-            AiDotNet.Models.CloneEngine.PrepareParameterTopology(
-                this,
-                copy,
-                GetParameters().Length,
-                () => copy.GetParameters().Length);
+            // Bridging fitted topology needs a count from both sides. A model whose layout is still
+            // fit-deferred cannot give one -- it throws rather than answer zero -- and has no fitted
+            // topology to bridge either, so skip straight to the state restore below.
+            if (TryGetParameterCount(out int expectedParameterCount))
+            {
+                AiDotNet.Models.CloneEngine.PrepareParameterTopology(
+                    this,
+                    copy,
+                    expectedParameterCount,
+                    () => copy.GetParameters().Length);
+            }
             copy.Deserialize(state);
             AiDotNet.Models.CloneEngine.RestoreMutableConstructorConfiguration(this, copy);
             return copy;
+        }
+    }
+
+    /// <summary>Reads this model's parameter count, or reports that its layout is not resolved yet.</summary>
+    /// <param name="count">The parameter count when the layout is resolved; zero otherwise.</param>
+    /// <returns><c>true</c> when the count was read.</returns>
+    private bool TryGetParameterCount(out int count)
+    {
+        try
+        {
+            count = GetParameters().Length;
+            return true;
+        }
+        catch (AiDotNet.Models.Parameters.ParameterLayoutNotReadyException)
+        {
+            count = 0;
+            return false;
         }
     }
 

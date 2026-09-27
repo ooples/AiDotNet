@@ -501,7 +501,7 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
                     trainableDiscLayers, stacked, target,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _discriminatorOptimizer,
-                    out T _))
+                    out T _, owner: this))
             {
                 return;
             }
@@ -639,7 +639,7 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
                     trainableGenLayers, noiseBatch, realBatch,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _generatorOptimizer,
-                    out T _))
+                    out T _, owner: this))
             {
                 return;
             }

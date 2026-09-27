@@ -116,6 +116,9 @@ public abstract partial class TransformerNERBase<T> : SequenceLabeling.SequenceL
 
     #region Properties
 
+    /// <inheritdoc />
+    public override ModelOptions GetOptions() => _options;
+
     /// <summary>
     /// Gets the options for this transformer NER model.
     /// </summary>
@@ -488,6 +491,7 @@ public abstract partial class TransformerNERBase<T> : SequenceLabeling.SequenceL
                 baseLearningRate: _options.LearningRate,
                 warmupSteps: _options.WarmupSteps,
                 totalSteps: _options.TotalTrainingSteps,
+                // Zero is a valid, intentional first-update rate, not an unset sentinel.
                 warmupInitLr: _options.WarmupInitialLearningRate,
                 decayMode: _options.TotalTrainingSteps > _options.WarmupSteps
                     ? LinearWarmupScheduler.DecayMode.Linear

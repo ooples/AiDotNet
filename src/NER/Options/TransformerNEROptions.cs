@@ -360,9 +360,19 @@ public class TransformerNEROptions : NeuralNetworkOptions
     /// Gets or sets the number of optimizer updates used to linearly warm the learning rate from zero.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Set this to zero to disable warmup. Transformer fine-tuning commonly warms the learning rate
     /// before applying the full rate; Template-NER's reference implementation uses Hugging Face's
     /// linear warmup/decay schedule.
+    /// </para>
+    /// <para>
+    /// Warmup is ON by default (#2135). It used to default to zero, so every transformer NER model
+    /// took raw AdamW steps straight from initialisation — the condition BERT-family fine-tuning
+    /// uses warmup to avoid. The cost was measurable: LegalBERTNER's loss rose from 2.825676 after
+    /// one step to 3.992393 after two and needed roughly thirty steps to recover, which is well
+    /// past the budget a correctness probe can afford. Its sibling PromptNER already defaulted to
+    /// a warmup of ten for the same reason.
+    /// </para>
     /// </remarks>
     public int WarmupSteps
     {
@@ -375,7 +385,11 @@ public class TransformerNEROptions : NeuralNetworkOptions
             _warmupSteps = value;
         }
     }
-    private int _warmupSteps;
+    /// <summary>
+    /// Ten updates, matching the default PromptNER's paper-schedule factory already uses for this
+    /// family. Zero still disables warmup, so the documented opt-out is unchanged.
+    /// </summary>
+    private int _warmupSteps = 10;
 
     /// <summary>
     /// Gets or sets the learning rate used for the first warmup update.

@@ -15,6 +15,9 @@ public class Checkpoint<T, TInput, TOutput>
     /// <summary>
     /// Gets the unique identifier for this checkpoint.
     /// </summary>
+    // JsonProperty: Newtonsoft skips private setters, so without it a reloaded checkpoint got a NEW
+    // random id / creation time and no longer matched the index it was loaded from.
+    [Newtonsoft.Json.JsonProperty]
     public string CheckpointId { get; private set; }
 
     /// <summary>
@@ -77,6 +80,9 @@ public class Checkpoint<T, TInput, TOutput>
     /// <summary>
     /// Gets the timestamp when this checkpoint was created.
     /// </summary>
+    // JsonProperty: Newtonsoft skips private setters, so without it a reloaded checkpoint got a NEW
+    // random id / creation time and no longer matched the index it was loaded from.
+    [Newtonsoft.Json.JsonProperty]
     public DateTime CreatedAt { get; private set; }
 
     /// <summary>

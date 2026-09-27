@@ -566,7 +566,7 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
                     trainableGenLayers, noiseTensor, target,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _generatorOptimizer,
-                    out T _);
+                    out T _, owner: this);
                 if (!ran) { if (!fusedEngaged) break; continue; }
                 fusedEngaged = true;
             }
