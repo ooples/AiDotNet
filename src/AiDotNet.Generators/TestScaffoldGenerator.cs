@@ -2131,11 +2131,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static readonly DiagnosticDescriptor UntestedModel = new(
         id: "AIDN040",
         title: "Model has no test coverage",
-        messageFormat: "Model '{0}' has no corresponding test class and could not be auto-generated (missing category/task metadata)",
+        messageFormat: "Model '{0}' has no corresponding test class and could not be auto-generated (missing category/task metadata). Every model must have automated invariant tests; the only exemptions are the existing entries in DefectBaselines.UntestedModels, which may only shrink.",
         category: "AiDotNet.TestCoverage",
-        defaultSeverity: DiagnosticSeverity.Warning,
+        defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true,
         description: "Model has no test coverage and lacks sufficient metadata for auto-generation. Add [ModelCategory] and [ModelTask] attributes, or create a manual test class.");
+
+    private static readonly DiagnosticDescriptor StaleUntestedBaselineEntry = new(
+        id: "ADNGEN002",
+        title: "Untested-model baseline entry is stale",
+        messageFormat: "'{0}' is listed in DefectBaselines.UntestedModels but now has tests or no longer exists; remove its line so the baseline stays an exact inventory",
+        category: "AiDotNet.TestCoverage",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor CoverageSummary = new(
         id: "AIDN041",
@@ -3097,13 +3105,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             testedModels.Sort((a, b) => string.Compare(a.ClassName, b.ClassName, System.StringComparison.Ordinal));
             untestedModels.Sort((a, b) => string.Compare(a.ClassName, b.ClassName, System.StringComparison.Ordinal));
 
-            // Emit AIDN040 for remaining untested models
+            // AIDN040 is an error for any untested model outside the checked-in baseline, and ADNGEN002 an
+            // error for a baseline entry that is no longer untested, so the baseline can only shrink.
+            var untestedNames = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal);
             foreach (var model in untestedModels)
             {
+                untestedNames.Add(model.FullyQualifiedName);
+                if (DefectBaselines.UntestedModels.Contains(model.FullyQualifiedName))
+                    continue;
                 context.ReportDiagnostic(Diagnostic.Create(
                     UntestedModel,
                     Location.None,
-                    model.ClassName));
+                    model.FullyQualifiedName));
+            }
+            foreach (var baselined in DefectBaselines.UntestedModels)
+            {
+                if (!untestedNames.Contains(baselined))
+                    context.ReportDiagnostic(Diagnostic.Create(StaleUntestedBaselineEntry, Location.None, baselined));
             }
 
             // Emit AIDN041 summary

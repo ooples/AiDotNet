@@ -63,6 +63,7 @@ ADNPORT011 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Derived
 ADNPORT012 | AiDotNet.TensorPorts | Error | TensorPortContractGenerator, Input variants have indistinguishable required external signatures
 ADNBUF001 | AiDotNet.ParameterAutomation | Error | TrainableParameterGenerator, Distinct persistent fields declare the same generated buffer identity
 ADNGEN001 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Model cannot be auto-generated a test and therefore has NO coverage
+ADNGEN002 | AiDotNet.TestCoverage | Error | TestScaffoldGenerator, Untested-model baseline entry is stale
 AIDN081 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Layer parameter surfaces are derived by LayerBase and cannot be overridden
 AIDN082 | AiDotNet.ParameterAutomation | Error | ParameterAutomationAnalyzer, Model parameter surfaces are derived from registered components and cannot be overridden
 AIDN085 | AiDotNet.ParameterAutomation | Warning | ParameterAutomationAnalyzer, Model owns weights outside Layers but is not partial, so the generator cannot register them
@@ -89,3 +90,7 @@ AIDN103 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Paper optimiz
 AIDN104 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Declared paper recipe is never used, because the optimizer is still hardcoded
 AIDN105 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Citation URL claims to be arXiv but its identifier cannot exist
 AIDN106 | AiDotNet.PaperFidelity | Info | PaperOptimizerAnalyzer, Model cites a paper but does not declare the optimizer settings that paper specifies (Info while the backlog is large; promote per the AIDN087 ladder)
+ADNDEF001 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Two models implement the same paper
+ADNDEF002 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Transformer factory yields attention without a residual connection
+ADNDEF003 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Model reuses another paper's layer factory without declaring it
+ADNDEF004 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Model defect baseline entry is stale
