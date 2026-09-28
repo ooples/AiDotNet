@@ -69,7 +69,7 @@ namespace AiDotNet.Video.Generation;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-public partial class OpenSora<T> : NeuralNetworkBase<T>
+public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITrainingObjectiveProvider<T>
 {
     private readonly OpenSoraOptions _options;
 
@@ -85,6 +85,8 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>
     private int _hiddenDim;
     private int _numLayers;
     private int _numInferenceSteps;
+    // The timestep of the Train call in progress, read by ForwardForTraining; null outside Train.
+    private double? _trainingTime;
     private double _guidanceScale;
 
     // Patch embedding for spatiotemporal input
@@ -393,52 +395,78 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>
     /// <param name="expectedOutput">Target (typically the same as input for diffusion training).</param>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Sample a random timestep
+        // DDPM epsilon-prediction (Ho et al. 2020, Algorithm 1), the objective Open-Sora trains its DiT on: draw a
+        // timestep and noise, form x_t = sqrt(alpha_bar_t) x_0 + sqrt(1 - alpha_bar_t) eps, and fit the network's
+        // predicted noise to eps. The regression target is the drawn noise, so expectedOutput is not used.
+        // This used to compute the loss and a gradient by hand, never backpropagate it, and then call
+        // UpdateParameters with a hard-coded rate on every layer, so the model never trained. It now runs on the
+        // tape like every other network, with the base training loop's optimizer and loss.
         var random = RandomHelper.CreateSecureRandom();
         int timestep = random.Next(_numInferenceSteps);
-        double t = 1.0 - (double)timestep / _numInferenceSteps;
-
-        // Get noise schedule parameters
         double alphaCumprod = _alphasCumprod[timestep];
-        double sqrtAlphaCumprod = Math.Sqrt(alphaCumprod);
-        double sqrtOneMinusAlphaCumprod = Math.Sqrt(1 - alphaCumprod);
-
-        // Sample noise
         var noise = InitializeLatents(input._shape, random);
+        var noisyInput = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(input, NumOps.FromDouble(Math.Sqrt(alphaCumprod))),
+            Engine.TensorMultiplyScalar(noise, NumOps.FromDouble(Math.Sqrt(1 - alphaCumprod))));
 
-        // Create noisy input: x_t = sqrt(alpha_cumprod) * x_0 + sqrt(1 - alpha_cumprod) * noise
-        var scaledInput = Engine.TensorMultiplyScalar(input, NumOps.FromDouble(sqrtAlphaCumprod));
-        var scaledNoise = Engine.TensorMultiplyScalar(noise, NumOps.FromDouble(sqrtOneMinusAlphaCumprod));
-        var noisyInput = Engine.TensorAdd(scaledInput, scaledNoise);
-
-        // Forward pass: predict the noise
-        var timeEmbed = CreateTimeEmbedding(t);
-        var predictedNoise = PredictNoise(noisyInput, null, timeEmbed);
-
-        // Compute MSE loss between predicted and actual noise
-        T loss = NumOps.Zero;
-        for (int i = 0; i < noise.Length; i++)
+        _trainingTime = 1.0 - (double)timestep / _numInferenceSteps;
+        SetTrainingMode(true);
+        try
         {
-            T diff = NumOps.Subtract(predictedNoise.Data.Span[i], noise.Data.Span[i]);
-            loss = NumOps.Add(loss, NumOps.Multiply(diff, diff));
+            TrainWithTape(noisyInput, noise);
         }
-        loss = NumOps.Divide(loss, NumOps.FromDouble(noise.Length));
-        LastLoss = loss;
-
-        // Compute gradient: d(MSE)/d(pred) = 2 * (pred - target) / N
-        var gradient = new Tensor<T>(predictedNoise._shape);
-        T scale = NumOps.FromDouble(2.0 / noise.Length);
-        for (int i = 0; i < noise.Length; i++)
+        finally
         {
-            T diff = NumOps.Subtract(predictedNoise.Data.Span[i], noise.Data.Span[i]);
-            gradient.Data.Span[i] = NumOps.Multiply(diff, scale);
+            _trainingTime = null;
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <summary>
+    /// During <see cref="Train"/>, the denoiser's forward at the step's timestep: the time embedding is built here,
+    /// inside the taped forward, so its layer receives gradients too. Outside training it is the ordinary forward.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        => _trainingTime is { } time ? PredictNoise(input, null, CreateTimeEmbedding(time)) : base.ForwardForTraining(input);
+
+    /// <summary>
+    /// Each step conditions on a freshly drawn timestep, so a compiled plan that froze the first step's time
+    /// embedding would train every later step at the wrong noise level. Train on the eager tape.
+    /// </summary>
+    protected override bool SupportsFusedCompiledTraining => false;
+
+    /// <inheritdoc/>
+    AiDotNet.Enums.TrainingObjectiveKind AiDotNet.Interfaces.ITrainingObjectiveProvider<T>.TrainingObjectiveKind
+        => AiDotNet.Enums.TrainingObjectiveKind.DiffusionDenoising;
+
+    /// <summary>The clip being learned is x_0 itself: Train noises its input, not a separate target.</summary>
+    Tensor<T> AiDotNet.Interfaces.ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget)
+        => input;
+
+    /// <summary>
+    /// L_simple over a fixed (timestep, noise) quadrature, through the configured loss: four timesteps spread over
+    /// the schedule, each with seeded noise. A single Train call draws one random timestep, and the epsilon-MSE at
+    /// one noise level is not comparable with the next step's at another, so this is the quantity whose decrease
+    /// means the denoiser learned. It is deterministic and never updates parameters.
+    /// </summary>
+    T AiDotNet.Interfaces.ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        const int Points = 4;
+        int points = Math.Min(Points, _numInferenceSteps);
+        double total = 0;
+        for (int k = 0; k < points; k++)
+        {
+            int timestep = Math.Min(_numInferenceSteps - 1, (int)((k + 0.5) * _numInferenceSteps / points));
+            double alphaCumprod = _alphasCumprod[timestep];
+            var noise = InitializeLatents(target._shape, new Random(20260928 + k));
+            var noisy = Engine.TensorAdd(
+                Engine.TensorMultiplyScalar(target, NumOps.FromDouble(Math.Sqrt(alphaCumprod))),
+                Engine.TensorMultiplyScalar(noise, NumOps.FromDouble(Math.Sqrt(1 - alphaCumprod))));
+            var predicted = PredictNoise(noisy, null, CreateTimeEmbedding(1.0 - (double)timestep / _numInferenceSteps));
+            total += NumOps.ToDouble(LossFunction.CalculateLoss(predicted.ToVector(), noise.ToVector()));
         }
 
-        // Backpropagate through the network
-
-        // Update parameters
-        T lr = NumOps.FromDouble(0.0001);
-        foreach (var layer in Layers) layer.UpdateParameters(lr);
+        return NumOps.FromDouble(total / points);
     }
 
     #endregion
@@ -522,33 +550,26 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>
         }
         features = AddCondition(features, timeEmbed);
 
-        // DiT blocks with multi-head self-attention
-        for (int i = 0; i < _numLayers; i++)
+        // DiT blocks with multi-head self-attention. Training checkpoints them: only segment boundaries are kept
+        // and each segment is recomputed in the backward (Chen et al. 2016), sqrt(N) blocks per segment, the same
+        // trade NoisePredictorBase makes. At Open-Sora's sequence length a taped step that kept every block's
+        // activations would not fit; the reference implementation trains with gradient checkpointing as well.
+        if (_trainingTime is not null)
         {
-            var residual = features;
+            var blocks = new Func<Tensor<T>, Tensor<T>>[_numLayers];
+            for (int b = 0; b < _numLayers; b++)
+            {
+                int block = b;
+                blocks[b] = x => DiTBlock(block, x);
+            }
 
-            // Pre-norm (layer normalization)
-            var normed = LayerNorm(features);
-
-            // Multi-head self-attention
-            var qkv = _ditQKV[i].Forward(normed);
-            var attended = DiTMultiHeadAttention(qkv, features._shape);
-            attended = _ditAttnProj[i].Forward(attended);
-
-            // First residual connection
-            features = AddTensors(features, attended);
-
-            // Pre-norm for FFN
-            residual = features;
-            normed = LayerNorm(features);
-
-            // FFN with GELU activation
-            var ffnOut = _ditFFN1[i].Forward(normed);
-            ffnOut = ApplyGELU(ffnOut);
-            ffnOut = _ditFFN2[i].Forward(ffnOut);
-
-            // Second residual connection
-            features = AddTensors(features, ffnOut);
+            int segmentSize = Math.Max(1, (int)Math.Sqrt(_numLayers));
+            features = AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing<T>.Checkpoint(blocks, features, segmentSize);
+        }
+        else
+        {
+            for (int i = 0; i < _numLayers; i++)
+                features = DiTBlock(i, features);
         }
 
         // Final prediction
@@ -558,56 +579,57 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>
         return UnpatchifyNoise(noise, latents._shape);
     }
 
+    /// <summary>One pre-norm DiT block: self-attention and a GELU feed-forward, each with a residual.</summary>
+    private Tensor<T> DiTBlock(int i, Tensor<T> features)
+    {
+        var residual = features;
+
+        // Pre-norm (layer normalization)
+        var normed = LayerNorm(features);
+
+        // Multi-head self-attention
+        var qkv = _ditQKV[i].Forward(normed);
+        var attended = DiTMultiHeadAttention(qkv, features._shape);
+        attended = _ditAttnProj[i].Forward(attended);
+
+        // First residual connection
+        features = AddTensors(features, attended);
+
+        // Pre-norm for FFN
+        residual = features;
+        normed = LayerNorm(features);
+
+        // FFN with GELU activation
+        var ffnOut = _ditFFN1[i].Forward(normed);
+        ffnOut = ApplyGELU(ffnOut);
+        ffnOut = _ditFFN2[i].Forward(ffnOut);
+
+        // Second residual connection
+        features = AddTensors(features, ffnOut);
+        return features;
+    }
+
     /// <summary>
     /// Converts patched noise back to full resolution using pixel shuffle and bilinear interpolation.
     /// </summary>
     private Tensor<T> UnpatchifyNoise(Tensor<T> patchedNoise, int[] targetShape)
     {
-        int batchSize = targetShape[0];
-        int channels = targetShape[1];
-        int height = targetShape[2];
-        int width = targetShape[3];
-
-        int srcH = patchedNoise.Shape[2];
-        int srcW = patchedNoise.Shape[3];
-
-        // Use bilinear interpolation for smooth upsampling
-        var noise = new Tensor<T>(targetShape);
-
-        for (int b = 0; b < batchSize; b++)
-            for (int c = 0; c < channels; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                    {
-                        // Compute source coordinates with bilinear interpolation
-                        double srcY = (h + 0.5) * srcH / height - 0.5;
-                        double srcX = (w + 0.5) * srcW / width - 0.5;
-
-                        // Clamp to valid range
-                        srcY = Math.Max(0, Math.Min(srcY, srcH - 1));
-                        srcX = Math.Max(0, Math.Min(srcX, srcW - 1));
-
-                        // Bilinear interpolation
-                        int y0 = (int)Math.Floor(srcY);
-                        int x0 = (int)Math.Floor(srcX);
-                        int y1 = Math.Min(y0 + 1, srcH - 1);
-                        int x1 = Math.Min(x0 + 1, srcW - 1);
-
-                        double wy = srcY - y0;
-                        double wx = srcX - x0;
-
-                        double v00 = Convert.ToDouble(patchedNoise[b, c, y0, x0]);
-                        double v01 = Convert.ToDouble(patchedNoise[b, c, y0, x1]);
-                        double v10 = Convert.ToDouble(patchedNoise[b, c, y1, x0]);
-                        double v11 = Convert.ToDouble(patchedNoise[b, c, y1, x1]);
-
-                        double top = v00 * (1 - wx) + v01 * wx;
-                        double bottom = v10 * (1 - wx) + v11 * wx;
-                        double value = top * (1 - wy) + bottom * wy;
-                        noise[b, c, h, w] = NumOps.FromDouble(value);
-                    }
-
-        return noise;
+        if (patchedNoise.Rank != 4 || targetShape.Length != 4 || patchedNoise.Shape[1] < targetShape[1])
+            throw new ArgumentException(
+                $"OpenSora cannot unpatchify [{string.Join(", ", patchedNoise._shape)}] to [{string.Join(", ", targetShape)}].");
+        // The final layer emits more channels than the latent has; the noise is read from the leading ones, as the
+        // element loop this replaces did (it indexed channel c < targetShape[1] of the patched output).
+        if (patchedNoise.Shape[1] > targetShape[1])
+            // TensorSlice copies into a contiguous result and records its backward; a Narrow view is strided, and a
+            // batch > 1 then reached code that needs a contiguous span.
+            patchedNoise = Engine.TensorSlice(patchedNoise, new[] { 0, 0, 0, 0 },
+                new[] { patchedNoise.Shape[0], targetShape[1], patchedNoise.Shape[2], patchedNoise.Shape[3] });
+        if (patchedNoise.Shape[2] == targetShape[2] && patchedNoise.Shape[3] == targetShape[3])
+            return patchedNoise;
+        // Bilinear with half-pixel centres and edge clamping (PyTorch's align_corners=False): the arithmetic the
+        // element loop computed, as an engine op the tape can differentiate.
+        return Engine.Interpolate(patchedNoise, new[] { targetShape[2], targetShape[3] },
+            AiDotNet.Tensors.Engines.InterpolateMode.Bilinear, alignCorners: false);
     }
 
     private Tensor<T> DenoisingStep(Tensor<T> latents, Tensor<T> noisePred, int step)
@@ -842,16 +864,16 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>
 
     private Tensor<T> AddCondition(Tensor<T> features, Tensor<T> condition)
     {
-        int batchSize = features.Shape[0];
-        int channels = features.Shape[1];
-        int height = features.Shape[2];
-        int width = features.Shape[3];
-
-        return features.Transform((v, idx) =>
-        {
-            int condIdx = idx % condition.Data.Length;
-            return NumOps.Add(v, condition.Data.Span[condIdx]);
-        });
+        // A per-channel conditioning vector ([1 or B, C, 1, 1]) added to every position of [B, C, H, W] features.
+        // The previous element loop indexed the condition by flat NCHW position modulo its length, which is not the
+        // channel, so the embedding landed on scrambled channels; and it was invisible to the tape.
+        if (condition.Rank != 4 || condition.Shape[1] != features.Shape[1] || condition.Shape[2] != 1 || condition.Shape[3] != 1
+            || (condition.Shape[0] != 1 && condition.Shape[0] != features.Shape[0]))
+            throw new ArgumentException(
+                $"OpenSora conditioning must be [1 or batch, {features.Shape[1]}, 1, 1] against features " +
+                $"[{string.Join(", ", features._shape)}], got [{string.Join(", ", condition._shape)}].", nameof(condition));
+        // TensorAdd broadcasts by the NumPy rule, so [1 or B, C, 1, 1] reaches every position of its channel.
+        return Engine.TensorAdd(features, condition);
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b) =>

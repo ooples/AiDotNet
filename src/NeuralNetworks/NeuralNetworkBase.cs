@@ -11231,7 +11231,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             var trainableLayers = Training.TapeTrainingStep<T>.CollectTrainableLayers(Layers, _layerStructureVersion);
             for (int i = 0; i < trainableLayers.Length; i++)
             {
-                if (trainableLayers[i].GetTrainableParameters().Count == 0)
+                // A layer the forward has not run yet may expose empty placeholder tensors rather than none (OpenSora's
+                // unused text projection and decoder keep [0,0,0,0] weights). Those are not in the set the step optimizes,
+                // so a buffer built over them would disagree with it (47 slots against 38 tensors): treat them as lazy.
+                var layerParameters = trainableLayers[i].GetTrainableParameters();
+                if (layerParameters.Count == 0 || layerParameters.Any(p => p.Length == 0))
                 {
                     hasLazyParam = true;
                     break;
