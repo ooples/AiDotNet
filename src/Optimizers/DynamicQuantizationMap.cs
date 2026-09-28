@@ -84,6 +84,7 @@ internal static class DynamicQuantizationMap
     internal static byte Encode(double value, double scale, double[] code)
     {
         double normalized = value / scale;
+        RequireComparable(normalized, value);
         double lo = code[0], hi = code[code.Length - 1];
         if (normalized <= lo) return 0;
         if (normalized >= hi) return (byte)(code.Length - 1);
@@ -99,6 +100,7 @@ internal static class DynamicQuantizationMap
     internal static byte EncodeStochastic(double value, double scale, double[] code, double uniform01)
     {
         double normalized = value / scale;
+        RequireComparable(normalized, value);
         if (normalized <= code[0]) return 0;
         if (normalized >= code[code.Length - 1]) return (byte)(code.Length - 1);
         int upper = UpperIndex(normalized, code);
@@ -109,6 +111,16 @@ internal static class DynamicQuantizationMap
 
     /// <summary>Decodes a codebook index in a block of the given scale.</summary>
     internal static double Decode(byte index, double scale, double[] code) => code[index] * scale;
+
+    // NaN compares false against every entry, so it would skip both clamps and index code[-1]. An 8-bit moment has no
+    // NaN code; fail with the cause instead of an IndexOutOfRangeException from inside the optimizer.
+    private static void RequireComparable(double normalized, double value)
+    {
+        if (double.IsNaN(normalized))
+            throw new ArgumentException(
+                $"Cannot quantize a NaN moment (value {value}). A non-finite gradient reached the 8-bit optimizer.",
+                nameof(value));
+    }
 
     // Smallest index whose entry is strictly greater than value (value is strictly inside the codebook's range).
     private static int UpperIndex(double value, double[] code)
