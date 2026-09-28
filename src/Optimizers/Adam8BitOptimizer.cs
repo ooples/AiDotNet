@@ -2029,8 +2029,9 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
 
             // Consume the options JSON. The read itself still matters - the stream position
             // depends on it and a malformed payload must fail here - but the VALUE is discarded:
-            // base.Deserialize above already adopted the authoritative copy into Options, which
-            // _options now reads through. Keeping a second copy is what this refactor removed.
+            // the base payload staged above carries the authoritative copy (restoredOptions), which the
+            // commit adopts into Options and _options reads through. Keeping a second copy is what this
+            // refactor removed.
             string optionsJson = reader.ReadString();
             _ = JsonConvert.DeserializeObject<Adam8BitOptimizerOptions<T, TInput, TOutput>>(optionsJson)
                 ?? throw new InvalidOperationException("Failed to deserialize optimizer options.");
