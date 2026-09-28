@@ -151,14 +151,11 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         PSENetOptions? options = null)
-        // PSENet's kernel-prediction heads output per-pixel maps that the paper trains with
-        // binary cross-entropy on the SIGMOID of the logits. PredictCore returns the raw linear
-        // conv output (no sigmoid), so a plain BinaryCrossEntropyLoss (which expects [0,1]
-        // probabilities) explodes as the logits drift during training (memorization loss
-        // 0.38 -> 18582). BinaryCrossEntropyWithLogitsLoss fuses the sigmoid into a numerically
-        // stable loss over raw logits — the paper-correct objective — keeping training bounded
-        // while leaving PredictCore's linear-logit output contract unchanged.
-        : base(architecture, lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>(), 1.0)
+        // PSENet trains with Dice, not cross-entropy (Wang et al. 2019, Eq. 5): 0.7 x OHEM Dice on the complete
+        // map plus 0.3 x Dice on the shrunk kernels inside the predicted text region. PSENetLoss applies the
+        // sigmoid itself, so PredictCore keeps returning raw logits. The previous default (BCE with logits),
+        // documented here as the paper's objective, was not.
+        : base(architecture, lossFunction ?? new PSENetLoss<T>(), 1.0)
     {
         _options = options ?? new PSENetOptions();
         Options = _options;
@@ -209,14 +206,11 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         PSENetOptions? options = null)
-        // PSENet's kernel-prediction heads output per-pixel maps that the paper trains with
-        // binary cross-entropy on the SIGMOID of the logits. PredictCore returns the raw linear
-        // conv output (no sigmoid), so a plain BinaryCrossEntropyLoss (which expects [0,1]
-        // probabilities) explodes as the logits drift during training (memorization loss
-        // 0.38 -> 18582). BinaryCrossEntropyWithLogitsLoss fuses the sigmoid into a numerically
-        // stable loss over raw logits — the paper-correct objective — keeping training bounded
-        // while leaving PredictCore's linear-logit output contract unchanged.
-        : base(architecture, lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>(), 1.0)
+        // PSENet trains with Dice, not cross-entropy (Wang et al. 2019, Eq. 5): 0.7 x OHEM Dice on the complete
+        // map plus 0.3 x Dice on the shrunk kernels inside the predicted text region. PSENetLoss applies the
+        // sigmoid itself, so PredictCore keeps returning raw logits. The previous default (BCE with logits),
+        // documented here as the paper's objective, was not.
+        : base(architecture, lossFunction ?? new PSENetLoss<T>(), 1.0)
     {
         _options = options ?? new PSENetOptions();
         Options = _options;
