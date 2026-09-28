@@ -267,21 +267,43 @@ public class TransformerTrainPathReproIssue1227And1228Tests
         var warmupTarget = BuildOneHotTarget(0, vocab);
         for (int i = 0; i < 3; i++) model.Train(warmupInput, warmupTarget);
 
+        // This probe measures multi-core Train dispatch, so it must run with the machine's parallelism, not the test
+        // harness's. ModuleInitializer caps managed parallelism at ONE thread for the whole test process (16 xUnit
+        // workers x 16 threads oversubscribed CI), and determinism-pinning tests (the model-family base and others)
+        // turn BLAS deterministic mode on - OpenBLAS pinned to one thread - and leave it on. Under either the probe
+        // measured a process that was serial by configuration: alone its 1.2-1.5 ratio came from incidental threads
+        // (JIT tiering, GC), and in-suite, once those were quiet, it read 1.00 and blamed Train dispatch. Raise both
+        // for the measurement, as FoundationScaleCpuFixture does, and restore them. The collection runs alone
+        // (DisableParallelization), so nothing else observes the change.
+        bool previousDeterministicMode = AiDotNet.Tensors.Helpers.BlasProvider.IsDeterministicMode;
+        int previousMaxDegreeOfParallelism = AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism;
+        AiDotNet.Tensors.Helpers.BlasProvider.SetDeterministicMode(false);
+        AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism = Environment.ProcessorCount;
         var process = Process.GetCurrentProcess();
-        process.Refresh();
-        TimeSpan cpuStart = process.TotalProcessorTime;
-        var sw = Stopwatch.StartNew();
-
-        for (int step = 0; step < trainSteps; step++)
+        TimeSpan cpuStart, cpuEnd;
+        var sw = new Stopwatch();
+        try
         {
-            var input = BuildInputTensor(ctx, vocab, seed: step);
-            var target = BuildOneHotTarget(step % vocab, vocab);
-            model.Train(input, target);
-        }
+            process.Refresh();
+            cpuStart = process.TotalProcessorTime;
+            sw.Start();
 
-        sw.Stop();
-        process.Refresh();
-        TimeSpan cpuEnd = process.TotalProcessorTime;
+            for (int step = 0; step < trainSteps; step++)
+            {
+                var input = BuildInputTensor(ctx, vocab, seed: step);
+                var target = BuildOneHotTarget(step % vocab, vocab);
+                model.Train(input, target);
+            }
+
+            sw.Stop();
+            process.Refresh();
+            cpuEnd = process.TotalProcessorTime;
+        }
+        finally
+        {
+            AiDotNet.Tensors.Helpers.BlasProvider.SetDeterministicMode(previousDeterministicMode);
+            AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism = previousMaxDegreeOfParallelism;
+        }
 
         double wallSec = sw.Elapsed.TotalSeconds;
         double cpuSec = (cpuEnd - cpuStart).TotalSeconds;
