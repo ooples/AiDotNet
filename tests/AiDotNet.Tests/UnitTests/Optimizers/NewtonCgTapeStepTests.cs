@@ -44,7 +44,7 @@ public class NewtonCgTapeStepTests
     public void Step_OnAQuadratic_LandsOnTheMinimiserInOneFullNewtonStep()
     {
         var optimizer = new NewtonMethodOptimizer<double, Tensor<double>, Tensor<double>>(
-            null!, new NewtonMethodOptimizerOptions<double, Tensor<double>, Tensor<double>> { InitialLearningRate = 1.0 });
+            null, new NewtonMethodOptimizerOptions<double, Tensor<double>, Tensor<double>> { InitialLearningRate = 1.0 });
         var w = new Tensor<double>(new[] { 2 }, new Vector<double>(new[] { 0.7, 0.4 }));
 
         optimizer.Step(QuadraticContext(w, A));
@@ -58,7 +58,7 @@ public class NewtonCgTapeStepTests
     public void Step_WithNegativeCurvatureAtTheStart_TakesTheSteepestDescentStep()
     {
         var optimizer = new NewtonMethodOptimizer<double, Tensor<double>, Tensor<double>>(
-            null!, new NewtonMethodOptimizerOptions<double, Tensor<double>, Tensor<double>> { InitialLearningRate = 0.1 });
+            null, new NewtonMethodOptimizerOptions<double, Tensor<double>, Tensor<double>> { InitialLearningRate = 0.1 });
         var w = new Tensor<double>(new[] { 2 }, new Vector<double>(new[] { 0.7, 0.4 }));
         double[] concave = { -2.0, -5.0 };
         var expected = new double[2];

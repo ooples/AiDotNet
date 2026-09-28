@@ -206,8 +206,9 @@ public class StreamingStepTrainingTests : IDisposable
         // Guard against a vacuous pass: this test is about the fused path, so prove the run took it. The eager tape
         // path advances the optimizer's own step counter; the fused path leaves it at zero.
         var tapeStep = typeof(AdamOptimizer<float, Tensor<float>, Tensor<float>>).GetField(
-            "_tapeStep", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        Assert.Equal(0, (int)tapeStep.GetValue(straight.Opt)!);
+            "_tapeStep", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            ?? throw new InvalidOperationException("AdamOptimizer has no _tapeStep field");
+        Assert.Equal(0, Assert.IsType<int>(tapeStep.GetValue(straight.Opt)));
 
         var first = await Train(13, resume: true, Checkpoints("fused-resumed", saveEvery: 4), init);
         Assert.True(MaxAbsDiff(first.Model.GetParameters(), straight.Model.GetParameters()) > 1e-3,
@@ -295,7 +296,8 @@ public class StreamingStepTrainingTests : IDisposable
         var bx = Stack(x.Take(BatchSize).ToArray());
         var by = Stack(y.Take(BatchSize).ToArray());
         var fusedDisabled = typeof(NeuralNetworkBase<float>).GetField(
-            "_fusedTrainingDisabled", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+            "_fusedTrainingDisabled", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            ?? throw new InvalidOperationException("NeuralNetworkBase has no _fusedTrainingDisabled field");
 
         var sourceOptimizer = Optimizer(epochs: 100);
         var source = Model(sourceOptimizer);

@@ -90,11 +90,14 @@ public class OptimizerCheckpointAtomicityTests
     }
 
     private static byte[] Serialize(object optimizer) =>
-        (byte[])optimizer.GetType().GetMethod("Serialize", Type.EmptyTypes)!.Invoke(optimizer, null)!;
+        Assert.IsType<byte[]>((optimizer.GetType().GetMethod("Serialize", Type.EmptyTypes)
+            ?? throw new InvalidOperationException($"{optimizer.GetType().Name} has no Serialize()")).Invoke(optimizer, null));
 
     private static void Deserialize(object optimizer, byte[] data)
     {
-        try { optimizer.GetType().GetMethod("Deserialize", new[] { typeof(byte[]) })!.Invoke(optimizer, new object[] { data }); }
+        var deserialize = optimizer.GetType().GetMethod("Deserialize", new[] { typeof(byte[]) })
+            ?? throw new InvalidOperationException($"{optimizer.GetType().Name} has no Deserialize(byte[])");
+        try { deserialize.Invoke(optimizer, new object[] { data }); }
         catch (TargetInvocationException ex) when (ex.InnerException is not null)
         {
             System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(ex.InnerException).Throw();

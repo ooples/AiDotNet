@@ -22,7 +22,7 @@ public class LambWeightDecayExclusionTests
         // ratio ||w|| / ||wd w|| turns it into exactly lr * w for any decayed tensor.
         const double lr = 0.1;
         var optimizer = new LAMBOptimizer<double, Tensor<double>, Tensor<double>>(
-            null!, new LAMBOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            null, new LAMBOptimizerOptions<double, Tensor<double>, Tensor<double>>
             {
                 InitialLearningRate = lr,
                 WeightDecay = 0.5,
@@ -53,7 +53,7 @@ public class LambWeightDecayExclusionTests
         // back to a ratio of 1 only for a zero norm, so the step is lr * ||w|| / ||r|| * r, about 5e-9 here; treating
         // the small norm as zero would move the weight by the full lr.
         var optimizer = new LAMBOptimizer<double, Tensor<double>, Tensor<double>>(
-            null!, new LAMBOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            null, new LAMBOptimizerOptions<double, Tensor<double>, Tensor<double>>
             {
                 InitialLearningRate = 0.1,
                 WeightDecay = 0.0,

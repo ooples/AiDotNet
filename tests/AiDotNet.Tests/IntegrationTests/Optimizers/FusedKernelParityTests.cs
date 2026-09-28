@@ -1,3 +1,5 @@
+using AiDotNet.Tensors.Helpers;
+using System.Linq;
 using System;
 using System.Collections.Generic;
 using AiDotNet.Interfaces;
@@ -99,7 +101,7 @@ public class FusedKernelParityTests
     private static float[][] Gradients()
     {
         // Seeded, with a spread of magnitudes; the global norm stays well under the eager default clip of 1.
-        var rng = new Random(20260927);
+        var rng = RandomHelper.CreateSeededRandom(20260927);
         var grads = new float[Steps][];
         for (int t = 0; t < Steps; t++)
         {
@@ -112,7 +114,7 @@ public class FusedKernelParityTests
 
     private static float[] InitialWeights()
     {
-        var rng = new Random(7);
+        var rng = RandomHelper.CreateSeededRandom(7);
         var w = new float[Total];
         for (int i = 0; i < Total; i++) w[i] = (float)(rng.NextDouble() - 0.5);
         return w;
@@ -123,8 +125,8 @@ public class FusedKernelParityTests
         // Two parameter tensors of different sizes, so a whole-vector quantity (L-BFGS history, a trust radius) and a
         // per-tensor one (LAMB's trust ratio) cannot be confused without the comparison noticing.
         var engine = new CpuEngine();
-        var w1 = new Tensor<float>(new[] { Length }, new Vector<float>(w0[..Length]));
-        var w2 = new Tensor<float>(new[] { Length2 }, new Vector<float>(w0[Length..]));
+        var w1 = new Tensor<float>(new[] { Length }, new Vector<float>(w0.Take(Length).ToArray()));
+        var w2 = new Tensor<float>(new[] { Length2 }, new Vector<float>(w0.Skip(Length).ToArray()));
         var g1 = new Tensor<float>(new[] { Length });
         var g2 = new Tensor<float>(new[] { Length2 });
         ICompiledTrainingPlan<float> plan;
@@ -157,12 +159,12 @@ public class FusedKernelParityTests
 
     private static float[] RunEager(IGradientBasedOptimizer<float, Tensor<float>, Tensor<float>> optimizer, float[] w0, float[][] grads)
     {
-        var w1 = new Tensor<float>(new[] { Length }, new Vector<float>(w0[..Length]));
-        var w2 = new Tensor<float>(new[] { Length2 }, new Vector<float>(w0[Length..]));
+        var w1 = new Tensor<float>(new[] { Length }, new Vector<float>(w0.Take(Length).ToArray()));
+        var w2 = new Tensor<float>(new[] { Length2 }, new Vector<float>(w0.Skip(Length).ToArray()));
         foreach (var step in grads)
         {
-            var g1 = new Tensor<float>(new[] { Length }, new Vector<float>(step[..Length]));
-            var g2 = new Tensor<float>(new[] { Length2 }, new Vector<float>(step[Length..]));
+            var g1 = new Tensor<float>(new[] { Length }, new Vector<float>(step.Take(Length).ToArray()));
+            var g2 = new Tensor<float>(new[] { Length2 }, new Vector<float>(step.Skip(Length).ToArray()));
             optimizer.Step(new TapeStepContext<float>(
                 new[] { w1, w2 }, new Dictionary<Tensor<float>, Tensor<float>> { [w1] = g1, [w2] = g2 }, 0f));
         }

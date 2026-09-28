@@ -3,6 +3,7 @@ using System.Linq;
 using System;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Regression;
 using Xunit;
@@ -437,7 +438,7 @@ public class Adam8BitOptimizerIntegrationTests
             Min8BitSize = 0,
         };
         var optimizer = new Adam8BitOptimizer<double, Matrix<double>, Vector<double>>(null, options);
-        var rng = new Random(5);
+        var rng = RandomHelper.CreateSeededRandom(5);
         var parameters = new Vector<double>(Enumerable.Range(0, 20).Select(_ => rng.NextDouble() * 4 - 2).ToArray());
         var tapeParameter = new Tensor<double>(new[] { 4, 5 });
         for (int i = 0; i < tapeParameter.Length; i++) tapeParameter[i] = rng.NextDouble() * 4 - 2;
@@ -456,7 +457,8 @@ public class Adam8BitOptimizerIntegrationTests
         var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic
             | System.Reflection.BindingFlags.Public;
         object Get(object owner, string name) => (owner.GetType().GetField(name, flags)
-            ?? throw new InvalidOperationException($"field {name} not found")).GetValue(owner)!;
+            ?? throw new InvalidOperationException($"field {name} not found")).GetValue(owner)
+            ?? throw new InvalidOperationException($"field {name} is null");
 
         // Rewrite every quantized moment in the version-2 LINEAR encoding, exactly as the old encoder produced it,
         // and remember the values that encoding represents.

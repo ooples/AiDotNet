@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -274,7 +275,7 @@ public class Adam8BitTapeStepIssue1238Tests
         Assert.Equal(4096, options.Min8BitSize);
         var optimizer = new Adam8BitOptimizer<double, Matrix<double>, Vector<double>>(null, options);
 
-        var rng = new Random(17);
+        var rng = RandomHelper.CreateSeededRandom(17);
         var small = new Tensor<double>(new[] { 8, 8 });
         var large = new Tensor<double>(new[] { 64, 64 });
         for (int i = 0; i < small.Length; i++) small[i] = rng.NextDouble() - 0.5;
