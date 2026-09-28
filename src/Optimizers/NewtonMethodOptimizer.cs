@@ -504,8 +504,12 @@ public partial class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOp
             d[param] = new Tensor<T>(param._shape);
             if (negGrad.TryGetValue(param, out var ng))
             {
+                // r and p start equal but are updated separately, so p must be its own tensor: sharing one made
+                // every in-place residual update overwrite the search direction as well.
                 r[param] = ng;
-                p[param] = ng;
+                var pInit = new Tensor<T>(param._shape);
+                Engine.TensorCopy(ng, pInit);
+                p[param] = pInit;
             }
             else
             {
@@ -529,7 +533,17 @@ public partial class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOp
             // alpha = r'r / p'Hp
             T pHp = ComputeDotProduct(p, hp);
             if (NumOps.LessThanOrEquals(pHp, NumOps.Zero))
-                break; // Negative curvature — stop CG
+            {
+                // Non-positive curvature (Nocedal & Wright, Algorithm 7.1): on the first iteration the direction is
+                // still the steepest-descent direction -g, so take it; later, keep the iterate built so far.
+                if (iter == 0)
+                {
+                    foreach (var param in parameters)
+                        if (d.TryGetValue(param, out var dVal) && p.TryGetValue(param, out var pVal))
+                            Engine.TensorCopy(pVal, dVal);
+                }
+                break;
+            }
 
             T alpha = NumOps.Divide(rDotR, pHp);
 
