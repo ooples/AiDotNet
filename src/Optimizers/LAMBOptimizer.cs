@@ -384,8 +384,8 @@ public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
 
                 // Trust ratio: ||w|| / ||r||
                 T zero = NumOps.Zero;
-                bool paramNormZero = NumOps.LessThan(paramNorm, epsilon);
-                bool updateNormZero = NumOps.LessThan(updateNorm, epsilon);
+                bool paramNormZero = !NumOps.GreaterThan(paramNorm, NumOps.Zero);
+                bool updateNormZero = !NumOps.GreaterThan(updateNorm, NumOps.Zero);
 
                 if (paramNormZero || updateNormZero)
                 {
@@ -539,8 +539,8 @@ public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         T updateNorm = VectorHelper.L2Norm(updatedParameters);
 
         T trustRatio;
-        bool paramNormZero = NumOps.LessThan(paramNorm, epsilon);
-        bool updateNormZero = NumOps.LessThan(updateNorm, epsilon);
+        bool paramNormZero = !NumOps.GreaterThan(paramNorm, NumOps.Zero);
+        bool updateNormZero = !NumOps.GreaterThan(updateNorm, NumOps.Zero);
 
         if (paramNormZero || updateNormZero)
         {
@@ -644,7 +644,10 @@ public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
 
             // Adam update + weight decay
             var adamUpdate = Engine.TensorDivide(mHat, Engine.TensorAddScalar(Engine.TensorSqrt(vHat), epsilon));
-            var fullUpdate = Engine.TensorAdd(adamUpdate, Engine.TensorMultiplyScalar(param, weightDecay));
+            // ExcludeBiasFromWeightDecay: biases and normalization scales/shifts are the rank <= 1 parameters (the same
+            // rule timm uses to build its no-decay group), and they take no decay.
+            T parameterDecay = _options.ExcludeBiasFromWeightDecay && param.Rank <= 1 ? NumOps.Zero : weightDecay;
+            var fullUpdate = Engine.TensorAdd(adamUpdate, Engine.TensorMultiplyScalar(param, parameterDecay));
 
             // LAMB trust ratio: phi(||param||) / ||fullUpdate||
             var paramNorm = Engine.TensorNorm(param);
@@ -653,7 +656,9 @@ public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             T uNorm = updateNorm.Length > 0 ? updateNorm[0] : NumOps.Zero;
 
             T trustRatio;
-            if (NumOps.LessThan(pNorm, epsilon) || NumOps.LessThan(uNorm, epsilon))
+            // The ratio falls back to 1 only for a zero norm, as in the reference implementations (NVIDIA apex, TF
+            // Addons) and the fused kernel; Adam's epsilon is not a norm threshold.
+            if (!NumOps.GreaterThan(pNorm, NumOps.Zero) || !NumOps.GreaterThan(uNorm, NumOps.Zero))
             {
                 trustRatio = NumOps.One;
             }
