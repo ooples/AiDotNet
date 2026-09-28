@@ -361,7 +361,7 @@ Bumped 0.130.3 to 0.132.1 for AiDotNet.Tensors #1035 (non-causal FlashAttention 
          so it can only land once the in-repo engine is gone. It also replaces the process-global
          GradientTape.ReleaseStreamingActivations flag with the per-tape StreamingGraphRetention option. -->
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.132.1" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.132.1" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.133.0" />
     <PackageVersion Include="AiDotNet.Tensors" Version="0.132.1" />
     <PackageVersion Include="AiDotNet.Evolution" Version="0.1.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.132.1" />
