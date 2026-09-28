@@ -7,7 +7,7 @@ namespace AiDotNet.Optimizers;
 
 /// <summary>
 /// Sparse scatter helper for Nadam — Adam with Nesterov-style look-ahead.
-/// The corrected first-moment is <c>mHat = (β1·m_new + (1-β1)·g) / bc1</c>;
+/// The corrected first-moment is <c>mHat = β1·m_new / (1-β1^(t+1)) + (1-β1)·g / bc1</c> (Dozat 2016, Alg. 2);
 /// otherwise the math matches Adam.
 /// </summary>
 internal static partial class SparseEmbeddingOptimizerHelpers
@@ -56,6 +56,7 @@ internal static partial class SparseEmbeddingOptimizerHelpers
         T b1T = ops.FromDouble(b1), b2T = ops.FromDouble(b2);
         T omB1 = ops.FromDouble(oneMinusB1), omB2 = ops.FromDouble(oneMinusB2);
         T bc1T = ops.FromDouble(bc1), bc2T = ops.FromDouble(bc2);
+        T bc1NextT = ops.FromDouble(1.0 - b1 * (1.0 - bc1));   // 1 - b1^(t+1), from bc1 = 1 - b1^t
         T epsT = ops.FromDouble(eps), wdT = ops.FromDouble(weightDecay);
         bool hasWd = weightDecay > 0.0;
 
@@ -80,8 +81,8 @@ internal static partial class SparseEmbeddingOptimizerHelpers
                     T vNew = ops.Add(ops.Multiply(b2T, v[paramBase + c]), ops.Multiply(omB2, ops.Multiply(g, g)));
                     m[paramBase + c] = mNew;
                     v[paramBase + c] = vNew;
-                    // Nesterov-corrected: mHat = (β1·mNew + (1-β1)·g) / bc1.
-                    T mHat = ops.Divide(ops.Add(ops.Multiply(b1T, mNew), ops.Multiply(omB1, g)), bc1T);
+                    // Nesterov look-ahead: mHat = β1·mNew / (1-β1^(t+1)) + (1-β1)·g / bc1.
+                    T mHat = ops.Add(ops.Divide(ops.Multiply(b1T, mNew), bc1NextT), ops.Divide(ops.Multiply(omB1, g), bc1T));
                     T vHat = ops.Divide(vNew, bc2T);
                     T denom = ops.Add(ops.Sqrt(vHat), epsT);
                     param[paramBase + c] = ops.Subtract(theta, ops.Divide(ops.Multiply(lrT, mHat), denom));
@@ -124,7 +125,7 @@ internal static partial class SparseEmbeddingOptimizerHelpers
                     double vNew = b2 * vSpan[paramBase + c] + oneMinusB2 * g * g;
                     mSpan[paramBase + c] = mNew;
                     vSpan[paramBase + c] = vNew;
-                    double mHat = (b1 * mNew + oneMinusB1 * g) / bc1;
+                    double mHat = b1 * mNew / (1.0 - b1 * (1.0 - bc1)) + oneMinusB1 * g / bc1;
                     double vHat = vNew / bc2;
                     paramSpan[paramBase + c] = theta - lr * mHat / (Math.Sqrt(vHat) + eps);
                 }
@@ -165,7 +166,7 @@ internal static partial class SparseEmbeddingOptimizerHelpers
                     float vNew = b2 * vSpan[paramBase + c] + oneMinusB2 * g * g;
                     mSpan[paramBase + c] = mNew;
                     vSpan[paramBase + c] = vNew;
-                    float mHat = (b1 * mNew + oneMinusB1 * g) / bc1;
+                    float mHat = b1 * mNew / (1f - b1 * (1f - bc1)) + oneMinusB1 * g / bc1;
                     float vHat = vNew / bc2;
                     paramSpan[paramBase + c] = theta - lr * mHat / ((float)Math.Sqrt(vHat) + eps);
                 }

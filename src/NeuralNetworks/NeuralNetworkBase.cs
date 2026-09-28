@@ -12998,6 +12998,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         if (!TryMapToFusedOptimizerConfig(optimizer, out var cfg))
             return false;
+        // This shape cannot carry Extras (Nesterov, decoupled AMSGrad decay, LARS/FTRL constants) and its
+        // callers discard the LR schedule, so handing them such a config would run a different optimizer - a
+        // constant LR instead of the schedule, classical instead of Nesterov momentum, L2 instead of AdamW
+        // decay. Decline: those callers then take the eager path, which honours all of it.
+        if (cfg.Extras is not null || cfg.Schedule is not null)
+            return false;
 
         optimizerType = cfg.Type;
         learningRate = cfg.LearningRate;

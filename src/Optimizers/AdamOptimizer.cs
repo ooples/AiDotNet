@@ -629,9 +629,12 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
 
             if (amsGrad)
             {
-                // Preserve Engine.Max(vMax, vHat) operand order, including its NaN behavior.
-                vHat = NumOps.GreaterThan(vMaxSpan[i], vHat) ? vMaxSpan[i] : vHat;
-                vMaxSpan[i] = vHat;
+                // AMSGrad keeps the running max of the RAW second moment and bias-corrects it at use - PyTorch
+                // Adam(amsgrad=True) and the fused AMSGrad kernel this optimizer dispatches to. Taking the max of
+                // the already-corrected v/(1-b2^t) instead made the eager and fused paths train differently.
+                T vMax = NumOps.GreaterThan(vMaxSpan[i], v) ? vMaxSpan[i] : v;
+                vMaxSpan[i] = vMax;
+                vHat = NumOps.Divide(vMax, biasCorrection2);
             }
 
             T denominator = NumOps.Add(NumOps.Sqrt(vHat), epsilon);
@@ -716,8 +719,8 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         {
             if (_vMaxVector is null || _vMaxVector.Length != vHat.Length)
                 _vMaxVector = new Vector<T>(vHat.Length);
-            _vMaxVector = (Vector<T>)Engine.Max(_vMaxVector, vHat);
-            vHatForDenominator = _vMaxVector;
+            _vMaxVector = (Vector<T>)Engine.Max(_vMaxVector, _v);   // max of the RAW v (PyTorch), corrected below
+            vHatForDenominator = (Vector<T>)Engine.Divide(_vMaxVector, biasCorrection2);
         }
 
         // Compute update
@@ -1137,11 +1140,10 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                         if (useAmsgrad)
                         {
                             // AMSGrad: track running max of v̂ across all steps.
-                            double vHatNow = vNew / bc2;
                             double vMaxPrev = vMaxArr![i];
-                            double vMaxNew = vHatNow > vMaxPrev ? vHatNow : vMaxPrev;
+                            double vMaxNew = vNew > vMaxPrev ? vNew : vMaxPrev;   // max of the RAW v (PyTorch)
                             vMaxArr[i] = vMaxNew;
-                            vHatEff = vMaxNew;
+                            vHatEff = vMaxNew / bc2;
                         }
                         else
                         {
@@ -1189,11 +1191,10 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                         double vHatEff;
                         if (useAmsgrad)
                         {
-                            double vHatNow = vNew / bc2;
                             double vMaxPrev = System.Runtime.CompilerServices.Unsafe.Add(ref vMaxR, i);
-                            double vMaxNew = vHatNow > vMaxPrev ? vHatNow : vMaxPrev;
+                            double vMaxNew = vNew > vMaxPrev ? vNew : vMaxPrev;   // max of the RAW v (PyTorch)
                             System.Runtime.CompilerServices.Unsafe.Add(ref vMaxR, i) = vMaxNew;
-                            vHatEff = vMaxNew;
+                            vHatEff = vMaxNew / bc2;
                         }
                         else
                         {
@@ -1276,19 +1277,19 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 Tensor<T> vHatEffective;
                 if (useAmsgrad)
                 {
-                    // vMax := max(vMax, vHat) element-wise. Element-wise max
+                    // vMax := max(vMax, v) element-wise over the RAW v (PyTorch), bias-corrected at use. Element-wise max
                     // via (a + b + |a - b|) / 2 because IEngine doesn't ship
                     // a generic element-wise Max kernel; for the rare types
                     // that hit this path (Half / Decimal / etc.) the extra
                     // ops are negligible vs the matmul cost the model is
                     // already paying.
-                    var diff = Engine.TensorSubtract(vHat, vMax!);
+                    var diff = Engine.TensorSubtract(v, vMax!);
                     var absDiff = Engine.TensorAbs(diff);
-                    var sum = Engine.TensorAdd(vHat, vMax!);
+                    var sum = Engine.TensorAdd(v, vMax!);
                     var maxPlusSum = Engine.TensorAdd(sum, absDiff);
                     var vMaxNew = Engine.TensorMultiplyScalar(maxPlusSum, NumOps.FromDouble(0.5));
                     Engine.TensorCopy(vMaxNew, vMax!);
-                    vHatEffective = vMax!;
+                    vHatEffective = Engine.TensorDivideScalar(vMax!, biasCorrection2);
                 }
                 else
                 {
