@@ -728,13 +728,6 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     }
 
     /// <summary>
-    /// Allocates a freshly-zeroed <see cref="QuantizedTapeState"/> sized for a
-    /// parameter tensor of the given length. Block count is derived from
-    /// <see cref="Adam8BitOptimizerOptions{T,TInput,TOutput}.BlockSize"/>; each
-    /// block carries its own scale so per-block magnitude variation doesn't get
-    /// crushed into a single global scale.
-    /// </summary>
-    /// <summary>
     /// Returns a full-precision moment tensor at <paramref name="shape"/>: zeros on first use, the same values
     /// re-laid out when only the shape changed (element count is guaranteed equal by the caller's length check).
     /// </summary>
@@ -747,6 +740,13 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         return rebuilt;
     }
 
+    /// <summary>
+    /// Allocates a freshly-zeroed <see cref="QuantizedTapeState"/> sized for a
+    /// parameter tensor of the given length. Block count is derived from
+    /// <see cref="Adam8BitOptimizerOptions{T,TInput,TOutput}.BlockSize"/>; each
+    /// block carries its own scale so per-block magnitude variation doesn't get
+    /// crushed into a single global scale.
+    /// </summary>
     private QuantizedTapeState AllocateTapeState(int paramLength)
     {
         if (_options.UseBFloat16MomentStorage)
@@ -2479,9 +2479,11 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 _vFullPrecision = vFullPrecision;
                 _vQuantized = vQuantized;
                 _vScales = vScales;
-                _tapeStates.Clear();
+                // Cleared under the same lock as the pending map, as Reset() does: a concurrent Step moving an old
+                // pending entry into _tapeStates between the two clears would otherwise shadow the restored one.
                 lock (_pendingTapeStatesLock)
                 {
+                    _tapeStates.Clear();
                     _pendingTapeStatesByParameterIndex.Clear();
                     if (restoredTapeStates is not null)
                     {
@@ -2496,16 +2498,17 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     }
 
     /// <summary>
-    /// Re-encodes quantized state read from a version-2 checkpoint (linear per-block quantization) into the dynamic
-    /// codebook this optimizer now uses, block by block, so a resumed run continues from the same moments.
-    /// </summary>
-    /// <summary>
     /// Returns a moment buffer the current layout guarantees is allocated, or reports the broken invariant by name.
     /// </summary>
     private static TBuffer RequireMoment<TBuffer>(TBuffer? buffer, string name) where TBuffer : class
         => buffer ?? throw new InvalidOperationException(
             $"Adam8BitOptimizer: {name} is not allocated although the moment layout requires it. The optimizer state " +
             "is inconsistent; call Reset() or restore a consistent checkpoint.");
+
+    /// <summary>
+    /// Re-encodes quantized state read from a version-2 checkpoint (linear per-block quantization) into the dynamic
+    /// codebook this optimizer now uses, block by block, so a resumed run continues from the same moments.
+    /// </summary>
     private static void ConvertLegacyLinearState(
         Vector<byte>? mQuantized, Vector<double>? mScales, Vector<byte>? vQuantized, Vector<double>? vScales,
         Dictionary<int, QuantizedTapeState>? tapeStates, int blockSize)
