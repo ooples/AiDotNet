@@ -80,6 +80,9 @@ public partial class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
     private readonly MobileNetV2Options _options;
 
     /// <inheritdoc/>
+    protected override bool FusedTrainingDisabledByConfiguration => _options is not null && _options.DisableFusedOptimizerStep;
+
+    /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
     private readonly ILossFunction<T> _lossFunction;
@@ -128,7 +131,7 @@ public partial class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
     {
         _options = options ?? new MobileNetV2Options();
         Options = _options;
-        _fusedTrainingDisabled = _options.DisableFusedOptimizerStep;
+        _fusedTrainingDisabled = FusedTrainingDisabledByConfiguration;
         Guard.NotNull(configuration);
         _configuration = configuration;
 

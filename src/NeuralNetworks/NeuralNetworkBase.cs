@@ -2886,7 +2886,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Also drop compiled fused training plans and reset sticky-disable
         // so the next training run gets a fresh chance at the fused path.
         Training.CompiledTapeTrainingStep<T>.Invalidate(this);
-        _fusedTrainingDisabled = false;
+        _fusedTrainingDisabled = FusedTrainingDisabledByConfiguration;
         _fusedTrainingCommitted = false;
         _fusedPersistenceVerified = false;
     }
@@ -12010,6 +12010,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     protected bool _fusedTrainingDisabled;
 
     /// <summary>
+    /// Whether the model's own configuration turns the fused optimizer step off, as opposed to a failure having
+    /// turned it off for the rest of a run. Resets restore this value rather than <c>false</c>, so a reset, a new
+    /// training optimizer or a layer change never re-enables a path the caller disabled on purpose.
+    /// </summary>
+    protected virtual bool FusedTrainingDisabledByConfiguration => false;
+
+    /// <summary>
     /// Whether this model is eligible for the compile-once/replay-many fused
     /// compiled training path (<see cref="Training.CompiledTapeTrainingStep{T}.TryStepWithFusedOptimizer"/>).
     /// Default <c>true</c>. Override to <c>false</c> for models whose forward
@@ -13594,6 +13601,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             Training.CompiledTapeTrainingStep<T>.Invalidate(this);
             _fusedTrainingCommitted = false;
             _fusedPersistenceVerified = false;
+            // A sticky disable protected the previous optimizer's moments from a fused re-engagement mid-run. The new
+            // optimizer has no such moments, so it gets the configured default rather than inheriting the disable.
+            _fusedTrainingDisabled = FusedTrainingDisabledByConfiguration;
         }
         _baseTrainOptimizer = optimizer;
         _baseTrainOptimizerExplicitlyConfigured = optimizer is not null;
@@ -14280,7 +14290,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Also clear the fused-commitment: ResetState is an explicit
         // "start training over" signal, so any plan-embedded Adam/SGD state
         // is no longer needed, and the next run can engage fused fresh.
-        _fusedTrainingDisabled = false;
+        _fusedTrainingDisabled = FusedTrainingDisabledByConfiguration;
         _fusedTrainingCommitted = false;
         _fusedPersistenceVerified = false;
     }
