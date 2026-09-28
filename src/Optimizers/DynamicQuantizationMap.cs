@@ -23,10 +23,12 @@ namespace AiDotNet.Optimizers;
 internal static class DynamicQuantizationMap
 {
     /// <summary>Codebook for signed values (the first moment), sorted ascending, spanning [-1, 1].</summary>
-    internal static readonly double[] Signed = Create(signed: true);
+    internal static readonly double[] Signed =
+        Array.ConvertAll(AiDotNet.Tensors.Engines.Compilation.DynamicQuantizationCodebook.Signed, v => (double)v);
 
     /// <summary>Codebook for non-negative values (the second moment), sorted ascending, spanning [0, 1].</summary>
-    internal static readonly double[] Unsigned = Create(signed: false);
+    internal static readonly double[] Unsigned =
+        Array.ConvertAll(AiDotNet.Tensors.Engines.Compilation.DynamicQuantizationCodebook.Unsigned, v => (double)v);
 
     /// <summary>The index of 0.0 in <see cref="Signed"/>, the encoding of a zero first moment.</summary>
     internal static readonly byte SignedZeroIndex = (byte)Array.IndexOf(Signed, 0.0);
@@ -36,46 +38,6 @@ internal static class DynamicQuantizationMap
     /// works because every value in such a block encodes to the zero entry.
     /// </summary>
     internal const double MinScale = 1e-30;
-
-    private static double[] Create(bool signed, int maxExponentBits = 7, int totalBits = 8)
-    {
-        var data = new System.Collections.Generic.List<double>(1 << totalBits);
-        int nonSignBits = totalBits - 1;
-        int additionalItems = (1 << (nonSignBits - maxExponentBits)) - 1;
-        int i = 0;
-        for (i = 0; i < maxExponentBits; i++)
-        {
-            int fractionItems = signed
-                ? (1 << (i + nonSignBits - maxExponentBits)) + 1
-                : (1 << (i + nonSignBits - maxExponentBits + 1)) + 1;
-            AddMeans(data, fractionItems, Math.Pow(10, -(maxExponentBits - 1) + i), signed);
-        }
-
-        if (additionalItems > 0)
-            AddMeans(data, additionalItems + 1, Math.Pow(10, -(maxExponentBits - 1) + i - 1), signed);
-
-        data.Add(0.0);
-        data.Add(1.0);
-        if (data.Count != 1 << totalBits)
-            throw new InvalidOperationException(
-                $"Dynamic quantization map has {data.Count} entries, expected {1 << totalBits}.");
-        data.Sort();
-        return data.ToArray();
-    }
-
-    // torch.linspace(0.1, 1, n) in float32, then midpoints, scaled; float32 first so the entries match the reference.
-    private static void AddMeans(System.Collections.Generic.List<double> data, int count, double magnitude, bool signed)
-    {
-        var boundaries = new float[count];
-        for (int k = 0; k < count; k++)
-            boundaries[k] = count == 1 ? 0.1f : (float)(0.1 + (1.0 - 0.1) * k / (count - 1));
-        for (int k = 0; k < count - 1; k++)
-        {
-            double mean = (boundaries[k] + boundaries[k + 1]) / 2.0f;
-            data.Add(magnitude * mean);
-            if (signed) data.Add(-magnitude * mean);
-        }
-    }
 
     /// <summary>The block scale for values whose largest magnitude is <paramref name="absMax"/>.</summary>
     internal static double Scale(double absMax) => absMax > MinScale ? absMax : MinScale;

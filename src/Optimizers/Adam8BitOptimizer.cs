@@ -63,9 +63,27 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
     {
         config = default;
-        // Only BF16 moment storage maps to a fused kernel today; the int8
-        // block-quant path changes the update enough to need its own kernel.
-        if (!_options.UseBFloat16MomentStorage) return false;
+        if (!_options.UseBFloat16MomentStorage)
+        {
+            // Int8 block-quantized moments: the fused plan runs the same block-wise dynamic quantization (absmax scale,
+            // nearest codebook entry, fp32 update from the fresh moments, fp32 state below Min8BitSize). Only the
+            // configuration it implements maps: both moments compressed, absmax (100th percentile) scale, and
+            // deterministic rounding.
+            if (_options.UseAdaptiveLearningRate || _options.UseAMSGrad) return false;
+            if (!_options.CompressBothMoments || _options.QuantizationPercentile < 100 || _options.UseStochasticRounding)
+                return false;
+            if (!TryGetFusedLrSchedule(out var int8Schedule)) return false;
+            config = new Fused.FusedOptimizerConfig(
+                Tensors.Engines.Compilation.OptimizerType.Adam,
+                (float)GetCurrentLearningRate(),
+                (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
+                0f, int8Schedule)
+            {
+                Int8MomentBlockSize = _options.BlockSize,
+                Int8MinQuantizedLength = Math.Max(0, _options.Min8BitSize),
+            };
+            return true;
+        }
         // Adaptive LR mutates the rate between steps and AMSGrad needs the
         // max-second-moment variant — neither is modeled by the bf16 Adam/AdamW
         // kernels, so fall back to eager for those.

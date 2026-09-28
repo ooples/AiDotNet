@@ -9,6 +9,7 @@ using AiDotNet.Regularization;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Engines.Compilation;
+using AiDotNet.Training;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -39,6 +40,8 @@ public class FusedKernelParityTests
     private const int Length = 48;
     private const int Length2 = 20;
     private const int Total = Length + Length2;
+    // A rank-2 weight and a rank-1 bias, so rank-dependent behaviour (LAMB's no-decay group) is exercised.
+    private static readonly int[] Shape1 = { 6, 8 };
     private const int Steps = 40;
     private readonly ITestOutputHelper _output;
 
@@ -53,6 +56,7 @@ public class FusedKernelParityTests
             "Rprop", "GradientDescent", "MiniBatchGradientDescent", "StochasticGradientDescent",
             "NesterovAcceleratedGradient", "CoordinateDescent", "Momentum", "TrustRegion", "LBFGS",
             "ProximalGradientDescentL2", "ProximalGradientDescentL1", "FTRL", "ASGD", "Adam8BitBf16",
+            "LAMB", "LAMBUnclamped", "Adam8BitInt8", "Adam8BitInt8Mixed",
         })
         {
             yield return new object[] { name };
@@ -93,6 +97,19 @@ public class FusedKernelParityTests
         "FTRL" => new FTRLOptimizer<float, Tensor<float>, Tensor<float>>(null!, new FTRLOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-1 }),
         "ASGD" => new ASGDOptimizer<float, Tensor<float>, Tensor<float>>(null!, new ASGDOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }),
         "Adam8BitBf16" => new Adam8BitOptimizer<float, Tensor<float>, Tensor<float>>(null, new Adam8BitOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2, UseBFloat16MomentStorage = true }),
+        // Defaults: trust ratio clipped at 10, bias correction on, rank <= 1 parameters excluded from weight decay.
+        "LAMB" => new LAMBOptimizer<float, Tensor<float>, Tensor<float>>(null!, new LAMBOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }),
+        "LAMBUnclamped" => new LAMBOptimizer<float, Tensor<float>, Tensor<float>>(null!, new LAMBOptimizerOptions<float, Tensor<float>, Tensor<float>>
+        {
+            InitialLearningRate = 1e-2,
+            ClipTrustRatio = false,
+            UseBiasCorrection = false,
+            ExcludeBiasFromWeightDecay = false,
+        }),
+        // Every tensor quantized, in several blocks each.
+        "Adam8BitInt8" => new Adam8BitOptimizer<float, Tensor<float>, Tensor<float>>(null, new Adam8BitOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2, BlockSize = 16, Min8BitSize = 0 }),
+        // The 48-element weight quantized, the 20-element bias below Min8BitSize and full precision.
+        "Adam8BitInt8Mixed" => new Adam8BitOptimizer<float, Tensor<float>, Tensor<float>>(null, new Adam8BitOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2, BlockSize = 16, Min8BitSize = 30 }),
         _ => throw new ArgumentException(name),
     };
 
@@ -123,9 +140,9 @@ public class FusedKernelParityTests
         // Two parameter tensors of different sizes, so a whole-vector quantity (L-BFGS history, a trust radius) and a
         // per-tensor one (LAMB's trust ratio) cannot be confused without the comparison noticing.
         var engine = new CpuEngine();
-        var w1 = new Tensor<float>(new[] { Length }, new Vector<float>(w0[..Length]));
+        var w1 = new Tensor<float>(Shape1, new Vector<float>(w0[..Length]));
         var w2 = new Tensor<float>(new[] { Length2 }, new Vector<float>(w0[Length..]));
-        var g1 = new Tensor<float>(new[] { Length });
+        var g1 = new Tensor<float>(Shape1);
         var g2 = new Tensor<float>(new[] { Length2 });
         ICompiledTrainingPlan<float> plan;
         using (var scope = GraphMode.Enable())
@@ -136,11 +153,9 @@ public class FusedKernelParityTests
 
         using (plan)
         {
-            if (config.UseBf16Moments) plan.RequestBf16MomentStorage(true);
-            if (config.Schedule is not null)
-                plan.ConfigureOptimizer(config.Type, config.Schedule, config.Beta1, config.Beta2, config.Epsilon, config.WeightDecay, config.Extras);
-            else
-                plan.ConfigureOptimizer(config.Type, config.LearningRate, config.Beta1, config.Beta2, config.Epsilon, config.WeightDecay, config.Extras);
+            CompiledTapeTrainingStep<float>.ConfigureFusedOptimizer(plan, new[] { w1, w2 }, config.Type, config.LearningRate,
+                config.Beta1, config.Beta2, config.Epsilon, config.WeightDecay, config.Schedule, config.UseBf16Moments,
+                config.Extras, config.Int8MomentBlockSize, config.Int8MinQuantizedLength, config.DecayOnlyRankTwoAndAbove);
 
             foreach (var step in grads)
             {
@@ -157,11 +172,11 @@ public class FusedKernelParityTests
 
     private static float[] RunEager(IGradientBasedOptimizer<float, Tensor<float>, Tensor<float>> optimizer, float[] w0, float[][] grads)
     {
-        var w1 = new Tensor<float>(new[] { Length }, new Vector<float>(w0[..Length]));
+        var w1 = new Tensor<float>(Shape1, new Vector<float>(w0[..Length]));
         var w2 = new Tensor<float>(new[] { Length2 }, new Vector<float>(w0[Length..]));
         foreach (var step in grads)
         {
-            var g1 = new Tensor<float>(new[] { Length }, new Vector<float>(step[..Length]));
+            var g1 = new Tensor<float>(Shape1, new Vector<float>(step[..Length]));
             var g2 = new Tensor<float>(new[] { Length2 }, new Vector<float>(step[Length..]));
             optimizer.Step(new TapeStepContext<float>(
                 new[] { w1, w2 }, new Dictionary<Tensor<float>, Tensor<float>> { [w1] = g1, [w2] = g2 }, 0f));

@@ -104,7 +104,7 @@ public static class CompiledTapeTrainingStep<T>
         internal Tensor<T>? persistentInput;
         internal Tensor<T>? persistentTarget;
         internal object? configuredPlan;
-        internal (int OptType, float Lr, float B1, float B2, float Eps, float Wd)? configuredOptimizerConfig;
+        internal (int OptType, float Lr, float B1, float B2, float Eps, float Wd, int Int8Block, int Int8Min, bool RankDecay)? configuredOptimizerConfig;
         internal long fusedStepCount;
         internal System.Collections.Generic.HashSet<AiDotNet.Tensors.Engines.Compilation.OptimizerType>? fusedUnavailableTypes;
         internal System.Exception? lastFallbackException;
@@ -326,7 +326,7 @@ public static class CompiledTapeTrainingStep<T>
     /// reset m/v buffers and silently corrupt training, so on drift we
     /// also return <c>false</c>.
     /// </summary>
-    private static (int OptType, float Lr, float B1, float B2, float Eps, float Wd)? _configuredOptimizerConfig { get => CurrentState.configuredOptimizerConfig; set => CurrentState.configuredOptimizerConfig = value; }
+    private static (int OptType, float Lr, float B1, float B2, float Eps, float Wd, int Int8Block, int Int8Min, bool RankDecay)? _configuredOptimizerConfig { get => CurrentState.configuredOptimizerConfig; set => CurrentState.configuredOptimizerConfig = value; }
 
     /// <summary>
     /// Counter of successful fused-step executions on this thread. Exposed
@@ -823,6 +823,10 @@ public static class CompiledTapeTrainingStep<T>
         // (see NeuralNetworkBase.SelectTrainableParametersForTraining). Null = optimize
         // everything, which is what all but the partial-freeze models want.
         IReadOnlyCollection<Tensor<T>>? trainableSelection = null,
+        // Int8 block-quantized Adam moments (0 = off) and the rank-aware weight decay; see FusedOptimizerConfig.
+        int int8MomentBlockSize = 0,
+        int int8MinQuantizedLength = 0,
+        bool decayOnlyRankTwoAndAbove = false,
         // The model the step trains. Its compiled plan and optimizer moments are kept per owner, not per
         // thread; null uses the first layer, which belongs to exactly one model.
         object? owner = null)
@@ -845,13 +849,71 @@ public static class CompiledTapeTrainingStep<T>
         try
         {
             _currentState = state;
-            return TryStepWithFusedOptimizerCore(layers: layers, input: input, target: target, forward: forward, computeLoss: computeLoss, optimizerType: optimizerType, learningRate: learningRate, beta1: beta1, beta2: beta2, epsilon: epsilon, weightDecay: weightDecay, lossValue: out lossValue, maxGradNorm: maxGradNorm, lrSchedule: lrSchedule, eagerOptimizer: eagerOptimizer, useBf16Moments: useBf16Moments, extraTensors: extraTensors, fusedExtras: fusedExtras, onGradients: onGradients, trainableSelection: trainableSelection);
+            return TryStepWithFusedOptimizerCore(layers: layers, input: input, target: target, forward: forward, computeLoss: computeLoss, optimizerType: optimizerType, learningRate: learningRate, beta1: beta1, beta2: beta2, epsilon: epsilon, weightDecay: weightDecay, lossValue: out lossValue, maxGradNorm: maxGradNorm, lrSchedule: lrSchedule, eagerOptimizer: eagerOptimizer, useBf16Moments: useBf16Moments, extraTensors: extraTensors, fusedExtras: fusedExtras, onGradients: onGradients, trainableSelection: trainableSelection, int8MomentBlockSize: int8MomentBlockSize, int8MinQuantizedLength: int8MinQuantizedLength, decayOnlyRankTwoAndAbove: decayOnlyRankTwoAndAbove);
         }
         finally
         {
             if (--_stepDepth > 0) _currentState = previous;
             ExitState(ownerStates);
         }
+    }
+
+    /// <summary>
+    /// Configures a compiled plan's fused optimizer from a mapped configuration: moment storage first (bf16 or int8
+    /// block-quantized buffers are allocated by ConfigureOptimizer), then either one group, or two groups when weight
+    /// decay applies only to parameters of rank 2 or more.
+    /// </summary>
+    internal static void ConfigureFusedOptimizer(
+        ICompiledTrainingPlan<T> plan,
+        IReadOnlyList<Tensor<T>> parameters,
+        AiDotNet.Tensors.Engines.Compilation.OptimizerType optimizerType,
+        float learningRate,
+        float beta1,
+        float beta2,
+        float epsilon,
+        float weightDecay,
+        AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule,
+        bool useBf16Moments,
+        AiDotNet.Tensors.Engines.Compilation.FusedOptimizerExtras? fusedExtras,
+        int int8MomentBlockSize,
+        int int8MinQuantizedLength,
+        bool decayOnlyRankTwoAndAbove)
+    {
+        // #1745: bf16 moment storage must be requested before ConfigureOptimizer allocates the moment buffers; int8
+        // likewise. The plan honours each only for the kernels that implement it and rejects the rest.
+        if (useBf16Moments)
+            plan.RequestBf16MomentStorage(true);
+        if (int8MomentBlockSize > 0)
+            plan.RequestInt8MomentStorage(true, int8MomentBlockSize, int8MinQuantizedLength);
+
+        if (decayOnlyRankTwoAndAbove && weightDecay != 0f)
+        {
+            // Group 0 is decayed, group 1 (biases and normalization parameters, rank <= 1) is not. Both groups use the
+            // same learning-rate schedule, so this differs from the single-group plan only in the decay.
+            var schedule = lrSchedule ?? AiDotNet.Tensors.Engines.Compilation.LrSchedule.Constant(learningRate);
+            var paramToGroup = new int[parameters.Count];
+            for (int i = 0; i < paramToGroup.Length; i++)
+                paramToGroup[i] = parameters[i].Rank <= 1 ? 1 : 0;
+            plan.ConfigureOptimizerGrouped(
+                optimizerType,
+                groupOptimizerTypes: null,
+                groupSchedules: new[] { schedule, schedule },
+                paramToGroup: paramToGroup,
+                beta1: beta1,
+                beta2: beta2,
+                eps: epsilon,
+                weightDecay: weightDecay,
+                groupWeightDecays: new[] { weightDecay, 0f },
+                extras: fusedExtras);
+            return;
+        }
+
+        // A caller-supplied schedule lets the kernel evaluate the per-step learning rate inline (cosine, exponential,
+        // Noam), so paper-faithful schedulers stay on the fused path.
+        if (lrSchedule != null)
+            plan.ConfigureOptimizer(optimizerType, lrSchedule, beta1, beta2, epsilon, weightDecay, fusedExtras);
+        else
+            plan.ConfigureOptimizer(optimizerType, learningRate, beta1, beta2, epsilon, weightDecay, fusedExtras);
     }
 
     private static bool TryStepWithFusedOptimizerCore(
@@ -881,7 +943,10 @@ public static class CompiledTapeTrainingStep<T>
         // The subset of layer/extra tensors the model's published recipe actually optimizes
         // (see NeuralNetworkBase.SelectTrainableParametersForTraining). Null = optimize
         // everything, which is what all but the partial-freeze models want.
-        IReadOnlyCollection<Tensor<T>>? trainableSelection = null)
+        IReadOnlyCollection<Tensor<T>>? trainableSelection = null,
+        int int8MomentBlockSize = 0,
+        int int8MinQuantizedLength = 0,
+        bool decayOnlyRankTwoAndAbove = false)
     {
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
         // AiDotNet#1395: clear the previous-call's exception buffer so the
@@ -1233,47 +1298,14 @@ public static class CompiledTapeTrainingStep<T>
             //
             // Drift on the SAME plan (LR or beta change between steps) also
             // returns false — reconfiguring would reset m/v.
-            var currentConfig = ((int)optimizerType, learningRate, beta1, beta2, epsilon, weightDecay);
+            var currentConfig = ((int)optimizerType, learningRate, beta1, beta2, epsilon, weightDecay, int8MomentBlockSize, int8MinQuantizedLength, decayOnlyRankTwoAndAbove);
 
             bool isFirstStepForConfiguredPlan = _configuredPlan is null;
             if (_configuredPlan is null)
             {
-                // #1745: request bf16 moment storage BEFORE ConfigureOptimizer so the
-                // plan allocates the half-size m/v buffers. Honored only for the CPU
-                // float Adam/AdamW kernel; a safe no-op for every other configuration.
-                if (useBf16Moments)
-                    plan.RequestBf16MomentStorage(true);
-
-                // First fused call on this thread. Configure the plan and
-                // commit to single-plan semantics from here on. When the
-                // caller passed an lrSchedule, use the LrSchedule overload
-                // so the fused kernel evaluates the per-step learning rate
-                // inline (cosine, exponential, etc.) — no perf penalty vs
-                // constant LR, but it lets paper-faithful schedulers
-                // (cosine annealing, OneCycle, linear-warmup-cosine) run
-                // through the fused path instead of falling back to eager.
-                if (lrSchedule != null)
-                {
-                    plan.ConfigureOptimizer(
-                        optimizerType,
-                        lrSchedule,
-                        beta1,
-                        beta2,
-                        epsilon,
-                        weightDecay,
-                        fusedExtras);
-                }
-                else
-                {
-                    plan.ConfigureOptimizer(
-                        optimizerType,
-                        learningRate,
-                        beta1,
-                        beta2,
-                        epsilon,
-                        weightDecay,
-                        fusedExtras);
-                }
+                ConfigureFusedOptimizer(plan, parameters, optimizerType, learningRate, beta1, beta2, epsilon, weightDecay,
+                    lrSchedule, useBf16Moments, fusedExtras, int8MomentBlockSize, int8MinQuantizedLength,
+                    decayOnlyRankTwoAndAbove);
                 _configuredPlan = plan;
                 _configuredOptimizerConfig = currentConfig;
                 // Apply the global gradient-norm clip threshold to the plan

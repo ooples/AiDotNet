@@ -65,21 +65,33 @@ namespace AiDotNet.Optimizers;
 public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <summary>
-    /// LAMB does not map to the fused kernel. Two measured differences keep it eager:
-    /// <list type="bullet">
-    /// <item>The kernel computes the unclamped trust ratio ||w|| / ||r||, while LAMB clips it at MaxTrustRatio (10) by
-    /// default: 2.9e-4 divergence over 40 steps against 6.7e-7 for the Adam control.</item>
-    /// <item>Even unclamped, the per-tensor trust ratio amplifies rounding differences. Divergence is at the Adam
-    /// control's level for 20 steps (6e-8 after one step, 3e-6 after twenty) and then grows to 4.6e-5 to over 1e-4
-    /// by step 40, varying between runs, so the mapping cannot hold a parity bound.</item>
-    /// </list>
-    /// FusedOptimizerParityTests pins the decline; revisit once the Tensors kernel clamps and its norm reductions
-    /// match the eager ones.
+    /// Describes this LAMB instance for the fused kernel (Tensors <c>OptimizerType.LAMB</c>): Beta1/Beta2, Epsilon and
+    /// WeightDecay map directly; the trust-ratio clip (<c>ClipTrustRatio</c>/<c>MaxTrustRatio</c>) and
+    /// <c>UseBiasCorrection</c> travel in the extras, and <c>ExcludeBiasFromWeightDecay</c> becomes a no-decay group for
+    /// the rank &lt;= 1 parameters. Declines on adaptive learning rate, an unmappable scheduler, or an active warmup,
+    /// none of which the kernel's learning-rate input can express. Parity-gated by FusedKernelParityTests.
     /// </summary>
     bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
     {
         config = default;
-        return false;
+        if (_options.UseAdaptiveLearningRate) return false;
+        if (_warmupSteps > 0) return false;
+        if (_options.ClipTrustRatio && !(_options.MaxTrustRatio > 0.0)) return false;
+        if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        config = new Fused.FusedOptimizerConfig(
+            Tensors.Engines.Compilation.OptimizerType.LAMB,
+            (float)GetCurrentLearningRate(),
+            (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
+            (float)_options.WeightDecay, schedule)
+        {
+            Extras = new Tensors.Engines.Compilation.FusedOptimizerExtras
+            {
+                LambMaxTrustRatio = _options.ClipTrustRatio ? (float)_options.MaxTrustRatio : 0f,
+                LambDisableBiasCorrection = !_options.UseBiasCorrection,
+            },
+            DecayOnlyRankTwoAndAbove = _options.ExcludeBiasFromWeightDecay,
+        };
+        return true;
     }
 
     /// <summary>

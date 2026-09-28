@@ -12553,6 +12553,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 // from the primary layer list.
                 extraTensors: fusedExtraParameters,
                 fusedExtras: fusedCfg.Extras,
+                int8MomentBlockSize: fusedCfg.Int8MomentBlockSize,
+                int8MinQuantizedLength: fusedCfg.Int8MinQuantizedLength,
+                decayOnlyRankTwoAndAbove: fusedCfg.DecayOnlyRankTwoAndAbove,
                 // Publish the fused kernel's gradients onto the layer surface. The fused path
                 // updates parameters in-replay and returns without ever passing through the eager
                 // gradient code below, which is why the surface stayed empty for every model that

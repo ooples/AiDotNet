@@ -39,6 +39,20 @@ internal readonly record struct FusedOptimizerConfig(
     public bool UseBf16Moments { get; init; }
 
     /// <summary>
+    /// Block size of int8 block-quantized Adam moments (Dettmers et al., 2022); 0 keeps fp32 moments.
+    /// </summary>
+    public int Int8MomentBlockSize { get; init; }
+
+    /// <summary>Parameters with fewer elements keep fp32 moments under int8 storage (bitsandbytes' min_8bit_size).</summary>
+    public int Int8MinQuantizedLength { get; init; }
+
+    /// <summary>
+    /// Apply <see cref="WeightDecay"/> only to parameters of rank 2 or more, leaving biases and normalization
+    /// parameters (rank &lt;= 1) undecayed, as the eager optimizer does for this configuration.
+    /// </summary>
+    public bool DecayOnlyRankTwoAndAbove { get; init; }
+
+    /// <summary>
     /// Optimizer-specific coefficients for the kernels that do not read them from the beta/epsilon
     /// slots: LARS (momentum, trust coefficient), FTRL (L1, L2, lr power), ASGD (lambd, alpha, t0) and
     /// Rprop (eta+/eta-, step bounds). Null for every other kernel, which needs none.

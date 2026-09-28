@@ -8,9 +8,9 @@ namespace AiDotNetTests.IntegrationTests.Optimizers;
 /// <summary>
 /// #1745: the Adam8BitOptimizer's BF16 moment-storage mode must advertise a fused
 /// config so it keeps the compiled fast path (with bf16 m/v) instead of dropping
-/// to the eager tape. The true 8-bit block-quant mode has no fused kernel yet and
-/// must NOT map (it would otherwise run as plain fp32-moment Adam, silently losing
-/// the block quantization). These guard the optimizer→fused-kernel mapping.
+/// to the eager tape. The 8-bit block-quant mode maps to the plan's int8 block-quantized
+/// Adam with the same block size and minimum quantized length, and declines for the
+/// configurations that kernel does not implement. These guard the optimizer→fused-kernel mapping.
 /// </summary>
 public class Adam8BitFusedSpecTests
 {
@@ -36,13 +36,36 @@ public class Adam8BitFusedSpecTests
     }
 
     [Fact]
-    public void BlockQuantMode_DoesNotMapToFused()
+    public void BlockQuantMode_MapsToFusedInt8Adam_WithItsBlockSizeAndMinimum()
     {
-        // UseBFloat16MomentStorage == false ⇒ true int8 block-quant moments,
-        // which has no fused kernel yet — must fall back to the eager tape.
-        var opt = Make(bf16: false);
+        var opt = new Adam8BitOptimizer<float, Tensor<float>, Tensor<float>>(
+            null, new Adam8BitOptimizerOptions<float, Tensor<float>, Tensor<float>> { BlockSize = 256, Min8BitSize = 1024 });
+        Assert.True(((IFusedOptimizerSpec)opt).TryGetFusedOptimizerConfig(out var cfg),
+            "8-bit block-quant Adam8Bit should map to the plan's int8 block-quantized Adam.");
+        Assert.Equal(AiDotNet.Tensors.Engines.Compilation.OptimizerType.Adam, cfg.Type);
+        Assert.False(cfg.UseBf16Moments);
+        Assert.Equal(256, cfg.Int8MomentBlockSize);
+        Assert.Equal(1024, cfg.Int8MinQuantizedLength);
+        Assert.Equal(0f, cfg.WeightDecay);
+    }
+
+    [Theory]
+    [InlineData("percentile")]
+    [InlineData("stochastic")]
+    [InlineData("v-only")]
+    [InlineData("amsgrad")]
+    public void BlockQuantMode_TheKernelDoesNotImplement_DoesNotMap(string scenario)
+    {
+        var opt = new Adam8BitOptimizer<float, Tensor<float>, Tensor<float>>(
+            null, new Adam8BitOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                QuantizationPercentile = scenario == "percentile" ? 99.9 : 100.0,
+                UseStochasticRounding = scenario == "stochastic",
+                CompressBothMoments = scenario != "v-only",
+                UseAMSGrad = scenario == "amsgrad",
+            });
         Assert.False(((IFusedOptimizerSpec)opt).TryGetFusedOptimizerConfig(out _),
-            "8-bit block-quant Adam8Bit has no fused kernel and must not map.");
+            $"Adam8Bit mapped to the int8 kernel under '{scenario}', which that kernel does not implement.");
     }
 
     [Fact]
