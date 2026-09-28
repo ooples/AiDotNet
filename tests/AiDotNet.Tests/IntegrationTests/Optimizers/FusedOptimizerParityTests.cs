@@ -66,6 +66,10 @@ public class FusedOptimizerParityTests
     private (double maxAbsDiff, long fusedSteps, double trainDelta) Divergence(
         Func<IGradientBasedOptimizer<float, Tensor<float>, Tensor<float>>> optFactory)
     {
+        // Pin the global default init seed. The model-family test base sets it to 1234 process-wide and never resets it,
+        // so without this the initial weights, and every result here, depended on whether such a test had already run
+        // in the process (FTRL's L1 held all weights at zero under one init and not the other).
+        NeuralNetworkArchitecture<float>.DefaultRandomSeedOverride = 1234;
         var fused = new FeedForwardNeuralNetwork<float>(MakeArch(), optFactory(), new MeanSquaredErrorLoss<float>());
         var eager = new FeedForwardNeuralNetwork<float>(MakeArch(), optFactory(), new MeanSquaredErrorLoss<float>());
         // Identical initial weights: copy the fused model's init into the eager one.
@@ -140,6 +144,60 @@ public class FusedOptimizerParityTests
         Assert.True(trainDelta > 1e-6, $"{name}: training barely moved the parameters ({trainDelta:E3}); the comparison would be vacuous.");
         Assert.True(diff <= Math.Max(adamDiff * 10.0, 1e-4),
             $"{name}: fused and eager training differ by {diff:E3}, against {adamDiff:E3} for the Adam control.");
+    }
+    /// <summary>
+    /// A warmup that starts at learning rate 0 (the LinearWarmupScheduler default) makes the first step change nothing.
+    /// The #1822 persistence probe read that as a plan decoupled from the live tensors and disabled fused training for
+    /// the rest of the run. It must stay fused for every step, and match the eager warmup.
+    /// </summary>
+    [Fact]
+    public void Adam_WithAWarmupFromZero_StaysOnTheFusedPath()
+    {
+        var (adamDiff, _, _) = Divergence(Adam);
+        var (diff, fusedSteps, trainDelta) = Divergence(() =>
+            new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null, new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = 1e-2,
+                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(1e-2, warmupSteps: 5),
+                // Per batch: the cadence the compiled plan's per-step schedule expresses.
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+            }));
+        _output.WriteLine($"Adam + warmup from 0: fusedSteps={fusedSteps}, maxAbsDiff={diff:E3} (Adam control {adamDiff:E3})");
+        Assert.Equal(Steps, fusedSteps);
+        Assert.True(trainDelta > 1e-6, $"training barely moved the parameters ({trainDelta:E3}); the comparison would be vacuous.");
+        Assert.True(diff <= Math.Max(adamDiff * 10.0, 1e-4), $"fused and eager warmup differ by {diff:E3}, against {adamDiff:E3}.");
+    }
+
+    /// <summary>
+    /// A scheduler stepped per epoch (the default mode) cannot be expressed by the compiled plan's per-step schedule.
+    /// Mapping it made the fused path ramp the learning rate every batch while the eager path, following the
+    /// configuration, held it until the epoch ended. It must stay eager, and so train exactly like the eager model.
+    /// </summary>
+    [Fact]
+    public void Adam_WithAPerEpochScheduler_StaysEager_AndMatchesTheEagerStep()
+    {
+        var (diff, fusedSteps, _) = Divergence(() =>
+            new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null, new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = 1e-2,
+                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.CosineAnnealingLRScheduler(1e-2, tMax: 40),
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerEpoch,
+            }));
+        _output.WriteLine($"Adam + per-epoch cosine: fusedSteps={fusedSteps}, maxAbsDiff={diff:E3}");
+        Assert.Equal(0, fusedSteps);
+        Assert.Equal(0.0, diff);
+    }
+    /// <summary>
+    /// FTRL's L1 term holds a weight at exactly zero while its accumulator stays inside lambda1, so under this init a
+    /// fused step can leave every parameter unchanged. That is FTRL working, not a decoupled plan: FTRL must keep the
+    /// fused path for every step instead of being reset to eager.
+    /// </summary>
+    [Fact]
+    public void FTRL_KeepsTheFusedPath_WhenItsL1TermHoldsEveryWeightAtZero()
+    {
+        var (_, fusedSteps, _) = Divergence(() => FusedKernelParityTests.Create("FTRL"));
+        _output.WriteLine($"FTRL: fusedSteps={fusedSteps}");
+        Assert.Equal(Steps, fusedSteps);
     }
     [Fact]
     public void Adam_Control_FusedMatchesEager()
