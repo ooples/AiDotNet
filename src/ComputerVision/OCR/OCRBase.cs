@@ -581,8 +581,33 @@ public abstract class OCRBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
             throw new ArgumentNullException(nameof(expectedOutput));
         }
 
-        RecordTrainingLoss(TensorModelTrainer<T>.Step(
-            this, input, expectedOutput, NumOps.FromDouble(TrainingLearningRate), ForwardLogits));
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(true);
+        try
+        {
+            RecordTrainingLoss(TensorModelTrainer<T>.Step(
+                this, input, expectedOutput, NumOps.FromDouble(TrainingLearningRate), ForwardLogits));
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
+    }
+
+    /// <summary>Whether the model is in training mode.</summary>
+    protected bool IsTrainingMode;
+
+    /// <summary>
+    /// Sets training or inference mode.
+    /// </summary>
+    /// <remarks>
+    /// Batch normalization depends on it: batch statistics while training, running statistics at
+    /// inference. The OCR base had no switch at all, unlike the text and object detectors. Override to
+    /// forward the mode to modules that depend on it, calling the base.
+    /// </remarks>
+    public virtual void SetTrainingMode(bool training)
+    {
+        IsTrainingMode = training;
     }
 
     /// <inheritdoc />

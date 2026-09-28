@@ -48,6 +48,11 @@ public partial class CRNN<T> : OCRBase<T>
     private readonly Conv2D<T> _conv6;
     private readonly Conv2D<T> _conv7;
 
+    // Batch normalization after the 5th and 6th convolutions (Shi et al. 2017, Table 1), with learned
+    // scale/shift and running statistics for inference.
+    private readonly BatchNorm2D<T> _bn5;
+    private readonly BatchNorm2D<T> _bn6;
+
     // Bidirectional LSTM layers using actual LSTMLayer
     private readonly LSTMLayer<T> _lstm1Forward;
     private readonly LSTMLayer<T> _lstm1Backward;
@@ -85,6 +90,8 @@ public partial class CRNN<T> : OCRBase<T>
 
         // Stage 4
         _conv7 = new Conv2D<T>(512, 512, kernelSize: 2, padding: 0);
+        _bn5 = new BatchNorm2D<T>(512);
+        _bn6 = new BatchNorm2D<T>(512);
 
         // Bidirectional LSTM Layer 1
         // Input: [batch, seqLen, 512], Output: [batch, seqLen, 256]
@@ -100,6 +107,16 @@ public partial class CRNN<T> : OCRBase<T>
         // Output layer to vocabulary (512 = 256*2 from bidirectional)
         _outputLayer = new Dense<T>(_hiddenDim * 2, VocabularySize);
 
+        // A new model predicts; batch norm must start on its running statistics.
+        SetTrainingMode(false);
+    }
+
+    /// <inheritdoc/>
+    public override void SetTrainingMode(bool training)
+    {
+        base.SetTrainingMode(training);
+        _bn5.SetTrainingMode(training);
+        _bn6.SetTrainingMode(training);
     }
 
     /// <inheritdoc/>
@@ -167,13 +184,12 @@ public partial class CRNN<T> : OCRBase<T>
         x = ApplyReLU(x);
         x = MaxPool2D(x, 2, 1); // Pool height only
 
-        x = _conv5.Forward(x);
+        // Convolution, batch norm, then ReLU (the reference order; BN came after ReLU before).
+        x = _bn5.Forward(_conv5.Forward(x));
         x = ApplyReLU(x);
-        x = ApplyBatchNorm(x);
 
-        x = _conv6.Forward(x);
+        x = _bn6.Forward(_conv6.Forward(x));
         x = ApplyReLU(x);
-        x = ApplyBatchNorm(x);
         x = MaxPool2D(x, 2, 1); // Pool height only
 
         x = _conv7.Forward(x);
@@ -259,15 +275,6 @@ public partial class CRNN<T> : OCRBase<T>
         return Engine.Softmax(logits, -1);
     }
 
-    /// <summary>
-    /// Applies simple batch normalization.
-    /// </summary>
-    private Tensor<T> ApplyBatchNorm(Tensor<T> x)
-        // Normalises with the CURRENT batch's statistics (biased variance, no affine parameters),
-        // exactly as the loop it replaces. Note that this makes one image's output depend on what else
-        // is in its batch; it is preserved here and not silently changed.
-        => CvTensorOps<T>.BatchStatisticsNorm(x, 1e-5);
-
     /// <inheritdoc/>
     public override long GetParameterCount()
     {
@@ -278,6 +285,8 @@ public partial class CRNN<T> : OCRBase<T>
                _conv5.GetParameterCount() +
                _conv6.GetParameterCount() +
                _conv7.GetParameterCount() +
+               _bn5.GetParameterCount() +
+               _bn6.GetParameterCount() +
                _lstm1Forward.GetParameters().Length +
                _lstm1Backward.GetParameters().Length +
                _lstm2Forward.GetParameters().Length +
@@ -336,6 +345,8 @@ public partial class CRNN<T> : OCRBase<T>
         MapConvWeights(weights, "cnn.conv4", _conv5);
         MapConvWeights(weights, "cnn.conv5", _conv6);
         MapConvWeights(weights, "cnn.conv6", _conv7);
+        MapBatchNormWeights(weights, "cnn.batchnorm4", _bn5);
+        MapBatchNormWeights(weights, "cnn.batchnorm5", _bn6);
 
         // Map LSTM weights (typical PyTorch naming: rnn.weight_ih_l0, rnn.weight_hh_l0, etc.)
         MapLSTMWeights(weights, "rnn", 0, _lstm1Forward, _lstm1Backward);
@@ -343,6 +354,14 @@ public partial class CRNN<T> : OCRBase<T>
 
         // Map output layer weights
         MapDenseWeights(weights, "fc", _outputLayer);
+    }
+
+    private void MapBatchNormWeights(Dictionary<string, Tensor<float>> weights, string prefix, BatchNorm2D<T> bn)
+    {
+        if (weights.TryGetValue($"{prefix}.weight", out var gamma)) CopyWeights(gamma, bn.Gamma);
+        if (weights.TryGetValue($"{prefix}.bias", out var beta)) CopyWeights(beta, bn.Beta);
+        if (weights.TryGetValue($"{prefix}.running_mean", out var mean)) CopyWeights(mean, bn.RunningMean);
+        if (weights.TryGetValue($"{prefix}.running_var", out var variance)) CopyWeights(variance, bn.RunningVariance);
     }
 
     private void MapConvWeights(Dictionary<string, Tensor<float>> weights, string prefix, Conv2D<T> conv)

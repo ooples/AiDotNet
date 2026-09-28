@@ -234,42 +234,7 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     /// Extracts the outputs for a single batch item from batch outputs.
     /// </summary>
     protected virtual List<Tensor<T>> ExtractBatchOutputs(List<Tensor<T>> batchOutputs, int batchIndex)
-    {
-        var itemOutputs = new List<Tensor<T>>();
-
-        foreach (var output in batchOutputs)
-        {
-            int batchSize = output.Shape[0];
-            if (batchSize == 1 && batchIndex == 0)
-            {
-                // Single image in batch, return as-is
-                itemOutputs.Add(output);
-            }
-            else
-            {
-                // Extract the slice for this batch item
-                var itemShape = new int[output.Shape.Length];
-                itemShape[0] = 1;
-                for (int d = 1; d < output.Shape.Length; d++)
-                {
-                    itemShape[d] = output.Shape[d];
-                }
-
-                var itemTensor = new Tensor<T>(itemShape);
-                int elementsPerItem = output.Length / batchSize;
-                int sourceOffset = batchIndex * elementsPerItem;
-
-                for (int j = 0; j < elementsPerItem; j++)
-                {
-                    itemTensor[j] = output[sourceOffset + j];
-                }
-
-                itemOutputs.Add(itemTensor);
-            }
-        }
-
-        return itemOutputs;
-    }
+        => DetectionOutputBatching<T>.SliceItem(batchOutputs, batchIndex);
 
     /// <summary>
     /// Performs forward pass through the network.

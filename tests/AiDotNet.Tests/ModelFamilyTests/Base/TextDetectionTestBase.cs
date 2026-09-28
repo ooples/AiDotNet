@@ -93,10 +93,15 @@ public abstract class TextDetectionTestBase<T> : DetectionModelTestBase<T>
         switch (detector)
         {
             case CRAFT<T>:
-                AssertPositiveTextResult(detector.Detect(image, DetectConfidenceThreshold), 1, (0, 0, 60, 60));
+                // One 32x32 component: niter = int(sqrt(1024 * 32 / 1024) * 2) = 11, so the reference dilation
+                // grows each side by (1 + 11) / 2 = 6 cells, [-6, 37] at stride 2, clipped to the 64x64 image.
+                AssertPositiveTextResult(detector.Detect(image, DetectConfidenceThreshold), 1, (0, 0, 64, 64));
                 break;
             case DBNet<T>:
-                AssertPositiveTextResult(detector.Detect(image, DetectConfidenceThreshold), 1, (0, 0, 63, 63));
+                // The uniform head marks the whole 16x16 map as one kernel: its 15x15 minimum-area rectangle is
+                // dilated by D' = A' r' / L' = 225 * 1.5 / 60 = 5.625 cells, i.e. [-22.5, 82.5] px at stride 4,
+                // and clipped to the 64x64 image. Before the unclip existed this pinned the kernel, (0,0)-(63,63).
+                AssertPositiveTextResult(detector.Detect(image, DetectConfidenceThreshold), 1, (0, 0, 64, 64));
                 break;
             case EAST<T>:
                 // The actual RBOX head is the unique trainable five-element bias. A changed or
@@ -118,9 +123,12 @@ public abstract class TextDetectionTestBase<T> : DetectionModelTestBase<T>
                         for (int index = 0; index < overlappingGeometry.Length; index++)
                             Assert.Equal(overlappingGeometry[index], ToD(raw[0, (index + 1) * 64 + cell]), 10);
                     }
-                // Sixty-four eligible cells enter real NMS (fixed IoU 0.2); overlapping boxes
-                // leave eight. Zero distances are not a valid positive geometry fixture.
-                AssertPositiveTextResult(detector.Detect(image, DetectConfidenceThreshold), 8, (-20, -12, 28, 20));
+                // Locality-aware NMS, worked by hand: each cell's box is 48x32 px. Walking a row, the running
+                // score-weighted merge absorbs cells 0-6 (centres 4..52, mean 28); cell 7 sits 32 px from that
+                // mean, IoU exactly 0.2, which is not above the threshold, so it starts its own group. Standard
+                // NMS then keeps rows 0, 3 and 6 of both the merged boxes and the singles: 6 regions, the first
+                // being row 0's merged box, x 28 +- 24, y 4 +- 16. Zero distances are not a valid positive fixture.
+                AssertPositiveTextResult(detector.Detect(image, DetectConfidenceThreshold), 6, (4, -12, 52, 20));
 
                 for (int index = 0; index < 4; index++) geometryBias[index] = ToT(0.25);
                 geometryBias[4] = ToT(0);
@@ -141,6 +149,72 @@ public abstract class TextDetectionTestBase<T> : DetectionModelTestBase<T>
         // the caller raises the threshold; this is not a second randomly initialized fixture.
         Assert.Empty(detector.Detect(image, 0.75).TextRegions);
     }
+
+    /// <summary>
+    /// A batch of N images must give exactly the N results of detecting each image alone.
+    /// </summary>
+    /// <remarks>
+    /// Every text detector used to decode batch position 0 of a batched forward and return it as the
+    /// whole answer, so the other images vanished without an error. The two images differ and the check
+    /// requires them to give different results, so a decoder that reads item 0 for every item fails here
+    /// rather than passing on two identical answers.
+    /// </remarks>
+    [Fact(Timeout = 120000)]
+    public async Task DetectBatch_EqualsDetectingEachImageAlone()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var detector = CreateTextDetector();
+        detector.SetTrainingMode(false);
+
+        var first = CreateRandomImage(rng);
+        var second = CreateRandomImage(rng);
+        var batchShape = first.Shape.ToArray();
+        batchShape[0] = 2;
+        var batch = new Tensor<T>(batchShape);
+        for (int i = 0; i < first.Length; i++)
+        {
+            batch[i] = first[i];
+            batch[first.Length + i] = second[i];
+        }
+
+        // Zero keeps every scored region, so the comparison sees as much decoder output as it can.
+        var aloneFirst = detector.Detect(first, 0.0);
+        var aloneSecond = detector.Detect(second, 0.0);
+        var batched = detector.DetectBatch(batch, 0.0);
+
+        Assert.Equal(2, batched.Count);
+        AssertSameRegions(aloneFirst, batched[0], "batch item 0");
+        AssertSameRegions(aloneSecond, batched[1], "batch item 1");
+        Assert.True(aloneFirst.TextRegions.Count + aloneSecond.TextRegions.Count > 0,
+            "Neither image produced a region, so this fixture cannot tell batch items apart.");
+        Assert.NotEqual(RegionSignature(aloneFirst), RegionSignature(aloneSecond));
+
+        // One result cannot describe two images, so Detect refuses a batch instead of dropping one.
+        Assert.Throws<ArgumentException>(() => detector.Detect(batch));
+    }
+
+    private static void AssertSameRegions(TextDetectionResult<T> expected, TextDetectionResult<T> actual, string label)
+    {
+        Assert.True(expected.TextRegions.Count == actual.TextRegions.Count,
+            $"{label}: {actual.TextRegions.Count} regions batched, {expected.TextRegions.Count} alone.");
+        for (int r = 0; r < expected.TextRegions.Count; r++)
+        {
+            var (el, et, er, eb) = expected.TextRegions[r].Box.ToXYXY();
+            var (al, at, ar, ab) = actual.TextRegions[r].Box.ToXYXY();
+            // A batched forward may reduce in a different order than a single one, hence a tolerance.
+            Assert.Equal(el, al, 6); Assert.Equal(et, at, 6); Assert.Equal(er, ar, 6); Assert.Equal(eb, ab, 6);
+            Assert.Equal(ToD(expected.TextRegions[r].Confidence), ToD(actual.TextRegions[r].Confidence), 6);
+        }
+    }
+
+    private static string RegionSignature(TextDetectionResult<T> result)
+        => string.Join(";", result.TextRegions.Select(region =>
+        {
+            var (left, top, right, bottom) = region.Box.ToXYXY();
+            return $"{left:F4},{top:F4},{right:F4},{bottom:F4},{ToD(region.Confidence):F6}";
+        }));
 
     internal static void AssertPositiveTextResult(TextDetectionResult<T> result, int expectedCount,
         (double Left, double Top, double Right, double Bottom) expectedFirstBox)

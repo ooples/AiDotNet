@@ -87,33 +87,6 @@ public partial class CRAFT<T> : TextDetectorBase<T>
     };
 
     /// <inheritdoc/>
-    public override TextDetectionResult<T> Detect(Tensor<T> image)
-    {
-        return Detect(image, NumOps.ToDouble(Options.ConfidenceThreshold));
-    }
-
-    /// <inheritdoc/>
-    public override TextDetectionResult<T> Detect(Tensor<T> image, double confidenceThreshold)
-    {
-        var startTime = DateTime.UtcNow;
-
-        int originalHeight = image.Shape[2];
-        int originalWidth = image.Shape[3];
-
-        var input = Preprocess(image);
-        var outputs = Forward(input);
-        var textRegions = PostProcess(outputs, originalWidth, originalHeight, confidenceThreshold);
-
-        return new TextDetectionResult<T>
-        {
-            TextRegions = textRegions,
-            InferenceTime = DateTime.UtcNow - startTime,
-            ImageWidth = originalWidth,
-            ImageHeight = originalHeight
-        };
-    }
-
-    /// <inheritdoc/>
     protected override List<Tensor<T>> Forward(Tensor<T> input)
     {
         // Extract multi-scale backbone features
@@ -157,6 +130,12 @@ public partial class CRAFT<T> : TextDetectorBase<T>
     }
 
     /// <inheritdoc/>
+    /// <summary>Reference low-text threshold on the region score (Baek et al. 2019).</summary>
+    internal const double LowTextThreshold = 0.4;
+
+    /// <summary>Reference link threshold on the affinity score.</summary>
+    internal const double LinkThreshold = 0.4;
+
     protected override List<TextRegion<T>> PostProcess(
         List<Tensor<T>> outputs,
         int imageWidth,
@@ -173,19 +152,20 @@ public partial class CRAFT<T> : TextDetectorBase<T>
         double scaleX = (double)imageWidth / scoreW;
         double scaleY = (double)imageHeight / scoreH;
 
-        // Find connected components in the combined score map
+        // The reference decoder (Baek et al. 2019, getDetBoxes) uses three thresholds: a pixel belongs to
+        // text when its region score exceeds low_text (0.4) or its affinity exceeds link (0.4); a component
+        // survives only if its PEAK region score reaches the text threshold (0.7, here the caller's
+        // confidence threshold). One shared threshold on both maps, as before, is none of these.
         var textMask = new bool[scoreH, scoreW];
-        double threshold = NumOps.ToDouble(Options.BinaryThreshold);
-
+        var linkOnly = new bool[scoreH, scoreW];
         for (int h = 0; h < scoreH; h++)
         {
             for (int w = 0; w < scoreW; w++)
             {
-                double region = NumOps.ToDouble(regionScore[0, 0, h, w]);
-                double affinity = NumOps.ToDouble(affinityScore[0, 0, h, w]);
-
-                // Text pixel if either region or affinity is high enough
-                textMask[h, w] = region > threshold || affinity > threshold;
+                bool text = NumOps.ToDouble(regionScore[0, 0, h, w]) > LowTextThreshold;
+                bool link = NumOps.ToDouble(affinityScore[0, 0, h, w]) > LinkThreshold;
+                textMask[h, w] = text || link;
+                linkOnly[h, w] = link && !text;
             }
         }
 
@@ -200,15 +180,26 @@ public partial class CRAFT<T> : TextDetectorBase<T>
             if (component.Count < 10) // Filter very small regions
                 continue;
 
-            // Get bounding box and confidence
-            var (minX, minY, maxX, maxY, avgConfidence) = GetComponentStats(
+            // The reported confidence is the component's mean region score.
+            var (_, _, _, _, avgConfidence) = GetComponentStats(
                 component, regionScore, scaleX, scaleY);
 
-            if (avgConfidence < confidenceThreshold)
+            double peak = component.Max(p => NumOps.ToDouble(regionScore[0, 0, p.H, p.W]));
+            if (peak < confidenceThreshold)
                 continue;
 
-            // Create polygon from component boundary
-            var polygon = GetComponentBoundary(component, scaleX, scaleY);
+            // The reference boxes the component minus its link-only pixels, dilated by a size-dependent
+            // square kernel of side 1 + niter, niter = int(sqrt(size * min(w, h) / (w * h)) * 2), and then
+            // takes the minimum-area rectangle; a dilation of side k grows each side by floor(k / 2).
+            var character = component.Where(p => !linkOnly[p.H, p.W]).ToList();
+            int boxW = component.Max(p => p.W) - component.Min(p => p.W) + 1;
+            int boxH = component.Max(p => p.H) - component.Min(p => p.H) + 1;
+            int niter = (int)(Math.Sqrt(component.Count * (double)Math.Min(boxW, boxH) / (boxW * boxH)) * 2);
+            double dilation = (1 + niter) / 2;
+            var polygon = TextBoxGeometry.MinAreaRectangle(character.Count > 0 ? character : component, (_, _) => dilation)
+                .Select(p => (X: Math.Min(Math.Max(p.X * scaleX, 0.0), imageWidth),
+                              Y: Math.Min(Math.Max(p.Y * scaleY, 0.0), imageHeight)))
+                .ToList();
 
             if (polygon.Count >= 4)
             {
@@ -437,23 +428,4 @@ public partial class CRAFT<T> : TextDetectorBase<T>
         return (minX, minY, maxX, maxY, sumConf / component.Count);
     }
 
-    private List<(double X, double Y)> GetComponentBoundary(
-        List<(int H, int W)> component,
-        double scaleX,
-        double scaleY)
-    {
-        // Simple approach: get convex hull of component points
-        var points = component.Select(p => (X: p.W * scaleX, Y: p.H * scaleY)).ToList();
-
-        // Sort by angle from centroid
-        double cx = points.Average(p => p.X);
-        double cy = points.Average(p => p.Y);
-
-        var boundary = points
-            .OrderBy(p => Math.Atan2(p.Y - cy, p.X - cx))
-            .ToList();
-
-        // Simplify polygon
-        return SimplifyPolygon(boundary, Options.PolygonSimplificationEpsilon * Math.Max(scaleX, scaleY));
-    }
 }

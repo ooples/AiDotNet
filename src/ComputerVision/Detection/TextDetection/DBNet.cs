@@ -97,33 +97,6 @@ public partial class DBNet<T> : TextDetectorBase<T>
     };
 
     /// <inheritdoc/>
-    public override TextDetectionResult<T> Detect(Tensor<T> image)
-    {
-        return Detect(image, NumOps.ToDouble(Options.ConfidenceThreshold));
-    }
-
-    /// <inheritdoc/>
-    public override TextDetectionResult<T> Detect(Tensor<T> image, double confidenceThreshold)
-    {
-        var startTime = DateTime.UtcNow;
-
-        int originalHeight = image.Shape[2];
-        int originalWidth = image.Shape[3];
-
-        var input = Preprocess(image);
-        var outputs = Forward(input);
-        var textRegions = PostProcess(outputs, originalWidth, originalHeight, confidenceThreshold);
-
-        return new TextDetectionResult<T>
-        {
-            TextRegions = textRegions,
-            InferenceTime = DateTime.UtcNow - startTime,
-            ImageWidth = originalWidth,
-            ImageHeight = originalHeight
-        };
-    }
-
-    /// <inheritdoc/>
     protected override List<Tensor<T>> Forward(Tensor<T> input)
     {
         var fused = _pyramid.Forward(EnsureBackbone.ExtractFeatures(input));
@@ -193,13 +166,13 @@ public partial class DBNet<T> : TextDetectorBase<T>
             if (avgProb < confidenceThreshold)
                 continue;
 
-            // Scale contour to original image coordinates
-            var polygon = contour
-                .Select(p => (X: p.W * scaleX, Y: p.H * scaleY))
+            // The binary map marks the SHRUNK text kernel (training shrinks each polygon by
+            // D = A (1 - r^2) / L, Liao et al. 2020 Eq. 7), so the detection must be dilated back out:
+            // D' = A' r' / L' with r' = 1.5 (Eq. 10). Without it every box was the shrunk kernel.
+            var polygon = UnclipMinAreaRectangle(contour, UnclipRatio)
+                .Select(p => (X: Math.Min(Math.Max(p.X * scaleX, 0.0), imageWidth),
+                              Y: Math.Min(Math.Max(p.Y * scaleY, 0.0), imageHeight)))
                 .ToList();
-
-            // Simplify polygon
-            polygon = SimplifyPolygon(polygon, Options.PolygonSimplificationEpsilon * Math.Max(scaleX, scaleY));
 
             if (polygon.Count >= 4)
             {
@@ -417,6 +390,23 @@ public partial class DBNet<T> : TextDetectorBase<T>
             .ToList();
     }
 
+    /// <summary>The paper's inference dilation ratio r' (Liao et al. 2020, Section 3.5).</summary>
+    internal const double UnclipRatio = 1.5;
+
+    /// <summary>
+    /// Dilates a detected kernel back to its text region: the component's minimum-area rectangle grown by
+    /// D' = A' r' / L' on every side.
+    /// </summary>
+    /// <remarks>
+    /// This is the reference post-process (mini box, unclip, mini box again). For a rectangle the Vatti offset
+    /// by D' followed by its minimum-area rectangle is exactly the rectangle with each side moved out by D',
+    /// so no general polygon clipper is needed.
+    /// </remarks>
+    internal static List<(double X, double Y)> UnclipMinAreaRectangle(IReadOnlyList<(int H, int W)> points, double ratio)
+        => TextBoxGeometry.MinAreaRectangle(points, (width, height) =>
+            width + height > 0 ? width * height * ratio / (2 * (width + height)) : 0.0);
+
+    // Andrew's monotone chain; returns the hull counter-clockwise without the closing point.
     private List<TextRegion<T>> ApplyPolygonNMS(List<TextRegion<T>> regions, double iouThreshold)
     {
         if (regions.Count == 0)

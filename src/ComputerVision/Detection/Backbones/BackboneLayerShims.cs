@@ -438,6 +438,13 @@ internal class BatchNorm2D<T> : IParameterSource<T>, IParameterChunkSource<T>, I
         _layer = new BatchNormalizationLayer<T>(channels);
     }
 
+    // Live views, so pretrained batch-norm state (PyTorch weight, bias, running_mean, running_var) can be
+    // copied in place.
+    public Tensor<T> Gamma => _layer.GetGamma();
+    public Tensor<T> Beta => _layer.GetBeta();
+    public Tensor<T> RunningMean => _layer.GetRunningMean();
+    public Tensor<T> RunningVariance => _layer.GetRunningVariance();
+
     public Tensor<T> Forward(Tensor<T> input)
     {
         if (input.Shape.Length != 4 || input.Shape[1] != _channels)

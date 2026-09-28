@@ -253,19 +253,79 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
     protected TextDetectorBase(TextDetectionOptions<T> options)
     {
         Options = options;
+        // Arm the per-layer initialization seed scope before the derived constructor builds any layer
+        // (the same root-model contract DiffusionModelBase follows). Every layer, the BackboneLayerShims
+        // adapters' inner layers, and the necks and query tables that draw from the scope then take a
+        // deterministic seed, so two models built from equal options start from equal weights (#2201).
+        // A null seed leaves the scope unarmed and initialization stays unseeded.
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(options.RandomSeed);
     }
 
     /// <summary>
-    /// Detects text regions in an image.
+    /// Detects text regions in one image.
     /// </summary>
-    /// <param name="image">Input image tensor [batch, channels, height, width].</param>
+    /// <param name="image">Input image tensor [1, channels, height, width].</param>
     /// <returns>Text detection result.</returns>
-    public abstract TextDetectionResult<T> Detect(Tensor<T> image);
+    public virtual TextDetectionResult<T> Detect(Tensor<T> image)
+        => Detect(image, NumOps.ToDouble(Options.ConfidenceThreshold));
 
     /// <summary>
-    /// Detects text regions with custom threshold.
+    /// Detects text regions in one image with a custom confidence threshold.
     /// </summary>
-    public abstract TextDetectionResult<T> Detect(Tensor<T> image, double confidenceThreshold);
+    /// <exception cref="ArgumentException">The tensor holds more than one image; use <see cref="DetectBatch(Tensor{T}, double)"/>.</exception>
+    public virtual TextDetectionResult<T> Detect(Tensor<T> image, double confidenceThreshold)
+    {
+        if (image is null) throw new ArgumentNullException(nameof(image));
+        // A single result cannot describe several images. Every detector used to decode batch position 0
+        // of a batched forward and return it as the whole answer, silently dropping the rest.
+        if (image.Rank == 4 && image.Shape[0] != 1)
+            throw new ArgumentException(
+                $"Detect takes one image but got a batch of {image.Shape[0]}; use DetectBatch for several images.",
+                nameof(image));
+
+        return DetectBatch(image, confidenceThreshold)[0];
+    }
+
+    /// <summary>
+    /// Detects text regions in every image of a batch, with one forward pass.
+    /// </summary>
+    /// <param name="images">Input image tensor [batch, channels, height, width].</param>
+    /// <returns>One result per image, in batch order.</returns>
+    public virtual IReadOnlyList<TextDetectionResult<T>> DetectBatch(Tensor<T> images)
+        => DetectBatch(images, NumOps.ToDouble(Options.ConfidenceThreshold));
+
+    /// <summary>
+    /// Detects text regions in every image of a batch with a custom confidence threshold.
+    /// </summary>
+    public virtual IReadOnlyList<TextDetectionResult<T>> DetectBatch(Tensor<T> images, double confidenceThreshold)
+    {
+        if (images is null) throw new ArgumentNullException(nameof(images));
+        if (images.Rank != 4)
+            throw new ArgumentException($"Expected [batch, channels, height, width], got rank {images.Rank}.", nameof(images));
+
+        var startTime = DateTime.UtcNow;
+        int batchSize = images.Shape[0];
+        int originalHeight = images.Shape[2];
+        int originalWidth = images.Shape[3];
+
+        var batchOutputs = Forward(Preprocess(images));
+        var results = new List<TextDetectionResult<T>>(batchSize);
+        for (int i = 0; i < batchSize; i++)
+        {
+            var itemOutputs = DetectionOutputBatching<T>.SliceItem(batchOutputs, i);
+            results.Add(new TextDetectionResult<T>
+            {
+                TextRegions = PostProcess(itemOutputs, originalWidth, originalHeight, confidenceThreshold),
+                ImageWidth = originalWidth,
+                ImageHeight = originalHeight
+            });
+        }
+
+        // One forward serves the whole batch, so each image reports the batch's time.
+        var elapsed = DateTime.UtcNow - startTime;
+        foreach (var result in results) result.InferenceTime = elapsed;
+        return results;
+    }
 
     /// <summary>
     /// Preprocesses the input image.

@@ -95,33 +95,6 @@ public partial class EAST<T> : TextDetectorBase<T>
     };
 
     /// <inheritdoc/>
-    public override TextDetectionResult<T> Detect(Tensor<T> image)
-    {
-        return Detect(image, NumOps.ToDouble(Options.ConfidenceThreshold));
-    }
-
-    /// <inheritdoc/>
-    public override TextDetectionResult<T> Detect(Tensor<T> image, double confidenceThreshold)
-    {
-        var startTime = DateTime.UtcNow;
-
-        int originalHeight = image.Shape[2];
-        int originalWidth = image.Shape[3];
-
-        var input = Preprocess(image);
-        var outputs = Forward(input);
-        var textRegions = PostProcess(outputs, originalWidth, originalHeight, confidenceThreshold);
-
-        return new TextDetectionResult<T>
-        {
-            TextRegions = textRegions,
-            InferenceTime = DateTime.UtcNow - startTime,
-            ImageWidth = originalWidth,
-            ImageHeight = originalHeight
-        };
-    }
-
-    /// <inheritdoc/>
     protected override List<Tensor<T>> Forward(Tensor<T> input)
     {
         // Extract multi-scale backbone features
@@ -208,8 +181,17 @@ public partial class EAST<T> : TextDetectorBase<T>
             }
         }
 
-        // Apply NMS to remove overlapping detections
-        regions = ApplyTextNMS(regions, 0.2);
+        // Locality-aware NMS (Zhou et al. 2017, Algorithm 1), one of the paper's two contributions: the
+        // per-pixel geometries arrive in row-major order, neighbours in a row that overlap are merged by
+        // score-weighted averaging of their vertices, and only then does standard NMS run. Plain NMS over
+        // thousands of per-pixel boxes, as before, keeps one pixel's box instead of the row's consensus.
+        regions = ApplyTextNMS(LocalityAwareMerge(regions, 0.2), 0.2);
+
+        // The merged score is a SUM (it orders the NMS above); report the box's mean score-map value, as the
+        // reference does after LANMS, so confidences stay in [0, 1] and threshold like single-pixel scores.
+        foreach (var region in regions)
+            region.Confidence = NumOps.FromDouble(MeanScoreInside(region, score, scaleX, scaleY));
+        regions = regions.Where(r => NumOps.ToDouble(r.Confidence) >= confidenceThreshold).ToList();
 
         // Limit to max detections
         if (regions.Count > Options.MaxDetections)
@@ -400,6 +382,74 @@ public partial class EAST<T> : TextDetectorBase<T>
     private Tensor<T> BilinearUpsample(Tensor<T> x, int targetH, int targetW)
         // Asymmetric bilinear (src = dst * in / out, no half-pixel offset), as the loop it replaces.
         => CvTensorOps<T>.ResizeBilinearAsymmetric(x, targetH, targetW);
+
+    // Merges consecutive (row-major) regions whose boxes overlap by more than the threshold: vertices are
+    // averaged by score, and the merged score is the sum of the parts.
+    private List<TextRegion<T>> LocalityAwareMerge(List<TextRegion<T>> regions, double iouThreshold)
+    {
+        var merged = new List<TextRegion<T>>();
+        List<(double X, double Y)>? polygon = null;
+        double polygonScore = 0, angleSum = 0;
+        BoundingBox<T>? box = null;
+
+        void Flush()
+        {
+            if (polygon is null) return;
+            var region = TextRegion<T>.FromPolygon(
+                polygon.Select(p => (NumOps.FromDouble(p.X), NumOps.FromDouble(p.Y))).ToList(),
+                NumOps.FromDouble(polygonScore));
+            region.RegionType = TextRegionType.Word;
+            if (_useRotatedBoxes) region.RotationAngle = angleSum / polygonScore;
+            merged.Add(region);
+        }
+
+        foreach (var next in regions)
+        {
+            double s = NumOps.ToDouble(next.Confidence);
+            var points = next.Polygon?.Select(v => (X: NumOps.ToDouble(v.X), Y: NumOps.ToDouble(v.Y))).ToList();
+            if (points is null || points.Count == 0) continue;
+
+            if (polygon is not null && box is not null && polygon.Count == points.Count
+                && ComputeBoxIoU(box, next.Box) > iouThreshold)
+            {
+                double total = polygonScore + s;
+                for (int k = 0; k < polygon.Count; k++)
+                    polygon[k] = ((polygon[k].X * polygonScore + points[k].X * s) / total,
+                                  (polygon[k].Y * polygonScore + points[k].Y * s) / total);
+                polygonScore = total;
+                angleSum += s * next.RotationAngle;
+                box = TextRegion<T>.FromPolygon(
+                    polygon.Select(p => (NumOps.FromDouble(p.X), NumOps.FromDouble(p.Y))).ToList(), next.Confidence).Box;
+                continue;
+            }
+
+            Flush();
+            polygon = points;
+            polygonScore = s;
+            angleSum = s * next.RotationAngle;
+            box = next.Box;
+        }
+
+        Flush();
+        return merged;
+    }
+
+    // Mean score-map value over the cells whose centres fall inside the region's box.
+    private double MeanScoreInside(TextRegion<T> region, Tensor<T> score, double scaleX, double scaleY)
+    {
+        var (left, top, right, bottom) = region.Box.ToXYXY();
+        double sum = 0;
+        int count = 0;
+        for (int h = 0; h < score.Shape[2]; h++)
+            for (int w = 0; w < score.Shape[3]; w++)
+            {
+                double cx = (w + 0.5) * scaleX, cy = (h + 0.5) * scaleY;
+                if (cx < left || cx > right || cy < top || cy > bottom) continue;
+                sum += NumOps.ToDouble(score[0, 0, h, w]);
+                count++;
+            }
+        return count > 0 ? sum / count : 0.0;
+    }
 
     private List<TextRegion<T>> ApplyTextNMS(List<TextRegion<T>> regions, double iouThreshold)
     {
