@@ -64,5 +64,117 @@
     "origin": "ce95e3e00dcc",
     "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.TFCTests",
     "reason": "ce95e3e00dcc (with fb6e578e94) made FinancialModelBase publish the [batch, sequence, features] input these models accept. Before it the census could only read a flat architecture InputSize and probed a rank-1 vector the model never sees in use; the census now probes the real window. The model code is unchanged; the workload measured is the one the model is built for, so this is a level change in what is measured, not a regression. Probe shapes read from census records: master e21af6d627 vs PR run 36147619096: [200] -> [1,200,1] (ContextLength 200): the same element count, now as the rank-3 sequence the model declares; allocation 18.7 MB -> 84.8 MB."
+  },
+  {
+    "commit": "a9d755ee24",
+    "origin": "e15c12f2a5",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.MQCNNTests",
+    "metric": "allocatedBytes",
+    "reason": "e15c12f2a5 made FinancialModelBase declare its exact rank-3 input geometry, so the census now probes MQCNN on the input the model is built for instead of a flat vector: [512] with 56,040 parameters at 1afde6bc50, [1,168,512] with 56,040 at a4838391ff. A larger workload, not a slower one: the level moved in that one window and has held since. Baseline 4.6 MB, measured 20.0 MB on this PR."
+  },
+  {
+    "commit": "a9d755ee24",
+    "origin": "e15c12f2a5",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.TS2VecTests",
+    "metric": "allocatedBytes",
+    "reason": "e15c12f2a5 made FinancialModelBase declare its exact rank-3 input geometry, so the census now probes TS2Vec on the input the model is built for instead of a flat vector: [512] with 170,208 parameters at 1afde6bc50, [1,200,1] with 134,984 at a4838391ff. A larger workload, not a slower one: the level moved in that one window and has held since. Baseline 12.6 MB, measured 54.6 MB on this PR."
+  },
+  {
+    "commit": "a9d755ee24",
+    "origin": "e15c12f2a5",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.WaveNetTests",
+    "metric": "allocatedBytes",
+    "reason": "e15c12f2a5 made FinancialModelBase declare its exact rank-3 input geometry, so the census now probes WaveNet on the input the model is built for instead of a flat vector: [512] with 274,232 parameters at 1afde6bc50, [1,128,512] with 274,232 at a4838391ff. A larger workload, not a slower one: the level moved in that one window and has held since. Baseline 13.9 MB, measured 89.3 MB on this PR."
+  },
+  {
+    "commit": "a9d755ee24",
+    "origin": "e15c12f2a5",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.LSTNetTests",
+    "metric": "peakPrivateMemoryBytes",
+    "reason": "e15c12f2a5 made FinancialModelBase declare its exact rank-3 input geometry, so the census now probes LSTNet on the input the model is built for instead of a flat vector: [512] with 138,318 parameters at 1afde6bc50, [1,168,512] with 6,417,486 at a4838391ff. A larger workload, not a slower one: the level moved in that one window and has held since. Baseline 259.0 MB, measured 551.2 MB on this PR."
+  },
+  {
+    "commit": "a9d755ee24",
+    "origin": "e15c12f2a5",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.FEDformerTests",
+    "metric": "steadyForwardMedianMs",
+    "reason": "e15c12f2a5 made FinancialModelBase declare its exact rank-3 input geometry, so the census now probes FEDformer on the input the model is built for instead of a flat vector: [512] with 9,719,815 parameters at 1afde6bc50, [1,96,7] with 9,461,255 at a4838391ff. A larger workload, not a slower one: the level moved in that one window and has held since. Baseline 4.6 ms, measured 122.9 ms on this PR. Its 3-sample forward timing is also runner-bound on this geometry: 38.3 to 161.6 ms on the same Intel model with no FEDformer change between runs."
+  },
+  {
+    "commit": "a9d755ee24",
+    "origin": "e15c12f2a5",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.FEDformerTests",
+    "metric": "steadyForwardP95Ms",
+    "reason": "e15c12f2a5 made FinancialModelBase declare its exact rank-3 input geometry, so the census now probes FEDformer on the input the model is built for instead of a flat vector: [512] with 9,719,815 parameters at 1afde6bc50, [1,96,7] with 9,461,255 at a4838391ff. A larger workload, not a slower one: the level moved in that one window and has held since. Baseline 15.1 ms, measured 123.8 ms on this PR. Its 3-sample forward timing is also runner-bound on this geometry: 38.3 to 161.6 ms on the same Intel model with no FEDformer change between runs."
+  },
+  {
+    "commit": "a9d755ee24",
+    "origin": "e15c12f2a5",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.DeepFactorTests",
+    "metric": "allocatedBytes",
+    "reason": "e15c12f2a5 made FinancialModelBase declare its exact rank-3 input geometry, so the census now probes DeepFactor on the input the model is built for instead of a flat vector: [512] with 123,192 parameters at 1afde6bc50, [1,168,512] with 219,384 at a4838391ff. A larger workload, not a slower one: the level moved in that one window and has held since. Baseline 8.5 MB, measured 253.5 MB on this PR. Part of this is a Tensors defect, fixed in ooples/AiDotNet.Tensors#1062 (a broadcast-add backward that sent every fused step to the eager tape, and pre-packed weights discarded on each compile): measured locally, DeepFactor 256.9 -> 121.0 MB and DeepState 211.8 -> 113.0 MB once that release is consumed."
+  },
+  {
+    "commit": "a9d755ee24",
+    "origin": "e15c12f2a5",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.DeepFactorTests",
+    "metric": "cpuMs",
+    "reason": "e15c12f2a5 made FinancialModelBase declare its exact rank-3 input geometry, so the census now probes DeepFactor on the input the model is built for instead of a flat vector: [512] with 123,192 parameters at 1afde6bc50, [1,168,512] with 219,384 at a4838391ff. A larger workload, not a slower one: the level moved in that one window and has held since. Baseline 523.4 ms, measured 1386.8 ms on this PR."
+  },
+  {
+    "commit": "a9d755ee24",
+    "origin": "e15c12f2a5",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.DeepFactorTests",
+    "metric": "peakPrivateMemoryBytes",
+    "reason": "e15c12f2a5 made FinancialModelBase declare its exact rank-3 input geometry, so the census now probes DeepFactor on the input the model is built for instead of a flat vector: [512] with 123,192 parameters at 1afde6bc50, [1,168,512] with 219,384 at a4838391ff. A larger workload, not a slower one: the level moved in that one window and has held since. Baseline 214.0 MB, measured 474.5 MB on this PR."
+  },
+  {
+    "commit": "a9d755ee24",
+    "origin": "e15c12f2a5",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.DeepFactorTests",
+    "metric": "peakWorkingSetBytes",
+    "reason": "e15c12f2a5 made FinancialModelBase declare its exact rank-3 input geometry, so the census now probes DeepFactor on the input the model is built for instead of a flat vector: [512] with 123,192 parameters at 1afde6bc50, [1,168,512] with 219,384 at a4838391ff. A larger workload, not a slower one: the level moved in that one window and has held since. Baseline 129.1 MB, measured 282.3 MB on this PR."
+  },
+  {
+    "commit": "a9d755ee24",
+    "origin": "e15c12f2a5",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.DeepFactorTests",
+    "metric": "steadyForwardP95Ms",
+    "reason": "e15c12f2a5 made FinancialModelBase declare its exact rank-3 input geometry, so the census now probes DeepFactor on the input the model is built for instead of a flat vector: [512] with 123,192 parameters at 1afde6bc50, [1,168,512] with 219,384 at a4838391ff. A larger workload, not a slower one: the level moved in that one window and has held since. Baseline 1.3 ms, measured 27.8 ms on this PR."
+  },
+  {
+    "commit": "a9d755ee24",
+    "origin": "e15c12f2a5",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.DeepFactorTests",
+    "metric": "trainStepMs",
+    "reason": "e15c12f2a5 made FinancialModelBase declare its exact rank-3 input geometry, so the census now probes DeepFactor on the input the model is built for instead of a flat vector: [512] with 123,192 parameters at 1afde6bc50, [1,168,512] with 219,384 at a4838391ff. A larger workload, not a slower one: the level moved in that one window and has held since. Baseline 251.3 ms, measured 923.2 ms on this PR."
+  },
+  {
+    "commit": "a9d755ee24",
+    "origin": "e15c12f2a5",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.DeepStateTests",
+    "metric": "allocatedBytes",
+    "reason": "e15c12f2a5 made FinancialModelBase declare its exact rank-3 input geometry, so the census now probes DeepState on the input the model is built for instead of a flat vector: [512] with 204,054 parameters at 1afde6bc50, [1,168,512] with 204,054 at a4838391ff. A larger workload, not a slower one: the level moved in that one window and has held since. Baseline 15.2 MB, measured 213.0 MB on this PR. Part of this is a Tensors defect, fixed in ooples/AiDotNet.Tensors#1062 (a broadcast-add backward that sent every fused step to the eager tape, and pre-packed weights discarded on each compile): measured locally, DeepFactor 256.9 -> 121.0 MB and DeepState 211.8 -> 113.0 MB once that release is consumed."
+  },
+  {
+    "commit": "a9d755ee24",
+    "origin": "e15c12f2a5",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.DeepStateTests",
+    "metric": "peakPrivateMemoryBytes",
+    "reason": "e15c12f2a5 made FinancialModelBase declare its exact rank-3 input geometry, so the census now probes DeepState on the input the model is built for instead of a flat vector: [512] with 204,054 parameters at 1afde6bc50, [1,168,512] with 204,054 at a4838391ff. A larger workload, not a slower one: the level moved in that one window and has held since. Baseline 220.5 MB, measured 395.3 MB on this PR."
+  },
+  {
+    "commit": "a9d755ee24",
+    "origin": "e15c12f2a5",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.DeepStateTests",
+    "metric": "peakWorkingSetBytes",
+    "reason": "e15c12f2a5 made FinancialModelBase declare its exact rank-3 input geometry, so the census now probes DeepState on the input the model is built for instead of a flat vector: [512] with 204,054 parameters at 1afde6bc50, [1,168,512] with 204,054 at a4838391ff. A larger workload, not a slower one: the level moved in that one window and has held since. Baseline 131.0 MB, measured 234.6 MB on this PR."
+  },
+  {
+    "commit": "a9d755ee24",
+    "origin": "e15c12f2a5",
+    "fixture": "AiDotNet.Tests.ModelFamilyTests.Generated.DeepStateTests",
+    "metric": "trainStepMs",
+    "reason": "e15c12f2a5 made FinancialModelBase declare its exact rank-3 input geometry, so the census now probes DeepState on the input the model is built for instead of a flat vector: [512] with 204,054 parameters at 1afde6bc50, [1,168,512] with 204,054 at a4838391ff. A larger workload, not a slower one: the level moved in that one window and has held since. Baseline 263.9 ms, measured 790.0 ms on this PR."
   }
 ]
