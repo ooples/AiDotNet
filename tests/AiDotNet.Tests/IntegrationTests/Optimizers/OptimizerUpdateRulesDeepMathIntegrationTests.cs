@@ -480,36 +480,27 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
             Epsilon = 1e-8
         };
 
-        // AMSGrad requires a model - we need to check if it works with null model
-        // If it throws, we'll use a workaround
-        try
-        {
-            var optimizer = new AMSGradOptimizer<double, Matrix<double>, Vector<double>>(
-                null!, options);
+        // Built for a bare parameter vector (no model), so UpdateParameters always runs and the assertion is
+        // unconditional: a construction or update failure fails the test instead of passing it silently.
+        var optimizer = AMSGradOptimizer<double, Matrix<double>, Vector<double>>.CreateForFunction(options);
 
-            var parameters = new Vector<double>(new double[] { 1.0, 2.0 });
-            var gradient = new Vector<double>(new double[] { 0.1, -0.2 });
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0 });
+        var gradient = new Vector<double>(new double[] { 0.1, -0.2 });
 
-            var result = optimizer.UpdateParameters(parameters, gradient);
+        var result = optimizer.UpdateParameters(parameters, gradient);
 
-            // Step 1: m = 0.1*g, v = 0.001*g^2, vHat = max(0, v) = v
-            // mHat = m / (1-0.9) = g, and the running max is bias-corrected like Adam's v (PyTorch amsgrad=True):
-            // vHatCorrected = vHat / (1-0.999) = g^2. So step 1 is exactly Adam's step, about lr in magnitude.
-            // (Leaving vHat uncorrected made this step 0.0316, i.e. ~32x the learning rate.)
-            double m0 = 0.1 * 0.1;
-            double v0 = 0.001 * 0.01;
-            double mHat0 = m0 / (1 - 0.9);
-            double vHatCorrected0 = v0 / (1 - 0.999);
-            double update0 = 0.001 * mHat0 / (Math.Sqrt(vHatCorrected0) + 1e-8);
-            double expected0 = 1.0 - update0;
+        // Step 1: m = 0.1*g, v = 0.001*g^2, vHat = max(0, v) = v
+        // mHat = m / (1-0.9) = g, and the running max is bias-corrected like Adam's v (PyTorch amsgrad=True):
+        // vHatCorrected = vHat / (1-0.999) = g^2. So step 1 is exactly Adam's step, about lr in magnitude.
+        // (Leaving vHat uncorrected made this step 0.0316, i.e. ~32x the learning rate.)
+        double m0 = 0.1 * 0.1;
+        double v0 = 0.001 * 0.01;
+        double mHat0 = m0 / (1 - 0.9);
+        double vHatCorrected0 = v0 / (1 - 0.999);
+        double update0 = 0.001 * mHat0 / (Math.Sqrt(vHatCorrected0) + 1e-8);
+        double expected0 = 1.0 - update0;
 
-            Assert.Equal(expected0, result[0], RelaxedTol);
-        }
-        catch (NullReferenceException)
-        {
-            // If null model causes issues in constructor, skip gracefully
-            // The test still documents the expected behavior
-        }
+        Assert.Equal(expected0, result[0], RelaxedTol);
     }
 
     [Fact(Timeout = 120000)]
