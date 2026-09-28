@@ -108,7 +108,7 @@ public partial class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBa
     /// </para>
     /// </remarks>
     public CoordinateDescentOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         CoordinateDescentOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

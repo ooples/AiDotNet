@@ -102,7 +102,7 @@ public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : 
     /// <param name="modelCache">The model cache to use.</param>
     /// <param name="gradientCache">The gradient cache to use.</param>
     public NesterovAcceleratedGradientOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

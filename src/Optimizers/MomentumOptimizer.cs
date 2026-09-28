@@ -114,7 +114,7 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
     /// </para>
     /// </remarks>
     public MomentumOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         MomentumOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {

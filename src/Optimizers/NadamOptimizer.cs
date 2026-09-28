@@ -110,7 +110,7 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// <param name="model">The model to optimize.</param>
     /// <param name="options">The Nadam-specific optimization options.</param>
     public NadamOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         NadamOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {

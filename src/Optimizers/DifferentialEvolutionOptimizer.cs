@@ -85,7 +85,7 @@ public partial class DifferentialEvolutionOptimizer<T, TInput, TOutput> : Optimi
     /// </para>
     /// </remarks>
     public DifferentialEvolutionOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         DifferentialEvolutionOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

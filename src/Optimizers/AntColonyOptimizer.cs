@@ -55,7 +55,7 @@ public partial class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, T
     /// </para>
     /// </remarks>
     public AntColonyOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         AntColonyOptimizationOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

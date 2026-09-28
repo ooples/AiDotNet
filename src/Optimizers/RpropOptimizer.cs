@@ -92,7 +92,7 @@ public partial class RpropOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// 0.5, first step 0.1). Those defaults are well tested and rarely worth changing.</para>
     /// </remarks>
     public RpropOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         RpropOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {

@@ -91,7 +91,7 @@ public partial class RAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// </para>
     /// </remarks>
     public RAdamOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         RAdamOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {

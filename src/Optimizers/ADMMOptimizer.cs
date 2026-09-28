@@ -64,7 +64,7 @@ public partial class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// </para>
     /// </remarks>
     public ADMMOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         ADMMOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

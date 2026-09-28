@@ -78,7 +78,7 @@ public partial class NewtonMethodOptimizer<T, TInput, TOutput> : GradientBasedOp
     /// <param name="model">The model to optimize.</param>
     /// <param name="options">The Newton's Method-specific optimization options.</param>
     public NewtonMethodOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         NewtonMethodOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {

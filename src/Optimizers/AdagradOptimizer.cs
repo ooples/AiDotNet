@@ -114,7 +114,7 @@ public partial class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// </para>
     /// </remarks>
     public AdagradOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         AdagradOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {

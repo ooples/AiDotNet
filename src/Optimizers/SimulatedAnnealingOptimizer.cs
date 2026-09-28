@@ -101,7 +101,7 @@ public partial class SimulatedAnnealingOptimizer<T, TInput, TOutput> : Optimizer
     /// </para>
     /// </remarks>
     public SimulatedAnnealingOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         SimulatedAnnealingOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

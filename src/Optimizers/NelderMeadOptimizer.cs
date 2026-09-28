@@ -74,7 +74,7 @@ public partial class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// <param name="model">The model to optimize.</param>
     /// <param name="options">The Nelder-Mead-specific optimization options.</param>
     public NelderMeadOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         NelderMeadOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {

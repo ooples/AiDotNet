@@ -277,7 +277,7 @@ public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : Grad
     /// </para>
     /// </remarks>
     public ProximalGradientDescentOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

@@ -152,7 +152,7 @@ public partial class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimize
     /// </para>
     /// </remarks>
     public AdaMaxOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         AdaMaxOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

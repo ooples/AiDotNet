@@ -70,28 +70,28 @@ public class FusedKernelParityTests
         "AdaDelta" => new AdaDeltaOptimizer<float, Tensor<float>, Tensor<float>>(null, new AdaDeltaOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1.0 }),
         "AMSGrad" => new AMSGradOptimizer<float, Tensor<float>, Tensor<float>>(null, new AMSGradOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }),
         "AdamW" => new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(null, new AdamWOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }),
-        "RAdam" => new RAdamOptimizer<float, Tensor<float>, Tensor<float>>(null!, new RAdamOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }),
-        "Rprop" => new RpropOptimizer<float, Tensor<float>, Tensor<float>>(null!, new RpropOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }),
-        "GradientDescent" => new GradientDescentOptimizer<float, Tensor<float>, Tensor<float>>(null!, new GradientDescentOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-1 }),
-        "MiniBatchGradientDescent" => new MiniBatchGradientDescentOptimizer<float, Tensor<float>, Tensor<float>>(null!, new MiniBatchGradientDescentOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-1 }),
-        "StochasticGradientDescent" => new StochasticGradientDescentOptimizer<float, Tensor<float>, Tensor<float>>(null!, new StochasticGradientDescentOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-1 }),
-        "NesterovAcceleratedGradient" => new NesterovAcceleratedGradientOptimizer<float, Tensor<float>, Tensor<float>>(null!, new NesterovAcceleratedGradientOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }),
-        "CoordinateDescent" => new CoordinateDescentOptimizer<float, Tensor<float>, Tensor<float>>(null!, new CoordinateDescentOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }),
-        "Momentum" => new MomentumOptimizer<float, Tensor<float>, Tensor<float>>(null!, new MomentumOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2, UseAdaptiveMomentum = false }),
-        "TrustRegion" => new TrustRegionOptimizer<float, Tensor<float>, Tensor<float>>(null!, new TrustRegionOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2, AdaptTrustRegionRadius = false }),
-        "LBFGS" => new LBFGSOptimizer<float, Tensor<float>, Tensor<float>>(null!, new LBFGSOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2, UseLineSearch = false }),
-        "ProximalGradientDescentL2" => new ProximalGradientDescentOptimizer<float, Tensor<float>, Tensor<float>>(null!, new ProximalGradientDescentOptimizerOptions<float, Tensor<float>, Tensor<float>>
+        "RAdam" => new RAdamOptimizer<float, Tensor<float>, Tensor<float>>(null, new RAdamOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }),
+        "Rprop" => new RpropOptimizer<float, Tensor<float>, Tensor<float>>(null, new RpropOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }),
+        "GradientDescent" => new GradientDescentOptimizer<float, Tensor<float>, Tensor<float>>(null, new GradientDescentOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-1 }),
+        "MiniBatchGradientDescent" => new MiniBatchGradientDescentOptimizer<float, Tensor<float>, Tensor<float>>(null, new MiniBatchGradientDescentOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-1 }),
+        "StochasticGradientDescent" => new StochasticGradientDescentOptimizer<float, Tensor<float>, Tensor<float>>(null, new StochasticGradientDescentOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-1 }),
+        "NesterovAcceleratedGradient" => new NesterovAcceleratedGradientOptimizer<float, Tensor<float>, Tensor<float>>(null, new NesterovAcceleratedGradientOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }),
+        "CoordinateDescent" => new CoordinateDescentOptimizer<float, Tensor<float>, Tensor<float>>(null, new CoordinateDescentOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }),
+        "Momentum" => new MomentumOptimizer<float, Tensor<float>, Tensor<float>>(null, new MomentumOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2, UseAdaptiveMomentum = false }),
+        "TrustRegion" => new TrustRegionOptimizer<float, Tensor<float>, Tensor<float>>(null, new TrustRegionOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2, AdaptTrustRegionRadius = false }),
+        "LBFGS" => new LBFGSOptimizer<float, Tensor<float>, Tensor<float>>(null, new LBFGSOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2, UseLineSearch = false }),
+        "ProximalGradientDescentL2" => new ProximalGradientDescentOptimizer<float, Tensor<float>, Tensor<float>>(null, new ProximalGradientDescentOptimizerOptions<float, Tensor<float>, Tensor<float>>
         {
             InitialLearningRate = 1e-1,
             Regularization = new L2Regularization<float, Tensor<float>, Tensor<float>>(new RegularizationOptions { Strength = 1e-2 }),
         }),
-        "ProximalGradientDescentL1" => new ProximalGradientDescentOptimizer<float, Tensor<float>, Tensor<float>>(null!, new ProximalGradientDescentOptimizerOptions<float, Tensor<float>, Tensor<float>>
+        "ProximalGradientDescentL1" => new ProximalGradientDescentOptimizer<float, Tensor<float>, Tensor<float>>(null, new ProximalGradientDescentOptimizerOptions<float, Tensor<float>, Tensor<float>>
         {
             InitialLearningRate = 1e-1,
             Regularization = new L1Regularization<float, Tensor<float>, Tensor<float>>(new RegularizationOptions { Strength = 1e-3 }),
         }),
-        "FTRL" => new FTRLOptimizer<float, Tensor<float>, Tensor<float>>(null!, new FTRLOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-1 }),
-        "ASGD" => new ASGDOptimizer<float, Tensor<float>, Tensor<float>>(null!, new ASGDOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }),
+        "FTRL" => new FTRLOptimizer<float, Tensor<float>, Tensor<float>>(null, new FTRLOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-1 }),
+        "ASGD" => new ASGDOptimizer<float, Tensor<float>, Tensor<float>>(null, new ASGDOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }),
         "Adam8BitBf16" => new Adam8BitOptimizer<float, Tensor<float>, Tensor<float>>(null, new Adam8BitOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2, UseBFloat16MomentStorage = true }),
         _ => throw new ArgumentException(name),
     };

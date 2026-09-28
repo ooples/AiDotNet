@@ -86,7 +86,7 @@ public partial class GradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     /// <param name="model">The model to optimize.</param>
     /// <param name="options">Options for the Gradient Descent optimizer.</param>
     public GradientDescentOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         GradientDescentOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new GradientDescentOptimizerOptions<T, TInput, TOutput>())
