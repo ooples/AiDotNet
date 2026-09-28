@@ -92,7 +92,7 @@ public partial class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
     /// <param name="model">The model to optimize.</param>
     /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     public DFPOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         DFPOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

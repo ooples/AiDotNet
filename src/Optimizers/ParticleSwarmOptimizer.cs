@@ -65,7 +65,7 @@ public partial class ParticleSwarmOptimizer<T, TInput, TOutput> : OptimizerBase<
     /// <param name="model">The model to be optimized.</param>
     /// <param name="options">The particle swarm optimization options, or null to use default options.</param>
     public ParticleSwarmOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         ParticleSwarmOptimizationOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {

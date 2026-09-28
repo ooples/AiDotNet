@@ -120,7 +120,7 @@ public partial class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInp
     /// </para>
     /// </remarks>
     public PowellOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         PowellOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

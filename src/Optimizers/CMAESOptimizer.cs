@@ -81,7 +81,7 @@ public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
     /// </para>
     /// </remarks>
     public CMAESOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         CMAESOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

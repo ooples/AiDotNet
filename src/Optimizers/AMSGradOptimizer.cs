@@ -67,7 +67,7 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// </para>
     /// </remarks>
     public AMSGradOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         AMSGradOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

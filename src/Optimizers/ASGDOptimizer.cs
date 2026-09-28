@@ -81,7 +81,7 @@ public partial class ASGDOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// want the averaging to actually engage.</para>
     /// </remarks>
     public ASGDOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         ASGDOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {

@@ -145,7 +145,7 @@ public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// <param name="options">Options for the L-BFGS optimizer. If null, default options are used.</param>
     /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     public LBFGSOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         LBFGSOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

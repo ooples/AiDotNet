@@ -157,7 +157,7 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
     /// </para>
     /// </remarks>
     public RootMeanSquarePropagationOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

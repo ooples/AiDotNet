@@ -122,6 +122,23 @@ public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : Grad
             return true;
         }
 
+        if (_regularization is L2Regularization<T, TInput, TOutput>)
+        {
+            // The eager step is w' = s * (w - lr * g) with s = 1 - strength (L2Regularization's shrink). The fused SGD
+            // kernel applies L2 weight decay as w' = w * (1 - lr' * wd) - lr' * g, which is the same update exactly when
+            // lr' = s * lr and wd = (1 - s) / (s * lr). That identity needs the configured lr, so only a constant rate
+            // maps, and s = 0 (the prox zeroes every weight) has no finite weight decay.
+            if (schedule is not null) return false;
+            if (!(lr > 0.0) || double.IsInfinity(lr)) return false;
+            double shrink = 1.0 - _regularization.GetOptions().Strength;
+            if (!(shrink > 0.0) || shrink > 1.0) return false;
+            config = new Fused.FusedOptimizerConfig(
+                Tensors.Engines.Compilation.OptimizerType.SGD,
+                (float)(shrink * lr),
+                0f, 0f, 0f, (float)((1.0 - shrink) / (shrink * lr)), schedule);
+            return true;
+        }
+
         return false;
     }
 
@@ -260,7 +277,7 @@ public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : Grad
     /// </para>
     /// </remarks>
     public ProximalGradientDescentOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

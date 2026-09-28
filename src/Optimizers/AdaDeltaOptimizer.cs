@@ -145,7 +145,7 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
     /// </para>
     /// </remarks>
     public AdaDeltaOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         AdaDeltaOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

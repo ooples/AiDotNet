@@ -145,7 +145,7 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <param name="options">The options for configuring the FTRL algorithm.</param>
     /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     public FTRLOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         FTRLOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())
