@@ -237,8 +237,9 @@ public class StreamingStepTrainingTests : IDisposable
 
         // Force the eager path: the checkpoint's Adam state lives in a compiled-plan payload the eager optimizer
         // cannot use, so training on would restart Adam silently.
-        typeof(NeuralNetworkBase<float>).GetField(
-                "_fusedTrainingDisabled", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+        (typeof(NeuralNetworkBase<float>).GetField(
+                "_fusedTrainingDisabled", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            ?? throw new InvalidOperationException("NeuralNetworkBase has no _fusedTrainingDisabled field"))
             .SetValue(model, true);
         var (x, y) = Data(1);
         var ex = Assert.Throws<InvalidOperationException>(
@@ -246,6 +247,46 @@ public class StreamingStepTrainingTests : IDisposable
         Assert.Contains("fused compiled training", ex.Message);
     }
 
+    [Fact(Timeout = 180000)]
+    public async Task FusedCheckpoint_ThenReset_TrainsExactlyLikeAFreshOptimizer()
+    {
+        // Reset() must discard a restored fused checkpoint that is still waiting to be imported. Otherwise the next
+        // plan would resume the checkpoint's moments, and on the eager path the pending state would refuse to train.
+        await Task.Yield();
+        var init = InitialWeights();
+        var fused = await Train(13, resume: false, Checkpoints("fused-then-reset", saveEvery: 1000), init);
+        byte[] optimizerState = fused.Opt.Serialize();
+        var (x, y) = Data(1);
+        var batchX = Stack(x.Take(BatchSize).ToArray());
+        var batchY = Stack(y.Take(BatchSize).ToArray());
+
+        FeedForwardNeuralNetwork<float> EagerModel(bool restoreThenReset)
+        {
+            var optimizer = Optimizer(epochs: 100);
+            var model = Model(optimizer);
+            model.SetParameters(fused.Model.GetParameters());
+            model.SetBaseTrainOptimizer(optimizer);
+            if (restoreThenReset)
+            {
+                optimizer.Deserialize(optimizerState);
+                optimizer.Reset();
+            }
+
+            // The eager path is where a leftover pending checkpoint shows: it refuses to train.
+            (typeof(NeuralNetworkBase<float>).GetField(
+                    "_fusedTrainingDisabled", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                ?? throw new InvalidOperationException("NeuralNetworkBase has no _fusedTrainingDisabled field"))
+                .SetValue(model, true);
+            return model;
+        }
+
+        var reset = EagerModel(restoreThenReset: true);
+        var fresh = EagerModel(restoreThenReset: false);
+        reset.Train(batchX, batchY);
+        fresh.Train(batchX, batchY);
+
+        Assert.Equal(fresh.GetParameters().ToArray(), reset.GetParameters().ToArray());
+    }
     [Fact(Timeout = 180000)]
     public async Task FusedCheckpoint_WhoseImportFails_IsRefusedRatherThanRestartingTheOptimizer()
     {

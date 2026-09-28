@@ -2184,6 +2184,15 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         GradientCache.ClearCache();
         ClearSerializedTapeState();
 
+        // Fused training keeps this optimizer's moments inside the compiled plan, and a restored checkpoint may still
+        // be waiting to be imported into the next plan. A reset must clear both: release the live plan so the next
+        // fused step configures a fresh one, and drop the pending and eager-restore state so that plan starts from
+        // zero instead of importing the checkpoint the caller just reset away.
+        _fusedStateLink?.Release();
+        _fusedStateLink = null;
+        _pendingFusedPlanState = null;
+        _restoredEagerStateAwaitingEagerPath = false;
+
         // Reset learning rate scheduler state
         _learningRateScheduler?.Reset();
         _currentStep = 0;
