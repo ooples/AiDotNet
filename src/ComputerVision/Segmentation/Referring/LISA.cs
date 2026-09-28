@@ -43,10 +43,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
 ///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
-/// var model = new LISA&lt;double&gt;(architecture, numClasses: 1);
+/// var model = new LISA&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new LISA&lt;double&gt;(architecture,
+///     options: new LISAOptions { NumClasses = 1, DropRate = 0 });
 ///
 /// // Or load a pre-trained ONNX model for conversational segmentation
-/// var onnxModel = new LISA&lt;double&gt;(architecture, "lisa.onnx", numClasses: 1);
+/// var onnxModel = new LISA&lt;double&gt;(architecture, "lisa.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -85,8 +88,6 @@ public partial class LISA<T> : Common.ReferringSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
-    /// <param name="dropRate">Dropout rate (default: 0).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -95,18 +96,17 @@ public partial class LISA<T> : Common.ReferringSegmentationBase<T>
     /// </remarks>
     public LISA(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 1,
-        double dropRate = 0,
+        ILossFunction<T>? lossFunction = null,
         LISAOptions? options = null)
         // The base resolves height/width/channels/numClasses/native-mode from the architecture and
         // defaults `optimizer` lazily via CreateDefaultOptimizer(), so null is passed straight through.
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, optimizer, lossFunction, (options ??= new LISAOptions()).NumClasses)
     {
-        _options = options ?? new LISAOptions(); Options = _options;
+        _options = options; Options = _options;
         // LISA's own fallback input geometry is 1024x1024, not the base's 512.
         if (architecture.InputHeight <= 0) _height = 1024;
         if (architecture.InputWidth <= 0) _width = 1024;
-        _dropRate = dropRate;
+        _dropRate = _options.DropRate;
         _channelDims = [64, 128, 320, 768];
         _depths = [2, 2, 4, 12];
         _decoderDim = 256;
@@ -118,7 +118,6 @@ public partial class LISA<T> : Common.ReferringSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -128,18 +127,18 @@ public partial class LISA<T> : Common.ReferringSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public LISA(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 1,
+    public LISA(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         LISAOptions? options = null)
         // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
         // InferenceSession.
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, onnxModelPath, (options ??= new LISAOptions()).NumClasses)
     {
-        _options = options ?? new LISAOptions(); Options = _options;
+        _options = options; Options = _options;
         // LISA's own fallback input geometry is 1024x1024, not the base's 512.
         if (architecture.InputHeight <= 0) _height = 1024;
         if (architecture.InputWidth <= 0) _width = 1024;
-        _dropRate = 0;
+        _dropRate = _options.DropRate;
         _channelDims = [64, 128, 320, 768];
         _depths = [2, 2, 4, 12];
         _decoderDim = 256;

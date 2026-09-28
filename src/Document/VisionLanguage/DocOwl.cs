@@ -136,19 +136,10 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
     public DocOwl(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int imageSize = 448,
-        int maxSequenceLength = 2048,
-        int visionDim = 1024,
-        int languageDim = 4096,
-        int visionLayers = 24,
-        int languageLayers = 32,
-        int numHeads = 32,
-        int vocabSize = 32000,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
         DocOwlOptions? options = null,
-        int? visionNumHeads = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new DocOwlOptions();
         Options = _options;
@@ -159,17 +150,21 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
             throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}", onnxModelPath);
 
         _useNativeMode = false;
-        _visionDim = visionDim;
-        _languageDim = languageDim;
-        _visionLayers = visionLayers;
-        _languageLayers = languageLayers;
-        _numHeads = numHeads;
-        _visionNumHeads = visionNumHeads ?? 16;
-        _vocabSize = vocabSize;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _visionDim = _options.VisionDim;
+        _languageDim = _options.LanguageDim;
+        _visionLayers = _options.VisionLayers;
+        _languageLayers = _options.LanguageLayers;
+        _numHeads = _options.NumHeads;
+        _visionNumHeads = _options.VisionNumHeads ?? 16;
+        _vocabSize = _options.VocabSize;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.ImageSize;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -191,51 +186,43 @@ public partial class DocOwl<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
     /// </remarks>
     public DocOwl(
         NeuralNetworkArchitecture<T> architecture,
-        int imageSize = 448,
-        int maxSequenceLength = 2048,
-        int visionDim = 1024,
-        int languageDim = 4096,
-        int visionLayers = 24,
-        int languageLayers = 32,
-        int numHeads = 32,
-        int vocabSize = 32000,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
         DocOwlOptions? options = null,
-        int? visionNumHeads = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new DocOwlOptions();
+        _options.Validate();
         Options = _options;
 
         // A deliberately tiny image is the public signal used by smoke/integration callers.
         // Keep the DocOwl topology but avoid materializing the paper-scale 7B-style defaults
         // (including a 32k x 4096 embedding) for a 64-pixel fixture. Normal 448px construction
         // and every explicitly larger image retain the production defaults unchanged.
-        if (imageSize <= 64)
+        if (_options.ImageSize <= 64)
         {
-            if (maxSequenceLength == 2048) maxSequenceLength = 64;
-            if (visionDim == 1024) visionDim = 64;
-            if (languageDim == 4096) languageDim = 64;
-            if (visionLayers == 24) visionLayers = 2;
-            if (languageLayers == 32) languageLayers = 2;
-            if (numHeads == 32) numHeads = 4;
-            if (vocabSize == 32000) vocabSize = 256;
-            if (!visionNumHeads.HasValue) visionNumHeads = 4;
+            if (_options.MaxSequenceLength == 2048) _options.MaxSequenceLength = 64;
+            if (_options.VisionDim == 1024) _options.VisionDim = 64;
+            if (_options.LanguageDim == 4096) _options.LanguageDim = 64;
+            if (_options.VisionLayers == 24) _options.VisionLayers = 2;
+            if (_options.LanguageLayers == 32) _options.LanguageLayers = 2;
+            if (_options.NumHeads == 32) _options.NumHeads = 4;
+            if (_options.VocabSize == 32000) _options.VocabSize = 256;
+            if (!_options.VisionNumHeads.HasValue) _options.VisionNumHeads = 4;
         }
 
         _useNativeMode = true;
-        _visionDim = visionDim;
-        _languageDim = languageDim;
-        _visionLayers = visionLayers;
-        _languageLayers = languageLayers;
-        _numHeads = numHeads;
-        _visionNumHeads = visionNumHeads ?? 16;
-        _vocabSize = vocabSize;
+        _visionDim = _options.VisionDim;
+        _languageDim = _options.LanguageDim;
+        _visionLayers = _options.VisionLayers;
+        _languageLayers = _options.LanguageLayers;
+        _numHeads = _options.NumHeads;
+        _visionNumHeads = _options.VisionNumHeads ?? 16;
+        _vocabSize = _options.VocabSize;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.ImageSize;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
         InitializeLayers();
         InitializeEmbeddings();

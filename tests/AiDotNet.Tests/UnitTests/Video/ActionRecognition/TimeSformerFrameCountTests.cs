@@ -5,7 +5,8 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.ActionRecognition;
-using Xunit;
+using Xunit;
+using AiDotNet.Video.Options;
 
 namespace AiDotNet.Tests.UnitTests.Video.ActionRecognition;
 
@@ -34,10 +35,8 @@ public class TimeSformerFrameCountTests
 
     private static TimeSformer<double> Small(NeuralNetworkArchitecture<double> architecture, int? numFrames = null)
         => numFrames is int frames
-            ? new TimeSformer<double>(architecture, numClasses: Classes, embedDim: 16, numHeads: 2, numLayers: 1,
-                numFrames: frames, patchSize: Patch)
-            : new TimeSformer<double>(architecture, numClasses: Classes, embedDim: 16, numHeads: 2, numLayers: 1,
-                patchSize: Patch);
+            ? new TimeSformer<double>(architecture, options: new TimeSformerOptions { NumClasses = Classes, EmbedDim = 16, NumHeads = 2, NumLayers = 1, NumFrames = frames, PatchSize = Patch })
+            : new TimeSformer<double>(architecture, options: new TimeSformerOptions { NumClasses = Classes, EmbedDim = 16, NumHeads = 2, NumLayers = 1, PatchSize = Patch });
 
     private static Tensor<double> Random(int[] shape, int seed)
     {

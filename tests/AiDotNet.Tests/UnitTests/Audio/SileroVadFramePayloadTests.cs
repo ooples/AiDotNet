@@ -1,4 +1,6 @@
 using AiDotNet.Audio.VoiceActivity;
+using AiDotNet.Models.Options;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
 using Xunit;
@@ -27,13 +29,7 @@ public class SileroVadFramePayloadTests
     private const int FrameSize = 64;
 
     private static SileroVad<double> CreateVad() =>
-        new SileroVad<double>(
-            new NeuralNetworkArchitecture<double>(inputFeatures: FrameSize, outputSize: 1),
-            sampleRate: 16000,
-            frameSize: FrameSize,
-            convFilters: 4,
-            lstmHiddenDim: 4,
-            numLstmLayers: 1);
+        new SileroVad<double>(new NeuralNetworkArchitecture<double>(inputFeatures: FrameSize, outputSize: 1), options: new SileroVadOptions { SampleRate = 16000, FrameSize = FrameSize, ConvFilters = 4, LstmHiddenDim = 4, NumLstmLayers = 1 });
 
     private static Tensor<double> Signal(int frames, double amplitude, int seed)
     {

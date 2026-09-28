@@ -93,17 +93,20 @@ public class BuildAsyncFacadeRadianceFieldTests
     public async Task BuildAsync_NeRF_ConfigureModel_DoesNotThrowFromFeatureSelection()
     {
         var nerf = new NeRF<float>(
-            positionEncodingLevels: 4,
-            directionEncodingLevels: 2,
-            hiddenDim: 32,
-            numLayers: 2,
-            colorHiddenDim: 16,
-            colorNumLayers: 1,
-            useHierarchicalSampling: false,
-            renderSamples: 8,
-            renderNearBound: 1.0,
-            renderFarBound: 4.0,
-            learningRate: 1e-3);
+            options: new AiDotNet.Models.Options.NeRFOptions
+            {
+                PositionEncodingLevels = 4,
+                DirectionEncodingLevels = 2,
+                HiddenDim = 32,
+                NumLayers = 2,
+                ColorHiddenDim = 16,
+                ColorNumLayers = 1,
+                UseHierarchicalSampling = false,
+                RenderSamples = 8,
+                RenderNearBound = 1.0,
+                RenderFarBound = 4.0,
+                LearningRate = 1e-3
+            });
 
         var (xTrain, yTrain) = SmallCubeBatch(seed: 1826);
 
@@ -159,15 +162,18 @@ public class BuildAsyncFacadeRadianceFieldTests
     public async Task BuildAsync_InstantNGP_ConfigureModel_DoesNotThrowFromFeatureSelection()
     {
         var ngp = new InstantNGP<float>(
-            hashTableSize: 4096,
-            numLevels: 4,
-            featuresPerLevel: 2,
-            finestResolution: 256,
-            coarsestResolution: 16,
-            mlpHiddenDim: 16,
-            mlpNumLayers: 2,
-            occupancyGridResolution: 16,
-            learningRate: 1e-2);
+            new AiDotNet.Models.Options.InstantNGPOptions<float>
+            {
+                HashTableSize = 4096,
+                NumLevels = 4,
+                FeaturesPerLevel = 2,
+                FinestResolution = 256,
+                CoarsestResolution = 16,
+                MlpHiddenDim = 16,
+                MlpNumLayers = 2,
+                OccupancyGridResolution = 16,
+                LearningRate = 1e-2
+            });
 
         var (xTrain, yTrain) = SmallCubeBatch(seed: 18262);
 

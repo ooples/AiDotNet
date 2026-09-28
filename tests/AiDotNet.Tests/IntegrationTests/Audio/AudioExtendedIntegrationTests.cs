@@ -35,13 +35,10 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(80, options.NumMels);
         Assert.Equal(30, options.MaxAudioLengthSeconds);
         Assert.NotNull(options.OnnxOptions);
-        Assert.Null(options.EncoderModelPath);
-        Assert.Null(options.DecoderModelPath);
         Assert.Equal(448, options.MaxTokens);
         Assert.Equal(5, options.BeamSize);
         Assert.Equal(0.0, options.Temperature, Tolerance);
         Assert.False(options.ReturnTimestamps);
-        Assert.False(options.WordTimestamps);
     }
 
     [Fact(Timeout = 120000)]
@@ -58,10 +55,7 @@ public class AudioExtendedIntegrationTests
             MaxTokens = 1024,
             BeamSize = 10,
             Temperature = 0.5,
-            ReturnTimestamps = true,
-            WordTimestamps = true,
-            EncoderModelPath = "/path/encoder.onnx",
-            DecoderModelPath = "/path/decoder.onnx"
+            ReturnTimestamps = true
         };
         Assert.Equal(WhisperModelSize.LargeV3, options.ModelSize);
         Assert.Equal("en", options.Language);
@@ -73,9 +67,6 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(10, options.BeamSize);
         Assert.Equal(0.5, options.Temperature, Tolerance);
         Assert.True(options.ReturnTimestamps);
-        Assert.True(options.WordTimestamps);
-        Assert.Equal("/path/encoder.onnx", options.EncoderModelPath);
-        Assert.Equal("/path/decoder.onnx", options.DecoderModelPath);
     }
 
     #endregion
@@ -464,7 +455,6 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(0.65, options.ClusteringThreshold, Tolerance);
         Assert.Equal(0.5, options.MinTurnDuration, Tolerance);
         Assert.Null(options.MaxSpeakers);
-        Assert.Null(options.EmbeddingModelPath);
     }
 
     [Fact(Timeout = 120000)]
@@ -478,8 +468,7 @@ public class AudioExtendedIntegrationTests
             EmbeddingDimension = 512,
             ClusteringThreshold = 0.8,
             MinTurnDuration = 1.0,
-            MaxSpeakers = 4,
-            EmbeddingModelPath = "/model/embedding.onnx"
+            MaxSpeakers = 4
         };
         Assert.Equal(8000, options.SampleRate);
         Assert.Equal(2.0, options.WindowDurationSeconds, Tolerance);
@@ -500,7 +489,6 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(160, options.HopLength);
         Assert.Equal(40, options.NumMfcc);
         Assert.Equal(256, options.EmbeddingDimension);
-        Assert.Null(options.ModelPath);
         Assert.NotNull(options.OnnxOptions);
     }
 
@@ -512,7 +500,10 @@ public class AudioExtendedIntegrationTests
     public async Task SpeakerVerifierOptions_DefaultValues()
     {
         var options = new SpeakerVerifierOptions();
-        Assert.Equal(0.7, options.VerificationThreshold, Tolerance);
+        // 0.6, not the 0.7 asserted before: nothing read this class, so the model applied its own
+        // 0.6 to every verification. The property is now the value the model uses, and it carries
+        // the number that was actually in force rather than the one that never was.
+        Assert.Equal(0.6, options.VerificationThreshold, Tolerance);
         Assert.Equal(0.6, options.IdentificationThreshold, Tolerance);
     }
 
@@ -626,7 +617,6 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(1.0, options.AngleResolution, Tolerance);
         Assert.Equal(512, options.FrameSize);
         Assert.Equal(1000.0, options.CenterFrequency, Tolerance);
-        Assert.Null(options.ModelPath);
         Assert.NotNull(options.OnnxOptions);
     }
 
@@ -793,7 +783,6 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(1024, options.HopLength);
         Assert.Equal(4, options.StemCount);
         Assert.Equal(31, options.HpssKernelSize);
-        Assert.Null(options.ModelPath);
         Assert.NotNull(options.OnnxOptions);
     }
 
@@ -806,8 +795,7 @@ public class AudioExtendedIntegrationTests
             FftSize = 2048,
             HopLength = 512,
             StemCount = 2,
-            HpssKernelSize = 15,
-            ModelPath = "/models/separator.onnx"
+            HpssKernelSize = 15
         };
         Assert.Equal(22050, options.SampleRate);
         Assert.Equal(2048, options.FftSize);
@@ -873,7 +861,6 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(1.0, options.Energy, Tolerance);
         Assert.Null(options.SpeakerId);
         Assert.Null(options.Language);
-        Assert.Null(options.AcousticModelPath);
         Assert.Null(options.VocoderModelPath);
         Assert.True(options.UseGriffinLimFallback);
         Assert.Equal(60, options.GriffinLimIterations);
@@ -894,7 +881,6 @@ public class AudioExtendedIntegrationTests
             Energy = 0.8,
             SpeakerId = 3,
             Language = "fr",
-            AcousticModelPath = "/model/acoustic.onnx",
             VocoderModelPath = "/model/vocoder.onnx",
             UseGriffinLimFallback = false,
             GriffinLimIterations = 100,
@@ -976,7 +962,6 @@ public class AudioExtendedIntegrationTests
         Assert.Equal(250, options.MinSpeechDurationMs);
         Assert.Equal(100, options.MinSilenceDurationMs);
         Assert.Equal(0.1, options.DropoutRate, Tolerance);
-        Assert.Null(options.ModelPath);
         Assert.NotNull(options.OnnxOptions);
         Assert.Equal(1e-3, options.LearningRate, 1e-10);
     }

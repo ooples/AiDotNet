@@ -97,7 +97,7 @@ public partial class EfficientConformer<T> : AudioNeuralNetworkBase<T>, ISpeechR
     public TranscriptionResult<T> Transcribe(
         Tensor<T> audio,
         string? language = null,
-        bool includeTimestamps = false)
+        bool? includeTimestamps = null)
     {
         ThrowIfDisposed();
         var features = PreprocessAudio(audio);
@@ -112,7 +112,7 @@ public partial class EfficientConformer<T> : AudioNeuralNetworkBase<T>, ISpeechR
             Language = language ?? _options.Language,
             Confidence = NumOps.FromDouble(confidence),
             DurationSeconds = duration,
-            Segments = includeTimestamps
+            Segments = ResolveReturnTimestamps(includeTimestamps)
                 ? ExtractSegments(text, duration, confidence)
                 : Array.Empty<TranscriptionSegment<T>>()
         };
@@ -122,7 +122,7 @@ public partial class EfficientConformer<T> : AudioNeuralNetworkBase<T>, ISpeechR
     public Task<TranscriptionResult<T>> TranscribeAsync(
         Tensor<T> audio,
         string? language = null,
-        bool includeTimestamps = false,
+        bool? includeTimestamps = null,
         CancellationToken cancellationToken = default)
         => Task.Run(
             () => Transcribe(audio, language, includeTimestamps),

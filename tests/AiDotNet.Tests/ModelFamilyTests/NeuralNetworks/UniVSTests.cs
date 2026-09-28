@@ -64,6 +64,6 @@ public class UniVSTests : SegmentationTestBase
             inputDepth: Channels,
             outputSize: NumClasses);
 
-        return new UniVS<double>(architecture, numClasses: NumClasses, dropRate: 0.0);
+        return new UniVS<double>(architecture, options: new UniVSOptions { NumClasses = NumClasses, DropRate = 0.0 });
     }
 }

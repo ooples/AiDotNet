@@ -47,10 +47,10 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
-/// var model = new OMGSeg&lt;double&gt;(architecture, numClasses: 150);
+/// var model = new OMGSeg&lt;double&gt;(architecture, options: new OMGSegOptions { NumClasses = 150 });
 ///
 /// // Or load a pre-trained ONNX model for unified segmentation
-/// var onnxModel = new OMGSeg&lt;double&gt;(architecture, "omgseg.onnx", numClasses: 150);
+/// var onnxModel = new OMGSeg&lt;double&gt;(architecture, "omgseg.onnx", options: new OMGSegOptions { NumClasses = 150 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -121,25 +121,32 @@ public partial class OMGSeg<T> : Common.PanopticSegmentationBase<T>
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        int numClasses = 150,
-        int numQueries = 200,
-        OMGSegModelSize modelSize = OMGSegModelSize.Base,
-        double dropRate = 0.1,
         OMGSegOptions? options = null)
-        // The base resolves height/width/channels/numClasses/native-mode from the architecture, and
+        : this(options ?? new OMGSegOptions(), architecture, optimizer, lossFunction)
+    {
+    }
+
+    private OMGSeg(
+        OMGSegOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        ILossFunction<T>? lossFunction)
+
+        // The base resolves height/width/channels/options.NumClasses/native-mode from the architecture, and
         // defaults `optimizer` LAZILY via CreateDefaultOptimizer() - which is why null is passed
         // straight through instead of `optimizer ?? new AdamWOptimizer<...>(this)`, an expression
         // that cannot appear in a constructor initializer.
-        : base(architecture, optimizer, lossFunction, numClasses,
-               Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
+        : base(architecture, optimizer, lossFunction, options.NumClasses,
+               Math.Max(1, options.NumClasses / 3), options.NumClasses - Math.Max(1, options.NumClasses / 3))
     {
-        _options = options ?? new OMGSegOptions();
+        options.Validate();
+        _options = options;
         Options = _options;
-        _numQueries = numQueries;
-        _modelSize = modelSize;
-        _dropRate = dropRate;
+        _numQueries = options.NumQueries;
+        _modelSize = options.ModelSize;
+        _dropRate = options.DropRate;
 
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(options.ModelSize);
         InitializeLayers();
     }
 
@@ -163,22 +170,29 @@ public partial class OMGSeg<T> : Common.PanopticSegmentationBase<T>
     public OMGSeg(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numClasses = 150,
-        int numQueries = 200,
-        OMGSegModelSize modelSize = OMGSegModelSize.Base,
         OMGSegOptions? options = null)
+        : this(options ?? new OMGSegOptions(), architecture, onnxModelPath)
+    {
+    }
+
+    private OMGSeg(
+        OMGSegOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath)
+
         // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
         // geometry and opens the InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses,
-               Math.Max(1, numClasses / 3), numClasses - Math.Max(1, numClasses / 3))
+        : base(architecture, onnxModelPath, options.NumClasses,
+               Math.Max(1, options.NumClasses / 3), options.NumClasses - Math.Max(1, options.NumClasses / 3))
     {
-        _options = options ?? new OMGSegOptions();
+        options.Validate();
+        _options = options;
         Options = _options;
-        _numQueries = numQueries;
-        _modelSize = modelSize;
-        _dropRate = 0.0;
+        _numQueries = options.NumQueries;
+        _modelSize = options.ModelSize;
+        _dropRate = options.DropRate;
 
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(options.ModelSize);
 
         InitializeLayers();
     }

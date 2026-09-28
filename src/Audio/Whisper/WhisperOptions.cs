@@ -22,10 +22,21 @@ namespace AiDotNet.Audio.Whisper;
 /// </list>
 /// </para>
 /// </remarks>
-public class WhisperOptions : ModelOptions
+public class WhisperOptions : AudioNeuralNetworkOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
-    public WhisperOptions() { }
+    public WhisperOptions()
+    {
+        ModelSize = WhisperModelSize.Base;
+        Language = null;
+        Translate = false;
+        SampleRate = 16000;
+        NumMels = 80;
+        MaxAudioLengthSeconds = 30;
+        MaxTokens = 448;
+        BeamSize = 5;
+        Temperature = 0.0;
+    }
 
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
@@ -43,13 +54,9 @@ public class WhisperOptions : ModelOptions
         NumMels = other.NumMels;
         MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
         OnnxOptions = other.OnnxOptions;
-        EncoderModelPath = other.EncoderModelPath;
-        DecoderModelPath = other.DecoderModelPath;
         MaxTokens = other.MaxTokens;
         BeamSize = other.BeamSize;
         Temperature = other.Temperature;
-        ReturnTimestamps = other.ReturnTimestamps;
-        WordTimestamps = other.WordTimestamps;
     }
 
     /// <summary>
@@ -93,18 +100,6 @@ public class WhisperOptions : ModelOptions
     public OnnxModelOptions OnnxOptions { get; set; } = new();
 
     /// <summary>
-    /// Gets or sets the path to the encoder ONNX model.
-    /// If null, the model will be downloaded automatically.
-    /// </summary>
-    public string? EncoderModelPath { get; set; }
-
-    /// <summary>
-    /// Gets or sets the path to the decoder ONNX model.
-    /// If null, the model will be downloaded automatically.
-    /// </summary>
-    public string? DecoderModelPath { get; set; }
-
-    /// <summary>
     /// Gets or sets the maximum number of tokens to generate.
     /// </summary>
     public int MaxTokens { get; set; } = 448;
@@ -121,13 +116,23 @@ public class WhisperOptions : ModelOptions
     /// </summary>
     public double Temperature { get; set; } = 0.0;
 
-    /// <summary>
-    /// Gets or sets whether to return timestamps with the transcription.
-    /// </summary>
-    public bool ReturnTimestamps { get; set; } = false;
+    // WordTimestamps was declared here and never read. Timestamps are configured by
+    // AudioNeuralNetworkOptions.ReturnTimestamps, which Whisper honours via
+    // ResolveReturnTimestamps, so two switches described one behaviour and a caller could set
+    // the inert one. Word-level granularity is genuinely absent rather than merely unwired:
+    // TranscriptionSegment<T> carries Text/StartTime/EndTime/Confidence and has no per-word
+    // structure, so there is nothing for a word timestamp to be returned in. Adding it means
+    // a new shape on ISpeechRecognizer -- which 104 models implement -- plus cross-attention
+    // DTW alignment, and belongs in its own change rather than behind a bool.
 
     /// <summary>
-    /// Gets or sets whether to include word-level timestamps.
+    /// Throws if a value this model requires has been left unset or is not positive.
     /// </summary>
-    public bool WordTimestamps { get; set; } = false;
+    /// <exception cref="ArgumentException">
+    /// Thrown when a required dimension is zero or negative.
+    /// </exception>
+    public void Validate()
+    {
+        ValidateCore();
+    }
 }

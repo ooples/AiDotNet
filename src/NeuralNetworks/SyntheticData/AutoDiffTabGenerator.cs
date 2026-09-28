@@ -149,7 +149,6 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
     /// <param name="options">AutoDiffTab-specific configuration options.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor creates an AutoDiff-Tab network. If you provide custom
@@ -157,15 +156,13 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
     /// search discovers the best denoiser configuration automatically.
     /// </para>
     /// </remarks>
-    public AutoDiffTabGenerator(
-        NeuralNetworkArchitecture<T> architecture,
+    public AutoDiffTabGenerator(NeuralNetworkArchitecture<T> architecture,
         AutoDiffTabOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 5.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new AutoDiffTabOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new AutoDiffTabOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -438,7 +435,7 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
     /// </summary>
     /// <param name="data">The real data matrix.</param>
     /// <param name="columns">Metadata describing each column.</param>
-    /// <param name="epochs">Number of training epochs.</param>
+    /// <param name="epochs">Number of training epochs. When null, the model's published Epochs from its options is used.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This method first searches for the best diffusion configuration
@@ -446,9 +443,10 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
     /// After fitting, call Generate() to create new synthetic rows.
     /// </para>
     /// </remarks>
-    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
-        ValidateFitInputs(data, columns, epochs);
+        int epochCount = epochs ?? _options.Epochs;
+        ValidateFitInputs(data, columns, epochCount);
 
         _columns = PrepareColumns(data, columns);
 
@@ -474,7 +472,7 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
         SetTrainingMode(true);
         try
         {
-            for (int epoch = 0; epoch < epochs; epoch++)
+            for (int epoch = 0; epoch < epochCount; epoch++)
             {
                 for (int b = 0; b < data.Rows; b += batchSize)
                 {
@@ -489,9 +487,10 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
     }
 
     /// <inheritdoc />
-    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs, CancellationToken ct = default)
+    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null, CancellationToken ct = default)
     {
-        ValidateFitInputs(data, columns, epochs);
+        int epochCount = epochs ?? _options.Epochs;
+        ValidateFitInputs(data, columns, epochCount);
 
         _columns = PrepareColumns(data, columns);
 
@@ -519,7 +518,7 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
             SetTrainingMode(true);
             try
             {
-                for (int epoch = 0; epoch < epochs; epoch++)
+                for (int epoch = 0; epoch < epochCount; epoch++)
                 {
                     ct.ThrowIfCancellationRequested();
                     for (int b = 0; b < data.Rows; b += batchSize)
@@ -582,12 +581,12 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
 
     #region Configuration Search
 
-    private record struct DiffusionConfig(int Timesteps, string Schedule, int[] MLPDims, double Loss);
+    private record struct DiffusionConfig(int Timesteps, BetaSchedule Schedule, int[] MLPDims, double Loss);
 
     private DiffusionConfig SearchConfigurations(Matrix<T> data)
     {
         var configs = GenerateCandidateConfigs();
-        DiffusionConfig bestConfig = new(500, "linear", _options.MLPDimensions, double.MaxValue);
+        DiffusionConfig bestConfig = new(500, _options.BetaSchedule, _options.MLPDimensions, double.MaxValue);
 
         foreach (var config in configs)
         {
@@ -605,13 +604,19 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
     {
         var configs = new List<DiffusionConfig>();
         int[] timestepOptions = [100, 250, 500, 1000];
-        string[] scheduleOptions = ["linear", "cosine"];
+        BetaSchedule[] scheduleOptions =
+            [BetaSchedule.Linear, BetaSchedule.ScaledLinear, BetaSchedule.SquaredCosine];
 
         for (int trial = 0; trial < _options.SearchTrials; trial++)
         {
             int ts = timestepOptions[_random.Next(timestepOptions.Length)];
             ts = Math.Min(ts, _options.MaxTimesteps);
-            string schedule = scheduleOptions[_random.Next(scheduleOptions.Length)];
+            // Trial 0 is the configured schedule, so a caller who sets BetaSchedule is
+            // guaranteed it is evaluated -- the same relationship MLPDimensions already has
+            // with the width search below, and MaxTimesteps with the timestep draw above.
+            BetaSchedule schedule = trial == 0
+                ? _options.BetaSchedule
+                : scheduleOptions[_random.Next(scheduleOptions.Length)];
 
             // Randomly vary MLP dimensions
             int baseWidth = _options.MLPDimensions.Length > 0 ? _options.MLPDimensions[0] : 256;
@@ -665,30 +670,49 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
 
     #region Noise Schedule
 
-    private void ComputeNoiseSchedule(string schedule, int timesteps)
+    private void ComputeNoiseSchedule(BetaSchedule schedule, int timesteps)
     {
         var betasD = new double[timesteps];
         var alphasD = new double[timesteps];
         var alphasCumprodD = new double[timesteps];
 
-        if (schedule == "cosine")
+        switch (schedule)
         {
-            double s = 0.008;
-            for (int t = 0; t < timesteps; t++)
-            {
-                double t1 = (double)t / timesteps;
-                double t2 = (double)(t + 1) / timesteps;
-                double alpha1 = Math.Cos((t1 + s) / (1 + s) * Math.PI / 2);
-                double alpha2 = Math.Cos((t2 + s) / (1 + s) * Math.PI / 2);
-                betasD[t] = Math.Min(Math.Max(1.0 - (alpha2 * alpha2) / (alpha1 * alpha1), 1e-4), 0.999);
-            }
-        }
-        else
-        {
-            for (int t = 0; t < timesteps; t++)
-            {
-                betasD[t] = _options.BetaStart + (_options.BetaEnd - _options.BetaStart) * t / Math.Max(timesteps - 1, 1);
-            }
+            case BetaSchedule.SquaredCosine:
+                // Nichol & Dhariwal 2021, Eq. 17.
+                double s = 0.008;
+                for (int t = 0; t < timesteps; t++)
+                {
+                    double t1 = (double)t / timesteps;
+                    double t2 = (double)(t + 1) / timesteps;
+                    double alpha1 = Math.Cos((t1 + s) / (1 + s) * Math.PI / 2);
+                    double alpha2 = Math.Cos((t2 + s) / (1 + s) * Math.PI / 2);
+                    betasD[t] = Math.Min(Math.Max(1.0 - (alpha2 * alpha2) / (alpha1 * alpha1), 1e-4), 0.999);
+                }
+
+                break;
+
+            case BetaSchedule.ScaledLinear:
+                // Latent-diffusion's variant: linear in sqrt(beta), so beta is the square.
+                for (int t = 0; t < timesteps; t++)
+                {
+                    double interpolated = Math.Sqrt(_options.BetaStart)
+                        + (Math.Sqrt(_options.BetaEnd) - Math.Sqrt(_options.BetaStart))
+                          * t / Math.Max(timesteps - 1, 1);
+                    betasD[t] = interpolated * interpolated;
+                }
+
+                break;
+
+            case BetaSchedule.Linear:
+            default:
+                for (int t = 0; t < timesteps; t++)
+                {
+                    betasD[t] = _options.BetaStart
+                        + (_options.BetaEnd - _options.BetaStart) * t / Math.Max(timesteps - 1, 1);
+                }
+
+                break;
         }
 
         double cumprod = 1.0;

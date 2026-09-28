@@ -4,6 +4,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.PhysicsInformed.PINNs;
+using AiDotNet.PhysicsInformed.Options;
 using Moq;
 using Xunit;
 
@@ -33,7 +34,7 @@ public class MultiScalePINNPrecisionTests
             architecture,
             new ConstantResidualPDE(),
             Array.Empty<IBoundaryCondition<double>>(),
-            numCollocationPointsPerScale: 300,
+            options: new MultiScalePINNOptions { NumCollocationPointsPerScale = 300 },
             trainingOptions: new MultiScaleTrainingOptions<double> { UseAdaptiveScaleWeighting = false },
             optimizer: optimizer.Object);
 

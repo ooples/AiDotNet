@@ -88,13 +88,12 @@ public partial class UFM<T> : OpticalFlowBase<T>
 
     public UFM(
         NeuralNetworkArchitecture<T> architecture,
-        int numFeatures = 64,
-        int numLayers = 8,
         UFMOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new UFMOptions();
+        _options.Validate();
         Options = _options;
 
         // DEFAULT training optimizer (overridable — pass your own `optimizer`, or configure one via
@@ -109,8 +108,8 @@ public partial class UFM<T> : OpticalFlowBase<T>
         SetBaseTrainOptimizer(optimizer ?? new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 1e-4 }));
 
-        _numFeatures = numFeatures;
-        _numLayers = numLayers;
+        _numFeatures = _options.NumFeatures;
+        _numLayers = _options.NumLayers;
         _processingBlocks = [];
 
         InitializeNativeLayers(architecture);
