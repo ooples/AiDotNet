@@ -2044,9 +2044,9 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                     $"magic header 0x{Adam8BitV2Magic:X8} ('A8B1' in ASCII LE) immediately " +
                     $"after the options JSON; got 0x{magic:X8}. Older checkpoints " +
                     $"(format v1) wrote the Adam step counter (_t) at that position and " +
-                    $"the byte layout that follows is incompatible with v2. Re-serialize " +
-                    $"this checkpoint with a build that writes the v2 byte-quantized state " +
-                    $"format. If you authored a custom serializer, write " +
+                    $"the byte layout that follows is incompatible with this build. Load " +
+                    $"the checkpoint with the build that wrote it, then carry the model weights " +
+                    $"over and start a new version-{StateFormatVersion} optimizer state. If you authored a custom serializer, write " +
                     $"BinaryWriter.Write(0x{Adam8BitV2Magic:X8}) followed by " +
                     $"BinaryWriter.Write((int){StateFormatVersion}) immediately after the " +
                     $"options JSON.");

@@ -330,12 +330,90 @@ public class TapeOptimizerSerializationTests
     }
 
     [Fact]
+    public void Deserialize_CorruptExtensionTail_LeavesTheOptimizerStateUntouched()
+    {
+        // The extension payload is restored transactionally: an unknown trailing section must throw BEFORE the target
+        // optimizer's moments, pending state or scheduler change.
+        static AdamOptimizer<double, Tensor<double>, Tensor<double>> NewAdam() =>
+            new(null, new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>> { InitialLearningRate = 0.01 });
+
+        var source = NewAdam();
+        var sourceParameters = CreateParameters();
+        source.Step(new TapeStepContext<double>(sourceParameters, CreateFirstGradients(sourceParameters), 0.0));
+        byte[] corrupt = source.Serialize();
+        // Corrupt the LAST section's marker (the fused-plan section), so parsing fails only after the tape-state and
+        // scheduler sections have been read: the point where the old restore had already changed live state.
+        byte[] marker = System.Text.Encoding.UTF8.GetBytes("AiDotNet.FusedPlanOptimizerState.v1");
+        int at = -1;
+        for (int i = corrupt.Length - marker.Length; i >= 0 && at < 0; i--)
+        {
+            int j = 0;
+            while (j < marker.Length && corrupt[i + j] == marker[j]) j++;
+            if (j == marker.Length) at = i;
+        }
+        Assert.True(at >= 0, "the payload carries no fused-plan section to corrupt");
+        corrupt[at + marker.Length - 1] = (byte)'X';
+
+        // The target has its OWN trained state: three steps, so its moments and step count differ from the source's.
+        var target = NewAdam();
+        var targetParameters = CreateParameters();
+        for (int i = 0; i < 3; i++)
+            target.Step(new TapeStepContext<double>(targetParameters, CreateSecondGradients(targetParameters), 0.0));
+        var momentsBefore = SnapshotTapeMoments(target);
+        Assert.NotEmpty(momentsBefore);   // positive control: the target really holds moments that could be lost
+
+        Assert.Throws<InvalidOperationException>(() => target.Deserialize(corrupt));
+
+        // The extension-owned state is untouched: the live moments keep their values and nothing was staged as pending.
+        // (The old restore cleared these and staged the source's before validating the trailing section. The step
+        // counter is outside this guarantee: the declared-state envelope applies it before any payload is parsed.)
+        var momentsAfter = SnapshotTapeMoments(target);
+        Assert.Equal(momentsBefore.Count, momentsAfter.Count);
+        foreach (var (field, values) in momentsBefore)
+            Assert.Equal(values, momentsAfter[field]);
+        Assert.Equal(0, PendingTapeTensorStateCount(target));
+    }
+
+    private static Dictionary<string, double[]> SnapshotTapeMoments(object optimizer)
+    {
+        var snapshot = new Dictionary<string, double[]>();
+        for (var type = optimizer.GetType(); type is not null; type = type.BaseType)
+        {
+            foreach (var field in type.GetFields(System.Reflection.BindingFlags.NonPublic
+                | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.DeclaredOnly))
+            {
+                if (field.GetValue(optimizer) is not System.Collections.Concurrent.ConcurrentDictionary<Tensor<double>, Tensor<double>> state)
+                    continue;
+                var values = state.Values.SelectMany(t => t.ToArray()).ToArray();
+                if (values.Length > 0) snapshot[$"{type.Name}.{field.Name}"] = values;
+            }
+        }
+        return snapshot;
+    }
+
+    private static int PendingTapeTensorStateCount(object optimizer)
+    {
+        for (var type = optimizer.GetType(); type is not null; type = type.BaseType)
+        {
+            var field = type.GetField("_pendingTapeTensorStates",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (field?.GetValue(optimizer) is System.Collections.ICollection pending) return pending.Count;
+        }
+        throw new InvalidOperationException("optimizer has no _pendingTapeTensorStates field");
+    }
+    [Fact]
     public void Adam8BitDeserialize_Version2Payload_IsRejectedNotMisread()
     {
         // Version 2 stored LINEAR moment bytes; this build reads codebook indices. Decoding a v2 payload would resume
         // training with silently wrong moments, so it must be refused with a message that says why.
         var optimizer = CreateAdam8BitOptimizer();
-        Step(optimizer, CreateParameters(), CreateFirstGradients(CreateParameters()));
+        var parameters = CreateParameters();
+        Step(optimizer, parameters, CreateFirstGradients(parameters));
+        // The payload must carry real moment state, or the rejection below would only prove the header check.
+        var tapeStates = (System.Collections.ICollection)typeof(Adam8BitOptimizer<double, Tensor<double>, Tensor<double>>)
+            .GetField("_tapeStates", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            ?.GetValue(optimizer) ?? throw new InvalidOperationException("Adam8BitOptimizer has no _tapeStates field");
+        Assert.Equal(parameters.Length, tapeStates.Count);
         byte[] payload = optimizer.Serialize();
 
         // The format version is the int right after the 'A8B1' magic (0x31423841, little-endian).
