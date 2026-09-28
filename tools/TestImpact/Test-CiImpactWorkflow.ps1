@@ -249,6 +249,21 @@ foreach ($codeqlProject in @(
         "CodeQL builds '$projectPath' with --no-restore but never restores it"
 }
 
+# Pull requests analyze build-less; everything else keeps the traced analysis above. The traced build held a
+# hosted runner ~76 minutes on EVERY pull request (Actions-only Dependabot bumps included) while that PR's own
+# shards queued behind it. The split must stay exact: a PR that also ran the traced build would pay both, and a
+# master push that went build-less would drop source-generated code from the release analysis.
+$codeqlPrInit = Get-StepBlock -JobBlock $codeqlJob -Step 'Initialize CodeQL (build-less, pull requests)'
+$codeqlTracedInit = Get-StepBlock -JobBlock $codeqlJob -Step 'Initialize CodeQL (traced build)'
+Assert-Contract ($codeqlPrInit.Contains("if: github.event_name == 'pull_request'") -and $codeqlPrInit.Contains('build-mode: none')) `
+    'pull-request CodeQL is not build-less'
+Assert-Contract ($codeqlTracedInit.Contains("if: github.event_name != 'pull_request'") -and $codeqlTracedInit.Contains('build-mode: manual')) `
+    'master/nightly CodeQL lost its traced analysis'
+foreach ($tracedOnly in @($codeqlBuild, $codeqlRestore)) {
+    Assert-Contract ($tracedOnly.Contains("if: github.event_name != 'pull_request'")) `
+        'a traced-build step still runs on pull requests'
+}
+
 # Every Sonar step parses this value with fromJSON. It must therefore be defined on the Sonar job,
 # not on a neighboring job where it is invisible and becomes a null template value at runtime.
 $sonarJob = Get-JobBlock -WorkflowText $validation -Job 'sonarcloud'
