@@ -156,6 +156,13 @@ public class OCROptions<T>
     /// Whether to use pretrained weights.
     /// </summary>
     public bool UsePretrained { get; set; } = true;
+
+    /// <summary>
+    /// Seed for weight initialization, so two models built from equal options start from equal weights.
+    /// Default: 42, matching <see cref="AiDotNet.Models.Options.ObjectDetectionOptions{T}.RandomSeed"/>.
+    /// Null leaves initialization unseeded.
+    /// </summary>
+    public int? RandomSeed { get; set; } = 42;
 }
 
 /// <summary>
@@ -246,6 +253,12 @@ public abstract class OCRBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     protected OCRBase(OCROptions<T> options)
     {
         Options = options;
+        // Arm the per-layer initialization seed scope before the derived constructor builds any layer
+        // (the same root-model contract DiffusionModelBase follows). Every layer, the BackboneLayerShims
+        // adapters' inner layers, and the necks and query tables that draw from the scope then take a
+        // deterministic seed, so two models built from equal options start from equal weights (#2201).
+        // A null seed leaves the scope unarmed and initialization stays unseeded.
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(options.RandomSeed);
 
         string charset = options.CharacterSet ?? DefaultCharacterSet;
 

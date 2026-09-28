@@ -190,6 +190,13 @@ public class TextDetectionOptions<T>
     /// URL for pretrained weights.
     /// </summary>
     public string? WeightsUrl { get; set; }
+
+    /// <summary>
+    /// Seed for weight initialization, so two models built from equal options start from equal weights.
+    /// Default: 42, matching <see cref="AiDotNet.Models.Options.ObjectDetectionOptions{T}.RandomSeed"/>.
+    /// Null leaves initialization unseeded.
+    /// </summary>
+    public int? RandomSeed { get; set; } = 42;
 }
 
 /// <summary>

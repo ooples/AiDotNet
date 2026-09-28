@@ -324,7 +324,7 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
         int totalElements = tensor.Length;
 
         // Create a flat random tensor [0, 1]
-        var randomTensor = Tensor<T>.CreateRandom(totalElements, 1).Reshape([totalElements]);
+        var randomTensor = Tensor<T>.CreateRandom(Random, totalElements, 1).Reshape([totalElements]);
 
         // Shift to [-0.5, 0.5] range: random - 0.5
         var halfTensor = new Tensor<T>([totalElements]);

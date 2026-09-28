@@ -471,7 +471,7 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
     /// <param name="scale">The scale factor for the random values.</param>
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
-        var randomTensor = Tensor<T>.CreateRandom(tensor._shape);
+        var randomTensor = Tensor<T>.CreateRandom(Random, tensor._shape);
         var halfTensor = new Tensor<T>(tensor._shape);
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);

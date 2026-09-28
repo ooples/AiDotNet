@@ -785,7 +785,10 @@ internal class DINODecoder<T> : CvParameterModule<T>
     {
         var queries = new Tensor<T>(new[] { numQueries, hiddenDim });
         double scale = Math.Sqrt(2.0 / (numQueries + hiddenDim));
-        var random = RandomHelper.CreateSeededRandom(42);
+        // Drawn from the model's initialization scope (#2201). With the fixed seed of 42 this replaced,
+        // the content and positional queries (two calls, same shape) were IDENTICAL tensors, so the
+        // decoder started with every query's content equal to its own position embedding.
+        var random = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextRandom();
 
         for (int i = 0; i < queries.Length; i++)
         {

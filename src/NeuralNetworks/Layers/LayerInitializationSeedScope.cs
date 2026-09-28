@@ -143,4 +143,18 @@ internal static class LayerInitializationSeedScope
 
         return _rng is null ? (int?)null : _rng.Next();
     }
+
+    /// <summary>
+    /// A Random for a model component that initializes its own tensors instead of through a layer
+    /// (necks, query embeddings, relative-position tables). It draws the next seed from the active
+    /// scope, so it follows the model's configured seed exactly as layers do; with no scope and no
+    /// ambient seed it is a secure, unseeded Random, matching an unseeded layer.
+    /// </summary>
+    internal static Random NextRandom()
+    {
+        int? seed = NextSeedOrNull();
+        return seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
+    }
 }

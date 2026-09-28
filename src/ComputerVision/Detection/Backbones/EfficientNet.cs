@@ -69,11 +69,7 @@ public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<
         EfficientNetVariant variant = EfficientNetVariant.B0,
         int inChannels = 3,
         IActivationFunction<T>? activation = null)
-        : base(NeuralNetworkArchitecture<T>.CreateDynamicSpatial(
-                inputType: InputType.ThreeDimensional,
-                taskType: NeuralNetworkTaskType.ImageClassification,
-                channels: inChannels,
-                outputSize: 1),
+        : base(DetectionBackboneArchitecture<T>.Create(inChannels),
               new MeanSquaredErrorLoss<T>())
     {
         _variant = variant;

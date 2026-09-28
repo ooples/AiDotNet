@@ -129,6 +129,12 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     protected ObjectDetectorBase(ObjectDetectionOptions<T> options)
     {
         Options = options;
+        // Arm the per-layer initialization seed scope before the derived constructor builds any layer
+        // (the same root-model contract DiffusionModelBase follows). Every layer, the BackboneLayerShims
+        // adapters' inner layers, and the necks and query tables that draw from the scope then take a
+        // deterministic seed, so two models built from equal options start from equal weights (#2201).
+        // A null seed leaves the scope unarmed and initialization stays unseeded.
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(options.RandomSeed);
         Nms = new NMS<T>();
         WeightDownloader = new WeightDownloader();
         IsTrainingMode = false;

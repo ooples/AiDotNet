@@ -838,7 +838,8 @@ internal class RTDETRDecoder<T> : CvParameterModule<T>
     {
         var queries = new Tensor<T>(new[] { numQueries, hiddenDim });
         double scale = Math.Sqrt(2.0 / (numQueries + hiddenDim));
-        var random = RandomHelper.CreateSeededRandom(42);
+        // Drawn from the model's initialization scope (#2201). A fixed seed of 42 here ignored the configured seed and gave every same-shape tensor identical values.
+        var random = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextRandom();
 
         for (int i = 0; i < queries.Length; i++)
         {
