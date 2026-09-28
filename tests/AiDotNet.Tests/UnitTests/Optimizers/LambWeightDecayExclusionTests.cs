@@ -69,8 +69,12 @@ public class LambWeightDecayExclusionTests
             },
             0.0));
 
+        // Every component of the Adam direction r is equal (the gradient is all ones), so the step on each coordinate
+        // is lr * ||w|| / ||r|| * r_i = lr * ||w|| / sqrt(4) = 0.1 * 5e-8 / 2 = 2.5e-9, whatever the betas and epsilon.
+        // Treating the sub-epsilon norm as zero (ratio 1) would instead move each coordinate by about lr = 0.1.
+        double[] start = { 3e-8, 4e-8, 0.0, 0.0 };
+        const double expectedStep = 2.5e-9;
         for (int i = 0; i < 4; i++)
-            Assert.True(System.Math.Abs(weight[i] - new[] { 3e-8, 4e-8, 0.0, 0.0 }[i]) < 1e-7,
-                $"weight[{i}] moved to {weight[i]:R}; a sub-epsilon norm was treated as zero");
+            Assert.Equal(start[i] - expectedStep, weight[i], tolerance: 1e-20);
     }
 }

@@ -194,8 +194,6 @@ public class FusedKernelParityTests
             maxMove = Math.Max(maxMove, Math.Abs((double)eager[i] - w0[i]));
         }
         _output.WriteLine($"{name} ({config.Type}): max |fused - eager| = {maxDiff:E3}, eager moved {maxMove:E3}");
-        System.IO.File.AppendAllText(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "zzkernel.txt"),
-            $"{name} ({config.Type}): diff {maxDiff:E3} move {maxMove:E3}{Environment.NewLine}");
 
         Assert.True(maxMove > 1e-4, $"{name}: the eager run barely moved ({maxMove:E3}); the comparison would be vacuous.");
         Assert.True(maxDiff <= 1e-5 + 1e-4 * maxMove,

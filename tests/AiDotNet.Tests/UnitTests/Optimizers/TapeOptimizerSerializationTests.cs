@@ -334,8 +334,8 @@ public class TapeOptimizerSerializationTests
     [Fact]
     public void Deserialize_CorruptExtensionTail_LeavesTheOptimizerStateUntouched()
     {
-        // The extension payload is restored transactionally: an unknown trailing section must throw BEFORE the target
-        // optimizer's moments, pending state or scheduler change.
+        // The restore is atomic: an unknown trailing section must throw BEFORE anything in the target optimizer changes,
+        // including the step counter carried by the declared-state envelope.
         static AdamOptimizer<double, Tensor<double>, Tensor<double>> NewAdam() =>
             new(null, new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>> { InitialLearningRate = 0.01 });
 
@@ -363,17 +363,30 @@ public class TapeOptimizerSerializationTests
             target.Step(new TapeStepContext<double>(targetParameters, CreateSecondGradients(targetParameters), 0.0));
         var momentsBefore = SnapshotTapeMoments(target);
         Assert.NotEmpty(momentsBefore);   // positive control: the target really holds moments that could be lost
+        byte[] serializedBefore = target.Serialize();
+
+        // A twin trained identically that never sees the corrupt payload: the reference for the next update.
+        var twin = NewAdam();
+        var twinParameters = CreateParameters();
+        for (int i = 0; i < 3; i++)
+            twin.Step(new TapeStepContext<double>(twinParameters, CreateSecondGradients(twinParameters), 0.0));
+        Assert.Equal(serializedBefore, twin.Serialize());   // control: the twin really is identical before the restore
 
         Assert.Throws<InvalidOperationException>(() => target.Deserialize(corrupt));
 
-        // The extension-owned state is untouched: the live moments keep their values and nothing was staged as pending.
-        // (The old restore cleared these and staged the source's before validating the trailing section. The step
-        // counter is outside this guarantee: the declared-state envelope applies it before any payload is parsed.)
+        // Nothing changed: the whole optimizer serializes byte-identically (moments, step counter, options, scheduler),
+        // the live moments keep their values, nothing was staged as pending, and the next update matches the twin's.
+        Assert.Equal(serializedBefore, target.Serialize());
         var momentsAfter = SnapshotTapeMoments(target);
         Assert.Equal(momentsBefore.Count, momentsAfter.Count);
         foreach (var (field, values) in momentsBefore)
             Assert.Equal(values, momentsAfter[field]);
         Assert.Equal(0, PendingTapeTensorStateCount(target));
+
+        target.Step(new TapeStepContext<double>(targetParameters, CreateSecondGradients(targetParameters), 0.0));
+        twin.Step(new TapeStepContext<double>(twinParameters, CreateSecondGradients(twinParameters), 0.0));
+        for (int p = 0; p < targetParameters.Length; p++)
+            Assert.Equal(twinParameters[p].ToArray(), targetParameters[p].ToArray());
     }
 
     private static Dictionary<string, double[]> SnapshotTapeMoments(object optimizer)
