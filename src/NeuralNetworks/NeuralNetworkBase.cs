@@ -12869,6 +12869,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // mid-run. Cleared on next ResetState/InvalidateParameterCountCache.
             _fusedTrainingDisabled = true;
         }
+        // A fused step ran the schedule inside the plan; the optimizer's own step and learning rate (what
+        // GetCurrentLearningRate, checkpoints and callers read) advance here, as the eager and streaming paths do.
+        // The streaming fallback above has already stepped them and returns before reaching this.
+        if (ran) StepSchedulerIfSupported(resolvedOptimizer);
         return ran;
     }
 
