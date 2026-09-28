@@ -26,6 +26,32 @@ namespace AiDotNet.Models.Options;
 public class Adam8BitOptimizerOptions<T, TInput, TOutput> : AdamOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Initializes the options with their defaults.
+    /// </summary>
+    public Adam8BitOptimizerOptions()
+    {
+    }
+
+    /// <summary>
+    /// Copy constructor: copies every Adam and base-class setting (through the Adam copy constructor) and every
+    /// 8-bit setting declared here, so a cloned configuration never falls back to a default.
+    /// </summary>
+    /// <param name="other">Source options to copy. Must be non-null.</param>
+    /// <exception cref="ArgumentNullException">When <paramref name="other"/> is null.</exception>
+    public Adam8BitOptimizerOptions(Adam8BitOptimizerOptions<T, TInput, TOutput> other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
+    {
+        BlockSize = other.BlockSize;
+        UseDynamicQuantization = other.UseDynamicQuantization;
+        QuantizationPercentile = other.QuantizationPercentile;
+        FullPrecisionUpdateFrequency = other.FullPrecisionUpdateFrequency;
+        UseStochasticRounding = other.UseStochasticRounding;
+        CompressBothMoments = other.CompressBothMoments;
+        UseBFloat16MomentStorage = other.UseBFloat16MomentStorage;
+        Min8BitSize = other.Min8BitSize;
+    }
+
+    /// <summary>
     /// Gets or sets the block size for block-wise quantization.
     /// </summary>
     /// <value>The number of elements per quantization block, defaulting to 2048.</value>
@@ -160,6 +186,8 @@ public class Adam8BitOptimizerOptions<T, TInput, TOutput> : AdamOptimizerOptions
     /// Parameters with fewer elements than this keep full-precision Adam moments instead of 8-bit ones.
     /// Default: 4096.
     /// </summary>
+    /// <value>A non-negative element count; 0 quantizes every parameter. Negative values are rejected when the optimizer
+    /// is constructed or restored.</value>
     /// <remarks>
     /// <para>
     /// This is bitsandbytes' <c>min_8bit_size</c>, the reference implementation of Dettmers et al., "8-bit

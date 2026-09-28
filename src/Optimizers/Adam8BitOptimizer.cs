@@ -179,6 +179,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         Adam8BitOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
+        ValidateAdam8BitOptions(_options);
         _t = 0;
         _currentBeta1 = NumOps.Zero;
         _currentBeta2 = NumOps.Zero;
@@ -2495,6 +2496,25 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                 InitializeAdaptiveParameters();
             }, baseRestore.HasFallibleCommit);
         }
+    }
+
+    /// <inheritdoc/>
+    protected override void ValidateRestoredOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
+    {
+        base.ValidateRestoredOptions(options);
+        if (options is Adam8BitOptimizerOptions<T, TInput, TOutput> adam8BitOptions)
+            ValidateAdam8BitOptions(adam8BitOptions);
+    }
+
+    /// <summary>
+    /// Rejects 8-bit settings that cannot describe a valid moment layout. Runs at construction and before a restored
+    /// checkpoint's options are installed.
+    /// </summary>
+    private static void ValidateAdam8BitOptions(Adam8BitOptimizerOptions<T, TInput, TOutput> options)
+    {
+        if (options.Min8BitSize < 0)
+            throw new ArgumentOutOfRangeException(nameof(options), options.Min8BitSize,
+                "Adam8BitOptimizerOptions.Min8BitSize must be non-negative; 0 quantizes every parameter.");
     }
 
     /// <summary>
