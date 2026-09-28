@@ -320,9 +320,18 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// </remarks>
     public EmbeddingLayer(
         [LayerState] int vocabularySize,
-        [LayerState] int embeddingDimension)
+        [LayerState] int embeddingDimension,
+        [LayerState] double outputScale = 1.0)
         : base([1], [embeddingDimension])
     {
+        if (!(outputScale > 0.0) || double.IsInfinity(outputScale))
+            throw new ArgumentOutOfRangeException(nameof(outputScale), outputScale, "The output scale must be positive and finite.");
+        _outputScale = outputScale;
+        if (outputScale != 1.0)
+        {
+            _outputScaleTensor = new Tensor<T>(new[] { 1 });
+            _outputScaleTensor[0] = NumOps.FromDouble(outputScale);
+        }
         AuxiliaryLossWeight = NumOps.FromDouble(0.0001);
         _lastEmbeddingRegularizationLoss = NumOps.Zero;
 
@@ -359,6 +368,37 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         EnsureEmbeddingInitialized();
         base.EnsureInitialized();
     }
+
+    /// <summary>
+    /// A constant factor applied to every looked-up embedding, such as Gemma's <c>sqrt(hidden)</c>. Hugging Face applies it at
+    /// runtime rather than baking it into the table, and so does this layer: a language-model head tied to the table must
+    /// read the raw weights.
+    /// </summary>
+    private readonly double _outputScale;
+
+    // The scale as a one-element tensor, so it goes through the tape-tracked element-wise multiply;
+    // TensorMultiplyScalar does not propagate gradient to its input. Null when the scale is 1.
+    [Scratch]
+    private readonly Tensor<T>? _outputScaleTensor;
+
+    private Tensor<T> ApplyOutputScale(Tensor<T> output)
+        => _outputScaleTensor is null ? output : Engine.TensorMultiply(output, _outputScaleTensor);
+
+    /// <summary>
+    /// The embedding table <c>[vocabulary, embedding dimension]</c>, materialized if still lazy. Read afresh on every use:
+    /// a restore, a copy-on-write clone or <see cref="SetParameters"/> can replace the tensor instance.
+    /// </summary>
+    internal Tensor<T> GetMaterializedEmbeddingTable()
+    {
+        EnsureEmbeddingInitialized();
+        return _embeddingTensor;
+    }
+
+    /// <summary>The number of rows (tokens) in the embedding table.</summary>
+    internal int VocabularySize => _vocabularySize;
+
+    /// <summary>The width of each embedding row.</summary>
+    internal int EmbeddingDimension => _embeddingDimension;
 
     private void EnsureEmbeddingInitialized()
     {
@@ -654,7 +694,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             reshaped = AiDotNet.Helpers.TensorTapeOps.TapeMultiplyScalar(Engine, reshaped, sqrtDim);
         }
 
-        return reshaped;
+        return ApplyOutputScale(reshaped);
     }
 
     /// <summary>
@@ -734,7 +774,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             gpuOutput = AiDotNet.Helpers.TensorTapeOps.TapeMultiplyScalar(Engine, gpuOutput, sqrtDim);
         }
 
-        return gpuOutput;
+        return ApplyOutputScale(gpuOutput);
     }
 
     /// <summary>

@@ -3178,6 +3178,19 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
+    /// Points every layer that refers to another layer of this network (a tied language-model head) at that layer's
+    /// current instance. Runs whenever the canonical layer list is built or replaced, because construction, clone and
+    /// deserialization each create new layer instances and a stale reference would silently untie the weights.
+    /// </summary>
+    private void BindLayerGraphReferences()
+    {
+        for (int i = 0; i < _layers.Count; i++)
+        {
+            if (_layers[i] is Layers.ILayerGraphBinding<T> binding)
+                binding.BindToLayerGraph(_layers);
+        }
+    }
+    /// <summary>
     /// Transfers generated named-layer views from this source model to a clone whose canonical
     /// <see cref="Layers"/> graph has already been reconstructed.
     /// </summary>
@@ -3278,6 +3291,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         child._layers.Clear();
         child._layers.AddRange(replacements);
         child.RebindLayerAliases(previousChildLayers, child._layers);
+        child.BindLayerGraphReferences();
         child.InvalidateParameterCountCache();
     }
 
@@ -3358,6 +3372,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         destinationChild._layers.Clear();
         destinationChild._layers.AddRange(replacements);
         destinationChild.RebindLayerAliases(previousChildLayers, destinationChild._layers);
+        destinationChild.BindLayerGraphReferences();
         sourceChild.CopyGeneratedLayerAliasesTo(destinationChild);
         destinationChild.InvalidateParameterCountCache();
     }
@@ -3437,6 +3452,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             destination._layers.AddRange(reconstructed);
             destination.InvalidateParameterCountCache();
             destination.RebindLayerAliases(previousDestinationLayers, destination._layers);
+            destination.BindLayerGraphReferences();
             return true;
         }
 
@@ -3512,6 +3528,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         if (pending.Count > 0)
             destination.RebindLayerAliases(previousDestinationLayers, destination._layers);
+            destination.BindLayerGraphReferences();
 
         return true;
     }
@@ -5308,6 +5325,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             if (!_layerOnlyInitialized && Layers.Count == 0)
             {
                 InitializeLayers();
+                BindLayerGraphReferences();
                 ReconcileCanonicalNestedNetworkLayerViews();
                 ReportLayerContractMismatches();
             }
@@ -5330,6 +5348,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
             // Initialize network-specific layers
             InitializeLayers();
+            BindLayerGraphReferences();
             ReconcileCanonicalNestedNetworkLayerViews();
             ReportLayerContractMismatches();
 
@@ -9456,6 +9475,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         try
         {
             RebindLayerAliases(previous, _layers);
+            BindLayerGraphReferences();
         }
         catch (InvalidOperationException)
         {
@@ -14480,6 +14500,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </summary>
     private byte[] SerializeInternalUnchecked()
     {
+        // Record where layer-to-layer references point (a tied LM head's embedding) before this graph is copied.
+        BindLayerGraphReferences();
         // MATERIALIZE BEFORE WRITING, so the saved form is not a function of the source's
         // materialization state.
         //
@@ -14855,6 +14877,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Repair all generated fields and collections that were views into the old canonical graph.
         // Independent layer members are left alone because rebinding is reference-identity based.
         RebindLayerAliases(previousLayers, _layers);
+        BindLayerGraphReferences();
 
         if (version >= 6) RestoreGeneratedAdditionalLayerState(reader, version);
 
@@ -15236,6 +15259,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
     {
+        // Record where layer-to-layer references point (a tied LM head's embedding) before this graph is copied.
+        BindLayerGraphReferences();
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
 
         var sourceLayout = ParameterLayout;
@@ -15573,6 +15598,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
+        // Record where layer-to-layer references point (a tied LM head's embedding) before this graph is copied.
+        BindLayerGraphReferences();
         // A copy is state-identical to its source, INCLUDING its training mode. Every path below
         // restores through the layer deserializer, which deliberately leaves a restored model in
         // inference mode (right for a model loaded from bytes, wrong for a clone). Before training
@@ -15783,6 +15810,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 // objects still belong to the source. Generated aliases must always point at the
                 // destination's canonical graph before its manifest or forward path is observed.
                 largeBase.RebindLayerAliases(_layers, largeBase._layers);
+                largeBase.BindLayerGraphReferences();
                 CopyGeneratedLayerAliasesTo(largeBase);
                 CompleteDeclaredStateRestore(largeBase, largeDeclaredStateEnvelope);
                 largeBase.InvalidateParameterCountCache();
@@ -15940,6 +15968,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         try
         {
             copyBase.RebindLayerAliases(_layers, copyBase._layers);
+            copyBase.BindLayerGraphReferences();
             CopyGeneratedLayerAliasesTo(copyBase);
         }
         catch (InvalidOperationException ex)
@@ -16565,6 +16594,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             try
             {
                 destination.RebindLayerAliases(previousDestinationLayers, destination._layers);
+                destination.BindLayerGraphReferences();
                 CopyGeneratedLayerAliasesTo(destination);
             }
             catch (InvalidOperationException ex)
@@ -16831,6 +16861,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> Clone()
     {
+        // Record where layer-to-layer references point (a tied LM head's embedding) before this graph is copied.
+        BindLayerGraphReferences();
         // By default, Clone behaves the same as DeepCopy
         return DeepCopy();
     }
