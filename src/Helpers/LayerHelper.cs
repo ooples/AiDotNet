@@ -10487,17 +10487,10 @@ public static partial class LayerHelper<T>
         // Transformer encoder layers (BERT-style)
         for (int i = 0; i < numLayers; i++)
         {
-            // Self-attention
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), 
-                activationFunction: identityActivation);
-
-            yield return new LayerNormalizationLayer<T>();
-
-            // Feed-forward network
-            yield return new DenseLayer<T>(intermediateSize, geluActivation);
-            yield return new DenseLayer<T>(hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-
+            // Post-LN BERT block WITH its residual connections: LN(x + Attn(x)), then LN(h + FFN(h)).
+            // The flat MultiHeadAttention -> LayerNorm -> FFN -> LayerNorm chain this replaces had no skip at
+            // all, so every layer computed LN(Attn(x)) and the stack was not the paper's transformer.
+            yield return new TransformerEncoderLayer<T>(numHeads, intermediateSize, hiddenDim);
             if (i < numLayers - 1)
             {
                 yield return new DropoutLayer<T>(0.1);
@@ -10592,17 +10585,10 @@ public static partial class LayerHelper<T>
 
         for (int i = 0; i < numLayers; i++)
         {
-            // Self-attention (spatial-aware)
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), 
-                activationFunction: identityActivation);
-
-            yield return new LayerNormalizationLayer<T>();
-
-            // Feed-forward network
-            yield return new DenseLayer<T>(intermediateSize, geluActivation);
-            yield return new DenseLayer<T>(hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-
+            // Post-LN BERT block WITH its residual connections: LN(x + Attn(x)), then LN(h + FFN(h)).
+            // The flat MultiHeadAttention -> LayerNorm -> FFN -> LayerNorm chain this replaces had no skip at
+            // all, so every layer computed LN(Attn(x)) and the stack was not the paper's transformer.
+            yield return new TransformerEncoderLayer<T>(numHeads, intermediateSize, hiddenDim);
             if (i < numLayers - 1)
             {
                 yield return new DropoutLayer<T>(0.1);
@@ -10686,14 +10672,10 @@ public static partial class LayerHelper<T>
 
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), 
-                activationFunction: identityActivation);
-
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(intermediateSize, geluActivation);
-            yield return new DenseLayer<T>(hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-
+            // Post-LN BERT block WITH its residual connections: LN(x + Attn(x)), then LN(h + FFN(h)).
+            // The flat MultiHeadAttention -> LayerNorm -> FFN -> LayerNorm chain this replaces had no skip at
+            // all, so every layer computed LN(Attn(x)) and the stack was not the paper's transformer.
+            yield return new TransformerEncoderLayer<T>(numHeads, intermediateSize, hiddenDim);
             if (i < numLayers - 1)
             {
                 yield return new DropoutLayer<T>(0.1);
@@ -10762,12 +10744,10 @@ public static partial class LayerHelper<T>
         // Transformer encoder
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), 
-                activationFunction: identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(hiddenDim * 4, geluActivation);
-            yield return new DenseLayer<T>(hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            // Post-LN BERT block WITH its residual connections: LN(x + Attn(x)), then LN(h + FFN(h)).
+            // The flat MultiHeadAttention -> LayerNorm -> FFN -> LayerNorm chain this replaces had no skip at
+            // all, so every layer computed LN(Attn(x)) and the stack was not the paper's transformer.
+            yield return new TransformerEncoderLayer<T>(numHeads, hiddenDim * 4, hiddenDim);
         }
     }
 
@@ -10945,12 +10925,10 @@ public static partial class LayerHelper<T>
 
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), 
-                activationFunction: identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(hiddenDim * 4, geluActivation);
-            yield return new DenseLayer<T>(hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            // Post-LN BERT block WITH its residual connections: LN(x + Attn(x)), then LN(h + FFN(h)).
+            // The flat MultiHeadAttention -> LayerNorm -> FFN -> LayerNorm chain this replaces had no skip at
+            // all, so every layer computed LN(Attn(x)) and the stack was not the paper's transformer.
+            yield return new TransformerEncoderLayer<T>(numHeads, hiddenDim * 4, hiddenDim);
         }
     }
 
@@ -11084,11 +11062,9 @@ public static partial class LayerHelper<T>
         // Transformer encoder layers
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(intermediateSize, geluActivation);
-            yield return new DenseLayer<T>(hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
+            // Post-LN BERT block WITH its residual connections: LN(x + Attn(x)), then LN(h + FFN(h)). The flat
+            // MultiHeadAttention -> LayerNorm -> FFN -> LayerNorm chain this replaces had no skip at all.
+            yield return new TransformerEncoderLayer<T>(numHeads, intermediateSize, hiddenDim);
             if (i < numLayers - 1) yield return new DropoutLayer<T>(0.1);
         }
 
