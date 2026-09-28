@@ -328,7 +328,6 @@ public partial class TimeGPT<T> : ForecastingModelBase<T>
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="options">Configuration options for TimeGPT.</param>
-    /// <param name="numFeatures">Number of input features.</param>
     /// <param name="optimizer">Optional optimizer.</param>
     /// <param name="lossFunction">Optional custom loss function.</param>
     /// <exception cref="ArgumentNullException">Thrown when architecture is null.</exception>
@@ -337,10 +336,8 @@ public partial class TimeGPT<T> : ForecastingModelBase<T>
     /// or fine-tune on your specific domain data.
     /// </para>
     /// </remarks>
-    public TimeGPT(
-        NeuralNetworkArchitecture<T> architecture,
+    public TimeGPT(NeuralNetworkArchitecture<T> architecture,
         TimeGPTOptions<T>? options = null,
-        int numFeatures = 1,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -366,7 +363,7 @@ public partial class TimeGPT<T> : ForecastingModelBase<T>
         _confidenceLevel = options.ConfidenceLevel;
         _fineTuningSteps = options.FineTuningSteps;
         _fineTuningLearningRate = options.FineTuningLearningRate;
-        _numFeatures = numFeatures;
+        _numFeatures = (options ??= new TimeGPTOptions<T>()).NumFeatures;
 
         InitializeLayers();
     }

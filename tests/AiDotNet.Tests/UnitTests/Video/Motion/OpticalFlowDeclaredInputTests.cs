@@ -6,7 +6,8 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video;
 using AiDotNet.Video.Motion;
-using Xunit;
+using Xunit;
+using AiDotNet.Video.Options;
 
 namespace AiDotNet.Tests.UnitTests.Video.Motion;
 
@@ -37,19 +38,19 @@ public class OpticalFlowDeclaredInputTests
 
     private static readonly Dictionary<string, Func<OpticalFlowBase<double>>> PairDeclaringModels = new()
     {
-        ["DKM"] = () => new DKM<double>(PairArchitecture(), numFeatures: 8, numLayers: 2),
-        ["DPFlow"] = () => new DPFlow<double>(PairArchitecture(), numFeatures: 8, numLayers: 2),
-        ["FlowDiffuser"] = () => new FlowDiffuser<double>(PairArchitecture(), numFeatures: 8, numLayers: 2),
-        ["FlowFormerPlusPlus"] = () => new FlowFormerPlusPlus<double>(PairArchitecture(), numFeatures: 8, numLayers: 2),
-        ["MemFlow"] = () => new MemFlow<double>(PairArchitecture(), numFeatures: 8, numLayers: 2),
-        ["NeuFlowV2"] = () => new NeuFlowV2<double>(PairArchitecture(), numFeatures: 8, numLayers: 2),
-        ["RoMa"] = () => new RoMa<double>(PairArchitecture(), numFeatures: 8, numLayers: 2),
-        ["RPKNet"] = () => new RPKNet<double>(PairArchitecture(), numFeatures: 8, numLayers: 2),
-        ["SEARAFT"] = () => new SEARAFT<double>(PairArchitecture(), numFeatures: 8, numLayers: 2),
-        ["SKFlow"] = () => new SKFlow<double>(PairArchitecture(), numFeatures: 8, numLayers: 2),
-        ["UFM"] = () => new UFM<double>(PairArchitecture(), numFeatures: 8, numLayers: 2),
-        ["UniMatch"] = () => new UniMatch<double>(PairArchitecture(), numFeatures: 8, numLayers: 2),
-        ["VideoFlow"] = () => new VideoFlow<double>(PairArchitecture(), numFeatures: 8, numLayers: 2),
+        ["DKM"] = () => new DKM<double>(PairArchitecture(), options: new DKMOptions { NumFeatures = 8, NumLayers = 2 }),
+        ["DPFlow"] = () => new DPFlow<double>(PairArchitecture(), options: new DPFlowOptions { NumFeatures = 8, NumLayers = 2 }),
+        ["FlowDiffuser"] = () => new FlowDiffuser<double>(PairArchitecture(), options: new FlowDiffuserOptions { NumFeatures = 8, NumLayers = 2 }),
+        ["FlowFormerPlusPlus"] = () => new FlowFormerPlusPlus<double>(PairArchitecture(), options: new FlowFormerPlusPlusOptions { NumFeatures = 8, NumLayers = 2 }),
+        ["MemFlow"] = () => new MemFlow<double>(PairArchitecture(), options: new MemFlowOptions { NumFeatures = 8, NumLayers = 2 }),
+        ["NeuFlowV2"] = () => new NeuFlowV2<double>(PairArchitecture(), options: new NeuFlowV2Options { NumFeatures = 8, NumLayers = 2 }),
+        ["RoMa"] = () => new RoMa<double>(PairArchitecture(), options: new RoMaOptions { NumFeatures = 8, NumLayers = 2 }),
+        ["RPKNet"] = () => new RPKNet<double>(PairArchitecture(), options: new RPKNetOptions { NumFeatures = 8, NumLayers = 2 }),
+        ["SEARAFT"] = () => new SEARAFT<double>(PairArchitecture(), options: new SEARAFTOptions { NumFeatures = 8, NumLayers = 2 }),
+        ["SKFlow"] = () => new SKFlow<double>(PairArchitecture(), options: new SKFlowOptions { NumFeatures = 8, NumLayers = 2 }),
+        ["UFM"] = () => new UFM<double>(PairArchitecture(), options: new UFMOptions { NumFeatures = 8, NumLayers = 2 }),
+        ["UniMatch"] = () => new UniMatch<double>(PairArchitecture(), options: new UniMatchOptions { NumFeatures = 8, NumLayers = 2 }),
+        ["VideoFlow"] = () => new VideoFlow<double>(PairArchitecture(), options: new VideoFlowOptions { NumFeatures = 8, NumLayers = 2 }),
     };
 
     public static IEnumerable<object[]> PairDeclaringModelNames()
@@ -117,7 +118,7 @@ public class OpticalFlowDeclaredInputTests
         // (3), so its declared shape [3, H, W] describes one frame rather than the pair Predict takes (see
         // the TestScaffoldGenerator note on RAPIDFlow). What the shared base owes it is the same as every
         // other member: an unbatched pair [2*3, H, W] must be accepted, not rejected for its rank.
-        var model = new RAPIDFlow<double>(PairArchitecture(depth: 3), numRefinementIterations: 1);
+        var model = new RAPIDFlow<double>(PairArchitecture(depth: 3), options: new RAPIDFlowOptions { NumRefinementIterations = 1 });
 
         var pair = Random([6, Size, Size], seed: 7);
         var flow = model.Predict(pair);
@@ -132,13 +133,11 @@ public class OpticalFlowDeclaredInputTests
         // RAFT overrides PredictCore but inherits the family's batch-optional input layout, so it owes the
         // same unbatched pair [2*C, H, W]. It indexed Shape[3] unconditionally and threw IndexOutOfRange.
         const int size = 32;
-        var model = new RAFT<double>(
-            new NeuralNetworkArchitecture<double>(
+        var model = new RAFT<double>(new NeuralNetworkArchitecture<double>(
                 inputType: InputType.ThreeDimensional,
                 taskType: NeuralNetworkTaskType.Regression,
                 inputHeight: size, inputWidth: size, inputDepth: 3,
-                outputSize: 2),
-            numFeatures: 16, correlationLevels: 2, correlationRadius: 1, numIterations: 1);
+                outputSize: 2), options: new RAFTOptions { NumFeatures = 16, CorrelationLevels = 2, CorrelationRadius = 1, NumIterations = 1 });
 
         var pair = Random([6, size, size], seed: 9);
         var flow = model.Predict(pair);
@@ -155,13 +154,11 @@ public class OpticalFlowDeclaredInputTests
     public void RAFT_RejectsAStackedPairWithTheWrongChannelCount(int channels, bool batched)
     {
         const int size = 32;
-        var model = new RAFT<double>(
-            new NeuralNetworkArchitecture<double>(
+        var model = new RAFT<double>(new NeuralNetworkArchitecture<double>(
                 inputType: InputType.ThreeDimensional,
                 taskType: NeuralNetworkTaskType.Regression,
                 inputHeight: size, inputWidth: size, inputDepth: 3,
-                outputSize: 2),
-            numFeatures: 16, correlationLevels: 2, correlationRadius: 1, numIterations: 1);
+                outputSize: 2), options: new RAFTOptions { NumFeatures = 16, CorrelationLevels = 2, CorrelationRadius = 1, NumIterations = 1 });
 
         var pair = Random([channels, size, size], seed: 9);
         var ex = Assert.Throws<ArgumentException>(() => model.Predict(batched ? WithBatchAxis(pair) : pair));

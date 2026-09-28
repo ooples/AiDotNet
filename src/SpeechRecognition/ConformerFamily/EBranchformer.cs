@@ -93,7 +93,7 @@ public partial class EBranchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     /// depthwise convolution + linear projection for better local-global fusion,
     /// followed by CTC greedy decoding.
     /// </summary>
-    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool includeTimestamps = false)
+    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null)
     {
         ThrowIfDisposed();
         var features = PreprocessAudio(audio);
@@ -105,12 +105,12 @@ public partial class EBranchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         {
             Text = text, Language = language ?? _options.Language,
             Confidence = NumOps.FromDouble(confidence), DurationSeconds = duration,
-            Segments = includeTimestamps ? ExtractSegments(text, duration, confidence) : Array.Empty<TranscriptionSegment<T>>()
+            Segments = ResolveReturnTimestamps(includeTimestamps) ? ExtractSegments(text, duration, confidence) : Array.Empty<TranscriptionSegment<T>>()
         };
     }
 
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null,
-        bool includeTimestamps = false, CancellationToken cancellationToken = default)
+        bool? includeTimestamps = null, CancellationToken cancellationToken = default)
         => Task.Run(() => { cancellationToken.ThrowIfCancellationRequested(); return Transcribe(audio, language, includeTimestamps); }, cancellationToken);
     public string DetectLanguage(Tensor<T> audio)
     {

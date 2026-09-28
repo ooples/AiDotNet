@@ -145,12 +145,6 @@ public partial class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableE
         NeuralNetworkArchitecture<T> architecture,
         string detectionModelPath,
         string structureModelPath,
-        int imageSize = 800,
-        int hiddenDim = 256,
-        int numEncoderLayers = 6,
-        int numDecoderLayers = 6,
-        int numHeads = 8,
-        int numQueries = 100,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         TableTransformerOptions? options = null)
@@ -169,24 +163,27 @@ public partial class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableE
             throw new FileNotFoundException($"Structure model not found: {structureModelPath}", structureModelPath);
 
         _useNativeMode = false;
-        _hiddenDim = hiddenDim;
-        _numEncoderLayers = numEncoderLayers;
-        _numDecoderLayers = numDecoderLayers;
-        _numHeads = numHeads;
-        _numQueries = numQueries;
-        _numTableClasses = 2;       // background, table
-        _numStructureClasses = 7;   // background, table, column, row, column header, projected row header, spanning cell
-        // TableTransformer is a DETR-based detector (Smock et al. 2022). DETR fine-tunes at 1e-4 with
-        // gradient-norm clipping at 0.1-1.0; built bare, the optimizer ran on framework defaults.
+        _hiddenDim = _options.HiddenDim;
+        _numEncoderLayers = _options.NumEncoderLayers;
+        _numDecoderLayers = _options.NumDecoderLayers;
+        _numHeads = _options.NumHeads;
+        _numQueries = _options.NumQueries;
+        // Previously the literals 2 and 7 with their meanings only in trailing comments. Both
+        // size a classifier head, so they are part of the model's shape and belong on the options.
+        _numTableClasses = _options.NumTableClasses;
+        _numStructureClasses = _options.NumStructureClasses;
+        // DETR fine-tunes well below Adam's generic 1e-3, with gradient-norm clipping. The rate
+        // now comes from the options; the clipping stays, being a stability measure rather than a
+        // tunable the paper specifies.
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = 0.0001,
+                InitialLearningRate = _options.LearningRate,
                 EnableGradientClipping = true,
                 MaxGradientNorm = 1.0,
             });
 
-        ImageSize = imageSize;
+        ImageSize = _options.ImageSize;
 
         _onnxDetectionModelPath = detectionModelPath;
         _onnxStructureModelPath = structureModelPath;
@@ -218,12 +215,6 @@ public partial class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableE
     /// </remarks>
     public TableTransformer(
         NeuralNetworkArchitecture<T> architecture,
-        int imageSize = 800,
-        int hiddenDim = 256,
-        int numEncoderLayers = 6,
-        int numDecoderLayers = 6,
-        int numHeads = 8,
-        int numQueries = 100,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         TableTransformerOptions? options = null)
@@ -233,24 +224,24 @@ public partial class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableE
         Options = _options;
 
         _useNativeMode = true;
-        _hiddenDim = hiddenDim;
-        _numEncoderLayers = numEncoderLayers;
-        _numDecoderLayers = numDecoderLayers;
-        _numHeads = numHeads;
-        _numQueries = numQueries;
-        _numTableClasses = 2;
-        _numStructureClasses = 7;
+        _hiddenDim = _options.HiddenDim;
+        _numEncoderLayers = _options.NumEncoderLayers;
+        _numDecoderLayers = _options.NumDecoderLayers;
+        _numHeads = _options.NumHeads;
+        _numQueries = _options.NumQueries;
+        _numTableClasses = _options.NumTableClasses;
+        _numStructureClasses = _options.NumStructureClasses;
         // TableTransformer is a DETR-based detector (Smock et al. 2022). DETR fine-tunes at 1e-4 with
         // gradient-norm clipping at 0.1-1.0; built bare, the optimizer ran on framework defaults.
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = 0.0001,
+                InitialLearningRate = _options.LearningRate,
                 EnableGradientClipping = true,
                 MaxGradientNorm = 1.0,
             });
 
-        ImageSize = imageSize;
+        ImageSize = _options.ImageSize;
 
         InitializeLayers();
         InitializeObjectQueries();

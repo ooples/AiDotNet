@@ -50,7 +50,7 @@ namespace AiDotNet.Video.Motion;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
-/// var model = new RAFT&lt;double&gt;(architecture, numFeatures: 128, numIterations: 12);
+/// var model = new RAFT&lt;double&gt;(architecture, options: new RAFTOptions { NumFeatures = 128, NumIterations = 12 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]
@@ -161,23 +161,20 @@ public partial class RAFT<T> : OpticalFlowBase<T>
     /// <param name="numIterations">The number of GRU refinement iterations.</param>
     public RAFT(
         NeuralNetworkArchitecture<T> architecture,
-        int numFeatures = DefaultNumFeatures,
-        int correlationLevels = DefaultCorrelationLevels,
-        int correlationRadius = DefaultCorrelationRadius,
-        int numIterations = DefaultNumIterations,
         RAFTOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new RAFTOptions();
+        _options.Validate();
         Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 480;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 640;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numFeatures = numFeatures;
-        _correlationLevels = correlationLevels;
-        _correlationRadius = correlationRadius;
-        NumIterations = numIterations;
+        _numFeatures = _options.NumFeatures;
+        _correlationLevels = _options.CorrelationLevels;
+        _correlationRadius = _options.CorrelationRadius;
+        NumIterations = _options.NumIterations;
 
         _featureEncoder = [];
         _contextEncoder = [];

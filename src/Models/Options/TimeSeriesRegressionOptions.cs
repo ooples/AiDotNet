@@ -20,6 +20,33 @@ namespace AiDotNet.Models.Options;
 public class TimeSeriesRegressionOptions<T> : RegressionOptions<T>
 {
     /// <summary>
+    /// Gets or sets the number of input features (variables) observed at each time step.
+    /// </summary>
+    /// <value>The feature count, defaulting to 1 — a univariate series.</value>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> This is how many things you measure at each point in time. Tracking
+    /// only a stock's closing price is one feature, so the default of 1 describes a single series
+    /// over time. Tracking price, volume and volatility together is three, and the model then
+    /// learns from all of them at once.
+    /// </para>
+    /// <para>
+    /// Declared here rather than on each model because all twelve forecasting models that take it
+    /// — Hippo, MOIRAI, Mamba, Mamba2, RWKVForecaster, S4, TimeGPT, TimeGrad, TimeLLM, TimeMachine,
+    /// Timer and UniTS — derive from this class, all default it to 1, and all called it by this
+    /// name while it was a constructor parameter (issue #2090).
+    /// </para>
+    /// <para>
+    /// This class is deliberately NOT re-parented onto
+    /// <see cref="ModelHyperparameterOptions"/> to gain the property: that base derives from
+    /// <see cref="NeuralNetworkOptions"/>, and <see cref="RegressionOptions{T}"/> also serves the
+    /// classical, non-neural regression models, which should not acquire neural-network
+    /// configuration as a side effect.
+    /// </para>
+    /// </remarks>
+    public int NumFeatures { get; set; } = 1;
+
+    /// <summary>
     /// Gets or sets the lag order, which determines how many previous time steps are used as predictors.
     /// </summary>
     /// <value>The lag order, defaulting to 1.</value>

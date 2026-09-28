@@ -1,3 +1,4 @@
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -20,7 +21,7 @@ public class GraphSAGENetworkTests : GraphNNModelTestBase<float>
                 taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification,
                 inputSize: 128,
                 outputSize: 7),
-            normalize: false);
+            options: new GraphSAGEOptions { Normalize = false });
         if (_savedParams == null)
             _savedParams = network.GetParameters();
         else

@@ -34,18 +34,17 @@ public class ChatGLM3TextConditioner<T> : TextConditioningBase<T>
 
     public override bool ProducesPooledOutput => false;
 
-    public ChatGLM3TextConditioner(
-        ITokenizer tokenizer,
-        ChatGLM3Variant variant = ChatGLM3Variant.SixB,
-        NeuralNetworkArchitecture<T>? architecture = null)
+    public ChatGLM3TextConditioner(ITokenizer tokenizer,
+        NeuralNetworkArchitecture<T>? architecture = null,
+        ChatGLM3TextConditionerOptions? options = null)
         : base(
-            architecture: architecture ?? BuildDefaultArchitecture(variant),
+            architecture: architecture ?? BuildDefaultArchitecture((options ??= new ChatGLM3TextConditionerOptions()).Variant),
             tokenizer: tokenizer,
             maxSequenceLength: 512,
-            embeddingDimension: GetEmbeddingDim(variant))
+            embeddingDimension: GetEmbeddingDim((options ??= new ChatGLM3TextConditionerOptions()).Variant))
     {
         Guard.NotNull(tokenizer);
-        _variant = variant;
+        _variant = options.Variant;
     }
 
     /// <summary>
@@ -58,7 +57,7 @@ public class ChatGLM3TextConditioner<T> : TextConditioningBase<T>
         string? cacheDir = null)
     {
         var tokenizer = AutoTokenizer.FromPretrained(huggingFaceModelName, cacheDir);
-        return new ChatGLM3TextConditioner<T>(tokenizer, variant);
+        return new ChatGLM3TextConditioner<T>(tokenizer, options: new ChatGLM3TextConditionerOptions { Variant = variant });
     }
 
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers() =>

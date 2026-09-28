@@ -137,12 +137,6 @@ public partial class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     public DBNet(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int imageSize = 640,
-        int backboneChannels = 256,
-        int innerChannels = 256,
-        double expandRatio = 1.5,
-        double thresholdK = 50,
-        int minTextArea = 16,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DBNetOptions? options = null)
@@ -158,15 +152,22 @@ public partial class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
             throw new FileNotFoundException($"ONNX model file not found: {onnxModelPath}", onnxModelPath);
 
         _useNativeMode = false;
-        _backboneChannels = backboneChannels;
-        _innerChannels = innerChannels;
-        _expandRatio = expandRatio;
-        _thresholdK = thresholdK;
-        _minTextArea = minTextArea;
+        _backboneChannels = _options.BackboneChannels;
+        _innerChannels = _options.InnerChannels;
+        _expandRatio = _options.ExpandRatio;
+        _thresholdK = _options.ThresholdK;
+        _minTextArea = _options.MinTextArea;
+        // Built from the options rather than bare: a bare AdamOptimizer trains at its own default
+        // and no configured rate can reach the model.
         _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
-            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this));
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            }));
 
-        ImageSize = imageSize;
+        ImageSize = _options.ImageSize;
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -196,12 +197,6 @@ public partial class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
     /// </remarks>
     public DBNet(
         NeuralNetworkArchitecture<T> architecture,
-        int imageSize = 640,
-        int backboneChannels = 256,
-        int innerChannels = 256,
-        double expandRatio = 1.5,
-        double thresholdK = 50,
-        int minTextArea = 16,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DBNetOptions? options = null)
@@ -211,15 +206,22 @@ public partial class DBNet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         Options = _options;
 
         _useNativeMode = true;
-        _backboneChannels = backboneChannels;
-        _innerChannels = innerChannels;
-        _expandRatio = expandRatio;
-        _thresholdK = thresholdK;
-        _minTextArea = minTextArea;
+        _backboneChannels = _options.BackboneChannels;
+        _innerChannels = _options.InnerChannels;
+        _expandRatio = _options.ExpandRatio;
+        _thresholdK = _options.ThresholdK;
+        _minTextArea = _options.MinTextArea;
+        // Built from the options rather than bare: a bare AdamOptimizer trains at its own default
+        // and no configured rate can reach the model.
         _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
-            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this));
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            }));
 
-        ImageSize = imageSize;
+        ImageSize = _options.ImageSize;
 
         InitializeLayers();
     }

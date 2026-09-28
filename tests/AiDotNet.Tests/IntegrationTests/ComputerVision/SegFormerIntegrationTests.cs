@@ -39,7 +39,7 @@ public class SegFormerIntegrationTests
     public async Task Constructor_NativeMode_WithCustomNumClasses_SetsCorrectly()
     {
         var architecture = CreateArchitecture(64, 64, 3);
-        var model = new SegFormer<double>(architecture, numClasses: 21);
+        var model = new SegFormer<double>(architecture, options: new SegFormerOptions { NumClasses = 21 });
 
         Assert.Equal(21, model.NumClasses);
     }
@@ -54,7 +54,7 @@ public class SegFormerIntegrationTests
     public void Constructor_NativeMode_DifferentModelSizes_CreatesDifferentLayerCounts(SegFormerModelSize modelSize)
     {
         var architecture = CreateArchitecture(64, 64, 3);
-        var model = new SegFormer<double>(architecture, modelSize: modelSize);
+        var model = new SegFormer<double>(architecture, options: new SegFormerOptions { ModelSize = modelSize });
 
         Assert.NotNull(model);
         Assert.Equal(modelSize, model.ModelSize);
@@ -65,8 +65,8 @@ public class SegFormerIntegrationTests
     public async Task Constructor_NativeMode_B0HasFewerLayersThanB5()
     {
         var architecture = CreateArchitecture(64, 64, 3);
-        var modelB0 = new SegFormer<double>(architecture, modelSize: SegFormerModelSize.B0);
-        var modelB5 = new SegFormer<double>(architecture, modelSize: SegFormerModelSize.B5);
+        var modelB0 = new SegFormer<double>(architecture, options: new SegFormerOptions { ModelSize = SegFormerModelSize.B0 });
+        var modelB5 = new SegFormer<double>(architecture, options: new SegFormerOptions { ModelSize = SegFormerModelSize.B5 });
 
         // B5 has much deeper transformer stages (depths [3,6,40,3] vs [2,2,2,2])
         // so it should have more layers
@@ -137,7 +137,7 @@ public class SegFormerIntegrationTests
     public async Task Predict_NativeMode_WithBatchedInput_ReturnsOutput()
     {
         var architecture = CreateArchitecture(32, 32, 3);
-        var model = new SegFormer<double>(architecture, numClasses: 10, modelSize: SegFormerModelSize.B0);
+        var model = new SegFormer<double>(architecture, options: new SegFormerOptions { NumClasses = 10, ModelSize = SegFormerModelSize.B0 });
 
         // Create batched input [B, C, H, W]
         var input = CreateRandomTensor([1, 3, 32, 32]);
@@ -152,7 +152,7 @@ public class SegFormerIntegrationTests
     public async Task Predict_NativeMode_WithUnbatchedInput_ReturnsOutput()
     {
         var architecture = CreateArchitecture(32, 32, 3);
-        var model = new SegFormer<double>(architecture, numClasses: 10, modelSize: SegFormerModelSize.B0);
+        var model = new SegFormer<double>(architecture, options: new SegFormerOptions { NumClasses = 10, ModelSize = SegFormerModelSize.B0 });
 
         // Create unbatched input [C, H, W]
         var input = CreateRandomTensor([3, 32, 32]);
@@ -171,7 +171,7 @@ public class SegFormerIntegrationTests
     public async Task Train_NativeMode_DoesNotThrow()
     {
         var architecture = CreateArchitecture(32, 32, 3);
-        var model = new SegFormer<double>(architecture, numClasses: 5, modelSize: SegFormerModelSize.B0);
+        var model = new SegFormer<double>(architecture, options: new SegFormerOptions { NumClasses = 5, ModelSize = SegFormerModelSize.B0 });
 
         var input = CreateRandomTensor([1, 3, 32, 32]);
         // Expected output needs to match actual predict output shape
@@ -204,7 +204,7 @@ public class SegFormerIntegrationTests
     public async Task GetModelMetadata_ReturnsCorrectModelType()
     {
         var architecture = CreateArchitecture(64, 64, 3);
-        var model = new SegFormer<double>(architecture, numClasses: 21, modelSize: SegFormerModelSize.B2);
+        var model = new SegFormer<double>(architecture, options: new SegFormerOptions { NumClasses = 21, ModelSize = SegFormerModelSize.B2 });
 
         var metadata = model.GetModelMetadata();
 
@@ -223,10 +223,7 @@ public class SegFormerIntegrationTests
     {
         var architecture = CreateArchitecture(64, 64, 3);
         var model = new SegFormer<double>(
-            architecture,
-            numClasses: 21,
-            modelSize: SegFormerModelSize.B2,
-            dropRate: 0.15);
+            architecture, options: new SegFormerOptions { NumClasses = 21, ModelSize = SegFormerModelSize.B2, DropRate = 0.15 });
 
         // Serialize
         var metadata = model.GetModelMetadata();
@@ -242,7 +239,7 @@ public class SegFormerIntegrationTests
     public async Task CreateNewInstance_NativeMode_CreatesWorkingCopy()
     {
         var architecture = CreateArchitecture(32, 32, 3);
-        var model = new SegFormer<double>(architecture, numClasses: 10, modelSize: SegFormerModelSize.B0);
+        var model = new SegFormer<double>(architecture, options: new SegFormerOptions { NumClasses = 10, ModelSize = SegFormerModelSize.B0 });
 
         // Get metadata which calls Serialize internally
         var metadata = model.GetModelMetadata();
@@ -282,7 +279,7 @@ public class SegFormerIntegrationTests
             outputSize: 10,
             layers: customLayers);
 
-        var model = new SegFormer<double>(architecture, numClasses: 10);
+        var model = new SegFormer<double>(architecture, options: new SegFormerOptions { NumClasses = 10 });
 
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);

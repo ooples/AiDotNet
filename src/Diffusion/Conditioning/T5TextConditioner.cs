@@ -34,18 +34,17 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
 
     public override bool ProducesPooledOutput => false;
 
-    public T5TextConditioner(
-        ITokenizer tokenizer,
-        T5Variant variant = T5Variant.Base,
-        NeuralNetworkArchitecture<T>? architecture = null)
+    public T5TextConditioner(ITokenizer tokenizer,
+        NeuralNetworkArchitecture<T>? architecture = null,
+        T5TextConditionerOptions? options = null)
         : base(
-            architecture: architecture ?? BuildDefaultArchitecture(variant),
+            architecture: architecture ?? BuildDefaultArchitecture((options ??= new T5TextConditionerOptions()).Variant),
             tokenizer: tokenizer,
             maxSequenceLength: 512,
-            embeddingDimension: GetEmbeddingDim(variant))
+            embeddingDimension: GetEmbeddingDim((options ??= new T5TextConditionerOptions()).Variant))
     {
         Guard.NotNull(tokenizer);
-        _variant = variant;
+        _variant = options.Variant;
     }
 
     /// <summary>
@@ -69,7 +68,7 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
             _ => "google/t5-v1_1-base",
         };
         var tokenizer = AutoTokenizer.FromPretrained(modelName, cacheDir);
-        return new T5TextConditioner<T>(tokenizer, variant);
+        return new T5TextConditioner<T>(tokenizer, options: new T5TextConditionerOptions { Variant = variant });
     }
 
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers() =>

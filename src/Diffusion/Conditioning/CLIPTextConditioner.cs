@@ -52,23 +52,21 @@ public partial class CLIPTextConditioner<T> : TextConditioningBase<T>
     /// that loads the canonical HuggingFace CLIP tokenizer.
     /// </summary>
     /// <param name="tokenizer">The paper-canonical CLIP tokenizer (byte-level BPE).</param>
-    /// <param name="variant">CLIP variant (selects hidden size / num layers / num heads).</param>
     /// <param name="architecture">Optional architecture override; pass user-supplied
     /// <see cref="NeuralNetworkArchitecture{T}.Layers"/> to bypass the default factory.</param>
-    public CLIPTextConditioner(
-        ITokenizer tokenizer,
-        CLIPVariant variant = CLIPVariant.ViTL14,
-        NeuralNetworkArchitecture<T>? architecture = null)
+    public CLIPTextConditioner(ITokenizer tokenizer,
+        NeuralNetworkArchitecture<T>? architecture = null,
+        CLIPTextConditionerOptions? options = null)
         : base(
-            architecture: architecture ?? BuildDefaultArchitecture(variant),
+            architecture: architecture ?? BuildDefaultArchitecture((options ??= new CLIPTextConditionerOptions()).Variant),
             tokenizer: tokenizer,
             maxSequenceLength: 77,
-            embeddingDimension: GetEmbeddingDim(variant))
+            embeddingDimension: GetEmbeddingDim((options ??= new CLIPTextConditionerOptions()).Variant))
     {
         Guard.NotNull(tokenizer);
-        _variant = variant;
+        _variant = options.Variant;
         _textProjection = new DenseLayer<T>(
-            outputSize: GetProjectionDim(variant),
+            outputSize: GetProjectionDim(options.Variant),
             activationFunction: new IdentityActivation<T>());
     }
 
@@ -79,7 +77,6 @@ public partial class CLIPTextConditioner<T> : TextConditioningBase<T>
     /// so construction is explicit about its cost rather than hiding it
     /// inside a default constructor.
     /// </summary>
-    /// <param name="variant">CLIP variant.</param>
     /// <param name="huggingFaceModelName">HuggingFace model ID (default: <c>openai/clip-vit-large-patch14</c>).</param>
     /// <param name="cacheDir">Optional cache directory for downloaded tokenizer files.</param>
     public static CLIPTextConditioner<T> FromPretrained(
@@ -88,7 +85,7 @@ public partial class CLIPTextConditioner<T> : TextConditioningBase<T>
         string? cacheDir = null)
     {
         var tokenizer = AutoTokenizer.FromPretrained(huggingFaceModelName, cacheDir);
-        return new CLIPTextConditioner<T>(tokenizer, variant);
+        return new CLIPTextConditioner<T>(tokenizer, options: new CLIPTextConditionerOptions { Variant = variant });
     }
 
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers() =>

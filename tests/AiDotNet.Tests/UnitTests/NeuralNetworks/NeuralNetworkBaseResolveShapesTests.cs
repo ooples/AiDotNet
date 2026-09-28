@@ -49,17 +49,20 @@ public class NeuralNetworkBaseResolveShapesTests
             ]));
 
     private static NeRF<float> BuildNeRF() => new NeRF<float>(
-        positionEncodingLevels: 10,
-        directionEncodingLevels: 4,
-        hiddenDim: 64,
-        numLayers: 3,
-        colorHiddenDim: 32,
-        colorNumLayers: 1,
-        useHierarchicalSampling: false,
-        renderSamples: 8,
-        renderNearBound: 1.0,
-        renderFarBound: 4.5,
-        learningRate: 1e-3);
+        options: new AiDotNet.Models.Options.NeRFOptions
+        {
+            PositionEncodingLevels = 10,
+            DirectionEncodingLevels = 4,
+            HiddenDim = 64,
+            NumLayers = 3,
+            ColorHiddenDim = 32,
+            ColorNumLayers = 1,
+            UseHierarchicalSampling = false,
+            RenderSamples = 8,
+            RenderNearBound = 1.0,
+            RenderFarBound = 4.5,
+            LearningRate = 1e-3
+        });
 
     private static (Tensor<float> input, Tensor<float> target) DummyBatch(int n, int seed = 0)
     {

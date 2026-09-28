@@ -62,7 +62,7 @@ public partial class EAST<T> : TextDetectorBase<T>
         _useRotatedBoxes = useRotatedBoxes;
 
         // ResNet backbone
-        Backbone = new ResNet<T>(ResNetVariant.ResNet50);
+        Backbone = new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetVariant.ResNet50 });
 
         // Feature merging branch (U-Net style)
         var stageChannels = Backbone.OutputChannels;

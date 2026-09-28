@@ -73,7 +73,7 @@ public partial class Paraformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     /// token count and extracts acoustic embeddings, then the GLM decoder generates all
     /// tokens in a single parallel forward pass.
     /// </summary>
-    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool includeTimestamps = false)
+    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null)
     {
         ThrowIfDisposed();
         var features = PreprocessAudio(audio);
@@ -99,11 +99,11 @@ public partial class Paraformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
             Language = language ?? _options.Language,
             Confidence = NumOps.FromDouble(confidence),
             DurationSeconds = duration,
-            Segments = includeTimestamps ? ExtractSegments(text, duration, confidence) : Array.Empty<TranscriptionSegment<T>>()
+            Segments = ResolveReturnTimestamps(includeTimestamps) ? ExtractSegments(text, duration, confidence) : Array.Empty<TranscriptionSegment<T>>()
         };
     }
 
-    public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool includeTimestamps = false, CancellationToken cancellationToken = default) => Task.Run(() => { cancellationToken.ThrowIfCancellationRequested(); return Transcribe(audio, language, includeTimestamps); }, cancellationToken);
+    public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => { cancellationToken.ThrowIfCancellationRequested(); return Transcribe(audio, language, includeTimestamps); }, cancellationToken);
     public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = GreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
     {

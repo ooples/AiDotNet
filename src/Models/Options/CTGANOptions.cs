@@ -42,7 +42,7 @@ namespace AiDotNet.Models.Options;
 /// Reference: "Modeling Tabular Data using Conditional GAN" (Xu et al., NeurIPS 2019)
 /// </para>
 /// </remarks>
-public class CTGANOptions<T> : RiskModelOptions<T>
+public class CTGANOptions<T> : SyntheticDataGeneratorOptions<T>
 {
     /// <summary>
     /// Gets or sets the dimension of the random noise vector fed to the generator.
