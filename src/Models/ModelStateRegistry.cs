@@ -70,6 +70,39 @@ public static class ModelStateEnvelope
     /// <param name="state">The model's declared state.</param>
     /// <param name="payload">The stored bytes.</param>
     /// <returns>The payload without its trailer, or the original when there is none.</returns>
+    /// <summary>
+    /// Splits off the declared-state block and STAGES it without installing anything: the returned action installs
+    /// it. <paramref name="hasFallibleCommit"/> reports whether that action can still throw (see
+    /// <see cref="ModelStateRegistry{T}.StageAll"/>).
+    /// </summary>
+    internal static Action Stage<T>(
+        ModelStateRegistry<T> state, byte[] payload, out byte[] inner, out bool hasFallibleCommit)
+    {
+        if (payload is null) throw new ArgumentNullException(nameof(payload));
+        hasFallibleCommit = false;
+        inner = payload;
+        if (payload.Length < TrailerLength) return () => { };
+
+        int magic = BitConverter.ToInt32(payload, payload.Length - sizeof(int));
+        if (magic != Magic) return () => { };
+
+        int blockLength = BitConverter.ToInt32(payload, payload.Length - TrailerLength);
+        int innerLength = payload.Length - TrailerLength - blockLength;
+        if (blockLength < 0 || innerLength < 0) return () => { };
+
+        Action commit = () => { };
+        if (state is not null && state.Count > 0)
+        {
+            using var buffer = new MemoryStream(payload, innerLength, blockLength);
+            using var reader = new BinaryReader(buffer, System.Text.Encoding.UTF8, leaveOpen: true);
+            commit = state.StageAll(reader, restoreAfterParameters: null, out hasFallibleCommit);
+        }
+
+        inner = new byte[innerLength];
+        Buffer.BlockCopy(payload, 0, inner, 0, innerLength);
+        return commit;
+    }
+
     public static byte[] Extract<T>(ModelStateRegistry<T> state, byte[] payload)
         => Extract(state, payload, restoreAfterParameters: null);
 
@@ -230,6 +263,13 @@ public sealed class ModelStateRegistry<T>
 
     private static readonly Action NoOp = () => { };
 
+    private static readonly System.Reflection.MethodInfo MemberwiseCloneMethod =
+        typeof(object).GetMethod("MemberwiseClone", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+        ?? throw new InvalidOperationException("object.MemberwiseClone is unavailable.");
+
+    private static object ShallowCopy(object source)
+        => MemberwiseCloneMethod.Invoke(source, null) ?? throw new InvalidOperationException("MemberwiseClone returned null.");
+
     /// <summary>Stages an already-read value: the value is read now, and installed only when the entry commits.</summary>
     private static Action Assign<TValue>(Action<TValue> set, TValue value)
         => set.Target is StagedSetter<TValue> staged ? staged.Prepare(value) : () => set(value);
@@ -255,13 +295,24 @@ public sealed class ModelStateRegistry<T>
     private static Func<BinaryReader, Action> Deferred(Action<BinaryReader> read) => r =>
     {
         var bytes = r.ReadBytes(checked((int)(r.BaseStream.Length - r.BaseStream.Position)));
-        return () =>
+        return new FallibleCommit(() =>
         {
             using var buffer = new MemoryStream(bytes);
             using var replay = new BinaryReader(buffer, System.Text.Encoding.UTF8, leaveOpen: true);
             read(replay);
-        };
+        }).Run;
     };
+
+    /// <summary>
+    /// Marks a commit that can still throw because it runs another object's restore or a repair callback. Staging
+    /// reports whether any such commit is pending, so a caller pays for a rollback snapshot only when one is.
+    /// </summary>
+    private sealed class FallibleCommit
+    {
+        private readonly Action _run;
+        public FallibleCommit(Action run) => _run = run;
+        public void Run() => _run();
+    }
 
     private void Add(
         string name,
@@ -471,7 +522,7 @@ public sealed class ModelStateRegistry<T>
     public void DeclareAfterRestore(string name, Action restore)
     {
         if (restore is null) throw new ArgumentNullException(nameof(restore));
-        Add(name, _ => { }, _ => restore);
+        Add(name, _ => { }, _ => new FallibleCommit(restore).Run);
     }
 
     /// <summary>
@@ -487,7 +538,7 @@ public sealed class ModelStateRegistry<T>
     public void DeclareAfterParameterRestore(string name, Action restore)
     {
         if (restore is null) throw new ArgumentNullException(nameof(restore));
-        Add(name, _ => { }, _ => restore, restoreAfterParameters: true);
+        Add(name, _ => { }, _ => new FallibleCommit(restore).Run, restoreAfterParameters: true);
     }
 
     /// <summary>Declares a readonly list of vectors and restores its contents in place.</summary>
@@ -2189,10 +2240,10 @@ public sealed class ModelStateRegistry<T>
                     WriteScalarOption(w, property.GetValue(options));
                 }
             },
-            Deferred(r =>
+            r =>
             {
                 int marker = r.ReadInt32();
-                if (marker == -1) return;
+                if (marker == -1) return NoOp;
 
                 var options = get();
                 // The reader must consume its bytes whether or not there is anywhere to put them,
@@ -2200,6 +2251,7 @@ public sealed class ModelStateRegistry<T>
                 var properties = options is null
                     ? new List<System.Reflection.PropertyInfo>()
                     : ScalarOptionProperties(options.GetType());
+                var assignments = new List<(System.Reflection.PropertyInfo Property, object? Value)>();
 
                 if (marker == NamedOptionsFormat)
                 {
@@ -2210,29 +2262,40 @@ public sealed class ModelStateRegistry<T>
                         string propertyName = r.ReadString();
                         byName.TryGetValue(propertyName, out var target);
                         var value = ReadScalarOption(r, target?.PropertyType);
-                        if (options is null || target is null) continue;
-                        target.SetValue(options, value);
+                        if (options is not null && target is not null) assignments.Add((target, value));
                     }
-                    return;
+                }
+                else
+                {
+                    // Legacy payloads wrote scalar values positionally. Keep reading them so existing
+                    // checkpoints remain valid; new payloads are name-tagged because a clone can
+                    // legitimately reconstruct the same field with a more-derived options runtime type.
+                    if (marker < 0)
+                    {
+                        throw new InvalidOperationException(
+                            $"An options payload carries an unknown format marker {marker}.");
+                    }
+
+                    for (int i = 0; i < marker; i++)
+                    {
+                        var target = i < properties.Count ? properties[i] : null;
+                        var value = ReadScalarOption(r, target?.PropertyType);
+                        if (options is not null && target is not null) assignments.Add((target, value));
+                    }
                 }
 
-                // Legacy payloads wrote scalar values positionally. Keep reading them so existing
-                // checkpoints remain valid; new payloads are name-tagged because a clone can
-                // legitimately reconstruct the same field with a more-derived options runtime type.
-                if (marker < 0)
-                {
-                    throw new InvalidOperationException(
-                        $"An options payload carries an unknown format marker {marker}.");
-                }
+                if (options is null || assignments.Count == 0) return NoOp;
 
-                for (int i = 0; i < marker; i++)
+                // Dry-run every setter on a shallow copy, so a setter that validates rejects the checkpoint NOW, while
+                // nothing is installed. The commit replays the same values through the same deterministic setters.
+                var probe = ShallowCopy(options);
+                foreach (var (property, value) in assignments) property.SetValue(probe, value);
+                return () =>
                 {
-                    var target = i < properties.Count ? properties[i] : null;
-                    var value = ReadScalarOption(r, target?.PropertyType);
-                    if (options is null || target is null) continue;
-                    target.SetValue(options, value);
-                }
-            }));
+                    var live = get() ?? options;   // re-fetched: an earlier entry may have replaced the options object
+                    foreach (var (property, value) in assignments) property.SetValue(live, value);
+                };
+            });
 
     /// <summary>The settable scalar settings of an options type, in a stable order.</summary>
     /// <param name="type">The options type.</param>
@@ -2726,6 +2789,14 @@ public sealed class ModelStateRegistry<T>
         => ReadAll(reader, restoreAfterParameters: true);
 
     private void ReadAll(BinaryReader reader, bool? restoreAfterParameters)
+        => StageAll(reader, restoreAfterParameters, out _)();
+
+    /// <summary>
+    /// Reads and validates every declared entry without installing any, and returns the action that installs them.
+    /// <paramref name="hasFallibleCommit"/> reports whether that action can still throw, because an entry restores
+    /// through another object (a child model, a layer, a random generator) or runs a repair callback.
+    /// </summary>
+    internal Action StageAll(BinaryReader reader, bool? restoreAfterParameters, out bool hasFallibleCommit)
     {
         int count = reader.ReadInt32();
 
@@ -2757,7 +2828,11 @@ public sealed class ModelStateRegistry<T>
             commits.Add(entry.Stage(inner));
         }
 
-        foreach (var commit in commits) commit();
+        hasFallibleCommit = commits.Exists(commit => commit.Target is FallibleCommit);
+        return () =>
+        {
+            foreach (var commit in commits) commit();
+        };
     }
 
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
