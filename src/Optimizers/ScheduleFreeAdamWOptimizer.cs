@@ -175,9 +175,12 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
                 nameof(gradient));
         }
 
-        _step++;
         if (_flatZ.Length != parameters.Length)
         {
+            // A differently sized parameter vector is a different model: its schedule starts at step 1 too. Carrying
+            // the old step count into fresh state skewed the bias correction, the step size and the 1/t averaging
+            // weight of the new vector's first update.
+            _step = 0;
             _flatZ = new double[parameters.Length];
             _flatX = new double[parameters.Length];
             _flatV = new double[parameters.Length];
@@ -187,6 +190,7 @@ public class ScheduleFreeAdamWOptimizer<T, TInput, TOutput> : GradientBasedOptim
                 _flatX[i] = _flatZ[i];
             }
         }
+        _step++;
 
         double beta = _options.Interpolation;
         double beta2 = _options.Beta2;

@@ -38,7 +38,7 @@ public static class DeserializationHelper
             && message.Contains("constructor", StringComparison.Ordinal);
     }
 
-    private static readonly Dictionary<string, Type> LayerTypes = new Dictionary<string, Type>();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Type> LayerTypes = new();
 
     static DeserializationHelper()
     {
@@ -126,6 +126,33 @@ public static class DeserializationHelper
     /// This design makes it easy to add new types of layers in the future without changing this method.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Resolves a layer type that is not one of AiDotNet's own by its full name across the loaded assemblies, and
+    /// caches it. Discovery scans only this assembly, so a model containing a layer defined anywhere else - a user's
+    /// custom layer - could not be deep-copied or deserialized ("not supported for deserialization"), which also broke
+    /// every optimizer that snapshots the model each epoch. Only full names resolve: a short name is ambiguous across
+    /// assemblies.
+    /// </summary>
+    private static bool TryResolveLayerTypeFromLoadedAssemblies(string layerType, out Type? type)
+    {
+        type = null;
+        if (string.IsNullOrEmpty(layerType) || layerType.IndexOf('.') < 0) return false;
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            if (assembly.IsDynamic) continue;
+            Type? candidate;
+            try { candidate = assembly.GetType(layerType, throwOnError: false); }
+            catch (Exception) { continue; }
+            if (candidate is null || candidate.IsAbstract) continue;
+            bool isLayer = candidate.GetInterfaces()
+                .Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(ILayer<>));
+            if (!isLayer) continue;
+            type = LayerTypes.GetOrAdd(layerType, candidate);
+            return true;
+        }
+        return false;
+    }
+
     public static ILayer<T> CreateLayerFromType<T>(string layerType, int[] inputShape, int[] outputShape, Dictionary<string, object>? additionalParams = null)
     {
         // Allow layerType to contain serialized constructor metadata, e.g. "MultiHeadAttentionLayer;HeadCount=8".
@@ -135,7 +162,8 @@ public static class DeserializationHelper
             additionalParams = MergeParams(additionalParams, parsedParams);
         }
 
-        if (!LayerTypes.TryGetValue(layerType, out Type? openGenericType))
+        if (!LayerTypes.TryGetValue(layerType, out Type? openGenericType)
+            && !TryResolveLayerTypeFromLoadedAssemblies(layerType, out openGenericType))
         {
             throw new NotSupportedException($"Layer type {layerType} is not supported for deserialization.");
         }
@@ -237,15 +265,16 @@ public static class DeserializationHelper
             ? openGenericType.MakeGenericType(typeof(T))
             : openGenericType;
 
-        // Get the generic type definition for comparison (handles both open and closed types)
-        // All layer types should be generic; if not, throw a descriptive error
-        if (!openGenericType.IsGenericType)
+        // A concrete (non-generic) layer - a user's LayerBase<float> subclass - is rebuilt as itself, provided it is a
+        // layer for this T; it matches none of the per-type branches below and reaches the constructor matcher.
+        if (!openGenericType.IsGenericType && !typeof(ILayer<T>).IsAssignableFrom(openGenericType))
         {
-            throw new InvalidOperationException($"Layer type {layerType} is not a generic type. All ILayer<T> implementations must be generic.");
+            throw new InvalidOperationException(
+                $"Layer type {layerType} is not generic and does not implement ILayer<{typeof(T).Name}>.");
         }
         Type genericDef = openGenericType.IsGenericTypeDefinition
             ? openGenericType
-            : openGenericType.GetGenericTypeDefinition();
+            : openGenericType.IsGenericType ? openGenericType.GetGenericTypeDefinition() : openGenericType;
 
         // Prepare constructor and parameters based on layer type. The if-chain
         // below is wrapped so that any explicit branch's "Cannot find ...
