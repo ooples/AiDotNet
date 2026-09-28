@@ -142,8 +142,36 @@ public class FusedOptimizerParityTests
         _output.WriteLine($"{name}: fusedSteps={fusedSteps}, maxAbsDiff={diff:E3}, trainDelta={trainDelta:E3} (Adam control {adamDiff:E3})");
         Assert.True(fusedSteps > 0, $"{name} maps onto a fused kernel but training never engaged it (fusedSteps == 0).");
         Assert.True(trainDelta > 1e-6, $"{name}: training barely moved the parameters ({trainDelta:E3}); the comparison would be vacuous.");
-        Assert.True(diff <= Math.Max(adamDiff * 10.0, 1e-4),
-            $"{name}: fused and eager training differ by {diff:E3}, against {adamDiff:E3} for the Adam control.");
+        Assert.True(diff <= ParityBound(name, adamDiff),
+            $"{name}: fused and eager training differ by {diff:E3}, against {adamDiff:E3} for the Adam control " +
+            $"(bound {ParityBound(name, adamDiff):E3}).");
+    }
+
+    /// <summary>
+    /// The fused-vs-eager bound: 10x the fp32 Adam control, or, for bfloat16 moment storage, one bf16 rounding step
+    /// per update.
+    /// </summary>
+    /// <remarks>
+    /// Fused and eager gradients differ by fp32 ulps because the compiled plan orders its float operations differently
+    /// (the Adam control measures this, about 1e-6). With fp32 moments that noise stays at ulp scale. With bf16 moments,
+    /// an ulp that straddles a bf16 rounding boundary moves the stored moment by a whole bf16 step (2^-8 relative), so
+    /// that parameter's update differs by about lr * 2^-8. Measured for Adam8BitBf16: agreement to 1e-7 for four steps,
+    /// then 4 of 4931 parameters off by ~2e-5 at step 5, compounding to 3.8e-4 by step 40. Kernel-level parity, where
+    /// both sides get identical gradients, is exact (FusedKernelParityTests). The bf16 bound allows one bf16 step
+    /// (2^-7 with rounding) per update: Steps * lr * 2^-7, 3.1e-3 at lr 1e-2. A wrong mapping such as a missing bias
+    /// correction or beta diverges by ~1e-1 and still fails.
+    /// </remarks>
+    private static double ParityBound(string name, double adamDiff)
+    {
+        double fp32Bound = Math.Max(adamDiff * 10.0, 1e-4);
+        if (FusedKernelParityTests.Create(name) is AiDotNet.Optimizers.Fused.IFusedOptimizerSpec spec
+            && spec.TryGetFusedOptimizerConfig(out var config)
+            && config.UseBf16Moments)
+        {
+            return Math.Max(fp32Bound, Steps * config.LearningRate * Math.Pow(2, -7));
+        }
+
+        return fp32Bound;
     }
     /// <summary>
     /// A warmup that starts at learning rate 0 (the LinearWarmupScheduler default) makes the first step change nothing.
