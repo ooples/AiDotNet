@@ -106,6 +106,12 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
     private readonly bool _usePaperLikelihood;
 
     /// <summary>
+    /// The loss the caller passed, or null when none was: the paper likelihood's switch, kept as state so a
+    /// clone is rebuilt from it. The base class resolves a null loss to its default, so a clone that read
+    /// <c>LossFunction</c> instead passed that default back in and silently trained the mean head on it.
+    /// </summary>
+    private readonly ILossFunction<T>? _suppliedLossFunction;
+    /// <summary>
     /// Output layer for distribution mean (mu).
     /// </summary>
     /// <remarks>
@@ -292,7 +298,8 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         _distributionType = options.LikelihoodType;
         _numSamples = options.NumSamples;
         _useScaling = options.ScaleHandling != DeepARScaleHandling.None;
-        _usePaperLikelihood = lossFunction is null;
+        _suppliedLossFunction = lossFunction;
+        _usePaperLikelihood = _suppliedLossFunction is null;
 
         // Honour the configured seed. DeepAR (Salinas et al. 2020) section 4 draws 200 samples from the
         // decoder to form its forecast, so this RNG decides the prediction, not just an initialization
@@ -359,7 +366,8 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
         _distributionType = options.LikelihoodType;
         _numSamples = options.NumSamples;
         _useScaling = options.ScaleHandling != DeepARScaleHandling.None;
-        _usePaperLikelihood = lossFunction is null;
+        _suppliedLossFunction = lossFunction;
+        _usePaperLikelihood = _suppliedLossFunction is null;
 
         // Honour the configured seed. DeepAR (Salinas et al. 2020) section 4 draws 200 samples from the
         // decoder to form its forecast, so this RNG decides the prediction, not just an initialization
