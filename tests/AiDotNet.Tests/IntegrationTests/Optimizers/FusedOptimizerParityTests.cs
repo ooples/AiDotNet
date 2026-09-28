@@ -223,36 +223,27 @@ public class FusedOptimizerParityTests
         AssertOptimizerParity("AdaDelta", fusedSteps, diff, trainDelta, adamDiff);
     }
 
-    // The fused LAMB kernel has no trust-ratio clamp, so only the unclamped configuration maps; the default
-    // (ClipTrustRatio, MaxTrustRatio 10) must decline and train eager, pinned by the next test.
-    [Fact]
-    public void LAMB_FusedMatchesEager_NoWorseThanAdam()
+    // LAMB is deliberately NOT fused (see LAMBOptimizer's IFusedOptimizerSpec): the kernel does not clamp the trust
+    // ratio, and even unclamped its divergence grows past the parity bound after ~20 steps. Both configurations must
+    // decline and still train on the eager path.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void LAMB_DeclinesTheFusedPath_AndTrainsEager(bool clipTrustRatio)
     {
-        var (adamDiff, _, _) = Divergence(Adam);
-        var (diff, fusedSteps, trainDelta) = Divergence(() =>
-            new LAMBOptimizer<float, Tensor<float>, Tensor<float>>(
-                null, new LAMBOptimizerOptions<float, Tensor<float>, Tensor<float>>
-                {
-                    InitialLearningRate = 1e-2,
-                    ClipTrustRatio = false,
-                }));
-        AssertOptimizerParity("LAMB", fusedSteps, diff, trainDelta, adamDiff);
-    }
+        LAMBOptimizer<float, Tensor<float>, Tensor<float>> Create() => new(
+            null, new LAMBOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = 1e-2,
+                ClipTrustRatio = clipTrustRatio,
+            });
 
-    [Fact]
-    public void LAMB_WithTrustRatioClip_DeclinesTheFusedPath()
-    {
-        AiDotNet.Optimizers.Fused.IFusedOptimizerSpec spec = new LAMBOptimizer<float, Tensor<float>, Tensor<float>>(
-            null, new LAMBOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 });
-        Assert.False(spec.TryGetFusedOptimizerConfig(out _),
-            "LAMB with ClipTrustRatio mapped to the fused kernel, which has no trust-ratio clamp.");
-        var (_, fusedSteps, trainDelta) = Divergence(() =>
-            new LAMBOptimizer<float, Tensor<float>, Tensor<float>>(
-                null, new LAMBOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }));
+        AiDotNet.Optimizers.Fused.IFusedOptimizerSpec spec = Create();
+        Assert.False(spec.TryGetFusedOptimizerConfig(out _), "LAMB mapped to the fused kernel.");
+        var (_, fusedSteps, trainDelta) = Divergence(Create);
         Assert.Equal(0, fusedSteps);
-        Assert.True(trainDelta > 1e-6, "LAMB with the default clamp did not train at all.");
+        Assert.True(trainDelta > 1e-6, "LAMB did not train on the eager path.");
     }
-
     [Fact]
     public void AMSGrad_FusedMatchesEager_NoWorseThanAdam()
     {

@@ -65,27 +65,21 @@ namespace AiDotNet.Optimizers;
 public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<T, TInput, TOutput>, Fused.IFusedOptimizerSpec
 {
     /// <summary>
-    /// Describes this LAMB instance for the fused kernel (Tensors
-    /// <c>OptimizerType.LAMB</c> = <c>LAMBUpdateSimd(lr, b1, b2, eps, wd)</c>):
-    /// Beta1/Beta2 → β1/β2, Epsilon → eps, WeightDecay → wd. Declines (eager) on
-    /// adaptive LR, an unmappable scheduler, or a trust-ratio clamp: the kernel computes
-    /// the unclamped ||w|| / ||r||, so with ClipTrustRatio (the default, MaxTrustRatio 10)
-    /// fused and eager training diverge (measured 2.9e-4 over 40 steps against 6.7e-7 for
-    /// the Adam control; 4.6e-5 with the clamp off). Parity-gated by
-    /// FusedOptimizerParityTests.
+    /// LAMB does not map to the fused kernel. Two measured differences keep it eager:
+    /// <list type="bullet">
+    /// <item>The kernel computes the unclamped trust ratio ||w|| / ||r||, while LAMB clips it at MaxTrustRatio (10) by
+    /// default: 2.9e-4 divergence over 40 steps against 6.7e-7 for the Adam control.</item>
+    /// <item>Even unclamped, the per-tensor trust ratio amplifies rounding differences. Divergence is at the Adam
+    /// control's level for 20 steps (6e-8 after one step, 3e-6 after twenty) and then grows to 4.6e-5 to over 1e-4
+    /// by step 40, varying between runs, so the mapping cannot hold a parity bound.</item>
+    /// </list>
+    /// FusedOptimizerParityTests pins the decline; revisit once the Tensors kernel clamps and its norm reductions
+    /// match the eager ones.
     /// </summary>
     bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
     {
         config = default;
-        if (_options.UseAdaptiveLearningRate) return false;
-        if (_options.ClipTrustRatio) return false;
-        if (!TryGetFusedLrSchedule(out var schedule)) return false;
-        config = new Fused.FusedOptimizerConfig(
-            Tensors.Engines.Compilation.OptimizerType.LAMB,
-            (float)GetCurrentLearningRate(),
-            (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
-            (float)_options.WeightDecay, schedule);
-        return true;
+        return false;
     }
 
     /// <summary>
