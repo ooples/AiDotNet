@@ -11741,9 +11741,9 @@ public static partial class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreateDefaultABINetVisionLayers(
         int imageWidth = 128,
         int imageHeight = 32,
-        int visionDim = 512)
+        int visionDim = 512,
+        int numLayers = 3)
     {
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int sequenceLength = (imageHeight / 4) * (imageWidth / 4);
 
         yield return new ConvolutionalLayer<T>(64, 3, 1, 1);
@@ -11754,14 +11754,16 @@ public static partial class LayerHelper<T>
         yield return new MaxPoolingLayer<T>(2, 2);
         yield return new ConvolutionalLayer<T>(visionDim, 3, 1, 1);
 
-        // Convert each convolutional feature map into a token sequence before
-        // attention. ReshapeLayer preserves the batch axis, so both a single
-        // image and a batch become [B, H*W, C] without TransposeLayer's
-        // rank-4-only contract.
-        yield return new ReshapeLayer<T>(new[] { sequenceLength, visionDim });
+        // One token per spatial position: [B, C, H, W] -> [B, C, H*W] -> [B, H*W, C]. Reshaping straight
+        // to [H*W, C], as before, reinterpreted the channel-major buffer, so a "token" was a run of one
+        // channel's values across positions rather than one position's feature vector.
+        yield return new ReshapeLayer<T>(new[] { visionDim, sequenceLength });
+        yield return new TransposeLayer<T>(new[] { 1, 0 });
 
-        yield return new MultiHeadAttentionLayer<T>(8, (visionDim) / (8), identityActivation);
-        yield return new LayerNormalizationLayer<T>();
+        // The paper's vision model ends in a transformer of numLayers (3) residual layers. This was one
+        // bare attention layer with no skip, and the visionLayers option was never read.
+        for (int i = 0; i < numLayers; i++)
+            yield return new TransformerEncoderLayer<T>(8, visionDim * 4, visionDim);
     }
 
     /// <summary>
@@ -11837,10 +11839,8 @@ public static partial class LayerHelper<T>
     /// <returns>The layers forming ABINet's fusion branch.</returns>
     public static IEnumerable<ILayer<T>> CreateDefaultABINetFusionLayers(
         int visionDim = 512,
-        int numIterations = 3,
         int charsetSize = 95)
     {
-        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
         // Paper section 3.4: the vision and language features are combined by a learned GATE,
@@ -11850,12 +11850,9 @@ public static partial class LayerHelper<T>
         // streams and the "fusion" was just more language-model depth.
         yield return new GatedFusionLayer<T>(visionDim);
 
-        for (int i = 0; i < numIterations; i++)
-        {
-            yield return new DenseLayer<T>(visionDim, reluActivation);
-            yield return new LayerNormalizationLayer<T>();
-        }
-
+        // The fused features go straight to the character classifier (paper section 3.4). A stack of
+        // numIterations Dense + LayerNorm blocks used to sit here, reusing the ITERATION count as depth;
+        // iteration is the language model re-running on the fused prediction, which ABINet does itself.
         yield return new DenseLayer<T>(charsetSize, identityActivation);
     }
 
@@ -11903,7 +11900,7 @@ public static partial class LayerHelper<T>
             yield return l;
         foreach (var l in CreateDefaultABINetLanguageLayers(charsetSize, visionDim, languageDim))
             yield return l;
-        foreach (var l in CreateDefaultABINetFusionLayers(visionDim, numIterations, charsetSize))
+        foreach (var l in CreateDefaultABINetFusionLayers(visionDim, charsetSize))
             yield return l;
     }
 

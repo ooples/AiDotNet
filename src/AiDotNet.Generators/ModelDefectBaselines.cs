@@ -77,7 +77,6 @@ internal static class ModelDefectBaselines
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
             "CreateAudioVisualEventLocalizationLayers",
-            "CreateDefaultABINetVisionLayers",
             "CreateDefaultALIGNLayers",
             "CreateDefaultAudioFlamingo2Layers",
             "CreateDefaultAudioLDMClassifierLayers",

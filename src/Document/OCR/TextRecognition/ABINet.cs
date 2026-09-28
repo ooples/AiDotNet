@@ -354,6 +354,7 @@ public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T
         int charsetSize = _charset.Length + 1;
 
         _visionModelLayers.AddRange(LayerHelper<T>.CreateDefaultABINetVisionLayers(
+            numLayers: _visionLayers,
             imageWidth: ImageSize,
             imageHeight: _imageHeight,
             visionDim: _visionDim));
@@ -365,7 +366,6 @@ public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T
 
         _fusionLayers.AddRange(LayerHelper<T>.CreateDefaultABINetFusionLayers(
             visionDim: _visionDim,
-            numIterations: _numIterations,
             charsetSize: charsetSize));
 
         _visionHead.Add(LayerHelper<T>.CreateDefaultABINetBranchHead(charsetSize));
