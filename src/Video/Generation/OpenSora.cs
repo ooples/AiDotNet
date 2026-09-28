@@ -551,8 +551,7 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITr
         features = AddCondition(features, timeEmbed);
 
         // DiT blocks with multi-head self-attention. Training checkpoints them: only segment boundaries are kept
-        // and each segment is recomputed in the backward (Chen et al. 2016), sqrt(N) blocks per segment, the same
-        // trade NoisePredictorBase makes. At Open-Sora's sequence length a taped step that kept every block's
+        // and each segment is recomputed in the backward (Chen et al. 2016). At Open-Sora's sequence length a taped step that kept every block's
         // activations would not fit; the reference implementation trains with gradient checkpointing as well.
         if (_trainingTime is not null)
         {
@@ -563,8 +562,11 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITr
                 blocks[b] = x => DiTBlock(block, x);
             }
 
-            int segmentSize = Math.Max(1, (int)Math.Sqrt(_numLayers));
-            features = AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing<T>.Checkpoint(blocks, features, segmentSize);
+            // One block per segment, as Open-Sora checkpoints each block: only the block boundaries are kept, and the
+            // backward recomputes a single block at a time. At its sequence length one block's taped activations are
+            // estimated at about 1.4 GB, so a sqrt(N)-block segment (5 blocks) would recompute ~7 GB at once; with that
+            // segment size the first real-training census run was killed on the 16 GB runner.
+            features = AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing<T>.Checkpoint(blocks, features, segmentSize: 1);
         }
         else
         {
