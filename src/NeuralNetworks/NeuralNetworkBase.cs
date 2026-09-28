@@ -13667,6 +13667,18 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     internal virtual void SetBaseTrainOptimizer(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
     {
+        // A different optimizer is a different trajectory: the eager path starts it from its own (fresh) state, so
+        // the fused path must not keep stepping this model's compiled plan with the previous optimizer's
+        // hyperparameters and moments. Left alone, the next fused step saw the new learning rate as drift, declined,
+        // and the single-plan commitment rule threw ("Fused compiled training has already run successfully, but
+        // the current step cannot engage the fused path") - any Train after SetBaseTrainOptimizer on a model that
+        // had already trained fused. Re-installing the SAME instance is not a switch and keeps its state.
+        if (!ReferenceEquals(_baseTrainOptimizer, optimizer))
+        {
+            Training.CompiledTapeTrainingStep<T>.Invalidate(this);
+            _fusedTrainingCommitted = false;
+            _fusedPersistenceVerified = false;
+        }
         _baseTrainOptimizer = optimizer;
         _baseTrainOptimizerExplicitlyConfigured = optimizer is not null;
         _baseTrainOptimizerLearningRate = null;
