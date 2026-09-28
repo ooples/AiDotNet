@@ -385,11 +385,11 @@ int internalSkipped = 0;
 // Compiles one snippet, recording pass/fail against the given key.
 //
 // homeNamespace, when given, wraps the snippet in that namespace. Importing every AiDotNet namespace makes
-// the 33 type names that are declared in two namespaces ambiguous — an artefact of the harness, not of the
+// the type names that are declared in two namespaces ambiguous — an artefact of the harness, not of the
 // example, since a reader imports the handful of namespaces they need rather than all 867. Compiling an
 // example inside the namespace of the member that documents it reproduces the reader's situation exactly:
 // C# resolves a type in the containing namespace ahead of anything a using directive brought in, so
-// `Donut` in the docs for AiDotNet.VisionLanguage.Document.Donut means that one, as the reader intends.
+// `DINO` in the docs for AiDotNet.ComputerVision.Detection.ObjectDetection.DETR.DINO means that one, as the reader intends.
 // Builds the compilable unit for a snippet, optionally with extra declarations prepended to its body.
 string Compose(string code, string? homeNamespace, IEnumerable<string>? extraDeclarations)
 {
