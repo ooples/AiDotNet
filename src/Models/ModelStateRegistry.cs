@@ -307,6 +307,19 @@ public sealed class ModelStateRegistry<T>
     /// Marks a commit that can still throw because it runs another object's restore or a repair callback. Staging
     /// reports whether any such commit is pending, so a caller pays for a rollback snapshot only when one is.
     /// </summary>
+    /// <summary>
+    /// A commit that owns a resource it would release after running. StageAll disposes it when a later entry fails to
+    /// stage, so the resource is released whether or not the commit ever runs.
+    /// </summary>
+    private sealed class OwningCommit : IDisposable
+    {
+        private readonly Action _run;
+        private readonly IDisposable _owned;
+        public OwningCommit(Action run, IDisposable owned) { _run = run; _owned = owned; }
+        public void Run() => _run();
+        public void Dispose() => _owned.Dispose();
+    }
+
     private sealed class FallibleCommit
     {
         private readonly Action _run;
@@ -473,7 +486,14 @@ public sealed class ModelStateRegistry<T>
 
                 ValidateCollectionState<TState>(name, current);
 
-                return () => CopyCollectionState(name, current, restored);
+                // Re-fetched at commit, as PrepareCollectionInPlace does: an earlier entry may have replaced the object
+                // that owns this collection. The staged instance was validated; the live one must be too.
+                return () =>
+                {
+                    var live = get() ?? current;
+                    if (!ReferenceEquals(live, current)) ValidateCollectionState<TState>(name, live);
+                    CopyCollectionState(name, live, restored);
+                };
             });
 
     /// <summary>Declares the exact continuation state of a constructor-owned random generator.</summary>
@@ -1296,7 +1316,9 @@ public sealed class ModelStateRegistry<T>
                 restored?.Dispose();
                 throw new InvalidDataException($"State '{name}' requires matching non-null construction-owned tensor storage.");
             }
-            return () =>
+            // The staged tensor is owned by the commit. If a later entry fails to stage, StageAll disposes it instead,
+            // so an abandoned restore does not leak it.
+            return new OwningCommit(() =>
             {
                 using (restored)
                 {
@@ -1305,7 +1327,7 @@ public sealed class ModelStateRegistry<T>
                         throw new InvalidDataException($"State '{name}' changed shape between staging and commit.");
                     target.CopyFromArray(restored.ToArray());
                 }
-            };
+            }, restored).Run;
         }).Set);
 
     /// <summary>Declares a list of tensors, such as a temporal memory bank.</summary>
@@ -2822,26 +2844,36 @@ public sealed class ModelStateRegistry<T>
         // Stage every entry first, then commit: nothing is installed until the whole block has been read and
         // validated, so a corrupt or truncated entry leaves the target exactly as it was.
         var commits = new List<Action>(count);
-        for (int i = 0; i < count; i++)
+        try
         {
-            string name = reader.ReadString();
-            int length = reader.ReadInt32();
-            if (length < 0)
-                throw new InvalidDataException($"State '{name}' declares a negative length {length}.");
-            var bytes = reader.ReadBytes(length);
-            if (bytes.Length != length)
-                throw new InvalidDataException($"State '{name}' is truncated: expected {length} bytes, got {bytes.Length}.");
-
-            if (!byName.TryGetValue(name, out var entry)
-                || (restoreAfterParameters.HasValue
-                    && entry.RestoreAfterParameters != restoreAfterParameters.Value))
+            for (int i = 0; i < count; i++)
             {
-                continue;
-            }
+                string name = reader.ReadString();
+                int length = reader.ReadInt32();
+                if (length < 0)
+                    throw new InvalidDataException($"State '{name}' declares a negative length {length}.");
+                var bytes = reader.ReadBytes(length);
+                if (bytes.Length != length)
+                    throw new InvalidDataException($"State '{name}' is truncated: expected {length} bytes, got {bytes.Length}.");
 
-            using var buffer = new MemoryStream(bytes);
-            using var inner = new BinaryReader(buffer, System.Text.Encoding.UTF8, leaveOpen: true);
-            commits.Add(entry.Stage(inner));
+                if (!byName.TryGetValue(name, out var entry)
+                    || (restoreAfterParameters.HasValue
+                        && entry.RestoreAfterParameters != restoreAfterParameters.Value))
+                {
+                    continue;
+                }
+
+                using var buffer = new MemoryStream(bytes);
+                using var inner = new BinaryReader(buffer, System.Text.Encoding.UTF8, leaveOpen: true);
+                commits.Add(entry.Stage(inner));
+            }
+        }
+        catch
+        {
+            // Nothing was installed; release what the entries staged so far instead of leaking it.
+            foreach (var staged in commits)
+                (staged.Target as IDisposable)?.Dispose();
+            throw;
         }
 
         hasFallibleCommit = commits.Exists(commit => commit.Target is FallibleCommit);
