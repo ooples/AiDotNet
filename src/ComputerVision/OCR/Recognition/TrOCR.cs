@@ -46,9 +46,12 @@ public partial class TrOCR<T> : OCRBase<T>
     private readonly TrOCRDecoderLayer<T>[] _decoderLayers;
     private readonly Dense<T> _outputProjection;
     private readonly Dense<T> _tokenEmbedding;
-    private readonly int _hiddenDim;
+    // Projects encoder memory to the decoder width; absent when the widths agree.
+    private readonly Dense<T>? _encoderToDecoder;
+    private readonly int _encoderDim;
+    private readonly int _encoderHeads;
+    private readonly int _decoderDim;
     private readonly int _numHeads;
-    private readonly int _numLayers;
     private readonly int _patchSize;
     private readonly int _startTokenId;
     private readonly int _endTokenId;
@@ -64,39 +67,49 @@ public partial class TrOCR<T> : OCRBase<T>
     /// <summary>
     /// Creates a new TrOCR text recognizer.
     /// </summary>
+    /// <remarks>
+    /// Sizes come from <see cref="TrOCROptions{T}"/> when <paramref name="options"/> is one, and are TrOCR-Base
+    /// otherwise. They were hard-coded to 512 wide, 8 heads and 6 layers for both stacks, which matches no
+    /// published TrOCR.
+    /// </remarks>
     public TrOCR(OCROptions<T> options) : base(options)
     {
-        _hiddenDim = 512;
-        _numHeads = 8;
-        _numLayers = 6;
-        _patchSize = 16;
+        var sizes = options as TrOCROptions<T> ?? new TrOCROptions<T>();
+        _encoderDim = sizes.EncoderHiddenDim;
+        _encoderHeads = sizes.EncoderHeads;
+        _decoderDim = sizes.DecoderHiddenDim;
+        _numHeads = sizes.DecoderHeads;
+        _patchSize = sizes.PatchSize;
 
         // Special tokens (add to vocabulary)
         _startTokenId = VocabularySize; // SOS token
         _endTokenId = VocabularySize + 1; // EOS token
 
         // Patch embedding layer
-        _patchEmbed = new Conv2D<T>(3, _hiddenDim, kernelSize: _patchSize, stride: _patchSize);
+        _patchEmbed = new Conv2D<T>(3, _encoderDim, kernelSize: _patchSize, stride: _patchSize);
 
         // Token embedding for decoder
-        _tokenEmbedding = new Dense<T>(VocabularySize + 2, _hiddenDim);
+        _tokenEmbedding = new Dense<T>(VocabularySize + 2, _decoderDim);
 
         // Proper transformer encoder layers with multi-head self-attention
-        _encoderLayers = new TrOCREncoderLayer<T>[_numLayers];
-        for (int i = 0; i < _numLayers; i++)
+        _encoderLayers = new TrOCREncoderLayer<T>[sizes.EncoderLayers];
+        for (int i = 0; i < _encoderLayers.Length; i++)
         {
-            _encoderLayers[i] = new TrOCREncoderLayer<T>(_hiddenDim, _numHeads);
+            _encoderLayers[i] = new TrOCREncoderLayer<T>(_encoderDim, _encoderHeads);
         }
 
+        if (_encoderDim != _decoderDim)
+            _encoderToDecoder = new Dense<T>(_encoderDim, _decoderDim);
+
         // Proper transformer decoder layers with self-attention and cross-attention
-        _decoderLayers = new TrOCRDecoderLayer<T>[_numLayers];
-        for (int i = 0; i < _numLayers; i++)
+        _decoderLayers = new TrOCRDecoderLayer<T>[sizes.DecoderLayers];
+        for (int i = 0; i < _decoderLayers.Length; i++)
         {
-            _decoderLayers[i] = new TrOCRDecoderLayer<T>(_hiddenDim, _numHeads);
+            _decoderLayers[i] = new TrOCRDecoderLayer<T>(_decoderDim, _numHeads);
         }
 
         // Output projection to vocabulary + special tokens
-        _outputProjection = new Dense<T>(_hiddenDim, VocabularySize + 2);
+        _outputProjection = new Dense<T>(_decoderDim, VocabularySize + 2);
     }
 
     /// <inheritdoc/>
@@ -167,12 +180,13 @@ public partial class TrOCR<T> : OCRBase<T>
     {
         // Patch embedding, flattened to a token sequence, plus positional encoding.
         var x = AddPositionalEncoding(CvTensorOps<T>.FlattenSpatial(_patchEmbed.Forward(image)));
-        for (int l = 0; l < _numLayers; l++)
+        for (int l = 0; l < _encoderLayers.Length; l++)
         {
             x = ApplyEncoderLayer(x, l);
         }
 
-        return x;
+        // Every decoder path (teacher forcing, cached generation) cross-attends to memory at decoder width.
+        return _encoderToDecoder is null ? x : _encoderToDecoder.ForwardTokens(x);
     }
 
     private (string text, T confidence) DecodeText(Tensor<T> encoderOutput)
@@ -210,8 +224,8 @@ public partial class TrOCR<T> : OCRBase<T>
         int vocab = VocabularySize + 2;
         int maxSteps = Math.Max(1, Options.MaxSequenceLength - 1);
 
-        var caches = new TrOCRLayerCache<T>[_numLayers];
-        for (int l = 0; l < _numLayers; l++)
+        var caches = new TrOCRLayerCache<T>[_decoderLayers.Length];
+        for (int l = 0; l < _decoderLayers.Length; l++)
         {
             caches[l] = new TrOCRLayerCache<T>();
         }
@@ -231,7 +245,7 @@ public partial class TrOCR<T> : OCRBase<T>
         for (int step = 0; step < maxSteps; step++)
         {
             var x = EmbedTokens(current.Select(t => new[] { t }).ToArray(), step);
-            for (int l = 0; l < _numLayers; l++)
+            for (int l = 0; l < _decoderLayers.Length; l++)
             {
                 x = _decoderLayers[l].ForwardStep(x, encoderOutput, caches[l]);
             }
@@ -347,7 +361,7 @@ public partial class TrOCR<T> : OCRBase<T>
     private Tensor<T> ApplyDecoder(Tensor<T> decoderInput, Tensor<T> encoderOutput)
     {
         var x = decoderInput;
-        for (int l = 0; l < _numLayers; l++)
+        for (int l = 0; l < _decoderLayers.Length; l++)
         {
             x = _decoderLayers[l].Forward(x, encoderOutput);
         }
@@ -372,6 +386,7 @@ public partial class TrOCR<T> : OCRBase<T>
         }
 
         count += _outputProjection.GetParameterCount();
+        count += _encoderToDecoder?.GetParameterCount() ?? 0;
 
         return count;
     }
@@ -417,13 +432,16 @@ public partial class TrOCR<T> : OCRBase<T>
         MapDenseWeights(weights, "decoder.embed_tokens", _tokenEmbedding);
 
         // Map encoder layer weights
-        for (int i = 0; i < _numLayers; i++)
+        for (int i = 0; i < _encoderLayers.Length; i++)
         {
             MapEncoderLayerWeights(weights, $"encoder.layers.{i}", _encoderLayers[i]);
         }
 
         // Map decoder layer weights
-        for (int i = 0; i < _numLayers; i++)
+        if (_encoderToDecoder is not null)
+            MapDenseWeights(weights, "enc_to_dec_proj", _encoderToDecoder);
+
+        for (int i = 0; i < _decoderLayers.Length; i++)
         {
             MapDecoderLayerWeights(weights, $"decoder.layers.{i}", _decoderLayers[i]);
         }
@@ -513,11 +531,15 @@ public partial class TrOCR<T> : OCRBase<T>
 
         // Write header
         writer.Write(0x54524F43); // "TROC" in ASCII
-        writer.Write(1); // Version 1
+        // Version 2: the encoder and decoder are sized separately (version 1 stored one shared size).
+        writer.Write(2);
         writer.Write(Name);
-        writer.Write(_hiddenDim);
+        writer.Write(_encoderDim);
+        writer.Write(_encoderHeads);
+        writer.Write(_encoderLayers.Length);
+        writer.Write(_decoderDim);
         writer.Write(_numHeads);
-        writer.Write(_numLayers);
+        writer.Write(_decoderLayers.Length);
         writer.Write(_patchSize);
         writer.Write(VocabularySize);
         writer.Write(_startTokenId);
@@ -538,6 +560,7 @@ public partial class TrOCR<T> : OCRBase<T>
         }
 
         _outputProjection.WriteParameters(writer);
+        _encoderToDecoder?.WriteParameters(writer);
     }
 
     /// <summary>
@@ -556,15 +579,18 @@ public partial class TrOCR<T> : OCRBase<T>
         }
 
         int version = reader.ReadInt32();
-        if (version != 1)
+        if (version != 2)
         {
             throw new InvalidDataException($"Unsupported TrOCR model version: {version}");
         }
 
         string name = reader.ReadString();
-        int hiddenDim = reader.ReadInt32();
-        int numHeads = reader.ReadInt32();
-        int numLayers = reader.ReadInt32();
+        int encoderDim = reader.ReadInt32();
+        int encoderHeads = reader.ReadInt32();
+        int encoderLayers = reader.ReadInt32();
+        int decoderDim = reader.ReadInt32();
+        int decoderHeads = reader.ReadInt32();
+        int decoderLayers = reader.ReadInt32();
         int patchSize = reader.ReadInt32();
         int vocabSize = reader.ReadInt32();
         int startTokenId = reader.ReadInt32();
@@ -576,15 +602,15 @@ public partial class TrOCR<T> : OCRBase<T>
                 $"TrOCR configuration mismatch. Expected name={Name}, got name={name}");
         }
 
-        if (hiddenDim != _hiddenDim || numHeads != _numHeads || numLayers != _numLayers || patchSize != _patchSize ||
-            vocabSize != VocabularySize || startTokenId != _startTokenId || endTokenId != _endTokenId)
+        var expected = (_encoderDim, _encoderHeads, _encoderLayers.Length, _decoderDim, _numHeads, _decoderLayers.Length,
+            _patchSize, VocabularySize, _startTokenId, _endTokenId);
+        var actual = (encoderDim, encoderHeads, encoderLayers, decoderDim, decoderHeads, decoderLayers,
+            patchSize, vocabSize, startTokenId, endTokenId);
+        if (expected != actual)
         {
             throw new InvalidOperationException(
-                $"TrOCR configuration mismatch. Expected hiddenDim={_hiddenDim}, numHeads={_numHeads}, " +
-                $"numLayers={_numLayers}, patchSize={_patchSize}, vocabSize={VocabularySize}, " +
-                $"startTokenId={_startTokenId}, endTokenId={_endTokenId}, " +
-                $"got hiddenDim={hiddenDim}, numHeads={numHeads}, numLayers={numLayers}, patchSize={patchSize}, " +
-                $"vocabSize={vocabSize}, startTokenId={startTokenId}, endTokenId={endTokenId}");
+                $"TrOCR configuration mismatch. Expected (encoderDim, encoderHeads, encoderLayers, decoderDim, " +
+                $"decoderHeads, decoderLayers, patchSize, vocabSize, startTokenId, endTokenId) = {expected}, got {actual}.");
         }
 
         // Read component weights
@@ -602,6 +628,7 @@ public partial class TrOCR<T> : OCRBase<T>
         }
 
         _outputProjection.ReadParameters(reader);
+        _encoderToDecoder?.ReadParameters(reader);
     }
 
     /// <summary>
@@ -632,12 +659,42 @@ public partial class TrOCR<T> : OCRBase<T>
             throw new ArgumentNullException(nameof(expectedOutput));
         }
 
-        var labels = LabelsFrom(expectedOutput);
+        var labels = WithEndToken(LabelsFrom(expectedOutput));
         var targets = LabelTargets(labels);
         RecordTrainingLoss(TensorModelTrainer<T>.Step(
             this, input, targets, NumOps.FromDouble(TrainingLearningRate),
             image => TeacherForcedLogits(image, labels),
             CrossEntropy));
+    }
+
+    /// <summary>
+    /// Terminates every label row with the end token so the decoder learns where text stops.
+    /// </summary>
+    /// <remarks>
+    /// Generation stops at the end token, but training never supervised one unless the caller wrote it in,
+    /// so a model trained on plain text labels could not learn to stop. A row without it gets the end token
+    /// right after its content (trailing zeros are padding); when a row is full, every row grows by one.
+    /// Rows that already contain it are unchanged.
+    /// </remarks>
+    private int[][] WithEndToken(int[][] labels)
+    {
+        var content = labels.Select(row =>
+        {
+            int end = Array.IndexOf(row, _endTokenId);
+            if (end >= 0) return (Row: row, Terminated: true, Length: end + 1);
+            int length = row.Length;
+            while (length > 0 && row[length - 1] == 0) length--;
+            return (Row: row, Terminated: false, Length: length + 1);
+        }).ToArray();
+
+        int width = Math.Max(labels.Length == 0 ? 0 : labels[0].Length, content.Max(c => c.Length));
+        return content.Select(c =>
+        {
+            var row = new int[width];
+            Array.Copy(c.Row, row, Math.Min(c.Row.Length, c.Terminated ? c.Length : c.Length - 1));
+            if (!c.Terminated) row[c.Length - 1] = _endTokenId;
+            return row;
+        }).ToArray();
     }
 
     /// <summary>

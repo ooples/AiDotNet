@@ -5711,6 +5711,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "MaxSequenceLength = 16, MaxGenerationLength = 8, MaxVisualTokens = 16, " +
                     "DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "TrOCR" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.ComputerVision.OCR.Recognition.", System.StringComparison.Ordinal))
+            {
+                // TrOCR's defaults are TrOCR-Base (a 768-wide, 12-layer BEiT encoder and a 1024-wide,
+                // 12-layer decoder): about 230M parameters, far too large for a CI fixture. Run the same
+                // encoder -> projection -> cross-attending decoder topology at bounded sizes. The widths
+                // differ on purpose (32 vs 48) so the encoder-to-decoder bridge is exercised, as at paper scale.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.ComputerVision.OCR.Recognition.TrOCROptions<double> {{ " +
+                    "EncoderHiddenDim = 32, EncoderHeads = 4, EncoderLayers = 1, " +
+                    "DecoderHiddenDim = 48, DecoderHeads = 4, DecoderLayers = 1 })";
+            }
             else if (model.ClassName == "ABINet" && model.TypeParameterCount == 1)
             {
                 // ABINet's explicit training branch consumes the supplied tensor directly. Build
