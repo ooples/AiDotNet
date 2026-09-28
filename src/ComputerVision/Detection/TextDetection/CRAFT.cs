@@ -56,20 +56,22 @@ public partial class CRAFT<T> : TextDetectorBase<T>
     {
         _hiddenDim = GetHiddenDim(options.Size);
 
-        // VGG16-based backbone
-        Backbone = new ResNet<T>(ResNetVariant.ResNet50);
+        // The paper's backbone is VGG-16 with batch norm (Baek et al. 2019, section 3.1). This was a
+        // ResNet-50 under a comment that said VGG16. Its five taps are relu2_2..relu5_3 plus fc7.
+        Backbone = new VGG16BNBackbone<T>();
 
-        // Upsampling convolutions for feature fusion
+        // U-Net decoder of the reference: upconv1 reads fc7 concatenated with relu5_3 (same stride), then
+        // each merge upsamples and concatenates the next finer tap, ending at relu2_2 (stride 2).
         var stageChannels = Backbone.OutputChannels;
-        _upConv1 = new Conv2D<T>(stageChannels[^1], _hiddenDim, kernelSize: 3, padding: 1);
+        _upConv1 = new Conv2D<T>(stageChannels[^1] + stageChannels[^2], _hiddenDim, kernelSize: 3, padding: 1);
         // Each merge conv receives the upsampled decoder map CONCATENATED with a raw backbone
         // stage, so its input width is the decoder width plus that stage's channel count. These were
         // declared as twice the decoder width, which matches no backbone stage, so the first merge
         // threw on a channel mismatch (e.g. ResNet-50's C4: 256 + 1024 = 1280 channels into a conv
         // built for 512) and the model could not run a forward pass at all.
-        _upConv2 = new Conv2D<T>(_hiddenDim + stageChannels[^2], _hiddenDim, kernelSize: 3, padding: 1);
-        _upConv3 = new Conv2D<T>(_hiddenDim + stageChannels[^3], _hiddenDim, kernelSize: 3, padding: 1);
-        _upConv4 = new Conv2D<T>(_hiddenDim + stageChannels[^4], _hiddenDim, kernelSize: 3, padding: 1);
+        _upConv2 = new Conv2D<T>(_hiddenDim + stageChannels[^3], _hiddenDim, kernelSize: 3, padding: 1);
+        _upConv3 = new Conv2D<T>(_hiddenDim + stageChannels[^4], _hiddenDim, kernelSize: 3, padding: 1);
+        _upConv4 = new Conv2D<T>(_hiddenDim + stageChannels[^5], _hiddenDim, kernelSize: 3, padding: 1);
 
         // Prediction heads: region score and affinity score
         _regionHead = new Conv2D<T>(_hiddenDim, 1, kernelSize: 1);
@@ -92,32 +94,11 @@ public partial class CRAFT<T> : TextDetectorBase<T>
         // Extract multi-scale backbone features
         var features = EnsureBackbone.ExtractFeatures(input);
 
-        // U-Net style upsampling with skip connections
-        // Start from deepest features
-        var x = _upConv1.Forward(features[^1]);
-        x = ApplyReLU(x);
-
-        // Upsample and concatenate with skip features
-        if (features.Count > 1)
-        {
-            x = UpsampleAndConcat(x, features[^2]);
-            x = _upConv2.Forward(x);
-            x = ApplyReLU(x);
-        }
-
-        if (features.Count > 2)
-        {
-            x = UpsampleAndConcat(x, features[^3]);
-            x = _upConv3.Forward(x);
-            x = ApplyReLU(x);
-        }
-
-        if (features.Count > 3)
-        {
-            x = UpsampleAndConcat(x, features[^4]);
-            x = _upConv4.Forward(x);
-            x = ApplyReLU(x);
-        }
+        // U-Net decoder: fc7 with relu5_3 (both stride 16), then relu4_3, relu3_3 and relu2_2.
+        var x = ApplyReLU(_upConv1.Forward(UpsampleAndConcat(features[^1], features[^2])));
+        x = ApplyReLU(_upConv2.Forward(UpsampleAndConcat(x, features[^3])));
+        x = ApplyReLU(_upConv3.Forward(UpsampleAndConcat(x, features[^4])));
+        x = ApplyReLU(_upConv4.Forward(UpsampleAndConcat(x, features[^5])));
 
         // Predict region and affinity scores
         var regionScore = _regionHead.Forward(x);
