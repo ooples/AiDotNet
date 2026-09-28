@@ -121,6 +121,8 @@ public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : Grad
                 {
                     L1 = l1Threshold,
                 },
+                // Soft-thresholding holds a weight at exactly zero while |w - lr g| <= threshold.
+                UpdateCanBeExactlyZero = true,
             };
             return true;
         }

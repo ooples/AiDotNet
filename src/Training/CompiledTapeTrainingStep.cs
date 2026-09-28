@@ -106,6 +106,9 @@ public static class CompiledTapeTrainingStep<T>
         internal object? configuredPlan;
         internal (int OptType, float Lr, float B1, float B2, float Eps, float Wd)? configuredOptimizerConfig;
         internal long fusedStepCount;
+        // The configured plan's optimizer step (1-based after its first Step), counted from configuration; -1 when it
+        // is unknown (an imported checkpoint set it, or the last fused step ran a different plan).
+        internal int planOptimizerStep = -1;
         internal System.Collections.Generic.HashSet<AiDotNet.Tensors.Engines.Compilation.OptimizerType>? fusedUnavailableTypes;
         internal System.Exception? lastFallbackException;
         internal object? mpPlan;
@@ -348,6 +351,17 @@ public static class CompiledTapeTrainingStep<T>
 
     /// <summary>Gets the count of successful fused-step executions on the calling thread.</summary>
     public static long GetFusedStepCount() => _fusedStepCount;
+
+    /// <summary>
+    /// The optimizer step the configured plan applied most recently, the index its learning-rate schedule was evaluated
+    /// at (1 for its first step). False when it is not known: a checkpoint import set the plan's step, or the last
+    /// fused step ran a mixed-precision plan instead.
+    /// </summary>
+    internal static bool TryGetPlanOptimizerStep(out int step)
+    {
+        step = CurrentState.planOptimizerStep;
+        return step >= 0;
+    }
 
     /// <summary>Resets the fused-step counter on the calling thread to zero.</summary>
     public static void ResetFusedStepCount() { _fusedStepCount = 0; }
@@ -1125,6 +1139,7 @@ public static class CompiledTapeTrainingStep<T>
                     (double)epsilon, (double)weightDecay, scaler);
                 lossValue = (T)(object)lossF32;
                 _fusedStepCount++;
+                CurrentState.planOptimizerStep = -1;   // a mixed-precision plan ran, not the configured one
                 return true;
             }
 
@@ -1191,6 +1206,7 @@ public static class CompiledTapeTrainingStep<T>
                     eagerOptimizer.Step(ctx);
                 }
                 _fusedStepCount++;
+                CurrentState.planOptimizerStep = -1;   // a mixed-precision plan ran, not the configured one
                 return true;
             }
 
@@ -1275,6 +1291,7 @@ public static class CompiledTapeTrainingStep<T>
                         fusedExtras);
                 }
                 _configuredPlan = plan;
+                CurrentState.planOptimizerStep = 0;
                 _configuredOptimizerConfig = currentConfig;
                 // Apply the global gradient-norm clip threshold to the plan
                 // when the underlying ICompiledTrainingPlan<T> exposes
@@ -1345,6 +1362,7 @@ public static class CompiledTapeTrainingStep<T>
             // assert the compiled path actually ran — distinguishing it from
             // a silent fallback to the eager path.
             _fusedStepCount++;
+            if (CurrentState.planOptimizerStep >= 0) CurrentState.planOptimizerStep++;
             return true;
         }
         catch (Exception ex)
@@ -1381,6 +1399,7 @@ public static class CompiledTapeTrainingStep<T>
             }
             _configuredPlan = null;
             _configuredOptimizerConfig = null;
+            CurrentState.planOptimizerStep = -1;
             return false;
         }
     }
@@ -1404,6 +1423,8 @@ public static class CompiledTapeTrainingStep<T>
             // the import succeeds: a failed import leaves it pending, so the eager fallback still refuses to run.
             plan.ImportOptimizerState(restored);
             optimizer.MarkPendingFusedOptimizerStateInstalled();
+            // The import carried the checkpoint's step, which this side cannot read.
+            CurrentState.planOptimizerStep = -1;
         }
         else
         {

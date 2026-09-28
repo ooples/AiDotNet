@@ -4945,6 +4945,50 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// vector rather than retaining the tensors, so the published surface is already independent of
     /// the plan's buffers by the time this returns.
     /// </remarks>
+    /// <summary>
+    /// Whether a fused step could have moved any parameter, so that finding every parameter unchanged afterwards is
+    /// evidence of a plan that has come loose from the live tensors (ooples/AiDotNet#1822) rather than of a step that
+    /// legitimately did nothing.
+    /// </summary>
+    /// <remarks>
+    /// A step legitimately changes nothing when its learning rate is exactly zero (a warmup that starts at 0, a cosine
+    /// schedule that decays to 0), when every gradient is exactly zero, or when the optimizer's update can itself be
+    /// exactly zero (an L1 proximal step holding weights at zero). Treating those as a decoupled plan disabled fused
+    /// training for the rest of the run and discarded the optimizer's fused state. Anything this cannot establish
+    /// (gradients not observed, the plan's step unknown) counts as "could have moved", so the guard keeps catching a
+    /// genuinely decoupled plan.
+    /// </remarks>
+    private static bool FusedStepCouldHaveMovedParameters(
+        AiDotNet.Optimizers.Fused.FusedOptimizerConfig config,
+        float learningRate,
+        AiDotNet.Tensors.Engines.Compilation.LrSchedule? schedule,
+        bool gradientsObserved,
+        bool anyGradientNonZero)
+    {
+        if (config.UpdateCanBeExactlyZero) return false;
+        if (gradientsObserved && !anyGradientNonZero) return false;
+
+        if (schedule is null)
+            return learningRate != 0f;
+
+        // The plan evaluates its schedule at its own 1-based step; when that step is known, so is this step's rate.
+        return !Training.CompiledTapeTrainingStep<T>.TryGetPlanOptimizerStep(out int step)
+            || schedule.GetLr(step) != 0.0;
+    }
+
+    private bool AnyGradientNonZero(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+    {
+        foreach (var gradient in grads.Values)
+        {
+            if (gradient is null) continue;
+            var span = gradient.AsSpan();
+            for (int i = 0; i < span.Length; i++)
+            {
+                if (!NumOps.Equals(span[i], NumOps.Zero)) return true;
+            }
+        }
+        return false;
+    }
     private void ScatterFusedGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
     {
         PublishParameterGradients(grads);
@@ -12528,6 +12572,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 : FusedTrainableParamChecksum(trainableLayers, fusedExtraParameters);
         }
 
+        // Whether this step's gradients were seen, and whether any was non-zero: a step whose gradients are all exactly
+        // zero cannot move a parameter, so leaving them unchanged is not evidence of a decoupled plan. Only recorded on
+        // probe steps, where it is needed.
+        bool fusedGradientsObserved = false;
+        bool fusedGradientNonZero = false;
+        void OnFusedGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+        {
+            if (verifyFusedPersistence)
+            {
+                fusedGradientsObserved = true;
+                fusedGradientNonZero = AnyGradientNonZero(grads);
+            }
+            ScatterFusedGradients(grads);
+        }
+
         bool ran;
         T lossValue;
         try
@@ -12564,7 +12623,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 // updates parameters in-replay and returns without ever passing through the eager
                 // gradient code below, which is why the surface stayed empty for every model that
                 // engages fusion -- the largest single cause of the all-zero gradient reports.
-                onGradients: ScatterFusedGradients,
+                onGradients: OnFusedGradients,
                 trainableSelection: selectedParameters,
                 owner: this);
         }
@@ -12601,7 +12660,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 // regression fixture) therefore made Train() return successfully without
                 // changing a single parameter. Treat every non-persisting first step as an
                 // unsafe plan and retry it through the eager tape in this same Train() call.
-                if (!persisted)
+                if (!persisted && !FusedStepCouldHaveMovedParameters(fusedCfg, lr, lrSched, fusedGradientsObserved, fusedGradientNonZero))
+                {
+                    // Inconclusive, not a failure: this step could not have moved anything (zero learning rate, all-zero
+                    // gradients, or an optimizer whose update is legitimately exactly zero). Leave the plan unverified and
+                    // re-probe on the next step, so a truly decoupled plan is still caught the first time it should move.
+                    _fusedStepsSincePersistenceCheck = FusedPersistenceRecheckInterval;
+                }
+                else if (!persisted)
                 {
                     if (_fusedTrainingCommitted)
                     {
@@ -12637,10 +12703,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     }
                     return false; // fall through to the eager tape path in TrainWithTape
                 }
-                // Proven to persist for THIS PLAN, for now. Re-armed rather than latched off, so a
-                // plan that later decouples from the live parameter tensors is still caught.
-                _fusedPersistenceVerified = true;
-                _fusedStepsSincePersistenceCheck = 0;
+                else
+                {
+                    // Proven to persist for THIS PLAN, for now. Re-armed rather than latched off, so a
+                    // plan that later decouples from the live parameter tensors is still caught.
+                    _fusedPersistenceVerified = true;
+                    _fusedStepsSincePersistenceCheck = 0;
+                }
             }
 
             LastLoss = lossValue;

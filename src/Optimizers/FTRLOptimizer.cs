@@ -92,6 +92,8 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 FtrlBeta = (float)_options.Beta,
                 LrPower = -0.5f,
             },
+            // The L1 term holds a weight at exactly zero while |z| <= lambda1, so a step can change nothing.
+            UpdateCanBeExactlyZero = _options.Lambda1 > 0.0,
         };
         return true;
     }
