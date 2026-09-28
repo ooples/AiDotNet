@@ -159,15 +159,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // (exact-name match) and has its own manual DiffusionModelTestBase scaffold.
         "OmniGen2",
 
-        // Donut (Kim et al. 2022, VisionLanguage.Document): paper-scale Swin+BART defaults
-        // (VisionDim=1024, DecoderDim=1024, 12+4 layers, NumHeads=16, ImageSize=2560) make
-        // a single AdamW train step ~9s on CPU, so the training-invariant counts overflow
-        // the 120s budget; the memorization invariant also needs dropout disabled for a
-        // clean monotonic decrease. The manual DonutTests scaffold in
-        // ModelFamilyTests/NeuralNetworks runs a reduced-scale config (same architecture
-        // shape, ~4x smaller dims, DropoutRate=0) that exercises every code path in seconds.
-        "Donut",
-
         // BASIC (Pham et al. 2022, "Combined Scaling for Zero-shot Transfer Learning") and the
         // Emu generative-VLM family (Sun et al. 2023, "Generative Pretraining in Multimodality"):
         // foundation-scale contrastive / generative VLMs. BASIC's defaults are a 24-layer /
@@ -308,13 +299,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static readonly System.Collections.Generic.Dictionary<string, string> CollisionOwners =
         new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.Ordinal)
         {
-            // The trainable model, not the ONNX-inference wrapper in VisionLanguage.Document.
-            { "LayoutLMv3", "AiDotNet.Document.LayoutAware." },
-            // Two Donut models share the simple name. The document-understanding one under
-            // PixelToSequence is the trainable model these fixtures target; the VisionLanguage.Document
-            // namesake is the inference wrapper. Without an owner the generator refuses to guess, since
-            // the winner would otherwise depend on discovery order.
-            { "Donut", "AiDotNet.Document.PixelToSequence." },
             // The grounding VLM every GLaMM entry in this file was written for.
             { "GLaMM", "AiDotNet.VisionLanguage.Grounding." },
             // The pin's own comment named this one explicitly, then relied on ordering to get it.
@@ -324,8 +308,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             { "SAM", "AiDotNet.ComputerVision.Segmentation.Foundation." },
 
             // ---------------------------------------------------------------------------------
-            // The 22 below were found by ADNTEST003 the first time it ran. Every one is the same
-            // latent bug as the four above — two models claiming one generated test class, winner
+            // The 15 below were found by ADNTEST003 the first time it ran. Every one is the same
+            // latent bug as the three above — two models claiming one generated test class, winner
             // decided by discovery order — and none was known before the diagnostic existed.
             //
             // Each owner is the ORDINALLY FIRST fully-qualified name, i.e. exactly what the sort
@@ -344,14 +328,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             { "MatchaTTS", "AiDotNet.Audio.TextToSpeech." },
             { "StyleTTS2", "AiDotNet.Audio.TextToSpeech." },
             { "DINO", "AiDotNet.ComputerVision.Detection.ObjectDetection.DETR." },
-            { "CRAFT", "AiDotNet.ComputerVision.Detection.TextDetection." },
-            { "DBNet", "AiDotNet.ComputerVision.Detection.TextDetection." },
-            { "EAST", "AiDotNet.ComputerVision.Detection.TextDetection." },
-            { "CRNN", "AiDotNet.ComputerVision.OCR.Recognition." },
-            { "TrOCR", "AiDotNet.ComputerVision.OCR.Recognition." },
             { "GroundedSAM2", "AiDotNet.ComputerVision.Segmentation.OpenVocabulary." },
-            { "Nougat", "AiDotNet.Document.PixelToSequence." },
-            { "Pix2Struct", "AiDotNet.Document.PixelToSequence." },
             { "CSDI", "AiDotNet.Finance.Forecasting.Foundation." },
             { "TSDiff", "AiDotNet.Finance.Forecasting.Foundation." },
             { "TimeGrad", "AiDotNet.Finance.Forecasting.Foundation." },
@@ -6394,20 +6371,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "LLMHiddenDim = 32, NumPerceiverLayers = 2, NumPerceiverTokens = 8, " +
                     "MaxAudioDurationSeconds = 1.0, MaxResponseTokens = 8, DropoutRate = 0.0 })";
             }
-            else if (model.ClassName == "CRNN" && model.TypeParameterCount == 1
-                     && typeName.StartsWith(
-                         "AiDotNet.Document.OCR.TextRecognition.", System.StringComparison.Ordinal))
-            {
-                // Preserve the TPAMI CRNN defaults in production. Exercise the same
-                // seven-stage VGG extractor -> recurrent projection -> CTC head with
-                // a 32x32 OCR crop and bounded public channel/hidden widths.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 11), " +
-                    "imageWidth: 32, maxSequenceLength: 8, cnnChannels: 64, " +
-                    "rnnHiddenSize: 32, rnnLayers: 1, charset: \"0123456789\")";
-            }
             else if (model.ClassName == "Emotion2Vec" && model.TypeParameterCount == 1)
             {
                 // Keep the native emotion2vec topology while bounding the
@@ -6618,6 +6581,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "imageSize: 32, patchSize: 16, maxPatches: 4, maxSequenceLength: 8, " +
                     "hiddenDim: 32, numEncoderLayers: 1, numDecoderLayers: 1, " +
                     "numHeads: 2, vocabSize: 64)";
+            }
+            else if (model.ClassName == "Donut" && model.TypeParameterCount == 1
+                     && typeName.StartsWith(
+                         "AiDotNet.Document.PixelToSequence.", System.StringComparison.Ordinal))
+            {
+                // Donut (Kim et al. 2022) keeps its paper defaults in production: a 1920x2560 page through a
+                // Swin-B encoder (embed 128, depths 2/2/14/2, window 10) and a 4-layer, 1024-wide BART decoder.
+                // One training step at that scale takes seconds, so this fixture runs the same four-stage Swin
+                // encoder (patch embedding, shifted-window blocks, patch merging) and cross-attending decoder
+                // with narrow widths. A 32x32 page with patch 4 gives 8x8 tokens, halved per stage to 1x1.
+                // The encoder ends at 16 * 8 = 128 wide, the decoder's width, so no bridge layer is needed.
+                // Until the VisionLanguage.Document template copy was deleted, this model was excluded from
+                // generation by name, and only that copy had a hand-written scaffold.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 64), " +
+                    "tokenizer: null, imageHeight: 32, imageWidth: 32, maxGenerationLength: 8, " +
+                    "embedDim: 16, depths: new[] { 2, 2, 2, 2 }, numHeads: new[] { 1, 2, 4, 8 }, " +
+                    "windowSize: 2, patchSize: 4, decoderHiddenDim: 128, numDecoderLayers: 1, " +
+                    "decoderHeads: 4, vocabSize: 64)";
             }
             else if (model.ClassName == "MATCHA" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -9271,8 +9255,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // IDENTICAL unified text-image architecture (word embeddings + ViT patch embeddings -> shared
                 // multimodal transformer, run via the modality-robust RunModalityForward) at CI-smoke
                 // width/depth/vocab. Token-ID InputShape [16] is emitted by the token-based document branch.
-                // NOTE: the ONNX-inference-wrapper namesake AiDotNet.VisionLanguage.Document.LayoutLMv3 is
-                // excluded from scaffolding (see the collection filter) so this trainable model is the one tested.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
@@ -10739,35 +10721,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "imageSize: 28, maxSequenceLength: 16, visionDim: 32, languageDim: 32, " +
                     "visionLayers: 1, languageLayers: 1, numHeads: 4, vocabSize: 4, visionNumHeads: 4)";
             }
-            else if (model.ClassName == "Pix2Struct"
-                     && typeName.StartsWith(
-                         "AiDotNet.VisionLanguage.Document.", System.StringComparison.Ordinal))
-            {
-                // Pix2Struct keeps the paper's 1024px, 768-wide, 12+12-layer defaults in
-                // production. Its generated FP64 training probes timed out and drove the
-                // shard to its memory limit. Exercise the same variable-resolution patch
-                // encoder and autoregressive decoder via the public options at CI scale.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Embedding, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 4), " +
-                    "new AiDotNet.VisionLanguage.Document.Pix2StructOptions { ImageSize = 32, " +
-                    "VisionDim = 32, DecoderDim = 32, NumVisionLayers = 1, NumDecoderLayers = 1, " +
-                    "NumHeads = 4, VocabSize = 64, MaxSequenceLength = 8, MaxGenerationLength = 8, " +
-                    "MaxPatchesPerImage = 16, EnableVariableResolution = true, DropoutRate = 0.0 })";
-            }
             else if (model.ClassName == "Nougat"
                      && typeName.StartsWith(
                          "AiDotNet.Document.PixelToSequence.", System.StringComparison.Ordinal))
             {
-                // The OTHER Nougat. AiDotNet.VisionLanguage.Document.Nougat is handled by the
-                // document-OCR branch below; this one is a distinct class in a different namespace
-                // sharing the simple name, so that branch's namespace gate skipped it and it was
-                // built at FULL PAPER SCALE -- 896px, hiddenDim 1024, 12 encoder + 10 decoder
-                // layers, vocab 50,000. That is 423,315,280 parameters in a CI fixture: every
-                // training invariant blew the 120 s gate, and the flat parameter vector it produced
-                // ("Vector lengths must match. Got 423315280 and 238653352") is a second, separate
-                // consequence of the same scale.
+                // At full paper scale (896px, hiddenDim 1024, 12 encoder + 10 decoder layers, vocab
+                // 50,000) this is 423,315,280 parameters in a CI fixture: every training invariant
+                // blew the 120 s gate, and the flat parameter vector it produced ("Vector lengths must
+                // match. Got 423315280 and 238653352") is a second, separate consequence of that scale.
                 //
                 // Reduced to smoke scale the same way its siblings are, preserving the architecture
                 // that matters: patch embedding -> residual ViT/Swin encoder -> cross-attending
@@ -10785,7 +10746,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "vocabSize: 64)";
             }
             else if ((model.ClassName is "GOTOCR2" or "Surya" or "MPLUGDocOwl" or "MPLUGDocOwl15"
-                          or "MPLUGDocOwl2" or "TextMonkey" or "UReader" or "DocPedia" or "Nougat")
+                          or "MPLUGDocOwl2" or "TextMonkey" or "UReader" or "DocPedia")
                      && typeName.StartsWith(
                          "AiDotNet.VisionLanguage.Document.", System.StringComparison.Ordinal))
             {
@@ -12714,21 +12675,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // unchanged.
             sb.AppendLine("    protected override double MoreDataTolerance => 0.0002;");
         }
-        else if (model.ClassName == "CRNN"
-                 && typeName.StartsWith(
-                     "AiDotNet.Document.OCR.TextRecognition.", System.StringComparison.Ordinal))
-        {
-            // CRNN normalizes every crop to its configured 32x32 fixture and exposes
-            // canonical CTC logits [batch, MaxSequenceLength, charset+blank].
-            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 32, 32 };");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 8, 11 };");
-            // This bounded OCR fixture reaches its stable CTC-loss floor near
-            // step 50; the generic 200-step Adam horizon drifts slightly upward
-            // after convergence despite finite parameters and passing loss-
-            // reduction/memorization invariants.
-            sb.AppendLine("    protected override int MoreDataShortIterations => 10;");
-            sb.AppendLine("    protected override int MoreDataLongIterations => 50;");
-        }
         else if (model.ClassName == "Pix2Struct"
                  && typeName.StartsWith(
                      "AiDotNet.Document.PixelToSequence.", System.StringComparison.Ordinal))
@@ -12736,6 +12682,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // The bounded constructor above uses four 16x16 patch tokens and a 64-token head.
             sb.AppendLine("    protected override int[] InputShape => new[] { 3, 32, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 4, 64 };");
+        }
+        else if (model.ClassName == "Donut"
+                 && typeName.StartsWith(
+                     "AiDotNet.Document.PixelToSequence.", System.StringComparison.Ordinal))
+        {
+            // One RGB page in; VisionEncoderDecoderLayer emits the decoder's first step from BOS, so the output
+            // is [batch, 1, vocab] over the fixture's 64-token vocabulary.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 32, 32 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 64 };");
         }
         else if (model.ClassName == "MATCHA"
                  && typeName.StartsWith(

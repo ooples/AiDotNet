@@ -10197,7 +10197,7 @@ public static partial class LayerHelper<T>
             throw new ArgumentException("Must specify attention heads for all 4 stages.", nameof(numHeads));
 
         return (
-            CreateDonutEncoderLayers(imageHeight, imageWidth, inputChannels, embedDim, depths, numHeads, windowSize, patchSize, mlpRatio),
+            CreateDonutEncoderLayers(imageHeight, imageWidth, inputChannels, embedDim, depths, numHeads, windowSize, patchSize, mlpRatio, decoderHiddenDim),
             CreateDonutDecoderLayers(embedDim * 8, decoderHiddenDim, numDecoderLayers, decoderHeads, vocabSize, maxGenerationLength)
         );
     }
@@ -10214,7 +10214,8 @@ public static partial class LayerHelper<T>
         int[] numHeads,
         int windowSize,
         int patchSize,
-        int mlpRatio)
+        int mlpRatio,
+        int decoderHiddenDim)
     {
         // Stage 0: Patch embedding (lazy on input H/W and channel count).
         yield return new SwinPatchEmbeddingLayer<T>(
@@ -10250,6 +10251,11 @@ public static partial class LayerHelper<T>
                 currentDim *= 2; // Channels double after each merge
             }
         }
+
+        // The decoder cross-attends to this memory at its own width. Donut-base needs no bridge (Swin-B ends
+        // at 128 * 8 = 1024, BART's width), so a linear projection is emitted only when they differ.
+        if (currentDim != decoderHiddenDim)
+            yield return new DenseLayer<T>(decoderHiddenDim, (IActivationFunction<T>)new IdentityActivation<T>());
     }
 
     /// <summary>

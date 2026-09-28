@@ -10906,6 +10906,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // exit. See AcquireTrainSentinel for the contract.
         using var __reentrancyGuard = AcquireTrainSentinel();
 
+        // Every Train override passes its PUBLIC input straight in here, so apply the same public-input
+        // preparation as the conformance funnel (ForwardPreparedForTraining). Without it the probe and real
+        // training saw different tensors: Document models normalize in Predict via PreprocessDocument but
+        // trained on the raw page, and Donut fed a rank-3 page into a patch embedding that indexes NCHW.
+        // A model whose ForwardForTraining or PredictCore owns its input convention gets the input unchanged.
+        input = ForwardForTrainingOwnsPublicInputPreparation() ? input : PrepareInputForTraining(input);
+
         var configuredOptimizer = optimizer ?? _baseTrainOptimizer;
         bool useStreamingDefaults = configuredOptimizer is null;
         var resolvedOptimizer = configuredOptimizer ?? GetOrCreateBaseOptimizer();
