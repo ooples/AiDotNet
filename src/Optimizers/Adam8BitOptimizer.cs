@@ -1248,9 +1248,15 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             }
             return updatedParameters;
         }
-        Span<T> fullPrecisionMSpan = _options.CompressBothMoments
+        // Resolved once, outside the per-element loop. The quantized first moment exists only when both moments are
+        // compressed; otherwise m lives in _mFullPrecision.
+        Vector<byte>? mQuantizedState = _options.CompressBothMoments ? RequireMoment(_mQuantized, nameof(_mQuantized)) : null;
+        Vector<double>? mScaleState = _options.CompressBothMoments ? RequireMoment(_mScales, nameof(_mScales)) : null;
+        var vQuantizedState = RequireMoment(_vQuantized, nameof(_vQuantized));
+        var vScaleState = RequireMoment(_vScales, nameof(_vScales));
+        Span<T> fullPrecisionMSpan = mQuantizedState is not null
             ? Span<T>.Empty
-            : _mFullPrecision!.AsWritableSpan();
+            : RequireMoment(_mFullPrecision, nameof(_mFullPrecision)).AsWritableSpan();
         int blockSize = _options.BlockSize;
 
         T[] mBlock = ArrayPool<T>.Shared.Rent(blockSize);
@@ -1262,17 +1268,17 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             {
                 int blockStart = block * blockSize;
                 int blockLength = Math.Min(blockSize, parameters.Length - blockStart);
-                double oldMScale = _options.CompressBothMoments ? _mScales![block] : 0.0;
-                double oldVScale = _vScales![block];
+                double oldMScale = mScaleState is not null ? mScaleState[block] : 0.0;
+                double oldVScale = vScaleState[block];
 
                 for (int j = 0; j < blockLength; j++)
                 {
                     int i = blockStart + j;
                     T g = gradientSpan[i];
-                    T oldM = _options.CompressBothMoments
-                        ? NumOps.FromDouble(DynamicQuantizationMap.Decode(_mQuantized![i], oldMScale, DynamicQuantizationMap.Signed))
+                    T oldM = mQuantizedState is not null
+                        ? NumOps.FromDouble(DynamicQuantizationMap.Decode(mQuantizedState[i], oldMScale, DynamicQuantizationMap.Signed))
                         : fullPrecisionMSpan[i];
-                    T oldV = NumOps.FromDouble(DynamicQuantizationMap.Decode(_vQuantized![i], oldVScale, DynamicQuantizationMap.Unsigned));
+                    T oldV = NumOps.FromDouble(DynamicQuantizationMap.Decode(vQuantizedState[i], oldVScale, DynamicQuantizationMap.Unsigned));
                     T newM = NumOps.Add(
                         NumOps.Multiply(beta1, oldM),
                         NumOps.Multiply(oneMinusBeta1, g));
@@ -1296,11 +1302,11 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                     updatedSpan[i] = NumOps.Subtract(parameterSpan[i], update);
                 }
 
-                if (_options.CompressBothMoments)
+                if (mQuantizedState is not null && mScaleState is not null)
                 {
-                    QuantizeBlock(mBlock, blockLength, blockStart, block, _mQuantized!, _mScales!, true, absoluteValues);
+                    QuantizeBlock(mBlock, blockLength, blockStart, block, mQuantizedState, mScaleState, true, absoluteValues);
                 }
-                QuantizeBlock(vBlock, blockLength, blockStart, block, _vQuantized!, _vScales!, false, absoluteValues);
+                QuantizeBlock(vBlock, blockLength, blockStart, block, vQuantizedState, vScaleState, false, absoluteValues);
             }
         }
         finally
