@@ -1251,6 +1251,13 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var initialOutput = network.Predict(input);
         double initialLoss = MeasureLoss(network, input, initialOutput, target);
 
+        // BatchNorm: keep an untrained copy, to re-measure the starting weights under the trained running
+        // statistics (see ContainsBatchNormalization).
+        using var untrained = network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nnBase
+            && ContainsBatchNormalization(nnBase.Layers)
+                ? (INeuralNetworkModel<T>)network.Clone()
+                : null;
+
         int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations * 3);
         for (int i = 0; i < iterations; i++)
             network.Train(input, target);
@@ -1259,12 +1266,80 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var finalOutput = network.Predict(input);
         double finalLoss = MeasureLoss(network, input, finalOutput, target);
 
+        string regime = string.Empty;
+        if (untrained is not null)
+        {
+            AdoptBatchNormalizationStatistics(
+                (AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)untrained,
+                (AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)network);
+            initialLoss = MeasureLoss(untrained, input, untrained.Predict(input), target);
+            regime = " (both measured in eval mode under the trained BatchNorm running statistics)";
+        }
+
         if (!double.IsNaN(initialLoss) && !double.IsNaN(finalLoss))
         {
             Assert.True(finalLoss <= initialLoss + TrainingLossReductionTolerance,
-                $"Training did not reduce loss: initial={initialLoss:F6}, final={finalLoss:F6}. " +
+                $"Training did not reduce loss: initial={initialLoss:F6}, final={finalLoss:F6}{regime}. " +
                 "Gradient computation or parameter update may be broken.");
         }
+    }
+
+    /// <summary>
+    /// Whether any layer, at any depth, is a <see cref="BatchNormalizationLayer{T}"/> - the one layer whose
+    /// evaluation depends on statistics that training itself changes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// BatchNorm evaluates with running statistics that start at mean 0 / variance 1 and move toward the
+    /// data's batch statistics on every training forward (momentum 0.1). An eval loss measured before training
+    /// and one measured after therefore differ by two things at once: the weights, and the normalization. A
+    /// few steps in, the normalization change can dominate. On EfficientConformer (3 BatchNorm layers,
+    /// 6 updates) the training objective fell every step, 6.3502 to 6.3185, while the eval loss rose from
+    /// 6.2433 to 6.2854, so <see cref="Training_ShouldReduceLoss"/> failed although training worked.
+    /// </para>
+    /// <para>
+    /// The fix holds the normalization fixed: an untrained clone taken before training adopts the running
+    /// statistics training ended with, and is evaluated beside the trained network, so the comparison sees
+    /// only what the weights did. Both measurements stay in eval mode, and so stay deterministic.
+    /// </para>
+    /// <para>
+    /// Two alternatives were measured and rejected. The training-mode loss a model reports includes a fresh
+    /// dropout mask per step, which on KyutaiMoshi (AdamW, peak LR 2e-6) moved the reported loss by 0.026
+    /// over updates that barely changed a weight. And restoring the starting weights with SetParameters is
+    /// not a stable round trip for lazily sized networks: on EfficientConformer it refused the vector taken
+    /// before training ("expected at least 121344 parameters from the materialized fixed layout ... got
+    /// 134504").
+    /// </para>
+    /// </remarks>
+    private static bool ContainsBatchNormalization(IEnumerable<ILayer<T>> layers)
+        => BatchNormalizationLayers(layers).Any();
+
+    /// <summary>Every BatchNorm layer at any depth, in a stable depth-first order.</summary>
+    private static IEnumerable<BatchNormalizationLayer<T>> BatchNormalizationLayers(IEnumerable<ILayer<T>> layers)
+    {
+        foreach (var layer in layers)
+        {
+            if (layer is BatchNormalizationLayer<T> batchNorm) yield return batchNorm;
+            var subLayers = layer.GetSubLayers();
+            if (subLayers is null) continue;
+            foreach (var nested in BatchNormalizationLayers(subLayers)) yield return nested;
+        }
+    }
+
+    /// <summary>
+    /// Installs the running statistics of each of <paramref name="source"/>'s BatchNorm layers into the
+    /// matching layer of <paramref name="destination"/> (a clone of the same network, so the depth-first order
+    /// pairs them), through the same copy-on-write buffer adoption the clone path uses.
+    /// </summary>
+    private static void AdoptBatchNormalizationStatistics(
+        AiDotNet.NeuralNetworks.NeuralNetworkBase<T> destination, AiDotNet.NeuralNetworks.NeuralNetworkBase<T> source)
+    {
+        var to = BatchNormalizationLayers(destination.Layers).ToList();
+        var from = BatchNormalizationLayers(source.Layers).ToList();
+        Assert.True(to.Count == from.Count,
+            $"The untrained clone has {to.Count} BatchNorm layers but the trained network has {from.Count}.");
+        for (int i = 0; i < to.Count; i++)
+            to[i].AdoptRegisteredBuffersFrom(from[i]);
     }
 
     /// <summary>
@@ -1720,9 +1795,19 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
         SetEvalMode(network);
         var input = CreateRandomTensor(EffectiveInputShape, rng);
+        // JIT activity around each call, reported only on failure: a tier-up between two calls shows as
+        // methods compiled between them, which is the evidence the warm-up explanation below needs.
+        long jitBefore = CompiledMethodCount();
         var out1 = network.Predict(input);
+        long jitAfter1 = CompiledMethodCount();
         var out2 = network.Predict(input);
+        long jitAfter2 = CompiledMethodCount();
         var out3 = network.Predict(input);
+        long jitAfter3 = CompiledMethodCount();
+        string jitSummary = jitBefore < 0
+            ? "JIT counts unavailable on this runtime"
+            : $"methods JIT-compiled process-wide (any thread) while call 1 ran={jitAfter1 - jitBefore}, "
+              + $"call 2={jitAfter2 - jitAfter1}, call 3={jitAfter3 - jitAfter2}";
 
         Assert.Equal(out1.Length, out2.Length);
         Assert.Equal(out2.Length, out3.Length);
@@ -1737,7 +1822,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             {
                 Assert.Fail(
                     $"Output[{i}] is not stable across repeated inference: second={out2[i]}, "
-                    + $"third={out3[i]}, delta={settled:R}. The network is non-deterministic.");
+                    + $"third={out3[i]}, delta={settled:R}. The network is non-deterministic."
+                    + DescribeRepeatedInferenceDivergence(network, input, jitSummary));
             }
 
             // The FIRST call is allowed to differ by a rounding step, and only by a
@@ -1766,9 +1852,82 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                     + $"second-third delta={settled:R}, allowed={tolerance:R}. "
                     + "The second and third calls agree, so this is not non-determinism -- "
                     + "the first inference changed the network's own state or took a "
-                    + "materially different path.");
+                    + "materially different path."
+                    + DescribeRepeatedInferenceDivergence(network, input, jitSummary));
             }
         }
+    }
+
+    private static long CompiledMethodCount()
+    {
+#if NET6_0_OR_GREATER
+        return System.Runtime.JitInfo.GetCompiledMethodCount(currentThread: false);
+#else
+        return -1;
+#endif
+    }
+
+    /// <summary>
+    /// Failure-only evidence for <see cref="Predict_ShouldBeDeterministic"/>. The one-ULP divergences it
+    /// catches have only ever appeared inside full CI shards, never in isolation, under local CPU load or
+    /// in a 4-CPU Linux container, so the only place to learn their cause is the failing run itself. This
+    /// reports the environment and the JIT activity between calls, then replays the per-layer activations
+    /// twice and names the first layer whose output differs. It never changes the verdict.
+    /// </summary>
+    private static string DescribeRepeatedInferenceDivergence(INeuralNetworkModel<T> network, Tensor<T> input, string jitSummary)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.Append($" Diagnostics: ProcessorCount={Environment.ProcessorCount}, ")
+          .Append($"DeterministicMode={AiDotNet.Tensors.Engines.AiDotNetEngine.DeterministicMode}, {jitSummary}.");
+        try
+        {
+            var first = network.GetNamedLayerActivations(input);
+            var second = network.GetNamedLayerActivations(input);
+            var onlyFirst = first.Keys.Where(k => !second.ContainsKey(k)).ToList();
+            var onlySecond = second.Keys.Where(k => !first.ContainsKey(k)).ToList();
+            if (onlyFirst.Count > 0 || onlySecond.Count > 0)
+            {
+                sb.Append($" Layer replay: the passes named different activations (only in the first: ")
+                  .Append($"[{string.Join(", ", onlyFirst)}]; only in the second: [{string.Join(", ", onlySecond)}]).");
+                return sb.ToString();
+            }
+
+            foreach (var entry in first)
+            {
+                var other = second[entry.Key];
+                int[] shapeA = entry.Value.Shape.ToArray();
+                int[] shapeB = other.Shape.ToArray();
+                if (!shapeA.SequenceEqual(shapeB))
+                {
+                    sb.Append($" Layer replay: '{entry.Key}' changed shape between passes ")
+                      .Append($"([{string.Join(", ", shapeA)}] vs [{string.Join(", ", shapeB)}]).");
+                    return sb.ToString();
+                }
+
+                int differing = 0;
+                double maxDelta = 0;
+                for (int i = 0; i < entry.Value.Length; i++)
+                {
+                    double delta = Math.Abs(ConvertToDouble(entry.Value[i]) - ConvertToDouble(other[i]));
+                    if (delta > 0) { differing++; maxDelta = Math.Max(maxDelta, delta); }
+                }
+
+                if (differing > 0)
+                {
+                    sb.Append($" Layer replay: first layer whose output differs across two further passes is ")
+                      .Append($"'{entry.Key}' ({differing}/{entry.Value.Length} elements, max delta {maxDelta:R}).");
+                    return sb.ToString();
+                }
+            }
+
+            sb.Append($" Layer replay: all {first.Count} named activations were identical across two further passes.");
+        }
+        catch (Exception ex)
+        {
+            sb.Append($" Layer replay unavailable: {ex.GetType().Name}: {ex.Message}");
+        }
+
+        return sb.ToString();
     }
 
     /// <summary>
@@ -2204,7 +2363,50 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 $"Clone output[{i}] differs beyond {(isFloat ? "float" : "double")} tolerance: original={original[i]}, cloned={clonedOutput[i]}");
         }
 
+        // Before the storage probe, which writes to the clone's parameters.
+        AssertClonePreservesTrainingObjective(network, (INeuralNetworkModel<T>)cloned, input, rng);
         AssertCloneOwnsIndependentParameterStorage(network, cloned);
+    }
+
+    /// <summary>
+    /// Proves that a clone evaluates the same training objective as its original, for a model that
+    /// declares one.
+    /// </summary>
+    /// <remarks>
+    /// Predict equality cannot see the objective: the loss is configuration, not weights, and a clone that
+    /// gets it wrong still predicts identically. ABINet's did. Its constructor wraps the supplied loss in
+    /// the three-branch multi-task objective, and the clone path replays that constructor with the model's
+    /// own LossFunction, which is already the wrapper, so the clone nested one multi-task loss inside
+    /// another. Its Predict matched to the last bit while its objective threw on the first evaluation.
+    /// Any model whose constructor transforms a loss it then stores can fail the same way, so this is
+    /// checked for every model that declares an objective.
+    /// </remarks>
+    private void AssertClonePreservesTrainingObjective(
+        INeuralNetworkModel<T> network, INeuralNetworkModel<T> cloned, Tensor<T> input, Random rng)
+    {
+        if (network is not ITrainingObjectiveProvider<T>) return;
+
+        var target = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
+        target = ResolveTrainingObjectiveTarget(network, input, target);
+        double originalObjective = MeasureLoss(network, input, network.Predict(input), target);
+        double originalAgain = MeasureLoss(network, input, network.Predict(input), target);
+        double clonedObjective = MeasureLoss(cloned, input, cloned.Predict(input), target);
+
+        Assert.False(double.IsNaN(clonedObjective) || double.IsInfinity(clonedObjective),
+            $"{network.GetType().Name}'s clone evaluates a non-finite training objective ({clonedObjective}) "
+            + $"where the original evaluates {originalObjective:G9}.");
+
+        // The objective runs the training forward. A model whose training forward is stochastic (a dropout
+        // stream advanced per call) does not reproduce its own value, and then a clone's value cannot be
+        // compared to it; finiteness, checked above, is what remains assertable.
+        bool isFloat = typeof(T) == typeof(float);
+        double tolerance = (isFloat ? 1e-4 : 1e-10) + (isFloat ? 1e-3 : 0.0) * Math.Abs(originalObjective);
+        if (Math.Abs(originalObjective - originalAgain) > tolerance) return;
+
+        Assert.True(Math.Abs(originalObjective - clonedObjective) <= tolerance,
+            $"{network.GetType().Name}'s clone evaluates a different training objective: original="
+            + $"{originalObjective:G9} (reproduced), clone={clonedObjective:G9}. The clone predicts the same, so "
+            + "its loss configuration, not its weights, differs from the original's.");
     }
 
     /// <summary>
@@ -2276,6 +2478,11 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         Assert.Equal(originalValue, originalTensor[0]);
         Assert.Equal(mutated, cloneTensor[0]);
+
+        // Undo the probe. Left in place, it silently changed a weight of the clone, and any clone check
+        // that ran afterwards measured a different model: the training-objective check read that as
+        // 0.2-1% objective gaps on 10 models whose clones were in fact exact.
+        cloneTensor[0] = cloneValue;
     }
 
     // =====================================================

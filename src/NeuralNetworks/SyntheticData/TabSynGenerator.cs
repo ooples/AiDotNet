@@ -823,7 +823,7 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
                     trainableVaeLayers, inputTensor, inputTensor,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _optimizer,
-                    out T _);
+                    out T _, owner: this);
                 if (!ran)
                 {
                     if (!fusedEngaged) break;

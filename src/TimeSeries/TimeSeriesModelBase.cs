@@ -276,7 +276,7 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     /// resident) callers must pass a <b>constant batch shape</b> on every step.
     /// </para>
     /// </remarks>
-    private protected static bool TryFusedResidentStep(
+    private protected bool TryFusedResidentStep(
         IReadOnlyList<ITrainableLayer<T>> layers,
         Tensor<T> input,
         Tensor<T> target,
@@ -302,7 +302,8 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
             epsilon,
             weightDecay,
             out lossValue,
-            maxGradNorm: maxGradNorm);
+            maxGradNorm: maxGradNorm,
+            owner: this);
 
     /// <summary>
     /// Gets or sets the trained model parameters.

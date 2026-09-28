@@ -557,8 +557,8 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
         const float epsilon = 1e-8f;
         const float weightDecay = 0f;
 
-        AiDotNet.Training.CompiledTapeTrainingStep<T>.Invalidate();
-        AiDotNet.Training.CompiledTapeTrainingStep<T>.ResetFusedStepCount();
+        AiDotNet.Training.CompiledTapeTrainingStep<T>.Invalidate(this);
+        AiDotNet.Training.CompiledTapeTrainingStep<T>.ResetFusedStepCount(this);
 
         var random = RandomHelper.CreateSeededRandom(42);
         int maxEpochs = _options.Epochs;
