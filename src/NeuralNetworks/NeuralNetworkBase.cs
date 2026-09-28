@@ -13629,9 +13629,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>One parameter's gradient with the regularization term added (L2 as device tensor ops).</summary>
+    /// <remarks>
+    /// Runs with recording SUPPRESSED. It executes while the step's tape is still active, and theta is a trainable
+    /// parameter: recording g + lambda * theta linked each parameter to its own gradient, the optimizer's operations
+    /// on that gradient joined the graph, and the next backward walked into the previous step's optimizer math -
+    /// measured: SqrtBackward / DivideBackward of RMSprop's sqrt(v) at v = 0 produced 0 * inf = NaN in exactly the
+    /// weight elements whose gradient had been zero, and the DNC's parameters turned NaN on its third Train call.
+    /// </remarks>
     private Tensor<T> RegularizeGradient(
         IRegularization<T, Tensor<T>, Tensor<T>> regularization, Tensor<T> parameter, Tensor<T> gradient)
     {
+        using var noGrad = new NoGradScope<T>();
         var theta = parameter._shape.SequenceEqual(gradient._shape) ? parameter : Engine.Reshape(parameter, gradient._shape);
         return regularization is AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>> l2
             ? Engine.TensorAdd(gradient, Engine.TensorMultiplyScalar(theta, NumOps.FromDouble(l2.GetOptions().Strength)))
@@ -16666,7 +16674,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         try
         {
-            using var stream = new System.IO.MemoryStream();
+            // Not a MemoryStream: a large layer's serialized state passes its 2 GB cap and the clone failed with
+            // "Array dimensions exceeded supported range" (UnifiedMultimodalNetwork).
+            using var stream = new AiDotNet.Helpers.ChunkedMemoryStream();
             using (var writer = new System.IO.BinaryWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true))
             {
                 source.Serialize(writer);
