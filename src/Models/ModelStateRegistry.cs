@@ -2288,13 +2288,29 @@ public sealed class ModelStateRegistry<T>
 
                 // Dry-run every setter on a shallow copy, so a setter that validates rejects the checkpoint NOW, while
                 // nothing is installed. The commit replays the same values through the same deterministic setters.
+                // A shallow copy still shares its referenced objects, so a setter that forwards into one (such as
+                // ProgramEvolutionOptions.EvaluatorScript => Script.EvaluatorScript) would write through to the live
+                // options. That is detected rather than assumed away: if any carried setting of the live options reads
+                // differently after the dry run, it is put back and the commit is marked fallible, so a caller that
+                // needs atomicity snapshots and rolls back across it.
+                var liveBefore = properties.Select(property => property.GetValue(options)).ToArray();
                 var probe = ShallowCopy(options);
                 foreach (var (property, value) in assignments) property.SetValue(probe, value);
-                return () =>
+                Action commit = () =>
                 {
                     var live = get() ?? options;   // re-fetched: an earlier entry may have replaced the options object
                     foreach (var (property, value) in assignments) property.SetValue(live, value);
                 };
+
+                bool aliased = false;
+                for (int i = 0; i < properties.Count; i++)
+                {
+                    if (!Equals(properties[i].GetValue(options), liveBefore[i])) { aliased = true; break; }
+                }
+
+                if (!aliased) return commit;
+                for (int i = 0; i < properties.Count; i++) properties[i].SetValue(options, liveBefore[i]);
+                return new FallibleCommit(commit).Run;
             });
 
     /// <summary>The settable scalar settings of an options type, in a stable order.</summary>
