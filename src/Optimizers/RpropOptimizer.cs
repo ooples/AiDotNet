@@ -472,6 +472,14 @@ public partial class RpropOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
     }
 
+    /// <inheritdoc/>
+    /// <remarks>Rejects invalid hyperparameters from a checkpoint before any of it is installed.</remarks>
+    protected override void ValidateRestoredOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
+    {
+        if (options is RpropOptimizerOptions<T, TInput, TOutput> rpropOptions)
+            ValidateHyperparameters(rpropOptions);
+    }
+
     /// <summary>
     /// Updates the optimizer's options with new settings.
     /// </summary>

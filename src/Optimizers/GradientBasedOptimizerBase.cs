@@ -2853,11 +2853,12 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     }
 
     /// <inheritdoc />
-    private protected override void DeserializeExtensionData(BinaryReader reader)
+    private protected override Action StageExtensionData(BinaryReader reader, out bool hasFallibleCommit)
     {
+        hasFallibleCommit = false;
         if (reader.BaseStream.Position >= reader.BaseStream.Length)
         {
-            return;
+            return () => { };
         }
 
         // Transactional: the whole extension payload is parsed and validated into locals first, and live state is
@@ -2881,7 +2882,10 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 "checkpoint stream while reading optimizer state).", ex);
         }
 
-        CommitExtensionPayload(parsed);
+        // A same-typed custom scheduler cannot be rebuilt from an untrusted type name, so its state is loaded into the
+        // configured instance at commit, which can throw. Everything else commits by assignment.
+        hasFallibleCommit = parsed.Scheduler?.PendingState is not null;
+        return () => CommitExtensionPayload(parsed);
     }
 
     /// <summary>Everything the extension payload restores, read and validated but not yet applied.</summary>

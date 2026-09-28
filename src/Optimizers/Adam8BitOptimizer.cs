@@ -1516,11 +1516,11 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
         }
     }
 
-    private void ReadTapeStates(BinaryReader reader)
+    private Dictionary<int, QuantizedTapeState> ParseTapeStates(BinaryReader reader)
     {
-        // Parse into a LOCAL map first so the stream I/O runs outside _pendingTapeStatesLock, then swap the
-        // contents in atomically under the lock (WriteTapeStates snapshots the shared map under the same
-        // lock, so a concurrent Serialize sees either the old or the new full state, never a torn one).
+        // Parse into a LOCAL map only; the restore's commit swaps it in under _pendingTapeStatesLock (WriteTapeStates
+        // snapshots the shared map under the same lock, so a concurrent Serialize sees either the old or the new full
+        // state, never a torn one).
         var pending = new Dictionary<int, QuantizedTapeState>();
 
         int count = reader.ReadInt32();
@@ -1546,12 +1546,7 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             pending[parameterIndex] = ReadTapeState(reader);
         }
 
-        lock (_pendingTapeStatesLock)
-        {
-            _pendingTapeStatesByParameterIndex.Clear();
-            foreach (var entry in pending)
-                _pendingTapeStatesByParameterIndex[entry.Key] = entry.Value;
-        }
+        return pending;
     }
 
     private void WriteTapeState(BinaryWriter writer, QuantizedTapeState state)
@@ -1995,6 +1990,16 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
     /// </summary>
     public override void Deserialize(byte[] data)
     {
+        if (data is null) throw new ArgumentNullException(nameof(data));
+        RunAtomicRestore(data, StageAdam8BitRestore);
+    }
+
+    /// <summary>
+    /// Reads and validates an Adam8Bit checkpoint - the base optimizer payload, then this optimizer's quantized
+    /// moments and tape states - without changing anything, and returns the commit that installs all of it.
+    /// </summary>
+    private StagedRestore StageAdam8BitRestore(byte[] data)
+    {
         using (MemoryStream ms = new MemoryStream(data))
         using (BinaryReader reader = new BinaryReader(ms))
         {
@@ -2018,7 +2023,9 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                     $"stream bytes ({remainingBytes}). Checkpoint is truncated or malformed.");
             }
             byte[] baseData = reader.ReadBytes(baseDataLength);
-            base.Deserialize(baseData);
+            var baseRestore = StageDeserialize(baseData);
+            // The options this restore will adopt; the live _options still hold the previous configuration here.
+            var restoredOptions = baseRestore.Options as Adam8BitOptimizerOptions<T, TInput, TOutput> ?? _options;
 
             // Consume the options JSON. The read itself still matters - the stream position
             // depends on it and a malformed payload must fail here - but the VALUE is discarded:
@@ -2071,45 +2078,50 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             }
 
             // Deserialize state
-            _t = reader.ReadInt32();
-            _parameterLength = reader.ReadInt32();
-            _numBlocks = reader.ReadInt32();
+            int t = reader.ReadInt32();
+            int parameterLength = reader.ReadInt32();
+            int numBlocks = reader.ReadInt32();
+            Vector<byte>? mQuantized = null;
+            Vector<double>? mScales = null;
+            Vector<T>? mFullPrecision = null;
+            Vector<byte>? vQuantized = null;
+            Vector<double>? vScales = null;
 
             // Bounds-check ALL structural fields before allocating anything
             // sized off them. Untrusted/tampered checkpoints could otherwise:
             //   (a) force multi-GB phantom allocations on the ReadBytes calls
             //       below by claiming impossibly large lengths,
             //   (b) trigger DivideByZeroException via BlockSize <= 0,
-            //   (c) overflow (_parameterLength + blockSize - 1) when both
+            //   (c) overflow (parameterLength + blockSize - 1) when both
             //       are near int.MaxValue and the addition wraps to negative,
-            //   (d) skip the consistency check via negative _numBlocks that
-            //       happen to satisfy `_numBlocks != expectedNumBlocks`
+            //   (d) skip the consistency check via negative numBlocks that
+            //       happen to satisfy `numBlocks != expectedNumBlocks`
             //       being false (it isn't, but defensive belt-and-suspenders).
             // All checks happen before any allocation downstream.
-            if (_parameterLength < 0)
+            if (parameterLength < 0)
                 throw new InvalidOperationException(
-                    $"Adam8BitOptimizer: invalid _parameterLength={_parameterLength} in checkpoint.");
-            int blockSize = _options.BlockSize;
+                    $"Adam8BitOptimizer: invalid parameterLength={parameterLength} in checkpoint.");
+            int blockSize = restoredOptions.BlockSize;
             if (blockSize <= 0)
                 throw new InvalidOperationException(
                     $"Adam8BitOptimizer: invalid BlockSize={blockSize} in checkpoint options. " +
                     $"BlockSize must be positive (typical values: 64, 128, 256, 2048).");
-            if (_numBlocks < 0)
+            if (numBlocks < 0)
                 throw new InvalidOperationException(
-                    $"Adam8BitOptimizer: invalid _numBlocks={_numBlocks} in checkpoint.");
+                    $"Adam8BitOptimizer: invalid numBlocks={numBlocks} in checkpoint.");
             // Compute expected blocks in long arithmetic to avoid int
-            // overflow on hostile _parameterLength near int.MaxValue.
-            long expectedNumBlocksLong = _parameterLength == 0 ? 0L
-                : ((long)_parameterLength + blockSize - 1L) / blockSize;
+            // overflow on hostile parameterLength near int.MaxValue.
+            long expectedNumBlocksLong = parameterLength == 0 ? 0L
+                : ((long)parameterLength + blockSize - 1L) / blockSize;
             if (expectedNumBlocksLong > int.MaxValue)
                 throw new InvalidOperationException(
-                    $"Adam8BitOptimizer: _parameterLength={_parameterLength} and BlockSize=" +
+                    $"Adam8BitOptimizer: parameterLength={parameterLength} and BlockSize=" +
                     $"{blockSize} produce {expectedNumBlocksLong} blocks, exceeding int.MaxValue. " +
                     $"Checkpoint is malformed or out of supported range.");
-            if (_numBlocks != (int)expectedNumBlocksLong)
+            if (numBlocks != (int)expectedNumBlocksLong)
                 throw new InvalidOperationException(
-                    $"Adam8BitOptimizer: _numBlocks={_numBlocks} inconsistent with " +
-                    $"_parameterLength={_parameterLength} and BlockSize={blockSize} " +
+                    $"Adam8BitOptimizer: numBlocks={numBlocks} inconsistent with " +
+                    $"parameterLength={parameterLength} and BlockSize={blockSize} " +
                     $"(expected {expectedNumBlocksLong}). Checkpoint may be corrupted.");
 
             // The m-quantized and v-quantized read branches below each
@@ -2126,34 +2138,34 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             // serialized before any training had run.
             //
             // The streamed compressBothMoments flag is cross-checked
-            // against _options.CompressBothMoments (the authoritative
+            // against restoredOptions.CompressBothMoments (the authoritative
             // value, just deserialized from the options JSON). A
             // mismatch indicates a tampered payload, manual format
             // surgery, or a bug — fail fast rather than allocate the
             // wrong moment representation and silently produce wrong
             // updates downstream.
             bool streamedCompressBothMoments = reader.ReadBoolean();
-            if (streamedCompressBothMoments != _options.CompressBothMoments)
+            if (streamedCompressBothMoments != restoredOptions.CompressBothMoments)
                 throw new InvalidOperationException(
                     $"Adam8BitOptimizer: checkpoint compressBothMoments flag " +
                     $"({streamedCompressBothMoments}) does not match the value in the " +
-                    $"deserialized options ({_options.CompressBothMoments}). The options " +
+                    $"deserialized options ({restoredOptions.CompressBothMoments}). The options " +
                     $"JSON is the source of truth — a mismatch here means the payload's " +
                     $"m-state layout is inconsistent with the options that were " +
                     $"serialized alongside it. Re-serialize from a consistent build.");
             bool hasMState = reader.ReadBoolean();
             if (hasMState)
             {
-                if (_options.CompressBothMoments)
+                if (restoredOptions.CompressBothMoments)
                 {
                     int mLength = reader.ReadInt32();
-                    if (mLength != _parameterLength)
+                    if (mLength != parameterLength)
                         throw new InvalidOperationException(
                             $"Adam8BitOptimizer: m-quantized length {mLength} does not " +
-                            $"match _parameterLength={_parameterLength}.");
+                            $"match parameterLength={parameterLength}.");
                     // Pre-check: payload can't exceed the remaining stream
                     // bytes — protects against a malformed payload whose
-                    // declared length passes the _parameterLength check but
+                    // declared length passes the parameterLength check but
                     // the actual data was truncated upstream. Without this,
                     // ReadBytes would allocate a full-sized array and only
                     // then notice the truncation.
@@ -2173,43 +2185,43 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                         throw new InvalidOperationException(
                             $"Adam8BitOptimizer: m-quantized truncated (expected {mLength} " +
                             $"bytes, got {mBytes.Length}). Checkpoint is corrupted.");
-                    _mQuantized = new Vector<byte>(mLength);
-                    for (int i = 0; i < mLength; i++) _mQuantized[i] = mBytes[i];
-                    _mScales = new Vector<double>(_numBlocks);
-                    for (int i = 0; i < _numBlocks; i++)
+                    mQuantized = new Vector<byte>(mLength);
+                    for (int i = 0; i < mLength; i++) mQuantized[i] = mBytes[i];
+                    mScales = new Vector<double>(numBlocks);
+                    for (int i = 0; i < numBlocks; i++)
                     {
-                        _mScales[i] = reader.ReadDouble();
+                        mScales[i] = reader.ReadDouble();
                     }
                     // Clear stale full-precision m on mode switch — see
                     // OzYc: deserializing a CompressBothMoments=true payload
-                    // into an instance that previously held _mFullPrecision
+                    // into an instance that previously held mFullPrecision
                     // would otherwise leave that buffer resident, inflating
                     // GetMemoryUsage and breaking the 8x savings claim.
-                    _mFullPrecision = null;
+                    mFullPrecision = null;
                 }
                 else
                 {
                     int mLength = reader.ReadInt32();
-                    if (mLength != _parameterLength)
+                    if (mLength != parameterLength)
                         throw new InvalidOperationException(
                             $"Adam8BitOptimizer: m-fullprecision length {mLength} does not " +
-                            $"match _parameterLength={_parameterLength}.");
-                    _mFullPrecision = new Vector<T>(mLength);
+                            $"match parameterLength={parameterLength}.");
+                    mFullPrecision = new Vector<T>(mLength);
                     for (int i = 0; i < mLength; i++)
                     {
-                        _mFullPrecision[i] = NumOps.FromDouble(reader.ReadDouble());
+                        mFullPrecision[i] = NumOps.FromDouble(reader.ReadDouble());
                     }
                     // Clear stale quantized m on mode switch (symmetric
                     // with the compressBothMoments branch above).
-                    _mQuantized = null;
-                    _mScales = null;
+                    mQuantized = null;
+                    mScales = null;
                 }
             }
             else
             {
-                _mQuantized = null;
-                _mFullPrecision = null;
-                _mScales = null;
+                mQuantized = null;
+                mFullPrecision = null;
+                mScales = null;
             }
 
             // Deserialize second moment
@@ -2217,10 +2229,10 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             if (hasVQuantized)
             {
                 int vLength = reader.ReadInt32();
-                if (vLength != _parameterLength)
+                if (vLength != parameterLength)
                     throw new InvalidOperationException(
                         $"Adam8BitOptimizer: v-quantized length {vLength} does not " +
-                        $"match _parameterLength={_parameterLength}.");
+                        $"match parameterLength={parameterLength}.");
                 // Pre-check declared length against remaining stream — see
                 // the m-quantized branch for rationale.
                 long vAfter = ms.Position + vLength;
@@ -2233,74 +2245,90 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
                     throw new InvalidOperationException(
                         $"Adam8BitOptimizer: v-quantized truncated (expected {vLength} " +
                         $"bytes, got {vBytes.Length}). Checkpoint is corrupted.");
-                _vQuantized = new Vector<byte>(vLength);
-                for (int i = 0; i < vLength; i++) _vQuantized[i] = vBytes[i];
-                _vScales = new Vector<double>(_numBlocks);
-                for (int i = 0; i < _numBlocks; i++)
+                vQuantized = new Vector<byte>(vLength);
+                for (int i = 0; i < vLength; i++) vQuantized[i] = vBytes[i];
+                vScales = new Vector<double>(numBlocks);
+                for (int i = 0; i < numBlocks; i++)
                 {
-                    _vScales[i] = reader.ReadDouble();
+                    vScales[i] = reader.ReadDouble();
                 }
             }
             else
             {
                 // Clear stale v state when deserializing into a reused
                 // optimizer instance. Without this, an instance that
-                // previously held _vQuantized / _vScales from an earlier
+                // previously held vQuantized / vScales from an earlier
                 // load would carry that state forward when a fresh,
                 // never-stepped checkpoint is loaded — silently producing
                 // wrong updates. Symmetric with the m-state else branch
                 // above.
-                _vQuantized = null;
-                _vScales = null;
+                vQuantized = null;
+                vScales = null;
             }
 
             // Tape-state checkpoint (matches Serialize): read the global
             // step counter plus per-parameter quantized moments. Some older
             // v2 payloads ended before any tape-step data existed; those
             // remain readable and resume with cold-started tape moments.
-            _tapeStates.Clear();
-            lock (_pendingTapeStatesLock)
-            {
-                _pendingTapeStatesByParameterIndex.Clear();
-            }
+            int tapeStep = 0;
+            Dictionary<int, QuantizedTapeState>? restoredTapeStates = null;
             long tapePayloadBytes = reader.BaseStream.Length - reader.BaseStream.Position;
-            if (tapePayloadBytes == 0)
+            if (tapePayloadBytes != 0)
             {
-                _tapeStep = 0;
-                InitializeAdaptiveParameters();
-                return;
-            }
-
-            if (tapePayloadBytes < sizeof(int))
-            {
-                throw new InvalidOperationException(
-                    "Adam8BitOptimizer: truncated tape-state payload before the tape-step header.");
-            }
-
-            _tapeStep = reader.ReadInt32();
-            // A negative step would make the next Step()'s bias-correction (1 - beta^t) invalid, and a
-            // step of -1 incrementing to 0 divides by zero. Reject it rather than corrupt training.
-            if (_tapeStep < 0)
-            {
-                throw new InvalidOperationException(
-                    $"Adam8BitOptimizer: invalid tape-step counter {_tapeStep} in checkpoint.");
-            }
-            if (reader.BaseStream.Position < reader.BaseStream.Length)
-            {
-                try
-                {
-                    ReadTapeStates(reader);
-                }
-                catch (EndOfStreamException ex)
+                if (tapePayloadBytes < sizeof(int))
                 {
                     throw new InvalidOperationException(
-                        "Adam8BitOptimizer: truncated tape-state payload after the tape-step header.",
-                        ex);
+                        "Adam8BitOptimizer: truncated tape-state payload before the tape-step header.");
+                }
+
+                tapeStep = reader.ReadInt32();
+                if (tapeStep < 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Adam8BitOptimizer: invalid tape-step counter {tapeStep} in checkpoint.");
+                }
+
+                if (reader.BaseStream.Position < reader.BaseStream.Length)
+                {
+                    try
+                    {
+                        restoredTapeStates = ParseTapeStates(reader);
+                    }
+                    catch (EndOfStreamException ex)
+                    {
+                        throw new InvalidOperationException(
+                            "Adam8BitOptimizer: truncated tape-state payload after the tape-step header.",
+                            ex);
+                    }
                 }
             }
 
-            InitializeAdaptiveParameters();
-        }
+            // Everything above only read and validated. Install it all together: the base optimizer first (declared
+            // state, options, extension), then this optimizer's moments and tape states.
+            return new StagedRestore(baseRestore.Options, () =>
+            {
+                baseRestore.Commit();
+                _t = t;
+                _parameterLength = parameterLength;
+                _numBlocks = numBlocks;
+                _mQuantized = mQuantized;
+                _mScales = mScales;
+                _mFullPrecision = mFullPrecision;
+                _vQuantized = vQuantized;
+                _vScales = vScales;
+                _tapeStates.Clear();
+                lock (_pendingTapeStatesLock)
+                {
+                    _pendingTapeStatesByParameterIndex.Clear();
+                    if (restoredTapeStates is not null)
+                    {
+                        foreach (var entry in restoredTapeStates)
+                            _pendingTapeStatesByParameterIndex[entry.Key] = entry.Value;
+                    }
+                }
+                _tapeStep = tapeStep;
+                InitializeAdaptiveParameters();
+            }, baseRestore.HasFallibleCommit);        }
     }
 
     /// <summary>

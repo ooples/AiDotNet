@@ -2074,11 +2074,98 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     public virtual void Deserialize(byte[] data)
     {
-        // Apply and strip generated optimizer state before parsing the legacy-compatible body.
-        data = AiDotNet.Models.ModelStateEnvelope.Extract(DeclaredState, data);
+        if (data is null) throw new ArgumentNullException(nameof(data));
+        RunAtomicRestore(data, StageDeserialize);
+    }
 
+    /// <summary>
+    /// A restore that has been fully read and validated but not yet installed: <see cref="Commit"/> installs it.
+    /// </summary>
+    private protected sealed class StagedRestore
+    {
+        public StagedRestore(OptimizationAlgorithmOptions<T, TInput, TOutput>? options, Action commit, bool hasFallibleCommit)
+        {
+            Options = options;
+            Commit = commit;
+            HasFallibleCommit = hasFallibleCommit;
+        }
+
+        /// <summary>The restored options, as they will be adopted at commit.</summary>
+        public OptimizationAlgorithmOptions<T, TInput, TOutput>? Options { get; }
+
+        /// <summary>Installs the staged state.</summary>
+        public Action Commit { get; }
+
+        /// <summary>
+        /// Whether <see cref="Commit"/> can still throw: it restores through another object (a declared child or random
+        /// generator, a same-typed custom scheduler) or runs a subclass hook that reads and applies in one step.
+        /// </summary>
+        public bool HasFallibleCommit { get; }
+    }
+
+    /// <summary>
+    /// Restores <paramref name="data"/> atomically: either all of it is installed, or the optimizer is left exactly as it
+    /// was and the failure is rethrown.
+    /// </summary>
+    /// <remarks>
+    /// <para>Everything is read and validated first (<paramref name="stage"/>), so a damaged payload changes nothing.
+    /// Only a commit that can still throw needs more: for those, the current state is serialized first and restored
+    /// through the same path if the commit fails. The snapshot is taken only then, because it doubles the memory held
+    /// by moment state, which for a large model is most of the optimizer.</para>
+    /// <para>If the snapshot itself cannot be taken (an optimizer whose configuration cannot be serialized), the restore
+    /// still runs; the staged part stays atomic and only the fallible commits are unprotected.</para>
+    /// </remarks>
+    private protected void RunAtomicRestore(byte[] data, Func<byte[], StagedRestore> stage)
+    {
+        var staged = stage(data);
+
+        byte[]? snapshot = null;
+        if (staged.HasFallibleCommit)
+        {
+            try { snapshot = Serialize(); }
+            catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException)
+            {
+                System.Diagnostics.Trace.TraceWarning(
+                    $"{GetType().Name}: restoring without a rollback snapshot because the current state cannot be " +
+                    $"serialized ({ex.GetType().Name}); a failure in a fallible commit would leave partial state.");
+            }
+        }
+
+        try
+        {
+            staged.Commit();
+        }
+        catch (Exception failure) when (snapshot is not null)
+        {
+            try
+            {
+                stage(snapshot).Commit();
+            }
+            catch (Exception rollbackFailure)
+            {
+                throw new InvalidOperationException(
+                    $"{GetType().Name}: restoring a checkpoint failed and restoring the previous state also failed; " +
+                    "the optimizer state is undefined. Construct a fresh optimizer before continuing.",
+                    new AggregateException(failure, rollbackFailure));
+            }
+
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Reads and validates a serialized optimizer without changing it: the declared-state envelope, the type, the
+    /// options and the extension payload. The returned <see cref="StagedRestore.Commit"/> installs them in the order
+    /// the restore has always used: declared state, options, subclass data, extension.
+    /// </summary>
+    private protected StagedRestore StageDeserialize(byte[] data)
+    {
         ModelPersistenceGuard.EnforceBeforeDeserialize();
-        using MemoryStream ms = new(data);
+        var commitDeclared = AiDotNet.Models.ModelStateEnvelope.Stage(
+            DeclaredState, data, out var inner, out bool declaredFallible);
+
+        using MemoryStream ms = new(inner);
         using BinaryReader reader = new(ms);
 
         // Read and verify the type
@@ -2093,9 +2180,6 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         Type optionsType = Options?.GetType() ?? typeof(OptimizationAlgorithmOptions<T, TInput, TOutput>);
         object? deserializedOptions = JsonConvert.DeserializeObject(optionsJson, optionsType);
         var options = deserializedOptions as OptimizationAlgorithmOptions<T, TInput, TOutput>;
-
-        // Update the options. The base adopts them first so its own state - the shared generator
-        // above all - matches what was restored, then the derived class reacts.
         if (options != null)
         {
             // The interface-typed collaborators do NOT survive the options JSON round-trip: with no
@@ -2111,14 +2195,60 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             options.FitnessCalculator = FitnessCalculator;
             options.FitDetector = FitDetector;
             options.ModelCache = ModelCache;
-
-            ApplyOptions(options);
-            UpdateOptions(options);
+            ValidateRestoredOptions(options);
         }
 
-        // Allow derived classes to deserialize additional data
-        DeserializeAdditionalData(reader);
-        DeserializeExtensionData(reader);
+        // A subclass that overrides DeserializeAdditionalData reads AND applies in one step, in stream order, after the
+        // options. Its restore keeps that sequential order and is always protected by the rollback snapshot.
+        if (OverridesDeserializeAdditionalData())
+        {
+            byte[] body = inner;
+            long bodyStart = ms.Position;
+            return new StagedRestore(options, () =>
+            {
+                commitDeclared();
+                AdoptRestoredOptions(options);
+                using var replay = new MemoryStream(body);
+                replay.Position = bodyStart;
+                using var replayReader = new BinaryReader(replay);
+                DeserializeAdditionalData(replayReader);
+                StageExtensionData(replayReader, out _)();
+            }, hasFallibleCommit: true);
+        }
+
+        var commitExtension = StageExtensionData(reader, out bool extensionFallible);
+        return new StagedRestore(options, () =>
+        {
+            commitDeclared();
+            AdoptRestoredOptions(options);
+            commitExtension();
+        }, declaredFallible || extensionFallible);
+    }
+
+    private void AdoptRestoredOptions(OptimizationAlgorithmOptions<T, TInput, TOutput>? options)
+    {
+        // The base adopts them first so its own state - the shared generator above all - matches what was restored,
+        // then the derived class reacts.
+        if (options == null) return;
+        ApplyOptions(options);
+        UpdateOptions(options);
+    }
+
+    private bool OverridesDeserializeAdditionalData()
+    {
+        var method = GetType().GetMethod(nameof(DeserializeAdditionalData),
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
+            binder: null, types: new[] { typeof(BinaryReader) }, modifiers: null);
+        return method is not null && method.DeclaringType != typeof(OptimizerBase<T, TInput, TOutput>);
+    }
+
+    /// <summary>
+    /// Validates restored options before anything is installed. Override to run the checks <see cref="UpdateOptions"/>
+    /// would make, so an invalid checkpoint is rejected while the optimizer is still untouched.
+    /// </summary>
+    /// <param name="options">The options read from the checkpoint.</param>
+    protected virtual void ValidateRestoredOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
+    {
     }
 
     /// <summary>
@@ -2186,15 +2316,18 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     }
 
     /// <summary>
-    /// Deserializes optional extension data appended by <see cref="SerializeExtensionData"/>.
+    /// Reads and validates optional extension data appended by <see cref="SerializeExtensionData"/> without applying it,
+    /// and returns the action that applies it. <paramref name="hasFallibleCommit"/> reports whether that action can throw.
     /// </summary>
     /// <param name="reader">The binary reader to use for deserialization.</param>
     /// <remarks>
     /// Implementations must tolerate older payloads where no extension data was present.
     /// </remarks>
-    private protected virtual void DeserializeExtensionData(BinaryReader reader)
+    private protected virtual Action StageExtensionData(BinaryReader reader, out bool hasFallibleCommit)
     {
-        // Base implementation does nothing.
+        // Base implementation reads nothing.
+        hasFallibleCommit = false;
+        return () => { };
     }
 
     /// <summary>
