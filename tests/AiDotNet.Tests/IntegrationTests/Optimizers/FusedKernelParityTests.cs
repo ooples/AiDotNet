@@ -59,7 +59,7 @@ public class FusedKernelParityTests
         }
     }
 
-    private static IGradientBasedOptimizer<float, Tensor<float>, Tensor<float>> Create(string name) => name switch
+    internal static IGradientBasedOptimizer<float, Tensor<float>, Tensor<float>> Create(string name) => name switch
     {
         "Adam" => new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null, new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }),
         "AdaMax" => new AdaMaxOptimizer<float, Tensor<float>, Tensor<float>>(null, new AdaMaxOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }),

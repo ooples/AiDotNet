@@ -123,6 +123,24 @@ public class FusedOptimizerParityTests
     private static AdamOptimizer<float, Tensor<float>, Tensor<float>> Adam() =>
         new(null, new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 });
 
+    /// <summary>
+    /// Every optimizer that maps onto a fused kernel must actually engage the fused path when a network trains, and
+    /// train it the way its eager step does. FusedKernelParityTests drives each kernel directly from a fixed gradient
+    /// sequence, which cannot notice an optimizer that maps onto a kernel but whose training never reaches it
+    /// (Momentum, TrustRegion, ProximalGradientDescent and L-BFGS all did); this runs the real training step.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(FusedKernelParityTests.Cases), MemberType = typeof(FusedKernelParityTests))]
+    public void Training_EngagesTheFusedPath_AndMatchesTheEagerStep(string name)
+    {
+        var (adamDiff, _, _) = Divergence(Adam);
+        var (diff, fusedSteps, trainDelta) = Divergence(() => FusedKernelParityTests.Create(name));
+        _output.WriteLine($"{name}: fusedSteps={fusedSteps}, maxAbsDiff={diff:E3}, trainDelta={trainDelta:E3} (Adam control {adamDiff:E3})");
+        Assert.True(fusedSteps > 0, $"{name} maps onto a fused kernel but training never engaged it (fusedSteps == 0).");
+        Assert.True(trainDelta > 1e-6, $"{name}: training barely moved the parameters ({trainDelta:E3}); the comparison would be vacuous.");
+        Assert.True(diff <= Math.Max(adamDiff * 10.0, 1e-4),
+            $"{name}: fused and eager training differ by {diff:E3}, against {adamDiff:E3} for the Adam control.");
+    }
     [Fact]
     public void Adam_Control_FusedMatchesEager()
     {
