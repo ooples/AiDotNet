@@ -218,17 +218,55 @@ public sealed class ModelStateRegistry<T>
     {
         public string Name = string.Empty;
         public Action<BinaryWriter> Write = _ => { };
-        public Action<BinaryReader> Read = _ => { };
+        // Reads and validates this entry's bytes WITHOUT touching live state, and returns the action that installs
+        // them. ReadAll stages every entry before committing any, so a bad entry late in the payload cannot leave
+        // the earlier ones applied.
+        public Func<BinaryReader, Action> Stage = _ => NoOp;
         public bool RestoreAfterParameters;
     }
 
     /// <summary>Gets the number of declared state entries.</summary>
     public int Count => _entries.Count;
 
+    private static readonly Action NoOp = () => { };
+
+    /// <summary>Stages an already-read value: the value is read now, and installed only when the entry commits.</summary>
+    private static Action Assign<TValue>(Action<TValue> set, TValue value)
+        => set.Target is StagedSetter<TValue> staged ? staged.Prepare(value) : () => set(value);
+
+    /// <summary>
+    /// A setter whose validation runs at STAGE time. The in-place declarations copy into construction-owned storage and
+    /// must reject a size or shape mismatch; as a plain setter that check would only run at commit, after earlier
+    /// entries were installed. <see cref="Assign{TValue}"/> recognises this target and calls <see cref="Prepare"/>.
+    /// </summary>
+    private sealed class StagedSetter<TValue>
+    {
+        private readonly Func<TValue, Action> _prepare;
+        public StagedSetter(Func<TValue, Action> prepare) => _prepare = prepare;
+        public Action Prepare(TValue value) => _prepare(value);
+        public void Set(TValue value) => _prepare(value)();
+    }
+
+    /// <summary>
+    /// Stages an entry whose install runs another object's own restore (a child model, a layer, a random generator,
+    /// a repair callback). Its bytes are captured now and replayed at commit. Such a commit can still fail, so callers
+    /// that need atomicity across it (OptimizerBase.Deserialize) wrap the restore in a snapshot and roll back.
+    /// </summary>
+    private static Func<BinaryReader, Action> Deferred(Action<BinaryReader> read) => r =>
+    {
+        var bytes = r.ReadBytes(checked((int)(r.BaseStream.Length - r.BaseStream.Position)));
+        return () =>
+        {
+            using var buffer = new MemoryStream(bytes);
+            using var replay = new BinaryReader(buffer, System.Text.Encoding.UTF8, leaveOpen: true);
+            read(replay);
+        };
+    };
+
     private void Add(
         string name,
         Action<BinaryWriter> write,
-        Action<BinaryReader> read,
+        Func<BinaryReader, Action> stage,
         bool restoreAfterParameters = false)
     {
         if (string.IsNullOrWhiteSpace(name))
@@ -244,7 +282,7 @@ public sealed class ModelStateRegistry<T>
         {
             Name = name,
             Write = write,
-            Read = read,
+            Stage = stage,
             RestoreAfterParameters = restoreAfterParameters
         });
     }
@@ -256,20 +294,21 @@ public sealed class ModelStateRegistry<T>
     public void Declare(string name, Func<Vector<T>?> get, Action<Vector<T>?> set)
         => Add(name,
             w => WriteVector(w, get()),
-            r => set(ReadVector(r)));
+            r => Assign(set, ReadVector(r)));
 
     /// <summary>Restores a constructor-owned vector without replacing its reference.</summary>
     /// <param name="name">The stable state name.</param>
     /// <param name="get">The destination vector, whose length must match the checkpoint.</param>
     public void DeclareInPlace(string name, Func<Vector<T>?> get)
-        => Declare(name, get, (Vector<T>? restored) =>
+        => Declare(name, get, new StagedSetter<Vector<T>?>(restored =>
         {
             var current = get();
-            if (current is null && restored is null) return;
+            if (current is null && restored is null) return NoOp;
             if (current is null || restored is null || current.Length != restored.Length)
                 throw new InvalidDataException($"State '{name}' requires matching non-null construction-owned vector storage.");
-            restored.AsSpan().CopyTo(current.AsWritableSpan());
-        });
+            // Re-fetched at commit: an earlier entry may have replaced the object that owns this storage.
+            return () => restored.AsSpan().CopyTo(RequireSameLength(name, get(), restored.Length).AsWritableSpan());
+        }).Set);
 
     /// <summary>Declares a byte vector, such as quantized optimizer moments.</summary>
     public void DeclareByteVector(string name, Func<Vector<byte>?> get, Action<Vector<byte>?> set)
@@ -284,10 +323,10 @@ public sealed class ModelStateRegistry<T>
             r =>
             {
                 int length = r.ReadInt32();
-                if (length < 0) { set(null); return; }
+                if (length < 0) return Assign(set, null);
                 var vector = new Vector<byte>(length);
                 for (int i = 0; i < length; i++) vector[i] = r.ReadByte();
-                set(vector);
+                return Assign(set, vector);
             });
 
     /// <summary>Declares a double vector held by a model whose primary numeric type may differ.</summary>
@@ -303,10 +342,10 @@ public sealed class ModelStateRegistry<T>
             r =>
             {
                 int length = r.ReadInt32();
-                if (length < 0) { set(null); return; }
+                if (length < 0) return Assign(set, null);
                 var vector = new Vector<double>(length);
                 for (int i = 0; i < length; i++) vector[i] = r.ReadDouble();
-                set(vector);
+                return Assign(set, vector);
             });
 
     /// <summary>Declares a matrix, such as the retained training set of an instance-based model.</summary>
@@ -316,21 +355,28 @@ public sealed class ModelStateRegistry<T>
     public void Declare(string name, Func<Matrix<T>?> get, Action<Matrix<T>?> set)
         => Add(name,
             w => WriteMatrix(w, get()),
-            r => set(ReadMatrix(r)));
+            r => Assign(set, ReadMatrix(r)));
 
     /// <summary>Restores a constructor-owned matrix without replacing its reference.</summary>
     /// <param name="name">The stable state name.</param>
     /// <param name="get">The destination matrix, whose rows and columns must match the checkpoint.</param>
     public void DeclareInPlace(string name, Func<Matrix<T>?> get)
-        => Declare(name, get, (Matrix<T>? restored) =>
+        => Declare(name, get, new StagedSetter<Matrix<T>?>(restored =>
         {
             var current = get();
-            if (current is null && restored is null) return;
+            if (current is null && restored is null) return NoOp;
             if (current is null || restored is null
                 || current.Rows != restored.Rows || current.Columns != restored.Columns)
                 throw new InvalidDataException($"State '{name}' requires matching non-null construction-owned matrix storage.");
-            restored.AsSpan().CopyTo(current.AsWritableSpan());
-        });
+            // Re-fetched at commit: an earlier entry may have replaced the object that owns this storage.
+            return () =>
+            {
+                var target = get();
+                if (target is null || target.Rows != restored.Rows || target.Columns != restored.Columns)
+                    throw new InvalidDataException($"State '{name}' changed shape between staging and commit.");
+                restored.AsSpan().CopyTo(target.AsWritableSpan());
+            };
+        }).Set);
 
     /// <summary>Declares an assignable fitted object, array, list, or dictionary.</summary>
     /// <typeparam name="TState">The compile-time state type.</typeparam>
@@ -347,7 +393,7 @@ public sealed class ModelStateRegistry<T>
         where TState : class
         => Add(name,
             w => WriteObjectState(w, get()),
-            r => set(ReadObjectState<TState>(r, name)));
+            r => Assign(set, ReadObjectState<TState>(r, name)));
 
     /// <summary>Declares a readonly list or dictionary and restores its contents in place.</summary>
     /// <typeparam name="TState">The concrete collection type.</typeparam>
@@ -374,7 +420,9 @@ public sealed class ModelStateRegistry<T>
                         + "the collection null, so the restored contents have nowhere to go.");
                 }
 
-                CopyCollectionState(name, current, restored);
+                ValidateCollectionState<TState>(name, current);
+
+                return () => CopyCollectionState(name, current, restored);
             });
 
     /// <summary>Declares the exact continuation state of a constructor-owned random generator.</summary>
@@ -390,7 +438,7 @@ public sealed class ModelStateRegistry<T>
     public void DeclareRandom(string name, Func<Random?> get)
         => Add(name,
             w => WriteRandomState(w, get()),
-            r => ReadRandomState(r, get(), set: null, name));
+            Deferred(r => ReadRandomState(r, get(), set: null, name)));
 
     /// <summary>Declares continuation state for an assignable, lazily-created random generator.</summary>
     /// <param name="name">A stable name, unique within the model.</param>
@@ -407,7 +455,7 @@ public sealed class ModelStateRegistry<T>
         if (set is null) throw new ArgumentNullException(nameof(set));
         Add(name,
             w => WriteRandomState(w, get()),
-            r => ReadRandomState(r, get(), set, name));
+            Deferred(r => ReadRandomState(r, get(), set, name)));
     }
 
     /// <summary>
@@ -423,7 +471,7 @@ public sealed class ModelStateRegistry<T>
     public void DeclareAfterRestore(string name, Action restore)
     {
         if (restore is null) throw new ArgumentNullException(nameof(restore));
-        Add(name, _ => { }, _ => restore());
+        Add(name, _ => { }, _ => restore);
     }
 
     /// <summary>
@@ -439,30 +487,30 @@ public sealed class ModelStateRegistry<T>
     public void DeclareAfterParameterRestore(string name, Action restore)
     {
         if (restore is null) throw new ArgumentNullException(nameof(restore));
-        Add(name, _ => { }, _ => restore(), restoreAfterParameters: true);
+        Add(name, _ => { }, _ => restore, restoreAfterParameters: true);
     }
 
     /// <summary>Declares a readonly list of vectors and restores its contents in place.</summary>
     public void DeclareInPlace(string name, Func<List<Vector<T>>?> get)
-        => Declare(name, get, restored => RestoreCollectionInPlace(name, get, restored));
+        => Declare(name, get, new StagedSetter<List<Vector<T>>?>(restored => PrepareCollectionInPlace(name, get, restored)).Set);
 
     /// <summary>Declares a readonly list of matrices and restores its contents in place.</summary>
     public void DeclareInPlace(string name, Func<List<Matrix<T>>?> get)
-        => Declare(name, get, restored => RestoreCollectionInPlace(name, get, restored));
+        => Declare(name, get, new StagedSetter<List<Matrix<T>>?>(restored => PrepareCollectionInPlace(name, get, restored)).Set);
 
     /// <summary>Declares a readonly list of tensors and restores its contents in place.</summary>
     public void DeclareInPlace(string name, Func<List<Tensor<T>>?> get)
-        => Declare(name, get, restored => RestoreCollectionInPlace(name, get, restored));
+        => Declare(name, get, new StagedSetter<List<Tensor<T>>?>(restored => PrepareCollectionInPlace(name, get, restored)).Set);
 
     /// <summary>Declares a readonly string-keyed vector table and restores it in place.</summary>
     public void DeclareInPlace(string name, Func<Dictionary<string, Vector<T>>?> get)
-        => Declare(name, get, restored => RestoreCollectionInPlace(name, get, restored));
+        => Declare(name, get, new StagedSetter<Dictionary<string, Vector<T>>?>(restored => PrepareCollectionInPlace(name, get, restored)).Set);
 
     /// <summary>Declares a readonly integer-keyed vector table and restores it in place.</summary>
     public void DeclareInPlace(string name, Func<Dictionary<int, Vector<T>>?> get)
-        => Declare(name, get, restored => RestoreCollectionInPlace(name, get, restored));
+        => Declare(name, get, new StagedSetter<Dictionary<int, Vector<T>>?>(restored => PrepareCollectionInPlace(name, get, restored)).Set);
 
-    private static void RestoreCollectionInPlace<TState>(
+    private static Action PrepareCollectionInPlace<TState>(
         string name,
         Func<TState?> get,
         TState? restored)
@@ -472,13 +520,81 @@ public sealed class ModelStateRegistry<T>
         if (current is null)
         {
             throw new InvalidOperationException(
-                $"State '{name}' is held in a readonly collection, but its constructor left "
-                + "the collection null, so the restored contents have nowhere to go.");
+                $"State '{name}' is held in a readonly collection, but its constructor left " +
+                "the collection null, so the restored contents have nowhere to go.");
         }
 
-        CopyCollectionState(name, current, restored);
+        ValidateCollectionState<TState>(name, current);
+        // Re-fetched at commit: an earlier entry may have replaced the object that owns this collection.
+        return () => CopyCollectionState(name, get() ?? current, restored);
     }
 
+    private static TStorage RequireSameLength<TStorage>(string name, TStorage? target, int length)
+        where TStorage : class
+    {
+        int actual = target switch
+        {
+            Vector<T> v => v.Length,
+            _ => -1,
+        };
+        if (target is null || actual != length)
+            throw new InvalidDataException($"State '{name}' changed size between staging and commit.");
+        return target;
+    }
+
+    /// <summary>The type check <see cref="CopyCollectionState{TState}"/> makes, run at stage time.</summary>
+    private static void ValidateCollectionState<TState>(string name, object current)
+    {
+        if (current is IDictionary || current is IList) return;
+        throw new InvalidOperationException(
+            $"State '{name}' requested in-place restoration for '{typeof(TState).FullName}', " +
+            "which is neither a list nor a dictionary.");
+    }
+
+    /// <summary>Validates a construction-owned array restore now; the copy runs at commit.</summary>
+    private static Action StageDoublesInPlace(string name, Func<double[]?> get, double[]? source)
+    {
+        ValidateDoublesInPlace(name, get(), source);
+        return () => CopyDoublesInPlace(name, get(), source);   // re-fetched at commit
+    }
+
+    private static Action StageJaggedDoublesInPlace(string name, Func<double[][]?> get, double[][]? source)
+    {
+        var destination = get();
+        if (source is not null)
+        {
+            if (destination is null || destination.Length != source.Length)
+            {
+                throw new InvalidDataException(
+                    $"State '{name}' requires {source.Length} construction-owned rows, but the destination " +
+                    $"has {destination?.Length.ToString() ?? "no"} rows.");
+            }
+            for (int i = 0; i < source.Length; i++)
+                ValidateDoublesInPlace($"{name}[{i}]", destination[i], source[i]);
+        }
+        else if (destination is not null)
+        {
+            throw new InvalidDataException(
+                $"State '{name}' was null in the checkpoint but is construction-owned in this model.");
+        }
+        return () => CopyJaggedDoublesInPlace(name, get(), source);   // re-fetched at commit
+    }
+
+    private static void ValidateDoublesInPlace(string name, double[]? destination, double[]? source)
+    {
+        if (source is null)
+        {
+            if (destination is null) return;
+            throw new InvalidDataException(
+                $"State '{name}' was null in the checkpoint but is construction-owned in this model.");
+        }
+        if (destination is null || destination.Length != source.Length)
+        {
+            throw new InvalidDataException(
+                $"State '{name}' requires a {source.Length}-value construction-owned array, but the " +
+                $"destination has {destination?.Length.ToString() ?? "no"} values.");
+        }
+    }
     private static void WriteRandomState(BinaryWriter writer, Random? random)
     {
         if (random is null) { writer.Write(false); return; }
@@ -1096,10 +1212,10 @@ public sealed class ModelStateRegistry<T>
             r =>
             {
                 int count = r.ReadInt32();
-                if (count < 0) { set(null); return; }
+                if (count < 0) return Assign(set, null);
                 var list = new List<Vector<T>>(count);
                 for (int i = 0; i < count; i++) list.Add(ReadVector(r) ?? new Vector<T>(0));
-                set(list);
+                return Assign(set, list);
             });
 
     /// <summary>Declares a tensor.</summary>
@@ -1109,7 +1225,7 @@ public sealed class ModelStateRegistry<T>
     public void Declare(string name, Func<Tensor<T>?> get, Action<Tensor<T>?> set)
         => Add(name,
             w => WriteTensor(w, get()),
-            r => set(ReadTensor(r)));
+            r => Assign(set, ReadTensor(r)));
 
     /// <summary>Restores a constructor-owned tensor without replacing its identity or device.</summary>
     /// <param name="name">The stable state name.</param>
@@ -1120,17 +1236,26 @@ public sealed class ModelStateRegistry<T>
     /// version so a subsequent GPU operation cannot reuse a stale cached upload.
     /// </remarks>
     public void DeclareInPlace(string name, Func<Tensor<T>?> get)
-        => Declare(name, get, (Tensor<T>? restored) =>
+        => Declare(name, get, new StagedSetter<Tensor<T>?>(restored =>
         {
-            using (restored)
+            var current = get();
+            if (current is null && restored is null) return NoOp;
+            if (current is null || restored is null || current.Shape != restored.Shape)
             {
-                var current = get();
-                if (current is null && restored is null) return;
-                if (current is null || restored is null || current.Shape != restored.Shape)
-                    throw new InvalidDataException($"State '{name}' requires matching non-null construction-owned tensor storage.");
-                current.CopyFromArray(restored.ToArray());
+                restored?.Dispose();
+                throw new InvalidDataException($"State '{name}' requires matching non-null construction-owned tensor storage.");
             }
-        });
+            return () =>
+            {
+                using (restored)
+                {
+                    var target = get();
+                    if (target is null || target.Shape != restored.Shape)
+                        throw new InvalidDataException($"State '{name}' changed shape between staging and commit.");
+                    target.CopyFromArray(restored.ToArray());
+                }
+            };
+        }).Set);
 
     /// <summary>Declares a list of tensors, such as a temporal memory bank.</summary>
     public void Declare(string name, Func<List<Tensor<T>>?> get, Action<List<Tensor<T>>?> set)
@@ -1145,11 +1270,11 @@ public sealed class ModelStateRegistry<T>
             r =>
             {
                 int count = r.ReadInt32();
-                if (count < 0) { set(null); return; }
+                if (count < 0) return Assign(set, null);
                 var list = new List<Tensor<T>>(count);
                 for (int i = 0; i < count; i++)
                     list.Add(ReadTensor(r) ?? new Tensor<T>([0]));
-                set(list);
+                return Assign(set, list);
             });
 
     /// <summary>Declares an integer array, such as node indices or a feature mapping.</summary>
@@ -1159,7 +1284,7 @@ public sealed class ModelStateRegistry<T>
     public void Declare(string name, Func<int[]?> get, Action<int[]?> set)
         => Add(name,
             w => WriteInts(w, get()),
-            r => set(ReadInts(r)));
+            r => Assign(set, ReadInts(r)));
 
     /// <summary>
     /// Describes ONE node of a recursive structure, so the registry can walk the whole of it.
@@ -1320,7 +1445,7 @@ public sealed class ModelStateRegistry<T>
 
         Add(name,
             w => WriteNode(w, getRoot(), shape),
-            r => setRoot(ReadNode(r, shape)));
+            r => Assign(setRoot, ReadNode(r, shape)));
     }
 
     private static void WriteNode<TNode>(BinaryWriter w, TNode? node, NodeShape<TNode> shape)
@@ -1398,7 +1523,7 @@ public sealed class ModelStateRegistry<T>
             r =>
             {
                 int count = r.ReadInt32();
-                if (count < 0) { set(null); return; }
+                if (count < 0) return Assign(set, null);
 
                 var roots = new List<TNode>(count);
                 for (int i = 0; i < count; i++)
@@ -1406,7 +1531,7 @@ public sealed class ModelStateRegistry<T>
                     var node = ReadNode(r, shape);
                     if (node is not null) roots.Add(node);
                 }
-                set(roots);
+                return Assign(set, roots);
             });
     }
 
@@ -1426,10 +1551,10 @@ public sealed class ModelStateRegistry<T>
             r =>
             {
                 int length = r.ReadInt32();
-                if (length < 0) { set(null); return; }
+                if (length < 0) return Assign(set, null);
                 var a = new T[length];
                 for (int i = 0; i < length; i++) a[i] = Ops.FromDouble(r.ReadDouble());
-                set(a);
+                return Assign(set, a);
             });
 
     /// <summary>Declares a JAGGED array held as the model's own numeric type.</summary>
@@ -1460,7 +1585,7 @@ public sealed class ModelStateRegistry<T>
             r =>
             {
                 int outer = r.ReadInt32();
-                if (outer < 0) { set(null); return; }
+                if (outer < 0) return Assign(set, null);
                 var rows = new T[outer][];
                 for (int i = 0; i < outer; i++)
                 {
@@ -1470,7 +1595,7 @@ public sealed class ModelStateRegistry<T>
                     for (int j = 0; j < inner; j++) row[j] = Ops.FromDouble(r.ReadDouble());
                     rows[i] = row;
                 }
-                set(rows);
+                return Assign(set, rows);
             });
 
     /// <summary>Declares a list of matrices, such as per-class or per-category probability tables.</summary>
@@ -1489,10 +1614,10 @@ public sealed class ModelStateRegistry<T>
             r =>
             {
                 int count = r.ReadInt32();
-                if (count < 0) { set(null); return; }
+                if (count < 0) return Assign(set, null);
                 var list = new List<Matrix<T>>(count);
                 for (int i = 0; i < count; i++) list.Add(ReadMatrix(r) ?? new Matrix<T>(0, 0));
-                set(list);
+                return Assign(set, list);
             });
 
     /// <summary>Declares a single nested model, such as a DQN agent's target network.</summary>
@@ -1515,13 +1640,13 @@ public sealed class ModelStateRegistry<T>
                 w.Write(bytes.Length);
                 w.Write(bytes);
             },
-            r =>
+            Deferred(r =>
             {
                 int length = r.ReadInt32();
                 if (length < 0) return;
                 var bytes = r.ReadBytes(length);
                 if (length > 0) get()?.Deserialize(bytes);
-            });
+            }));
 
     /// <summary>Declares an assignable child that may not exist until its fitted state is restored.</summary>
     /// <typeparam name="TChild">The child's concrete or abstract serializer type.</typeparam>
@@ -1549,7 +1674,7 @@ public sealed class ModelStateRegistry<T>
                 w.Write(bytes.Length);
                 w.Write(bytes);
             },
-            r =>
+            Deferred(r =>
             {
                 int marker = r.ReadInt32();
                 if (marker == -1) { set(null); return; }
@@ -1578,7 +1703,7 @@ public sealed class ModelStateRegistry<T>
                 }
 
                 if (length > 0) child.Deserialize(bytes);
-            });
+            }));
 
     /// <summary>
     /// Declares an assignable fitted child whose parent already owns the canonical construction
@@ -1611,7 +1736,7 @@ public sealed class ModelStateRegistry<T>
                 w.Write(bytes.Length);
                 w.Write(bytes);
             },
-            r =>
+            Deferred(r =>
             {
                 int length = r.ReadInt32();
                 if (length < 0) { set(null); return; }
@@ -1626,7 +1751,7 @@ public sealed class ModelStateRegistry<T>
                 }
 
                 if (length > 0) child.Deserialize(bytes);
-            });
+            }));
     }
 
     /// <summary>Declares a nested parameter source, such as a duelling agent's target network.</summary>
@@ -1640,11 +1765,11 @@ public sealed class ModelStateRegistry<T>
     public void DeclareParameterSource(string name, Func<IParameterSource<T>?> get)
         => Add(name,
             w => WriteVector(w, get()?.GetParameters()),
-            r =>
+            Deferred(r =>
             {
                 var values = ReadVector(r);
                 if (values is not null) get()?.SetParameters(values);
-            });
+            }));
 
     /// <summary>Declares a list of layers the model owns directly, such as a conv stack.</summary>
     /// <typeparam name="TLayer">The layer type.</typeparam>
@@ -1697,7 +1822,7 @@ public sealed class ModelStateRegistry<T>
                     w.Write(bytes);
                 }
             },
-            r =>
+            Deferred(r =>
             {
                 int count = r.ReadInt32();
                 if (count < 0) return;
@@ -1715,7 +1840,7 @@ public sealed class ModelStateRegistry<T>
                     using var lr = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true);
                     layers[i]?.Deserialize(lr);
                 }
-            });
+            }));
 
     /// <summary>Declares a list of nested models, such as an agent's per-actor target networks.</summary>
     /// <typeparam name="TChild">The child type.</typeparam>
@@ -1744,7 +1869,7 @@ public sealed class ModelStateRegistry<T>
                     w.Write(bytes);
                 }
             },
-            r =>
+            Deferred(r =>
             {
                 int header = r.ReadInt32();
                 bool carriesTypes = header == TypedChildListMarker;
@@ -1772,7 +1897,7 @@ public sealed class ModelStateRegistry<T>
 
                     children[i]?.Deserialize(bytes);
                 }
-            });
+            }));
 
     /// <summary>Builds an empty child for a restored list to fill.</summary>
     /// <param name="name">The state name, for the error message when it cannot be built.</param>
@@ -1910,7 +2035,7 @@ public sealed class ModelStateRegistry<T>
         Action<DecisionTreeNode<T>?> set)
         => Add(name,
             w => WriteNode(w, get()),
-            r => set(ReadNode(r, name)));
+            r => Assign(set, ReadNode(r, name)));
 
     private static void WriteNode(BinaryWriter w, DecisionTreeNode<T>? node)
     {
@@ -2064,7 +2189,7 @@ public sealed class ModelStateRegistry<T>
                     WriteScalarOption(w, property.GetValue(options));
                 }
             },
-            r =>
+            Deferred(r =>
             {
                 int marker = r.ReadInt32();
                 if (marker == -1) return;
@@ -2107,7 +2232,7 @@ public sealed class ModelStateRegistry<T>
                     if (options is null || target is null) continue;
                     target.SetValue(options, value);
                 }
-            });
+            }));
 
     /// <summary>The settable scalar settings of an options type, in a stable order.</summary>
     /// <param name="type">The options type.</param>
@@ -2216,10 +2341,10 @@ public sealed class ModelStateRegistry<T>
             r =>
             {
                 int length = r.ReadInt32();
-                if (length < 0) { set(null); return; }
+                if (length < 0) return Assign(set, null);
                 var v = new Vector<int>(length);
                 for (int i = 0; i < length; i++) v[i] = r.ReadInt32();
-                set(v);
+                return Assign(set, v);
             });
 
     /// <summary>Declares a keyed set of vectors, such as per-layer optimiser moments.</summary>
@@ -2257,14 +2382,14 @@ public sealed class ModelStateRegistry<T>
             r =>
             {
                 int count = r.ReadInt32();
-                if (count < 0) { set(null); return; }
+                if (count < 0) return Assign(set, null);
                 var map = new Dictionary<string, Vector<T>>(count, StringComparer.Ordinal);
                 for (int i = 0; i < count; i++)
                 {
                     string key = r.ReadString();
                     map[key] = ReadVector(r) ?? new Vector<T>(0);
                 }
-                set(map);
+                return Assign(set, map);
             });
 
     public void Declare(string name, Func<Dictionary<int, Vector<T>>?> get, Action<Dictionary<int, Vector<T>>?> set)
@@ -2283,14 +2408,14 @@ public sealed class ModelStateRegistry<T>
             r =>
             {
                 int count = r.ReadInt32();
-                if (count < 0) { set(null); return; }
+                if (count < 0) return Assign(set, null);
                 var map = new Dictionary<int, Vector<T>>(count);
                 for (int i = 0; i < count; i++)
                 {
                     int key = r.ReadInt32();
                     map[key] = ReadVector(r) ?? new Vector<T>(0);
                 }
-                set(map);
+                return Assign(set, map);
             });
 
     /// <summary>Declares an array of vectors, such as per-feature sorted values or per-point distances.</summary>
@@ -2309,10 +2434,10 @@ public sealed class ModelStateRegistry<T>
             r =>
             {
                 int count = r.ReadInt32();
-                if (count < 0) { set(null); return; }
+                if (count < 0) return Assign(set, null);
                 var a = new Vector<T>[count];
                 for (int i = 0; i < count; i++) a[i] = ReadVector(r) ?? new Vector<T>(0);
-                set(a);
+                return Assign(set, a);
             });
 
     /// <summary>Declares an array of matrices, such as one probability table per category.</summary>
@@ -2331,10 +2456,10 @@ public sealed class ModelStateRegistry<T>
             r =>
             {
                 int count = r.ReadInt32();
-                if (count < 0) { set(null); return; }
+                if (count < 0) return Assign(set, null);
                 var a = new Matrix<T>[count];
                 for (int i = 0; i < count; i++) a[i] = ReadMatrix(r) ?? new Matrix<T>(0, 0);
-                set(a);
+                return Assign(set, a);
             });
 
     /// <summary>Declares a double array.</summary>
@@ -2344,7 +2469,7 @@ public sealed class ModelStateRegistry<T>
     public void Declare(string name, Func<double[]?> get, Action<double[]?> set)
         => Add(name,
             w => WriteDoubles(w, get()),
-            r => set(ReadDoubles(r)));
+            r => Assign(set, ReadDoubles(r)));
 
     /// <summary>
     /// Declares a double array that shadows a flat <typeparamref name="T"/> parameter slot.
@@ -2354,14 +2479,14 @@ public sealed class ModelStateRegistry<T>
     public void DeclareExact(string name, Func<double[]?> get, Action<double[]?> set)
         => Add(name,
             w => WriteDoubles(w, get()),
-            r => set(ReadDoubles(r)),
+            r => Assign(set, ReadDoubles(r)),
             restoreAfterParameters: true);
 
     /// <summary>Declares a readonly double array and restores its contents without replacing it.</summary>
     public void DeclareInPlace(string name, Func<double[]?> get)
         => Add(name,
             w => WriteDoubles(w, get()),
-            r => CopyDoublesInPlace(name, get(), ReadDoubles(r)));
+            r => StageDoublesInPlace(name, get, ReadDoubles(r)));
 
     /// <summary>
     /// Declares a readonly double parameter array whose exact payload wins after vector restore.
@@ -2369,14 +2494,14 @@ public sealed class ModelStateRegistry<T>
     public void DeclareExactInPlace(string name, Func<double[]?> get)
         => Add(name,
             w => WriteDoubles(w, get()),
-            r => CopyDoublesInPlace(name, get(), ReadDoubles(r)),
+            r => StageDoublesInPlace(name, get, ReadDoubles(r)),
             restoreAfterParameters: true);
 
     /// <summary>Declares a readonly jagged double array and restores its contents in place.</summary>
     public void DeclareInPlace(string name, Func<double[][]?> get)
         => Add(name,
             w => WriteJaggedDoubles(w, get()),
-            r => CopyJaggedDoublesInPlace(name, get(), ReadJaggedDoubles(r)));
+            r => StageJaggedDoublesInPlace(name, get, ReadJaggedDoubles(r)));
 
     /// <summary>
     /// Declares a readonly jagged double parameter array whose exact payload wins after vector restore.
@@ -2384,7 +2509,7 @@ public sealed class ModelStateRegistry<T>
     public void DeclareExactInPlace(string name, Func<double[][]?> get)
         => Add(name,
             w => WriteJaggedDoubles(w, get()),
-            r => CopyJaggedDoublesInPlace(name, get(), ReadJaggedDoubles(r)),
+            r => StageJaggedDoublesInPlace(name, get, ReadJaggedDoubles(r)),
             restoreAfterParameters: true);
 
     /// <summary>
@@ -2393,7 +2518,7 @@ public sealed class ModelStateRegistry<T>
     public void DeclareExact(string name, Func<double[][]?> get, Action<double[][]?> set)
         => Add(name,
             w => WriteJaggedDoubles(w, get()),
-            r => set(ReadJaggedDoubles(r)),
+            r => Assign(set, ReadJaggedDoubles(r)),
             restoreAfterParameters: true);
 
     // Scalars. A hyperparameter that PREDICTION reads is state, however small: k-nearest-neighbours
@@ -2406,31 +2531,31 @@ public sealed class ModelStateRegistry<T>
     /// <param name="get">Reads the current value.</param>
     /// <param name="set">Installs a restored value.</param>
     public void DeclareInt32(string name, Func<int> get, Action<int> set)
-        => Add(name, w => w.Write(get()), r => set(r.ReadInt32()));
+        => Add(name, w => w.Write(get()), r => Assign(set, r.ReadInt32()));
 
     /// <summary>Declares a 64-bit integer, such as an online model's sample count.</summary>
     public void DeclareInt64(string name, Func<long> get, Action<long> set)
-        => Add(name, w => w.Write(get()), r => set(r.ReadInt64()));
+        => Add(name, w => w.Write(get()), r => Assign(set, r.ReadInt64()));
 
     /// <summary>Declares a double, such as a temperature or a learned threshold.</summary>
     /// <param name="name">A stable name, unique within the model.</param>
     /// <param name="get">Reads the current value.</param>
     /// <param name="set">Installs a restored value.</param>
     public void DeclareDouble(string name, Func<double> get, Action<double> set)
-        => Add(name, w => w.Write(get()), r => set(r.ReadDouble()));
+        => Add(name, w => w.Write(get()), r => Assign(set, r.ReadDouble()));
 
     /// <summary>
     /// Declares a double scalar that shadows a flat <typeparamref name="T"/> parameter slot.
     /// </summary>
     public void DeclareExactDouble(string name, Func<double> get, Action<double> set)
-        => Add(name, w => w.Write(get()), r => set(r.ReadDouble()), restoreAfterParameters: true);
+        => Add(name, w => w.Write(get()), r => Assign(set, r.ReadDouble()), restoreAfterParameters: true);
 
     /// <summary>Declares a boolean, such as a fitted flag or a mode switch.</summary>
     /// <param name="name">A stable name, unique within the model.</param>
     /// <param name="get">Reads the current value.</param>
     /// <param name="set">Installs a restored value.</param>
     public void DeclareBoolean(string name, Func<bool> get, Action<bool> set)
-        => Add(name, w => w.Write(get()), r => set(r.ReadBoolean()));
+        => Add(name, w => w.Write(get()), r => Assign(set, r.ReadBoolean()));
 
     /// <summary>Declares a numeric value held as the model's own numeric type.</summary>
     /// <param name="name">A stable name, unique within the model.</param>
@@ -2439,7 +2564,7 @@ public sealed class ModelStateRegistry<T>
     public void DeclareScalar(string name, Func<T> get, Action<T> set)
         => Add(name,
             w => w.Write(Convert.ToDouble(get())),
-            r => set(Ops.FromDouble(r.ReadDouble())));
+            r => Assign(set, Ops.FromDouble(r.ReadDouble())));
 
     /// <summary>Declares a string, such as a fitted category name or a chosen kernel.</summary>
     /// <param name="name">A stable name, unique within the model.</param>
@@ -2448,7 +2573,7 @@ public sealed class ModelStateRegistry<T>
     public void DeclareString(string name, Func<string?> get, Action<string?> set)
         => Add(name,
             w => { var v = get(); w.Write(v is not null); if (v is not null) w.Write(v); },
-            r => set(r.ReadBoolean() ? r.ReadString() : null));
+            r => Assign(set, r.ReadBoolean() ? r.ReadString() : null));
 
     /// <summary>
     /// Declares a child model whose own state travels with this one -- an ensemble member, a base
@@ -2488,7 +2613,7 @@ public sealed class ModelStateRegistry<T>
                     w.Write(bytes);
                 }
             },
-            r =>
+            Deferred(r =>
             {
                 int count = r.ReadInt32();
                 if (count < 0) return;
@@ -2516,7 +2641,7 @@ public sealed class ModelStateRegistry<T>
                     child.Deserialize(bytes);
                     children.Add(child);
                 }
-            });
+            }));
 
     /// <summary>Rebuilds a child from the type name saved beside its bytes.</summary>
     /// <typeparam name="TInput">The child's input type.</typeparam>
@@ -2607,11 +2732,18 @@ public sealed class ModelStateRegistry<T>
         var byName = new Dictionary<string, Entry>(StringComparer.Ordinal);
         foreach (var entry in _entries) byName[entry.Name] = entry;
 
+        // Stage every entry first, then commit: nothing is installed until the whole block has been read and
+        // validated, so a corrupt or truncated entry leaves the target exactly as it was.
+        var commits = new List<Action>(count);
         for (int i = 0; i < count; i++)
         {
             string name = reader.ReadString();
             int length = reader.ReadInt32();
+            if (length < 0)
+                throw new InvalidDataException($"State '{name}' declares a negative length {length}.");
             var bytes = reader.ReadBytes(length);
+            if (bytes.Length != length)
+                throw new InvalidDataException($"State '{name}' is truncated: expected {length} bytes, got {bytes.Length}.");
 
             if (!byName.TryGetValue(name, out var entry)
                 || (restoreAfterParameters.HasValue
@@ -2622,8 +2754,10 @@ public sealed class ModelStateRegistry<T>
 
             using var buffer = new MemoryStream(bytes);
             using var inner = new BinaryReader(buffer, System.Text.Encoding.UTF8, leaveOpen: true);
-            entry.Read(inner);
+            commits.Add(entry.Stage(inner));
         }
+
+        foreach (var commit in commits) commit();
     }
 
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
