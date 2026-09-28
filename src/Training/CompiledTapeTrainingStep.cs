@@ -922,7 +922,10 @@ public static class CompiledTapeTrainingStep<T>
             or AiDotNet.Tensors.Engines.Compilation.OptimizerType.Rprop
             or AiDotNet.Tensors.Engines.Compilation.OptimizerType.HypergradientSGD
             or AiDotNet.Tensors.Engines.Compilation.OptimizerType.ScheduleFreeSGD
-            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.DAdaptationSGD))
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.DAdaptationSGD
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.ProximalL1
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.TrustRegion
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.LBFGS))
             { Fd($"optimizerType {optimizerType} not in allowlist"); return false; }
 
         // If a prior fused step already proved this thread's Tensors build can't

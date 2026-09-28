@@ -704,24 +704,66 @@ public class FusedSpecMatchesEagerBehaviourTests
     }
 
     /// <summary>
-    /// L2 has a proximal operator, but not this one — it shrinks toward zero rather than to zero — and no
-    /// kernel implements it, so the spec must decline rather than fuse the nearest available update.
+    /// The eager L2 step is w' = s (w - lr g) with s = 1 - strength. The fused SGD kernel with L2 weight decay computes
+    /// w (1 - lr' wd) - lr' g, which is the same update for lr' = s lr and wd = (1 - s) / (s lr); this runs the kernel's
+    /// own arithmetic with the mapped values against the eager update.
     /// </summary>
     [Fact]
-    public void ProximalGradientDescent_L2_Declines()
+    public void ProximalGradientDescent_L2_KernelArithmeticReproducesTheEagerStep()
+    {
+        const double lr = 0.1, strength = 0.04;
+        var optimizer = new ProximalGradientDescentOptimizer<double, Matrix<double>, Vector<double>>(
+            null,
+            new ProximalGradientDescentOptimizerOptions<double, Matrix<double>, Vector<double>>
+            {
+                InitialLearningRate = lr,
+                UseAdaptiveLearningRate = false,
+                Regularization = new L2Regularization<double, Matrix<double>, Vector<double>>(
+                    new RegularizationOptions { Strength = strength }),
+            });
+
+        Assert.True(TryGetConfig(optimizer, out var config));
+        Assert.Equal(Tensors.Engines.Compilation.OptimizerType.SGD, config.Type);
+
+        var parameters = new Vector<double>(new[] { 0.5, -0.3, 0.02, -0.03 });
+        var gradient = new Vector<double>(new[] { 1.0, -2.0, 0.05, 0.0 });
+
+        var actual = optimizer.UpdateParameters(parameters, gradient);
+
+        // CPU SGD with weight decay: grad += wd * param; param -= lr' * grad.
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            double expected = parameters[i] - config.LearningRate * (gradient[i] + config.WeightDecay * parameters[i]);
+            Assert.Equal(expected, actual[i], 6);
+            Assert.Equal((1 - strength) * (parameters[i] - lr * gradient[i]), actual[i], 12);
+        }
+    }
+
+    /// <summary>
+    /// The L2 identity needs the configured lr and a shrink factor strictly between 0 and 1, so it declines otherwise.
+    /// </summary>
+    [Theory]
+    [InlineData("schedule")]
+    [InlineData("zero-lr")]
+    [InlineData("adaptive")]
+    [InlineData("shrink-to-zero")]
+    public void ProximalGradientDescent_L2_DeclinesWhenTheIdentityDoesNotHold(string scenario)
     {
         var optimizer = new ProximalGradientDescentOptimizer<double, Matrix<double>, Vector<double>>(
             null,
             new ProximalGradientDescentOptimizerOptions<double, Matrix<double>, Vector<double>>
             {
-                InitialLearningRate = 0.1,
-                UseAdaptiveLearningRate = false,
+                InitialLearningRate = scenario == "zero-lr" ? 0.0 : 0.1,
+                UseAdaptiveLearningRate = scenario == "adaptive",
                 Regularization = new L2Regularization<double, Matrix<double>, Vector<double>>(
-                    new RegularizationOptions { Strength = 0.04 }),
+                    new RegularizationOptions { Strength = scenario == "shrink-to-zero" ? 1.0 : 0.04 }),
+                LearningRateScheduler = scenario == "schedule"
+                    ? new AiDotNet.LearningRateSchedulers.ExponentialLRScheduler(0.1, 0.95)
+                    : null,
             });
 
         Assert.False(TryGetConfig(optimizer, out _),
-            "PGD fused with an L2 prox the kernel does not implement — the fused path would run a different algorithm.");
+            $"PGD fused its L2 case under '{scenario}', where lr' = s lr and wd = (1 - s) / (s lr) cannot reproduce it.");
     }
 
     // ── L-BFGS ───────────────────────────────────────────────────────────────
