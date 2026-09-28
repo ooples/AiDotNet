@@ -422,7 +422,8 @@ public class Adam8BitOptimizerIntegrationTests
 
     /// <summary>
     /// A version-2 checkpoint stored LINEAR quantized moments. Loading it must re-encode them into the dynamic
-    /// codebook; decoding the old bytes as codebook indices would silently replace every moment with a different one.
+    /// codebook, for the flat state and for every per-parameter tape state; decoding the old bytes as codebook indices
+    /// would silently replace every moment with a different one.
     /// </summary>
     [Fact]
     public void Deserialize_LegacyLinearCheckpoint_ConvertsMomentsToDynamicCodebook()
@@ -438,29 +439,35 @@ public class Adam8BitOptimizerIntegrationTests
         var optimizer = new Adam8BitOptimizer<double, Matrix<double>, Vector<double>>(null, options);
         var rng = new Random(5);
         var parameters = new Vector<double>(Enumerable.Range(0, 20).Select(_ => rng.NextDouble() * 4 - 2).ToArray());
+        var tapeParameter = new Tensor<double>(new[] { 4, 5 });
+        for (int i = 0; i < tapeParameter.Length; i++) tapeParameter[i] = rng.NextDouble() * 4 - 2;
         for (int step = 0; step < 6; step++)
         {
             var gradient = new Vector<double>(parameters.Select(x => 2.0 * x + 0.3 * rng.NextDouble()).ToArray());
             parameters = optimizer.UpdateParameters(parameters, gradient);
+            var tapeGradient = new Tensor<double>(tapeParameter._shape);
+            for (int i = 0; i < tapeGradient.Length; i++) tapeGradient[i] = 2.0 * tapeParameter[i] + 0.3 * rng.NextDouble();
+            optimizer.Step(new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<double>(
+                parameters: new[] { tapeParameter },
+                gradients: new Dictionary<Tensor<double>, Tensor<double>> { [tapeParameter] = tapeGradient },
+                loss: 0.0));
         }
 
-        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
-        var type = optimizer.GetType();
-        System.Reflection.FieldInfo Field(string name) => type.GetField(name, flags)
-            ?? throw new InvalidOperationException($"field {name} not found");
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic
+            | System.Reflection.BindingFlags.Public;
+        object Get(object owner, string name) => (owner.GetType().GetField(name, flags)
+            ?? throw new InvalidOperationException($"field {name} not found")).GetValue(owner)!;
 
-        // Rewrite the live state in the version-2 linear encoding, exactly as the old encoder produced it, and keep
-        // the values that encoding represents.
-        var expected = new Dictionary<string, double[]>();
-        foreach (var (bytesName, scalesName, signed) in new[] { ("_mQuantized", "_mScales", true), ("_vQuantized", "_vScales", false) })
+        // Rewrite every quantized moment in the version-2 LINEAR encoding, exactly as the old encoder produced it,
+        // and remember the values that encoding represents.
+        var expected = new List<double[]>();
+        void ToLinear(Vector<byte> q, Vector<double> scales, int length, bool signed)
         {
-            var q = (Vector<byte>)Field(bytesName).GetValue(optimizer)!;
-            var scales = (Vector<double>)Field(scalesName).GetValue(optimizer)!;
             double[] code = signed ? DynamicQuantizationMap.Signed : DynamicQuantizationMap.Unsigned;
-            var values = new double[q.Length];
-            for (int b = 0; b * blockSize < q.Length; b++)
+            var values = new double[length];
+            for (int b = 0; b * blockSize < length; b++)
             {
-                int start = b * blockSize, count = Math.Min(blockSize, q.Length - start);
+                int start = b * blockSize, count = Math.Min(blockSize, length - start);
                 double absMax = 0;
                 for (int i = 0; i < count; i++)
                     absMax = Math.Max(absMax, Math.Abs(code[q[start + i]] * scales[b]));
@@ -474,26 +481,34 @@ public class Adam8BitOptimizerIntegrationTests
                 }
                 scales[b] = linearScale;
             }
-            expected[bytesName] = values;
+            expected.Add(values);
         }
 
-        byte[] checkpoint = optimizer.Serialize();
-        // The format version is the int that follows the "A8B1" magic.
-        int magicAt = -1;
-        for (int i = 0; i + 8 <= checkpoint.Length && magicAt < 0; i++)
-            if (checkpoint[i] == 0x41 && checkpoint[i + 1] == 0x38 && checkpoint[i + 2] == 0x42 && checkpoint[i + 3] == 0x31)
-                magicAt = i;
-        Assert.True(magicAt >= 0, "magic not found");
-        Assert.Equal(3, BitConverter.ToInt32(checkpoint, magicAt + 4));
-        BitConverter.GetBytes(2).CopyTo(checkpoint, magicAt + 4);
+        ToLinear((Vector<byte>)Get(optimizer, "_mQuantized"), (Vector<double>)Get(optimizer, "_mScales"), 20, signed: true);
+        ToLinear((Vector<byte>)Get(optimizer, "_vQuantized"), (Vector<double>)Get(optimizer, "_vScales"), 20, signed: false);
+        var tapeStates = (System.Collections.IDictionary)Get(optimizer, "_tapeStates");
+        Assert.Equal(1, tapeStates.Count);
+        object tapeState = tapeStates[tapeParameter]!;
+        ToLinear((Vector<byte>)Get(tapeState, "MQuantized"), (Vector<double>)Get(tapeState, "MScales"), 20, signed: true);
+        ToLinear((Vector<byte>)Get(tapeState, "VQuantized"), (Vector<double>)Get(tapeState, "VScales"), 20, signed: false);
 
+        byte[] checkpoint = DowngradeAdam8BitPayloadToVersion2(optimizer.Serialize());
         var restored = new Adam8BitOptimizer<double, Matrix<double>, Vector<double>>(null, options);
         restored.Deserialize(checkpoint);
 
-        foreach (var (bytesName, scalesName, signed) in new[] { ("_mQuantized", "_mScales", true), ("_vQuantized", "_vScales", false) })
+        var pending = (System.Collections.IDictionary)Get(restored, "_pendingTapeStatesByParameterIndex");
+        object restoredTape = pending[0]!;
+        var actual = new (Vector<byte> q, Vector<double> scales, bool signed)[]
         {
-            var q = (Vector<byte>)Field(bytesName).GetValue(restored)!;
-            var scales = (Vector<double>)Field(scalesName).GetValue(restored)!;
+            ((Vector<byte>)Get(restored, "_mQuantized"), (Vector<double>)Get(restored, "_mScales"), true),
+            ((Vector<byte>)Get(restored, "_vQuantized"), (Vector<double>)Get(restored, "_vScales"), false),
+            ((Vector<byte>)Get(restoredTape, "MQuantized"), (Vector<double>)Get(restoredTape, "MScales"), true),
+            ((Vector<byte>)Get(restoredTape, "VQuantized"), (Vector<double>)Get(restoredTape, "VScales"), false),
+        };
+        string[] names = { "flat m", "flat v", "tape m", "tape v" };
+        for (int k = 0; k < actual.Length; k++)
+        {
+            var (q, scales, signed) = actual[k];
             double[] code = signed ? DynamicQuantizationMap.Signed : DynamicQuantizationMap.Unsigned;
             double maxGap = 0;
             for (int i = 1; i < code.Length; i++) maxGap = Math.Max(maxGap, code[i] - code[i - 1]);
@@ -502,10 +517,83 @@ public class Adam8BitOptimizerIntegrationTests
                 int b = i / blockSize;
                 double decoded = code[q[i]] * scales[b];
                 double tolerance = maxGap / 2 * scales[b] + 1e-15;
-                Assert.True(Math.Abs(decoded - expected[bytesName][i]) <= tolerance,
-                    $"{bytesName}[{i}]: converted {decoded:R}, checkpoint held {expected[bytesName][i]:R}, tolerance {tolerance:R}");
+                Assert.True(Math.Abs(decoded - expected[k][i]) <= tolerance,
+                    $"{names[k]}[{i}]: converted {decoded:R}, checkpoint held {expected[k][i]:R}, tolerance {tolerance:R}");
             }
         }
+    }
+
+    /// <summary>
+    /// Rewrites a current (version 3) Adam8Bit payload in the version-2 layout: the same fields minus the ones version 3
+    /// added (the flat below-Min8BitSize section and each tape state's full-precision layout), labelled version 2.
+    /// The payload must not use the full-precision layout, which version 2 cannot express.
+    /// </summary>
+    private static byte[] DowngradeAdam8BitPayloadToVersion2(byte[] payload)
+    {
+        using var input = new System.IO.MemoryStream(payload);
+        using var reader = new System.IO.BinaryReader(input);
+        using var output = new System.IO.MemoryStream();
+        using var writer = new System.IO.BinaryWriter(output);
+        void Copy(long count) => writer.Write(reader.ReadBytes(checked((int)count)));
+
+        int baseLength = reader.ReadInt32();
+        writer.Write(baseLength);
+        Copy(baseLength);
+        writer.Write(reader.ReadString());
+        writer.Write(reader.ReadInt32()); // magic
+        Assert.Equal(3, reader.ReadInt32());
+        writer.Write(2);
+        Copy(2 * sizeof(int)); // _t, _parameterLength
+        int numBlocks = reader.ReadInt32();
+        writer.Write(numBlocks);
+        bool compressBoth = reader.ReadBoolean();
+        writer.Write(compressBoth);
+        bool hasM = reader.ReadBoolean();
+        writer.Write(hasM);
+        if (hasM)
+        {
+            int length = reader.ReadInt32();
+            writer.Write(length);
+            Copy(compressBoth ? length + (long)sizeof(double) * numBlocks : (long)sizeof(double) * length);
+        }
+        bool hasV = reader.ReadBoolean();
+        writer.Write(hasV);
+        if (hasV)
+        {
+            int length = reader.ReadInt32();
+            writer.Write(length);
+            Copy(length + (long)sizeof(double) * numBlocks);
+        }
+        Assert.False(reader.ReadBoolean(), "a full-precision flat state has no version-2 form");
+        Copy(sizeof(int)); // _tapeStep
+        int states = reader.ReadInt32();
+        writer.Write(states);
+        void CopyOptional(int elementSize)
+        {
+            bool present = reader.ReadBoolean();
+            writer.Write(present);
+            if (!present) return;
+            int length = reader.ReadInt32();
+            writer.Write(length);
+            Copy((long)elementSize * length);
+        }
+        for (int s = 0; s < states; s++)
+        {
+            Copy(3 * sizeof(int)); // parameter index, Length, NumBlocks
+            CopyOptional(sizeof(byte)); // MQuantized
+            Assert.False(reader.ReadBoolean(), "version 2 tape states with full-precision m are not exercised here");
+            writer.Write(false); // MFullPrecision
+            CopyOptional(sizeof(byte)); // VQuantized
+            CopyOptional(sizeof(double)); // MScales
+            CopyOptional(sizeof(double)); // VScales
+            CopyOptional(sizeof(ushort)); // MBf16
+            CopyOptional(sizeof(ushort)); // VBf16
+            Assert.False(reader.ReadBoolean(), "a full-precision tape state has no version-2 form");
+            Assert.False(reader.ReadBoolean(), "a quantized tape state carries no full-precision v");
+        }
+        Assert.Equal(input.Length, input.Position);
+        writer.Flush();
+        return output.ToArray();
     }
 
     #endregion

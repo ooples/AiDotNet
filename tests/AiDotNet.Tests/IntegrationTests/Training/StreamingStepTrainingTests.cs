@@ -255,20 +255,33 @@ public class StreamingStepTrainingTests : IDisposable
         var fused = await Train(13, resume: false, Checkpoints("fused-bad-import", saveEvery: 1000), init);
         byte[] optimizerState = fused.Opt.Serialize();
 
+        var (x, y) = Data(1);
+        FeedForwardNeuralNetwork<float> Restore(byte[] payload)
+        {
+            var optimizer = Optimizer(epochs: 100);
+            var model = Model(optimizer);
+            model.SetParameters(fused.Model.GetParameters());
+            model.SetBaseTrainOptimizer(optimizer);
+            optimizer.Deserialize(payload);
+            return model;
+        }
+
+        // Control: the intact payload imports into the fused plan and the step runs, so the refusal below is caused
+        // by the corruption and nothing else.
+        var intact = Restore((byte[])optimizerState.Clone());
+        intact.Train(Stack(x.Take(BatchSize).ToArray()), Stack(y.Take(BatchSize).ToArray()));
+
         // Corrupt the compiled-plan payload's magic ("AOPT") so ImportOptimizerState rejects it.
         int magic = IndexOf(optimizerState, new byte[] { 0x41, 0x4F, 0x50, 0x54 });
         Assert.True(magic >= 0, "the checkpoint must carry a fused-plan payload");
         optimizerState[magic] = (byte)'X';
 
-        var optimizer = Optimizer(epochs: 100);
-        var model = Model(optimizer);
-        model.SetParameters(fused.Model.GetParameters());
-        model.SetBaseTrainOptimizer(optimizer);
-        optimizer.Deserialize(optimizerState);
-        var (x, y) = Data(1);
+        var corrupted = Restore(optimizerState);
         var ex = Assert.Throws<InvalidOperationException>(
-            () => model.Train(Stack(x.Take(BatchSize).ToArray()), Stack(y.Take(BatchSize).ToArray())));
-        Assert.Contains("fused compiled training", ex.Message);
+            () => corrupted.Train(Stack(x.Take(BatchSize).ToArray()), Stack(y.Take(BatchSize).ToArray())));
+        // The PENDING-state refusal specifically: the failed import left the fused payload uninstalled, and the eager
+        // fallback refused to restart the optimizer. (Other fused refusals share the words "fused compiled training".)
+        Assert.Contains("restored from a checkpoint written during fused compiled training", ex.Message);
     }
 
     [Fact(Timeout = 180000)]
@@ -290,6 +303,8 @@ public class StreamingStepTrainingTests : IDisposable
         source.SetBaseTrainOptimizer(sourceOptimizer);
         fusedDisabled.SetValue(source, true);
         for (int i = 0; i < 5; i++) source.Train(bx, by);
+        // Positive control 1: the source really trained on the eager path, so the checkpoint carries eager moments.
+        Assert.True(TapeStep(sourceOptimizer) > 0, "the source optimizer never took an eager step");
         byte[] eagerState = sourceOptimizer.Serialize();
         var weights = source.GetParameters();
 
@@ -304,6 +319,16 @@ public class StreamingStepTrainingTests : IDisposable
             return model;
         }
 
+        // Positive control 2: fused training is available for this model and data, so the decline below is a decision
+        // about the restored eager state, not a fused path that could never engage.
+        var freshOptimizer = Optimizer(epochs: 100);
+        var fresh = Model(freshOptimizer);
+        fresh.SetParameters(weights.Clone());
+        fresh.SetBaseTrainOptimizer(freshOptimizer);
+        AiDotNet.Training.CompiledTapeTrainingStep<float>.ResetFusedStepCount();
+        fresh.Train(bx, by);
+        Assert.True(AiDotNet.Training.CompiledTapeTrainingStep<float>.GetFusedStepCount() > 0, "the fused path never engages here");
+
         var eagerContinuation = Restore(fused: false);
         eagerContinuation.Train(bx, by);
         var withFusedEnabled = Restore(fused: true);
@@ -311,6 +336,17 @@ public class StreamingStepTrainingTests : IDisposable
         Assert.True(MaxAbsDiff(withFusedEnabled.GetParameters(), eagerContinuation.GetParameters()) == 0.0,
             "resuming an eager checkpoint with fused enabled discarded the restored moments; diverged by " +
             $"{MaxAbsDiff(withFusedEnabled.GetParameters(), eagerContinuation.GetParameters())}");
+    }
+
+    private static int TapeStep(object optimizer)
+    {
+        for (var type = optimizer.GetType(); type is not null; type = type.BaseType)
+        {
+            var field = type.GetField("_tapeStep",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (field?.GetValue(optimizer) is int step) return step;
+        }
+        throw new InvalidOperationException($"{optimizer.GetType().Name} has no _tapeStep field");
     }
 
     private static int IndexOf(byte[] haystack, byte[] needle)
