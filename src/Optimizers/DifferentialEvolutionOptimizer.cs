@@ -305,7 +305,7 @@ public partial class DifferentialEvolutionOptimizer<T, TInput, TOutput> : Optimi
     public Vector<T> Minimize(
         Vector<T> initialParameters, Func<Vector<T>, T> objective, int maxIterations, T tolerance)
     {
-        ValidateMinimizeArguments(initialParameters, objective, maxIterations);
+        ValidateMinimizeArguments(initialParameters, objective, maxIterations, tolerance);
 
         var search = new DerivativeFreeSearch(objective, NumOps, initialParameters);
         var random = CreateSearchRandom();

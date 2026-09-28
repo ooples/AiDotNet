@@ -2977,12 +2977,17 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <param name="initialParameters">The starting point.</param>
     /// <param name="objective">The function to minimize.</param>
     /// <param name="maxIterations">The iteration budget.</param>
+    /// <param name="tolerance">The convergence threshold each method stops on.</param>
     /// <exception cref="ArgumentNullException">When either reference argument is null.</exception>
     /// <exception cref="ArgumentException">
-    /// When the starting point is empty or the budget is not positive.
+    /// When the starting point is empty, the budget is not positive, or the tolerance is negative or not finite.
     /// </exception>
+    /// <remarks>
+    /// A NaN tolerance compares false against everything, so it silently disables the stopping test (differential
+    /// evolution never stops on spread) or the search itself (simulated annealing's temperature floor).
+    /// </remarks>
     protected static void ValidateMinimizeArguments(
-        Vector<T> initialParameters, Func<Vector<T>, T> objective, int maxIterations)
+        Vector<T> initialParameters, Func<Vector<T>, T> objective, int maxIterations, T tolerance)
     {
         Guard.NotNull(initialParameters);
         Guard.NotNull(objective);
@@ -2999,6 +3004,14 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
             throw new ArgumentException(
                 $"Maximum iterations must be positive, got {maxIterations}.",
                 nameof(maxIterations));
+        }
+
+        double toleranceValue = Convert.ToDouble(tolerance);
+        if (double.IsNaN(toleranceValue) || double.IsInfinity(toleranceValue) || toleranceValue < 0.0)
+        {
+            throw new ArgumentException(
+                $"Tolerance must be a finite, non-negative number, got {toleranceValue}.",
+                nameof(tolerance));
         }
     }
 

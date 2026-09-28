@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 using AiDotNet.Helpers;
 using AiDotNet.Extensions;
 using Newtonsoft.Json;
@@ -528,7 +528,7 @@ public partial class CMAESOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInpu
     public Vector<T> Minimize(
         Vector<T> initialParameters, Func<Vector<T>, T> objective, int maxIterations, T tolerance)
     {
-        ValidateMinimizeArguments(initialParameters, objective, maxIterations);
+        ValidateMinimizeArguments(initialParameters, objective, maxIterations, tolerance);
 
         var search = new DerivativeFreeSearch(objective, NumOps, initialParameters);
         var random = CreateSearchRandom();
