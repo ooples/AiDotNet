@@ -945,8 +945,8 @@ public partial class S4<T> : ForecastingModelBase<T>
             {
                 for (int j = 0; j < n; j++)
                 {
-                    double sqrtI = Math.Sqrt(2 * i + 1);
-                    double sqrtJ = Math.Sqrt(2 * j + 1);
+                    double sqrtI = Math.Sqrt(2.0 * i + 1);
+                    double sqrtJ = Math.Sqrt(2.0 * j + 1);
 
                     if (i > j)
                     {
@@ -970,8 +970,8 @@ public partial class S4<T> : ForecastingModelBase<T>
             {
                 for (int j = 0; j < n; j++)
                 {
-                    double sqrtI = Math.Sqrt(2 * i + 1);
-                    double sqrtJ = Math.Sqrt(2 * j + 1);
+                    double sqrtI = Math.Sqrt(2.0 * i + 1);
+                    double sqrtJ = Math.Sqrt(2.0 * j + 1);
 
                     if (i >= j)
                     {

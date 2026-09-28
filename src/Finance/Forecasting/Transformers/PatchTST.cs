@@ -1275,7 +1275,7 @@ public partial class PatchTST<T> : ForecastingModelBase<T>
         {
             for (int i = 0; i < modelDim; i++)
             {
-                double angle = pos / Math.Pow(10000, (2.0 * (i / 2)) / modelDim);
+                double angle = pos / Math.Pow(10000, (double)(i - i % 2) / modelDim);  // even/odd dimensions share a frequency
                 double value = (i % 2 == 0) ? Math.Sin(angle) : Math.Cos(angle);
                 pe[pos * modelDim + i] = NumOps.FromDouble(value);
             }
