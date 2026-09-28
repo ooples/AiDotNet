@@ -403,6 +403,17 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             case null:
             case LearningRateSchedulers.ConstantLRScheduler:
                 return true;
+        }
+
+        // The compiled plan evaluates its schedule once per optimizer step, which is StepPerBatch. The other modes
+        // advance the scheduler at epoch boundaries (StepPerEpoch, the default) or switch cadence after warmup
+        // (WarmupThenEpoch), which a per-step schedule cannot express. Mapping them anyway made the fused path
+        // follow a different learning-rate trajectory from the eager path and from the configuration, so decline.
+        if (_schedulerStepMode != SchedulerStepMode.StepPerBatch)
+            return false;
+
+        switch (_learningRateScheduler)
+        {
             case LearningRateSchedulers.CosineAnnealingLRScheduler cosine:
                 // Denominator reconciliation: eager CosineAnnealing uses
                 // cos(π·(N-1)/tMax) on batch N, but the fused CosineLr uses
