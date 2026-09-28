@@ -12970,53 +12970,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
-    /// Legacy out-parameter shape, retained so the existing fused call sites keep compiling while they
-    /// migrate to the config-returning overload above. New code should use that one.
-    /// </summary>
-    internal static bool TryMapToFusedOptimizerConfig(
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
-        out AiDotNet.Tensors.Engines.Compilation.OptimizerType optimizerType,
-        out float learningRate,
-        out float beta1,
-        out float beta2,
-        out float epsilon,
-        out float weightDecay,
-        out AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule,
-        out bool useBf16Moments)
-    {
-        // Delegates to the config-returning overload rather than repeating the dispatch check. Two copies
-        // of one rule drift the moment a future edit touches only one of them, and this overload exists
-        // solely to unpack what that one already decided.
-        optimizerType = default;
-        learningRate = 0f;
-        beta1 = 0f;
-        beta2 = 0f;
-        epsilon = 0f;
-        weightDecay = 0f;
-        lrSchedule = null;
-        useBf16Moments = false;
-
-        if (!TryMapToFusedOptimizerConfig(optimizer, out var cfg))
-            return false;
-        // This shape cannot carry Extras (Nesterov, decoupled AMSGrad decay, LARS/FTRL constants) and its
-        // callers discard the LR schedule, so handing them such a config would run a different optimizer - a
-        // constant LR instead of the schedule, classical instead of Nesterov momentum, L2 instead of AdamW
-        // decay. Decline: those callers then take the eager path, which honours all of it.
-        if (cfg.Extras is not null || cfg.Schedule is not null)
-            return false;
-
-        optimizerType = cfg.Type;
-        learningRate = cfg.LearningRate;
-        beta1 = cfg.Beta1;
-        beta2 = cfg.Beta2;
-        epsilon = cfg.Epsilon;
-        weightDecay = cfg.WeightDecay;
-        lrSchedule = cfg.Schedule;
-        useBf16Moments = cfg.UseBf16Moments;
-        return true;
-    }
-
-    /// <summary>
     /// Performs tape-based training with a caller-provided loss function.
     /// Use this for RL agents and other scenarios where the loss is not a standard
     /// predicted-vs-target comparison (e.g., PPO's clipped surrogate objective).

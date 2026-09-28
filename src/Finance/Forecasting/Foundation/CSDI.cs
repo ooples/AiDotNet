@@ -69,6 +69,21 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
                 Source = "Tashiro et al. 2021, hyperparameters: Adam at learning rate 0.001 decayed to 0.0001 and 0.00001 at 75% and 90% of the total epochs, batch size 16, 200 epochs. The decay points are kept as the fractions the paper states rather than transcribed into the step numbers of a 200-epoch run, which would be wrong at any other length.")]
 public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
 {
+    // Held across Train calls. The fused plan owns the optimizer state, so a step object built per call
+    // re-traced and recompiled every call and restarted the optimizer at t = 1 (Adam ~ lr*sign(g)).
+    private AiDotNet.Training.MultiSlotFusedStep<T>? _fusedMultiSlotStep;
+
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _fusedMultiSlotStep?.Dispose();
+            _fusedMultiSlotStep = null;
+        }
+        base.Dispose(disposing);
+    }
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -297,23 +312,22 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
 
         var loss = LossFunction;
 
-        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
+        var trainableParams = CollectModelTrainableTensors();
 
         // Preferred fused path: MultiSlotFusedStep with the sampled (noise,
         // xt-scale, sinT) tuple passed as persistent slots. Refreshes per step
         // by host-sampling a fresh (t, ε) pair and copying values into the
         // slot tensors — the compiled forward reads the CURRENT slot data on
         // every replay. See ooples/AiDotNet#1846.
-        if (trainableParams.Length > 0
+        if (trainableParams.Count > 0
             && NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
                 _optimizer,
-                out var mfsOptType, out var mfsLr, out var mfsB1, out var mfsB2,
-                out var mfsEps, out var mfsWd, out _, out _))
+                out var mfsCfg))
         {
             var slots = BuildCsdiSlots(input, target);
             if (slots is not null)
             {
-                using var multiSlotStep = new AiDotNet.Training.MultiSlotFusedStep<T>();
+                var multiSlotStep = _fusedMultiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>();
                 Tensor<T> ForwardFromSlots(IReadOnlyList<Tensor<T>> s) => DenoiserForwardFromSlots(s);
                 Tensor<T> ComputeLossFromSlots(Tensor<T> pred, IReadOnlyList<Tensor<T>> s)
                 {
@@ -322,17 +336,19 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
                     return loss.ComputeTapeLoss(pred, s[1]);
                 }
                 if (multiSlotStep.TryStep(
-                        parameters: trainableParams,
+                        parameterProvider: CollectModelTrainableTensors,
                         zeroGradAction: null,
                         freshSlotData: slots,
                         forward: ForwardFromSlots,
                         computeLoss: ComputeLossFromSlots,
-                        optimizerType: mfsOptType,
-                        learningRate: mfsLr,
-                        beta1: mfsB1,
-                        beta2: mfsB2,
-                        epsilon: mfsEps,
-                        weightDecay: mfsWd,
+                        optimizerType: mfsCfg.Type,
+                        learningRate: mfsCfg.LearningRate,
+                        beta1: mfsCfg.Beta1,
+                        beta2: mfsCfg.Beta2,
+                        epsilon: mfsCfg.Epsilon,
+                        weightDecay: mfsCfg.WeightDecay,
+                        lrSchedule: mfsCfg.Schedule,
+                        extras: mfsCfg.Extras,
                         out T fusedLoss))
                 {
                     LastLoss = fusedLoss;

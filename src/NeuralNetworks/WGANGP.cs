@@ -72,6 +72,21 @@ namespace AiDotNet.NeuralNetworks;
                         + "pair accompanies this rate is not stated.")]
 public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
 {
+    // Held across Train calls. The fused plan owns the optimizer state, so a step object built per call
+    // re-traced and recompiled every call and restarted the optimizer at t = 1 (Adam ~ lr*sign(g)).
+    private AiDotNet.Training.WganGpFusedStep<T>? _wganFusedStep;
+
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _wganFusedStep?.Dispose();
+            _wganFusedStep = null;
+        }
+        base.Dispose(disposing);
+    }
+
 
     // ParameterCount was Generator.GetParameterCount() + Critic.GetParameterCount(), which the
     // base already computes: this model puts BOTH sub-networks' layers in its own Layers, so the
@@ -513,11 +528,9 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
         if (criticDiscParams.Count > 0
             && TryMapToFusedOptimizerConfig(
                 _criticOptimizer,
-                out var wganOptType, out var wganLr, out var wganB1,
-                out var wganB2, out var wganEps, out var wganWd,
-                out _, out _))
+                out var wganCfg))
         {
-            using var wganStep = new AiDotNet.Training.WganGpFusedStep<T>();
+            var wganStep = _wganFusedStep ??= new AiDotNet.Training.WganGpFusedStep<T>();
             Tensor<T> DiscFwd(Tensor<T> inp)
             {
                 Tensor<T> current = inp;
@@ -534,12 +547,14 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
                     discForward: DiscFwd,
                     epsilonSampler: EpsilonSampler,
                     gradientPenaltyWeight: _gradientPenaltyCoefficient,
-                    optimizerType: wganOptType,
-                    learningRate: wganLr,
-                    beta1: wganB1,
-                    beta2: wganB2,
-                    epsilon: wganEps,
-                    weightDecay: wganWd,
+                    optimizerType: wganCfg.Type,
+                    learningRate: wganCfg.LearningRate,
+                    beta1: wganCfg.Beta1,
+                    beta2: wganCfg.Beta2,
+                    epsilon: wganCfg.Epsilon,
+                    weightDecay: wganCfg.WeightDecay,
+                    lrSchedule: wganCfg.Schedule,
+                    extras: wganCfg.Extras,
                     out T fusedLoss))
             {
                 return (fusedLoss, NumOps.Zero);

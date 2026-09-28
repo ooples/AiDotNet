@@ -77,6 +77,21 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     Authors = "Noseong Park, Mahmoud Mohammadi, Kshitij Gorde, Sushil Jajodia, Hongkyu Park, Youngmin Kim")]
 public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, ISyntheticTabularGenerator<T>
 {
+    // Held across Train calls. The fused plan owns the optimizer state, so a step object built per call
+    // re-traced and recompiled every call and restarted the optimizer at t = 1 (Adam ~ lr*sign(g)).
+    private AiDotNet.Training.WganGpFusedStep<T>? _wganFusedStep;
+
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _wganFusedStep?.Dispose();
+            _wganFusedStep = null;
+        }
+        base.Dispose(disposing);
+    }
+
     private readonly TableGANOptions<T> _options;
     // Separate G/D optimizers (see CTGANGenerator for the divergence rationale).
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _generatorOptimizer;
@@ -444,11 +459,9 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
         if (discParams.Count > 0
             && NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
                 _discriminatorOptimizer,
-                out var wganOptType, out var wganLr, out var wganB1,
-                out var wganB2, out var wganEps, out var wganWd,
-                out _, out _))
+                out var wganCfg))
         {
-            using var wganStep = new AiDotNet.Training.WganGpFusedStep<T>();
+            var wganStep = _wganFusedStep ??= new AiDotNet.Training.WganGpFusedStep<T>();
             Tensor<T> DiscFwd(Tensor<T> inp) => DiscriminatorForwardBatched(inp, isTraining: true);
             Tensor<T> EpsilonSampler(int bs) =>
                 Engine.TensorRandomUniformRange<T>(new[] { bs, 1 }, NumOps.Zero, NumOps.One);
@@ -459,12 +472,14 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
                     discForward: DiscFwd,
                     epsilonSampler: EpsilonSampler,
                     gradientPenaltyWeight: _options.GradientPenaltyWeight,
-                    optimizerType: wganOptType,
-                    learningRate: wganLr,
-                    beta1: wganB1,
-                    beta2: wganB2,
-                    epsilon: wganEps,
-                    weightDecay: wganWd,
+                    optimizerType: wganCfg.Type,
+                    learningRate: wganCfg.LearningRate,
+                    beta1: wganCfg.Beta1,
+                    beta2: wganCfg.Beta2,
+                    epsilon: wganCfg.Epsilon,
+                    weightDecay: wganCfg.WeightDecay,
+                    lrSchedule: wganCfg.Schedule,
+                    extras: wganCfg.Extras,
                     out T _))
             {
                 return;

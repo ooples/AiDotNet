@@ -43,6 +43,10 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     AiDotNet.Interfaces.ISelfSupervisedModel, AiDotNet.Models.Parameters.IParameterManifestProvider,
     AiDotNet.Models.Parameters.IParameterSurfaceLifecycle
 {
+    // Held across Train calls. The fused plan owns the optimizer state, so a step object built per call
+    // re-traced and recompiled every call and restarted the optimizer at t = 1 (Adam ~ lr*sign(g)).
+    private AiDotNet.Training.MultiSlotFusedStep<T>? _fusedMultiSlotStep;
+
     // --- declared state (ModelStateRegistry) ---
     // Identical in every model base because these bases are siblings over the same interfaces rather
     // than one hierarchy; the logic itself lives once in ModelStateRegistry/ModelStateEnvelope.
@@ -1421,8 +1425,7 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
             && trainingOptimizerForFused is not null
             && NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
                 trainingOptimizerForFused,
-                out var mfsOptType, out var mfsLr, out var mfsB1, out var mfsB2,
-                out var mfsEps, out var mfsWd, out _, out _))
+                out var mfsCfg))
         {
             var trainableForFused = CollectTrainableParameters();
             var noiseSlotT = new Tensor<T>(noisySampleTensor._shape, noiseVector);
@@ -1431,7 +1434,7 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
                 noisySampleTensor,
                 noiseSlotT,
             };
-            using var multiSlotStep = new AiDotNet.Training.MultiSlotFusedStep<T>();
+            var multiSlotStep = _fusedMultiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>();
             var timestepsSnapshot = timesteps;
             var isBatchedSnapshot = isBatched;
             Tensor<T> ForwardFromSlots(IReadOnlyList<Tensor<T>> s)
@@ -1448,17 +1451,19 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
             }
             if (trainableForFused.Length > 0
                 && multiSlotStep.TryStep(
-                    parameters: trainableForFused,
+                    parameterProvider: () => CollectTrainableParameters(),
                     zeroGradAction: null,
                     freshSlotData: slots,
                     forward: ForwardFromSlots,
                     computeLoss: ComputeLossFromSlots,
-                    optimizerType: mfsOptType,
-                    learningRate: mfsLr,
-                    beta1: mfsB1,
-                    beta2: mfsB2,
-                    epsilon: mfsEps,
-                    weightDecay: mfsWd,
+                    optimizerType: mfsCfg.Type,
+                    learningRate: mfsCfg.LearningRate,
+                    beta1: mfsCfg.Beta1,
+                    beta2: mfsCfg.Beta2,
+                    epsilon: mfsCfg.Epsilon,
+                    weightDecay: mfsCfg.WeightDecay,
+                    lrSchedule: mfsCfg.Schedule,
+                    extras: mfsCfg.Extras,
                     out T _))
             {
                 // The fused optimizer owns its internal gradient buffers and deliberately
@@ -2526,6 +2531,8 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     {
         if (_disposed || !disposing) return;
         _disposed = true;
+        _fusedMultiSlotStep?.Dispose();
+        _fusedMultiSlotStep = null;
 
         // Always dispose the scheduler we own — schedulers may hold buffers
         // (precomputed alpha/beta arrays, native handles for accelerated
