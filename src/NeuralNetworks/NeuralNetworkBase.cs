@@ -13586,6 +13586,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     internal virtual void SetBaseTrainOptimizer(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
     {
+        if (!ReferenceEquals(_baseTrainOptimizer, optimizer))
+        {
+            // The fused plan holds the PREVIOUS optimizer's moments. A different optimizer instance starts from its
+            // own (fresh) state, as it would eagerly, so this model's compiled optimizer state is dropped rather than
+            // treated as hyperparameter drift on a committed plan, which refuses the next step.
+            Training.CompiledTapeTrainingStep<T>.Invalidate(this);
+            _fusedTrainingCommitted = false;
+            _fusedPersistenceVerified = false;
+        }
         _baseTrainOptimizer = optimizer;
         _baseTrainOptimizerExplicitlyConfigured = optimizer is not null;
         _baseTrainOptimizerLearningRate = null;
