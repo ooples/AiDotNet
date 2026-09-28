@@ -155,4 +155,22 @@ public class Adam8BitOptimizerOptions<T, TInput, TOutput> : AdamOptimizerOptions
     /// </para>
     /// </remarks>
     public bool UseBFloat16MomentStorage { get; set; } = false;
+
+    /// <summary>
+    /// Parameters with fewer elements than this keep full-precision Adam moments instead of 8-bit ones.
+    /// Default: 4096.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is bitsandbytes' <c>min_8bit_size</c>, the reference implementation of Dettmers et al., "8-bit
+    /// Optimizers via Block-wise Quantization" (ICLR 2022). Small tensors (biases, normalization scales) add almost
+    /// nothing to optimizer memory but are where one block's quantization error touches every element, so they stay
+    /// full precision. The rule applies to each parameter tensor in the tape training step and to the whole
+    /// parameter vector in the flat-vector path. Set to 0 to quantize every parameter.
+    /// </para>
+    /// <para><b>For Beginners:</b> Only big weight tensors are compressed; tiny ones are kept exact because
+    /// compressing them saves nearly no memory.
+    /// </para>
+    /// </remarks>
+    public int Min8BitSize { get; set; } = 4096;
 }

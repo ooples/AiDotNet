@@ -200,7 +200,9 @@ public class TapeOptimizerSerializationTests
         yield return new object[] { "Adam", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new AdamOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>> { UseAMSGrad = false }))) };
         yield return new object[] { "AdamAMSGrad", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new AdamOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>> { UseAMSGrad = true }))) };
         yield return new object[] { "AdamW", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new AdamWOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>> { WeightDecay = 0.0 }))) };
-        yield return new object[] { "Adam8Bit", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new Adam8BitOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new Adam8BitOptimizerOptions<double, Tensor<double>, Tensor<double>> { BlockSize = 2, CompressBothMoments = true, QuantizationPercentile = 100.0, UseStochasticRounding = false, UseBFloat16MomentStorage = false }))) };
+        yield return new object[] { "Adam8Bit", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new Adam8BitOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new Adam8BitOptimizerOptions<double, Tensor<double>, Tensor<double>> { Min8BitSize = 0, BlockSize = 2, CompressBothMoments = true, QuantizationPercentile = 100.0, UseStochasticRounding = false, UseBFloat16MomentStorage = false }))) };
+        // Default Min8BitSize: these small parameters take the full-precision moment layout.
+        yield return new object[] { "Adam8BitBelowMin8BitSize", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new Adam8BitOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new Adam8BitOptimizerOptions<double, Tensor<double>, Tensor<double>> { BlockSize = 2, CompressBothMoments = true }))) };
         yield return new object[] { "AMSGrad", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new AMSGradOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new AMSGradOptimizerOptions<double, Tensor<double>, Tensor<double>>()))) };
         yield return new object[] { "AdaMax", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new AdaMaxOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new AdaMaxOptimizerOptions<double, Tensor<double>, Tensor<double>>()))) };
         yield return new object[] { "AdaDelta", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new AdaDeltaOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new AdaDeltaOptimizerOptions<double, Tensor<double>, Tensor<double>>()))) };
@@ -402,35 +404,6 @@ public class TapeOptimizerSerializationTests
         throw new InvalidOperationException("optimizer has no _pendingTapeTensorStates field");
     }
     [Fact]
-    public void Adam8BitDeserialize_Version2Payload_IsRejectedNotMisread()
-    {
-        // Version 2 stored LINEAR moment bytes; this build reads codebook indices. Decoding a v2 payload would resume
-        // training with silently wrong moments, so it must be refused with a message that says why.
-        var optimizer = CreateAdam8BitOptimizer();
-        var parameters = CreateParameters();
-        Step(optimizer, parameters, CreateFirstGradients(parameters));
-        // The payload must carry real moment state, or the rejection below would only prove the header check.
-        var tapeStates = (System.Collections.ICollection)typeof(Adam8BitOptimizer<double, Tensor<double>, Tensor<double>>)
-            .GetField("_tapeStates", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-            ?.GetValue(optimizer) ?? throw new InvalidOperationException("Adam8BitOptimizer has no _tapeStates field");
-        Assert.Equal(parameters.Length, tapeStates.Count);
-        byte[] payload = optimizer.Serialize();
-
-        // The format version is the int right after the 'A8B1' magic (0x31423841, little-endian).
-        byte[] magic = BitConverter.GetBytes(0x31423841);
-        int at = -1;
-        for (int i = 0; i + 8 <= payload.Length && at < 0; i++)
-            if (payload[i] == magic[0] && payload[i + 1] == magic[1] && payload[i + 2] == magic[2] && payload[i + 3] == magic[3])
-                at = i + 4;
-        Assert.True(at >= 0, "no v2+ magic header in the serialized payload");
-        Assert.Equal(3, BitConverter.ToInt32(payload, at));
-        BitConverter.GetBytes(2).CopyTo(payload, at);
-
-        var exception = Assert.Throws<InvalidOperationException>(() => CreateAdam8BitOptimizer().Deserialize(payload));
-        Assert.Contains("version 2", exception.Message);
-        Assert.Contains("LINEAR", exception.Message);
-    }
-    [Fact]
     public void Adam8BitDeserialize_TruncatedTapeStatePayload_ThrowsInvalidOperationException()
     {
         var optimizer = CreateAdam8BitOptimizer();
@@ -458,6 +431,7 @@ public class TapeOptimizerSerializationTests
             null,
             Common(new Adam8BitOptimizerOptions<double, Tensor<double>, Tensor<double>>
             {
+                Min8BitSize = 0,
                 BlockSize = 2,
                 CompressBothMoments = true,
                 QuantizationPercentile = 100.0,
@@ -477,7 +451,8 @@ public class TapeOptimizerSerializationTests
         stream.Position += baseDataLength;
 
         _ = reader.ReadString();
-        _ = reader.ReadInt32();
+        _ = reader.ReadInt32(); // magic
+        int versionOffset = checked((int)stream.Position);
         _ = reader.ReadInt32();
         _ = reader.ReadInt32();
         _ = reader.ReadInt32();
@@ -505,6 +480,9 @@ public class TapeOptimizerSerializationTests
         int tapeOffset = checked((int)stream.Position);
         var legacyPayload = new byte[tapeOffset];
         Array.Copy(serialized, legacyPayload, tapeOffset);
+        // Payloads that ended before the tape section were written by format version 2, which also had no
+        // full-precision (below Min8BitSize) section; label it as such so it is a genuine legacy payload.
+        BitConverter.GetBytes(2).CopyTo(legacyPayload, versionOffset);
         return legacyPayload;
     }
 
