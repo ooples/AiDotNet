@@ -86,12 +86,22 @@ public class FusedTrainableSetTests
         var prepared = type.GetMethod("PreprocessData", flags)!
             .Invoke(generator, new[] { data, type.GetField("_columns", flags)!.GetValue(generator) })!;
         generator.SetTrainingMode(true);
+        long fusedStepsBefore = FusedOptimizerStepCount(generator);
         type.GetMethod("TrainBatch", flags)!.Invoke(generator, new object[]
         {
             prepared.GetType().GetField("Item1")!.GetValue(prepared)!,
             prepared.GetType().GetField("Item2")!.GetValue(prepared)!,
             0, 60, 0.001f,
         });
+
+        if (fused)
+        {
+            // The weight checks below pass for an eager fallback too, so first prove THIS call ran the fused plan.
+            long fusedStepsAfter = FusedOptimizerStepCount(generator);
+            Assert.True(fusedStepsAfter > fusedStepsBefore,
+                $"TrainBatch did not advance the retained fused plan (optimizer step {fusedStepsBefore} -> {fusedStepsAfter}); "
+                + "it fell back to the eager step, so the fused trainable set was not exercised.");
+        }
 
         for (int i = 0; i < layers.Length; i++)
         {
@@ -100,5 +110,15 @@ public class FusedTrainableSetTests
             _out.WriteLine($"[{(fused ? "fused" : "eager")}] {layers[i].name}: max change {change:G4}");
             Assert.True(change > 0, $"{(fused ? "fused" : "eager")} step left {layers[i].name} untrained");
         }
+    }
+
+    /// <summary>The retained fused plan's optimizer step count, or -1 when no fused step or plan exists.</summary>
+    private static long FusedOptimizerStepCount(TabDDPMGenerator<float> generator)
+    {
+        var flags = BindingFlags.NonPublic | BindingFlags.Instance;
+        var step = typeof(TabDDPMGenerator<float>).GetField("_fusedMultiSlotStep", flags)?.GetValue(generator);
+        var plan = step?.GetType().GetField("_plan", flags)?.GetValue(step);
+        var counter = plan?.GetType().GetField("_optimizerStep", flags)?.GetValue(plan);
+        return counter is null ? -1 : Convert.ToInt64(counter);
     }
 }

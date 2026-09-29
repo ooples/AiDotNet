@@ -63,7 +63,9 @@ public class FusedStepPersistenceTests
             var step = typeof(TabDDPMGenerator<float>)
                 .GetField("_fusedMultiSlotStep", BindingFlags.NonPublic | BindingFlags.Instance)!
                 .GetValue(generator);
-            Skip.If(step is null, "The fused path did not engage on this engine (eager fallback).");
+            // On a GPU engine with compilation on, the fused path must engage; an eager fallback is the regression
+            // this test exists to catch, not a reason to skip it.
+            Assert.NotNull(step);
             var plan = step!.GetType().GetField("_plan", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(step);
             Assert.NotNull(plan);
             int optimizerStep = (int)plan!.GetType()

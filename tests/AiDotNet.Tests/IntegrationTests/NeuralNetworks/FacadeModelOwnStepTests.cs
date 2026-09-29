@@ -102,6 +102,8 @@ public class FacadeModelOwnStepTests
     [Fact(Timeout = 300000)]
     public async Task The_model_step_trains_to_the_same_parameters_as_the_flat_path()
     {
+        // Yield first so the xUnit timeout covers the synchronous training work below.
+        await Task.Yield();
         var previousEngine = AiDotNetEngine.Current;
         try
         {
