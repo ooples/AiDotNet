@@ -50,12 +50,12 @@ internal sealed class LoadedAssembly
     {
         PEReader? pe = null;
         MetadataReaderProvider? provider = null;
+        LoadedAssembly? loaded = null;
         try
         {
             pe = new PEReader(File.OpenRead(dll));
             if (!pe.HasMetadata)
             {
-                pe.Dispose();
                 return null;
             }
 
@@ -65,20 +65,26 @@ internal sealed class LoadedAssembly
             bool ours = reader.Documents.Any(d => RepoRelative(reader.GetString(reader.GetDocument(d).Name), root) is not null);
             if (!ours)
             {
-                provider.Dispose();
-                pe.Dispose();
                 return null;
             }
 
             var name = pe.GetMetadataReader().GetString(pe.GetMetadataReader().GetAssemblyDefinition().Name);
-            return new LoadedAssembly(name, pe, provider, repoRoot);
+            loaded = new LoadedAssembly(name, pe, provider, repoRoot);
+            return loaded;
         }
         catch (BadImageFormatException)
         {
             // Native or Windows-PDB binaries in the output folder are not ours to map.
-            provider?.Dispose();
-            pe?.Dispose();
             return null;
+        }
+        finally
+        {
+            // Every exit that did not hand the readers to a LoadedAssembly, exceptions included.
+            if (loaded is null)
+            {
+                provider?.Dispose();
+                pe?.Dispose();
+            }
         }
     }
 
@@ -128,9 +134,8 @@ internal sealed class LoadedAssembly
 
         foreach (var typeHandle in Metadata.TypeDefinitions)
         {
-            foreach (var cdiHandle in Pdb.GetCustomDebugInformation(typeHandle))
+            foreach (var cdi in Pdb.GetCustomDebugInformation(typeHandle).Select(Pdb.GetCustomDebugInformation))
             {
-                var cdi = Pdb.GetCustomDebugInformation(cdiHandle);
                 if (Pdb.GetGuid(cdi.Kind) != TypeDefinitionDocuments)
                 {
                     continue;

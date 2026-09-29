@@ -154,9 +154,8 @@ internal sealed class AssemblyIndex
             return false;
         }
 
-        foreach (var fieldHandle in type.GetFields())
+        foreach (var attributes in type.GetFields().Select(f => md.GetFieldDefinition(f).Attributes))
         {
-            var attributes = md.GetFieldDefinition(fieldHandle).Attributes;
             if ((attributes & FieldAttributes.Literal) != 0 &&
                 (attributes & FieldAttributes.FieldAccessMask) != FieldAttributes.Private)
             {
@@ -185,9 +184,8 @@ internal sealed class AssemblyIndex
             AddGenericConstraints(md, type.GetGenericParameters(), provider);
             AddAttributes(md, type.GetCustomAttributes(), provider);
 
-            foreach (var fieldHandle in type.GetFields())
+            foreach (var field in type.GetFields().Select(md.GetFieldDefinition))
             {
-                var field = md.GetFieldDefinition(fieldHandle);
                 field.DecodeSignature(provider, null);
                 AddAttributes(md, field.GetCustomAttributes(), provider);
             }
@@ -197,9 +195,8 @@ internal sealed class AssemblyIndex
                 AddAttributes(md, md.GetPropertyDefinition(propertyHandle).GetCustomAttributes(), provider);
             }
 
-            foreach (var methodHandle in type.GetMethods())
+            foreach (var method in type.GetMethods().Select(md.GetMethodDefinition))
             {
-                var method = md.GetMethodDefinition(methodHandle);
                 method.DecodeSignature(provider, null);
                 AddGenericConstraints(md, method.GetGenericParameters(), provider);
                 AddAttributes(md, method.GetCustomAttributes(), provider);
@@ -240,9 +237,8 @@ internal sealed class AssemblyIndex
 
     private static void AddAttributes(MetadataReader md, CustomAttributeHandleCollection attributes, ReferenceCollector provider)
     {
-        foreach (var attributeHandle in attributes)
+        foreach (var attribute in attributes.Select(md.GetCustomAttribute))
         {
-            var attribute = md.GetCustomAttribute(attributeHandle);
             provider.AddHandle(attribute.Constructor);
             try
             {
@@ -452,9 +448,8 @@ internal sealed class AssemblyIndex
     private HashSet<string> Categories(LoadedAssembly asm, CustomAttributeHandleCollection attributes)
     {
         var result = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var attributeHandle in attributes)
+        foreach (var attribute in attributes.Select(asm.Metadata.GetCustomAttribute))
         {
-            var attribute = asm.Metadata.GetCustomAttribute(attributeHandle);
             var name = AttributeTypeName(asm, attribute);
             if (name?.Name != "TraitAttribute")
             {
