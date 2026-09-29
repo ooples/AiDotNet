@@ -34,7 +34,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task PointTransformerV3_Construction_Succeeds()
     {
-        var model = new PointTransformerV3<double>(Arch(), modelSize: PointTransformerV3ModelSize.Base);
+        var model = new PointTransformerV3<double>(Arch(), options: new PointTransformerV3Options { ModelSize = PointTransformerV3ModelSize.Base });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -42,7 +42,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task PointTransformerV3_Predict_ReturnsOutput()
     {
-        var model = new PointTransformerV3<double>(Arch(), modelSize: PointTransformerV3ModelSize.Base);
+        var model = new PointTransformerV3<double>(Arch(), options: new PointTransformerV3Options { ModelSize = PointTransformerV3ModelSize.Base });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -62,7 +62,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task Sonata_Construction_Succeeds()
     {
-        var model = new Sonata<double>(Arch(), modelSize: SonataModelSize.Base);
+        var model = new Sonata<double>(Arch(), options: new SonataOptions { ModelSize = SonataModelSize.Base });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -70,7 +70,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task Sonata_Predict_ReturnsOutput()
     {
-        var model = new Sonata<double>(Arch(), modelSize: SonataModelSize.Base);
+        var model = new Sonata<double>(Arch(), options: new SonataOptions { ModelSize = SonataModelSize.Base });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -90,7 +90,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task Concerto_Construction_Succeeds()
     {
-        var model = new Concerto<double>(Arch(), modelSize: ConcertoModelSize.Base);
+        var model = new Concerto<double>(Arch(), options: new ConcertoOptions { ModelSize = ConcertoModelSize.Base });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -98,7 +98,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task Concerto_Predict_ReturnsOutput()
     {
-        var model = new Concerto<double>(Arch(), modelSize: ConcertoModelSize.Base);
+        var model = new Concerto<double>(Arch(), options: new ConcertoOptions { ModelSize = ConcertoModelSize.Base });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -118,7 +118,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MedSAM_Construction_Succeeds()
     {
-        var model = new MedSAM<double>(Arch(), modelSize: MedSAMModelSize.ViTBase);
+        var model = new MedSAM<double>(Arch(), options: new MedSAMOptions { ModelSize = MedSAMModelSize.ViTBase });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -126,7 +126,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MedSAM_Predict_ReturnsOutput()
     {
-        var model = new MedSAM<double>(Arch(), modelSize: MedSAMModelSize.ViTBase);
+        var model = new MedSAM<double>(Arch(), options: new MedSAMOptions { ModelSize = MedSAMModelSize.ViTBase });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -135,7 +135,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MedSAM_Train_DoesNotThrow()
     {
-        var model = new MedSAM<double>(Arch(), modelSize: MedSAMModelSize.ViTBase);
+        var model = new MedSAM<double>(Arch(), options: new MedSAMOptions { ModelSize = MedSAMModelSize.ViTBase });
         var input = Rand(1, 3, 32, 32);
         var predicted = model.Predict(input);
         var expected = Rand(predicted.Shape.ToArray());
@@ -156,7 +156,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MedSAM2_Construction_Succeeds()
     {
-        var model = new MedSAM2<double>(Arch(), modelSize: MedSAM2ModelSize.Tiny);
+        var model = new MedSAM2<double>(Arch(), options: new MedSAM2Options { ModelSize = MedSAM2ModelSize.Tiny });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -164,7 +164,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MedSAM2_Predict_ReturnsOutput()
     {
-        var model = new MedSAM2<double>(Arch(), modelSize: MedSAM2ModelSize.Tiny);
+        var model = new MedSAM2<double>(Arch(), options: new MedSAM2Options { ModelSize = MedSAM2ModelSize.Tiny });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -184,7 +184,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MedNeXt_Construction_Succeeds()
     {
-        var model = new MedNeXt<double>(Arch(), modelSize: MedNeXtModelSize.Small);
+        var model = new MedNeXt<double>(Arch(), options: new MedNeXtOptions { ModelSize = MedNeXtModelSize.Small });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -192,7 +192,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MedNeXt_Predict_ReturnsOutput()
     {
-        var model = new MedNeXt<double>(Arch(), modelSize: MedNeXtModelSize.Small);
+        var model = new MedNeXt<double>(Arch(), options: new MedNeXtOptions { ModelSize = MedNeXtModelSize.Small });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -212,7 +212,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task NnUNet_Construction_Succeeds()
     {
-        var model = new NnUNet<double>(Arch(), modelSize: NnUNetModelSize.UNet2D);
+        var model = new NnUNet<double>(Arch(), options: new NnUNetOptions { ModelSize = NnUNetModelSize.UNet2D });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -220,7 +220,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task NnUNet_Predict_ReturnsOutput()
     {
-        var model = new NnUNet<double>(Arch(), modelSize: NnUNetModelSize.UNet2D);
+        var model = new NnUNet<double>(Arch(), options: new NnUNetOptions { ModelSize = NnUNetModelSize.UNet2D });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -240,7 +240,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SwinUNETR_Construction_Succeeds()
     {
-        var model = new SwinUNETR<double>(Arch(), modelSize: SwinUNETRModelSize.Tiny);
+        var model = new SwinUNETR<double>(Arch(), options: new SwinUNETROptions { ModelSize = SwinUNETRModelSize.Tiny });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -248,7 +248,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task SwinUNETR_Predict_ReturnsOutput()
     {
-        var model = new SwinUNETR<double>(Arch(), modelSize: SwinUNETRModelSize.Tiny);
+        var model = new SwinUNETR<double>(Arch(), options: new SwinUNETROptions { ModelSize = SwinUNETRModelSize.Tiny });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);
@@ -268,7 +268,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task TransUNet_Construction_Succeeds()
     {
-        var model = new TransUNet<double>(Arch(), modelSize: TransUNetModelSize.Base);
+        var model = new TransUNet<double>(Arch(), options: new TransUNetOptions { ModelSize = TransUNetModelSize.Base });
         Assert.NotNull(model);
         Assert.True(model.SupportsTraining);
     }
@@ -276,7 +276,7 @@ public class PointCloudMedicalSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task TransUNet_Predict_ReturnsOutput()
     {
-        var model = new TransUNet<double>(Arch(), modelSize: TransUNetModelSize.Base);
+        var model = new TransUNet<double>(Arch(), options: new TransUNetOptions { ModelSize = TransUNetModelSize.Base });
         var output = model.Predict(Rand(1, 3, 32, 32));
         Assert.NotNull(output);
         Assert.True(output.Length > 0);

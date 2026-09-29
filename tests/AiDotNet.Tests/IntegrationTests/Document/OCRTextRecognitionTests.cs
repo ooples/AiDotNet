@@ -77,7 +77,7 @@ public class OCRTextRecognitionTests
     public async Task ABINet_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        using var model = new ABINet<double>(arch, imageWidth: 128, imageHeight: 32);
+        using var model = new ABINet<double>(arch);
         Assert.NotNull(model);
     }
 
@@ -85,7 +85,7 @@ public class OCRTextRecognitionTests
     public async Task ABINet_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        using var model = new ABINet<double>(arch, imageWidth: 128, imageHeight: 32);
+        using var model = new ABINet<double>(arch);
         using var input = CreateSmallImage();
         using var output = model.Predict(input);
         Assert.NotNull(output);
@@ -97,7 +97,7 @@ public class OCRTextRecognitionTests
     public async Task ABINet_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        using var model = new ABINet<double>(arch, imageWidth: 128, imageHeight: 32);
+        using var model = new ABINet<double>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("ABINet", meta.Name);
     }
@@ -114,7 +114,7 @@ public class OCRTextRecognitionTests
         // array is built: if a later constructor throws, the array assignment never completes and a
         // finally-based cleanup would never run, leaking every model already constructed.
         using var svtr = new SVTR<double>(CreateArchitecture());
-        using var abiNet = new ABINet<double>(CreateArchitecture(), imageWidth: 128, imageHeight: 32);
+        using var abiNet = new ABINet<double>(CreateArchitecture());
 
         var models = new DocumentNeuralNetworkBase<double>[] { svtr, abiNet };
 

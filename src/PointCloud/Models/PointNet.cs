@@ -52,10 +52,7 @@ namespace AiDotNet.PointCloud.Models;
 /// <example>
 /// <code>
 /// // Create a PointNet model for 3D object classification with 40 classes
-/// var pointNet = new PointNet&lt;float&gt;(
-///     numClasses: 40,
-///     useInputTransform: true,
-///     useFeatureTransform: true);
+/// var pointNet = new PointNet&lt;float&gt;(new AiDotNet.Models.Options.PointNetOptions { NumClasses = 40, UseInputTransform = true, UseFeatureTransform = true });
 /// // Process a point cloud (1024 points, 3 coordinates each)
 /// var pointCloud = new Tensor&lt;float&gt;(new[] { 1, 1024, 3 });
 /// Vector&lt;float&gt; classProbabilities = pointNet.ClassifyPointCloud(pointCloud);
@@ -169,22 +166,16 @@ public partial class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
     /// Initializes a new instance of the PointNet class.
     /// </summary>
     /// <param name="numClasses">Number of output classes for classification.</param>
-    /// <param name="useInputTransform">Whether to use input transformation network (T-Net).</param>
-    /// <param name="useFeatureTransform">Whether to use feature transformation network.</param>
     /// <param name="lossFunction">Optional loss function for training.</param>
     /// <remarks>
     /// <b>For Beginners:</b> Creates a PointNet model for point cloud classification.
     /// </remarks>
     public PointNet(
         int numClasses,
-        bool useInputTransform = true,
-        bool useFeatureTransform = true,
         ILossFunction<T>? lossFunction = null)
         : this(new PointNetOptions
         {
-            NumClasses = numClasses,
-            UseInputTransform = useInputTransform,
-            UseFeatureTransform = useFeatureTransform
+            NumClasses = numClasses
         },
             lossFunction)
     {

@@ -34,18 +34,17 @@ public class SigLIPTextConditioner<T> : TextConditioningBase<T>
 
     public override bool ProducesPooledOutput => true;
 
-    public SigLIPTextConditioner(
-        ITokenizer tokenizer,
-        SigLIPVariant variant = SigLIPVariant.Base,
-        NeuralNetworkArchitecture<T>? architecture = null)
+    public SigLIPTextConditioner(ITokenizer tokenizer,
+        NeuralNetworkArchitecture<T>? architecture = null,
+        SigLIPTextConditionerOptions? options = null)
         : base(
-            architecture: architecture ?? BuildDefaultArchitecture(variant),
+            architecture: architecture ?? BuildDefaultArchitecture((options ??= new SigLIPTextConditionerOptions()).Variant),
             tokenizer: tokenizer,
             maxSequenceLength: 64,
-            embeddingDimension: GetEmbeddingDim(variant))
+            embeddingDimension: GetEmbeddingDim((options ??= new SigLIPTextConditionerOptions()).Variant))
     {
         Guard.NotNull(tokenizer);
-        _variant = variant;
+        _variant = options.Variant;
     }
 
     /// <summary>
@@ -59,7 +58,7 @@ public class SigLIPTextConditioner<T> : TextConditioningBase<T>
         string? cacheDir = null)
     {
         var tokenizer = AutoTokenizer.FromPretrained(huggingFaceModelName, cacheDir);
-        return new SigLIPTextConditioner<T>(tokenizer, variant);
+        return new SigLIPTextConditioner<T>(tokenizer, options: new SigLIPTextConditionerOptions { Variant = variant });
     }
 
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers() =>

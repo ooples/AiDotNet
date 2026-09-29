@@ -279,11 +279,8 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// <param name="options">Optional InfoGAN options.</param>
     public InfoGAN(
         NeuralNetworkArchitecture<T> architecture,
-        int latentCodeSize = 10,
-        double mutualInfoCoefficient = 1.0,
         InfoGANOptions? options = null)
-        : this(architecture, architecture, architecture, latentCodeSize, architecture.InputType,
-               mutualInfoCoefficient: mutualInfoCoefficient, options: options)
+        : this(architecture, architecture, architecture, options?.LatentCodeSize ?? 10, architecture.InputType, options: options)
     {
     }
 
@@ -338,16 +335,16 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
         NeuralNetworkArchitecture<T> qNetworkArchitecture,
         int latentCodeSize,
         InputType inputType,
+        InfoGANOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? generatorOptimizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? discriminatorOptimizer = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? qNetworkOptimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double mutualInfoCoefficient = 1.0,
-        InfoGANOptions? options = null)
+        ILossFunction<T>? lossFunction = null)
         : base(CreateInfoGANArchitecture(generatorArchitecture, discriminatorArchitecture, inputType),
                lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
     {
         _options = options ?? new InfoGANOptions();
+        _options.Validate();
         Options = _options;
         if (generatorArchitecture is null)
             throw new ArgumentNullException(nameof(generatorArchitecture));
@@ -357,11 +354,11 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
             throw new ArgumentNullException(nameof(qNetworkArchitecture));
         if (latentCodeSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(latentCodeSize), latentCodeSize, "Latent code size must be positive.");
-        if (mutualInfoCoefficient < 0)
-            throw new ArgumentOutOfRangeException(nameof(mutualInfoCoefficient), mutualInfoCoefficient, "Mutual information coefficient must be non-negative.");
+        if (_options.MutualInfoCoefficient < 0)
+            throw new ArgumentOutOfRangeException(nameof(_options.MutualInfoCoefficient), _options.MutualInfoCoefficient, "Mutual information coefficient must be non-negative.");
 
         _latentCodeSize = latentCodeSize;
-        _mutualInfoCoefficient = NumOps.FromDouble(mutualInfoCoefficient);
+        _mutualInfoCoefficient = NumOps.FromDouble(_options.MutualInfoCoefficient);
 
         Generator = CreateBackboneForArchitecture(generatorArchitecture);
         Discriminator = CreateBackboneForArchitecture(discriminatorArchitecture);

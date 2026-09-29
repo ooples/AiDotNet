@@ -124,16 +124,6 @@ public class MTGNNOptions<T> : TimeSeriesRegressionOptions<T>
     /// </remarks>
     public int NumNodes { get; set; } = 207;
 
-    /// <summary>
-    /// Gets or sets the number of features per node per time step.
-    /// </summary>
-    /// <value>The number of features, defaulting to 1.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How many measurements at each node per time step.
-    /// Often 1 (single time series), but can be more for multivariate nodes.
-    /// </para>
-    /// </remarks>
-    public int NumFeatures { get; set; } = 1;
 
     /// <summary>
     /// Gets or sets the hidden dimension for the model.

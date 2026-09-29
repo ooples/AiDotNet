@@ -5,22 +5,29 @@ name: Docs Wiki (generate + gate)
 # website docs + wiki against the real AiDotNet assemblies. The wiki lives only in the Astro
 # website (the single canonical docs site); the legacy Jekyll docs/ tree was removed. Validation
 # runs before merge; the website deployment workflow owns post-merge publication and smoke tests.
+#
+# Pull requests reach this through the validation pipeline (sonarcloud.yml), not a path filter: it
+# runs only when Select-AuxiliaryWorkloads.ps1 finds a change to the docs, the wiki tools, or a
+# declaration or documentation comment, and reads the Build job's artifact instead of compiling
+# the library twice more (net8.0 Debug for the XML, net10.0 Debug under the tools). The artifact's
+# net10.0 Release AiDotNet.xml is member-for-member identical to the net8.0 Debug one: the library's
+# only framework- and configuration-conditional code is in method bodies and private fields. A
+# manual run, or a call without an artifact, still builds from source.
 on:
-  pull_request:
-    paths:
-      - 'src/**'
-      - 'website/src/content/docs/**'
-      - 'tools/WikiGenerator/**'
-      - 'tools/DocSnippetVerify/**'
-      - '.github/workflows/docs-wiki.yml'
+  workflow_call:
+    inputs:
+      build_artifact_id:
+        description: 'ID of the Build job artifact to read; empty builds from source.'
+        type: string
+        default: ''
+      build_artifact_digest:
+        description: 'sha256 digest of that artifact.'
+        type: string
+        default: ''
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: docs-wiki-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   generate-and-gate:
@@ -28,10 +35,19 @@ jobs:
     name: Generate wiki + compile-check snippets
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
     env:
       AIDOTNET_DISABLE_GPU: '1'
       DOTNET_NOLOGO: '1'
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      REUSE_BUILD: ${{ inputs.build_artifact_id != '' && 'true' || 'false' }}
+      # With the artifact the tools compile against the prebuilt library and nothing else is
+      # rebuilt (see samples.yml for what each property avoids). --property, not -p: for
+      # `dotnet run`, -p is the legacy spelling of --project.
+      TOOL_ARGS: ${{ inputs.build_artifact_id != '' && '-c Release --property:BuildProjectReferences=false --property:ProduceReferenceAssembly=false' || '-c Debug' }}
+      DOC_XML: ${{ inputs.build_artifact_id != '' && 'src/bin/Release/net10.0/AiDotNet.xml' || 'src/bin/Debug/net8.0/AiDotNet.xml' }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -43,14 +59,31 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Download the Build artifact
+        if: env.REUSE_BUILD == 'true'
+        timeout-minutes: 25
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          ./tools/TestImpact/Receive-RequiredArtifact.ps1 `
+            -Repository '${{ github.repository }}' `
+            -ArtifactId '${{ inputs.build_artifact_id }}' `
+            -ExpectedDigest '${{ inputs.build_artifact_digest }}' `
+            -Destination '.' `
+            -RunId '${{ github.run_id }}' `
+            -JobIndex '0'
+          if (-not (Test-Path -LiteralPath $env:DOC_XML)) { throw "The Build artifact has no $env:DOC_XML" }
+
       # Build the library (net8.0) so its XML doc file exists for the generator to read.
       - name: Build AiDotNet (net8.0, with XML docs)
+        if: env.REUSE_BUILD != 'true'
         run: dotnet build src/AiDotNet.csproj -c Debug -f net8.0
 
       # Regenerate the full API reference (every public type, by namespace + kind). The wiki is
       # gitignored and generated fresh here (and in the website build), not committed.
       - name: Generate API reference wiki
-        run: dotnet run --project tools/WikiGenerator -c Debug -- src/bin/Debug/net8.0/AiDotNet.xml website/src/content/docs/reference/wiki
+        run: dotnet run --project tools/WikiGenerator $TOOL_ARGS -- "$DOC_XML" website/src/content/docs/reference/wiki
 
       # Compile every ```csharp example in the website docs + generated wiki against the real
       # AiDotNet assemblies. Fails on any drift that would break a published example.
@@ -59,8 +92,12 @@ jobs:
       # ```cs block precisely so this step would skip it — 1209 examples were published that way against
       # 367 verified ones. The generator now labels every example ```csharp, so they are all checked, and
       # the counts below are ratcheted the same way as the XML pass.
+      #
+      # 1703 -> 1702 (#2269): the OCR audit deleted nine duplicated model copies (Document/OCR and
+      # VisionLanguage/Document), and their generated wiki pages took one compiling example with them.
+      # Every remaining example still compiles (--max-fail 0); nothing broke.
       - name: Compile-check doc + wiki snippets
-        run: dotnet run --project tools/DocSnippetVerify -c Debug -- website --min-pass 1703 --max-fail 0
+        run: dotnet run --project tools/DocSnippetVerify $TOOL_ARGS -- website --min-pass 1702 --max-fail 0
 
       # Compile-check the <example> blocks in the source XML doc comments. These are the examples a user
       # sees in IntelliSense and on the API reference pages, and they were never gated: this step's
@@ -74,7 +111,7 @@ jobs:
       # the failure count could stay level. Tighten both whenever this step reports better numbers; do not
       # loosen either without saying why in the commit message.
       - name: Compile-check XML doc-comment examples (ratchet)
-        run: dotnet run --project tools/DocSnippetVerify -c Debug -- src/bin/Debug/net8.0/AiDotNet.xml --min-pass 1424 --max-fail 0
+        run: dotnet run --project tools/DocSnippetVerify $TOOL_ARGS -- "$DOC_XML" --min-pass 1424 --max-fail 0
 
       # AiModelBuilder and AiModelResult are the whole supported surface. An example that trains or
       # predicts on the model object teaches readers to reach past the facade, skipping the validation,
@@ -82,4 +119,4 @@ jobs:
       # Roslyn semantic analysis rather than matched by name, because a receiver's type is not something
       # a regex can know. Ratchet the ceiling DOWN as examples are converted.
       - name: Facade conformance in doc examples (ratchet)
-        run: dotnet run --project tools/DocSnippetVerify -c Debug -- src/bin/Debug/net8.0/AiDotNet.xml --facade-check --max-facade-violations 0
+        run: dotnet run --project tools/DocSnippetVerify $TOOL_ARGS -- "$DOC_XML" --facade-check --max-facade-violations 0

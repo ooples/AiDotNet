@@ -93,8 +93,8 @@ public class DualTextConditioner<T> : IConditioningModule<T>
     /// // FLUX.1 pairs one CLIP encoder with a T5
     /// var tokenizer = CharacterTokenizer.CreateAscii();
     /// var conditioner = new DualTextConditioner&lt;float&gt;(
-    ///     new CLIPTextConditioner&lt;float&gt;(tokenizer, CLIPVariant.ViTL14),
-    ///     new T5TextConditioner&lt;float&gt;(tokenizer, T5Variant.Base));
+    ///     new CLIPTextConditioner&lt;float&gt;(tokenizer, options: new CLIPTextConditionerOptions { Variant = CLIPVariant.ViTL14 }),
+    ///     new T5TextConditioner&lt;float&gt;(tokenizer, options: new T5TextConditionerOptions { Variant = T5Variant.Base }));
     ///
     /// // SDXL uses two CLIP encoders alongside the T5 — see TripleTextConditioner
     /// </code>

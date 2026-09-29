@@ -157,47 +157,7 @@ public class TabROptions<T> : RiskModelOptions<T>
     /// <value>True to use layer normalization; false otherwise. Defaults to true.</value>
     public bool UseLayerNorm { get; set; } = true;
 
-    /// <summary>
-    /// Gets or sets the activation function type.
-    /// </summary>
-    /// <value>The activation type, defaulting to "ReLU".</value>
-    public string ActivationType { get; set; } = "ReLU";
 
-    /// <summary>
-    /// Gets or sets whether to use feature-wise linear modulation.
-    /// </summary>
-    /// <value>True to use FiLM; false otherwise. Defaults to false.</value>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> FiLM (Feature-wise Linear Modulation) allows the context
-    /// from neighbors to modulate the feature processing. It can help when the
-    /// relationship between features changes based on context.
-    /// </para>
-    /// </remarks>
-    public bool UseFiLM { get; set; } = false;
-
-    /// <summary>
-    /// Gets or sets the feed-forward dimension multiplier.
-    /// </summary>
-    /// <value>The multiplier, defaulting to 4.</value>
-    public int FeedForwardMultiplier { get; set; } = 4;
-
-    /// <summary>
-    /// Gets the feed-forward network dimension.
-    /// </summary>
-    public int FeedForwardDimension => EmbeddingDimension * FeedForwardMultiplier;
-
-    /// <summary>
-    /// Gets or sets whether to enable gradient clipping.
-    /// </summary>
-    /// <value>True to enable gradient clipping; false otherwise. Defaults to true.</value>
-    public bool EnableGradientClipping { get; set; } = true;
-
-    /// <summary>
-    /// Gets or sets the maximum gradient norm for clipping.
-    /// </summary>
-    /// <value>The maximum gradient norm, defaulting to 1.0.</value>
-    public double MaxGradientNorm { get; set; } = 1.0;
 
     /// <summary>
     /// Gets or sets the weight decay coefficient.
@@ -222,12 +182,8 @@ public class TabROptions<T> : RiskModelOptions<T>
             NormalizeEmbeddings = NormalizeEmbeddings,
             NumContextLayers = NumContextLayers,
             UseLayerNorm = UseLayerNorm,
-            ActivationType = ActivationType,
-            UseFiLM = UseFiLM,
-            FeedForwardMultiplier = FeedForwardMultiplier,
-            EnableGradientClipping = EnableGradientClipping,
-            MaxGradientNorm = MaxGradientNorm,
-            WeightDecay = WeightDecay
+            WeightDecay = WeightDecay,
+            MaxGradNorm = MaxGradNorm
         };
     }
 }

@@ -38,7 +38,7 @@ namespace AiDotNet.Models.Options;
 /// Reference: "Flow Matching for Tabular Data" (2024)
 /// </para>
 /// </remarks>
-public class TabFlowOptions<T> : RiskModelOptions<T>
+public class TabFlowOptions<T> : SyntheticDataGeneratorOptions<T>
 {
     /// <summary>
     /// Gets or sets the hidden layer sizes for the velocity field MLP.

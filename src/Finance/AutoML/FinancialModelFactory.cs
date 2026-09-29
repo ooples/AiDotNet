@@ -61,8 +61,10 @@ internal sealed class FinancialModelFactory<T>
     {
         var lookupType = modelType.IsGenericType ? modelType.GetGenericTypeDefinition() : modelType;
 
-        if (lookupType == typeof(PatchTST<>)) return new PatchTST<T>(_architecture);
-        if (lookupType == typeof(ITransformer<>)) return new ITransformer<T>(_architecture);
+        if (lookupType == typeof(PatchTST<>)) return CreateWithOptions(
+            (PatchTSTOptions<T> options) => new PatchTST<T>(_architecture, options: options), new PatchTSTOptions<T>(), parameters);
+        if (lookupType == typeof(ITransformer<>)) return CreateWithOptions(
+            (ITransformerOptions<T> options) => new ITransformer<T>(_architecture, options: options), new ITransformerOptions<T>(), parameters);
         if (lookupType == typeof(DeepAR<>)) return CreateWithOptions(
             (DeepAROptions<T> options) => new DeepAR<T>(_architecture, options), new DeepAROptions<T>(), parameters);
         if (lookupType == typeof(NBEATSFinance<>)) return CreateWithOptions(

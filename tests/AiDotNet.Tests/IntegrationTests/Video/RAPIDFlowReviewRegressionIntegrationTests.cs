@@ -1,5 +1,6 @@
 #nullable disable
 using AiDotNet.Enums;
+using AiDotNet.Video.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Motion;
@@ -62,7 +63,7 @@ public class RAPIDFlowReviewRegressionIntegrationTests
                 inputWidth: 32,
                 inputDepth: 3,
                 outputSize: 2),
-            numRefinementIterations);
+            new RAPIDFlowOptions { NumIterations = numRefinementIterations });
     }
 
     private static void AssertLayerGraphEqual(RAPIDFlow<double> expected, RAPIDFlow<double> actual)

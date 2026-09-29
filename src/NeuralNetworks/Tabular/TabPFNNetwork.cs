@@ -106,15 +106,13 @@ public partial class TabPFNNetwork<T> : TabularNeuralNetworkBase<T>
     /// <summary>
     /// Initializes a new TabPFN network with the specified architecture.
     /// </summary>
-    public TabPFNNetwork(
-        NeuralNetworkArchitecture<T> architecture,
+    public TabPFNNetwork(NeuralNetworkArchitecture<T> architecture,
         TabPFNOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 1.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TabPFNOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new TabPFNOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         // TabPFN (Hollmann et al., ICLR 2023) trains its transformer at 1e-4. Built bare, the
         // optimizer ran on framework defaults; the rate now comes from TabPFNOptions.LearningRate,
@@ -152,7 +150,9 @@ public partial class TabPFNNetwork<T> : TabularNeuralNetworkBase<T>
                 numHeads: _options.NumHeads,
                 numLayers: _options.NumLayers,
                 numClasses: Architecture.OutputSize,
-                dropoutRate: _options.DropoutRate));
+                dropoutRate: _options.DropoutRate,
+                feedForwardDimension: _options.FeedForwardDimension,
+                hiddenVectorActivation: _options.HiddenVectorActivation));
         }
     }
 

@@ -8,10 +8,14 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the PixelLM model. Default values follow the original paper settings.</para>
 /// </remarks>
-public class PixelLMOptions : NeuralNetworkOptions
+public class PixelLMOptions : SegmentationModelOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
-    public PixelLMOptions() { }
+    public PixelLMOptions()
+    {
+        NumClasses = 1;
+        DropRate = 0;
+    }
 
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
@@ -23,6 +27,9 @@ public class PixelLMOptions : NeuralNetworkOptions
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
+        MaxGradNorm = other.MaxGradNorm;
+        NumClasses = other.NumClasses;
+        DropRate = other.DropRate;
         LearningRate = other.LearningRate;
         WeightDecay = other.WeightDecay;
         OptimizerBatchSize = other.OptimizerBatchSize;
@@ -67,4 +74,12 @@ public class PixelLMOptions : NeuralNetworkOptions
     /// <summary>Gets or sets the lightweight pixel-decoder width.</summary>
     public int DecoderDimension { get; set; } = 256;
 
+    /// <summary>
+    /// Throws when a value on this instance cannot produce a working model.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <see cref="SegmentationModelOptions.NumClasses"/> is not positive, or when
+    /// <see cref="SegmentationModelOptions.DropRate"/> is not a fraction in [0, 1).
+    /// </exception>
+    public void Validate() => ValidateSegmentationCore();
 }

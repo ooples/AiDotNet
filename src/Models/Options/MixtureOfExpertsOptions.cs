@@ -32,7 +32,7 @@ namespace AiDotNet.Models.Options;
 /// - Whether to use load balancing to ensure all experts are utilized
 /// </para>
 /// </remarks>
-public class MixtureOfExpertsOptions<T> : NeuralNetworkOptions
+public class MixtureOfExpertsOptions<T> : ModelHyperparameterOptions
 {
     /// <summary>
     /// Gets or sets the number of expert networks in the mixture.

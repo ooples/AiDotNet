@@ -44,10 +44,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Medical;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
 ///     inputHeight: 128, inputWidth: 128, inputDepth: 1, outputSize: 1);
-/// var model = new UniverSeg&lt;double&gt;(architecture, numClasses: 1);
+/// var model = new UniverSeg&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new UniverSeg&lt;double&gt;(architecture,
+///     options: new UniverSegOptions { NumClasses = 1, DropRate = 0 });
 ///
 /// // Or load a pre-trained ONNX model for cross-domain medical segmentation
-/// var onnxModel = new UniverSeg&lt;double&gt;(architecture, "universeg.onnx", numClasses: 1);
+/// var onnxModel = new UniverSeg&lt;double&gt;(architecture, "universeg.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -92,8 +95,6 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyWithLogitsLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
-    /// <param name="dropRate">Dropout rate (default: 0).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -102,18 +103,17 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
     /// </remarks>
     public UniverSeg(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 1,
-        double dropRate = 0,
+        ILossFunction<T>? lossFunction = null,
         UniverSegOptions? options = null)
         // `optimizer` is passed straight through - INCLUDING null. The base resolves the default
         // AdamW lazily via CreateDefaultOptimizer(), which a base-constructor argument cannot do.
-        : base(architecture, optimizer, lossFunction, numClasses, ModalitiesSupported)
+        : base(architecture, optimizer, lossFunction, (options ??= new UniverSegOptions()).NumClasses, ModalitiesSupported)
     {
-        _options = options ?? new UniverSegOptions(); Options = _options;
+        _options = options; Options = _options;
         // UniverSeg defaults to 128x128, not the base's 512x512, so the geometry fallback stays here.
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 128;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 128;
-        _dropRate = dropRate;
+        _dropRate = _options.DropRate;
         _channelDims = [64, 128, 256, 512];
         _depths = [2, 2, 2, 2];
         _decoderDim = 256;
@@ -125,7 +125,6 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -135,17 +134,17 @@ public partial class UniverSeg<T> : Common.MedicalSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public UniverSeg(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 1,
+    public UniverSeg(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         UniverSegOptions? options = null)
         // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
         // InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, numClasses, ModalitiesSupported)
+        : base(architecture, onnxModelPath, (options ??= new UniverSegOptions()).NumClasses, ModalitiesSupported)
     {
-        _options = options ?? new UniverSegOptions(); Options = _options;
+        _options = options; Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 128;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 128;
-        _dropRate = 0;
+        _dropRate = _options.DropRate;
         _channelDims = [64, 128, 256, 512];
         _depths = [2, 2, 2, 2];
         _decoderDim = 256;

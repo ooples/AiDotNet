@@ -64,7 +64,7 @@ public partial class RTDETR<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<
         _numQueries = numQueries;
 
         // RT-DETR uses either ResNet or HGNetV2 backbone
-        Backbone = new ResNet<T>(ResNetVariant.ResNet50);
+        Backbone = new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetVariant.ResNet50 });
 
         // Hybrid encoder neck
         Neck = new PANet<T>(Backbone.OutputChannels.ToArray(), outputChannels: hiddenDim);

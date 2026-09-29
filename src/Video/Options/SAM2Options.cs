@@ -1,12 +1,35 @@
 using AiDotNet.Models.Options;
 
+using AiDotNet.Video.Segmentation;
+
 namespace AiDotNet.Video.Options;
 
 /// <summary>
 /// Configuration options for the SAM2 segmentation model.
 /// </summary>
-public class SAM2Options : NeuralNetworkOptions
+public class SAM2Options : VideoHyperparameterOptions
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SAM2Options"/> class carrying
+    /// this model's shipped defaults.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> You do not need to set any of these. They are the values this
+    /// model has always used, moved here from its constructor so they can be seen and
+    /// changed in one place.
+    /// </para>
+    /// <para>
+    /// Carried over unchanged. Whether each matches the published paper is verified, and
+    /// corrected where it does not, in a later phase of issue #2090.
+    /// </para>
+    /// </remarks>
+    public SAM2Options()
+    {
+        ModelSize = SAM2ModelSize.Base;
+        MemoryBankSize = 7;
+    }
+
     /// <summary>
     /// Optional Hiera stem width. Null selects the published width for the requested model size
     /// (Tiny/Small 96, Base+ 112, Large 144).
@@ -88,4 +111,25 @@ public class SAM2Options : NeuralNetworkOptions
 
     /// <summary>Gets or sets the object-presence classification loss weight.</summary>
     public double ObjectPresenceLossWeight { get; set; } = 1.0;
+
+    /// <summary>
+    /// Gets or sets the model size.
+    /// </summary>
+    public SAM2ModelSize ModelSize { get; set; }
+
+    /// <summary>
+    /// Gets or sets the memory bank size.
+    /// </summary>
+    public int MemoryBankSize { get; set; }
+
+    /// <summary>
+    /// Throws if a value this model requires has been left unset or is not positive.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when a required dimension is zero or negative.
+    /// </exception>
+    public void Validate()
+    {
+        ValidateCore();
+    }
 }

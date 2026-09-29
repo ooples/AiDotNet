@@ -8,10 +8,14 @@ namespace AiDotNet.ComputerVision.Segmentation.OpenVocabulary;
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the OpenVocabSAM model. Default values follow the original paper settings.</para>
 /// </remarks>
-public class OpenVocabSAMOptions : NeuralNetworkOptions
+public class OpenVocabSAMOptions : SegmentationModelOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
-    public OpenVocabSAMOptions() { }
+    public OpenVocabSAMOptions()
+    {
+        NumClasses = 1;
+        DropRate = 0;
+    }
 
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
@@ -23,6 +27,9 @@ public class OpenVocabSAMOptions : NeuralNetworkOptions
 
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
+        MaxGradNorm = other.MaxGradNorm;
+        NumClasses = other.NumClasses;
+        DropRate = other.DropRate;
         ChannelDimensions = (int[])other.ChannelDimensions.Clone();
         StageDepths = (int[])other.StageDepths.Clone();
         NeckEmbeddingDimension = other.NeckEmbeddingDimension;
@@ -56,4 +63,13 @@ public class OpenVocabSAMOptions : NeuralNetworkOptions
 
     /// <summary>Gets or sets the AdamW weight decay.</summary>
     public double WeightDecay { get; set; } = 0.05;
+
+    /// <summary>
+    /// Throws when a value on this instance cannot produce a working model.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when <see cref="SegmentationModelOptions.NumClasses"/> is not positive, or when
+    /// <see cref="SegmentationModelOptions.DropRate"/> is not a fraction in [0, 1).
+    /// </exception>
+    public void Validate() => ValidateSegmentationCore();
 }
