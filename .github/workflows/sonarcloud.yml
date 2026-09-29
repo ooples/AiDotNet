@@ -264,6 +264,13 @@ jobs:
     timeout-minutes: 85
     # CodeQL remains mandatory even for non-runtime changes because the active Main ruleset
     # requires a CodeQL result for the candidate commit. This is one job, not a model/test matrix.
+    #
+    # Pull requests analyze C# WITHOUT a traced build (build-mode: none): the traced net10 build plus analysis
+    # held one hosted runner for ~76 minutes on every PR - Dependabot Actions bumps included - while that PR's
+    # own test shards sat in the runner queue (measured: median 77-minute shard queue wait on a 4-hour PR run
+    # whose shards ran a median 13 minutes). Build-less extraction still yields the result the ruleset needs.
+    # Master pushes, the nightly schedule and manual runs keep the full traced analysis below, so what
+    # build-less mode reads less precisely (source-generated code) is still covered before release.
     if: "${{ always() && !cancelled() && fromJSON(needs.validation-source.outputs.execute_quality) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     permissions:
       contents: read
@@ -276,6 +283,7 @@ jobs:
           fetch-depth: 0
 
       - name: Free runner disk space
+        if: github.event_name != 'pull_request'
         # The full solution Release build compiles net10.0 + net471 outputs and can exhaust
         # ubuntu-latest's runner volume before downstream cleanup steps run. Keep the .NET
         # host frameworks intact and remove only preinstalled toolchains this job does not use.
@@ -298,6 +306,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Cache NuGet packages
+        if: github.event_name != 'pull_request'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
         with:
           path: ~/.nuget/packages
@@ -306,15 +315,27 @@ jobs:
             nuget-${{ runner.os }}-
 
       - name: Restore dependencies
+        if: github.event_name != 'pull_request'
         run: |
           dotnet restore src/AiDotNet.csproj
           dotnet restore src/AiDotNet.Serving/AiDotNet.Serving.csproj
           dotnet restore src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj
 
-      - name: Initialize CodeQL
+      - name: Initialize CodeQL (build-less, pull requests)
+        if: github.event_name == 'pull_request'
         uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
         with:
           languages: csharp
+          build-mode: none
+          config-file: ./.github/codeql/codeql-config.yml
+          queries: security-and-quality
+
+      - name: Initialize CodeQL (traced build)
+        if: github.event_name != 'pull_request'
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
+        with:
+          languages: csharp
+          build-mode: manual
           config-file: ./.github/codeql/codeql-config.yml
           queries: security-and-quality
 
@@ -327,6 +348,7 @@ jobs:
       # The core library's command is unchanged and runs first, so its extraction is identical;
       # the next two builds find it up to date and compile only their own sources.
       - name: Build for CodeQL (net10.0)
+        if: github.event_name != 'pull_request'
         run: |
           dotnet build src/AiDotNet.csproj -c Release --no-restore -f net10.0
           dotnet build src/AiDotNet.Serving/AiDotNet.Serving.csproj -c Release --no-restore
@@ -553,6 +575,50 @@ jobs:
           path: ./artifacts/*.nupkg
           retention-days: 1
 
+  # PULL-REQUEST AUXILIARY WORKLOADS. Formerly three workflows on 'src/**' path filters, each
+  # compiling the library again on its own runner for every source push. select-shards decides
+  # which of them this change can affect (Select-AuxiliaryWorkloads.ps1, failing open); each then
+  # consumes the Build artifact, or builds from source when the change needed no Build (a docs- or
+  # samples-only change). They stay advisory, exactly as the separate workflows were: none is a
+  # CI Gate dependency. A failed Build cancels them with the rest of the run.
+  model-performance-census:
+    name: Model Performance Census
+    needs: [validation-source, select-shards, build]
+    if: "${{ always() && !cancelled() && github.event_name == 'pull_request' && fromJSON(needs.validation-source.outputs.execute_validation) && needs.build.result != 'failure' && needs.build.result != 'cancelled' && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && (needs.select-shards.outputs.census_mode == 'full' || needs.select-shards.outputs.census_mode == 'selected') }}"
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/model-performance-census.yml
+    with:
+      scope: ${{ needs.select-shards.outputs.census_scope }}
+      build_artifact_id: ${{ needs.build.result == 'success' && needs.build.outputs.artifact_id || '' }}
+      build_artifact_digest: ${{ needs.build.result == 'success' && needs.build.outputs.artifact_digest || '' }}
+    secrets: inherit
+
+  samples:
+    name: Samples
+    needs: [validation-source, select-shards, build]
+    if: "${{ always() && !cancelled() && github.event_name == 'pull_request' && fromJSON(needs.validation-source.outputs.execute_validation) && needs.build.result != 'failure' && needs.build.result != 'cancelled' && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && needs.select-shards.outputs.run_samples == 'true' }}"
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/samples.yml
+    with:
+      build_artifact_id: ${{ needs.build.result == 'success' && needs.build.outputs.artifact_id || '' }}
+      build_artifact_digest: ${{ needs.build.result == 'success' && needs.build.outputs.artifact_digest || '' }}
+
+  docs-wiki:
+    name: Docs Wiki
+    needs: [validation-source, select-shards, build]
+    if: "${{ always() && !cancelled() && github.event_name == 'pull_request' && fromJSON(needs.validation-source.outputs.execute_validation) && needs.build.result != 'failure' && needs.build.result != 'cancelled' && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && needs.select-shards.outputs.run_docs_wiki == 'true' }}"
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/docs-wiki.yml
+    with:
+      build_artifact_id: ${{ needs.build.result == 'success' && needs.build.outputs.artifact_id || '' }}
+      build_artifact_digest: ${{ needs.build.result == 'success' && needs.build.outputs.artifact_digest || '' }}
+
   # The cancellation must happen in a DIFFERENT job from the build that failed. Cancelling a
   # workflow from inside the failing build changes that originating job's conclusion to
   # `cancelled`, hiding the compiler error that triggered fail-fast. These watchers cannot start
@@ -635,6 +701,12 @@ jobs:
       # Their full correctness suites still execute, but repeating the instrumentation that already
       # exceeded the runner envelope cannot produce a digest and is therefore suppressed.
       coverage_run_without_instrumentation: ${{ steps.select.outputs.coverage_run_without_instrumentation }}
+      # Which pull-request auxiliary workloads the change can affect (Select-AuxiliaryWorkloads.ps1).
+      # Empty on every other event, which the callers below read as "do not run".
+      census_mode: ${{ steps.aux.outputs.census_mode }}
+      census_scope: ${{ steps.aux.outputs.census_scope }}
+      run_samples: ${{ steps.aux.outputs.run_samples }}
+      run_docs_wiki: ${{ steps.aux.outputs.run_docs_wiki }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -1017,6 +1089,10 @@ jobs:
             }
           }
 
+          # The census scopes itself by this coverage selection, taken before nightly deferral trims
+          # it: a deferred shard still names models the change reaches.
+          $auxiliaryShards = @($matrixShards | ForEach-Object { [string] $_.name })
+
           # Sweeps and conformance windows run nightly, not on every pull request and push; which
           # selected ones may be deferred, and why, is Get-DeferredNightlyShards (CiWorkloadKinds.ps1).
           # An escalated selection still runs the complete matrix.
@@ -1092,6 +1168,8 @@ jobs:
           # that flag. A build-only change still compiles - .editorconfig can raise an analyzer to
           # error - but cannot affect any test.
           "requires_shards=$($requiresShards.ToString().ToLowerInvariant())" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "auxiliary_shards=$(ConvertTo-Json -InputObject @($auxiliaryShards) -Depth 3 -Compress)" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
           $summary = if ($escalate) { "Running the full matrix ($($all.Count) shards)." }
@@ -1216,6 +1294,70 @@ jobs:
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "coverage_run_without_instrumentation=$(ConvertTo-Json -InputObject @($runWithoutInstrumentation) -Depth 3 -Compress)" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      # The model performance census, the samples run and the docs wiki gate used to be separate
+      # workflows on 'src/**' path filters: every source push queued 36 extra jobs (34 of them the
+      # census) however small the change. They now run as jobs of this pipeline, reuse its Build
+      # artifact, and run only when this decides the change can affect them. It fails OPEN: an
+      # unproven selector, or a checkout that is not the expected merge, runs all three in full.
+      - name: Select auxiliary workloads
+        id: aux
+        if: ${{ github.event_name == 'pull_request' }}
+        timeout-minutes: 8
+        shell: pwsh
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          ESCALATED: ${{ steps.select.outputs.escalated }}
+          REQUIRES_VALIDATION: ${{ steps.select.outputs.requires_validation }}
+          AUXILIARY_SHARDS: ${{ steps.select.outputs.auxiliary_shards }}
+        run: |
+          $censusMode = 'full'
+          $censusScope = '{"mode":"full","shards":[]}'
+          $runSamples = 'true'
+          $runDocsWiki = 'true'
+          try {
+            ./tools/TestImpact/Select-AuxiliaryWorkloads.ps1 -SelfTest
+            if ($LASTEXITCODE -ne 0) { throw 'Select-AuxiliaryWorkloads self-test failed' }
+            ./tools/ModelPerfProbe/Select-CensusFixtures.ps1 -SelfTest
+            if ($LASTEXITCODE -ne 0) { throw 'Select-CensusFixtures self-test failed' }
+            if ($env:ESCALATED -notin @('true', 'false') -or $env:REQUIRES_VALIDATION -notin @('true', 'false')) {
+              throw 'the shard selection published no decision'
+            }
+            # refs/pull/N/merge: first parent is the base actually validated, second the PR head.
+            $parents = @(((& git rev-list --parents -n 1 HEAD) -join ' ').Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries))
+            if ($parents.Count -ne 3 -or $parents[2] -cne $env:PR_HEAD_SHA) {
+              throw 'the checkout is not the pull request merge commit'
+            }
+            $scope = if ($env:ESCALATED -eq 'true') { 'full' }
+                     elseif ($env:REQUIRES_VALIDATION -ne 'true') { 'none' }
+                     else { 'selected' }
+            $shards = @(if (-not [string]::IsNullOrWhiteSpace($env:AUXILIARY_SHARDS)) {
+              $env:AUXILIARY_SHARDS | ConvertFrom-Json | ForEach-Object { [string] $_ }
+            })
+            ./tools/TestImpact/Select-AuxiliaryWorkloads.ps1 -BaseSha $parents[1] -ValidationScope $scope `
+              -SelectedShards $shards -OutFile auxiliary.json
+            if ($LASTEXITCODE -ne 0) { throw "the auxiliary selector exited $LASTEXITCODE" }
+            $decision = Get-Content auxiliary.json -Raw | ConvertFrom-Json
+            $censusMode = [string] $decision.census.mode
+            if ($censusMode -cnotin @('full', 'selected', 'none')) { throw "unknown census mode '$censusMode'" }
+            $censusScope = [pscustomobject]@{ mode = $censusMode; shards = @($decision.census.shards) } |
+              ConvertTo-Json -Depth 3 -Compress
+            $runSamples = ([bool] $decision.samples.run).ToString().ToLowerInvariant()
+            $runDocsWiki = ([bool] $decision.docsWiki.run).ToString().ToLowerInvariant()
+          }
+          catch {
+            Write-Host "::warning::auxiliary workload selection unavailable ($($_.Exception.Message)) - running the census, samples and docs wiki in full"
+            $censusMode = 'full'
+            $censusScope = '{"mode":"full","shards":[]}'
+            $runSamples = 'true'
+            $runDocsWiki = 'true'
+          }
+          "census_mode=$censusMode" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "census_scope=$censusScope" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "run_samples=$runSamples" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "run_docs_wiki=$runDocsWiki" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "### Auxiliary workloads`n`nCensus: **$censusMode** · Samples: **$runSamples** · Docs wiki: **$runDocsWiki**" |
+            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
       # Named to match the harvest's `impact-digest-*` download pattern, so the map build picks
       # these up exactly like per-shard digests with no change on its side.

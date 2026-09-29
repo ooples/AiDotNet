@@ -249,6 +249,21 @@ foreach ($codeqlProject in @(
         "CodeQL builds '$projectPath' with --no-restore but never restores it"
 }
 
+# Pull requests analyze build-less; everything else keeps the traced analysis above. The traced build held a
+# hosted runner ~76 minutes on EVERY pull request (Actions-only Dependabot bumps included) while that PR's own
+# shards queued behind it. The split must stay exact: a PR that also ran the traced build would pay both, and a
+# master push that went build-less would drop source-generated code from the release analysis.
+$codeqlPrInit = Get-StepBlock -JobBlock $codeqlJob -Step 'Initialize CodeQL (build-less, pull requests)'
+$codeqlTracedInit = Get-StepBlock -JobBlock $codeqlJob -Step 'Initialize CodeQL (traced build)'
+Assert-Contract ($codeqlPrInit.Contains("if: github.event_name == 'pull_request'") -and $codeqlPrInit.Contains('build-mode: none')) `
+    'pull-request CodeQL is not build-less'
+Assert-Contract ($codeqlTracedInit.Contains("if: github.event_name != 'pull_request'") -and $codeqlTracedInit.Contains('build-mode: manual')) `
+    'master/nightly CodeQL lost its traced analysis'
+foreach ($tracedOnly in @($codeqlBuild, $codeqlRestore)) {
+    Assert-Contract ($tracedOnly.Contains("if: github.event_name != 'pull_request'")) `
+        'a traced-build step still runs on pull requests'
+}
+
 # Every Sonar step parses this value with fromJSON. It must therefore be defined on the Sonar job,
 # not on a neighboring job where it is invisible and becomes a null template value at runtime.
 $sonarJob = Get-JobBlock -WorkflowText $validation -Job 'sonarcloud'
@@ -1099,6 +1114,96 @@ foreach ($command in $apiCommands) {
     Assert-Contract ($command.Contains('repos/${GITHUB_REPOSITORY}/')) `
         "coverage-run has a gh api command without an explicit repository endpoint: $command"
 }
+
+# PULL-REQUEST AUXILIARY WORKLOADS. The census, samples and docs wiki run as reusable workflows
+# called from this pipeline, gated by Select-AuxiliaryWorkloads.ps1. Each failure below is a way
+# the wiring could quietly run them on every push again, never run them, run them twice, or run
+# them against something other than the commit's own Build.
+$auxiliarySelect = Get-StepBlock -JobBlock (Get-JobBlock -WorkflowText $validation -Job 'select-shards') -Step 'Select auxiliary workloads'
+Assert-Contract ([bool] $auxiliarySelect) 'select-shards has no auxiliary workload selection step'
+Assert-Contract ($auxiliarySelect.Contains('./tools/TestImpact/Select-AuxiliaryWorkloads.ps1 -SelfTest') -and
+        $auxiliarySelect.Contains('./tools/ModelPerfProbe/Select-CensusFixtures.ps1 -SelfTest')) `
+    'the auxiliary selection runs without its selectors self-testing first'
+Assert-Contract ($auxiliarySelect.Contains('catch {') -and
+        ([Regex]::Matches($auxiliarySelect, [Regex]::Escape("`$censusMode = 'full'"))).Count -ge 2 -and
+        ([Regex]::Matches($auxiliarySelect, [Regex]::Escape("`$runSamples = 'true'"))).Count -ge 2 -and
+        ([Regex]::Matches($auxiliarySelect, [Regex]::Escape("`$runDocsWiki = 'true'"))).Count -ge 2) `
+    'the auxiliary selection does not fail open to running all three workloads in full'
+Assert-Contract ($auxiliarySelect.Contains('$parents[2] -cne $env:PR_HEAD_SHA') -and
+        $auxiliarySelect.Contains('-BaseSha $parents[1]')) `
+    'the auxiliary selection does not diff the pull request merge against its validated base'
+$selectShardsJob = Get-JobBlock -WorkflowText $validation -Job 'select-shards'
+foreach ($output in 'census_mode', 'census_scope', 'run_samples', 'run_docs_wiki') {
+    Assert-Contract ($selectShardsJob.Contains("${output}: `${{ steps.aux.outputs.$output }}")) `
+        "select-shards does not publish the auxiliary decision '$output'"
+}
+$selectStep = Get-StepBlock -JobBlock $selectShardsJob -Step 'Select'
+$captured = $selectStep.IndexOf('$auxiliaryShards = @($matrixShards', [StringComparison]::Ordinal)
+$deferred = $selectStep.IndexOf('Get-DeferredNightlyShards -Shards', [StringComparison]::Ordinal)
+Assert-Contract ($captured -ge 0 -and $deferred -gt $captured) `
+    'the census scope is not taken from the coverage selection before nightly deferral trims it'
+Assert-Contract ($selectStep.Contains('"auxiliary_shards=$(ConvertTo-Json -InputObject @($auxiliaryShards)')) `
+    'the select step does not publish the shards the census scopes itself by'
+
+$auxiliaryCallers = [ordered]@{
+    'model-performance-census' = @{ Workflow = '.github/workflows/model-performance-census.yml'; Decision = "needs.select-shards.outputs.census_mode == 'selected'" }
+    'samples' = @{ Workflow = '.github/workflows/samples.yml'; Decision = "needs.select-shards.outputs.run_samples == 'true'" }
+    'docs-wiki' = @{ Workflow = '.github/workflows/docs-wiki.yml'; Decision = "needs.select-shards.outputs.run_docs_wiki == 'true'" }
+}
+foreach ($job in $auxiliaryCallers.Keys) {
+    $caller = $auxiliaryCallers[$job]
+    $block = Get-JobBlock -WorkflowText $validation -Job $job
+    if (-not $block) { continue }
+    Assert-Contract ($block.Contains("uses: ./$($caller.Workflow)")) "auxiliary job '$job' does not call $($caller.Workflow)"
+    foreach ($dependency in 'validation-source', 'select-shards', 'build') {
+        Assert-Contract (Test-JobDependency -JobHeader $block -Dependency $dependency) `
+            "auxiliary job '$job' does not depend on $dependency"
+    }
+    $jobIf = [Regex]::Match($block, '(?m)^    if:\s*(?<value>[^\r\n]+)\s*$').Groups['value'].Value
+    Assert-Contract ($jobIf.Contains('fromJSON(needs.validation-source.outputs.execute_validation)')) `
+        "auxiliary job '$job' runs even when this tree's validation is reused"
+    Assert-Contract ($jobIf.Contains("github.event_name == 'pull_request'")) `
+        "auxiliary job '$job' is not limited to pull requests"
+    Assert-Contract ($jobIf.Contains($caller.Decision)) "auxiliary job '$job' ignores its selector decision"
+    Assert-Contract ($jobIf.Contains("needs.build.result != 'failure'") -and $jobIf.Contains('!cancelled()')) `
+        "auxiliary job '$job' can run after a failed Build or keep a cancelled run alive"
+    Assert-Contract ($block.Contains("build_artifact_id: `${{ needs.build.result == 'success' && needs.build.outputs.artifact_id || '' }}") -and
+            $block.Contains("build_artifact_digest: `${{ needs.build.result == 'success' && needs.build.outputs.artifact_digest || '' }}")) `
+        "auxiliary job '$job' does not pass this run's Build artifact, pinned by digest"
+    # Advisory, as the separate workflows were. Making one required is a deliberate policy change.
+    Assert-Contract (-not ($gate -match "(?m)^\s+- $([Regex]::Escape($job))\s*$")) `
+        "CI Gate depends on the advisory auxiliary job '$job'"
+
+    $called = Get-Content -LiteralPath $caller.Workflow -Raw
+    $triggers = [Regex]::Match($called, '(?ms)^on:\s*\r?\n(?<body>.*?)(?=^\S)').Groups['body'].Value
+    Assert-Contract ($triggers.Contains('workflow_call:')) "$($caller.Workflow) cannot be called by the pipeline"
+    Assert-Contract (-not ($triggers -match '(?m)^  pull_request:')) `
+        "$($caller.Workflow) still triggers on pull_request, so every pull request would run it twice"
+    Assert-Contract ($called.Contains('./tools/TestImpact/Receive-RequiredArtifact.ps1') -and
+            $called.Contains("-ExpectedDigest '`${{ inputs.build_artifact_digest }}'")) `
+        "$($caller.Workflow) does not receive the Build artifact by digest"
+}
+$censusCaller = Get-JobBlock -WorkflowText $validation -Job 'model-performance-census'
+Assert-Contract ($censusCaller.Contains("needs.select-shards.outputs.census_mode == 'full'")) `
+    'an escalated selection does not run the full census'
+Assert-Contract ($censusCaller.Contains('scope: ${{ needs.select-shards.outputs.census_scope }}') -and
+        $censusCaller.Contains('secrets: inherit')) `
+    'the census is called without its scope or its license secret'
+
+$census = Get-Content -LiteralPath '.github/workflows/model-performance-census.yml' -Raw
+$censusShardJob = Get-JobBlock -WorkflowText $census -Job 'census'
+Assert-Contract ($censusShardJob.Contains('shard: ${{ fromJSON(needs.prepare.outputs.matrix) }}') -and
+        $censusShardJob.Contains('-ShardCount ${{ needs.prepare.outputs.shard_count }}')) `
+    'the census matrix is not sized by the scoped inventory, so shards and hash partitions disagree'
+Assert-Contract ($censusShardJob.Contains("if: needs.prepare.outputs.count != '0'")) `
+    'a scope owning no fixture still starts census shards'
+$censusPrepare = Get-JobBlock -WorkflowText $census -Job 'prepare'
+Assert-Contract ($censusPrepare.Contains('./tools/ModelPerfProbe/Select-CensusFixtures.ps1 @selectArguments') -and
+        $censusPrepare.Contains('Scope = $env:CENSUS_SCOPE')) `
+    'the census prepares its inventory without applying the pull request scope'
+Assert-Contract ($censusPrepare.Contains("-Destination 'artifacts/model-performance/test-bundle/test-list.txt'") -and
+        $censusPrepare.Contains("'artifacts/model-performance/inventory/test-list.txt'")) `
+    'the shards or the verifier read a different inventory than the scoped one'
 
 if ($failures.Count -gt 0) {
     Write-Host 'CI impact workflow contract FAILED:'
