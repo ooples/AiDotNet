@@ -12432,6 +12432,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 64, inputDepth: 6, outputSize: 2), " +
                     "options: new AiDotNet.Video.Options.MemFlowOptions { NumFeatures = 8, NumLayers = 2 })";
             }
+            else if (model.ClassName == "OpenSora" && model.TypeParameterCount == 1)
+            {
+                // OpenSora's parameterless constructor builds STDiT-XL (1152 hidden, 28 DiT blocks): 446M parameters.
+                // That was survivable only while Train never backpropagated; with the tape it needs gradients and
+                // optimizer moments too, and the performance census peaked at 32.6 GB and killed the 16 GB runner
+                // on every #2136 run. Same architecture as that constructor; the options go through the bounded
+                // scaler, which divides the widths and keeps HiddenDim divisible by NumHeads (DimensionDivisibility).
+                // Paper defaults are untouched - only the fixture is scaled.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, " +
+                    "inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 256 * 256 * 3), " +
+                    "options: (AiDotNet.Video.Options.OpenSoraOptions)global::AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(" +
+                    "typeof(AiDotNet.Video.Options.OpenSoraOptions)))";
+            }
             // These models expose convenient parameterless constructors that intentionally build their
             // paper/default scale. Do not let the generic fallback shadow their explicit CI-smoke branches
             // below. Production behavior is unchanged; only generated fixtures use the bounded constructors.

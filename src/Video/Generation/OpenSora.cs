@@ -218,12 +218,12 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITr
         _numInferenceSteps = _options.NumInferenceSteps;
         _guidanceScale = _options.GuidanceScale;
         GuidanceScale = _options.GuidanceScale;
-        _numHeads = 16;
+        _numHeads = _options.NumHeads;
         // Each head owns a contiguous block of _headDim channels, so the heads must tile hiddenDim
         // exactly - the same requirement as PyTorch's nn.MultiheadAttention.
         if (_hiddenDim % _numHeads != 0)
             throw new ArgumentOutOfRangeException(nameof(options), _hiddenDim,
-                $"OpenSoraOptions.HiddenDim must be divisible by the {_numHeads} attention heads.");
+                $"OpenSoraOptions.HiddenDim must be divisible by NumHeads ({_numHeads}).");
         _headDim = _hiddenDim / _numHeads;
 
         // Initialize noise schedule before InitializeLayers
