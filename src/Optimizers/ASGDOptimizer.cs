@@ -157,7 +157,13 @@ public partial class ASGDOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     }
 
     /// <inheritdoc/>
-    protected override bool SupportsModelOwnStep => true;
+    /// <remarks>
+    /// Off for ASGD. The model step can run the network's FUSED plan, which advances the compiled optimizer's own
+    /// state and never calls <see cref="Step(TapeStepContext{T})"/> - the only place <c>_tapeAx</c>/<c>_tapeStep</c>
+    /// advance. The averaged iterate, which is the result ASGD exists to produce, would then never be promoted. The
+    /// flat path always runs Step, so averaging stays exact.
+    /// </remarks>
+    protected override bool SupportsModelOwnStep => false;
 
     /// <summary>
     /// Performs the optimization process using the ASGD algorithm.
