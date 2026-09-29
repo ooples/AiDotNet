@@ -100,8 +100,19 @@ public sealed class YOLOv11NeckTests
         var block = new C3k2Block<double>(outChannels: 64, depth: 1, c3k: false, expansion: 0.25);
         block.Forward(new Tensor<double>(new[] { 1, 32, 8, 8 }));
         // Ultralytics counts nn.Parameters only; ParameterCount here also carries BatchNorm's running mean and
-        // variance (serialized state, not trained), so compare the trainable tensors.
-        Assert.Equal(6640, block.GetTrainableParameters().Sum(tensor => tensor.Length));
+        // variance (serialized state, not trained), so compare the trainable tensors. A composite reports only its
+        // own tensors, so walk the registered sub-layers the way the network's collector does - which also proves
+        // every child, including the bottleneck list, is registered.
+        Assert.Equal(6640, TrainableElementCount(block));
+    }
+
+    private static int TrainableElementCount(AiDotNet.Interfaces.ILayer<double> layer)
+    {
+        if (layer is not LayerBase<double> composite) return 0;
+        int total = composite.GetTrainableParameters().Sum(tensor => tensor.Length);
+        foreach (var child in composite.GetSubLayers())
+            total += TrainableElementCount(child);
+        return total;
     }
 
     [Fact]
