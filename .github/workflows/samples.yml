@@ -7,10 +7,9 @@ name: Samples (build + run)
 # short, CPU-only, self-contained console apps (no datasets/models/GPU required). This is a
 # pre-merge validation; repeating it on the identical master tree adds no coverage.
 #
-# Pull requests reach this through the validation pipeline (sonarcloud.yml), not a path filter:
-# it runs only when Select-AuxiliaryWorkloads.ps1 finds a change that can affect a sample, and
-# compiles the samples against the Build job's artifact instead of building the library again.
-# A manual run, or a call without an artifact, still builds everything from source.
+# Nightly on master, never on a pull request: a PR's runner time goes to the tests its change
+# can affect. A run without an artifact (schedule, manual) builds the library from source.
+# workflow_call is kept so a future caller can hand it a prebuilt artifact.
 on:
   workflow_call:
     inputs:
@@ -22,6 +21,8 @@ on:
         description: 'sha256 digest of that artifact.'
         type: string
         default: ''
+  schedule:
+    - cron: '30 4 * * *'
   workflow_dispatch:
 
 permissions:
