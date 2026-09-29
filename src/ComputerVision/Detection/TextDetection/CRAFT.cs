@@ -243,9 +243,9 @@ public partial class CRAFT<T> : TextDetectorBase<T>
         }
 
         int version = reader.ReadInt32();
-        if (version != 1)
+        if (version != 2)
         {
-            throw new InvalidDataException($"Unsupported CRAFT model version: {version}");
+            throw new InvalidDataException($"Unsupported CRAFT model version: {version}. Version 1 files use the former ResNet backbone layout, which cannot be read as the current one; re-save or re-export the weights with this version.");
         }
 
         string name = reader.ReadString();
@@ -281,7 +281,7 @@ public partial class CRAFT<T> : TextDetectorBase<T>
 
         // Write header
         writer.Write(0x43524146); // "CRAF" in ASCII
-        writer.Write(1); // Version 1
+        writer.Write(2); // Version 2: VGG16-BN backbone and the revised decoder
         writer.Write(Name);
         writer.Write(_hiddenDim);
 

@@ -28,7 +28,7 @@ internal readonly record struct YoloScale(double Depth, double Width, int MaxCha
         ModelSize.Medium => new(0.67, 0.75, 768),
         ModelSize.Large => new(1.00, 1.00, 512),
         ModelSize.XLarge => new(1.00, 1.25, 512),
-        _ => new(0.67, 0.75, 768),
+        _ => throw new ArgumentOutOfRangeException(nameof(size), size, "YOLOv8 publishes no scale for this model size."),
     };
 
     // yolo11.yaml scales; m, l and x use C3k inner blocks in every C3k2 (ultralytics parse_model).
@@ -39,7 +39,7 @@ internal readonly record struct YoloScale(double Depth, double Width, int MaxCha
         ModelSize.Medium => new(0.50, 1.00, 512, true),
         ModelSize.Large => new(1.00, 1.00, 512, true),
         ModelSize.XLarge => new(1.00, 1.50, 512, true),
-        _ => new(0.50, 1.00, 512, true),
+        _ => throw new ArgumentOutOfRangeException(nameof(size), size, "YOLO11 publishes no scale for this model size."),
     };
 
     /// <summary>Output channels of a layer declared with <paramref name="channels"/> at full width.</summary>
