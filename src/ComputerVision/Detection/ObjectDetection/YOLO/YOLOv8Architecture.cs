@@ -16,12 +16,12 @@ using System.Linq;
 namespace AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO;
 
 /// <summary>
-/// YOLOv8's compound scaling (ultralytics/cfg/models/v8/yolov8.yaml): depth and width multipliers and the
+/// Ultralytics YOLO compound scaling (yolov8.yaml, yolo11.yaml): depth and width multipliers and the
 /// channel cap applied before the width multiplier.
 /// </summary>
-internal readonly record struct YoloV8Scale(double Depth, double Width, int MaxChannels)
+internal readonly record struct YoloScale(double Depth, double Width, int MaxChannels, bool ForcesC3k = false)
 {
-    internal static YoloV8Scale For(ModelSize size) => size switch
+    internal static YoloScale ForV8(ModelSize size) => size switch
     {
         ModelSize.Nano => new(0.33, 0.25, 1024),
         ModelSize.Small => new(0.33, 0.50, 1024),
@@ -29,6 +29,17 @@ internal readonly record struct YoloV8Scale(double Depth, double Width, int MaxC
         ModelSize.Large => new(1.00, 1.00, 512),
         ModelSize.XLarge => new(1.00, 1.25, 512),
         _ => new(0.67, 0.75, 768),
+    };
+
+    // yolo11.yaml scales; m, l and x use C3k inner blocks in every C3k2 (ultralytics parse_model).
+    internal static YoloScale ForV11(ModelSize size) => size switch
+    {
+        ModelSize.Nano => new(0.50, 0.25, 1024),
+        ModelSize.Small => new(0.50, 0.50, 1024),
+        ModelSize.Medium => new(0.50, 1.00, 512, true),
+        ModelSize.Large => new(1.00, 1.00, 512, true),
+        ModelSize.XLarge => new(1.00, 1.50, 512, true),
+        _ => new(0.50, 1.00, 512, true),
     };
 
     /// <summary>Output channels of a layer declared with <paramref name="channels"/> at full width.</summary>
@@ -80,7 +91,7 @@ public partial class YOLOv8Backbone<T> : NeuralNetworkBase<T>, IDetectionBackbon
     public YOLOv8Backbone(ModelSize size = ModelSize.Nano, int inChannels = 3)
         : base(DetectionBackboneArchitecture<T>.Create(inChannels), new MeanSquaredErrorLoss<T>())
     {
-        var s = YoloV8Scale.For(size);
+        var s = YoloScale.ForV8(size);
         Name = $"YOLOv8Backbone-{size}";
         int c64 = s.Channels(64), c128 = s.Channels(128), c256 = s.Channels(256), c512 = s.Channels(512), c1024 = s.Channels(1024);
         _stages.Add(new YoloConv<T>(c64, 3, 2));                       // 0  P1/2
@@ -184,7 +195,7 @@ public partial class YOLOv8Neck<T> : NeckBase<T>
     /// <summary>Creates the neck for a model size.</summary>
     public YOLOv8Neck(ModelSize size)
     {
-        var s = YoloV8Scale.For(size);
+        var s = YoloScale.ForV8(size);
         int c256 = s.Channels(256), c512 = s.Channels(512), c1024 = s.Channels(1024);
         int n = s.Repeats(3);
         _topDown4 = new C2fBlock<T>(c512, n, false);

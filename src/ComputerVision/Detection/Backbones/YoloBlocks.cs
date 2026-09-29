@@ -13,7 +13,7 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 // Ultralytics YOLO building blocks (ultralytics/nn/modules/block.py and conv.py), shared by the per-paper
 // YOLO backbones and necks. Rank-4 [batch, channels, H, W] only: every block concatenates on axis 1.
 
-/// <summary>YOLO's Conv: convolution (no bias), batch normalization, SiLU.</summary>
+/// <summary>YOLO's Conv: convolution, batch normalization, then SiLU (or no activation when <c>act</c> is false).</summary>
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width, Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width, Direction = TensorLayoutDirection.Output)]
 [LayerCategory(LayerCategory.Convolution)]
@@ -25,18 +25,24 @@ public partial class YoloConv<T> : LayerBase<T>, IShapeContract
     private readonly int _outChannels;
     private readonly int _kernelSize;
     private readonly int _stride;
+    private readonly int _groups;
+    private readonly bool _act;
     private readonly ConvolutionalLayer<T> _conv;
     private readonly BatchNormalizationLayer<T> _norm;
-    private readonly IActivationFunction<T> _act = new SiLUActivation<T>();
+    private readonly IActivationFunction<T> _silu = new SiLUActivation<T>();
 
     /// <summary>Creates a Conv with "same" padding for odd kernels.</summary>
-    public YoloConv([LayerState] int outChannels, [LayerState] int kernelSize = 1, [LayerState] int stride = 1)
+    public YoloConv([LayerState] int outChannels, [LayerState] int kernelSize = 1, [LayerState] int stride = 1,
+        [LayerState] int groups = 1, [LayerState] bool act = true)
         : base(new[] { -1, -1, -1 }, new[] { outChannels, -1, -1 }, (IActivationFunction<T>)new IdentityActivation<T>())
     {
         _outChannels = outChannels;
         _kernelSize = kernelSize;
         _stride = stride;
-        _conv = new ConvolutionalLayer<T>(outChannels, kernelSize, stride, kernelSize / 2, (IActivationFunction<T>?)null);
+        _groups = groups;
+        _act = act;
+        _conv = new ConvolutionalLayer<T>(outChannels, kernelSize, stride, kernelSize / 2, (IActivationFunction<T>?)null,
+            initializationStrategy: null, nonlinearityForInit: null, groups: groups);
         _norm = new BatchNormalizationLayer<T>();
     }
 
@@ -62,7 +68,8 @@ public partial class YoloConv<T> : LayerBase<T>, IShapeContract
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        return _act.Activate(_norm.Forward(_conv.Forward(input)));
+        var y = _norm.Forward(_conv.Forward(input));
+        return _act ? _silu.Activate(y) : y;
     }
 
     /// <inheritdoc/>
