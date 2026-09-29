@@ -259,6 +259,7 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
         // deterministic seed, so two models built from equal options start from equal weights (#2201).
         // A null seed leaves the scope unarmed and initialization stays unseeded.
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(options.RandomSeed);
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.OfferSeedToNestedBackbone();
     }
 
     /// <summary>

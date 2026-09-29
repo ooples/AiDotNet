@@ -26,7 +26,9 @@ internal static class DetectionBackboneArchitecture<T>
             taskType: NeuralNetworkTaskType.ImageClassification,
             channels: inChannels,
             outputSize: 1);
-        architecture.RandomSeed = LayerInitializationSeedScope.NextSeedOrNull();
+        // Only a detector under construction offers its scope (see OfferSeedToNestedBackbone); a scope left armed
+        // by a detector that already finished must not seed a standalone backbone built afterwards.
+        architecture.RandomSeed = LayerInitializationSeedScope.TakeNestedBackboneSeed();
         return architecture;
     }
 }
