@@ -72,7 +72,7 @@ internal static class ModelDefectBaselines
             "AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>",
         };
 
-    /// <summary>ADNDEF002: LayerHelper factories yielding a bare MultiHeadAttentionLayer, 101 methods.</summary>
+    /// <summary>ADNDEF002: LayerHelper factories yielding a bare MultiHeadAttentionLayer, 102 entries; an overloaded factory is keyed by its signature.</summary>
     internal static readonly System.Collections.Generic.HashSet<string> ResidualFreeFactories =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
@@ -84,7 +84,7 @@ internal static class ModelDefectBaselines
             "CreateDefaultAudioLMLayers",
             "CreateDefaultBASICLayers",
             "CreateDefaultBEATsLayers",
-            "CreateDefaultBloombergGPTLayers",
+            "CreateDefaultBloombergGPTLayers(NeuralNetworkArchitecture<T>, int, int, int, int, int, int, int, double)",
             "CreateDefaultBridgeFusionLayers",
             "CreateDefaultBSRoFormerLayers",
             "CreateDefaultCanaryLayers",
@@ -100,7 +100,7 @@ internal static class ModelDefectBaselines
             "CreateDefaultDannaSepLayers",
             "CreateDefaultData2Vec2Layers",
             "CreateDefaultDecoderOnlyVisionLayers",
-            "CreateDefaultDiTLayers",
+            "CreateDefaultDiTLayers(int, int, int, int, int, int)",
             "CreateDefaultDocumentOCRLayers",
             "CreateDefaultDualStreamFusionLayers",
             "CreateDefaultEATLayers",
@@ -109,12 +109,13 @@ internal static class ModelDefectBaselines
             "CreateDefaultEncoderDecoderVLMLayers",
             "CreateDefaultETSformerLayers",
             "CreateDefaultFastConformerLayers",
-            "CreateDefaultFinGPTLayers",
-            "CreateDefaultFinMALayers",
+            "CreateDefaultFinGPTLayers(NeuralNetworkArchitecture<T>, int, int, int, int, int, int, int, double)",
+            "CreateDefaultFinGPTLayers(NeuralNetworkArchitecture<T>, int, int, int, int, int, double)",
+            "CreateDefaultFinMALayers(NeuralNetworkArchitecture<T>, int, int, int, int, int, int, int, double)",
             "CreateDefaultFishSpeechLayers",
             "CreateDefaultGenreClassifierLayers",
             "CreateDefaultHTDemucsLayers",
-            "CreateDefaultInvestLMLayers",
+            "CreateDefaultInvestLMLayers(NeuralNetworkArchitecture<T>, int, int, int, int, int, int, int, double)",
             "CreateDefaultLiLTLayers",
             "CreateDefaultLLaVAMLPProjectorLayers",
             "CreateDefaultMatchaTTSLayers",
