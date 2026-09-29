@@ -29,7 +29,16 @@ public class FusedTrainableSetTests
     public FusedTrainableSetTests(ITestOutputHelper output) => _out = output;
 
     [Fact]
-    public void TabDDPM_eager_step_updates_every_layer() => AssertEveryLayerTrains(fused: false);
+    public void TabDDPM_eager_step_updates_every_layer()
+    {
+        // Compilation off, so this exercises the eager DenoiserForwardTensors / BackwardAndStepOnPrecomputedLoss
+        // path whatever engine or codec setting the process happens to carry (the fused plan also commits on CPU).
+        var codec = TensorCodecOptions.Current;
+        bool saved = codec.EnableCompilation;
+        codec.EnableCompilation = false;
+        try { AssertEveryLayerTrains(fused: false); }
+        finally { codec.EnableCompilation = saved; }
+    }
 
     [SkippableFact]
     public void TabDDPM_fused_step_updates_every_layer_the_eager_step_does()
@@ -94,13 +103,19 @@ public class FusedTrainableSetTests
             0, 60, 0.001f,
         });
 
+        // The weight checks below pass on either path, so first prove which one THIS call took.
+        long fusedStepsAfter = FusedOptimizerStepCount(generator);
         if (fused)
         {
-            // The weight checks below pass for an eager fallback too, so first prove THIS call ran the fused plan.
-            long fusedStepsAfter = FusedOptimizerStepCount(generator);
             Assert.True(fusedStepsAfter > fusedStepsBefore,
                 $"TrainBatch did not advance the retained fused plan (optimizer step {fusedStepsBefore} -> {fusedStepsAfter}); "
                 + "it fell back to the eager step, so the fused trainable set was not exercised.");
+        }
+        else
+        {
+            Assert.True(fusedStepsAfter == fusedStepsBefore,
+                $"TrainBatch advanced a fused plan (optimizer step {fusedStepsBefore} -> {fusedStepsAfter}) with compilation "
+                + "off, so the eager step was not the one exercised.");
         }
 
         for (int i = 0; i < layers.Length; i++)

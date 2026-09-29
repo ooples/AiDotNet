@@ -1003,7 +1003,6 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
                 {
                     // s[0] noisyLatent, s[1] actualNoise (unused here — read
                     // in Loss), s[2] projectedTimeEmbed. Concat + MLP forward.
-                    int totalLen = s[0].Length + s[2].Length;
                     var input = Engine.TensorConcatenate(new[] { s[0], s[2] }, axis: 0);
                     var current = input;
                     foreach (var layer in _diffMLPLayers) current = layer.Forward(current);

@@ -692,121 +692,123 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         // is compiled once (on the first row) and replayed per subsequent row
         // by refreshing slot data. See ooples/AiDotNet#1846.
         AiDotNet.Training.MultiSlotFusedStep<T>? multiSlotStep = null;
+        bool fusedMapped = NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(_optimizer, out var mfsCfg);
+        bool hasTrainableParameters = false;
         for (int row = startRow; row < endRow; row++)
         {
-        int t = _gaussianDiffusion.SampleTimestep();
-        int catT = (int)((long)t * _options.NumCategoricalDiffusionSteps / _options.NumTimesteps);
+            int t = _gaussianDiffusion.SampleTimestep();
+            int catT = (int)((long)t * _options.NumCategoricalDiffusionSteps / _options.NumTimesteps);
 
-        var numClean = GetMatrixRow(numericalData, row);
-        var catClean = GetMatrixRow(categoricalData, row);
+            var numClean = GetMatrixRow(numericalData, row);
+            var catClean = GetMatrixRow(categoricalData, row);
 
-        Vector<T> numNoisy;
-        Vector<T> actualNoise;
-        if (_numNumericalFeatures > 0)
-        {
-            (numNoisy, actualNoise) = _gaussianDiffusion.AddNoise(numClean, t);
-        }
-        else
-        {
-            numNoisy = numClean;
-            actualNoise = new Vector<T>(0);
-        }
-
-        Vector<T> catNoisy;
-        if (_totalCategoricalWidth > 0 && catT < _multinomialDiffusion.NumTimesteps)
-        {
-            catNoisy = _multinomialDiffusion.AddNoise(catClean, catT);
-        }
-        else
-        {
-            catNoisy = catClean;
-        }
-
-        // Preferred fused path: MultiSlotFusedStep with the raw sinusoidal
-        // timestep encoding as a persistent slot. The learnable
-        // _timestepProjection stays INSIDE the compiled forward closure
-        // (which _plan.Step() replays per row) so its weights participate
-        // in the backward pass. See ooples/AiDotNet#1846.
-        var trainableParams = CollectModelTrainableTensors();
-        if (trainableParams.Count > 0
-            && NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
-                _optimizer,
-                out var mfsCfg))
-        {
-            var slots = BuildTabDDPMSlots(numNoisy, actualNoise, catNoisy, catClean, t);
-            if (slots is not null)
+            Vector<T> numNoisy;
+            Vector<T> actualNoise;
+            if (_numNumericalFeatures > 0)
             {
-                multiSlotStep = _fusedMultiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>();
-                Tensor<T> ForwardFromSlots(IReadOnlyList<Tensor<T>> s)
+                (numNoisy, actualNoise) = _gaussianDiffusion.AddNoise(numClean, t);
+            }
+            else
+            {
+                numNoisy = numClean;
+                actualNoise = new Vector<T>(0);
+            }
+
+            Vector<T> catNoisy;
+            if (_totalCategoricalWidth > 0 && catT < _multinomialDiffusion.NumTimesteps)
+            {
+                catNoisy = _multinomialDiffusion.AddNoise(catClean, catT);
+            }
+            else
+            {
+                catNoisy = catClean;
+            }
+
+            // Preferred fused path: MultiSlotFusedStep with the raw sinusoidal
+            // timestep encoding as a persistent slot. The learnable
+            // _timestepProjection stays INSIDE the compiled forward closure
+            // (which _plan.Step() replays per row) so its weights participate
+            // in the backward pass. See ooples/AiDotNet#1846.
+            // The optimizer mapping is per batch; the has-parameters gate latches once true (a lazily built model
+            // reports none until its first forward). TryStep still reads the parameter set every step: that is how
+            // it notices a changed set and re-reads lazily created weights after its first trace.
+            if (fusedMapped
+                && (hasTrainableParameters || (hasTrainableParameters = CollectModelTrainableTensors().Count > 0)))
+            {
+                var slots = BuildTabDDPMSlots(numNoisy, actualNoise, catNoisy, catClean, t);
+                if (slots is not null)
                 {
-                    // s[0] numNoisy, s[1] actualNoise, s[2] catNoisy,
-                    // s[3] catClean, s[4] rawSinusoidalTimeEmbed.
-                    var timeEmbed = _timestepProjection is not null
-                        ? _timestepProjection.Forward(s[4])
-                        : s[4];
-                    var (noisePred, catLogits) = DenoiserForwardFromTensors(s[0], s[2], timeEmbed);
-                    // Concat both heads into a single output tensor so the
-                    // fused-step signature (Tensor<T> forward output) is
-                    // satisfied. Loss closure splits it back.
-                    return Engine.TensorConcatenate(new[] { noisePred, catLogits }, axis: 0);
-                }
-                Tensor<T> ComputeLossFromSlots(Tensor<T> pred, IReadOnlyList<Tensor<T>> s)
-                {
-                    // Split forward output back into (noisePred, catLogits).
-                    int noisePredLen = _numNumericalFeatures > 0 && _numericalOutputHead is not null
-                        ? s[1].Length : 0;
-                    int catLogitsLen = _totalCategoricalWidth > 0 && _categoricalOutputHead is not null
-                        ? s[3].Length : 0;
-                    Tensor<T> noisePredT, catLogitsT;
-                    if (noisePredLen > 0 && catLogitsLen > 0)
+                    multiSlotStep = _fusedMultiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>();
+                    Tensor<T> ForwardFromSlots(IReadOnlyList<Tensor<T>> s)
                     {
-                        noisePredT = Engine.TensorSlice(pred, new[] { 0 }, new[] { noisePredLen });
-                        catLogitsT = Engine.TensorSlice(pred, new[] { noisePredLen }, new[] { catLogitsLen });
+                        // s[0] numNoisy, s[1] actualNoise, s[2] catNoisy,
+                        // s[3] catClean, s[4] rawSinusoidalTimeEmbed.
+                        var timeEmbed = _timestepProjection is not null
+                            ? _timestepProjection.Forward(s[4])
+                            : s[4];
+                        var (noisePred, catLogits) = DenoiserForwardFromTensors(s[0], s[2], timeEmbed);
+                        // Concat both heads into a single output tensor so the
+                        // fused-step signature (Tensor<T> forward output) is
+                        // satisfied. Loss closure splits it back.
+                        return Engine.TensorConcatenate(new[] { noisePred, catLogits }, axis: 0);
                     }
-                    else if (noisePredLen > 0)
+                    Tensor<T> ComputeLossFromSlots(Tensor<T> pred, IReadOnlyList<Tensor<T>> s)
                     {
-                        noisePredT = pred;
-                        catLogitsT = new Tensor<T>(new[] { 0 });
+                        // Split forward output back into (noisePred, catLogits).
+                        int noisePredLen = _numNumericalFeatures > 0 && _numericalOutputHead is not null
+                            ? s[1].Length : 0;
+                        int catLogitsLen = _totalCategoricalWidth > 0 && _categoricalOutputHead is not null
+                            ? s[3].Length : 0;
+                        Tensor<T> noisePredT, catLogitsT;
+                        if (noisePredLen > 0 && catLogitsLen > 0)
+                        {
+                            noisePredT = Engine.TensorSlice(pred, new[] { 0 }, new[] { noisePredLen });
+                            catLogitsT = Engine.TensorSlice(pred, new[] { noisePredLen }, new[] { catLogitsLen });
+                        }
+                        else if (noisePredLen > 0)
+                        {
+                            noisePredT = pred;
+                            catLogitsT = new Tensor<T>(new[] { 0 });
+                        }
+                        else
+                        {
+                            noisePredT = new Tensor<T>(new[] { 0 });
+                            catLogitsT = pred;
+                        }
+                        return ComputeDiffusionLossTapeFromTensors(noisePredT, s[1], catLogitsT, s[3]);
                     }
-                    else
+                    if (multiSlotStep.TryStep(
+                            parameterProvider: CollectModelTrainableTensors,
+                            zeroGradAction: null,
+                            freshSlotData: slots,
+                            forward: ForwardFromSlots,
+                            computeLoss: ComputeLossFromSlots,
+                            optimizerType: mfsCfg.Type,
+                            learningRate: mfsCfg.LearningRate,
+                            beta1: mfsCfg.Beta1,
+                            beta2: mfsCfg.Beta2,
+                            epsilon: mfsCfg.Epsilon,
+                            weightDecay: mfsCfg.WeightDecay,
+                            lrSchedule: mfsCfg.Schedule,
+                            extras: mfsCfg.Extras,
+                            out T _))
                     {
-                        noisePredT = new Tensor<T>(new[] { 0 });
-                        catLogitsT = pred;
+                        continue;
                     }
-                    return ComputeDiffusionLossTapeFromTensors(noisePredT, s[1], catLogitsT, s[3]);
-                }
-                if (multiSlotStep.TryStep(
-                        parameterProvider: CollectModelTrainableTensors,
-                        zeroGradAction: null,
-                        freshSlotData: slots,
-                        forward: ForwardFromSlots,
-                        computeLoss: ComputeLossFromSlots,
-                        optimizerType: mfsCfg.Type,
-                        learningRate: mfsCfg.LearningRate,
-                        beta1: mfsCfg.Beta1,
-                        beta2: mfsCfg.Beta2,
-                        epsilon: mfsCfg.Epsilon,
-                        weightDecay: mfsCfg.WeightDecay,
-                        lrSchedule: mfsCfg.Schedule,
-                        extras: mfsCfg.Extras,
-                        out T _))
-                {
-                    continue;
                 }
             }
-        }
 
-        // Eager fallback: tape-connected diffusion training step: run the
-        // denoiser forward on the tape, build the TabDDPM hybrid loss
-        // (ε-prediction MSE for the Gaussian-diffused numerical features +
-        // softmax cross-entropy for the multinomial-diffused categorical
-        // features, Kotelnikov et al. 2023), and backpropagate through the
-        // MLP + output heads + timestep projection in one optimizer step.
-        using var tape = new GradientTape<T>();
-        var timeEmbed2 = CreateTimestepEmbeddingTensor(t);
-        var (predictedNoise, predictedLogits) = DenoiserForwardTensors(numNoisy, catNoisy, timeEmbed2);
-        var loss = ComputeDiffusionLossTape(predictedNoise, actualNoise, predictedLogits, catClean);
-        BackwardAndStepOnPrecomputedLoss(tape, loss, _optimizer);
+            // Eager fallback: tape-connected diffusion training step: run the
+            // denoiser forward on the tape, build the TabDDPM hybrid loss
+            // (ε-prediction MSE for the Gaussian-diffused numerical features +
+            // softmax cross-entropy for the multinomial-diffused categorical
+            // features, Kotelnikov et al. 2023), and backpropagate through the
+            // MLP + output heads + timestep projection in one optimizer step.
+            using var tape = new GradientTape<T>();
+            var timeEmbed2 = CreateTimestepEmbeddingTensor(t);
+            var (predictedNoise, predictedLogits) = DenoiserForwardTensors(numNoisy, catNoisy, timeEmbed2);
+            var loss = ComputeDiffusionLossTape(predictedNoise, actualNoise, predictedLogits, catClean);
+            BackwardAndStepOnPrecomputedLoss(tape, loss, _optimizer);
         }
     }
 
