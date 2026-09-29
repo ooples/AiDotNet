@@ -490,17 +490,18 @@ public class TransformerTrainPathReproIssue1227And1228Tests
         long window2Growth = managedHeapEnd - managedHeapMid;
         _output.WriteLine($"  Window growth:    win1(0..{trainSteps / 2})=+{window1Growth / (1024 * 1024)}MB  win2({trainSteps / 2}..{trainSteps})=+{window2Growth / (1024 * 1024)}MB  per-call={window2Growth / (double)(trainSteps / 2) / 1024:F0}KB");
 
-        // Tripwire: tight working-set bound now that both ends of the fix
-        // have landed — Tensors 0.75.5 (graph + persistent-tape .Grad cleanup)
-        // and the LayerBase._preActivationCache gating below. Measured on a
-        // clean local build: ~0 MB delta across the full 1000 calls. The
-        // 1 GB ceiling tolerates working-set noise (native pool warm-up, JIT
-        // compilation, IO buffers) while still firing if per-call retention
-        // climbs back to even ~1 MB.
-        Assert.True(workingSetGrowthMB < 1024,
-            $"Working-set grew by {workingSetGrowthMB} MB across {trainSteps} L=4 train calls. " +
-            $"With the Tensors-side cleanup + LayerBase fix this should be ~0 MB. " +
-            $"At this rate the reporter's 56k-sample run would hit {workingSetGrowthMB * 56L} MB — see #1227.");
+        // Tripwire on the SECOND half of the run only. The working set settles during the first
+        // few hundred calls (native pool, JIT and allocator warm-up) and the size of that one-time
+        // step depends on what ran earlier in the process: measured +554 MB then +19 MB alone, +350 MB
+        // then -6 MB after the Transformer suite, and +1399 MB total in the full suite - always with a
+        // flat managed heap. A whole-run bound therefore failed on warm-up, not retention. A leak shows
+        // up as growth after warm-up: 0.5 MB per call over the 500 calls of window 2 trips this, twice
+        // as sensitive as the old whole-run 1 GB bound (~1 MB per call).
+        long workingSetGrowthWindow2MB = (workingSetEnd - workingSetMid) / (1024 * 1024);
+        Assert.True(workingSetGrowthWindow2MB < 256,
+            $"Working-set grew by {workingSetGrowthWindow2MB} MB over the last {trainSteps / 2} L=4 train calls " +
+            $"(after warm-up; whole run {workingSetGrowthMB} MB). Retention per call should be ~0. " +
+            $"At this rate the reporter's 56k-sample run would hit {workingSetGrowthWindow2MB * 112L} MB — see #1227.");
 
         // Tripwire: managed heap retention > 100 MB across 1000 calls means
         // graph nodes or activations are surviving Gen2 GC. Measured locally

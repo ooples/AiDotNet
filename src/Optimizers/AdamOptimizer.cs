@@ -604,7 +604,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         var mSpan = _m.AsWritableSpan();
         var vSpan = _v.AsWritableSpan();
         var outSpan = updatedParameters.AsWritableSpan();
-        // AMSGrad tracks a per-coordinate running max of the bias-corrected v̂ (Reddi 2018), which
+        // AMSGrad tracks a per-coordinate running max of the second moment (Reddi 2018; raw v, corrected at use), which
         // keeps the denominator non-decreasing and bounds Adam's post-convergence m̂/√v̂ drift on
         // stochastic objectives (VGAE reparameterization noise, GraphGenerationModel in the #1332
         // cluster). Updated in place here; semantics are unchanged.
