@@ -111,7 +111,9 @@ public partial class C3k2Block<T> : LayerBase<T>, IShapeContract
         _cv1a = new YoloConv<T>(hidden);
         _cv1b = new YoloConv<T>(hidden);
         _blocks = Enumerable.Range(0, Math.Max(1, depth))
-            .Select(_ => c3k ? (LayerBase<T>)new C3kBlock<T>(hidden, 2, shortcut) : new YoloBottleneck<T>(hidden, shortcut))
+            // Ultralytics C3k2 builds its plain inner blocks as Bottleneck(c, c, shortcut, g), i.e. Bottleneck's
+            // default e = 0.5; only C2f and C3k pass e = 1.0. YoloBottleneck defaults to 1.0 (the C2f case).
+            .Select(_ => c3k ? (LayerBase<T>)new C3kBlock<T>(hidden, 2, shortcut) : new YoloBottleneck<T>(hidden, shortcut, expansion: 0.5))
             .ToList();
         _cv2 = new YoloConv<T>(outChannels);
     }

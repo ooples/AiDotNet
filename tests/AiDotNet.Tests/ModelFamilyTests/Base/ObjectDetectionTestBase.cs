@@ -188,46 +188,56 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
         // batch's statistics; inference normalizes with running statistics and yields a different loss.
         // Batch statistics depend only on the input, so this forward and the step's own forward agree.
         // The window covers every oracle read, including YOLOv10's ForwardTrainingHeads.
+        double expected;
+        double[] beforeValues;
+        AiDotNet.ComputerVision.Detection.DetectionTrainingBatch<T> batch;
         detector.SetTrainingMode(true);
-        using var before = detector.Predict(input);
-        var beforeValues = before.ToArray().Select(value => ops.ToDouble(value)).ToArray();
-        var heads = new List<(TaskAlignedDetectionOracle.Level[] Levels, int TopK)>();
-        if (detector is AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv10<T> yolo10)
+        try
         {
-            var outputs = yolo10.ForwardTrainingHeads(input)
-                .Select(output => output.ToArray().Select(value => ops.ToDouble(value)).ToArray()).ToList();
-            Assert.Equal(4 * strides.Length, outputs.Count);
-            heads.Add((OracleLevels(outputs.Take(2 * strides.Length).ToList()), 1));
-            heads.Add((OracleLevels(outputs.Skip(2 * strides.Length).ToList()), 10));
-        }
-        else
-        {
-            var outputs = new List<double[]>();
-            int offset = 0;
-            foreach (int width in new[] { classes, 4 * regMax })
-                foreach (int stride in strides)
-                {
-                    int length = width * (imageSize / stride) * (imageSize / stride);
-                    outputs.Add(beforeValues.Skip(offset).Take(length).ToArray());
-                    offset += length;
-                }
-            Assert.Equal(beforeValues.Length, offset);
-            heads.Add((OracleLevels(outputs), 10));
-        }
+            using var before = detector.Predict(input);
+            beforeValues = before.ToArray().Select(value => ops.ToDouble(value)).ToArray();
+            var heads = new List<(TaskAlignedDetectionOracle.Level[] Levels, int TopK)>();
+            if (detector is AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv10<T> yolo10)
+            {
+                var outputs = yolo10.ForwardTrainingHeads(input)
+                    .Select(output => output.ToArray().Select(value => ops.ToDouble(value)).ToArray()).ToList();
+                Assert.Equal(4 * strides.Length, outputs.Count);
+                heads.Add((OracleLevels(outputs.Take(2 * strides.Length).ToList()), 1));
+                heads.Add((OracleLevels(outputs.Skip(2 * strides.Length).ToList()), 10));
+            }
+            else
+            {
+                var outputs = new List<double[]>();
+                int offset = 0;
+                foreach (int width in new[] { classes, 4 * regMax })
+                    foreach (int stride in strides)
+                    {
+                        int length = width * (imageSize / stride) * (imageSize / stride);
+                        outputs.Add(beforeValues.Skip(offset).Take(length).ToArray());
+                        offset += length;
+                    }
+                Assert.Equal(beforeValues.Length, offset);
+                heads.Add((OracleLevels(outputs), 10));
+            }
 
-        var gold = new[] { 0.55, 0.45, 0.3, 0.35 };
-        var oracleGold = emptyTargets
-            ? Array.Empty<TaskAlignedDetectionOracle.Gold>()
-            : new[] { new TaskAlignedDetectionOracle.Gold(1, gold[0], gold[1], gold[2], gold[3]) };
-        double expected = heads.Sum(head => TaskAlignedDetectionOracle.Loss(head.Levels, 1, classes, regMax,
-            TaskAlignedDetectionOracle.Assign(head.Levels, 1, classes, regMax, new[] { oracleGold }, imageSize, imageSize, head.TopK)));
+            var gold = new[] { 0.55, 0.45, 0.3, 0.35 };
+            var oracleGold = emptyTargets
+                ? Array.Empty<TaskAlignedDetectionOracle.Gold>()
+                : new[] { new TaskAlignedDetectionOracle.Gold(1, gold[0], gold[1], gold[2], gold[3]) };
+            expected = heads.Sum(head => TaskAlignedDetectionOracle.Loss(head.Levels, 1, classes, regMax,
+                TaskAlignedDetectionOracle.Assign(head.Levels, 1, classes, regMax, new[] { oracleGold }, imageSize, imageSize, head.TopK)));
 
-        var batch = new AiDotNet.ComputerVision.Detection.DetectionTrainingBatch<T>(new[]
+            batch = new AiDotNet.ComputerVision.Detection.DetectionTrainingBatch<T>(new[]
+            {
+                oracleGold.Select(g => new AiDotNet.ComputerVision.Detection.DetectionTrainingTarget<T>(g.ClassId,
+                    ops.FromDouble(g.CenterX), ops.FromDouble(g.CenterY), ops.FromDouble(g.Width), ops.FromDouble(g.Height))).ToArray()
+            });
+        }
+        finally
         {
-            oracleGold.Select(g => new AiDotNet.ComputerVision.Detection.DetectionTrainingTarget<T>(g.ClassId,
-                ops.FromDouble(g.CenterX), ops.FromDouble(g.CenterY), ops.FromDouble(g.Width), ops.FromDouble(g.Height))).ToArray()
-        });
-        detector.SetTrainingMode(false);
+            // An assertion failing inside the window must not leave the detector in training mode.
+            detector.SetTrainingMode(false);
+        }
         if (trainingStep is null) training.TrainDetections(input, batch);
         else trainingStep(input, batch);
 

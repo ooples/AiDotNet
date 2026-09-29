@@ -11754,6 +11754,7 @@ public static partial class LayerHelper<T>
     /// <param name="imageWidth">Input image width (default: 128).</param>
     /// <param name="imageHeight">Input image height (default: 32).</param>
     /// <param name="visionDim">Vision encoder dimension (default: 512).</param>
+    /// <param name="numLayers">Transformer units in the vision trunk (default: 3, the paper's).</param>
     /// <returns>The layers forming ABINet's vision model trunk.</returns>
     public static IEnumerable<ILayer<T>> CreateDefaultABINetVisionLayers(
         int imageWidth = 128,
@@ -11779,8 +11780,11 @@ public static partial class LayerHelper<T>
 
         // The paper's vision model ends in a transformer of numLayers (3) residual layers. This was one
         // bare attention layer with no skip, and the visionLayers option was never read.
+        // The paper's 8 heads, reduced to the largest head count that divides a non-default visionDim, as the
+        // other builders here do; a fixed 8 cannot resolve for, say, visionDim = 100.
+        int visionHeads = ChooseDivisibleHeadConfig(visionDim, 8).heads;
         for (int i = 0; i < numLayers; i++)
-            yield return new TransformerEncoderLayer<T>(8, visionDim * 4, visionDim);
+            yield return new TransformerEncoderLayer<T>(visionHeads, visionDim * 4, visionDim);
     }
 
     /// <summary>
@@ -11851,7 +11855,6 @@ public static partial class LayerHelper<T>
     /// Creates ABINet's fusion branch: the ITERATIVE refinement stack and the final character head.
     /// </summary>
     /// <param name="visionDim">Vision encoder dimension (default: 512).</param>
-    /// <param name="numIterations">Number of refinement iterations (default: 3).</param>
     /// <param name="charsetSize">Character set size (default: 95).</param>
     /// <returns>The layers forming ABINet's fusion branch.</returns>
     public static IEnumerable<ILayer<T>> CreateDefaultABINetFusionLayers(

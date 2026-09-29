@@ -90,4 +90,29 @@ public sealed class YOLOv11NeckTests
         b.Forward(features);
         Assert.Equal(a.GetParameters().ToArray(), b.GetParameters().ToArray());
     }
+
+    [Fact]
+    public void C3k2_MatchesTheUltralyticsParameterCount_ForYolo11nLayer2()
+    {
+        // yolo11n.yaml layer 2 is C3k2(32 -> 64, n = 1, c3k = False, e = 0.25); Ultralytics' model summary reports
+        // 6,640 parameters for it: cv1 32->32 (1,088), cv2 48->64 (3,200), and one inner Bottleneck 16->8->16
+        // (2,352) built with Bottleneck's default e = 0.5. With e = 1.0 the inner block is 4,672 and the total 8,960.
+        var block = new C3k2Block<double>(outChannels: 64, depth: 1, c3k: false, expansion: 0.25);
+        block.Forward(new Tensor<double>(new[] { 1, 32, 8, 8 }));
+        // Ultralytics counts nn.Parameters only; ParameterCount here also carries BatchNorm's running mean and
+        // variance (serialized state, not trained), so compare the trainable tensors.
+        Assert.Equal(6640, block.GetTrainableParameters().Sum(tensor => tensor.Length));
+    }
+
+    [Fact]
+    public void DifferentSeeds_GiveDifferentWeights()
+    {
+        // Without this the equal-seed test also passes when the seed is ignored or the weights are constant.
+        var features = Features(3);
+        var a = Neck(5);
+        var b = Neck(6);
+        a.Forward(features);
+        b.Forward(features);
+        Assert.NotEqual(a.GetParameters().ToArray(), b.GetParameters().ToArray());
+    }
 }

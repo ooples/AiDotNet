@@ -41,8 +41,11 @@ public partial class YoloConv<T> : LayerBase<T>, IShapeContract
         _stride = stride;
         _groups = groups;
         _act = act;
+        // Ultralytics Conv is nn.Conv2d(..., bias=False) followed by BatchNorm2d, whose shift makes a conv bias
+        // redundant. Stated explicitly: BiasMode.Auto asks the following layer, and inside this block the BN is not
+        // in any layer list the conv can see, so Auto kept a bias the reference does not have (1 extra per channel).
         _conv = new ConvolutionalLayer<T>(outChannels, kernelSize, stride, kernelSize / 2, (IActivationFunction<T>?)null,
-            initializationStrategy: null, nonlinearityForInit: null, groups: groups);
+            initializationStrategy: null, nonlinearityForInit: null, groups: groups, biasMode: BiasMode.Never);
         _norm = new BatchNormalizationLayer<T>();
     }
 
@@ -127,6 +130,13 @@ public partial class YoloBottleneck<T> : LayerBase<T>, IShapeContract
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
+        // The residual adds the input to a _channels-wide output, so the widths must agree. Reference YOLO only
+        // builds a shortcut when c1 == c2; here the declared width is the contract, so a mismatch is a caller error.
+        int inputChannels = input.Shape.Length == 4 ? input.Shape[1] : input.Shape[0];
+        if (_shortcut && inputChannels != _channels)
+            throw new ArgumentException(
+                $"YoloBottleneck with a shortcut expects {_channels} input channels but received {inputChannels}.",
+                nameof(input));
         var y = _cv2.Forward(_cv1.Forward(input));
         return _shortcut ? BackboneOps<T>.AddResidual(y, input) : y;
     }

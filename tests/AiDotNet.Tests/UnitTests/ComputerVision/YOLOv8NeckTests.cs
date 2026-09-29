@@ -90,4 +90,16 @@ public sealed class YOLOv8NeckTests
         b.Forward(features);
         Assert.Equal(a.GetParameters().ToArray(), b.GetParameters().ToArray());
     }
+
+    [Fact]
+    public void DifferentSeeds_GiveDifferentWeights()
+    {
+        // Without this the equal-seed test also passes when the seed is ignored or the weights are constant.
+        var features = Features(3);
+        var a = Neck(5);
+        var b = Neck(6);
+        a.Forward(features);
+        b.Forward(features);
+        Assert.NotEqual(a.GetParameters().ToArray(), b.GetParameters().ToArray());
+    }
 }
