@@ -223,7 +223,8 @@ public abstract class FTTransformerBase<T> : IParameterSource<T>
         }
 
         // Final layer normalization
-        FinalLayerNorm = new LayerNormalizationLayer<T>(Options.EmbeddingDimension);
+        FinalLayerNorm = new LayerNormalizationLayer<T>(
+            Options.EmbeddingDimension, Options.LayerNormEpsilon);
 
         // Initialize cache
         _layerOutputsCache = new List<Tensor<T>>();

@@ -1,12 +1,41 @@
 using AiDotNet.Models.Options;
 
+using AiDotNet.Video.Understanding;
+
 namespace AiDotNet.Video.Options;
 
 /// <summary>
 /// Configuration options for the VideoCLIP video understanding model.
 /// </summary>
-public class VideoCLIPVideoOptions : NeuralNetworkOptions
+public class VideoCLIPVideoOptions : VideoHyperparameterOptions
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="VideoCLIPVideoOptions"/> class carrying
+    /// this model's shipped defaults.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> You do not need to set any of these. They are the values this
+    /// model has always used, moved here from its constructor so they can be seen and
+    /// changed in one place.
+    /// </para>
+    /// <para>
+    /// Carried over unchanged. Whether each matches the published paper is verified, and
+    /// corrected where it does not, in a later phase of issue #2090.
+    /// </para>
+    /// </remarks>
+    public VideoCLIPVideoOptions()
+    {
+        NumFrames = 32;
+        EmbeddingDim = 512;
+        TextMaxLength = 77;
+        VocabSize = 49408;
+        Temperature = 1.0;
+        HiddenDim = 768;
+        VocabPath = null;
+        MergesPath = null;
+    }
+
     /// <summary>Gets or sets the learning rate used by the default Adam optimizer.</summary>
     /// <value>
     /// Defaults to 5e-5, the initial learning rate VideoCLIP specifies (Xu et al. 2021,
@@ -62,4 +91,50 @@ public class VideoCLIPVideoOptions : NeuralNetworkOptions
     /// <summary>Gets or sets the number of text transformer blocks.</summary>
     /// <value>Defaults to 12.</value>
     public int NumTextBlocks { get; set; } = 12;
+
+    /// <summary>
+    /// Gets or sets the embedding dim.
+    /// </summary>
+    public int EmbeddingDim { get; set; }
+
+    /// <summary>
+    /// Gets or sets the text max length.
+    /// </summary>
+    public int TextMaxLength { get; set; }
+
+    /// <summary>
+    /// Gets or sets the vocab size.
+    /// </summary>
+    public int VocabSize { get; set; }
+
+    /// <summary>
+    /// Gets or sets the temperature.
+    /// </summary>
+    public double Temperature { get; set; }
+
+    /// <summary>
+    /// Gets or sets the hidden dim.
+    /// </summary>
+    public int HiddenDim { get; set; }
+
+    /// <summary>
+    /// Gets or sets the vocab path.
+    /// </summary>
+    public string? VocabPath { get; set; }
+
+    /// <summary>
+    /// Gets or sets the merges path.
+    /// </summary>
+    public string? MergesPath { get; set; }
+
+    /// <summary>
+    /// Throws if a value this model requires has been left unset or is not positive.
+    /// </summary>
+    /// <exception cref="ArgumentException">
+    /// Thrown when a required dimension is zero or negative.
+    /// </exception>
+    public void Validate()
+    {
+        ValidateCore();
+    }
 }

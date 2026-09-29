@@ -254,13 +254,22 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
         // ForwardBackbone feeds this [samples, NumNumericalFeatures], so the input width is known
         // here. Zero features is the one genuinely deferred case, and only then is it deferred.
         _featureEncoder = NumNumericalFeatures > 0
-            ? new FullyConnectedLayer<T>(
-                NumNumericalFeatures,
-                embDim,
-                Options.HiddenActivation ?? new GELUActivation<T>())
-            : new FullyConnectedLayer<T>(
-                embDim,
-                Options.HiddenActivation ?? new GELUActivation<T>());
+            ? (Options.HiddenVectorActivation is null
+                ? new FullyConnectedLayer<T>(
+                    NumNumericalFeatures,
+                    embDim,
+                    Options.HiddenActivation ?? new GELUActivation<T>())
+                : FullyConnectedLayer<T>.WithVectorActivation(
+                    NumNumericalFeatures,
+                    embDim,
+                    Options.HiddenVectorActivation))
+            : (Options.HiddenVectorActivation is null
+                ? new FullyConnectedLayer<T>(
+                    embDim,
+                    Options.HiddenActivation ?? new GELUActivation<T>())
+                : new FullyConnectedLayer<T>(
+                    embDim,
+                    Options.HiddenVectorActivation));
 
         // Categorical encoders
         var cardinalities = Options.CategoricalCardinalities ?? [];
@@ -307,10 +316,15 @@ public abstract partial class TabPFNBase<T> : IParameterSource<T>
         for (int i = 0; i < mlpDims.Length; i++)
         {
             bool isLast = i == mlpDims.Length - 1;
-            _outputMLP[i] = new FullyConnectedLayer<T>(
-                inputDim,
-                mlpDims[i],
-                isLast ? null : Options.HiddenActivation ?? new GELUActivation<T>());
+            _outputMLP[i] = (isLast || Options.HiddenVectorActivation is null)
+                ? new FullyConnectedLayer<T>(
+                    inputDim,
+                    mlpDims[i],
+                    isLast ? null : Options.HiddenActivation ?? new GELUActivation<T>())
+                : FullyConnectedLayer<T>.WithVectorActivation(
+                    inputDim,
+                    mlpDims[i],
+                    Options.HiddenVectorActivation);
             inputDim = mlpDims[i];
         }
 

@@ -31,8 +31,6 @@ namespace AiDotNet.Diffusion.Conditioning;
 public class T5TextConditioner<T> : TextConditioningBase<T>
 {
     private readonly T5Variant _variant;
-    /// <summary>The caller's dimensions, copied so later edits to their object cannot resize this one.</summary>
-    private readonly TextConditionerOptions _options;
     /// <summary>Explicit transformer dimensions; null means the variant's paper value.</summary>
     private readonly int? _hiddenSizeOverride;
     private readonly int? _numLayersOverride;
@@ -40,30 +38,25 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
 
     public override bool ProducesPooledOutput => false;
 
-    /// <param name="options">Optional transformer dimensions; each unset value keeps the
-    /// variant's paper value, and the embedding dimension follows the hidden size.</param>
-    public T5TextConditioner(
-        ITokenizer tokenizer,
-        T5Variant variant = T5Variant.Base,
+    /// <param name="options">The variant and optional transformer dimensions; each unset dimension
+    /// keeps the variant's paper value, and the embedding dimension follows the hidden size.</param>
+    public T5TextConditioner(ITokenizer tokenizer,
         NeuralNetworkArchitecture<T>? architecture = null,
-        TextConditionerOptions? options = null)
+        T5TextConditionerOptions? options = null)
         : base(
-            architecture: architecture ?? BuildDefaultArchitecture(variant),
+            architecture: architecture ?? BuildDefaultArchitecture((options ??= new T5TextConditionerOptions()).Variant),
             tokenizer: tokenizer,
             maxSequenceLength: 512,
-            embeddingDimension: options?.HiddenSize ?? GetEmbeddingDim(variant))
+            embeddingDimension: (options ??= new T5TextConditionerOptions()).HiddenSize ?? GetEmbeddingDim(options.Variant))
     {
         Guard.NotNull(tokenizer);
-        _variant = variant;
-        _options = new TextConditionerOptions(options ?? new TextConditionerOptions());
-        int? hiddenSize = _options.HiddenSize;
-        int? numLayers = _options.NumLayers;
-        int? numHeads = _options.NumHeads;
-        if (hiddenSize is <= 0) throw new ArgumentOutOfRangeException(nameof(options), "HiddenSize must be positive.");
-        if (numLayers is <= 0) throw new ArgumentOutOfRangeException(nameof(options), "NumLayers must be positive.");
-        if (numHeads is <= 0) throw new ArgumentOutOfRangeException(nameof(options), "NumHeads must be positive.");
-        int effectiveHidden = hiddenSize ?? GetHiddenSize(variant);
-        int effectiveHeads = numHeads ?? GetNumHeads(variant);
+        options.Validate();
+        _variant = options.Variant;
+        int? hiddenSize = options.HiddenSize;
+        int? numLayers = options.NumLayers;
+        int? numHeads = options.NumHeads;
+        int effectiveHidden = hiddenSize ?? GetHiddenSize(_variant);
+        int effectiveHeads = numHeads ?? GetNumHeads(_variant);
         if (effectiveHidden % effectiveHeads != 0)
             throw new ArgumentException(
                 $"hiddenSize ({effectiveHidden}) must be divisible by numHeads ({effectiveHeads}).",
@@ -83,7 +76,7 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
         // (InputShape[0] = -1 until resolved), so constructing the layer OBJECTS allocates no
         // weights, and a T5-XXL variant still pays for its parameters only at first forward.
         InitializeLayers();
-}
+    }
 
     /// <summary>
     /// Loads a paper-canonical T5 conditioner with its real pretrained
@@ -106,7 +99,7 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
             _ => "google/t5-v1_1-base",
         };
         var tokenizer = AutoTokenizer.FromPretrained(modelName, cacheDir);
-        return new T5TextConditioner<T>(tokenizer, variant);
+        return new T5TextConditioner<T>(tokenizer, options: new T5TextConditionerOptions { Variant = variant });
     }
 
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers() =>

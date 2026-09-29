@@ -157,7 +157,7 @@ public class GanAdversarialStepTests
             Dense(NeuralNetworkTaskType.Generative, 16, 32, 4, new TanhActivation<double>()),
             Dense(NeuralNetworkTaskType.Regression, 20, 32, 1, new IdentityActivation<double>()),
             InputType.OneDimensional,
-            l1Lambda: 0.0);
+            options: new AiDotNet.NeuralNetworks.Options.Pix2PixOptions { L1Lambda = 0.0 });
         var generatorBefore = Snapshot(pix2pix.Generator);
         var discriminatorBefore = Snapshot(pix2pix.Discriminator);
 

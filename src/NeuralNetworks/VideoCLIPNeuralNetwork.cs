@@ -213,14 +213,14 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         _maxSequenceLength = _options.MaxSequenceLength;
         _imageSize = _options.ImageSize;
         _onnxChannels = _options.Channels;
-        _patchSize = 16;
-        _visionHiddenDim = 768;
-        _textHiddenDim = 512;
-        _numFrameEncoderLayers = 12;
-        _numTemporalLayers = 4;
-        _numTextLayers = 12;
-        _numHeads = 12;
-        _vocabularySize = 49408;
+        _patchSize = _options.PatchSize;
+        _visionHiddenDim = _options.VisionDim;
+        _textHiddenDim = _options.TextHiddenDim;
+        _numFrameEncoderLayers = _options.NumFrameEncoderLayers;
+        _numTemporalLayers = _options.NumTemporalLayers;
+        _numTextLayers = _options.NumTextLayers;
+        _numHeads = _options.NumHeads;
+        _vocabularySize = _options.VocabSize;
 
         InferenceSession? videoEncoder = null;
         InferenceSession? textEncoder = null;

@@ -56,7 +56,7 @@ namespace AiDotNet.Video.Segmentation;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 1);
-/// var model = new SAM2&lt;double&gt;(architecture, modelSize: SAM2ModelSize.Large, memoryBankSize: 7);
+/// var model = new SAM2&lt;double&gt;(architecture, options: new SAM2Options { ModelSize = SAM2ModelSize.Large, MemoryBankSize = 7 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]
@@ -284,8 +284,6 @@ public partial class SAM2<T> : NeuralNetworkBase<T>
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        SAM2ModelSize modelSize = SAM2ModelSize.Base,
-        int memoryBankSize = 7,
         SAM2Options? options = null)
         // SAM 2 (Ravi et al. 2024, §D) inherits SAM's mask supervision: "a linear combination of focal
         // and dice loss" in a 20:1 ratio, focal at the RetinaNet gamma=2 / alpha=0.25 the original SAM
@@ -300,9 +298,9 @@ public partial class SAM2<T> : NeuralNetworkBase<T>
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _modelSize = modelSize;
-        if (memoryBankSize <= 0) throw new ArgumentOutOfRangeException(nameof(memoryBankSize));
-        _memoryBankSize = memoryBankSize;
+        _modelSize = _options.ModelSize;
+        if (_options.MemoryBankSize <= 0) throw new ArgumentOutOfRangeException(nameof(options));
+        _memoryBankSize = _options.MemoryBankSize;
         _useNativeMode = true;
         _onnxModelPath = null;
         _optimizer = optimizer;
@@ -335,10 +333,8 @@ public partial class SAM2<T> : NeuralNetworkBase<T>
     public SAM2(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        SAM2ModelSize modelSize = SAM2ModelSize.Base,
-        int memoryBankSize = 7,
         SAM2Options? options = null)
-        : base(architecture, new BinaryCrossEntropyLoss<T>())
+        : base(architecture: architecture, new BinaryCrossEntropyLoss<T>())
     {
         _options = options ?? new SAM2Options();
         Options = _options;
@@ -350,9 +346,12 @@ public partial class SAM2<T> : NeuralNetworkBase<T>
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _modelSize = modelSize;
-        if (memoryBankSize <= 0) throw new ArgumentOutOfRangeException(nameof(memoryBankSize));
-        _memoryBankSize = memoryBankSize;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _modelSize = _options.ModelSize;
+        _memoryBankSize = _options.MemoryBankSize;
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
         _optimizer = null;

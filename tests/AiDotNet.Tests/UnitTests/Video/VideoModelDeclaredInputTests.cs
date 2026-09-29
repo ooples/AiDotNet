@@ -76,8 +76,7 @@ public class VideoModelDeclaredInputTests
     public void BasicVSRPlusPlus_UpscalesItsDeclaredSingleFrame_AsAOneFrameClip()
     {
         const int size = 32;
-        var model = new BasicVSRPlusPlus<double>(
-            FrameArchitecture(size), scaleFactor: 2, numFeatures: 8, numResidualBlocks: 1, numPropagations: 1);
+        var model = new BasicVSRPlusPlus<double>(FrameArchitecture(size), options: new BasicVSRPlusPlusOptions { ScaleFactor = 2, NumFeatures = 8, NumResidualBlocks = 1, NumPropagations = 1 });
 
         int[] declared = model.GetArchitecture().GetInputShape();
         Assert.Equal(new[] { 3, size, size }, declared);
@@ -99,13 +98,11 @@ public class VideoModelDeclaredInputTests
     public void OpenSora_DenoisesItsDeclaredSingleLatent()
     {
         const int size = 16;
-        var model = new OpenSora<double>(
-            new NeuralNetworkArchitecture<double>(
+        var model = new OpenSora<double>(new NeuralNetworkArchitecture<double>(
                 inputType: InputType.ThreeDimensional,
                 taskType: NeuralNetworkTaskType.Generative,
                 inputHeight: size, inputWidth: size, inputDepth: 3,
-                outputSize: size * size * 3),
-            numFrames: 2, hiddenDim: 32, numLayers: 1, numInferenceSteps: 4);
+                outputSize: size * size * 3), options: new OpenSoraOptions { NumFrames = 2, HiddenDim = 32, NumLayers = 1, NumInferenceSteps = 4 });
 
         int[] declared = model.GetArchitecture().GetInputShape();
         Assert.Equal(new[] { 3, size, size }, declared);
@@ -122,7 +119,7 @@ public class VideoModelDeclaredInputTests
     public void ProPainter_ReconstructsItsDeclaredSingleFrame_AsAOneFrameClip()
     {
         const int size = 16;
-        var model = new ProPainter<double>(FrameArchitecture(size), numFeatures: 8, numTransformerBlocks: 1, numHeads: 2);
+        var model = new ProPainter<double>(FrameArchitecture(size), options: new ProPainterOptions { NumFeatures = 8, NumTransformerBlocks = 1, NumHeads = 2 });
 
         int[] declared = model.GetArchitecture().GetInputShape();
         Assert.Equal(new[] { 3, size, size }, declared);
@@ -157,11 +154,14 @@ public class VideoModelDeclaredInputTests
             NumTemporalBlocks = 1,
             NumTextBlocks = 1,
             WarmupSteps = 0,
+            EmbeddingDim = 4,
+            TextMaxLength = 8,
+            VocabSize = 64,
         };
 
-        return numFrames is int frames
-            ? new VideoCLIP<float>(architecture, numFrames: frames, embeddingDim: 4, textMaxLength: 8, vocabSize: 64, options: options)
-            : new VideoCLIP<float>(architecture, embeddingDim: 4, textMaxLength: 8, vocabSize: 64, options: options);
+        // Left at its default, NumFrames defers to the architecture's declared clip length.
+        if (numFrames is int frames) options.NumFrames = frames;
+        return new VideoCLIP<float>(architecture, options: options);
     }
 
     private static NeuralNetworkArchitecture<float> ClipArchitecture(int frames) => new(

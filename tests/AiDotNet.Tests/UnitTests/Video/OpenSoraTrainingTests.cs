@@ -20,10 +20,13 @@ public class OpenSoraTrainingTests
                 inputHeight: 16,
                 inputWidth: 16,
                 inputDepth: 3),
-            numFrames: 1,
-            hiddenDim: 32,
-            numLayers: 4,
-            numInferenceSteps: 4);
+            new AiDotNet.Video.Options.OpenSoraOptions
+            {
+                NumFrames = 1,
+                HiddenDim = 32,
+                NumLayers = 4,
+                NumInferenceSteps = 4,
+            });
 
     private static Tensor<double> Frames(int seed)
     {

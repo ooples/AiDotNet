@@ -235,4 +235,31 @@ public abstract partial class SpeakerRecognitionBase<T> : AudioNeuralNetworkBase
         };
         return new MfccExtractor<T>(options);
     }
+
+    /// <summary>
+    /// Creates the MFCC front end described by a speaker model's own options.
+    /// </summary>
+    /// <param name="options">The model's options.</param>
+    /// <returns>An extractor configured to match the model.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="options"/> is null.</exception>
+    /// <remarks>
+    /// <para>
+    /// The overload above defaults the frame geometry independently of the model, so a model that
+    /// changed its coefficient count got layers of one width fed by features of another. Taking
+    /// the options directly keeps the front end and the network configured from one place.
+    /// </para>
+    /// </remarks>
+    protected MfccExtractor<T> CreateMfccExtractor(SpeakerEmbeddingOptions options)
+    {
+        if (options is null)
+            throw new ArgumentNullException(nameof(options));
+
+        return new MfccExtractor<T>(new MfccOptions
+        {
+            SampleRate = options.SampleRate,
+            NumCoefficients = options.NumMfcc,
+            FftSize = options.FftSize,
+            HopLength = options.HopLength
+        });
+    }
 }

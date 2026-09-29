@@ -32,8 +32,6 @@ namespace AiDotNet.Diffusion.Conditioning;
 public partial class CLIPTextConditioner<T> : TextConditioningBase<T>
 {
     private readonly CLIPVariant _variant;
-    /// <summary>The caller's dimensions, copied so later edits to their object cannot resize this one.</summary>
-    private readonly TextConditionerOptions _options;
     /// <summary>Explicit transformer dimensions; null means the variant's paper value.</summary>
     private readonly int? _hiddenSizeOverride;
     private readonly int? _numLayersOverride;
@@ -58,42 +56,34 @@ public partial class CLIPTextConditioner<T> : TextConditioningBase<T>
     /// that loads the canonical HuggingFace CLIP tokenizer.
     /// </summary>
     /// <param name="tokenizer">The paper-canonical CLIP tokenizer (byte-level BPE).</param>
-    /// <param name="variant">CLIP variant (selects hidden size / num layers / num heads).</param>
     /// <param name="architecture">Optional architecture override; pass user-supplied
     /// <see cref="NeuralNetworkArchitecture{T}.Layers"/> to bypass the default factory.</param>
-    /// <param name="options">Optional transformer dimensions; each unset value keeps the
-    /// variant's paper value, and the embedding dimension follows the hidden size.</param>
-    public CLIPTextConditioner(
-        ITokenizer tokenizer,
-        CLIPVariant variant = CLIPVariant.ViTL14,
+    /// <param name="options">The variant and optional transformer dimensions; each unset dimension
+    /// keeps the variant's paper value, and the embedding dimension follows the hidden size.</param>
+    public CLIPTextConditioner(ITokenizer tokenizer,
         NeuralNetworkArchitecture<T>? architecture = null,
-        TextConditionerOptions? options = null)
+        CLIPTextConditionerOptions? options = null)
         : base(
-            architecture: architecture ?? BuildDefaultArchitecture(variant),
+            architecture: architecture ?? BuildDefaultArchitecture((options ??= new CLIPTextConditionerOptions()).Variant),
             tokenizer: tokenizer,
             maxSequenceLength: 77,
-            embeddingDimension: options?.HiddenSize ?? GetEmbeddingDim(variant))
+            embeddingDimension: (options ??= new CLIPTextConditionerOptions()).HiddenSize ?? GetEmbeddingDim(options.Variant))
     {
         Guard.NotNull(tokenizer);
-        _variant = variant;
-        _options = new TextConditionerOptions(options ?? new TextConditionerOptions());
-        int? hiddenSize = _options.HiddenSize;
-        int? numLayers = _options.NumLayers;
-        int? numHeads = _options.NumHeads;
-        if (hiddenSize is <= 0) throw new ArgumentOutOfRangeException(nameof(options), "HiddenSize must be positive.");
-        if (numLayers is <= 0) throw new ArgumentOutOfRangeException(nameof(options), "NumLayers must be positive.");
-        if (numHeads is <= 0) throw new ArgumentOutOfRangeException(nameof(options), "NumHeads must be positive.");
-        int effectiveHidden = hiddenSize ?? GetHiddenSize(variant);
-        int effectiveHeads = numHeads ?? GetNumHeads(variant);
+        options.Validate();
+        _variant = options.Variant;
+        // Copied into readonly fields so later edits to the caller's object cannot resize this one.
+        _hiddenSizeOverride = options.HiddenSize;
+        _numLayersOverride = options.NumLayers;
+        _numHeadsOverride = options.NumHeads;
+        int effectiveHidden = _hiddenSizeOverride ?? GetHiddenSize(_variant);
+        int effectiveHeads = _numHeadsOverride ?? GetNumHeads(_variant);
         if (effectiveHidden % effectiveHeads != 0)
             throw new ArgumentException(
                 $"HiddenSize ({effectiveHidden}) must be divisible by NumHeads ({effectiveHeads}).",
                 nameof(options));
-        _hiddenSizeOverride = hiddenSize;
-        _numLayersOverride = numLayers;
-        _numHeadsOverride = numHeads;
         _textProjection = new DenseLayer<T>(
-            outputSize: GetProjectionDim(variant),
+            outputSize: GetProjectionDim(options.Variant),
             activationFunction: new IdentityActivation<T>());
     
         // Build the layer stack here, where this subclass's own fields are set. The base cannot do
@@ -116,7 +106,6 @@ public partial class CLIPTextConditioner<T> : TextConditioningBase<T>
     /// so construction is explicit about its cost rather than hiding it
     /// inside a default constructor.
     /// </summary>
-    /// <param name="variant">CLIP variant.</param>
     /// <param name="huggingFaceModelName">HuggingFace model ID (default: <c>openai/clip-vit-large-patch14</c>).</param>
     /// <param name="cacheDir">Optional cache directory for downloaded tokenizer files.</param>
     public static CLIPTextConditioner<T> FromPretrained(
@@ -125,7 +114,7 @@ public partial class CLIPTextConditioner<T> : TextConditioningBase<T>
         string? cacheDir = null)
     {
         var tokenizer = AutoTokenizer.FromPretrained(huggingFaceModelName, cacheDir);
-        return new CLIPTextConditioner<T>(tokenizer, variant);
+        return new CLIPTextConditioner<T>(tokenizer, options: new CLIPTextConditionerOptions { Variant = variant });
     }
 
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers() =>

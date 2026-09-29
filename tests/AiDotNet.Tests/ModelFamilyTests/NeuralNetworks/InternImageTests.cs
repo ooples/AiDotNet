@@ -76,7 +76,6 @@ public class InternImageTests : SegmentationTestBase<float>
             inputDepth: Channels,
             outputSize: NumClasses);
 
-        return new InternImage<float>(architecture, numClasses: NumClasses,
-            modelSize: InternImageModelSize.Tiny, dropRate: 0.0);
+        return new InternImage<float>(architecture, options: new InternImageOptions { NumClasses = NumClasses, ModelSize = InternImageModelSize.Tiny, DropRate = 0.0 });
     }
 }

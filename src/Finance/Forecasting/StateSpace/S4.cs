@@ -281,7 +281,6 @@ public partial class S4<T> : ForecastingModelBase<T>
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="options">S4-specific options.</param>
-    /// <param name="numFeatures">Number of input features.</param>
     /// <param name="optimizer">Optional optimizer for training.</param>
     /// <param name="lossFunction">Optional loss function.</param>
     /// <remarks>
@@ -290,10 +289,8 @@ public partial class S4<T> : ForecastingModelBase<T>
     /// state space computation with DPLR decomposition.
     /// </para>
     /// </remarks>
-    public S4(
-        NeuralNetworkArchitecture<T> architecture,
+    public S4(NeuralNetworkArchitecture<T> architecture,
         S4Options<T>? options = null,
-        int numFeatures = 1,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -315,7 +312,7 @@ public partial class S4<T> : ForecastingModelBase<T>
         _lowRankRank = _options.LowRankRank;
         _hippoMethod = _options.HippoMethod;
         _discretizationMethod = _options.DiscretizationMethod;
-        _numFeatures = numFeatures;
+        _numFeatures = (options ??= new S4Options<T>()).NumFeatures;
 
         InitializeLayers();
     }
@@ -1150,8 +1147,8 @@ public partial class S4<T> : ForecastingModelBase<T>
             {
                 for (int j = 0; j < n; j++)
                 {
-                    double sqrtI = Math.Sqrt(2 * i + 1);
-                    double sqrtJ = Math.Sqrt(2 * j + 1);
+                    double sqrtI = Math.Sqrt(2.0 * i + 1);
+                    double sqrtJ = Math.Sqrt(2.0 * j + 1);
 
                     if (i > j)
                     {
@@ -1175,8 +1172,8 @@ public partial class S4<T> : ForecastingModelBase<T>
             {
                 for (int j = 0; j < n; j++)
                 {
-                    double sqrtI = Math.Sqrt(2 * i + 1);
-                    double sqrtJ = Math.Sqrt(2 * j + 1);
+                    double sqrtI = Math.Sqrt(2.0 * i + 1);
+                    double sqrtJ = Math.Sqrt(2.0 * j + 1);
 
                     if (i >= j)
                     {

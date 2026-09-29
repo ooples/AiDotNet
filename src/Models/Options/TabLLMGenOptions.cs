@@ -38,7 +38,7 @@ namespace AiDotNet.Models.Options;
 /// Reference: "LLM-based Tabular Data Generation" (2024)
 /// </para>
 /// </remarks>
-public class TabLLMGenOptions<T> : RiskModelOptions<T>
+public class TabLLMGenOptions<T> : SyntheticDataGeneratorOptions<T>
 {
     /// <summary>
     /// Gets or sets the number of transformer layers.

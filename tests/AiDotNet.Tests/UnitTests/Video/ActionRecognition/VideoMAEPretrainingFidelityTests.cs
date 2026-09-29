@@ -37,7 +37,14 @@ public class VideoMAEPretrainingFidelityTests
         outputSize: 4);
 
     private static VideoMAE<double> Model(double maskRatio = 0.5, VideoMAEOptions? options = null)
-        => new(VideoArch(), numClasses: 4, numFrames: Frames, numFeatures: 16, maskRatio: maskRatio, options: options);
+    {
+        var resolved = options ?? new VideoMAEOptions();
+        resolved.NumClasses = 4;
+        resolved.NumFrames = Frames;
+        resolved.NumFeatures = 16;
+        resolved.MaskRatio = maskRatio;
+        return new VideoMAE<double>(VideoArch(), options: resolved);
+    }
 
     private static Tensor<double> RandomClip(int seed)
     {

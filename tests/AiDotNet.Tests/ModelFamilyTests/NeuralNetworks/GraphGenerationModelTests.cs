@@ -1,3 +1,4 @@
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
@@ -123,13 +124,13 @@ public class GraphGenerationModelTests : GraphNNModelTestBase<float>
         // faithful to Kipf & Welling (Adam at constant 0.01), while the test remains
         // free to exercise AMSGrad plus decay as a supported customization.
         var network = new GraphGenerationModel<float>(
-            inputFeatures: 16,
-            maxNodes: 10,
             learningRateScheduler: new AiDotNet.LearningRateSchedulers.ExponentialLRScheduler(
                 baseLearningRate: 0.001,
                 gamma: 0.99),
-            learningRate: 0.001,
-            useAMSGrad: true);
+            options: new GraphGenerationModelOptions
+            {
+                InputFeatures = 16, MaxNodes = 10, LearningRate = 0.001, UseAMSGrad = true,
+            });
         lock (_savedParamsLock)
         {
             if (_savedParams == null)

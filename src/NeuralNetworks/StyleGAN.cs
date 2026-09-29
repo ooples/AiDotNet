@@ -247,10 +247,8 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// <param name="latentSize">Size of input latent code Z.</param>
     /// <param name="intermediateLatentSize">Size of intermediate latent code W.</param>
     /// <param name="inputType">Input type.</param>
+    /// <param name="options">Learning rate, style mixing, R1 weight and mapping-network learning-rate factor; defaults follow Karras et al. (2019).</param>
     /// <param name="lossFunction">Optional loss function.</param>
-    /// <param name="initialLearningRate">Initial learning rate. Default is 0.001.</param>
-    /// <param name="enableStyleMixing">Enable style mixing. Default is true.</param>
-    /// <param name="styleMixingProbability">Probability of style mixing. Default is 0.9.</param>
     public StyleGAN(
         NeuralNetworkArchitecture<T> mappingNetworkArchitecture,
         NeuralNetworkArchitecture<T> synthesisNetworkArchitecture,
@@ -258,15 +256,13 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
         int latentSize,
         int intermediateLatentSize,
         InputType inputType,
-        ILossFunction<T>? lossFunction = null,
-        double initialLearningRate = 0.001,
-        bool enableStyleMixing = true,
-        double styleMixingProbability = 0.9,
-        StyleGANOptions? options = null)
+        StyleGANOptions? options = null,
+        ILossFunction<T>? lossFunction = null)
         : base(CreateStyleGANArchitecture(latentSize, synthesisNetworkArchitecture, discriminatorArchitecture, inputType),
                lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative))
     {
         _options = options ?? new StyleGANOptions();
+        _options.Validate();
         Options = _options;
 
         // Input validation
@@ -295,21 +291,21 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
             throw new ArgumentOutOfRangeException(nameof(intermediateLatentSize), intermediateLatentSize, "Intermediate latent size must be positive.");
         }
 
-        if (initialLearningRate <= 0)
+        if (_options.InitialLearningRate <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(initialLearningRate), initialLearningRate, "Initial learning rate must be positive.");
+            throw new ArgumentOutOfRangeException(nameof(_options.InitialLearningRate), _options.InitialLearningRate, "Initial learning rate must be positive.");
         }
 
-        if (styleMixingProbability < 0 || styleMixingProbability > 1)
+        if (_options.StyleMixingProbability < 0 || _options.StyleMixingProbability > 1)
         {
-            throw new ArgumentOutOfRangeException(nameof(styleMixingProbability), styleMixingProbability, "Style mixing probability must be in range [0, 1].");
+            throw new ArgumentOutOfRangeException(nameof(_options.StyleMixingProbability), _options.StyleMixingProbability, "Style mixing probability must be in range [0, 1].");
         }
 
         _latentSize = latentSize;
         _intermediateLatentSize = intermediateLatentSize;
-        _enableStyleMixing = enableStyleMixing;
-        _styleMixingProbability = styleMixingProbability;
-        _initialLearningRate = initialLearningRate;
+        _enableStyleMixing = _options.EnableStyleMixing;
+        _styleMixingProbability = _options.StyleMixingProbability;
+        _initialLearningRate = _options.InitialLearningRate;
 
         if (_options.R1Gamma < 0)
         {
@@ -330,11 +326,11 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
         Discriminator = CreateSubNetworkForInputType(discriminatorArchitecture, inputType);
 
         _mappingOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(MappingNetwork,
-            CreatePaperAdamOptions(initialLearningRate * _options.MappingLearningRateMultiplier));
+            CreatePaperAdamOptions(_initialLearningRate * _options.MappingLearningRateMultiplier));
         _synthesisOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(SynthesisNetwork,
-            CreatePaperAdamOptions(initialLearningRate));
+            CreatePaperAdamOptions(_initialLearningRate));
         _discriminatorOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(Discriminator,
-            CreatePaperAdamOptions(initialLearningRate));
+            CreatePaperAdamOptions(_initialLearningRate));
 
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.Generative);
 

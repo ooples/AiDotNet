@@ -31,8 +31,6 @@ namespace AiDotNet.Diffusion.Conditioning;
 public class ChatGLM3TextConditioner<T> : TextConditioningBase<T>
 {
     private readonly ChatGLM3Variant _variant;
-    /// <summary>The caller's dimensions, copied so later edits to their object cannot resize this one.</summary>
-    private readonly TextConditionerOptions _options;
     /// <summary>Explicit transformer dimensions; null means the variant's paper value.</summary>
     private readonly int? _hiddenSizeOverride;
     private readonly int? _numLayersOverride;
@@ -41,37 +39,31 @@ public class ChatGLM3TextConditioner<T> : TextConditioningBase<T>
 
     public override bool ProducesPooledOutput => false;
 
-    /// <param name="options">Optional transformer dimensions; each unset value keeps the
-    /// variant's paper value, and the embedding dimension follows the hidden size.</param>
-    public ChatGLM3TextConditioner(
-        ITokenizer tokenizer,
-        ChatGLM3Variant variant = ChatGLM3Variant.SixB,
+    /// <param name="options">The variant and optional transformer dimensions; each unset dimension
+    /// keeps the variant's paper value, and the embedding dimension follows the hidden size.</param>
+    public ChatGLM3TextConditioner(ITokenizer tokenizer,
         NeuralNetworkArchitecture<T>? architecture = null,
-        TextConditionerOptions? options = null)
+        ChatGLM3TextConditionerOptions? options = null)
         : base(
-            architecture: architecture ?? BuildDefaultArchitecture(variant),
+            architecture: architecture ?? BuildDefaultArchitecture((options ??= new ChatGLM3TextConditionerOptions()).Variant),
             tokenizer: tokenizer,
             maxSequenceLength: 512,
-            embeddingDimension: options?.HiddenSize ?? GetEmbeddingDim(variant))
+            embeddingDimension: (options ??= new ChatGLM3TextConditionerOptions()).HiddenSize ?? GetEmbeddingDim(options.Variant))
     {
         Guard.NotNull(tokenizer);
-        _variant = variant;
-        _options = new TextConditionerOptions(options ?? new TextConditionerOptions());
-        int? hiddenSize = _options.HiddenSize;
-        int? numLayers = _options.NumLayers;
-        int? numHeads = _options.NumHeads;
-        int? numKvHeads = _options.NumKvHeads;
-        if (hiddenSize is <= 0) throw new ArgumentOutOfRangeException(nameof(options), "HiddenSize must be positive.");
-        if (numLayers is <= 0) throw new ArgumentOutOfRangeException(nameof(options), "NumLayers must be positive.");
-        if (numHeads is <= 0) throw new ArgumentOutOfRangeException(nameof(options), "NumHeads must be positive.");
-        int effectiveHidden = hiddenSize ?? GetHiddenSize(variant);
-        int effectiveHeads = numHeads ?? GetNumHeads(variant);
+        options.Validate();
+        _variant = options.Variant;
+        int? hiddenSize = options.HiddenSize;
+        int? numLayers = options.NumLayers;
+        int? numHeads = options.NumHeads;
+        int? numKvHeads = options.NumKvHeads;
+        int effectiveHidden = hiddenSize ?? GetHiddenSize(_variant);
+        int effectiveHeads = numHeads ?? GetNumHeads(_variant);
         if (effectiveHidden % effectiveHeads != 0)
             throw new ArgumentException(
                 $"hiddenSize ({effectiveHidden}) must be divisible by numHeads ({effectiveHeads}).",
                 nameof(options));
-        if (numKvHeads is <= 0) throw new ArgumentOutOfRangeException(nameof(options), "NumKvHeads must be positive.");
-        int effectiveKvHeads = numKvHeads ?? GetNumKvHeads(variant);
+        int effectiveKvHeads = numKvHeads ?? GetNumKvHeads(_variant);
         if (effectiveHeads % effectiveKvHeads != 0)
             throw new ArgumentException(
                 $"numHeads ({effectiveHeads}) must be divisible by numKvHeads ({effectiveKvHeads}).",
@@ -92,7 +84,7 @@ public class ChatGLM3TextConditioner<T> : TextConditioningBase<T>
         // (InputShape[0] = -1 until resolved), so constructing the layer OBJECTS allocates no
         // weights, and a T5-XXL variant still pays for its parameters only at first forward.
         InitializeLayers();
-}
+    }
 
     /// <summary>
     /// Loads a paper-canonical ChatGLM3 conditioner with its real
@@ -104,7 +96,7 @@ public class ChatGLM3TextConditioner<T> : TextConditioningBase<T>
         string? cacheDir = null)
     {
         var tokenizer = AutoTokenizer.FromPretrained(huggingFaceModelName, cacheDir);
-        return new ChatGLM3TextConditioner<T>(tokenizer, variant);
+        return new ChatGLM3TextConditioner<T>(tokenizer, options: new ChatGLM3TextConditionerOptions { Variant = variant });
     }
 
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers() =>

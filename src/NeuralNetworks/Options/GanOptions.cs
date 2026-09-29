@@ -70,7 +70,11 @@ public abstract class GanOptions : ModelHyperparameterOptions
     /// GANs are unusually sensitive to this; 0.0002 with the Adam optimizer is the value most
     /// GAN papers settled on.</para>
     /// </remarks>
-    public double InitialLearningRate { get; set; }
+    /// <value>
+    /// Defaults to 0.0002, the Adam learning rate the DCGAN paper settled on and which most
+    /// later GAN papers inherited.
+    /// </value>
+    public double InitialLearningRate { get; set; } = 0.0002;
 
     /// <summary>
     /// Throws if a dimension every GAN requires has been left unset.
@@ -79,11 +83,26 @@ public abstract class GanOptions : ModelHyperparameterOptions
     /// Thrown when a required dimension is zero or negative, which means the derived options
     /// class did not assign its paper defaults.
     /// </exception>
-    protected void ValidateCore()
+    /// <param name="requireLatentSize">
+    /// False for a model that takes its latent size from a constructor argument rather than
+    /// from these options, which then legitimately leave it unset.
+    /// </param>
+    /// <param name="requireChannels">
+    /// False for a model that builds its generator and discriminator widths from its supplied
+    /// architectures rather than from these options.
+    /// </param>
+    protected void ValidateCore(bool requireLatentSize = true, bool requireChannels = true)
     {
-        Require(LatentSize, nameof(LatentSize));
-        Require(GeneratorChannels, nameof(GeneratorChannels));
-        Require(DiscriminatorChannels, nameof(DiscriminatorChannels));
+        // Strict by default: a model whose paper defaults live here must have assigned them.
+        // Only a model that genuinely does not read a value from its options opts out of it, so
+        // requiring it at the shared boundary would throw at construction for a valid model.
+        if (requireLatentSize)
+            Require(LatentSize, nameof(LatentSize));
+        if (requireChannels)
+        {
+            Require(GeneratorChannels, nameof(GeneratorChannels));
+            Require(DiscriminatorChannels, nameof(DiscriminatorChannels));
+        }
         Require(ImageChannels, nameof(ImageChannels));
         Require(InitialLearningRate, nameof(InitialLearningRate));
     }

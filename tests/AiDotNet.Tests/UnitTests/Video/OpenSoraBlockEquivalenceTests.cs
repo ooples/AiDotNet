@@ -26,10 +26,13 @@ public class OpenSoraBlockEquivalenceTests
                 inputHeight: 16,
                 inputWidth: 16,
                 inputDepth: 3),
-            numFrames: 1,
-            hiddenDim: HiddenDim,
-            numLayers: 1,
-            numInferenceSteps: 2);
+            new AiDotNet.Video.Options.OpenSoraOptions
+            {
+                NumFrames = 1,
+                HiddenDim = HiddenDim,
+                NumLayers = 1,
+                NumInferenceSteps = 2,
+            });
 
     private static Tensor<double> Random(int[] shape, int seed)
     {
@@ -130,7 +133,7 @@ public class OpenSoraBlockEquivalenceTests
                     inputHeight: 16,
                     inputWidth: 16,
                     inputDepth: 3),
-                hiddenDim: 40));
+                new AiDotNet.Video.Options.OpenSoraOptions { HiddenDim = 40 }));
     }
 
     /// <summary>The pre-rewrite scalar local-window attention, verbatim.</summary>

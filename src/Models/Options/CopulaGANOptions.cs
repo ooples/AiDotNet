@@ -43,7 +43,7 @@ namespace AiDotNet.Models.Options;
 /// Reference: "Synthesizing Tabular Data using Copulas" (2020)
 /// </para>
 /// </remarks>
-public class CopulaGANOptions<T> : RiskModelOptions<T>
+public class CopulaGANOptions<T> : SyntheticDataGeneratorOptions<T>
 {
     /// <summary>
     /// Gets or sets the dimension of the random noise vector fed to the generator.

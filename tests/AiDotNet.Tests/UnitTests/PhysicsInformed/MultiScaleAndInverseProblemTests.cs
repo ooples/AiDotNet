@@ -7,6 +7,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.PhysicsInformed.Interfaces;
 using AiDotNet.PhysicsInformed.PINNs;
+using AiDotNet.PhysicsInformed.Options;
 using AiDotNet.Tensors.LinearAlgebra;
 using Moq;
 using Xunit;
@@ -249,7 +250,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
                 architecture,
                 multiScalePDE,
                 boundaryConditions,
-                numCollocationPointsPerScale: 100);
+                options: new MultiScalePINNOptions { NumCollocationPointsPerScale = 100 });
 
             // Assert
             Assert.NotNull(pinn);
@@ -286,7 +287,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
                 architecture,
                 inverseProblem,
                 boundaryConditions,
-                numCollocationPoints: 100);
+                options: new InverseProblemOptions<double> { NumCollocationPoints = 100 });
 
             // Assert
             Assert.NotNull(pinn);
@@ -320,7 +321,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
                 architecture,
                 inverseProblem,
                 boundaryConditions,
-                numCollocationPoints: 50);
+                options: new InverseProblemOptions<double> { NumCollocationPoints = 50 });
 
             // Act - Get initial parameters
             var initialParams = pinn.Parameters;
@@ -353,7 +354,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
                 architecture,
                 inverseProblem,
                 boundaryConditions,
-                numCollocationPoints: 10,
+                options: new InverseProblemOptions<double> { NumCollocationPoints = 10 },
                 optimizer: optimizer.Object);
 
             var metadata = pinn.GetModelMetadata();
@@ -379,7 +380,7 @@ namespace AiDotNet.Tests.UnitTests.PhysicsInformed
                 restoredArchitecture,
                 inverseProblem,
                 boundaryConditions,
-                numCollocationPoints: 10);
+                options: new InverseProblemOptions<double> { NumCollocationPoints = 10 });
             restored.Deserialize(modelData);
             Assert.Equal(updatedCoefficient, restored.Parameters[0]);
         }
