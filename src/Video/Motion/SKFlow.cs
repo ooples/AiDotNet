@@ -86,16 +86,15 @@ public partial class SKFlow<T> : OpticalFlowBase<T>
 
     public SKFlow(
         NeuralNetworkArchitecture<T> architecture,
-        int numFeatures = 64,
-        int numLayers = 8,
         SKFlowOptions? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new SKFlowOptions();
+        _options.Validate();
         Options = _options;
 
-        _numFeatures = numFeatures;
-        _numLayers = numLayers;
+        _numFeatures = _options.NumFeatures;
+        _numLayers = _options.NumLayers;
         _processingBlocks = [];
 
         InitializeNativeLayers(architecture);

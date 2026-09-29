@@ -6,14 +6,23 @@ name: Samples (build + run)
 # catches compile breakage; the run step catches runtime/crash regressions. Examples are
 # short, CPU-only, self-contained console apps (no datasets/models/GPU required). This is a
 # pre-merge validation; repeating it on the identical master tree adds no coverage.
+#
+# Pull requests reach this through the validation pipeline (sonarcloud.yml), not a path filter:
+# it runs only when Select-AuxiliaryWorkloads.ps1 finds a change that can affect a sample, and
+# compiles the samples against the Build job's artifact instead of building the library again.
+# A manual run, or a call without an artifact, still builds everything from source.
 on:
-  pull_request:
-    paths: [ 'samples/**', 'src/**', '.github/workflows/samples.yml' ]
+  workflow_call:
+    inputs:
+      build_artifact_id:
+        description: 'ID of the Build job artifact to compile against; empty builds from source.'
+        type: string
+        default: ''
+      build_artifact_digest:
+        description: 'sha256 digest of that artifact.'
+        type: string
+        default: ''
   workflow_dispatch:
-
-concurrency:
-  group: samples-${{ github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -24,11 +33,15 @@ jobs:
     name: Build & run samples
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    permissions:
+      contents: read
+      actions: read
     env:
       # Examples are illustrative CPU programs; keep CI deterministic and off any GPU.
       AIDOTNET_DISABLE_GPU: '1'
       DOTNET_NOLOGO: '1'
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      REUSE_BUILD: ${{ inputs.build_artifact_id != '' && 'true' || 'false' }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -40,41 +53,79 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      # The validation pipeline's Build job already compiled the library for this exact commit.
+      # Same receiver, digest check and retry policy as the test shards.
+      - name: Download the Build artifact
+        if: env.REUSE_BUILD == 'true'
+        timeout-minutes: 25
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          ./tools/TestImpact/Receive-RequiredArtifact.ps1 `
+            -Repository '${{ github.repository }}' `
+            -ArtifactId '${{ inputs.build_artifact_id }}' `
+            -ExpectedDigest '${{ inputs.build_artifact_digest }}' `
+            -Destination '.' `
+            -RunId '${{ github.run_id }}' `
+            -JobIndex '0'
+
       # Build the shared library once so each sample reuses it instead of rebuilding.
       # Restore separately, then serialize MSBuild: the shared project is large enough that
       # concurrent child nodes can exhaust a 16 GB runner before any sample gets a chance to run.
       - name: Restore shared AiDotNet library
+        if: env.REUSE_BUILD != 'true'
         run: dotnet restore src/AiDotNet.csproj
 
       - name: Build shared AiDotNet library
+        if: env.REUSE_BUILD != 'true'
         run: dotnet build src/AiDotNet.csproj -c Release --no-restore -m:1
 
       # Build + run each sample ONE AT A TIME, reclaiming its output before the next.
       # Every sample's bin/ copies the large AiDotNet dependency (~1.4 GB each), so
       # materializing all ~36 at once (e.g. building the whole solution) would exhaust the
       # runner's disk. Building sequentially and deleting bin/obj after each keeps peak disk
-      # bounded to roughly one sample. `dotnet run` compiles the sample (reusing the
-      # prebuilt library) AND runs it, so a compile error or a non-zero exit both fail the job.
+      # bounded to roughly one sample. A compile error or a non-zero exit both fail the job.
+      #
+      # With the Build artifact, each sample compiles against the prebuilt library and nothing
+      # else is rebuilt: BuildProjectReferences=false reads referenced projects from their output
+      # paths, ProduceReferenceAssembly=false points those reads at the shipped assemblies rather
+      # than obj/ref, and UseAppHost/StaticWebAssetsEnabled=false keep a reference to the Serving
+      # web app from requiring files that only exist in its obj/. The Serving output itself is not
+      # in the artifact (800 MB); its copy in the Serving test output is put in place instead.
       - name: Build + run each sample (disk-bounded)
         shell: bash
         run: |
           set -uo pipefail
           fail=0
+          build_args=(-c Release)
+          if [ "$REUSE_BUILD" = 'true' ]; then
+            # --property, not -p: for `dotnet run`, -p is the legacy spelling of --project.
+            build_args+=(--property:BuildProjectReferences=false --property:ProduceReferenceAssembly=false
+                         --property:UseAppHost=false --property:StaticWebAssetsEnabled=false)
+          fi
           while IFS= read -r proj; do
             name=$(basename "$proj" .csproj)
             dir=$(dirname "$proj")
             echo "::group::$name"
-            if grep -q 'Microsoft.NET.Sdk.Web' "$proj"; then
+            if ! dotnet restore "$proj"; then
+              echo "::error::FAIL (restore): $name"
+              fail=1
+            elif [ "$REUSE_BUILD" = 'true' ] && ! pwsh -NoProfile -Command \
+                "./tools/ModelPerfProbe/Restore-ProjectOutputs.ps1 -Project '$proj' -SourceOutput @('tests/AiDotNet.Serving.Tests/bin/Release/net10.0', 'tests/AiDotNet.Tests/bin/Release/net10.0')"; then
+              echo "::error::FAIL (reference outputs): $name"
+              fail=1
+            elif grep -q 'Microsoft.NET.Sdk.Web' "$proj"; then
               # ASP.NET samples are long-running servers (they never exit), so they
               # are compile-verified only — `dotnet run` would hang until timeout.
-              if dotnet build "$proj" -c Release; then
+              if dotnet build "$proj" --no-restore "${build_args[@]}"; then
                 echo "PASS (build-only, web app): $name"
               else
                 echo "::error::FAIL (build): $name"
                 fail=1
               fi
             else
-              if timeout 300s dotnet run --project "$proj" -c Release; then
+              if timeout 300s dotnet run --project "$proj" --no-restore "${build_args[@]}"; then
                 echo "PASS: $name"
               else
                 code=$?

@@ -5,7 +5,7 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// <summary>
 /// Configuration options for the DeepQNetwork.
 /// </summary>
-public class DeepQNetworkOptions : NeuralNetworkOptions
+public class DeepQNetworkOptions : ModelHyperparameterOptions
 {
     /// <summary>
     /// Initializes a new instance with the published DQN training defaults.
@@ -115,4 +115,12 @@ public class DeepQNetworkOptions : NeuralNetworkOptions
                 "MinSquaredGradient must be a positive, finite number.");
         }
     }
+
+    /// <summary>
+    /// Gets or sets epsilon. Default: <c>1.0</c>.
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> How often the agent tries a random action instead of its best one.</para>
+    /// </remarks>
+    public double Epsilon { get; set; } = 1.0;
 }

@@ -130,19 +130,10 @@ public partial class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         ITokenizer tokenizer,
-        int numClasses = 7,
-        int imageSize = 224,
-        int maxSequenceLength = 512,
-        int hiddenDim = 768,
-        int numLayers = 12,
-        int numHeads = 12,
-        int vocabSize = 250002,
-        int visualBackboneChannels = 256,
-        int numLanguages = 53,
+        LayoutXLMOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        LayoutXLMOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new LayoutXLMOptions();
         Options = _options;
@@ -155,17 +146,21 @@ public partial class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
         Guard.NotNull(tokenizer);
         _tokenizer = tokenizer;
         _useNativeMode = false;
-        _numClasses = numClasses;
-        _hiddenDim = hiddenDim;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _vocabSize = vocabSize;
-        _visualBackboneChannels = visualBackboneChannels;
-        _numLanguages = numLanguages;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _numClasses = _options.NumClasses;
+        _hiddenDim = _options.HiddenDim;
+        _numLayers = _options.NumLayers;
+        _numHeads = _options.NumHeads;
+        _vocabSize = _options.VocabSize;
+        _visualBackboneChannels = _options.VisualBackboneChannels;
+        _numLanguages = _options.NumLanguages;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.ImageSize;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
         _onnxSession = new InferenceSession(onnxModelPath);
 
@@ -188,36 +183,28 @@ public partial class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
     /// </remarks>
     public LayoutXLM(
         NeuralNetworkArchitecture<T> architecture,
+        LayoutXLMOptions? options = null,
         ITokenizer? tokenizer = null,
-        int numClasses = 7,
-        int imageSize = 224,
-        int maxSequenceLength = 512,
-        int hiddenDim = 768,
-        int numLayers = 12,
-        int numHeads = 12,
-        int vocabSize = 250002,
-        int visualBackboneChannels = 256,
-        int numLanguages = 53,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        LayoutXLMOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
     {
         _options = options ?? new LayoutXLMOptions();
+        _options.Validate();
         Options = _options;
 
         _useNativeMode = true;
-        _numClasses = numClasses;
-        _hiddenDim = hiddenDim;
-        _numLayers = numLayers;
-        _numHeads = numHeads;
-        _vocabSize = vocabSize;
-        _visualBackboneChannels = visualBackboneChannels;
-        _numLanguages = numLanguages;
+        _numClasses = _options.NumClasses;
+        _hiddenDim = _options.HiddenDim;
+        _numLayers = _options.NumLayers;
+        _numHeads = _options.NumHeads;
+        _vocabSize = _options.VocabSize;
+        _visualBackboneChannels = _options.VisualBackboneChannels;
+        _numLanguages = _options.NumLanguages;
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
-        ImageSize = imageSize;
-        MaxSequenceLength = maxSequenceLength;
+        ImageSize = _options.ImageSize;
+        MaxSequenceLength = _options.MaxSequenceLength;
 
         _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
 

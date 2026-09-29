@@ -50,10 +50,10 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
-/// var model = new Mask2Former&lt;double&gt;(architecture, numClasses: 150);
+/// var model = new Mask2Former&lt;double&gt;(architecture, options: new Mask2FormerOptions { NumClasses = 150 });
 ///
 /// // Or load a pre-trained ONNX model for panoptic segmentation
-/// var onnxModel = new Mask2Former&lt;double&gt;(architecture, "mask2former.onnx", numClasses: 150);
+/// var onnxModel = new Mask2Former&lt;double&gt;(architecture, "mask2former.onnx", options: new Mask2FormerOptions { NumClasses = 150 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -141,21 +141,28 @@ public partial class Mask2Former<T> : Common.PanopticSegmentationBase<T>
         NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
-        int numClasses = 150,
-        int numQueries = 100,
-        Mask2FormerModelSize modelSize = Mask2FormerModelSize.SwinTiny,
-        double dropRate = 0.1,
         Mask2FormerOptions? options = null)
-        : base(architecture, optimizer, lossFunction, numClasses,
-               StuffClassCount(numClasses), numClasses - StuffClassCount(numClasses))
+        : this(options ?? new Mask2FormerOptions(), architecture, optimizer, lossFunction)
     {
-        _options = options ?? new Mask2FormerOptions();
-        Options = _options;
-        _numQueries = numQueries;
-        _modelSize = modelSize;
-        _dropRate = dropRate;
+    }
 
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+    private Mask2Former(
+        Mask2FormerOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        ILossFunction<T>? lossFunction)
+
+        : base(architecture, optimizer, lossFunction, options.NumClasses,
+               StuffClassCount(options.NumClasses), options.NumClasses - StuffClassCount(options.NumClasses))
+    {
+        options.Validate();
+        _options = options;
+        Options = _options;
+        _numQueries = options.NumQueries;
+        _modelSize = options.ModelSize;
+        _dropRate = options.DropRate;
+
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(options.ModelSize);
         InitializeLayers();
     }
 
@@ -224,20 +231,27 @@ public partial class Mask2Former<T> : Common.PanopticSegmentationBase<T>
     public Mask2Former(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numClasses = 150,
-        int numQueries = 100,
-        Mask2FormerModelSize modelSize = Mask2FormerModelSize.SwinTiny,
         Mask2FormerOptions? options = null)
-        : base(architecture, onnxModelPath, numClasses,
-               StuffClassCount(numClasses), numClasses - StuffClassCount(numClasses))
+        : this(options ?? new Mask2FormerOptions(), architecture, onnxModelPath)
     {
-        _options = options ?? new Mask2FormerOptions();
-        Options = _options;
-        _numQueries = numQueries;
-        _modelSize = modelSize;
-        _dropRate = 0.0;
+    }
 
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(modelSize);
+    private Mask2Former(
+        Mask2FormerOptions options,
+        NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath)
+
+        : base(architecture, onnxModelPath, options.NumClasses,
+               StuffClassCount(options.NumClasses), options.NumClasses - StuffClassCount(options.NumClasses))
+    {
+        options.Validate();
+        _options = options;
+        Options = _options;
+        _numQueries = options.NumQueries;
+        _modelSize = options.ModelSize;
+        _dropRate = options.DropRate;
+
+        (_channelDims, _depths, _decoderDim) = GetModelConfig(options.ModelSize);
 
         InitializeLayers();
     }

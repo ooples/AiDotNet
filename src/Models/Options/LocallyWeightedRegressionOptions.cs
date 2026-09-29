@@ -36,7 +36,8 @@ public class LocallyWeightedRegressionOptions : NonLinearRegressionOptions
     /// Gets or sets the bandwidth parameter that controls the size of the "neighborhood" 
     /// used in locally weighted regression.
     /// </summary>
-    /// <value>The bandwidth value, defaulting to 1.0.</value>
+    /// <value>The bandwidth, defaulting to 0.0 — the sentinel meaning "size the neighbourhood
+    /// adaptively from the data". Any positive value forces a fixed bandwidth instead.</value>
     /// <remarks>
     /// <para>
     /// The bandwidth parameter determines how quickly the influence of training examples
@@ -54,7 +55,10 @@ public class LocallyWeightedRegressionOptions : NonLinearRegressionOptions
     /// - A large bandwidth (like 10.0) means even somewhat different examples have influence,
     ///   creating a "broad community" effect
     /// 
-    /// The default value of 1.0 provides a reasonable balance for many problems:
+    /// The default of 0.0 is a sentinel meaning "choose the neighbourhood adaptively": the model
+    /// then uses Cleveland and Devlin's span-based local bandwidth, sizing the neighbourhood from
+    /// the data rather than from a fixed width. Setting any positive value overrides that and
+    /// forces a fixed bandwidth, which is where the guidance below applies:
     /// - Too small: Your model might become too "choppy" and sensitive to noise
     /// - Too large: Your model might become too "smoothed out" and miss important local patterns
     /// 

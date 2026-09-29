@@ -35,7 +35,7 @@ namespace AiDotNet.Video.Motion;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 2);
-/// var model = new DKM&lt;double&gt;(architecture, numFeatures: 64, numLayers: 8);
+/// var model = new DKM&lt;double&gt;(architecture, options: new DKMOptions { NumFeatures = 64, NumLayers = 8 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]
@@ -86,12 +86,11 @@ public partial class DKM<T> : OpticalFlowBase<T>
 
     public DKM(
         NeuralNetworkArchitecture<T> architecture,
-        int numFeatures = 64,
-        int numLayers = 8,
         DKMOptions? options = null)
-        : base(architecture, new MeanSquaredErrorLoss<T>())
+        : base(architecture: architecture, new MeanSquaredErrorLoss<T>())
     {
         _options = options ?? new DKMOptions();
+        _options.Validate();
         Options = _options;
 
         if (_options.LearningRate is double learningRate)
@@ -106,8 +105,8 @@ public partial class DKM<T> : OpticalFlowBase<T>
                 }));
         }
 
-        _numFeatures = numFeatures;
-        _numLayers = numLayers;
+        _numFeatures = _options.NumFeatures;
+        _numLayers = _options.NumLayers;
         _processingBlocks = [];
 
         InitializeNativeLayers(architecture);

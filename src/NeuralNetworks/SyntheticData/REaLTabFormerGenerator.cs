@@ -95,6 +95,10 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
     private readonly List<FullyConnectedLayer<T>> _ffnLayer1s = new();
     private readonly List<FullyConnectedLayer<T>> _ffnLayer2s = new();
 
+    // Residual dropout, one per transformer block, driven by REaLTabFormerOptions.DropoutRate.
+    // Parameterless, so it stays out of the Layers list that the FFN pairs are indexed from.
+    private readonly List<DropoutLayer<T>> _ffnDropouts = new();
+
     // Per-column output heads (auxiliary, depend on data columns)
     private readonly List<FullyConnectedLayer<T>> _outputHeads = new();
     private readonly List<int> _vocabSizes = new();
@@ -126,21 +130,18 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
     /// <param name="options">REaLTabFormer-specific options.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
     public REaLTabFormerGenerator()
         : this(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Generative, inputSize: 128, outputSize: 128))
     {
     }
 
-    public REaLTabFormerGenerator(
-        NeuralNetworkArchitecture<T> architecture,
+    public REaLTabFormerGenerator(NeuralNetworkArchitecture<T> architecture,
         REaLTabFormerOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 5.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new REaLTabFormerOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new REaLTabFormerOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -203,6 +204,7 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
         _attentionOutputLayers.Clear();
         _ffnLayer1s.Clear();
         _ffnLayer2s.Clear();
+        _ffnDropouts.Clear();
 
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
         var relu = new ReLUActivation<T>() as IActivationFunction<T>;
@@ -226,6 +228,8 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
                 _ffnLayer1s.Add(new FullyConnectedLayer<T>(_options.FeedForwardDimension, relu));
                 _ffnLayer2s.Add(new FullyConnectedLayer<T>(d, identity));
             }
+
+            _ffnDropouts.Add(new DropoutLayer<T>(_options.DropoutRate));
         }
     }
 
@@ -249,8 +253,9 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
     #region ISyntheticTabularGenerator Implementation
 
     /// <inheritdoc />
-    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
+        int epochCount = epochs ?? _options.Epochs;
         _columns = columns.ToList();
         _seqLength = columns.Count;
 
@@ -267,7 +272,7 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
         int numBatches = Math.Max(1, data.Rows / batchSize);
         T scaledLr = NumOps.FromDouble(_options.LearningRate / batchSize);
 
-        for (int epoch = 0; epoch < epochs; epoch++)
+        for (int epoch = 0; epoch < epochCount; epoch++)
         {
             for (int batch = 0; batch < numBatches; batch++)
             {
@@ -284,13 +289,14 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
     }
 
     /// <inheritdoc />
-    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs,
+    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null,
         CancellationToken cancellationToken = default)
     {
+        int epochCount = epochs ?? _options.Epochs;
         await Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            Fit(data, columns, epochs);
+            Fit(data, columns, epochCount);
         }, cancellationToken);
     }
 
@@ -573,6 +579,11 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
             var posInput = ExtractPosition(input, pos, d);
             var hidden = _ffnLayer1s[layerIdx].Forward(VectorToTensor(posInput));
             var ffnOut = _ffnLayer2s[layerIdx].Forward(hidden);
+            if (layerIdx < _ffnDropouts.Count)
+            {
+                _ffnDropouts[layerIdx].SetTrainingMode(IsTrainingMode);
+                ffnOut = _ffnDropouts[layerIdx].Forward(ffnOut);
+            }
             var ffnVec = TensorToVector(ffnOut, d);
 
             // Residual connection

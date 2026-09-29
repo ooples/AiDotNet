@@ -43,10 +43,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Referring;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
 ///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
-/// var model = new GLaMM&lt;double&gt;(architecture, numClasses: 1);
+/// var model = new GLaMM&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new GLaMM&lt;double&gt;(architecture,
+///     options: new GLaMMOptions { NumClasses = 1, DropRate = 0 });
 ///
 /// // Or load a pre-trained ONNX model for grounded conversation
-/// var onnxModel = new GLaMM&lt;double&gt;(architecture, "glamm.onnx", numClasses: 1);
+/// var onnxModel = new GLaMM&lt;double&gt;(architecture, "glamm.onnx");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -96,8 +99,6 @@ public partial class GLaMM<T> : Common.ReferringSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
-    /// <param name="dropRate">Dropout rate (default: 0).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -106,19 +107,18 @@ public partial class GLaMM<T> : Common.ReferringSegmentationBase<T>
     /// </remarks>
     public GLaMM(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 1,
-        double dropRate = 0,
+        ILossFunction<T>? lossFunction = null,
         GLaMMOptions? options = null)
         // The base resolves height/width/channels/numClasses/native-mode from the architecture and
         // defaults `optimizer` lazily via CreateDefaultOptimizer() - which GLaMM overrides above with
         // the paper's 5e-5 AdamW - so null is passed straight through.
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, optimizer, lossFunction, (options ??= new GLaMMOptions()).NumClasses)
     {
-        _options = options ?? new GLaMMOptions(); Options = _options;
+        _options = options; Options = _options;
         // GLaMM's own fallback input geometry is 1024x1024, not the base's 512.
         if (architecture.InputHeight <= 0) _height = 1024;
         if (architecture.InputWidth <= 0) _width = 1024;
-        _dropRate = dropRate;
+        _dropRate = _options.DropRate;
         _channelDims = [64, 128, 320, 768];
         _depths = [2, 2, 4, 12];
         _decoderDim = 256;
@@ -130,7 +130,6 @@ public partial class GLaMM<T> : Common.ReferringSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -140,18 +139,18 @@ public partial class GLaMM<T> : Common.ReferringSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public GLaMM(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 1,
+    public GLaMM(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         GLaMMOptions? options = null)
         // The base validates the path, sets ONNX mode, resolves the input geometry and opens the
         // InferenceSession.
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, onnxModelPath, (options ??= new GLaMMOptions()).NumClasses)
     {
-        _options = options ?? new GLaMMOptions(); Options = _options;
+        _options = options; Options = _options;
         // GLaMM's own fallback input geometry is 1024x1024, not the base's 512.
         if (architecture.InputHeight <= 0) _height = 1024;
         if (architecture.InputWidth <= 0) _width = 1024;
-        _dropRate = 0;
+        _dropRate = _options.DropRate;
         _channelDims = [64, 128, 320, 768];
         _depths = [2, 2, 4, 12];
         _decoderDim = 256;

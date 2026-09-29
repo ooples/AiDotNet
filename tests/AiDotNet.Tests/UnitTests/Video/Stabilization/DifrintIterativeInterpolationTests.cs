@@ -1,4 +1,6 @@
 using System;
+using AiDotNet.Video.Options;
+using AiDotNet.NeuralNetworks.Options;
 using System.Collections.Generic;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -110,7 +112,7 @@ public class DifrintIterativeInterpolationTests
         // constructed models get different random inits, and that difference would swamp the thing
         // being measured.
         const int size = 32;
-        var model = new DIFRINT<double>(Arch(size, size), numIterations: 3);
+        var model = new DIFRINT<double>(Arch(size, size), options: new DIFRINTOptions { NumIterations = 3 });
 
         var frames = new List<Tensor<double>>
         {
@@ -136,7 +138,7 @@ public class DifrintIterativeInterpolationTests
         // Pins the other end of the semantics. Without this, "3 differs from 1" could also be satisfied
         // by an off-by-one that runs 4 passes, or by iterating something unrelated.
         const int size = 32;
-        var model = new DIFRINT<double>(Arch(size, size), numIterations: 1);
+        var model = new DIFRINT<double>(Arch(size, size), options: new DIFRINTOptions { NumIterations = 1 });
 
         var frames = new List<Tensor<double>>
         {
@@ -157,7 +159,7 @@ public class DifrintIterativeInterpolationTests
         // Zero iterations is the edge that would otherwise hand the caller its own list back, so a
         // later mutation of the result would silently rewrite the input.
         const int size = 32;
-        var model = new DIFRINT<double>(Arch(size, size), numIterations: 0);
+        var model = new DIFRINT<double>(Arch(size, size), options: new DIFRINTOptions { NumIterations = 0 });
         var frames = new List<Tensor<double>> { Textured(size, size, 21), Textured(size, size, 22) };
 
         var result = model.Stabilize(frames);

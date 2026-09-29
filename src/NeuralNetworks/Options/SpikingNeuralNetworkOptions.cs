@@ -5,7 +5,7 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// <summary>
 /// Configuration options for the SpikingNeuralNetwork.
 /// </summary>
-public class SpikingNeuralNetworkOptions : NeuralNetworkOptions
+public class SpikingNeuralNetworkOptions : ModelHyperparameterOptions
 {
     // The composite default network performs full surrogate-gradient BPTT
     // through 20 time steps and reuses each synapse at every step. Its Adam
@@ -64,5 +64,24 @@ public class SpikingNeuralNetworkOptions : NeuralNetworkOptions
                 throw new ArgumentOutOfRangeException(nameof(value), value, "StdpWindow must be at least 1.");
             _stdpWindow = value;
         }
+    }
+
+    /// <summary>
+    /// Gets or sets simulation steps. Default: <c>100</c>.
+    /// </summary>
+    public int SimulationSteps { get; set; } = 100;
+
+    /// <summary>
+    /// Gets or sets time step. Default: <c>0.1</c>.
+    /// </summary>
+    public double TimeStep { get; set; } = 0.1;
+
+    /// <summary>
+    /// Throws when a value on this instance cannot produce a working model.
+    /// </summary>
+    public void Validate()
+    {
+        Require(SimulationSteps, nameof(SimulationSteps));
+        Require(TimeStep, nameof(TimeStep));
     }
 }

@@ -366,12 +366,12 @@ Bumped 0.130.3 to 0.132.1 for AiDotNet.Tensors #1035 (non-causal FlashAttention 
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.133.0" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.133.0" />
     <PackageVersion Include="AiDotNet.Tensors" Version="0.133.0" />
-    <PackageVersion Include="AiDotNet.Evolution" Version="0.1.0" />
+    <PackageVersion Include="AiDotNet.Evolution" Version="0.2.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.133.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />
-    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.10.0" />
+    <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.10.1" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.ML" Version="3.0.1" />
     <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.30.0" />
@@ -422,7 +422,7 @@ Bumped 0.130.3 to 0.132.1 for AiDotNet.Tensors #1035 (non-causal FlashAttention 
     <PackageVersion Include="Xunit.SkippableFact" Version="1.5.85" />
     <PackageVersion Include="YamlDotNet" Version="18.1.0" />
     <!-- Infrastructure -->
-    <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.5.2" />
+    <PackageVersion Include="Elastic.Clients.Elasticsearch" Version="9.5.3" />
     <PackageVersion Include="Neo4j.Driver" Version="5.28.4" />
     <!-- Managed FAISS wrapper (native ANN: Flat/IVF/HNSW/PQ). Consumed only by the opt-in
          AiDotNet.Storage.Faiss metapackage; ships a net6.0 lib + win-x64 native runtime. -->
@@ -453,8 +453,8 @@ Bumped 0.130.3 to 0.132.1 for AiDotNet.Tensors #1035 (non-causal FlashAttention 
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="2.8.2" />
-    <PackageVersion Include="coverlet.collector" Version="10.0.1" />
+    <PackageVersion Include="coverlet.collector" Version="10.1.0" />
     <PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
-    <PackageVersion Include="Moq" Version="4.20.72" />
+    <PackageVersion Include="Moq" Version="4.21.0" />
   </ItemGroup>
 </Project>

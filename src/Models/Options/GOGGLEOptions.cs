@@ -39,7 +39,7 @@ namespace AiDotNet.Models.Options;
 /// (Liu et al., ICLR 2023)
 /// </para>
 /// </remarks>
-public class GOGGLEOptions<T> : RiskModelOptions<T>
+public class GOGGLEOptions<T> : SyntheticDataGeneratorOptions<T>
 {
     /// <summary>
     /// Gets or sets the dimension of the VAE latent space.

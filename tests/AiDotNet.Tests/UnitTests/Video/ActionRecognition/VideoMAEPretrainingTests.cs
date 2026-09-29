@@ -4,7 +4,8 @@ using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.ActionRecognition;
-using Xunit;
+using Xunit;
+using AiDotNet.Video.Options;
 
 namespace AiDotNet.Tests.UnitTests.Video.ActionRecognition;
 
@@ -52,7 +53,7 @@ public class VideoMAEPretrainingTests
         const int frames = 4;
         const int size = 32;
         const int features = 16;
-        var model = new VideoMAE<double>(VideoArch(frames, size), numClasses: 4, numFrames: frames, numFeatures: features);
+        var model = new VideoMAE<double>(VideoArch(frames, size), options: new VideoMAEOptions { NumClasses = 4, NumFrames = frames, NumFeatures = features });
 
         int numTubelets = frames / TubeletSize;
         int patches = size / PatchSize;
@@ -81,7 +82,7 @@ public class VideoMAEPretrainingTests
     {
         const int frames = 4;
         const int size = 32;
-        var model = new VideoMAE<double>(VideoArch(frames, size), numClasses: 4, numFrames: frames, numFeatures: 16, maskRatio: 0.5);
+        var model = new VideoMAE<double>(VideoArch(frames, size), options: new VideoMAEOptions { NumClasses = 4, NumFrames = frames, NumFeatures = 16, MaskRatio = 0.5 });
 
         double loss = model.PretrainMAE(RandomClip(frames, size, seed: 11));
 
@@ -96,8 +97,8 @@ public class VideoMAEPretrainingTests
         const int size = 32;
         // Raw-pixel target, so the exact per-pixel correspondence is checkable by hand. The default
         // (per-patch normalised) target is pinned in VideoMAEPretrainingFidelityTests.
-        var model = new VideoMAE<double>(VideoArch(frames, size), numClasses: 4, numFrames: frames, numFeatures: 8,
-            options: new AiDotNet.Video.Options.VideoMAEOptions { NormalizeTarget = false });
+        var model = new VideoMAE<double>(VideoArch(frames, size),
+            options: new AiDotNet.Video.Options.VideoMAEOptions { NumClasses = 4, NumFrames = frames, NumFeatures = 8, NormalizeTarget = false });
         var clip = RandomClip(frames, size, seed: 13);
 
         int numTubelets = frames / TubeletSize;
@@ -144,7 +145,7 @@ public class VideoMAEPretrainingTests
     public void CreateTubeMask_MasksTheConfiguredFractionOfSpatialPatches_ForMultiTubeletClips(
         int frames, int size, double maskRatio, int expectedMaskedPerClip)
     {
-        var model = new VideoMAE<double>(VideoArch(frames, size), numClasses: 4, numFrames: frames, numFeatures: 8, maskRatio: maskRatio);
+        var model = new VideoMAE<double>(VideoArch(frames, size), options: new VideoMAEOptions { NumClasses = 4, NumFrames = frames, NumFeatures = 8, MaskRatio = maskRatio });
 
         const int batch = 3;
         var mask = model.CreateTubeMask(batch);
@@ -178,7 +179,7 @@ public class VideoMAEPretrainingTests
     [Fact]
     public void Constructor_UsesTheFrameCountDeclaredByTheArchitecture()
     {
-        var model = new VideoMAE<double>(VideoArch(frames: 8, size: 32), numClasses: 4, numFeatures: 8);
+        var model = new VideoMAE<double>(VideoArch(frames: 8, size: 32), options: new VideoMAEOptions { NumClasses = 4, NumFeatures = 8 });
 
         Assert.Equal(8, model.NumFrames);
         Assert.Equal(8, model.GetModelMetadata().AdditionalInfo["NumFrames"]);
@@ -187,7 +188,7 @@ public class VideoMAEPretrainingTests
     [Fact]
     public void Constructor_AgreeingExplicitFrameCount_IsAccepted()
     {
-        var model = new VideoMAE<double>(VideoArch(frames: 4, size: 32), numClasses: 4, numFrames: 4, numFeatures: 8);
+        var model = new VideoMAE<double>(VideoArch(frames: 4, size: 32), options: new VideoMAEOptions { NumClasses = 4, NumFrames = 4, NumFeatures = 8 });
 
         Assert.Equal(4, model.NumFrames);
     }
@@ -196,7 +197,7 @@ public class VideoMAEPretrainingTests
     public void Constructor_ConflictingExplicitFrameCount_Throws()
     {
         var ex = Assert.Throws<ArgumentException>(() =>
-            new VideoMAE<double>(VideoArch(frames: 8, size: 32), numClasses: 4, numFrames: 4, numFeatures: 8));
+            new VideoMAE<double>(VideoArch(frames: 8, size: 32), options: new VideoMAEOptions { NumClasses = 4, NumFrames = 4, NumFeatures = 8 }));
 
         Assert.Equal("numFrames", ex.ParamName);
     }
@@ -209,7 +210,7 @@ public class VideoMAEPretrainingTests
             taskType: NeuralNetworkTaskType.MultiClassClassification,
             inputDepth: Channels, inputHeight: 32, inputWidth: 32, outputSize: 4);
 
-        var model = new VideoMAE<double>(arch, numClasses: 4, numFrames: 6, numFeatures: 8);
+        var model = new VideoMAE<double>(arch, options: new VideoMAEOptions { NumClasses = 4, NumFrames = 6, NumFeatures = 8 });
 
         Assert.Equal(6, model.NumFrames);
     }
