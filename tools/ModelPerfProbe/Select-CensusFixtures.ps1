@@ -6,7 +6,7 @@
     census matrix to them.
 
 .DESCRIPTION
-    Select-AuxiliaryWorkloads.ps1 hands the census a scope: 'full', 'none', or 'selected' with the
+    A caller (a manual dispatch, or a future pipeline caller) hands the census a scope: 'full', 'none', or 'selected' with the
     test shards the coverage selection chose. A census fixture is the ModelPerformanceCensus test
     of a model-family test class, and the correctness tests of that same class run in the shard
     whose filter matches it - so the shards the change reaches name the models it can affect.
