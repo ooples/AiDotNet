@@ -10058,22 +10058,38 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Once training has begun, the loss is locked (see SetLossFunction) so the loss reported in metrics
         // matches the loss actually optimized.
         _hasBeenTrained = true;
+        RunTrainStep(input, expectedOutput, optimizerOverride: null);
+    }
 
+    /// <summary>
+    /// One training step with every preparation <see cref="Train(Tensor{T}, Tensor{T})"/> applies: batch-dim
+    /// promotion, LSUV init, the micro-batch gate, and the GPU-transient and OOM retries. Shared by Train and the
+    /// facade's model step (<see cref="TryTrainStepWithOptimizer"/>) so the two cannot drift apart.
+    /// </summary>
+    /// <param name="input">The training input.</param>
+    /// <param name="expectedOutput">The training target.</param>
+    /// <param name="optimizerOverride">
+    /// The optimizer to step with, or null for the network's own. An override never takes the OOM lever retry: that
+    /// retry rebuilds the NETWORK's optimizer as 8-bit, which cannot apply to one the caller supplied.
+    /// </param>
+    private void RunTrainStep(
+        Tensor<T> input, Tensor<T> expectedOutput, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizerOverride)
+    {
         // Fresh step: no parameter has been mutated yet, so an OOM during the forward/backward
         // (allocation) phase is safe to retry. MarkTrainMutationStarted() flips this true the moment
         // any in-place weight/moment write begins, after which the OOM-retry below stands down.
         _trainMutationStarted = false;
         try
         {
-            TrainCore(input, expectedOutput);
+            TrainCore(input, expectedOutput, optimizerOverride);
         }
         catch (Exception ex) when (IsGpuTransientFailure(ex) && !_trainMutationStarted)
         {
             // A sticky GPU fault tripped the circuit breaker (engine is now CPU); retry on CPU — but only
             // if no weight has been written yet, otherwise replaying the step would double-apply the update.
-            TrainCore(input, expectedOutput);
+            TrainCore(input, expectedOutput, optimizerOverride);
         }
-        catch (OutOfMemoryException) when (!_memoryLeversForced && !_trainMutationStarted)
+        catch (OutOfMemoryException) when (optimizerOverride is null && !_memoryLeversForced && !_trainMutationStarted)
         {
             // Reactive memory levers (#1624). The full-precision, full-batch step exhausted RAM. Latch the
             // 8-bit optimizer (G2 — ~1.5x model size less moment state) and micro-batch accumulation (G8 —
@@ -10091,11 +10107,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             GC.Collect();
             GC.WaitForPendingFinalizers();
             GC.Collect();
-            TrainCore(input, expectedOutput);
+            TrainCore(input, expectedOutput, optimizerOverride: null);
         }
     }
 
-    private void TrainCore(Tensor<T> input, Tensor<T> expectedOutput)
+    private void TrainCore(
+        Tensor<T> input, Tensor<T> expectedOutput, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizerOverride)
     {
         // Universal batch-dim auto-promotion. When the caller passes an
         // unbatched single sample (matching the architecture's declared rank
@@ -10125,7 +10142,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // 8c/16 GB runner. This is gradient-EQUIVALENT to the full-batch step (verified by the Issue1296
         // accumulation test) EXCEPT for cross-batch normalization (BatchNorm computes per-chunk batch
         // statistics), so it is gated to models without a BatchNorm layer. AIDOTNET_MICROBATCH=0 disables.
-        if (ShouldMicroBatch(input))
+        // The accumulation path steps the network's own optimizer, so an override never reaches it
+        // (TryTrainStepWithOptimizer declines those batches before getting here).
+        if (optimizerOverride is null && ShouldMicroBatch(input))
         {
             TrainWithGradientAccumulation(input, expectedOutput, MicroBatchChunkSize);
             return;
@@ -10151,7 +10170,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             {
                 // Tape-based training: delegates forward/backward/update to TrainWithTape
                 // which uses the configured optimizer via Step(TapeStepContext)
-                TrainWithTape(input, expectedOutput, optimizer: null);
+                TrainWithTape(input, expectedOutput, optimizer: optimizerOverride);
             }
             else
             {
@@ -10160,7 +10179,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 // the scheduler at the batch boundary via the shared
                 // helper so all training entry points keep the same
                 // OnBatchEnd contract. Closes #1270.yYuK.
-                var opt = GetOrCreateBaseOptimizer();
+                var opt = optimizerOverride ?? GetOrCreateBaseOptimizer();
                 // Legacy per-layer update writes weights in place (#1624 OOM-retry gate).
                 MarkTrainMutationStarted();
                 opt.UpdateParameters(Layers);
@@ -10877,6 +10896,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                             if (scaleDown) span[i] = NumOps.Multiply(span[i], scale);
                         }
                     }
+                    // Streaming optimizer writes this source's weights in place (#1624 OOM-retry gate).
+                    MarkTrainMutationStarted();
                     streamingOptimizer.Apply(source, grad);
                 });
 
@@ -12476,6 +12497,37 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         // Match eager TrainWithTape: reshape the leaf target to the prediction whenever element
         // counts agree, and never reshape the tape-tracked prediction merely to satisfy a leaf.
+        // The optimizer's regularization, applied the way its flat path applies it: to the gradient, BEFORE clipping.
+        // L2 has a fused form (the plan adds strength * theta ahead of its clip); any other regularizer runs on the
+        // eager tape, which applies it (ApplyOptimizerRegularization). Decided BEFORE the per-step arena below is
+        // created: TensorArena.Create is thread-static and stacks on the enclosing arena, so a miss returned after
+        // it would leave the arena current on this thread for the eager fallback and every later step.
+        double fusedL2 = 0.0;
+        if (OptimizerRegularizationOf(resolvedOptimizer) is { } fusedRegularization)
+        {
+            if (fusedRegularization is AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>> fusedL2Regularization)
+                fusedL2 = fusedL2Regularization.GetOptions().Strength;
+            else
+            {
+                string reason = "regularization " + fusedRegularization.GetType().Name
+                    + " has no fused form; the eager tape applies it";
+                if (_fusedTrainingCommitted)
+                {
+                    // A committed plan owns the Adam/SGD moments; the eager optimizer cannot inherit them. Drop the
+                    // plan explicitly (the same graceful reset the persistence-stop path uses) instead of leaving it
+                    // alive but unused while the eager tape silently restarts from zero moments.
+                    if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_QUIET")))
+                    {
+                        System.Diagnostics.Trace.TraceWarning(
+                            "[AiDotNet] committed fused plan dropped: " + reason + " (model: " + GetType().Name + ").");
+                    }
+                    ResetCompiledFusedStateAfterCommittedFailure(stickyDisableFused: true);
+                }
+
+                return EmitFusedMissAndFallback(reason);
+            }
+        }
+
         // #1624 / #1640: reclaim this training step's transient activations instead of
         // letting them accumulate across steps. This is how PyTorch bounds training
         // memory: its caching allocator returns each iteration's freed blocks to a reuse
@@ -12522,21 +12574,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         //
         // Re-checking costs one strided checksum, already bounded to ~FusedChecksumTargetSamples
         // regardless of model size, amortized over FusedPersistenceRecheckInterval steps.
-        // The optimizer's regularization, applied the way its flat path applies it: to the gradient, BEFORE clipping.
-        // L2 has a fused form (the plan adds strength * theta ahead of its clip); any other regularizer runs on the
-        // eager tape, which applies it (ApplyOptimizerRegularization).
-        double fusedL2 = 0.0;
-        if (OptimizerRegularizationOf(resolvedOptimizer) is { } fusedRegularization)
-        {
-            if (fusedRegularization is AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>> fusedL2Regularization)
-                fusedL2 = fusedL2Regularization.GetOptions().Strength;
-            else
-            {
-                _pendingFusedMissReason = "regularization " + fusedRegularization.GetType().Name
-                    + " has no fused form; the eager tape applies it";
-                return false;
-            }
-        }
 
         bool verifyFusedPersistence =
             (!_fusedPersistenceVerified && !_fusedTrainingCommitted)
@@ -13266,6 +13303,66 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
+    /// One training step with the GIVEN optimizer - the facade's model step (GradientBasedOptimizerBase.TryModelOwnStep).
+    /// Goes through the same preparation as <see cref="Train(Tensor{T}, Tensor{T})"/> (batch-dim promotion, LSUV init,
+    /// retries), so a facade step and a Train call see identical layer ranks. Needed because Train cannot be trusted to
+    /// use a supplied optimizer: NeuralNetwork.Train passes its own constructor-time optimizer, so a model step through
+    /// Train trained with AMSGrad at 5e-4 instead of the configured optimizer.
+    /// </summary>
+    /// <param name="input">The training input.</param>
+    /// <param name="expectedOutput">The training target.</param>
+    /// <param name="optimizer">The optimizer to step with.</param>
+    /// <param name="declineReason">Why the step was not taken, or null when it was.</param>
+    /// <returns>
+    /// False, changing nothing, when this network's Train is not the generic tape step (a subclass with its own
+    /// training logic, whose step would not be the objective the optimizer's flat path trains), or when the batch
+    /// would take the micro-batch accumulation path, which steps the network's own optimizer.
+    /// </returns>
+    internal bool TryTrainStepWithOptimizer(
+        Tensor<T> input,
+        Tensor<T> expectedOutput,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
+        out string? declineReason)
+    {
+        if (!HasGenericTrain())
+        {
+            declineReason = "network " + GetType().Name + " overrides Train with its own training logic";
+            return false;
+        }
+
+        var (batchedInput, _) = NormalizeBatchDim(input, expectedOutput);
+        if (ShouldMicroBatch(batchedInput))
+        {
+            declineReason = "batch takes the micro-batch accumulation path, which steps the network's own optimizer";
+            return false;
+        }
+
+        declineReason = null;
+        _hasBeenTrained = true;
+        RunTrainStep(input, expectedOutput, optimizer);
+        return true;
+    }
+
+    /// <summary>Cached result of the per-type reflection in <see cref="HasGenericTrain"/>; null until first asked.</summary>
+    private bool? _hasGenericTrain;
+
+    /// <summary>
+    /// Whether this network's <c>Train(Tensor, Tensor)</c> is the generic tape step declared by
+    /// <see cref="NeuralNetworkBase{T}"/> or <see cref="NeuralNetwork{T}"/>. Reflected once per instance, not per step.
+    /// </summary>
+    private bool HasGenericTrain()
+    {
+        if (_hasGenericTrain is bool known) return known;
+        var train = GetType().GetMethod(nameof(Train), new[] { typeof(Tensor<T>), typeof(Tensor<T>) });
+        var declaring = train?.DeclaringType;
+        bool generic = declaring is not null && declaring.IsGenericType
+            && (declaring.GetGenericTypeDefinition() == typeof(NeuralNetworkBase<>)
+                || declaring.GetGenericTypeDefinition() == typeof(NeuralNetwork<>));
+        _hasGenericTrain = generic;
+        return generic;
+    }
+
+    /// <summary>
     /// Adopts an optimizer that was constructed FOR this network as its tape-training optimizer, unless one has
     /// already been chosen.
     /// </summary>
@@ -13289,32 +13386,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <see cref="GetOrCreateBaseOptimizer"/> bypasses this entirely. (#1789)
     /// </para>
     /// </remarks>
-    /// <summary>
-    /// One training step on the tape with the GIVEN optimizer - the facade's model step
-    /// (GradientBasedOptimizerBase.TryModelOwnStep). Returns false without doing anything when this network's Train is
-    /// not the generic tape step (a subclass with its own training logic), because then the step would not be the
-    /// objective the optimizer's flat path trains. Needed because Train cannot be trusted to use a supplied optimizer:
-    /// NeuralNetwork.Train passes its own constructor-time optimizer, so a model step through Train trained with
-    /// AMSGrad at 5e-4 instead of the configured optimizer.
-    /// </summary>
-    internal bool TryTrainStepWithOptimizer(
-        Tensor<T> input, Tensor<T> expectedOutput, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
-    {
-        var train = GetType().GetMethod(nameof(Train), new[] { typeof(Tensor<T>), typeof(Tensor<T>) });
-        var declaring = train?.DeclaringType;
-        bool genericTrain = declaring is not null && declaring.IsGenericType
-            && (declaring.GetGenericTypeDefinition() == typeof(NeuralNetworkBase<>)
-                || declaring.GetGenericTypeDefinition() == typeof(NeuralNetwork<>));
-        if (!genericTrain) return false;
-        _hasBeenTrained = true;
-        _trainMutationStarted = false;
-        bool wasTraining = IsTrainingMode;
-        SetTrainingMode(true);
-        try { TrainWithTape(input, expectedOutput, optimizer); }
-        finally { if (!wasTraining) SetTrainingMode(false); }
-        return true;
-    }
-
     internal void AdoptConfiguredOptimizer(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
     {
         _baseTrainOptimizer ??= optimizer;

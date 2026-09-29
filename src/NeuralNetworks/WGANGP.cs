@@ -914,6 +914,10 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
     {
         _generatorOptimizer.Reset();
         _criticOptimizer.Reset();
+        // The retained fused critic plan owns its own moments and step count; resetting only
+        // _criticOptimizer would let the next fused critic update continue the old run.
+        _wganFusedStep?.Dispose();
+        _wganFusedStep = null;
     }
 
     /// <inheritdoc/>

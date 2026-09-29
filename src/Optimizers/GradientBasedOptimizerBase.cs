@@ -1792,8 +1792,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         _suppressModelBatchEnd++;
         try
         {
-            if (!network.TryTrainStepWithOptimizer(xTensor, yTensor, self))
-                return Decline("network " + network.GetType().Name + " overrides Train with its own training logic");
+            if (!network.TryTrainStepWithOptimizer(xTensor, yTensor, self, out string? networkDeclineReason))
+                return Decline(networkDeclineReason ?? "network " + network.GetType().Name + " declined the model step");
         }
         finally { _suppressModelBatchEnd--; }
         ModelOwnStepCount++;
