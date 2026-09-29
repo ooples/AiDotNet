@@ -409,7 +409,14 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITr
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(noisyInput, noise);
+            // The step's timestep reaches the forward as DATA (the auxiliary input), not as a value captured while a
+            // plan is traced: a compile-once plan that captured it would train every later step at the first step's
+            // noise level. The base routes an auxiliary-input step through the eager tape until the compiled cache
+            // carries such inputs, so this model needs no fused-training opt-out of its own.
+            using (UseAuxiliaryInput(TimeInput(_trainingTime.Value)))
+            {
+                TrainWithTape(noisyInput, noise);
+            }
         }
         finally
         {
@@ -423,13 +430,9 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITr
     /// inside the taped forward, so its layer receives gradients too. Outside training it is the ordinary forward.
     /// </summary>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
-        => _trainingTime is { } time ? PredictNoise(input, null, CreateTimeEmbedding(time)) : base.ForwardForTraining(input);
-
-    /// <summary>
-    /// Each step conditions on a freshly drawn timestep, so a compiled plan that froze the first step's time
-    /// embedding would train every later step at the wrong noise level. Train on the eager tape.
-    /// </summary>
-    protected override bool SupportsFusedCompiledTraining => false;
+        => _trainingTime is not null && AuxiliaryInput is { } timeInput
+            ? PredictNoise(input, null, _timeEmbed.Forward(timeInput))
+            : base.ForwardForTraining(input);
 
     /// <inheritdoc/>
     AiDotNet.Enums.TrainingObjectiveKind AiDotNet.Interfaces.ITrainingObjectiveProvider<T>.TrainingObjectiveKind
@@ -454,7 +457,7 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITr
         {
             int timestep = Math.Min(_numInferenceSteps - 1, (int)((k + 0.5) * _numInferenceSteps / points));
             double alphaCumprod = _alphasCumprod[timestep];
-            var noise = InitializeLatents(target._shape, new Random(20260928 + k));
+            var noise = InitializeLatents(target._shape, RandomHelper.CreateSeededRandom(20260928 + k));
             var noisy = Engine.TensorAdd(
                 Engine.TensorMultiplyScalar(target, NumOps.FromDouble(Math.Sqrt(alphaCumprod))),
                 Engine.TensorMultiplyScalar(noise, NumOps.FromDouble(Math.Sqrt(1 - alphaCumprod))));
@@ -527,11 +530,14 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITr
         return _textProjection.Forward(textEmbedding);
     }
 
-    private Tensor<T> CreateTimeEmbedding(double t)
+    private Tensor<T> CreateTimeEmbedding(double t) => _timeEmbed.Forward(TimeInput(t));
+
+    /// <summary>The normalized timestep as the [1, 1, 1, 1] tensor the time embedding reads.</summary>
+    private Tensor<T> TimeInput(double t)
     {
         var timeInput = new Tensor<T>([1, 1, 1, 1]);
         timeInput[0, 0, 0, 0] = NumOps.FromDouble(t);
-        return _timeEmbed.Forward(timeInput);
+        return timeInput;
     }
 
     private Tensor<T> PredictNoise(Tensor<T> latents, Tensor<T>? textCondition, Tensor<T> timeEmbed)

@@ -128,7 +128,7 @@ public class DeepAROptions<T> : TimeSeriesRegressionOptions<T>
     /// <summary>
     /// Gets or sets the batch size for training.
     /// </summary>
-    /// <value>The batch size, defaulting to 32.</value>
+    /// <value>The batch size, defaulting to 64, the value DeepAR (Salinas et al. 2020) table 3 reports for every dataset.</value>
     public int BatchSize { get; set; } = 64;
 
     /// <summary>
