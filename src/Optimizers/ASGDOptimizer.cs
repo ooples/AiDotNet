@@ -247,14 +247,55 @@ public partial class ASGDOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         OptimizationInputData<T, TInput, TOutput> inputData,
         ref OptimizationStepData<T, TInput, TOutput> bestStepData)
     {
-        if (_ax == null || _t <= _options.T0)
+        var averaged = AveragedParametersFor(currentSolution);
+        if (averaged == null)
         {
             return;
         }
 
-        var averagedSolution = InterfaceGuard.Parameterizable(currentSolution).WithParameters(_ax);
+        var averagedSolution = InterfaceGuard.Parameterizable(currentSolution).WithParameters(averaged);
         var averagedStepData = EvaluateSolution(averagedSolution, inputData);
         UpdateBestSolution(averagedStepData, ref bestStepData);
+    }
+
+    /// <summary>
+    /// The averaged iterate for <paramref name="solution"/>, flattened the way the solution flattens its own
+    /// parameters, or null while averaging has not started (t &lt;= t0).
+    /// </summary>
+    /// <remarks>
+    /// A network never advances the flat-path state: both its facade model step and its flat path
+    /// (UpdateSolution -> Step) run the tape step, which keeps the average per parameter tensor in
+    /// <c>_tapeAx</c> and counts in <c>_tapeStep</c>. Reading <c>_t</c>/<c>_ax</c> for a network therefore
+    /// never promoted the average at all. The tape average is flattened by writing it into the live tensors,
+    /// reading the network's own parameter vector (so the ordering is the network's, not a guess), and
+    /// restoring the live values, all through the same TensorCopy write path Step uses.
+    /// </remarks>
+    private Vector<T>? AveragedParametersFor(IFullModel<T, TInput, TOutput> solution)
+    {
+        if (solution is not AiDotNet.Interfaces.INeuralNetwork<T>)
+            return _ax != null && _t > _options.T0 ? _ax : null;
+
+        if (_tapeAx.IsEmpty || _tapeStep <= _options.T0)
+            return null;
+
+        var restore = new List<(Tensor<T> Live, Tensor<T> Saved)>(_tapeAx.Count);
+        try
+        {
+            foreach (var entry in _tapeAx)
+            {
+                var saved = new Tensor<T>(entry.Key._shape);
+                Engine.TensorCopy(entry.Key, saved);
+                restore.Add((entry.Key, saved));
+                Engine.TensorCopy(entry.Value, entry.Key);
+            }
+
+            return InterfaceGuard.Parameterizable(solution).GetParameters().Clone();
+        }
+        finally
+        {
+            foreach (var (live, saved) in restore)
+                Engine.TensorCopy(saved, live);
+        }
     }
 
     /// <summary>
