@@ -75,6 +75,9 @@ public partial class TrOCR<T> : OCRBase<T>
     public TrOCR(OCROptions<T> options) : base(options)
     {
         var sizes = options as TrOCROptions<T> ?? new TrOCROptions<T>();
+        // Public setters, so check before any layer is built: a head count that does not divide the width, or a
+        // zero head count, otherwise fails deep inside a layer constructor without naming the option.
+        sizes.Validate();
         _encoderDim = sizes.EncoderHiddenDim;
         _encoderHeads = sizes.EncoderHeads;
         _decoderDim = sizes.DecoderHiddenDim;
@@ -581,7 +584,10 @@ public partial class TrOCR<T> : OCRBase<T>
         int version = reader.ReadInt32();
         if (version != 2)
         {
-            throw new InvalidDataException($"Unsupported TrOCR model version: {version}");
+            throw new InvalidDataException(version == 1
+                ? "This TrOCR file is version 1, saved with the former fixed 512-wide, 6-layer shape, which cannot "
+                    + "hold TrOCR-Base. Re-save the model with this version, or retrain it."
+                : $"Unsupported TrOCR model version: {version}");
         }
 
         string name = reader.ReadString();

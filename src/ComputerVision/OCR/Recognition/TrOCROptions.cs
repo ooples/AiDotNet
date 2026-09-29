@@ -46,4 +46,37 @@ public class TrOCROptions<T> : OCROptions<T>
 
     /// <summary>Square image-patch side in pixels (16).</summary>
     public int PatchSize { get; set; }
+
+    /// <summary>
+    /// Throws when a size cannot build a working TrOCR: a non-positive width, head count, patch size or layer
+    /// count, or a width the head count does not divide (attention would split it into mismatched heads).
+    /// </summary>
+    /// <exception cref="ArgumentException">A size is invalid; the message names the option.</exception>
+    public void Validate()
+    {
+        RequirePositive(EncoderHiddenDim, nameof(EncoderHiddenDim));
+        RequirePositive(EncoderHeads, nameof(EncoderHeads));
+        RequirePositive(DecoderHiddenDim, nameof(DecoderHiddenDim));
+        RequirePositive(DecoderHeads, nameof(DecoderHeads));
+        RequirePositive(PatchSize, nameof(PatchSize));
+        if (EncoderLayers < 0)
+            throw new ArgumentException($"TrOCROptions.EncoderLayers is {EncoderLayers}; it cannot be negative.", "options");
+        if (DecoderLayers < 0)
+            throw new ArgumentException($"TrOCROptions.DecoderLayers is {DecoderLayers}; it cannot be negative.", "options");
+        RequireDivisible(EncoderHiddenDim, EncoderHeads, nameof(EncoderHiddenDim), nameof(EncoderHeads));
+        RequireDivisible(DecoderHiddenDim, DecoderHeads, nameof(DecoderHiddenDim), nameof(DecoderHeads));
+    }
+
+    private static void RequirePositive(int value, string name)
+    {
+        if (value <= 0)
+            throw new ArgumentException($"TrOCROptions.{name} is {value}; it must be greater than zero.", "options");
+    }
+
+    private static void RequireDivisible(int width, int heads, string widthName, string headsName)
+    {
+        if (width % heads != 0)
+            throw new ArgumentException(
+                $"TrOCROptions.{widthName} ({width}) must be divisible by {headsName} ({heads}).", "options");
+    }
 }
