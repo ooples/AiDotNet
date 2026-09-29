@@ -85,15 +85,22 @@ public abstract partial class TextConditioningBase<T> : NeuralNetworkBase<T>, IC
     /// <param name="maxSequenceLength">Maximum token sequence length.</param>
     /// <param name="embeddingDimension">Output embedding dimension.</param>
     /// <param name="lossFunction">Optional loss function; defaults to MSE for inference-only paths.</param>
+    /// <param name="options">
+    /// The conditioner's own options. Kept in the base <c>Options</c>, which is where the clone generator sources a
+    /// subclass's <c>options</c> constructor argument: left at the default <see cref="NeuralNetworkOptions"/>, a clone
+    /// found a value that is not the subclass's options type and could not rebuild the conditioner at all.
+    /// </param>
     protected TextConditioningBase(
         NeuralNetworkArchitecture<T> architecture,
         ITokenizer tokenizer,
         int maxSequenceLength,
         int embeddingDimension,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        TextConditionerOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         Guard.NotNull(tokenizer);
+        if (options is not null) Options = options;
         Tokenizer = tokenizer;
         MaxSequenceLength = maxSequenceLength;
         EmbeddingDimension = embeddingDimension;

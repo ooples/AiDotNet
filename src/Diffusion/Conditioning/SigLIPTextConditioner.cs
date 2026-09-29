@@ -47,7 +47,8 @@ public class SigLIPTextConditioner<T> : TextConditioningBase<T>
             architecture: architecture ?? BuildDefaultArchitecture((options ??= new SigLIPTextConditionerOptions()).Variant),
             tokenizer: tokenizer,
             maxSequenceLength: 64,
-            embeddingDimension: (options ??= new SigLIPTextConditionerOptions()).HiddenSize ?? GetEmbeddingDim(options.Variant))
+            embeddingDimension: (options ??= new SigLIPTextConditionerOptions()).HiddenSize ?? GetEmbeddingDim(options.Variant),
+            options: options)
     {
         Guard.NotNull(tokenizer);
         options.Validate();

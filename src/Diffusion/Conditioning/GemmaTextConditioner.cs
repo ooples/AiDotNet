@@ -46,7 +46,8 @@ public class GemmaTextConditioner<T> : TextConditioningBase<T>
             architecture: architecture ?? BuildDefaultArchitecture((options ??= new GemmaTextConditionerOptions()).Variant),
             tokenizer: tokenizer,
             maxSequenceLength: 8192,
-            embeddingDimension: (options ??= new GemmaTextConditionerOptions()).HiddenSize ?? GetEmbeddingDim(options.Variant))
+            embeddingDimension: (options ??= new GemmaTextConditionerOptions()).HiddenSize ?? GetEmbeddingDim(options.Variant),
+            options: options)
     {
         Guard.NotNull(tokenizer);
         options.Validate();

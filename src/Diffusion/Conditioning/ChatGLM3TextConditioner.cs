@@ -48,7 +48,8 @@ public class ChatGLM3TextConditioner<T> : TextConditioningBase<T>
             architecture: architecture ?? BuildDefaultArchitecture((options ??= new ChatGLM3TextConditionerOptions()).Variant),
             tokenizer: tokenizer,
             maxSequenceLength: 512,
-            embeddingDimension: (options ??= new ChatGLM3TextConditionerOptions()).HiddenSize ?? GetEmbeddingDim(options.Variant))
+            embeddingDimension: (options ??= new ChatGLM3TextConditionerOptions()).HiddenSize ?? GetEmbeddingDim(options.Variant),
+            options: options)
     {
         Guard.NotNull(tokenizer);
         options.Validate();

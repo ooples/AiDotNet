@@ -48,7 +48,8 @@ public class Qwen2TextConditioner<T> : TextConditioningBase<T>
             architecture: architecture ?? BuildDefaultArchitecture((options ??= new Qwen2TextConditionerOptions()).Variant),
             tokenizer: tokenizer,
             maxSequenceLength: 512,
-            embeddingDimension: (options ??= new Qwen2TextConditionerOptions()).HiddenSize ?? GetEmbeddingDim(options.Variant))
+            embeddingDimension: (options ??= new Qwen2TextConditionerOptions()).HiddenSize ?? GetEmbeddingDim(options.Variant),
+            options: options)
     {
         Guard.NotNull(tokenizer);
         options.Validate();

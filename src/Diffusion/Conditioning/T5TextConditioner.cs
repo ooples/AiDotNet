@@ -47,7 +47,8 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
             architecture: architecture ?? BuildDefaultArchitecture((options ??= new T5TextConditionerOptions()).Variant),
             tokenizer: tokenizer,
             maxSequenceLength: 512,
-            embeddingDimension: (options ??= new T5TextConditionerOptions()).HiddenSize ?? GetEmbeddingDim(options.Variant))
+            embeddingDimension: (options ??= new T5TextConditionerOptions()).HiddenSize ?? GetEmbeddingDim(options.Variant),
+            options: options)
     {
         Guard.NotNull(tokenizer);
         options.Validate();
