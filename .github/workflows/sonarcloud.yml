@@ -337,7 +337,8 @@ jobs:
           # refs/pull/N/merge: the first parent is the base this PR is validated against.
           mapfile -t changed < <(git -c core.quotepath=false diff --no-renames --diff-filter=AMR --name-only HEAD^1 HEAD -- '*.cs' \
             | grep -Ev '^(tests|AiDotNetTests|AiDotNetTestConsole|AiDotNetBenchmarkTests|examples|docs)/' || true)
-          config="$RUNNER_TEMP/codeql-pr-config.yml"
+          # codeql-action only loads a config file from inside the workspace.
+          config="$GITHUB_WORKSPACE/.codeql-pr-config.yml"
           cp .github/codeql/codeql-config.yml "$config"
           printf '\npaths:\n' >> "$config"
           if [ "${#changed[@]}" -eq 0 ]; then
