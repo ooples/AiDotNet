@@ -33,6 +33,7 @@ var unresolved = new List<JsonObject>();
 var ignored = new List<string>();
 var changed = new HashSet<TypeNode>();
 var perFile = new JsonArray();
+var constLines = options.Diff.Length == 0 ? null : FilesEditingConstLines(options.Diff);
 foreach (var (status, path) in ReadChanges(options.Changes))
 {
     if (IsDocumentation(path))
@@ -55,8 +56,9 @@ foreach (var (status, path) in ReadChanges(options.Changes))
 
     if (status == 'D')
     {
-        // The compiler already proved nothing still names the removed types.
-        ignored.Add(path);
+        // The new assemblies cannot show who depended on it: callers may now bind to another
+        // overload or extension method, and a reflection inventory has lost a type.
+        unresolved.Add(new JsonObject { ["path"] = path, ["reason"] = "deleted C# source: its former dependents cannot be read from the new assemblies" });
         continue;
     }
 
@@ -64,6 +66,15 @@ foreach (var (status, path) in ReadChanges(options.Changes))
     if (types is null || types.Count == 0)
     {
         unresolved.Add(new JsonObject { ["path"] = path, ["reason"] = "no compiled type in the loaded assemblies comes from this source" });
+        continue;
+    }
+
+    // Consumers inline a const's value and keep no reference to its type, so an edited const line
+    // in a type that exposes one cannot be followed. Without the diff, any such file is unmappable.
+    if (types.Any(t => t.DeclaresVisibleConstant) &&
+        (constLines is null || constLines.Contains(path)))
+    {
+        unresolved.Add(new JsonObject { ["path"] = path, ["reason"] = "edits a non-private const: consumers inline its value and hold no reference to it" });
         continue;
     }
 
@@ -106,7 +117,15 @@ if (options.Explain)
     }
 }
 
-var enumerating = index.Nodes.Where(n => n.Enumerates && n.TestClasses.Count > 0).ToHashSet();
+// Every test that reaches type enumeration inside the test assemblies - the enumerating class itself
+// or a test-side helper it uses (LayerTestBase sweeps every activation function for all 222 layer
+// tests) - depends on the enumerated set, which no signature names. A production-side enumerator is a
+// name-to-type registry (DeserializationHelper, ModelTypeRegistry): which entry a caller reaches is
+// runtime data, the same blind spot as a catalog, left to the nightly full run.
+var testAssemblies = index.TestAssemblies;
+var enumerating = ReverseClosure(index.Nodes.Where(n => n.Enumerates && testAssemblies.Contains(n.Assembly)), dispatchTables, out _)
+    .Where(n => n.TestClasses.Count > 0)
+    .ToHashSet();
 // Inventories react to production code: an edit confined to test sources cannot move the set of
 // types they enumerate.
 bool anySource = changed.Any(n => !index.TestAssemblies.Contains(n.Assembly));
@@ -211,6 +230,36 @@ static HashSet<TypeNode> ReverseClosure(IEnumerable<TypeNode> roots, HashSet<Typ
     return seen;
 }
 
+// Files whose added or removed lines in a unified diff mention `const`.
+static HashSet<string> FilesEditingConstLines(string diffFile)
+{
+    var result = new HashSet<string>(StringComparer.Ordinal);
+    var constWord = new System.Text.RegularExpressions.Regex(@"\bconst\b");
+    string? current = null;
+    foreach (var line in File.ReadLines(diffFile))
+    {
+        if (line.StartsWith("+++ ", StringComparison.Ordinal))
+        {
+            current = line == "+++ /dev/null" ? null : line[4..].TrimStart('b').TrimStart('/');
+            continue;
+        }
+
+        if (line.StartsWith("--- ", StringComparison.Ordinal))
+        {
+            // A deleted file has no "+++ b/" side; name it from the old side.
+            current = line == "--- /dev/null" ? current : line[4..].TrimStart('a').TrimStart('/');
+            continue;
+        }
+
+        if (current is not null && line.Length > 0 && line[0] is '+' or '-' && constWord.IsMatch(line))
+        {
+            result.Add(current);
+        }
+    }
+
+    return result;
+}
+
 static IEnumerable<(char Status, string Path)> ReadChanges(string file)
 {
     foreach (var raw in File.ReadAllLines(file))
@@ -263,6 +312,7 @@ internal sealed class Options
     public string Changes { get; private set; } = string.Empty;
     public string Shards { get; private set; } = string.Empty;
     public string Out { get; private set; } = "type-impact-plan.json";
+    public string Diff { get; private set; } = string.Empty;
     public int MaxClasses { get; private set; } = 400;
     public bool Explain { get; private set; }
     public int DispatchThreshold { get; private set; } = 1000;
@@ -288,6 +338,7 @@ internal sealed class Options
                 case "--changes": options.Changes = Next(); break;
                 case "--shards": options.Shards = Next(); break;
                 case "--out": options.Out = Next(); break;
+                case "--diff": options.Diff = Next(); break;
                 case "--explain": options.Explain = true; break;
                 case "--unmappable": options.Unmappable.Add(Next().Replace('\\', '/')); break;
                 case "--catalog-threshold": options.CatalogThreshold = int.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;

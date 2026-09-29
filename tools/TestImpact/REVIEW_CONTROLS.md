@@ -17,7 +17,7 @@ ever-current claim in this inventory.
 | `Test-NoCoverageShardPolicy.ps1` | Retain legitimate growing lists, collapse duplicate names, and reject oversized invalid parses |
 | `Test-ReviewFixtureCleanup.ps1` | Reject paths outside the temporary root or expected fixture prefix and real reparse-point ancestors; preserve a separate sentinel before cleaning owned fixtures |
 | `Test-TestImpactEndToEnd.ps1` | Real Git histories for selected PR tests, behind-master PRs, deleted tests, exact/delta reuse, and fail-closed invalid maps; runs the review controls above |
-| `TypeImpact/Test-TypeImpact.ps1` | Test-level selection over a compiled fixture: a leaf edit selects only its own tests, a base class reaches its subclasses, catalogs stop propagation, body-less types map through the PDB, nightly-only shards run only for their own test files, unmappable files leave the plan unresolved, and a narrowed filter conjoins the shard's own filter |
+| `TypeImpact/Test-TypeImpact.ps1` | Test-level selection over a compiled fixture: a leaf edit selects only its own tests, a base class reaches its subclasses, catalogs stop propagation, body-less types map through the PDB, nightly-only shards run only for their own test files, unmappable files, deletions and edited const lines leave the plan unresolved, test-side enumerating helpers select their callers, and a narrowed filter conjoins the shard's own filter |
 | `.github/scripts/New-CoverageRunSettings.ps1 -SelfTest` | Preserve coverage XML and write output in the PowerShell provider location even when the process directory differs |
 
 Closed policy/test modes use enums. Artifact names, paths, GitHub expressions and
@@ -40,6 +40,8 @@ foreach ($script in @('Test-ValidationReuseModes', 'Test-CiGateModes', 'Test-Tes
 }
 pwsh -NoProfile -File .github/scripts/New-CoverageRunSettings.ps1 -SelfTest
 if ($LASTEXITCODE -ne 0) { throw 'Coverage settings self-test failed' }
+pwsh -NoProfile -File tools/TestImpact/TypeImpact/Test-TypeImpact.ps1
+if ($LASTEXITCODE -ne 0) { throw 'TypeImpact self-test failed' }
 ```
 
 These are finite local decision/wiring checks. A full matrix is correct for

@@ -27,9 +27,9 @@ param(
     # Where the built test output lives; the checkout itself unless testing against another build.
     [string] $BuildRoot = '',
     [string] $PlanFile = 'type-impact-plan.json',
-    # Job outputs are capped at 1 MB in total; narrowed filters are un-narrowed, largest first,
-    # until the matrix fits under this.
-    [int] $MaxMatrixCharacters = 700000
+    # Job outputs are capped at 1 MB in total, and matrix and ledger_matrix carry the same shards;
+    # narrowed filters are un-narrowed, largest first, until both together fit under this.
+    [int] $MaxMatrixCharacters = 800000
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -66,6 +66,10 @@ try {
     $changes = Join-Path ([IO.Path]::GetTempPath()) 'type-impact-changes.txt'
     & git -c core.quotepath=false diff --no-renames --name-status $parents[1] HEAD | Set-Content -LiteralPath $changes -Encoding utf8
     if ($LASTEXITCODE -ne 0) { throw 'git diff failed' }
+    # Line-level diff, for the const edits the type graph cannot follow.
+    $diff = Join-Path ([IO.Path]::GetTempPath()) 'type-impact-changes.diff'
+    & git -c core.quotepath=false diff --no-renames -U0 $parents[1] HEAD -- '*.cs' | Set-Content -LiteralPath $diff -Encoding utf8
+    if ($LASTEXITCODE -ne 0) { throw 'git diff -U0 failed' }
 
     $all = @(yq -o=json -I=0 '.shard' (Join-Path $Repository '.github/test-shards.yml') | ConvertFrom-Json)
     if ($all.Count -eq 0) { throw 'test-shards.yml yielded no shards' }
@@ -84,7 +88,7 @@ try {
         --project 'tests/AiDotNet.Serving.Tests/AiDotNet.Serving.Tests.csproj=AiDotNet.Serving.Tests' `
         --unmappable 'src/AiDotNet.Generators/' `
         --unmappable "tools/" `
-        --changes $changes --shards $manifest --out $PlanFile
+        --changes $changes --diff $diff --shards $manifest --out $PlanFile
     if ($LASTEXITCODE -ne 0) { throw "TypeImpact exited $LASTEXITCODE" }
     $plan = Get-Content -LiteralPath $PlanFile -Raw | ConvertFrom-Json
 }
@@ -100,10 +104,21 @@ if (-not $plan.resolved) {
     return
 }
 
+# Only ever narrow: a shard select-shards did not choose (a deferred nightly sweep, one outside the
+# coverage selection) never runs here, however TypeImpact reaches it.
+try {
+    $chosen = [Collections.Generic.HashSet[string]]::new(
+        [string[]] @($env:SELECTED_MATRIX | ConvertFrom-Json | ForEach-Object { [string] $_.name } | Where-Object { $_ }),
+        [StringComparer]::Ordinal)
+}
+catch { $chosen = $null }
+if ($null -eq $chosen -or $chosen.Count -eq 0) { Write-Passthrough 'the chosen shard matrix is empty or unreadable'; return }
+
 $byName = @{}
 foreach ($entry in @($plan.shards)) { $byName[[string] $entry.name] = $entry }
 $narrowedShards = [Collections.Generic.List[object]]::new()
 foreach ($shard in $all) {
+    if (-not $chosen.Contains([string] $shard.name)) { continue }
     $entry = $byName[[string] $shard.name]
     if ($null -eq $entry -or -not $entry.run) { continue }
     $copy = $shard.PSObject.Copy()
@@ -128,18 +143,18 @@ if ($runnable.Escalated) { Write-Passthrough 'the narrowed selection has no ordi
 $workloads = Split-CiWorkloads -Shards @($runnable.Shards)
 
 function ConvertTo-MatrixJson($Shards) { ConvertTo-Json -InputObject @($Shards) -Depth 6 -Compress }
+function Measure-Outputs { (ConvertTo-MatrixJson $tests).Length + (ConvertTo-MatrixJson $runnable.LedgerShards).Length }
 $tests = @($workloads.Tests)
-$json = ConvertTo-MatrixJson $tests
-while ($json.Length -gt $MaxMatrixCharacters) {
+while ((Measure-Outputs) -gt $MaxMatrixCharacters) {
     $widest = $tests | Where-Object { $_.PSObject.Properties['narrowed'] -and $_.narrowed } |
         Sort-Object { $_.narrowedClasses } -Descending | Select-Object -First 1
     if ($null -eq $widest) { break }
     $original = $all | Where-Object { $_.name -ceq $widest.name } | Select-Object -First 1
     $widest.filter = $original.filter
     $widest.narrowed = $false
-    $json = ConvertTo-MatrixJson $tests
 }
-if ($json.Length -gt $MaxMatrixCharacters) { Write-Passthrough 'the narrowed matrix does not fit a job output'; return }
+$json = ConvertTo-MatrixJson $tests
+if ((Measure-Outputs) -gt $MaxMatrixCharacters) { Write-Passthrough 'the narrowed matrix does not fit a job output'; return }
 
 $running = [Collections.Generic.HashSet[string]]::new([string[]] @($runnable.Shards.name), [StringComparer]::Ordinal)
 $skipped = @($all | Where-Object { -not $running.Contains([string] $_.name) } | ForEach-Object { $_.name -replace '[\\/:*?"<>|\s-]+', '_' })

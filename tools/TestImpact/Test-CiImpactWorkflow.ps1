@@ -1149,13 +1149,10 @@ foreach ($auxiliary in '.github/workflows/model-performance-census.yml', '.githu
     Assert-Contract (-not $validation.Contains("uses: ./$auxiliary")) `
         "the validation pipeline still calls $auxiliary"
     $called = Get-Content -LiteralPath $auxiliary -Raw
-    $triggers = [Regex]::Match($called, '(?ms)^on:\s*
-?
-(?<body>.*?)(?=^\S)').Groups['body'].Value
+    $triggers = [Regex]::Match($called, '(?ms)^on:\s*\r?\n(?<body>.*?)(?=^\S)').Groups['body'].Value
+    Assert-Contract ([bool] $triggers) "$auxiliary has no parsable on: block"
     Assert-Contract (-not ($triggers -match '(?m)^  pull_request')) "$auxiliary triggers on pull requests"
-    Assert-Contract ($triggers -match "(?m)^  schedule:\s*
-?
-\s+- cron: '[^']+'") "$auxiliary has no nightly schedule, so it would never run"
+    Assert-Contract ($triggers -match "(?m)^  schedule:\s*\r?\n\s+- cron: '[^']+'") "$auxiliary has no nightly schedule, so it would never run"
 }
 
 $census = Get-Content -LiteralPath '.github/workflows/model-performance-census.yml' -Raw

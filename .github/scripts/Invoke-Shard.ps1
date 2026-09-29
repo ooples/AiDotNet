@@ -278,7 +278,10 @@ if ($collectCoverage) {
   # after xUnit parallelism and Server GC were disabled, so run them
   # as correctness-only shards and collect coverage from the lighter
   # matrix entries.
-  if ($heavyShard) {
+  if ($pullRequest -and -not $forcedCoverageRun) {
+    Write-Host 'Pull request shard: XPlat Code Coverage disabled (the map and Sonar coverage come from master and the weekly map run)'
+  }
+  elseif ($heavyShard) {
     Write-Host "Heavy shard: XPlat Code Coverage disabled to keep the runner under its memory envelope"
   } else {
     Write-Host "Timing shard: XPlat Code Coverage disabled because instrumentation would distort the ratio under test"

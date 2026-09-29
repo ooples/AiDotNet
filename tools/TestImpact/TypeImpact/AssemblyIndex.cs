@@ -18,6 +18,11 @@ internal sealed class TypeNode
     public HashSet<string> Documents { get; } = new(StringComparer.Ordinal);
     /// <summary>Enumerates types by reflection (GetTypes and friends): its reach is not static.</summary>
     public bool Enumerates { get; set; }
+    /// <summary>
+    /// Declares a non-private const: consumers inline its value (ldc/ldstr, attribute blobs) and keep
+    /// no token for this type, so a changed value is invisible to the reference graph.
+    /// </summary>
+    public bool DeclaresVisibleConstant { get; set; }
     public List<TestClass> TestClasses { get; } = [];
 }
 
@@ -117,6 +122,10 @@ internal sealed class AssemblyIndex
             }
 
             asm.NodeOf[handle] = node;
+            if (DeclaresVisibleConstant(md, handle))
+            {
+                node.DeclaresVisibleConstant = true;
+            }
         }
 
         foreach (var (typeHandle, documents) in asm.DocumentsByType())
@@ -133,6 +142,29 @@ internal sealed class AssemblyIndex
                 set.Add(node);
             }
         }
+    }
+
+    private static bool DeclaresVisibleConstant(MetadataReader md, TypeDefinitionHandle handle)
+    {
+        var type = md.GetTypeDefinition(handle);
+        // Enum members are literals too, but every consumer names the enum type in a signature.
+        if (type.BaseType.Kind == HandleKind.TypeReference &&
+            md.GetString(md.GetTypeReference((TypeReferenceHandle)type.BaseType).Name) == "Enum")
+        {
+            return false;
+        }
+
+        foreach (var fieldHandle in type.GetFields())
+        {
+            var attributes = md.GetFieldDefinition(fieldHandle).Attributes;
+            if ((attributes & FieldAttributes.Literal) != 0 &&
+                (attributes & FieldAttributes.FieldAccessMask) != FieldAttributes.Private)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void CollectEdges(LoadedAssembly asm)

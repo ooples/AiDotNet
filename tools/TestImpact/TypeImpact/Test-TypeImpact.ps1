@@ -35,19 +35,19 @@ try {
     $cases = @(
         @{ Name = 'a leaf model selects its own tests, the inherited contract and the inventory, not its sibling or the catalog'
            Change = "M`t$fixture/Lib/Alpha.cs"
-           Classes = @('AlphaContractTests', 'AlphaTests', 'InventoryTests')
+           Classes = @('AlphaContractTests', 'AlphaTests', 'HelperSweepTests', 'InventoryTests')
            Runs = @('Fast', 'Other project'); Resolved = $true },
         @{ Name = 'a base class reaches every model that derives from it and every test that names it'
            Change = "M`t$fixture/Lib/ModelBase.cs"
-           Classes = @('AlphaContractTests', 'AlphaTests', 'BetaTests', 'CatalogTests', 'InventoryTests')
+           Classes = @('AlphaContractTests', 'AlphaTests', 'BetaTests', 'CatalogTests', 'HelperSweepTests', 'InventoryTests')
            Runs = @('Fast', 'Slow', 'Other project'); Resolved = $true },
         @{ Name = 'a changed catalog selects the tests that call it'
            Change = "M`t$fixture/Lib/Catalog.cs"
-           Classes = @('CatalogTests', 'InventoryTests')
+           Classes = @('CatalogTests', 'HelperSweepTests', 'InventoryTests')
            Runs = @('Fast', 'Other project'); Resolved = $true },
         @{ Name = 'a body-less interface maps through the type-document record'
            Change = "M`t$fixture/Lib/ISurface.cs"
-           Classes = @('InventoryTests', 'SurfaceTests')
+           Classes = @('HelperSweepTests', 'InventoryTests', 'SurfaceTests')
            Runs = @('Fast', 'Other project'); Resolved = $true },
         @{ Name = 'an edited sweep test runs its nightly-only shard'
            Change = "M`t$fixture/Tests/InventoryTests.cs"
@@ -57,6 +57,22 @@ try {
            Change = "M`t$fixture/Tests/ModelContractTests.cs"
            Classes = @('AlphaContractTests')
            Runs = @('Fast', 'Other project'); Resolved = $true },
+        @{ Name = 'a test-side helper that enumerates types selects its callers, and only for production changes'
+           Change = "M`t$fixture/Tests/TypeSweep.cs"
+           Classes = @('HelperSweepTests')
+           Runs = @('Fast', 'Other project'); Resolved = $true },
+        @{ Name = 'a body edit in a type that exposes a const stays mapped'
+           Change = "M`t$fixture/Lib/Limits.cs"
+           Diff = "--- a/$fixture/Lib/Limits.cs`n+++ b/$fixture/Lib/Limits.cs`n@@ -8 +8 @@`n-    public static int Describe() => MaxDepth;`n+    public static int Describe() => MaxDepth + 0;"
+           Classes = @('HelperSweepTests', 'InventoryTests')
+           Runs = @('Fast', 'Other project'); Resolved = $true },
+        @{ Name = 'an edited const line is unresolved: its consumers hold no reference'
+           Change = "M`t$fixture/Lib/Limits.cs"
+           Diff = "--- a/$fixture/Lib/Limits.cs`n+++ b/$fixture/Lib/Limits.cs`n@@ -6 +6 @@`n-    public const int MaxDepth = 3;`n+    public const int MaxDepth = 4;"
+           Classes = @(); Runs = @('Other project'); Resolved = $false },
+        @{ Name = 'a deleted C# source is unresolved: its former dependents are not in the new build'
+           Change = "D`t$fixture/Lib/Gamma.cs"
+           Classes = @(); Runs = @('Other project'); Resolved = $false },
         @{ Name = 'a build file cannot be mapped, so the plan is unresolved'
            Change = "M`tDirectory.Build.props"
            Classes = @(); Runs = @('Other project'); Resolved = $false },
@@ -70,7 +86,13 @@ try {
         $changes = Join-Path $work 'changes.txt'
         Set-Content -LiteralPath $changes -Value $case.Change -Encoding utf8
         $out = Join-Path $work 'plan.json'
-        & dotnet (Join-Path $here 'bin/Release/net10.0/TypeImpact.dll') --repo $repo --bin $bin `
+        $diffArguments = @()
+        if ($case.ContainsKey('Diff')) {
+            $diffFile = Join-Path $work 'changes.diff'
+            Set-Content -LiteralPath $diffFile -Value $case.Diff -Encoding utf8
+            $diffArguments = @('--diff', $diffFile)
+        }
+        & dotnet (Join-Path $here 'bin/Release/net10.0/TypeImpact.dll') --repo $repo --bin $bin @diffArguments `
             --project 'Fixture.csproj=FixtureTests' --unmappable 'src/AiDotNet.Generators/' `
             --catalog-threshold 3 --catalog-max-entry-points 1 `
             --changes $changes --shards $shards --out $out | Out-Null
@@ -78,12 +100,11 @@ try {
         $plan = Get-Content -LiteralPath $out -Raw | ConvertFrom-Json
         $classes = @($plan.shards | Where-Object { $_.PSObject.Properties['testClasses'] } |
             ForEach-Object { $_.testClasses } | ForEach-Object { ($_ -split '\.')[-1] } | Sort-Object -Unique)
-        if (-not $case.Resolved) { $classes = @() }
         $runs = @($plan.shards | Where-Object run | ForEach-Object name | Sort-Object)
         $problems = @()
         if ([bool] $plan.resolved -ne $case.Resolved) { $problems += "resolved=$($plan.resolved), expected $($case.Resolved)" }
         if (($classes -join ',') -cne (@($case.Classes | Sort-Object) -join ',')) { $problems += "classes [$($classes -join ', ')], expected [$($case.Classes -join ', ')]" }
-        if ($case.Resolved -and ($runs -join ',') -cne (@($case.Runs | Sort-Object) -join ',')) { $problems += "shards [$($runs -join ', ')], expected [$($case.Runs -join ', ')]" }
+        if (($runs -join ',') -cne (@($case.Runs | Sort-Object) -join ',')) { $problems += "shards [$($runs -join ', ')], expected [$($case.Runs -join ', ')]" }
         if ($problems.Count -gt 0) {
             $failures++
             Write-Host "FAIL: $($case.Name)"
