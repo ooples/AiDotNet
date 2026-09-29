@@ -137,20 +137,75 @@ public static class DeserializationHelper
     {
         type = null;
         if (string.IsNullOrEmpty(layerType) || layerType.IndexOf('.') < 0) return false;
+
+        // "Full.Name, AssemblyName" - what Serialize writes for a layer defined outside AiDotNet. Resolve it in that
+        // assembly only, so a same-named layer in another assembly (or in AiDotNet) can never be substituted.
+        int comma = layerType.IndexOf(',');
+        if (comma > 0)
+        {
+            string fullName = layerType.Substring(0, comma).Trim();
+            string assemblyName = layerType.Substring(comma + 1).Trim();
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (assembly.IsDynamic
+                    || !string.Equals(assembly.GetName().Name, assemblyName, StringComparison.Ordinal)) continue;
+                var candidate = TryGetLayerType(assembly, fullName);
+                if (candidate is null) continue;
+                type = LayerTypes.GetOrAdd(layerType, candidate);
+                return true;
+            }
+
+            // The assembly was renamed or is not loaded: fall back to the full name, still refusing ambiguity.
+            layerType = fullName;
+        }
+
+        // A bare full name (records written before assembly identity was saved). Collect every match rather than
+        // taking the first: two loaded assemblies defining the same full name would otherwise rebuild the layer as
+        // whichever happened to load first.
+        Type? found = null;
         foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
         {
             if (assembly.IsDynamic) continue;
-            Type? candidate;
-            try { candidate = assembly.GetType(layerType, throwOnError: false); }
-            catch (Exception) { continue; }
-            if (candidate is null || candidate.IsAbstract) continue;
-            bool isLayer = candidate.GetInterfaces()
-                .Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(ILayer<>));
-            if (!isLayer) continue;
-            type = LayerTypes.GetOrAdd(layerType, candidate);
-            return true;
+            var candidate = TryGetLayerType(assembly, layerType);
+            if (candidate is null) continue;
+            if (found is not null && found != candidate)
+            {
+                throw new NotSupportedException(
+                    $"Layer type {layerType} is defined in more than one loaded assembly ({found.Assembly.GetName().Name} "
+                    + $"and {candidate.Assembly.GetName().Name}); the saved model does not record which one it used. "
+                    + "Re-save the model with this version to record the assembly.");
+            }
+            found = candidate;
         }
-        return false;
+
+        if (found is null) return false;
+        type = LayerTypes.GetOrAdd(layerType, found);
+        return true;
+    }
+
+    /// <summary>The concrete <see cref="ILayer{T}"/> type <paramref name="fullName"/> names in <paramref name="assembly"/>, or null.</summary>
+    private static Type? TryGetLayerType(System.Reflection.Assembly assembly, string fullName)
+    {
+        Type? candidate;
+        try { candidate = assembly.GetType(fullName, throwOnError: false); }
+        catch (Exception) { return null; }
+        if (candidate is null || candidate.IsAbstract) return null;
+        bool isLayer = candidate.GetInterfaces()
+            .Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(ILayer<>));
+        return isLayer ? candidate : null;
+    }
+
+    /// <summary>
+    /// The layer-type identity <c>Serialize</c> writes: the generic definition's full name, plus the assembly's simple
+    /// name for a layer defined outside AiDotNet. The simple name (no version) keeps a user's model loadable after
+    /// they bump their assembly version, while still telling apart same-named layers in different assemblies.
+    /// </summary>
+    internal static string GetLayerTypeIdentity(Type layerDefinitionType)
+    {
+        string fullName = layerDefinitionType.FullName ?? layerDefinitionType.Name;
+        if (layerDefinitionType.Assembly == typeof(DeserializationHelper).Assembly) return fullName;
+        string? assemblyName = layerDefinitionType.Assembly.GetName().Name;
+        return string.IsNullOrEmpty(assemblyName) ? fullName : fullName + ", " + assemblyName;
     }
 
     public static ILayer<T> CreateLayerFromType<T>(string layerType, int[] inputShape, int[] outputShape, Dictionary<string, object>? additionalParams = null)

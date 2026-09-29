@@ -14631,7 +14631,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             var layerDefinitionType = layerRuntimeType.IsGenericType
                 ? layerRuntimeType.GetGenericTypeDefinition()
                 : layerRuntimeType;
-            writer.Write(layerDefinitionType.FullName ?? layerDefinitionType.Name);
+            // A layer defined outside AiDotNet also carries its assembly's name, so deserialize cannot confuse it
+            // with a same-named layer from another assembly (see DeserializationHelper.GetLayerTypeIdentity).
+            writer.Write(AiDotNet.Helpers.DeserializationHelper.GetLayerTypeIdentity(layerDefinitionType));
 
             // Write input shape
             var inputShape = layer.GetInputShape();
