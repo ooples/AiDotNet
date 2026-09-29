@@ -1744,6 +1744,17 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <summary>How many facade batches ran as the network's own step (diagnostics and tests).</summary>
     internal int ModelOwnStepCount { get; private set; }
 
+    /// <summary>
+    /// Set by a wrapper that reads <see cref="LastComputedGradients"/> after each optimize (the sharded / DDP
+    /// optimizers synchronize those gradients across replicas).
+    /// </summary>
+    /// <remarks>
+    /// The model step does not produce that vector: the flat path stores the regularized, clipped gradient, while the
+    /// network publishes its raw tape gradient. Republishing one as the other would synchronize a different quantity,
+    /// and publishing nothing let the wrapper skip synchronization silently, so the model step is declined instead.
+    /// </remarks>
+    internal bool FlatGradientsConsumed { get; set; }
+
     /// <summary>Why the most recent facade batch did not run as the network's own step, or null if it did.</summary>
     internal string? LastModelStepDeclineReason { get; private set; }
 
@@ -1780,6 +1791,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             && Regularization is not RegularizationNs.L2Regularization<T, TInput, TOutput>)
             return Decline("regularization " + Regularization.GetType().Name + " has no model-step form yet");
         if (_mixedPrecisionContext is not null) return Decline("mixed-precision loss scaling");
+        if (FlatGradientsConsumed) return Decline("a wrapper synchronizes LastComputedGradients, which only the flat path produces");
         if (GradientOptions.LossFunctionExplicitlySet && !ReferenceEquals(LossFunction, network.DefaultLossFunction)) return Decline("explicit loss differs from the network's");
         // The network's fused step clips by the NETWORK's global-norm threshold; the flat path clipped by this
         // optimizer's. Take the model step only when the two agree (both default to 1.0), so the update is identical.
