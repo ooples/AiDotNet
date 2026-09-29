@@ -61,16 +61,13 @@ public partial class YOLOv10<T> : ObjectDetectorBase<T>, IDetectionTrainingModel
     public YOLOv10(ObjectDetectionOptions<T> options, bool useNmsFree = true) : base(options)
     {
         _useNmsFree = useNmsFree;
-        var (depth, width) = GetSizeConfig(options.Size);
+        // YOLOv10 builds on YOLOv8's architecture (Wang et al. 2024, section 3); its own contributions are
+        // the NMS-free dual assignment below. It ran a YOLOv4/v5 CSPDarknet with a generic PANet.
+        Backbone = new YOLOv8Backbone<T>(options.Size);
+        Neck = new YOLOv8Neck<T>(options.Size);
 
-        // Initialize backbone
-        Backbone = new CSPDarknet<T>(depth: depth, widthMultiplier: width);
-
-        // Initialize neck with enhanced connections
-        Neck = new PANet<T>(Backbone.OutputChannels.ToArray(), outputChannels: (int)(256 * width));
-
-        // Main detection head (one-to-one assignment)
-        var neckChannels = Enumerable.Repeat(Neck.OutputChannels, Neck.NumLevels).ToArray();
+        // Main detection head (one-to-one assignment), reading each level at its own width.
+        var neckChannels = Neck.LevelChannels.ToArray();
         _head = new YOLOv8Head<T>(neckChannels, options.NumClasses);
 
         // One-to-many head (Wang et al. 2024, dual label assignments): it supplies the rich supervision
@@ -83,16 +80,6 @@ public partial class YOLOv10<T> : ObjectDetectorBase<T>, IDetectionTrainingModel
             _head.RegMax, options.TaskAlignedLoss ?? new AiDotNet.ComputerVision.Detection.Losses.TaskAlignedLossOptions());
         _nms = new NMS<T>();
     }
-
-    private static (double depth, double width) GetSizeConfig(ModelSize size) => size switch
-    {
-        ModelSize.Nano => (0.33, 0.25),
-        ModelSize.Small => (0.33, 0.50),
-        ModelSize.Medium => (0.67, 0.75),
-        ModelSize.Large => (1.00, 1.00),
-        ModelSize.XLarge => (1.33, 1.25),
-        _ => (0.67, 0.75)
-    };
 
     /// <summary>Trains both heads with YOLOv10's consistent dual assignments.</summary>
     /// <remarks>

@@ -187,9 +187,9 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
         // (YOLOv8's Conv = conv + BN + SiLU) that is the TRAINING-mode forward, which normalizes with the
         // batch's statistics; inference normalizes with running statistics and yields a different loss.
         // Batch statistics depend only on the input, so this forward and the step's own forward agree.
+        // The window covers every oracle read, including YOLOv10's ForwardTrainingHeads.
         detector.SetTrainingMode(true);
         using var before = detector.Predict(input);
-        detector.SetTrainingMode(false);
         var beforeValues = before.ToArray().Select(value => ops.ToDouble(value)).ToArray();
         var heads = new List<(TaskAlignedDetectionOracle.Level[] Levels, int TopK)>();
         if (detector is AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv10<T> yolo10)
@@ -227,6 +227,7 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
             oracleGold.Select(g => new AiDotNet.ComputerVision.Detection.DetectionTrainingTarget<T>(g.ClassId,
                 ops.FromDouble(g.CenterX), ops.FromDouble(g.CenterY), ops.FromDouble(g.Width), ops.FromDouble(g.Height))).ToArray()
         });
+        detector.SetTrainingMode(false);
         if (trainingStep is null) training.TrainDetections(input, batch);
         else trainingStep(input, batch);
 
