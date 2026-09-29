@@ -275,7 +275,8 @@ jobs:
             -OutputDirectory $env:AIDOTNET_MODEL_PERF_DIR `
             -ShardIndex ${{ matrix.shard }} `
             -ShardCount ${{ needs.prepare.outputs.shard_count }} `
-            -TimeoutSeconds $env:PERF_MODEL_TIMEOUT_SECONDS
+            -TimeoutSeconds $env:PERF_MODEL_TIMEOUT_SECONDS `
+            -MemoryLimitBytes 12884901888
 
       - name: Upload shard records
         if: always()
