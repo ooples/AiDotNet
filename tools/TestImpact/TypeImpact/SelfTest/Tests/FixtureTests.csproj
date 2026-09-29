@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>FixtureTests</AssemblyName>
+    <Nullable>enable</Nullable>
+    <DebugType>portable</DebugType>
+    <IsPackable>false</IsPackable>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../XunitStub/XunitStub.csproj" />
+    <ProjectReference Include="../Lib/FixtureLib.csproj" />
+  </ItemGroup>
+</Project>

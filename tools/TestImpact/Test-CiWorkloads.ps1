@@ -120,7 +120,8 @@ try {
     }
 }
 finally { Pop-Location }
-Assert-True ($workflow -match '(?m)^          EXPECTED_SHARD_MATRIX: \$\{\{ needs\.select-shards\.outputs\.ledger_matrix \}\}\r?$') `
+# The Build job's narrowed ledger comes first; select-shards' is the fallback when it published none.
+Assert-True ($workflow -match '(?m)^          EXPECTED_SHARD_MATRIX: \$\{\{ needs\.build\.outputs\.ledger_matrix \|\| needs\.select-shards\.outputs\.ledger_matrix \}\}\r?$') `
     'Regression inventory does not require imported ordinary shards.'
 $outputPath = Join-Path ([IO.Path]::GetTempPath()) "ci-workloads-$([Guid]::NewGuid().ToString('N')).txt"
 $previousOutput = $env:GITHUB_OUTPUT

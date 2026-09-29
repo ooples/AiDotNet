@@ -213,8 +213,14 @@ if ($coverageDisposition -ne [CoverageDisposition]::Instrument -and
 }
 
 $forcedCoverageRun = "$($env:SHARD_FORCE_COVERAGE)" -eq 'true'
+# Pull requests never instrument: the test-impact map is fed only by the weekly coverage-everywhere
+# run, SonarCloud's coverage comes from master, and coverlet slowed every PR shard for a report
+# nobody gates on. Master pushes keep collecting it for Sonar.
+$pullRequest = "$($env:GITHUB_EVENT_NAME)" -eq 'pull_request'
 $collectCoverage = if ($forcedCoverageRun) {
   $coverageDisposition -eq [CoverageDisposition]::Instrument
+} elseif ($pullRequest) {
+  $false
 } else {
   -not ($heavyShard -or $measuresTiming)
 }
@@ -272,7 +278,10 @@ if ($collectCoverage) {
   # after xUnit parallelism and Server GC were disabled, so run them
   # as correctness-only shards and collect coverage from the lighter
   # matrix entries.
-  if ($heavyShard) {
+  if ($pullRequest -and -not $forcedCoverageRun) {
+    Write-Host 'Pull request shard: XPlat Code Coverage disabled (the map and Sonar coverage come from master and the weekly map run)'
+  }
+  elseif ($heavyShard) {
     Write-Host "Heavy shard: XPlat Code Coverage disabled to keep the runner under its memory envelope"
   } else {
     Write-Host "Timing shard: XPlat Code Coverage disabled because instrumentation would distort the ratio under test"
