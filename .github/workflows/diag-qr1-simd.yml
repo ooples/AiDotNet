@@ -1,0 +1,81 @@
+name: Diagnostic - Q-R1 SIMD/license
+
+# TEMPORARY (revert before merge). Q-R1 fails deterministically on CI (RepViTSAM loss 98.228439 -> 111.634476,
+# RBFLayer identical outputs) but passes locally through this same Invoke-Shard.ps1 on an AVX2-only CPU. Three
+# arms isolate the remaining differences: the runner's SIMD path and the CI license key.
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/diag-qr1-simd.yml
+
+permissions:
+  contents: read
+
+jobs:
+  qr1:
+    name: Q-R1 (${{ matrix.arm }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        arm: [ci-default, avx512-off, no-license]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Runner CPU
+        run: |
+          lscpu | grep -E 'Model name|^CPU\(s\)'
+          for f in avx2 avx512f avx512bw avx512vl avx512_vnni fma; do printf '%s=%s ' "$f" "$(grep -qw "$f" /proc/cpuinfo && echo yes || echo no)"; done; echo
+      - name: Restore dependencies
+        run: dotnet restore tests/AiDotNet.Tests/AiDotNetTests.csproj
+      - name: Inject license public key + revocation list (aidn2 offline verification)
+        # So the CI-built AiDotNet.dll can verify offline aidn2 tokens (the CI license key path) and
+        # honour the revocation deny-list, drop the PUBLIC signing key + signed CRL where the csproj
+        # embeds them (src/BuildKey/LicensePublicKey.json -> AiDotNet.LicensePublicKey,
+        # src/BuildKey/LicenseRevocation.json -> AiDotNet.LicenseRevocation). Both are PUBLIC/signed and
+        # safe to expose. No-ops when the secrets/vars are unset (embed is Condition="Exists(...)"), so a
+        # build without them simply ships no embedded key/CRL (offline aidn2 verification unavailable).
+        shell: bash
+        run: |
+          mkdir -p src/BuildKey
+          # Prefer the TEST-only key set (prod + ci-2026a) so this CI build embeds the CI public key and can
+          # verify the offline aidn2 CI token in AIDOTNET_LICENSE_KEY on the real verification path. The CI key
+          # is intentionally NOT in AIDOTNET_LICENSE_PUBLIC_KEY_JSON (used by release-please.yml), so published
+          # NuGets trust ONLY the production key. Falls back to the prod var / committed file.
+          if [ -n "${{ vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON_TEST || vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON || secrets.AIDOTNET_LICENSE_PUBLIC_KEY_JSON }}" ]; then
+            printf '%s' "${{ vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON_TEST || vars.AIDOTNET_LICENSE_PUBLIC_KEY_JSON || secrets.AIDOTNET_LICENSE_PUBLIC_KEY_JSON }}" > src/BuildKey/LicensePublicKey.json
+            echo "Injected LicensePublicKey.json ($(wc -c < src/BuildKey/LicensePublicKey.json) bytes)"
+          else
+            echo "AIDOTNET_LICENSE_PUBLIC_KEY_JSON not set â€” skipping (offline aidn2 verification unavailable in this build)."
+          fi
+          if [ -n "${{ vars.AIDOTNET_LICENSE_REVOCATION_JSON || secrets.AIDOTNET_LICENSE_REVOCATION_JSON }}" ]; then
+            printf '%s' "${{ vars.AIDOTNET_LICENSE_REVOCATION_JSON || secrets.AIDOTNET_LICENSE_REVOCATION_JSON }}" > src/BuildKey/LicenseRevocation.json
+            echo "Injected LicenseRevocation.json ($(wc -c < src/BuildKey/LicenseRevocation.json) bytes)"
+          fi
+
+      - name: Build source generator first
+        run: dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release --no-restore
+      - name: Build (Release, net10.0)
+        run: dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release --no-restore -f net10.0 -m:4
+      - name: Run Q-R1 through Invoke-Shard.ps1
+        shell: pwsh
+        env:
+          COVERAGE_CARRIED: '[]'
+          COVERAGE_RUN_WITHOUT_INSTRUMENTATION: '[]'
+          AIDOTNET_LICENSE_KEY: ${{ matrix.arm != 'no-license' && secrets.AIDOTNET_LICENSE_KEY || '' }}
+          DOTNET_EnableAVX512F: ${{ matrix.arm == 'avx512-off' && '0' || '' }}
+          SHARD_ENV: 'null'
+          SHARD_PROJECT: tests/AiDotNet.Tests/AiDotNetTests.csproj
+          SHARD_FRAMEWORK: net10.0
+          SHARD_NAME: ModelFamily - Generated Layers Q-R1
+          SHARD_FILTER: >-
+            FullyQualifiedName~ModelFamilyTests.Generated&
+            (FullyQualifiedName~Generated.Q|FullyQualifiedName~Generated.RA|FullyQualifiedName~Generated.Ra|FullyQualifiedName~Generated.RB|FullyQualifiedName~Generated.RC|FullyQualifiedName~Generated.RE|FullyQualifiedName~Generated.Re|FullyQualifiedName~Generated.RF|FullyQualifiedName~Generated.RI|FullyQualifiedName~Generated.RM|FullyQualifiedName~Generated.RN|FullyQualifiedName~Generated.RoBE)
+        run: |
+          if ([string]::IsNullOrEmpty($env:DOTNET_EnableAVX512F)) { Remove-Item Env:DOTNET_EnableAVX512F -ErrorAction SilentlyContinue }
+          Write-Host "arm=${{ matrix.arm }} licensed=$(-not [string]::IsNullOrEmpty($env:AIDOTNET_LICENSE_KEY)) avx512f=$($env:DOTNET_EnableAVX512F)"
+          & ./.github/scripts/Invoke-Shard.ps1
