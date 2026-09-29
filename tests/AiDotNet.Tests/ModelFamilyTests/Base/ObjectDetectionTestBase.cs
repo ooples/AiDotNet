@@ -191,14 +191,24 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
         detector.SetTrainingMode(true);
         using var before = detector.Predict(input);
         var beforeValues = before.ToArray().Select(value => ops.ToDouble(value)).ToArray();
-        var heads = new List<(TaskAlignedDetectionOracle.Level[] Levels, int TopK)>();
+        var heads = new List<(TaskAlignedDetectionOracle.Level[] Levels, int TopK, double Weight)>();
         if (detector is AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv10<T> yolo10)
         {
             var outputs = yolo10.ForwardTrainingHeads(input)
                 .Select(output => output.ToArray().Select(value => ops.ToDouble(value)).ToArray()).ToList();
             Assert.Equal(4 * strides.Length, outputs.Count);
-            heads.Add((OracleLevels(outputs.Take(2 * strides.Length).ToList()), 1));
-            heads.Add((OracleLevels(outputs.Skip(2 * strides.Length).ToList()), 10));
+            heads.Add((OracleLevels(outputs.Take(2 * strides.Length).ToList()), 1, 1.0));
+            heads.Add((OracleLevels(outputs.Skip(2 * strides.Length).ToList()), 10, 1.0));
+        }
+        else if (detector is AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9<T> yolo9)
+        {
+            // PGI (Wang et al. 2024; loss_tal_dual.py): the main head plus the auxiliary branch's head,
+            // both task-aligned with top-10 assignment; the auxiliary loss is weighted 0.25.
+            var outputs = yolo9.ForwardTrainingHeads(input)
+                .Select(output => output.ToArray().Select(value => ops.ToDouble(value)).ToArray()).ToList();
+            Assert.Equal(4 * strides.Length, outputs.Count);
+            heads.Add((OracleLevels(outputs.Take(2 * strides.Length).ToList()), 10, 1.0));
+            heads.Add((OracleLevels(outputs.Skip(2 * strides.Length).ToList()), 10, 0.25));
         }
         else
         {
@@ -212,14 +222,14 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
                     offset += length;
                 }
             Assert.Equal(beforeValues.Length, offset);
-            heads.Add((OracleLevels(outputs), 10));
+            heads.Add((OracleLevels(outputs), 10, 1.0));
         }
 
         var gold = new[] { 0.55, 0.45, 0.3, 0.35 };
         var oracleGold = emptyTargets
             ? Array.Empty<TaskAlignedDetectionOracle.Gold>()
             : new[] { new TaskAlignedDetectionOracle.Gold(1, gold[0], gold[1], gold[2], gold[3]) };
-        double expected = heads.Sum(head => TaskAlignedDetectionOracle.Loss(head.Levels, 1, classes, regMax,
+        double expected = heads.Sum(head => head.Weight * TaskAlignedDetectionOracle.Loss(head.Levels, 1, classes, regMax,
             TaskAlignedDetectionOracle.Assign(head.Levels, 1, classes, regMax, new[] { oracleGold }, imageSize, imageSize, head.TopK)));
 
         var batch = new AiDotNet.ComputerVision.Detection.DetectionTrainingBatch<T>(new[]

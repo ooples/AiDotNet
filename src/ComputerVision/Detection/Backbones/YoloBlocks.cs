@@ -43,7 +43,10 @@ public partial class YoloConv<T> : LayerBase<T>, IShapeContract
         _act = act;
         _conv = new ConvolutionalLayer<T>(outChannels, kernelSize, stride, kernelSize / 2, (IActivationFunction<T>?)null,
             initializationStrategy: null, nonlinearityForInit: null, groups: groups);
-        _norm = new BatchNormalizationLayer<T>();
+        // The reference YOLO initialize_weights (ultralytics and WongKinYiu/yolov9 utils/torch_utils.py)
+        // sets every BatchNorm2d to eps=1e-3, momentum=0.03 (PyTorch's weight on the new batch; here the
+        // weight on the running value, so 0.97).
+        _norm = new BatchNormalizationLayer<T>(epsilon: 1e-3, momentum: 0.97);
     }
 
     internal IEnumerable<LayerBase<T>> Children() { yield return _conv; yield return _norm; }

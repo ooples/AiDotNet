@@ -66,12 +66,22 @@ public abstract class DetectionModelTestBase<T>
     protected virtual int TrainingIterations => 2;
 
     /// <summary>
+    /// Shape of the image the loss-reduction contract trains on. Defaults to <see cref="InputShape"/>.
+    /// A model overrides it only when the default is below the smallest resolution its training is
+    /// well conditioned at. The YoloConv detectors (YOLOv8/9/10/11) on 64x64 leave P5 at 2x2, where each
+    /// BatchNorm normalizes four values: YOLOv9-t's stacked RepNCSPELAN4 stages drive the gradient norm
+    /// to ~1000 there (~22 at 128x128), and YOLOv8n stops descending once BatchNorm uses the reference
+    /// eps of 1e-3. The contract itself (steps, learning rate, strict decrease) is unchanged.
+    /// </summary>
+    protected virtual int[] LossReductionInputShape => InputShape;
+
+    /// <summary>
     /// Creates a deterministic pseudo-random image in [0, 1], the range the detector
     /// preprocessing expects.
     /// </summary>
-    protected Tensor<T> CreateRandomImage(Random rng)
+    protected Tensor<T> CreateRandomImage(Random rng, int[]? shape = null)
     {
-        var tensor = new Tensor<T>(InputShape);
+        var tensor = new Tensor<T>(shape ?? InputShape);
         for (int i = 0; i < tensor.Length; i++)
         {
             tensor[i] = ToT(rng.NextDouble());
@@ -326,7 +336,7 @@ public abstract class DetectionModelTestBase<T>
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var model = CreateModel();
-        var image = CreateRandomImage(rng);
+        var image = CreateRandomImage(rng, LossReductionInputShape);
 
         var losses = new List<double>();
         var lengths = new List<int>();
