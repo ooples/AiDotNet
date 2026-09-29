@@ -1455,6 +1455,23 @@ jobs:
           restore-keys: |
             nuget-${{ runner.os }}-
 
+      # HOSTED RUNNERS ARE NOT ONE MACHINE. The pool mixes AMD EPYC (no AVX-512) with Intel Xeon (AVX-512), and
+      # the managed kernels, oneDNN and OpenBLAS all take different code paths on each. A model test that failed
+      # deterministically on every AVX-512 runner and passed everywhere else (RepViTSAM, 2026-09-29) took a
+      # dedicated experiment to attribute, because no log said which CPU a shard ran on. Now every shard does.
+      - name: Record runner CPU and SIMD support
+        shell: pwsh
+        run: |
+          $model = (Get-Content /proc/cpuinfo | Select-String -Pattern '^model name\s*:\s*(.+)$' | Select-Object -First 1).Matches.Groups[1].Value
+          $avx512 = @((Get-Content /proc/cpuinfo -Raw | Select-String -Pattern 'avx512[a-z0-9_]*' -AllMatches).Matches.Value | Sort-Object -Unique)
+          $isa = 'Avx512F={0} Avx2={1} AvxVnni={2} Vector512={3}' -f `
+            [System.Runtime.Intrinsics.X86.Avx512F]::IsSupported, [System.Runtime.Intrinsics.X86.Avx2]::IsSupported,
+            [System.Runtime.Intrinsics.X86.AvxVnni]::IsSupported, [System.Runtime.Intrinsics.Vector512]::IsHardwareAccelerated
+          Write-Host "Runner CPU: $model ($([Environment]::ProcessorCount) logical processors)"
+          Write-Host "cpuinfo AVX-512: $(if ($avx512.Count) { $avx512 -join ' ' } else { 'none' })"
+          Write-Host ".NET: $isa"
+          "Runner CPU: **$model** | .NET: $isa" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
       - name: Download required build artifact
         id: download-build-artifacts
         timeout-minutes: 25
