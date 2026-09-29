@@ -64,26 +64,46 @@ internal sealed class ChunkedMemoryStream : Stream
     {
         if (buffer is null) throw new ArgumentNullException(nameof(buffer));
         if (offset < 0 || count < 0 || offset + count > buffer.Length) throw new ArgumentOutOfRangeException(nameof(count));
-        long available = _length - _position;
-        if (available <= 0) return 0;
-        int toRead = (int)Math.Min(count, available);
-        int done = 0;
-        while (done < toRead)
-        {
-            int block = BlockIndexOf(_position);
-            int within = (int)(_position - _blockStarts[block]);
-            int n = Math.Min(toRead - done, _blocks[block].Length - within);
-            Buffer.BlockCopy(_blocks[block], within, buffer, offset + done, n);
-            done += n;
-            _position += n;
-        }
-        return done;
+        return ReadCore(new Span<byte>(buffer, offset, count));
     }
 
     public override void Write(byte[] buffer, int offset, int count)
     {
         if (buffer is null) throw new ArgumentNullException(nameof(buffer));
         if (offset < 0 || count < 0 || offset + count > buffer.Length) throw new ArgumentOutOfRangeException(nameof(count));
+        WriteCore(new ReadOnlySpan<byte>(buffer, offset, count));
+    }
+
+#if NET
+    // Stream's base span overloads rent an ArrayPool buffer, copy, and call the array overload. BinaryWriter and
+    // BinaryReader call the span overloads on .NET Core, and this stream exists for multi-GB layer payloads, so
+    // that extra copy (and a rental too large for the pool to keep) would land on exactly the clone path it serves.
+    public override int Read(Span<byte> buffer) => ReadCore(buffer);
+
+    public override void Write(ReadOnlySpan<byte> buffer) => WriteCore(buffer);
+#endif
+
+    private int ReadCore(Span<byte> destination)
+    {
+        long available = _length - _position;
+        if (available <= 0) return 0;
+        int toRead = (int)Math.Min(destination.Length, available);
+        int done = 0;
+        while (done < toRead)
+        {
+            int block = BlockIndexOf(_position);
+            int within = (int)(_position - _blockStarts[block]);
+            int n = Math.Min(toRead - done, _blocks[block].Length - within);
+            new ReadOnlySpan<byte>(_blocks[block], within, n).CopyTo(destination.Slice(done, n));
+            done += n;
+            _position += n;
+        }
+        return done;
+    }
+
+    private void WriteCore(ReadOnlySpan<byte> source)
+    {
+        int count = source.Length;
         EnsureCapacity(_position + count);
         int done = 0;
         while (done < count)
@@ -91,7 +111,7 @@ internal sealed class ChunkedMemoryStream : Stream
             int block = BlockIndexOf(_position);
             int within = (int)(_position - _blockStarts[block]);
             int n = Math.Min(count - done, _blocks[block].Length - within);
-            Buffer.BlockCopy(buffer, offset + done, _blocks[block], within, n);
+            source.Slice(done, n).CopyTo(new Span<byte>(_blocks[block], within, n));
             done += n;
             _position += n;
         }
