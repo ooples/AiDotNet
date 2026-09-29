@@ -155,8 +155,22 @@ public static class DeserializationHelper
                 return true;
             }
 
-            // The assembly was renamed or is not loaded: fall back to the full name, still refusing ambiguity.
-            layerType = fullName;
+            // Not loaded yet: load it by name, since a record naming one assembly may resolve ONLY there. Any
+            // other assembly defining the same full name is exactly the substitution this identity exists to stop.
+            System.Reflection.Assembly? named = null;
+            try { named = System.Reflection.Assembly.Load(new System.Reflection.AssemblyName(assemblyName)); }
+            catch (System.IO.IOException) { }
+            catch (BadImageFormatException) { }
+            var fromNamed = named is null ? null : TryGetLayerType(named, fullName);
+            if (fromNamed is null)
+            {
+                throw new NotSupportedException(
+                    $"Layer type {fullName} was saved from assembly '{assemblyName}', which "
+                    + (named is null ? "cannot be found" : "does not define it")
+                    + ". Load that assembly before deserializing; a same-named type from another assembly is not substituted.");
+            }
+            type = LayerTypes.GetOrAdd(layerType, fromNamed);
+            return true;
         }
 
         // A bare full name (records written before assembly identity was saved). Collect every match rather than
