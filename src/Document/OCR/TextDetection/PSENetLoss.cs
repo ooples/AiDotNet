@@ -134,6 +134,9 @@ public sealed class PSENetLoss<T> : LossFunctionBase<T>
             return keep;
         }
         negatives.Sort((x, y) => y.CompareTo(x));
+        // Every negative scoring >= the k-th hardest is kept, so ties at the threshold can keep more than
+        // NegativeRatio x positives (common when sigmoids saturate at 1.0). This matches the reference
+        // implementation's ohem_single, which uses the same >= threshold, and is kept for parity.
         double threshold = negatives[negativeCount - 1];
         for (int p = 0; p < plane; p++)
             keep[p] = NumOps.ToDouble(target[offset + p]) > 0.5 || NumOps.ToDouble(scores[offset + p]) >= threshold;
