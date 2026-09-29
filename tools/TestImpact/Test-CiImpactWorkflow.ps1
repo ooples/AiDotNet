@@ -407,6 +407,12 @@ foreach ($output in 'matrix', 'ledger_matrix', 'skipped') {
 Assert-Contract ($impactStep.Contains('COLLECT_COVERAGE_EVERYWHERE: ${{ inputs.collect_coverage_everywhere }}')) `
     'the test-level selection could narrow the coverage-everywhere run that feeds the map'
 $affectedText = Get-Content -LiteralPath 'tools/TestImpact/Select-AffectedTests.ps1' -Raw
+# GitHub caps a job's outputs at 1,048,576 bytes counted in UTF-16, two bytes per ASCII character, so the two
+# matrices must stay well under 524,288 characters together with the job's other outputs. 800,000 passed the old
+# character check and failed #2272's Build job with "Job outputs exceed 1,048,576 bytes".
+$budgetMatch = [regex]::Match($affectedText, '\[int\]\s*\$MaxMatrixCharacters\s*=\s*(\d+)')
+Assert-Contract ($budgetMatch.Success -and [int] $budgetMatch.Groups[1].Value -le 450000) `
+    'the test-level matrix budget does not fit the 1 MB UTF-16 job-output cap with headroom for other outputs'
 Assert-Contract ($affectedText.Contains("Write-Passthrough 'coverage-everywhere run'") -and
         $affectedText.Contains("Write-Passthrough 'post-merge delta re-run'") -and
         $affectedText.Contains('if (-not $plan.resolved)')) `
