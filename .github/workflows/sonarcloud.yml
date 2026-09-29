@@ -45,14 +45,17 @@ on:
         required: false
         default: ''
   schedule:
-    # Weekly CodeQL scan on Mondays at 8am UTC
-    - cron: '0 8 * * 1'
+    # NIGHTLY FULL MATRIX on master, the net under test-level selection: pull requests and merges
+    # run only the tests their change can statically reach, so anything reached only by reflection
+    # over a name surfaces here within a day. Also the full traced CodeQL analysis. 03:00 UTC keeps
+    # the ~100-minute run clear of the working day and of the 04:30-06:00 nightly workflows.
+    - cron: '0 3 * * *'
 
 concurrency:
-  # Coverage-map runs are deliberately isolated from ordinary master activity. The Monday CodeQL
+  # Coverage-map runs are deliberately isolated from ordinary master activity. The nightly
   # schedule and a master push must not cancel the full matrix that feeds the next map.
   # Isolate push retries: concurrency cancellation happens before the resolver can recheck the tip.
-  group: build-${{ inputs.collect_coverage_everywhere && 'coverage-map' || github.event.pull_request.number || (github.event_name == 'push' && github.run_attempt > 1 && format('push-retry-{0}', github.run_id)) || github.ref }}
+  group: build-${{ inputs.collect_coverage_everywhere && 'coverage-map' || github.event.pull_request.number || (github.event_name == 'push' && github.run_attempt > 1 && format('push-retry-{0}', github.run_id)) || (github.event_name == 'schedule' && 'nightly-full') || github.ref }}
   # A synchronize event captured while a PR was still a draft can be delivered after the
   # ready_for_review run has started. Its job-level draft gates intentionally skip validation,
   # so it must never cancel the real ready run and replace it with an all-skipped check suite.
@@ -321,13 +324,40 @@ jobs:
           dotnet restore src/AiDotNet.Serving/AiDotNet.Serving.csproj
           dotnet restore src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj
 
+      # Build-less extraction of the whole library still held a runner ~41 minutes per PR. A PR's
+      # code-scanning result only gates alerts in the lines it changes, so it extracts only the C#
+      # files it changes; master pushes and the schedule still analyze everything, traced. A PR that
+      # changes no analyzed C# extracts one fixed small file, so the ruleset still gets its result.
+      - name: Scope build-less analysis to this change
+        id: codeql-scope
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # refs/pull/N/merge: the first parent is the base this PR is validated against.
+          mapfile -t changed < <(git -c core.quotepath=false diff --no-renames --diff-filter=AMR --name-only HEAD^1 HEAD -- '*.cs' \
+            | grep -Ev '^(tests|AiDotNetTests|AiDotNetTestConsole|AiDotNetBenchmarkTests|examples|docs)/' || true)
+          config="$RUNNER_TEMP/codeql-pr-config.yml"
+          cp .github/codeql/codeql-config.yml "$config"
+          printf '\npaths:\n' >> "$config"
+          if [ "${#changed[@]}" -eq 0 ]; then
+            echo "no analyzed C# changed - extracting src/GlobalUsings.cs so the ruleset still receives a result"
+            changed=('src/GlobalUsings.cs')
+          fi
+          q="'"
+          for path in "${changed[@]}"; do
+            printf "  - '%s'\n" "${path//$q/$q$q}" >> "$config"
+          done
+          echo "extracting ${#changed[@]} changed C# file(s)"
+          echo "config=$config" >> "$GITHUB_OUTPUT"
+
       - name: Initialize CodeQL (build-less, pull requests)
         if: github.event_name == 'pull_request'
         uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
         with:
           languages: csharp
           build-mode: none
-          config-file: ./.github/codeql/codeql-config.yml
+          config-file: ${{ steps.codeql-scope.outputs.config }}
           queries: security-and-quality
 
       - name: Initialize CodeQL (traced build)
@@ -369,6 +399,12 @@ jobs:
       artifact_id: ${{ steps.upload-build-artifact.outputs.artifact-id }}
       # upload-artifact emits bare hexadecimal; normalize once at the producer boundary.
       artifact_digest: ${{ format('sha256:{0}', steps.upload-build-artifact.outputs.artifact-digest) }}
+      # select-shards' decision narrowed to the affected test classes (Select-AffectedTests.ps1), or
+      # passed through unchanged. Consumers fall back to select-shards when these are empty.
+      matrix: ${{ steps.impact.outputs.matrix }}
+      ledger_matrix: ${{ steps.impact.outputs.ledger_matrix }}
+      skipped: ${{ steps.impact.outputs.skipped }}
+      impact_mode: ${{ steps.impact.outputs.impact_mode }}
     timeout-minutes: 45
     permissions:
       contents: read
@@ -494,6 +530,30 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/check-shard-coverage.ps1
 
+      # Test-level selection: which test classes can this change reach? Read from the assemblies this
+      # job just built, so it sees generated tests too. It only narrows select-shards' decision, and
+      # passes it through whenever it cannot map every changed file (Select-AffectedTests.ps1).
+      - name: Select affected tests
+        id: impact
+        shell: pwsh
+        env:
+          SELECTED_MATRIX: ${{ needs.select-shards.outputs.matrix }}
+          SELECTED_LEDGER_MATRIX: ${{ needs.select-shards.outputs.ledger_matrix }}
+          SELECTED_SKIPPED: ${{ needs.select-shards.outputs.skipped }}
+          REQUIRES_SHARDS: ${{ needs.select-shards.outputs.requires_shards }}
+          DELTA_MODE: ${{ needs.validation-source.outputs.delta_mode }}
+          COLLECT_COVERAGE_EVERYWHERE: ${{ inputs.collect_coverage_everywhere }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: ./tools/TestImpact/Select-AffectedTests.ps1
+
+      - name: Upload test-level selection plan
+        if: always() && hashFiles('type-impact-plan.json') != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: type-impact-plan
+          path: type-impact-plan.json
+          retention-days: 7
+
   # Everything the shards do NOT need, built concurrently with them instead of ahead of
   # them: the net471 compatibility compile, net8.0, and the pack that requires all three.
   # Compiling net471 is a real check -- it catches breakage a net10.0 build cannot see --
@@ -562,63 +622,25 @@ jobs:
       # -m:2 is kept HERE and only here: this is the job that actually runs net8/net10/net471
       # csc processes together, the combination that reached the 16-GB ceiling and got a
       # compiler killed with exit 137.
+      # A pull request compiles the test project for net471 only and skips the pack: nothing consumes
+      # the package it produced, and master pushes still pack every framework.
       - name: Build (Release, compat frameworks)
-        run: dotnet build -c Release --no-restore -m:2 -p:CompatBuildOnly=true
+        run: dotnet build -c Release --no-restore -m:2 -p:CompatBuildOnly=true ${{ github.event_name == 'pull_request' && '-p:CompatNet471Only=true' || '' }}
 
       - name: Build NuGet package
+        if: github.event_name != 'pull_request'
         run: dotnet pack --no-build -c Release --output ./artifacts -p:CompatBuildOnly=true
 
       - name: Upload NuGet package
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         with:
           name: nuget-packages
           path: ./artifacts/*.nupkg
           retention-days: 1
 
-  # PULL-REQUEST AUXILIARY WORKLOADS. Formerly three workflows on 'src/**' path filters, each
-  # compiling the library again on its own runner for every source push. select-shards decides
-  # which of them this change can affect (Select-AuxiliaryWorkloads.ps1, failing open); each then
-  # consumes the Build artifact, or builds from source when the change needed no Build (a docs- or
-  # samples-only change). They stay advisory, exactly as the separate workflows were: none is a
-  # CI Gate dependency. A failed Build cancels them with the rest of the run.
-  model-performance-census:
-    name: Model Performance Census
-    needs: [validation-source, select-shards, build]
-    if: "${{ always() && !cancelled() && github.event_name == 'pull_request' && fromJSON(needs.validation-source.outputs.execute_validation) && needs.build.result != 'failure' && needs.build.result != 'cancelled' && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && (needs.select-shards.outputs.census_mode == 'full' || needs.select-shards.outputs.census_mode == 'selected') }}"
-    permissions:
-      contents: read
-      actions: read
-    uses: ./.github/workflows/model-performance-census.yml
-    with:
-      scope: ${{ needs.select-shards.outputs.census_scope }}
-      build_artifact_id: ${{ needs.build.result == 'success' && needs.build.outputs.artifact_id || '' }}
-      build_artifact_digest: ${{ needs.build.result == 'success' && needs.build.outputs.artifact_digest || '' }}
-    secrets: inherit
-
-  samples:
-    name: Samples
-    needs: [validation-source, select-shards, build]
-    if: "${{ always() && !cancelled() && github.event_name == 'pull_request' && fromJSON(needs.validation-source.outputs.execute_validation) && needs.build.result != 'failure' && needs.build.result != 'cancelled' && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && needs.select-shards.outputs.run_samples == 'true' }}"
-    permissions:
-      contents: read
-      actions: read
-    uses: ./.github/workflows/samples.yml
-    with:
-      build_artifact_id: ${{ needs.build.result == 'success' && needs.build.outputs.artifact_id || '' }}
-      build_artifact_digest: ${{ needs.build.result == 'success' && needs.build.outputs.artifact_digest || '' }}
-
-  docs-wiki:
-    name: Docs Wiki
-    needs: [validation-source, select-shards, build]
-    if: "${{ always() && !cancelled() && github.event_name == 'pull_request' && fromJSON(needs.validation-source.outputs.execute_validation) && needs.build.result != 'failure' && needs.build.result != 'cancelled' && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && needs.select-shards.outputs.run_docs_wiki == 'true' }}"
-    permissions:
-      contents: read
-      actions: read
-    uses: ./.github/workflows/docs-wiki.yml
-    with:
-      build_artifact_id: ${{ needs.build.result == 'success' && needs.build.outputs.artifact_id || '' }}
-      build_artifact_digest: ${{ needs.build.result == 'success' && needs.build.outputs.artifact_digest || '' }}
-
+  # The model performance census, the samples build and the docs wiki are NOT pull-request work.
+  # Each runs nightly on master from its own workflow's schedule; a PR never waits on them.
   # The cancellation must happen in a DIFFERENT job from the build that failed. Cancelling a
   # workflow from inside the failing build changes that originating job's conclusion to
   # `cancelled`, hiding the compiler error that triggered fail-fast. These watchers cannot start
@@ -701,12 +723,6 @@ jobs:
       # Their full correctness suites still execute, but repeating the instrumentation that already
       # exceeded the runner envelope cannot produce a digest and is therefore suppressed.
       coverage_run_without_instrumentation: ${{ steps.select.outputs.coverage_run_without_instrumentation }}
-      # Which pull-request auxiliary workloads the change can affect (Select-AuxiliaryWorkloads.ps1).
-      # Empty on every other event, which the callers below read as "do not run".
-      census_mode: ${{ steps.aux.outputs.census_mode }}
-      census_scope: ${{ steps.aux.outputs.census_scope }}
-      run_samples: ${{ steps.aux.outputs.run_samples }}
-      run_docs_wiki: ${{ steps.aux.outputs.run_docs_wiki }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -788,8 +804,26 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      # The self-tests prove checked-in CI code, ~5 minutes on the path of every shard. A pull request
+      # that touches none of that code runs exactly what its base branch already proved (every
+      # master push runs them), so only a CI-tooling change, and every non-PR event, pays for them.
+      - name: Decide whether the impact tooling needs re-proving
+        id: tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" != 'pull_request' ]; then
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          elif git diff --quiet HEAD^1 HEAD -- .github tools/TestImpact tools/ModelPerfProbe; then
+            echo 'CI tooling unchanged against the validated base - reusing its proof'
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Verify the impact tooling
         id: selftest
+        if: steps.tooling.outputs.changed != 'false'
         # A HUNG self-test would otherwise burn the job's 15-minute ceiling and kill the whole
         # job before any matrix output is written; a step timeout converts it into outcome=failure,
         # which the gate below turns into a full-matrix run.
@@ -855,6 +889,7 @@ jobs:
           # The script body carries no GitHub expressions, so the 21,000-character expression cap
           # does not apply to it. Everything it needs from the context comes in through env.
           SELFTEST_OUTCOME: ${{ steps.selftest.outcome }}
+          TOOLING_CHANGED: ${{ steps.tooling.outputs.changed }}
           COLLECT_COVERAGE_EVERYWHERE: ${{ inputs.collect_coverage_everywhere }}
         run: |
           $all = @(yq -o=json -I=0 '.shard' .github/test-shards.yml | ConvertFrom-Json)
@@ -920,7 +955,8 @@ jobs:
           # validated, selected over what the base branch added since, and named the overlap to
           # re-run. This step never selects a master delta itself, so there is one reuse mechanism.
           # Merge groups, schedules and dispatches always run the full matrix.
-          $selectorTrusted = $env:SELFTEST_OUTCOME -eq 'success'
+          $selectorTrusted = $env:SELFTEST_OUTCOME -eq 'success' -or
+              ($env:SELFTEST_OUTCOME -eq 'skipped' -and $env:TOOLING_CHANGED -eq 'false')
           # A post-merge push of a GitHub "Merge pull request" commit has exactly the shape the selector
           # reads from refs/pull/N/merge: two parents, the first the previous tip and the second the
           # pull request head, so its change is that pull request's change. Without this every merge to
@@ -1089,10 +1125,6 @@ jobs:
             }
           }
 
-          # The census scopes itself by this coverage selection, taken before nightly deferral trims
-          # it: a deferred shard still names models the change reaches.
-          $auxiliaryShards = @($matrixShards | ForEach-Object { [string] $_.name })
-
           # Sweeps and conformance windows run nightly, not on every pull request and push; which
           # selected ones may be deferred, and why, is Get-DeferredNightlyShards (CiWorkloadKinds.ps1).
           # An escalated selection still runs the complete matrix.
@@ -1168,8 +1200,6 @@ jobs:
           # that flag. A build-only change still compiles - .editorconfig can raise an analyzer to
           # error - but cannot affect any test.
           "requires_shards=$($requiresShards.ToString().ToLowerInvariant())" |
-            Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "auxiliary_shards=$(ConvertTo-Json -InputObject @($auxiliaryShards) -Depth 3 -Compress)" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
           $summary = if ($escalate) { "Running the full matrix ($($all.Count) shards)." }
@@ -1295,72 +1325,6 @@ jobs:
           "coverage_run_without_instrumentation=$(ConvertTo-Json -InputObject @($runWithoutInstrumentation) -Depth 3 -Compress)" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
-      # The model performance census, the samples run and the docs wiki gate used to be separate
-      # workflows on 'src/**' path filters: every source push queued 36 extra jobs (34 of them the
-      # census) however small the change. They now run as jobs of this pipeline, reuse its Build
-      # artifact, and run only when this decides the change can affect them. It fails OPEN: an
-      # unproven selector, or a checkout that is not the expected merge, runs all three in full.
-      - name: Select auxiliary workloads
-        id: aux
-        if: ${{ github.event_name == 'pull_request' }}
-        timeout-minutes: 8
-        shell: pwsh
-        env:
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          ESCALATED: ${{ steps.select.outputs.escalated }}
-          REQUIRES_VALIDATION: ${{ steps.select.outputs.requires_validation }}
-          AUXILIARY_SHARDS: ${{ steps.select.outputs.auxiliary_shards }}
-        run: |
-          $censusMode = 'full'
-          $censusScope = '{"mode":"full","shards":[]}'
-          $runSamples = 'true'
-          $runDocsWiki = 'true'
-          try {
-            ./tools/TestImpact/Select-AuxiliaryWorkloads.ps1 -SelfTest
-            if ($LASTEXITCODE -ne 0) { throw 'Select-AuxiliaryWorkloads self-test failed' }
-            ./tools/ModelPerfProbe/Select-CensusFixtures.ps1 -SelfTest
-            if ($LASTEXITCODE -ne 0) { throw 'Select-CensusFixtures self-test failed' }
-            if ($env:ESCALATED -notin @('true', 'false') -or $env:REQUIRES_VALIDATION -notin @('true', 'false')) {
-              throw 'the shard selection published no decision'
-            }
-            # refs/pull/N/merge: first parent is the base actually validated, second the PR head.
-            $parents = @(((& git rev-list --parents -n 1 HEAD) -join ' ').Split(' ', [System.StringSplitOptions]::RemoveEmptyEntries))
-            if ($parents.Count -ne 3 -or $parents[2] -cne $env:PR_HEAD_SHA) {
-              throw 'the checkout is not the pull request merge commit'
-            }
-            $scope = if ($env:ESCALATED -eq 'true') { 'full' }
-                     elseif ($env:REQUIRES_VALIDATION -ne 'true') { 'none' }
-                     else { 'selected' }
-            $shards = @(if (-not [string]::IsNullOrWhiteSpace($env:AUXILIARY_SHARDS)) {
-              $env:AUXILIARY_SHARDS | ConvertFrom-Json | ForEach-Object { [string] $_ }
-            })
-            ./tools/TestImpact/Select-AuxiliaryWorkloads.ps1 -BaseSha $parents[1] -ValidationScope $scope `
-              -SelectedShards $shards -OutFile auxiliary.json
-            if ($LASTEXITCODE -ne 0) { throw "the auxiliary selector exited $LASTEXITCODE" }
-            $decision = Get-Content auxiliary.json -Raw | ConvertFrom-Json
-            $censusMode = [string] $decision.census.mode
-            if ($censusMode -cnotin @('full', 'selected', 'none')) { throw "unknown census mode '$censusMode'" }
-            $censusScope = [pscustomobject]@{ mode = $censusMode; shards = @($decision.census.shards) } |
-              ConvertTo-Json -Depth 3 -Compress
-            $runSamples = ([bool] $decision.samples.run).ToString().ToLowerInvariant()
-            $runDocsWiki = ([bool] $decision.docsWiki.run).ToString().ToLowerInvariant()
-          }
-          catch {
-            Write-Host "::warning::auxiliary workload selection unavailable ($($_.Exception.Message)) - running the census, samples and docs wiki in full"
-            $censusMode = 'full'
-            $censusScope = '{"mode":"full","shards":[]}'
-            $runSamples = 'true'
-            $runDocsWiki = 'true'
-          }
-          "census_mode=$censusMode" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "census_scope=$censusScope" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "run_samples=$runSamples" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "run_docs_wiki=$runDocsWiki" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "### Auxiliary workloads`n`nCensus: **$censusMode** · Samples: **$runSamples** · Docs wiki: **$runDocsWiki**" |
-            Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-
-      # Named to match the harvest's `impact-digest-*` download pattern, so the map build picks
-      # these up exactly like per-shard digests with no change on its side.
       - name: Upload carried digests
         if: ${{ inputs.collect_coverage_everywhere }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
@@ -1406,13 +1370,16 @@ jobs:
         # selection job filters it down to the shards a change can actually affect, and a matrix
         # is either a literal or an expression. select-shards emits the full list unchanged
         # whenever it is not confident, so the default behaviour is the full test matrix.
-        shard: ${{ fromJSON(needs.select-shards.outputs.matrix) }}
+        shard: ${{ fromJSON(needs.build.outputs.matrix || needs.select-shards.outputs.matrix) }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
       - name: Free runner disk space
+        # A test-level-narrowed shard runs a handful of classes uninstrumented, so it skips the two
+        # minutes of deletions; every full shard still makes room.
+        if: matrix.shard.narrowed != true
         # ubuntu-latest images ship with Android SDK, .NET preinstalls, Haskell, CodeQL,
         # PowerShell, Boost, and ~14GB of unused tooling. Tests on the largest shards
         # (Diffusion A-C/D-I/J-M/N-R/S-prefix/T-Z, Unit-03 diffusion,
@@ -1946,7 +1913,7 @@ jobs:
         id: analyze
         shell: pwsh
         env:
-          EXPECTED_SHARD_MATRIX: ${{ needs.select-shards.outputs.ledger_matrix }}
+          EXPECTED_SHARD_MATRIX: ${{ needs.build.outputs.ledger_matrix || needs.select-shards.outputs.ledger_matrix }}
           CURRENT_SHA: ${{ github.sha }}
           COMPARE: ${{ steps.comparison.outputs.compare }}
           BASE_SHA: ${{ steps.comparison.outputs.base_sha }}
@@ -1967,7 +1934,7 @@ jobs:
           $manifest = Get-Content '.github/test-shard-changes.json' -Raw | ConvertFrom-Json
           $changes = [System.Collections.Generic.List[object]]::new()
           foreach ($c in @($manifest.changes)) { [void] $changes.Add($c) }
-          foreach ($slug in @('${{ needs.select-shards.outputs.skipped }}' | ConvertFrom-Json)) {
+          foreach ($slug in @('${{ needs.build.outputs.skipped || needs.select-shards.outputs.skipped }}' | ConvertFrom-Json)) {
             if (-not $slug) { continue }
             [void] $changes.Add([PSCustomObject]@{
               baselineKey = [string] $slug

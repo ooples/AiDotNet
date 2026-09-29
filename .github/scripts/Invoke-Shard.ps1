@@ -213,8 +213,14 @@ if ($coverageDisposition -ne [CoverageDisposition]::Instrument -and
 }
 
 $forcedCoverageRun = "$($env:SHARD_FORCE_COVERAGE)" -eq 'true'
+# Pull requests never instrument: the test-impact map is fed only by the weekly coverage-everywhere
+# run, SonarCloud's coverage comes from master, and coverlet slowed every PR shard for a report
+# nobody gates on. Master pushes keep collecting it for Sonar.
+$pullRequest = "$($env:GITHUB_EVENT_NAME)" -eq 'pull_request'
 $collectCoverage = if ($forcedCoverageRun) {
   $coverageDisposition -eq [CoverageDisposition]::Instrument
+} elseif ($pullRequest) {
+  $false
 } else {
   -not ($heavyShard -or $measuresTiming)
 }

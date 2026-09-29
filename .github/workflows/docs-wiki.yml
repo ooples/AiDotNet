@@ -6,13 +6,9 @@ name: Docs Wiki (generate + gate)
 # website (the single canonical docs site); the legacy Jekyll docs/ tree was removed. Validation
 # runs before merge; the website deployment workflow owns post-merge publication and smoke tests.
 #
-# Pull requests reach this through the validation pipeline (sonarcloud.yml), not a path filter: it
-# runs only when Select-AuxiliaryWorkloads.ps1 finds a change to the docs, the wiki tools, or a
-# declaration or documentation comment, and reads the Build job's artifact instead of compiling
-# the library twice more (net8.0 Debug for the XML, net10.0 Debug under the tools). The artifact's
-# net10.0 Release AiDotNet.xml is member-for-member identical to the net8.0 Debug one: the library's
-# only framework- and configuration-conditional code is in method bodies and private fields. A
-# manual run, or a call without an artifact, still builds from source.
+# Nightly on master, never on a pull request: a PR's runner time goes to the tests its change
+# can affect. A run without an artifact (schedule, manual) builds the library from source.
+# workflow_call is kept so a future caller can hand it a prebuilt artifact.
 on:
   workflow_call:
     inputs:
@@ -24,6 +20,8 @@ on:
         description: 'sha256 digest of that artifact.'
         type: string
         default: ''
+  schedule:
+    - cron: '0 5 * * *'
   workflow_dispatch:
 
 permissions:

@@ -367,12 +367,34 @@ foreach ($binding in @(
         $activeIf[0].Value.Contains("&& fromJSON(needs.select-shards.outputs.$($binding.Flag)) &&") -and
         -not $activeIf[0].Value.Contains('||')) `
         "$($binding.Job) is not gated by its selected workload partition"
+    # The Build job narrows the selected partition to the affected test classes; when it publishes
+    # nothing (it did not run, or failed before its selection step) the selected partition runs as is.
     $matrixInput = [regex]::Matches($workloadHeader, '(?m)^        (?:include|shard):[^\r\n]+')
     Assert-Contract ($matrixInput.Count -eq 1 -and
-        $matrixInput[0].Value.Trim() -cmatch ('^(?:include|shard): \$\{\{ fromJSON\(needs\.select-shards\.outputs\.' +
+        $matrixInput[0].Value.Trim() -cmatch ('^(?:include|shard): \$\{\{ fromJSON\(needs\.build\.outputs\.' +
+            [regex]::Escape($binding.Matrix) + ' \|\| needs\.select-shards\.outputs\.' +
             [regex]::Escape($binding.Matrix) + '\) \}\}$')) `
         "$($binding.Job) uses an independent matrix instead of the selected workload partition"
 }
+
+# TEST-LEVEL SELECTION. The Build job may only narrow select-shards' partition, never replace it.
+$buildJob = Get-JobBlock -WorkflowText $validation -Job 'build'
+$impactStep = Get-StepBlock -JobBlock $buildJob -Step 'Select affected tests'
+Assert-Contract ([bool] $impactStep -and $impactStep.Contains('./tools/TestImpact/Select-AffectedTests.ps1')) `
+    'the Build job does not run the test-level selection'
+foreach ($output in 'matrix', 'ledger_matrix', 'skipped') {
+    Assert-Contract ($impactStep.Contains("needs.select-shards.outputs.$output }}")) `
+        "the test-level selection does not start from select-shards' $output"
+    Assert-Contract ($buildJob.Contains("${output}: `${{ steps.impact.outputs.$output }}")) `
+        "the Build job does not publish the narrowed $output"
+}
+Assert-Contract ($impactStep.Contains('COLLECT_COVERAGE_EVERYWHERE: ${{ inputs.collect_coverage_everywhere }}')) `
+    'the test-level selection could narrow the coverage-everywhere run that feeds the map'
+$affectedText = Get-Content -LiteralPath 'tools/TestImpact/Select-AffectedTests.ps1' -Raw
+Assert-Contract ($affectedText.Contains("Write-Passthrough 'coverage-everywhere run'") -and
+        $affectedText.Contains("Write-Passthrough 'post-merge delta re-run'") -and
+        $affectedText.Contains('if (-not $plan.resolved)')) `
+    'the test-level selection does not pass through the runs it must never narrow'
 Assert-Contract (Test-JobDependency -JobHeader $selectorHeader -Dependency 'validation-source') `
     'select-shards does not depend on validation-source'
 Assert-Contract ($selectorHeader.Contains('fromJSON(needs.validation-source.outputs.execute_validation)')) `
@@ -1115,80 +1137,26 @@ foreach ($command in $apiCommands) {
         "coverage-run has a gh api command without an explicit repository endpoint: $command"
 }
 
-# PULL-REQUEST AUXILIARY WORKLOADS. The census, samples and docs wiki run as reusable workflows
-# called from this pipeline, gated by Select-AuxiliaryWorkloads.ps1. Each failure below is a way
-# the wiring could quietly run them on every push again, never run them, run them twice, or run
-# them against something other than the commit's own Build.
-$auxiliarySelect = Get-StepBlock -JobBlock (Get-JobBlock -WorkflowText $validation -Job 'select-shards') -Step 'Select auxiliary workloads'
-Assert-Contract ([bool] $auxiliarySelect) 'select-shards has no auxiliary workload selection step'
-Assert-Contract ($auxiliarySelect.Contains('./tools/TestImpact/Select-AuxiliaryWorkloads.ps1 -SelfTest') -and
-        $auxiliarySelect.Contains('./tools/ModelPerfProbe/Select-CensusFixtures.ps1 -SelfTest')) `
-    'the auxiliary selection runs without its selectors self-testing first'
-Assert-Contract ($auxiliarySelect.Contains('catch {') -and
-        ([Regex]::Matches($auxiliarySelect, [Regex]::Escape("`$censusMode = 'full'"))).Count -ge 2 -and
-        ([Regex]::Matches($auxiliarySelect, [Regex]::Escape("`$runSamples = 'true'"))).Count -ge 2 -and
-        ([Regex]::Matches($auxiliarySelect, [Regex]::Escape("`$runDocsWiki = 'true'"))).Count -ge 2) `
-    'the auxiliary selection does not fail open to running all three workloads in full'
-Assert-Contract ($auxiliarySelect.Contains('$parents[2] -cne $env:PR_HEAD_SHA') -and
-        $auxiliarySelect.Contains('-BaseSha $parents[1]')) `
-    'the auxiliary selection does not diff the pull request merge against its validated base'
+# NIGHTLY AUXILIARY WORKLOADS. The census, samples and docs wiki are not pull-request work: a PR's
+# runner time goes to the tests its change can affect. Each failure below is a way one of them
+# could come back onto every pull request, or silently stop running at all.
 $selectShardsJob = Get-JobBlock -WorkflowText $validation -Job 'select-shards'
 foreach ($output in 'census_mode', 'census_scope', 'run_samples', 'run_docs_wiki') {
-    Assert-Contract ($selectShardsJob.Contains("${output}: `${{ steps.aux.outputs.$output }}")) `
-        "select-shards does not publish the auxiliary decision '$output'"
+    Assert-Contract (-not $selectShardsJob.Contains("${output}:")) `
+        "select-shards still publishes the pull-request auxiliary decision '$output'"
 }
-$selectStep = Get-StepBlock -JobBlock $selectShardsJob -Step 'Select'
-$captured = $selectStep.IndexOf('$auxiliaryShards = @($matrixShards', [StringComparison]::Ordinal)
-$deferred = $selectStep.IndexOf('Get-DeferredNightlyShards -Shards', [StringComparison]::Ordinal)
-Assert-Contract ($captured -ge 0 -and $deferred -gt $captured) `
-    'the census scope is not taken from the coverage selection before nightly deferral trims it'
-Assert-Contract ($selectStep.Contains('"auxiliary_shards=$(ConvertTo-Json -InputObject @($auxiliaryShards)')) `
-    'the select step does not publish the shards the census scopes itself by'
-
-$auxiliaryCallers = [ordered]@{
-    'model-performance-census' = @{ Workflow = '.github/workflows/model-performance-census.yml'; Decision = "needs.select-shards.outputs.census_mode == 'selected'" }
-    'samples' = @{ Workflow = '.github/workflows/samples.yml'; Decision = "needs.select-shards.outputs.run_samples == 'true'" }
-    'docs-wiki' = @{ Workflow = '.github/workflows/docs-wiki.yml'; Decision = "needs.select-shards.outputs.run_docs_wiki == 'true'" }
+foreach ($auxiliary in '.github/workflows/model-performance-census.yml', '.github/workflows/samples.yml', '.github/workflows/docs-wiki.yml') {
+    Assert-Contract (-not $validation.Contains("uses: ./$auxiliary")) `
+        "the validation pipeline still calls $auxiliary"
+    $called = Get-Content -LiteralPath $auxiliary -Raw
+    $triggers = [Regex]::Match($called, '(?ms)^on:\s*
+?
+(?<body>.*?)(?=^\S)').Groups['body'].Value
+    Assert-Contract (-not ($triggers -match '(?m)^  pull_request')) "$auxiliary triggers on pull requests"
+    Assert-Contract ($triggers -match "(?m)^  schedule:\s*
+?
+\s+- cron: '[^']+'") "$auxiliary has no nightly schedule, so it would never run"
 }
-foreach ($job in $auxiliaryCallers.Keys) {
-    $caller = $auxiliaryCallers[$job]
-    $block = Get-JobBlock -WorkflowText $validation -Job $job
-    if (-not $block) { continue }
-    Assert-Contract ($block.Contains("uses: ./$($caller.Workflow)")) "auxiliary job '$job' does not call $($caller.Workflow)"
-    foreach ($dependency in 'validation-source', 'select-shards', 'build') {
-        Assert-Contract (Test-JobDependency -JobHeader $block -Dependency $dependency) `
-            "auxiliary job '$job' does not depend on $dependency"
-    }
-    $jobIf = [Regex]::Match($block, '(?m)^    if:\s*(?<value>[^\r\n]+)\s*$').Groups['value'].Value
-    Assert-Contract ($jobIf.Contains('fromJSON(needs.validation-source.outputs.execute_validation)')) `
-        "auxiliary job '$job' runs even when this tree's validation is reused"
-    Assert-Contract ($jobIf.Contains("github.event_name == 'pull_request'")) `
-        "auxiliary job '$job' is not limited to pull requests"
-    Assert-Contract ($jobIf.Contains($caller.Decision)) "auxiliary job '$job' ignores its selector decision"
-    Assert-Contract ($jobIf.Contains("needs.build.result != 'failure'") -and $jobIf.Contains('!cancelled()')) `
-        "auxiliary job '$job' can run after a failed Build or keep a cancelled run alive"
-    Assert-Contract ($block.Contains("build_artifact_id: `${{ needs.build.result == 'success' && needs.build.outputs.artifact_id || '' }}") -and
-            $block.Contains("build_artifact_digest: `${{ needs.build.result == 'success' && needs.build.outputs.artifact_digest || '' }}")) `
-        "auxiliary job '$job' does not pass this run's Build artifact, pinned by digest"
-    # Advisory, as the separate workflows were. Making one required is a deliberate policy change.
-    Assert-Contract (-not ($gate -match "(?m)^\s+- $([Regex]::Escape($job))\s*$")) `
-        "CI Gate depends on the advisory auxiliary job '$job'"
-
-    $called = Get-Content -LiteralPath $caller.Workflow -Raw
-    $triggers = [Regex]::Match($called, '(?ms)^on:\s*\r?\n(?<body>.*?)(?=^\S)').Groups['body'].Value
-    Assert-Contract ($triggers.Contains('workflow_call:')) "$($caller.Workflow) cannot be called by the pipeline"
-    Assert-Contract (-not ($triggers -match '(?m)^  pull_request:')) `
-        "$($caller.Workflow) still triggers on pull_request, so every pull request would run it twice"
-    Assert-Contract ($called.Contains('./tools/TestImpact/Receive-RequiredArtifact.ps1') -and
-            $called.Contains("-ExpectedDigest '`${{ inputs.build_artifact_digest }}'")) `
-        "$($caller.Workflow) does not receive the Build artifact by digest"
-}
-$censusCaller = Get-JobBlock -WorkflowText $validation -Job 'model-performance-census'
-Assert-Contract ($censusCaller.Contains("needs.select-shards.outputs.census_mode == 'full'")) `
-    'an escalated selection does not run the full census'
-Assert-Contract ($censusCaller.Contains('scope: ${{ needs.select-shards.outputs.census_scope }}') -and
-        $censusCaller.Contains('secrets: inherit')) `
-    'the census is called without its scope or its license secret'
 
 $census = Get-Content -LiteralPath '.github/workflows/model-performance-census.yml' -Raw
 $censusShardJob = Get-JobBlock -WorkflowText $census -Job 'census'
