@@ -1,10 +1,12 @@
 name: CI Website
 
 on:
+  # Library-only changes do not rebuild the site: the API reference is regenerated from src on
+  # every deploy and checked nightly by the Docs Wiki workflow, so a src/** trigger here only
+  # held a runner for ~12 minutes on every source PR.
   pull_request:
     paths:
       - 'website/**'
-      - 'src/**'
       - 'tools/WikiGenerator/**'
       - '.github/workflows/deploy-website.yml'
       - '.github/workflows/ci-website.yml'
