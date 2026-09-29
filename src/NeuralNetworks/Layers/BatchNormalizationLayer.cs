@@ -804,7 +804,14 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
         _lastInput = tapeActive ? null : input;
 
-        // A single-sample batch (batch size 1) has zero batch variance, so the
+        // Batch statistics are taken per feature over every OTHER axis: the batch alone for [B, F], but
+        // batch AND spatial positions for [B, C, H, W]. So what can have zero variance is a feature with a
+        // single SAMPLE, not a batch of one: a single NCHW image still has H*W samples per channel. This
+        // used to test input.Shape[0] > 1, which sent every single-image convolutional step down the
+        // running-statistics path; running statistics never updated, BN acted as the identity, and deep
+        // CNNs trained without normalization (YOLO11's P5 spatial spread fell to about 1e-6).
+        //
+        // A feature with one sample (batch size 1 for [B, F]) has zero batch variance, so the
         // training-mode normalization (x - mean)/sqrt(var + eps) collapses every
         // feature to 0 → the output is a constant (≈ beta) that is INDEPENDENT of
         // the input and of upstream parameters. Its gradient is therefore zero,
@@ -815,8 +822,8 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         // running-statistics path — identical to inference — which is
         // differentiable end-to-end and lets gradients reach the input and the
         // affine parameters. Real training uses batch > 1 and is unaffected.
-        int effectiveBatchSize = input.Rank > 0 ? input.Shape[0] : 1;
-        if (IsTrainingMode && effectiveBatchSize > 1)
+        int samplesPerFeature = featureSize > 0 ? input.Length / featureSize : (input.Rank > 0 ? input.Shape[0] : 1);
+        if (IsTrainingMode && samplesPerFeature > 1)
         {
             // Training: Use Engine.BatchNorm to compute batch stats and normalize
             // This is fully GPU accelerated
