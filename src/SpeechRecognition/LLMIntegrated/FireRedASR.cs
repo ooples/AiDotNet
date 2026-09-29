@@ -109,7 +109,7 @@ public partial class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     /// Per FireRed Team (2025): first pass uses Conformer-CTC for fast initial results,
     /// second pass uses attention rescoring for refinement. CTC decoding produces output.
     /// </summary>
-    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool includeTimestamps = false)
+    public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null)
     {
         ThrowIfDisposed();
         var features = PreprocessAudio(audio);
@@ -135,7 +135,7 @@ public partial class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
             Language = language ?? _options.Language,
             Confidence = NumOps.FromDouble(confidence),
             DurationSeconds = duration,
-            Segments = includeTimestamps
+            Segments = ResolveReturnTimestamps(includeTimestamps)
                 ? ExtractSegments(text, duration, tokens, confidence)
                 : Array.Empty<TranscriptionSegment<T>>()
         };
@@ -144,7 +144,7 @@ public partial class FireRedASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     public Task<TranscriptionResult<T>> TranscribeAsync(
         Tensor<T> audio,
         string? language = null,
-        bool includeTimestamps = false,
+        bool? includeTimestamps = null,
         CancellationToken cancellationToken = default)
         => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
 

@@ -192,7 +192,12 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
         _audioEmbeddingSize = _options.AudioEmbeddingSize;
         _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSeededRandom(42);
         _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
-        _optimizer = optimizer ?? new Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // Built with the rate this model publishes. Bare, the optimizer would use Adam's own
+        // default and LearningRate would be configuration nothing reads -- #2090's defect form (5).
+        _optimizer = optimizer ?? new Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            { InitialLearningRate = _options.LearningRate });
 
         // Default event categories
         _supportedCategories = (eventCategories?.ToList() ?? GetDefaultEventCategories()).AsReadOnly();

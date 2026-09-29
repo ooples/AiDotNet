@@ -236,15 +236,13 @@ public partial class DeepBeliefNetwork<T> : VectorModelLayoutBase<T>
     /// Think of it like designing a blueprint for the tower before construction begins.
     /// </para>
     /// </remarks>
-    public DeepBeliefNetwork(
-        NeuralNetworkArchitecture<T> architecture,
-        int epochs = 10,
-        int batchSize = 32,
+    public DeepBeliefNetwork(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DeepBeliefNetworkOptions? options = null)
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType))
     {
+        options ??= new DeepBeliefNetworkOptions();
         // Hinton 2006 ("A fast learning algorithm for deep belief nets") and
         // Hinton & Salakhutdinov 2006 ("Reducing the Dimensionality of Data
         // with Neural Networks") fine-tune the post-CD stack with SGD +
@@ -278,14 +276,14 @@ public partial class DeepBeliefNetwork<T> : VectorModelLayoutBase<T>
             {
                 InitialLearningRate = 0.001,
                 InitialMomentum = 0.9,
-                BatchSize = batchSize
+                BatchSize = options.BatchSize
             });
-        _options = options ?? new DeepBeliefNetworkOptions();
+        _options = options;
         Options = _options;
 
         _learningRate = NumOps.FromDouble(_optimizer.GetCurrentLearningRate());
-        _epochs = epochs;
-        _batchSize = batchSize;
+        _epochs = options.Epochs;
+        _batchSize = options.BatchSize;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         _rbmLayers = new List<RBMLayer<T>>();
 

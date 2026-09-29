@@ -220,7 +220,8 @@ public partial class TabTransformer<T> : RiskModelBase<T>
                 _options.NumLayers,
                 _options.NumCategoricalFeatures,
                 1,
-                _options.DropoutRate));
+                _options.DropoutRate,
+                feedForwardDimension: _options.FeedForwardDimension));
         }
     }
 

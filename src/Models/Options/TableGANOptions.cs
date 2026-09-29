@@ -36,7 +36,7 @@ namespace AiDotNet.Models.Options;
 /// Reference: "Data Synthesis based on Generative Adversarial Networks" (Park et al., 2018)
 /// </para>
 /// </remarks>
-public class TableGANOptions<T> : RiskModelOptions<T>
+public class TableGANOptions<T> : SyntheticDataGeneratorOptions<T>
 {
     /// <summary>
     /// Gets or sets the dimension of the random noise vector for the generator.

@@ -180,7 +180,6 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     /// <param name="options">CopulaGAN-specific options for generator and discriminator configuration.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor creates a CopulaGAN network based on the architecture you provide.
@@ -212,15 +211,13 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     {
     }
 
-    public CopulaGANGenerator(
-        NeuralNetworkArchitecture<T> architecture,
+    public CopulaGANGenerator(NeuralNetworkArchitecture<T> architecture,
         CopulaGANOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 5.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new CopulaGANOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new CopulaGANOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>
             new(this, new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -416,7 +413,7 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     /// </summary>
     /// <param name="data">The real data matrix where each row is a sample and each column is a feature.</param>
     /// <param name="columns">Metadata describing each column (type, categories, etc.).</param>
-    /// <param name="epochs">Number of training epochs.</param>
+    /// <param name="epochs">Number of training epochs. When null, the model's published Epochs from its options is used.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This is the "learning" step. The generator studies your real data:
@@ -426,9 +423,10 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     /// After fitting, call Generate() to create new synthetic rows.
     /// </para>
     /// </remarks>
-    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
-        ValidateFitInputs(data, columns, epochs);
+        int epochCount = epochs ?? _options.Epochs;
+        ValidateFitInputs(data, columns, epochCount);
 
         _columns = PrepareColumns(data, columns);
 
@@ -471,7 +469,7 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         int numPacks = Math.Max(1, batchSize / pacSize);
         int numBatches = Math.Max(1, data.Rows / (numPacks * pacSize));
 
-        for (int epoch = 0; epoch < epochs; epoch++)
+        for (int epoch = 0; epoch < epochCount; epoch++)
         {
             for (int batch = 0; batch < numBatches; batch++)
             {
@@ -490,9 +488,10 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     }
 
     /// <inheritdoc />
-    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs, CancellationToken ct = default)
+    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null, CancellationToken ct = default)
     {
-        ValidateFitInputs(data, columns, epochs);
+        int epochCount = epochs ?? _options.Epochs;
+        ValidateFitInputs(data, columns, epochCount);
 
         _columns = PrepareColumns(data, columns);
 
@@ -535,7 +534,7 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             int numPacks = Math.Max(1, batchSize / pacSize);
             int numBatches = Math.Max(1, data.Rows / (numPacks * pacSize));
 
-            for (int epoch = 0; epoch < epochs; epoch++)
+            for (int epoch = 0; epoch < epochCount; epoch++)
             {
                 ct.ThrowIfCancellationRequested();
                 for (int batch = 0; batch < numBatches; batch++)

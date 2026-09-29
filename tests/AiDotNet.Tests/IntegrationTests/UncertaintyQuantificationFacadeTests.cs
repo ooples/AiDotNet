@@ -710,7 +710,9 @@ public sealed class UncertaintyQuantificationFacadeTests
             inputSize: 1,
             outputSize: 1);
 
-        var bayesianModel = new BayesianNeuralNetwork<double>(architecture, numSamples: 8);
+        var bayesianModel = new BayesianNeuralNetwork<double>(
+            architecture,
+            options: new BayesianNeuralNetworkOptions { NumSamples = 8 });
         var optimizer = new SingleStepTrainOptimizer<double, Tensor<double>, Tensor<double>>(bayesianModel);
 
         var x = Tensor<double>.FromMatrix(new Matrix<double>(new double[,]

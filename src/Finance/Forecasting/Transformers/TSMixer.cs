@@ -310,9 +310,14 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
         _useRevIN = opts.UseRevIN;
         _dropout = opts.Dropout;
 
+        // The rate this model publishes on its own options. Built bare, the optimizer
+        // would use its own default instead and LearningRate would be configuration that
+        // nothing reads — the defect that diverged MusicFlamingo's training.
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        { InitialLearningRate = _options.LearningRate });
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
     }
 
@@ -356,9 +361,14 @@ public partial class TSMixer<T> : ForecastingModelBase<T>
         _useRevIN = opts.UseRevIN;
         _dropout = opts.Dropout;
 
+        // The rate this model publishes on its own options. Built bare, the optimizer
+        // would use its own default instead and LearningRate would be configuration that
+        // nothing reads — the defect that diverged MusicFlamingo's training.
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+        new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        { InitialLearningRate = _options.LearningRate });
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         InitializeLayers();

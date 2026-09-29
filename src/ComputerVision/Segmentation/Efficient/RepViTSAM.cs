@@ -43,7 +43,10 @@ namespace AiDotNet.ComputerVision.Segmentation.Efficient;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.BinaryClassification,
 ///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 1);
-/// var model = new RepViTSAM&lt;double&gt;(architecture, numClasses: 1);
+/// var model = new RepViTSAM&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new RepViTSAM&lt;double&gt;(architecture,
+///     options: new RepViTSAMOptions { NumClasses = 1, DropRate = 0 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -81,8 +84,6 @@ public partial class RepViTSAM<T> : Common.PromptableSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
-    /// <param name="dropRate">Dropout rate (default: 0).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -91,14 +92,13 @@ public partial class RepViTSAM<T> : Common.PromptableSegmentationBase<T>
     /// </remarks>
     public RepViTSAM(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 1,
-        double dropRate = 0,
+        ILossFunction<T>? lossFunction = null,
         RepViTSAMOptions? options = null)
-        : base(architecture, optimizer, lossFunction, numClasses)
+        : base(architecture, optimizer, lossFunction, (options ??= new RepViTSAMOptions()).NumClasses)
     {
-        _options = options ?? new RepViTSAMOptions(); Options = _options;
+        _options = options; Options = _options;
         ApplySamDefaultGeometry(architecture);
-        _dropRate = dropRate;
+        _dropRate = _options.DropRate;
         _channelDims = [48, 96, 192, 384];
         _depths = [3, 4, 16, 3];
         _decoderDim = 256;
@@ -124,7 +124,6 @@ public partial class RepViTSAM<T> : Common.PromptableSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -134,14 +133,14 @@ public partial class RepViTSAM<T> : Common.PromptableSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public RepViTSAM(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 1,
+    public RepViTSAM(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         RepViTSAMOptions? options = null)
-        : base(architecture, onnxModelPath, numClasses)
+        : base(architecture, onnxModelPath, (options ??= new RepViTSAMOptions()).NumClasses)
     {
-        _options = options ?? new RepViTSAMOptions(); Options = _options;
+        _options = options; Options = _options;
         ApplySamDefaultGeometry(architecture);
-        _dropRate = 0;
+        _dropRate = _options.DropRate;
         _channelDims = [48, 96, 192, 384];
         _depths = [3, 4, 16, 3];
         _decoderDim = 256;

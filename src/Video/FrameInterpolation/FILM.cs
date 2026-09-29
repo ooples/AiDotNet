@@ -48,7 +48,7 @@ namespace AiDotNet.Video.FrameInterpolation;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
 ///     inputHeight: 256, inputWidth: 256, inputDepth: 6, outputSize: 3);
-/// var model = new FILM&lt;double&gt;(architecture, numScales: 7, numFeatures: 64);
+/// var model = new FILM&lt;double&gt;(architecture, options: new FILMOptions { NumScales = 7, NumFeatures = 64 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]
@@ -145,19 +145,18 @@ public partial class FILM<T> : FrameInterpolationBase<T>
 
     public FILM(
         NeuralNetworkArchitecture<T> architecture,
-        int numScales = 7,
-        int numFeatures = 64,
         FILMOptions? options = null)
-        : base(architecture, new CharbonnierLoss<T>())
+        : base(architecture: architecture, new CharbonnierLoss<T>())
     {
         _options = options ?? new FILMOptions();
+        _options.Validate();
         Options = _options;
 
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 256;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 256;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numScales = numScales;
-        _numFeatures = numFeatures;
+        _numScales = _options.NumScales;
+        _numFeatures = _options.NumFeatures;
 
         _featureExtractor = [];
         _pyramidLayers = [];
