@@ -348,6 +348,18 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     }
 
     /// <summary>
+    /// When true, a training-mode forward REPLACES the running statistics with this batch's statistics instead of
+    /// folding them in with the momentum.
+    /// </summary>
+    /// <remarks>
+    /// This is PyTorch's <c>torch.optim.swa_utils.update_bn</c> for a single batch: it re-estimates the statistics
+    /// that inference uses for the CURRENT weights. After a short run the momentum average still carries statistics of
+    /// earlier weights, so an eval-mode comparison of weights (the training-behaviour invariants) needs statistics
+    /// that match them.
+    /// </remarks>
+    internal bool OverwriteRunningStatistics { get; set; }
+
+    /// <summary>
     /// Gets the running variance of the batch normalization layer.
     /// </summary>
     /// <returns>The running variance tensor used during inference.</returns>
@@ -785,7 +797,14 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         // behaviour, so nothing changes for any existing caller.
         bool channelsFirstDeclared = Layout == BatchNormDataLayout.ChannelsFirst;
 
-        if (!channelsFirstDeclared && input.Rank >= 3 && featureSize > 0 && input.Shape[^1] == featureSize)
+        // A rank-4+ activation whose axis 1 already equals the feature count is the canonical NCHW conv layout,
+        // so the channels-last flatten must not fire just because its trailing axis also happens to match:
+        // GraFPrint's [1, 32, 32, 32] and FastSAM's [1, 8, 8, 8] (W == C) were normalized across WIDTH, with
+        // gamma indexed by column. Rank 3 is genuinely ambiguous ([B, T, F] vs [C, H, W]) and keeps the
+        // trailing-axis rule, with the declared Layout as the override.
+        bool canonicalChannelsFirst = input.Rank >= 4 && input.Shape[1] == featureSize;
+        if (!channelsFirstDeclared && !canonicalChannelsFirst && input.Rank >= 3 && featureSize > 0
+            && input.Shape[^1] == featureSize)
         {
             preFlattenShape = input._shape;
             int leadingBatch = 1;
@@ -883,11 +902,13 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             // as differentiable state and corrupted when the training tape is released.
             using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                T oneMinusMomentum = NumOps.Subtract(NumOps.One, _momentum);
-                Engine.TensorMultiplyScalarInPlace(_runningMean, _momentum);
+                // Recalibration (see OverwriteRunningStatistics) replaces the statistics outright: momentum 0.
+                T momentum = OverwriteRunningStatistics ? NumOps.Zero : _momentum;
+                T oneMinusMomentum = NumOps.Subtract(NumOps.One, momentum);
+                Engine.TensorMultiplyScalarInPlace(_runningMean, momentum);
                 var scaledBatchMean = Engine.TensorMultiplyScalar(batchMean, oneMinusMomentum);
                 Engine.TensorAddInPlace(_runningMean, scaledBatchMean);
-                Engine.TensorMultiplyScalarInPlace(_runningVariance, _momentum);
+                Engine.TensorMultiplyScalarInPlace(_runningVariance, momentum);
                 var scaledBatchVar = Engine.TensorMultiplyScalar(batchVariance, oneMinusMomentum);
                 Engine.TensorAddInPlace(_runningVariance, scaledBatchVar);
             }
