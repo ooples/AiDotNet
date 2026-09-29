@@ -183,7 +183,13 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
         for (int index = 0; index < input.Length; index++)
             input[index] = ops.FromDouble(((index * 37) % 101) / 101.0);
 
+        // The oracle must see the forward the training step optimizes. With batch-normalized backbones
+        // (YOLOv8's Conv = conv + BN + SiLU) that is the TRAINING-mode forward, which normalizes with the
+        // batch's statistics; inference normalizes with running statistics and yields a different loss.
+        // Batch statistics depend only on the input, so this forward and the step's own forward agree.
+        detector.SetTrainingMode(true);
         using var before = detector.Predict(input);
+        detector.SetTrainingMode(false);
         var beforeValues = before.ToArray().Select(value => ops.ToDouble(value)).ToArray();
         var heads = new List<(TaskAlignedDetectionOracle.Level[] Levels, int TopK)>();
         if (detector is AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv10<T> yolo10)
