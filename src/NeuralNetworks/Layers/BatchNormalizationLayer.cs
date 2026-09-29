@@ -804,19 +804,32 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
         _lastInput = tapeActive ? null : input;
 
-        // A single-sample batch (batch size 1) has zero batch variance, so the
-        // training-mode normalization (x - mean)/sqrt(var + eps) collapses every
-        // feature to 0 → the output is a constant (≈ beta) that is INDEPENDENT of
-        // the input and of upstream parameters. Its gradient is therefore zero,
-        // which silently detaches the autodiff tape and stops the entire model
-        // from learning (surfaced by GradientFlow_ShouldBeNonZeroAndFinite on every
-        // BatchNorm model trained one sample at a time). Batch statistics are
-        // undefined for a single sample, so fall back to the affine
-        // running-statistics path — identical to inference — which is
-        // differentiable end-to-end and lets gradients reach the input and the
-        // affine parameters. Real training uses batch > 1 and is unaffected.
-        int effectiveBatchSize = input.Rank > 0 ? input.Shape[0] : 1;
-        if (IsTrainingMode && effectiveBatchSize > 1)
+        // Batch statistics are taken over every value a feature has in this batch: the batch
+        // axis AND, for convolutional (channels-first) inputs, every spatial position. That is
+        // the paper's definition for convolutional layers (Ioffe & Szegedy 2015, section 3.2:
+        // the effective mini-batch is m' = m*p*q) and what PyTorch's BatchNorm1d/2d/3d compute.
+        // A [1, C, H, W] activation therefore has H*W values per channel and is normalized
+        // like any other batch.
+        //
+        // The gate used to be the batch axis alone (input.Shape[0] > 1). Every convolutional
+        // model trained one sample at a time -- all of the model-family tests, and anyone
+        // fine-tuning on single images -- took the fallback below, normalized with running
+        // statistics that the fallback never updates, and so trained with every BatchNorm frozen
+        // at mean 0 / variance 1: an UNNORMALIZED network. RepViTSAM (26 residual blocks, 50+
+        // BatchNorms) grew activations ~150x through its encoder that way, moved its output 7x
+        // on one Adam step, and whether it then converged depended on floating-point summation
+        // order: it failed deterministically on Intel runners and passed on AMD ones. The GPU
+        // path (ForwardGpu) already normalized with batch statistics; CPU and GPU disagreed.
+        //
+        // Exactly ONE value per feature has zero batch variance: the normalization collapses the
+        // feature to a constant (beta) that is independent of the input, and its gradient is zero
+        // (PyTorch refuses to train there: "Expected more than 1 value per channel"). Only that
+        // case falls back to the running-statistics path -- identical to inference, and
+        // differentiable end-to-end.
+        int valuesPerFeature = featureSize > 0 && input.Length % featureSize == 0
+            ? input.Length / featureSize
+            : (input.Rank > 0 ? input.Shape[0] : 1);
+        if (IsTrainingMode && valuesPerFeature > 1)
         {
             // Training: Use Engine.BatchNorm to compute batch stats and normalize
             // This is fully GPU accelerated
@@ -897,8 +910,8 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         }
         else if (IsTrainingMode)
         {
-            // #639: batch=1 TRAINING fallback. Batch variance is undefined for a single
-            // sample, so we normalize with the running statistics (same VALUE as inference)
+            // #639: one-value-per-feature TRAINING fallback (see valuesPerFeature above). Batch
+            // variance is undefined, so we normalize with the running statistics (same VALUE as inference)
             // — but route it through the single differentiable BatchNormAffine engine op
             // instead of the manual sqrt/divide/subtract/broadcast decomposition. Two wins:
             //   1. Op-count: the compiled-plan replay records ONE op per BN layer instead of
