@@ -11989,6 +11989,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 3, 64, 64 };");
             }
+                if (model.ClassName is "YOLOv8" or "YOLOv9" or "YOLOv10" or "YOLOv11")
+                {
+                    // The YoloConv detectors (reference BatchNorm eps 1e-3) at 64x64 leave P5 at 2x2, where
+                    // every BatchNorm normalizes four values. YOLOv9-t's depth-3 RepNCSPELAN4 stages raise
+                    // the gradient norm to ~1000 (norm 22 at 128x128) and YOLOv8n no longer descends at eps
+                    // 1e-3, so no practical SGD step is reliable. Only the loss-reduction contract trains at
+                    // 128x128, P5 at 4x4; every other contract keeps 64x64.
+                    sb.AppendLine("    protected override int[] LossReductionInputShape => new[] { 1, 3, 128, 128 };");
+                }
         }
         else if (model.ClassName == "StableVideoSR")
         {
