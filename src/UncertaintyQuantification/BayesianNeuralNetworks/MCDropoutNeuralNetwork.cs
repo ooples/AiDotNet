@@ -33,7 +33,7 @@ namespace AiDotNet.UncertaintyQuantification.BayesianNeuralNetworks;
 /// // Create an MC Dropout network for uncertainty-aware predictions
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 10, outputSize: 1);
 /// // Add MCDropoutLayer instances to the architecture for stochastic inference
-/// var mcDropout = new MCDropoutNeuralNetwork&lt;float&gt;(architecture, numSamples: 50);
+/// var mcDropout = new MCDropoutNeuralNetwork&lt;float&gt;(architecture, options: new MCDropoutNeuralNetworkOptions { NumSamples = 50 });
 /// var result = mcDropout.PredictWithUncertainty(inputTensor);
 /// // result.Mean = average prediction, result.Variance = epistemic uncertainty
 /// </code>
@@ -50,23 +50,29 @@ public class MCDropoutNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator
 {
     private readonly int _numSamples;
 
+    /// <summary>The options this network was built with; a clone rebuilds from them.</summary>
+    private readonly MCDropoutNeuralNetworkOptions _options;
+
     /// <summary>
     /// Initializes a new instance of the MCDropoutNeuralNetwork class.
     /// </summary>
     /// <param name="architecture">The network architecture (should include MC dropout layers).</param>
-    /// <param name="numSamples">Number of forward passes for uncertainty estimation (default: 50).</param>
     /// <remarks>
     /// <b>For Beginners:</b> Make sure your architecture includes MCDropoutLayer instances.
     /// The more samples you use, the better the uncertainty estimate, but prediction becomes slower.
     /// 50 samples is a good default that balances accuracy and speed.
     /// </remarks>
-    public MCDropoutNeuralNetwork(NeuralNetworkArchitecture<T> architecture, int numSamples = 50)
+    public MCDropoutNeuralNetwork(NeuralNetworkArchitecture<T> architecture,
+        MCDropoutNeuralNetworkOptions? options = null)
         : base(architecture)
     {
-        if (numSamples < 1)
-            throw new ArgumentException("Number of samples must be at least 1", nameof(numSamples));
+        options ??= new MCDropoutNeuralNetworkOptions();
+        if (options.NumSamples < 1)
+            throw new ArgumentException("Number of samples must be at least 1", nameof(options.NumSamples));
 
-        _numSamples = numSamples;
+        _options = options;
+        Options = _options;
+        _numSamples = options.NumSamples;
     }
 
     /// <summary>

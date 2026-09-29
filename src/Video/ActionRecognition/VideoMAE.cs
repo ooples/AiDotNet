@@ -62,7 +62,7 @@ namespace AiDotNet.Video.ActionRecognition;
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputFrames: 16, inputHeight: 224, inputWidth: 224, inputDepth: 3,
 ///     outputSize: 400);
-/// var model = new VideoMAE&lt;double&gt;(architecture, numClasses: 400, numFrames: 16);
+/// var model = new VideoMAE&lt;double&gt;(architecture, options: new VideoMAEOptions { NumClasses = 400, NumFrames = 16 });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Video)]
@@ -200,27 +200,24 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
     /// </remarks>
     public VideoMAE(
         NeuralNetworkArchitecture<T> architecture,
+        VideoMAEOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        int numClasses = 400,
-        int numFrames = DefaultNumFrames,
-        int numFeatures = 768,
-        double maskRatio = 0.9,
-        VideoMAEOptions? options = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture: architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new VideoMAEOptions();
+        _options.Validate();
         Options = _options;
 
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 224;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses;
-        _numFrames = ResolveNumFrames(architecture, numFrames);
-        _numFeatures = numFeatures;
+        _numClasses = _options.NumClasses;
+        _numFrames = ResolveNumFrames(architecture, _options.NumFrames);
+        _numFeatures = _options.NumFeatures;
         _patchSize = 16;
         _tubeletSize = 2;
-        _maskRatio = maskRatio;
+        _maskRatio = _options.MaskRatio;
         _useNativeMode = true;
         _onnxModelPath = null;
         _optimizer = optimizer;
@@ -246,10 +243,8 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
     public VideoMAE(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
-        int numClasses = 400,
-        int numFrames = DefaultNumFrames,
         VideoMAEOptions? options = null)
-        : base(architecture, new CrossEntropyWithLogitsLoss<T>())
+        : base(architecture: architecture, new CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new VideoMAEOptions();
         Options = _options;
@@ -262,12 +257,16 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 224;
         _channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
-        _numClasses = numClasses;
-        _numFrames = ResolveNumFrames(architecture, numFrames);
-        _numFeatures = 768;
+        // Validated after the path checks so a missing model file reports itself
+        // as FileNotFoundException rather than being pre-empted by the options.
+        _options.Validate();
+
+        _numClasses = _options.NumClasses;
+        _numFrames = ResolveNumFrames(architecture, _options.NumFrames);
+        _numFeatures = _options.NumFeatures;
         _patchSize = 16;
         _tubeletSize = 2;
-        _maskRatio = 0.9;
+        _maskRatio = _options.MaskRatio;
         _useNativeMode = false;
         _onnxModelPath = onnxModelPath;
         _optimizer = null;

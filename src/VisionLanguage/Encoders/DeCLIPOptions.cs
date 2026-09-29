@@ -27,7 +27,7 @@ public class DeCLIPOptions : ContrastiveEncoderOptions
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
-        LossType = other.LossType;
+            LossType = other.LossType;
         ImageSelfSupervisedWeight = other.ImageSelfSupervisedWeight;
         TextMLMWeight = other.TextMLMWeight;
         NearestNeighborWeight = other.NearestNeighborWeight;

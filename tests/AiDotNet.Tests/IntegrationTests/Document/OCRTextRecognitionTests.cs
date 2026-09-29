@@ -42,17 +42,20 @@ public class OCRTextRecognitionTests
         // double-precision embedding table repeatedly on a 16 GiB CI runner.
         return new TrOCR<double>(
             architecture,
-            imageHeight: 32,
-            imageWidth: 128,
-            maxSequenceLength: 16,
-            encoderHiddenDim: 32,
-            decoderHiddenDim: 32,
-            numEncoderLayers: 1,
-            numDecoderLayers: 1,
-            numEncoderHeads: 4,
-            numDecoderHeads: 4,
-            patchSize: 16,
-            vocabSize: 128);
+            options: new AiDotNet.Document.Options.TrOCROptions
+            {
+                ImageHeight = 32,
+                ImageWidth = 128,
+                MaxSequenceLength = 16,
+                EncoderHiddenDim = 32,
+                DecoderHiddenDim = 32,
+                NumEncoderLayers = 1,
+                NumDecoderLayers = 1,
+                NumEncoderHeads = 4,
+                NumDecoderHeads = 4,
+                PatchSize = 16,
+                VocabSize = 128
+            });
     }
 
     #region CRNN Tests
@@ -61,7 +64,7 @@ public class OCRTextRecognitionTests
     public async Task CRNN_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        using var model = new CRNN<double>(arch, imageWidth: 128);
+        using var model = new CRNN<double>(arch);
         Assert.NotNull(model);
     }
 
@@ -69,7 +72,7 @@ public class OCRTextRecognitionTests
     public async Task CRNN_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        using var model = new CRNN<double>(arch, imageWidth: 128);
+        using var model = new CRNN<double>(arch);
         using var input = CreateSmallImage();
         using var output = model.Predict(input);
         Assert.NotNull(output);
@@ -81,7 +84,7 @@ public class OCRTextRecognitionTests
     public async Task CRNN_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        using var model = new CRNN<double>(arch, imageWidth: 128);
+        using var model = new CRNN<double>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("CRNN", meta.Name);
     }
@@ -164,7 +167,7 @@ public class OCRTextRecognitionTests
     public async Task ABINet_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        using var model = new ABINet<double>(arch, imageWidth: 128, imageHeight: 32);
+        using var model = new ABINet<double>(arch);
         Assert.NotNull(model);
     }
 
@@ -172,7 +175,7 @@ public class OCRTextRecognitionTests
     public async Task ABINet_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        using var model = new ABINet<double>(arch, imageWidth: 128, imageHeight: 32);
+        using var model = new ABINet<double>(arch);
         using var input = CreateSmallImage();
         using var output = model.Predict(input);
         Assert.NotNull(output);
@@ -184,7 +187,7 @@ public class OCRTextRecognitionTests
     public async Task ABINet_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        using var model = new ABINet<double>(arch, imageWidth: 128, imageHeight: 32);
+        using var model = new ABINet<double>(arch);
         var meta = model.GetModelMetadata();
         Assert.Equal("ABINet", meta.Name);
     }
@@ -200,10 +203,10 @@ public class OCRTextRecognitionTests
         // Each model owns pooled buffers, so it is declared under its own using scope before the
         // array is built: if a later constructor throws, the array assignment never completes and a
         // finally-based cleanup would never run, leaking every model already constructed.
-        using var crnn = new CRNN<double>(CreateArchitecture(), imageWidth: 128);
+        using var crnn = new CRNN<double>(CreateArchitecture());
         using var trOcr = CreateSmallTrOCR(CreateArchitecture());
         using var svtr = new SVTR<double>(CreateArchitecture());
-        using var abiNet = new ABINet<double>(CreateArchitecture(), imageWidth: 128, imageHeight: 32);
+        using var abiNet = new ABINet<double>(CreateArchitecture());
 
         var models = new DocumentNeuralNetworkBase<double>[] { crnn, trOcr, svtr, abiNet };
 

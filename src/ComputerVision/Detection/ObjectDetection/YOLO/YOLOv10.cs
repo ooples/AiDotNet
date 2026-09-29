@@ -64,7 +64,7 @@ public partial class YOLOv10<T> : ObjectDetectorBase<T>, IDetectionTrainingModel
         var (depth, width) = GetSizeConfig(options.Size);
 
         // Initialize backbone
-        Backbone = new CSPDarknet<T>(depth: depth, widthMultiplier: width);
+        Backbone = new CSPDarknet<T>(options: new CSPDarknetOptions { Depth = depth, WidthMultiplier = width });
 
         // Initialize neck with enhanced connections
         Neck = new PANet<T>(Backbone.OutputChannels.ToArray(), outputChannels: (int)(256 * width));

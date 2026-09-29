@@ -53,7 +53,8 @@ public interface ISyntheticTabularGenerator<T>
     /// </summary>
     /// <param name="data">The real data matrix where each row is a sample and each column is a feature.</param>
     /// <param name="columns">Metadata describing each column (type, categories, etc.).</param>
-    /// <param name="epochs">Number of training epochs.</param>
+    /// <param name="epochs">Number of training epochs. When null, the implementation uses the
+    /// published default its options class declares.</param>
     /// <remarks>
     /// <para>
     /// This method trains the generative model on the provided data. After fitting,
@@ -65,17 +66,18 @@ public interface ISyntheticTabularGenerator<T>
     /// but takes longer to train.
     /// </para>
     /// </remarks>
-    void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs);
+    void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null);
 
     /// <summary>
     /// Asynchronously fits the generator model to the provided real tabular data.
     /// </summary>
     /// <param name="data">The real data matrix where each row is a sample and each column is a feature.</param>
     /// <param name="columns">Metadata describing each column (type, categories, etc.).</param>
-    /// <param name="epochs">Number of training epochs.</param>
+    /// <param name="epochs">Number of training epochs. When null, the implementation uses the
+    /// published default its options class declares.</param>
     /// <param name="ct">Cancellation token for stopping training early.</param>
     /// <returns>A task representing the asynchronous fit operation.</returns>
-    Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs, CancellationToken ct = default);
+    Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null, CancellationToken ct = default);
 
     /// <summary>
     /// Generates new synthetic tabular data rows.

@@ -20,6 +20,17 @@ updates:
       # Ignore major version updates for stable packages
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+    # One PR per group instead of one per package. Every update PR runs the full validation pipeline, and on
+    # 2026-09-28 ten separate Monday bumps saturated the hosted-runner pool so every other PR's jobs queued
+    # for hours. The AiDotNet.* family (Tensors, Native.*, Evolution) versions together: bumped one at a time
+    # it produced half-upgraded trees (Tensors 0.133.0 against Evolution 0.1.0) that could not restore.
+    groups:
+      aidotnet:
+        patterns: ["AiDotNet.*"]
+      nuget-minor-and-patch:
+        patterns: ["*"]
+        exclude-patterns: ["AiDotNet.*"]
+        update-types: ["minor", "patch"]
 
   # GitHub Actions updates
   - package-ecosystem: "github-actions"
@@ -37,3 +48,7 @@ updates:
     commit-message:
       prefix: "ci"
       include: "scope"
+    # All action bumps in one PR (each separate PR ran the whole pipeline for a pinned-SHA change).
+    groups:
+      github-actions:
+        patterns: ["*"]

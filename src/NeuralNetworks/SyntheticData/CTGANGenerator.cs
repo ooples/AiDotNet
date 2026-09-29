@@ -184,7 +184,6 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
     /// <param name="options">CTGAN-specific options for generator and discriminator configuration.</param>
     /// <param name="optimizer">Gradient-based optimizer (defaults to Adam).</param>
     /// <param name="lossFunction">Loss function (defaults based on task type).</param>
-    /// <param name="maxGradNorm">Maximum gradient norm for clipping (default 5.0).</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This constructor creates a CTGAN network based on the architecture you provide.
@@ -216,15 +215,13 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
     {
     }
 
-    public CTGANGenerator(
-        NeuralNetworkArchitecture<T> architecture,
+    public CTGANGenerator(NeuralNetworkArchitecture<T> architecture,
         CTGANOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null,
-        double maxGradNorm = 5.0)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), maxGradNorm)
+        ILossFunction<T>? lossFunction = null)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new CTGANOptions<T>()).MaxGradNorm)
     {
-        _options = options ?? new CTGANOptions<T>();
+        _options = options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
 
         // WGAN-GP Adam configuration (Gulrajani et al. 2017 / Xu et al. 2019):
@@ -374,7 +371,7 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
     /// </summary>
     /// <param name="data">The real data matrix where each row is a sample and each column is a feature.</param>
     /// <param name="columns">Metadata describing each column (type, categories, etc.).</param>
-    /// <param name="epochs">Number of training epochs.</param>
+    /// <param name="epochs">Number of training epochs. When null, the model's published Epochs from its options is used.</param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This is the "learning" step. The generator studies your real data:
@@ -384,9 +381,10 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
     /// After fitting, call Generate() to create new synthetic rows.
     /// </para>
     /// </remarks>
-    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs)
+    public void Fit(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null)
     {
-        ValidateFitInputs(data, columns, epochs);
+        int epochCount = epochs ?? _options.Epochs;
+        ValidateFitInputs(data, columns, epochCount);
 
         _columns = PrepareColumns(data, columns);
 
@@ -418,7 +416,7 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
         int numPacks = Math.Max(1, batchSize / pacSize);
         int numBatches = Math.Max(1, data.Rows / (numPacks * pacSize));
 
-        for (int epoch = 0; epoch < epochs; epoch++)
+        for (int epoch = 0; epoch < epochCount; epoch++)
         {
             for (int batch = 0; batch < numBatches; batch++)
             {
@@ -437,9 +435,10 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
     }
 
     /// <inheritdoc />
-    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int epochs, CancellationToken ct = default)
+    public async Task FitAsync(Matrix<T> data, IReadOnlyList<ColumnMetadata> columns, int? epochs = null, CancellationToken ct = default)
     {
-        ValidateFitInputs(data, columns, epochs);
+        int epochCount = epochs ?? _options.Epochs;
+        ValidateFitInputs(data, columns, epochCount);
 
         _columns = PrepareColumns(data, columns);
 
@@ -472,7 +471,7 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
             int numPacks = Math.Max(1, batchSize / pacSize);
             int numBatches = Math.Max(1, data.Rows / (numPacks * pacSize));
 
-            for (int epoch = 0; epoch < epochs; epoch++)
+            for (int epoch = 0; epoch < epochCount; epoch++)
             {
                 ct.ThrowIfCancellationRequested();
                 for (int batch = 0; batch < numBatches; batch++)

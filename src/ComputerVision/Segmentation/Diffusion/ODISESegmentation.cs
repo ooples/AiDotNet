@@ -44,7 +44,10 @@ namespace AiDotNet.ComputerVision.Segmentation.Diffusion;
 ///     inputType: InputType.ThreeDimensional,
 ///     taskType: NeuralNetworkTaskType.MultiClassClassification,
 ///     inputHeight: 512, inputWidth: 512, inputDepth: 3, outputSize: 150);
-/// var model = new ODISESegmentation&lt;double&gt;(architecture, numClasses: 150);
+/// var model = new ODISESegmentation&lt;double&gt;(architecture);
+/// // Every tunable is now set through the options object; these are the defaults:
+/// var custom = new ODISESegmentation&lt;double&gt;(architecture,
+///     options: new ODISESegmentationOptions { NumClasses = 133, DropRate = 0.1 });
 ///
 /// // Or load a pre-trained ONNX model
 /// var onnxModel = new ODISESegmentation&lt;double&gt;(architecture, "odise_model.onnx");
@@ -92,8 +95,6 @@ public partial class ODISESegmentation<T> : Common.PanopticSegmentationBase<T>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
     /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 133).</param>
-    /// <param name="dropRate">Dropout rate (default: 0.1).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -102,14 +103,13 @@ public partial class ODISESegmentation<T> : Common.PanopticSegmentationBase<T>
     /// </remarks>
     public ODISESegmentation(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null, int numClasses = 133,
-        double dropRate = 0.1,
+        ILossFunction<T>? lossFunction = null,
         ODISESegmentationOptions? options = null)
-        : base(architecture, optimizer, lossFunction, numClasses,
-               StuffClassCount(numClasses), numClasses - StuffClassCount(numClasses))
+        : base(architecture, optimizer, lossFunction, (options ??= new ODISESegmentationOptions()).NumClasses,
+               StuffClassCount(options.NumClasses), options.NumClasses - StuffClassCount(options.NumClasses))
     {
-        _options = options ?? new ODISESegmentationOptions(); Options = _options;
-        _dropRate = dropRate;
+        _options = options; Options = _options;
+        _dropRate = _options.DropRate;
         ValidateArchitectureOptions(_options);
         _channelDims = (int[])_options.ChannelDimensions.Clone();
         _depths = (int[])_options.StageDepths.Clone();
@@ -122,7 +122,6 @@ public partial class ODISESegmentation<T> : Common.PanopticSegmentationBase<T>
     /// </summary>
     /// <param name="architecture">Neural network architecture defining input dimensions.</param>
     /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="numClasses">Number of segmentation classes (default: 133).</param>
     /// <param name="options">Optional model options.</param>
     /// <remarks>
     /// <para>
@@ -132,14 +131,14 @@ public partial class ODISESegmentation<T> : Common.PanopticSegmentationBase<T>
     /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
     /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public ODISESegmentation(NeuralNetworkArchitecture<T> architecture, string onnxModelPath,
-        int numClasses = 133,
+    public ODISESegmentation(NeuralNetworkArchitecture<T> architecture,
+        string onnxModelPath,
         ODISESegmentationOptions? options = null)
-        : base(architecture, onnxModelPath, numClasses,
-               StuffClassCount(numClasses), numClasses - StuffClassCount(numClasses))
+        : base(architecture, onnxModelPath, (options ??= new ODISESegmentationOptions()).NumClasses,
+               StuffClassCount(options.NumClasses), options.NumClasses - StuffClassCount(options.NumClasses))
     {
-        _options = options ?? new ODISESegmentationOptions(); Options = _options;
-        _dropRate = 0.1;
+        _options = options; Options = _options;
+        _dropRate = _options.DropRate;
         ValidateArchitectureOptions(_options);
         _channelDims = (int[])_options.ChannelDimensions.Clone();
         _depths = (int[])_options.StageDepths.Clone();

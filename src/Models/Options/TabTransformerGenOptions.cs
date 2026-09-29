@@ -39,7 +39,7 @@ namespace AiDotNet.Models.Options;
 /// (Huang et al., 2020) — adapted for generation with masked prediction
 /// </para>
 /// </remarks>
-public class TabTransformerGenOptions<T> : RiskModelOptions<T>
+public class TabTransformerGenOptions<T> : SyntheticDataGeneratorOptions<T>
 {
     /// <summary>
     /// Gets or sets the number of transformer layers.

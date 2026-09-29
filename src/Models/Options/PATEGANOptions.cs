@@ -43,7 +43,7 @@ namespace AiDotNet.Models.Options;
 /// (Jordon et al., ICLR 2019)
 /// </para>
 /// </remarks>
-public class PATEGANOptions<T> : RiskModelOptions<T>
+public class PATEGANOptions<T> : SyntheticDataGeneratorOptions<T>
 {
     /// <summary>
     /// Gets or sets the number of teacher discriminators in the ensemble.

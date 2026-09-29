@@ -626,7 +626,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
             { -0.5, -0.5, -0.5 }, { -0.5, -0.5,  0.5 },
             { -0.5,  0.5, -0.5 }, { -0.5,  0.5,  0.5 },
             {  0.5, -0.5, -0.5 }, {  0.5, -0.5,  0.5 },
-            {  0.5,  0.5, -0.5 }, {  0.5,  0.5,  0.5 },
+            {  0.5,  0.5, -0.5 }, {  0.5,  0.5,  0.5 }
         };
         var pointCloud = new Matrix<T>(seedCap, 3);
         for (int i = 0; i < seedCap; i++)
@@ -694,8 +694,6 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
     /// </summary>
     /// <param name="initialPointCloud">Initial point cloud to place Gaussians.</param>
     /// <param name="initialColors">Optional initial colors for each point.</param>
-    /// <param name="useSphericalHarmonics">Whether to use spherical harmonics for view-dependent appearance.</param>
-    /// <param name="shDegree">Degree of spherical harmonics (0-3, higher = more view dependence).</param>
     /// <param name="lossFunction">Optional loss function for training.</param>
     /// <remarks>
     /// <b>For Beginners:</b> Creates a Gaussian Splatting model from an initial point cloud.
@@ -736,9 +734,11 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
     /// var gs = new GaussianSplatting(
     ///     initialPointCloud: pointCloud,
     ///     initialColors: colors,
-    ///     useSphericalHarmonics: true,
-    ///     shDegree: 3  // High quality view-dependent effects
-    /// );
+    ///     options: new GaussianSplattingOptions
+    ///     {
+    ///         UseSphericalHarmonics = true,
+    ///         ShDegree = 3  // High quality view-dependent effects
+    ///     });
     ///
     /// Typical workflow:
     /// 1. Run COLMAP on images → Get point cloud
@@ -749,14 +749,10 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
     public GaussianSplatting(
         Matrix<T>? initialPointCloud = null,
         Matrix<T>? initialColors = null,
-        bool useSphericalHarmonics = true,
-        int shDegree = 3,
         ILossFunction<T>? lossFunction = null)
         : this(
             new GaussianSplattingOptions
             {
-                UseSphericalHarmonics = useSphericalHarmonics,
-                ShDegree = shDegree
             },
             initialPointCloud,
             initialColors,
@@ -2121,7 +2117,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         // adaptive schedule for data-driven firing.
         var schedule = _options.DensificationSchedule ?? new NeuralRadianceFields.Data.FixedIntervalDensificationSchedule
         {
-            Interval = Math.Max(1, DensificationInterval),
+            Interval = Math.Max(1, DensificationInterval)
         };
         double meanGradNorm = 0;
         if (gradients.Count > 0)

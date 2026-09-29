@@ -174,7 +174,20 @@ public class DocumentNeuralNetworkOptions : ModelHyperparameterOptions
     /// </exception>
     protected void ValidateCore()
     {
-        Require(MaxSequenceLength, nameof(MaxSequenceLength));
-        Require(HiddenDim, nameof(HiddenDim));
+        // Nothing is universal across 29 heterogeneous document models: only 13 of them have a
+        // hidden dimension at all, and 17 a sequence length. Requiring a value the family does
+        // not share compiles clean and then fails at construction — it cost 11 failing tests
+        // here and 30 in the GAN family before that.
+        //
+        // ImageSize is not universal either: only 14 of the 29 document models render a page
+        // image at all, the rest working from text and layout coordinates (DocGCN and
+        // LayoutGraph are graph models over a layout; LayoutLM and LiLT take pre-extracted
+        // boxes). This method previously read
+        //     Require(ImageSize > 0 ? ImageSize : 1, nameof(ImageSize));
+        // which substitutes 1 whenever ImageSize is unset and therefore cannot throw — a guard
+        // shaped like validation that validated nothing. The 14 models that do use an image
+        // require it in their own Validate() instead.
+        //
+        // A leaf that knows it needs a value calls Require itself, in its own Validate().
     }
 }

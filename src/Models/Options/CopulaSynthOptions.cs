@@ -28,32 +28,23 @@ namespace AiDotNet.Models.Options;
 ///
 /// Example:
 /// <code>
-/// var options = new CopulaSynthOptions&lt;double&gt;
-/// {
-///     CopulaType = "gaussian",
-///     NumKDEPoints = 100
-/// };
+/// var options = new CopulaSynthOptions&lt;double&gt;{ Seed = 42 };
 /// var copulaSynth = new CopulaSynthGenerator&lt;double&gt;(options);
 /// </code>
 /// </para>
 /// </remarks>
 public class CopulaSynthOptions<T> : RiskModelOptions<T>
 {
-    /// <summary>
-    /// Gets or sets the copula family to use for dependency modeling.
-    /// </summary>
-    /// <value>Copula type string, defaulting to "gaussian". Supported: "gaussian".</value>
-    public string CopulaType { get; set; } = "gaussian";
-
-    /// <summary>
-    /// Gets or sets the number of points for kernel density estimation of marginals.
-    /// </summary>
-    /// <value>Number of KDE points, defaulting to 100.</value>
-    public int NumKDEPoints { get; set; } = 100;
-
-    /// <summary>
-    /// Gets or sets the KDE bandwidth multiplier.
-    /// </summary>
-    /// <value>Bandwidth multiplier, defaulting to 1.0. Higher values produce smoother marginals.</value>
-    public double BandwidthMultiplier { get; set; } = 1.0;
+    // CopulaType, NumKDEPoints and BandwidthMultiplier were declared here and none was ever
+    // read: CopulaSynthGenerator assigns _options and then reads nothing off it but Seed.
+    //
+    // CopulaType was additionally a string naming a closed set of choices, which CLAUDE.md
+    // bans -- but porting it to an enum would have been worse than deleting it, because its own
+    // documentation listed exactly one supported value and the generator implements exactly one
+    // copula. An enum with a single member advertises a choice that does not exist.
+    //
+    // NumKDEPoints and BandwidthMultiplier configure a kernel density estimator the model does
+    // not contain. Its marginals are the sorted observed values -- a pure empirical CDF. The
+    // class summary claimed "empirical CDF / kernel density estimation" and has been corrected
+    // to say what is implemented, since that sentence is what made these two look meaningful.
 }

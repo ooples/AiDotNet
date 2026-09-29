@@ -263,7 +263,6 @@ public partial class CSDI<T> : ForecastingModelBase<T>
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
     /// <param name="options">CSDI-specific options.</param>
-    /// <param name="numFeatures">Number of input features.</param>
     /// <param name="optimizer">Optional optimizer for training.</param>
     /// <param name="lossFunction">Optional loss function.</param>
     /// <remarks>
@@ -274,7 +273,6 @@ public partial class CSDI<T> : ForecastingModelBase<T>
     public CSDI(
         NeuralNetworkArchitecture<T> architecture,
         CSDIOptions<T>? options = null,
-        int numFeatures = 1,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
@@ -288,7 +286,7 @@ public partial class CSDI<T> : ForecastingModelBase<T>
     ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         _sequenceLength = _options.SequenceLength;
-        _numFeatures = numFeatures > 0 ? numFeatures : _options.NumFeatures;
+        _numFeatures = _options.NumFeatures;
         _hiddenDimension = _options.HiddenDimension;
         _numResidualLayers = _options.NumResidualLayers;
         _numDiffusionSteps = _options.NumDiffusionSteps;

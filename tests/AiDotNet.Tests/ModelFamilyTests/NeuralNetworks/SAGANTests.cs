@@ -1,4 +1,5 @@
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -17,11 +18,5 @@ public class SAGANTests : GANModelTestBase<float>
     protected override int[] OutputShape => [1, 8, 8];
 
     protected override INeuralNetworkModel<float> CreateNetwork()
-        => new SAGAN<float>(
-            latentSize: 16,
-            imageChannels: 1,
-            imageHeight: 8,
-            imageWidth: 8,
-            generatorChannels: 8,
-            discriminatorChannels: 8);
+        => new SAGAN<float>(latentSize: 16, imageChannels: 1, imageHeight: 8, imageWidth: 8, options: new SAGANOptions { GeneratorChannels = 8, DiscriminatorChannels = 8 });
 }

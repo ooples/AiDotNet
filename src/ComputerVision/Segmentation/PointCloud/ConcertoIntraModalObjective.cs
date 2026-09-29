@@ -26,6 +26,64 @@ public static class ConcertoIntraModalObjective<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    private static AiDotNet.Tensors.Engines.IEngine Engine => AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+
+    /// <summary>
+    /// The same cross-entropy as <see cref="ComputeLoss"/>, expressed in engine operations so a
+    /// <c>GradientTape</c> can differentiate it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="ComputeLoss"/> evaluates in raw <c>double</c> and returns a bare scalar, so it
+    /// carries no gradient graph: it can report a loss but cannot train anything. That is why this
+    /// overload exists rather than the pretraining loop calling the scalar one -- a loop built on
+    /// the scalar version would run, print a falling-looking number, and leave every weight
+    /// untouched.
+    /// </para>
+    /// <para>
+    /// The teacher side is wrapped in <c>StopGradient</c>. That is not an optimisation: the teacher
+    /// is an exponential moving average of the student, and back-propagating into it is what
+    /// collapses this objective to a constant.
+    /// </para>
+    /// </remarks>
+    /// <param name="studentLogits">Student cluster logits, shape [points, prototypes].</param>
+    /// <param name="teacherLogits">Teacher cluster logits, same shape.</param>
+    /// <param name="center">Running centering term over prototypes, or null to skip centering.</param>
+    /// <param name="studentTemperature">Student softmax temperature.</param>
+    /// <param name="teacherTemperature">Teacher softmax temperature; lower than the student's.</param>
+    /// <returns>A scalar tensor carrying the gradient graph.</returns>
+    public static Tensor<T> ComputeTapeLoss(
+        Tensor<T> studentLogits,
+        Tensor<T> teacherLogits,
+        Tensor<T>? center = null,
+        double studentTemperature = 0.1,
+        double teacherTemperature = 0.04)
+    {
+        if (studentLogits is null) throw new ArgumentNullException(nameof(studentLogits));
+        if (teacherLogits is null) throw new ArgumentNullException(nameof(teacherLogits));
+        if (studentTemperature <= 0) throw new ArgumentOutOfRangeException(nameof(studentTemperature));
+        if (teacherTemperature <= 0) throw new ArgumentOutOfRangeException(nameof(teacherTemperature));
+
+        var engine = Engine;
+
+        var teacherCentered = center is null
+            ? teacherLogits
+            : engine.TensorSubtract(teacherLogits, center);
+        var teacherScaled = engine.TensorDivideScalar(
+            teacherCentered, NumOps.FromDouble(teacherTemperature));
+        var teacherProbabilities = engine.StopGradient(engine.TensorSoftmax(teacherScaled, axis: -1));
+
+        var studentScaled = engine.TensorDivideScalar(
+            studentLogits, NumOps.FromDouble(studentTemperature));
+        var logStudent = engine.TensorLogSoftmax(studentScaled, axis: -1);
+
+        // H(teacher, student) per point, then averaged -- matching ComputeLoss's reduction.
+        var product = engine.TensorMultiply(teacherProbabilities, logStudent);
+        var perPoint = engine.ReduceSum(product, new[] { studentLogits.Shape.Length - 1 }, keepDims: false);
+        var mean = engine.ReduceMean(perPoint, new[] { 0 }, keepDims: false);
+        return engine.TensorNegate(mean);
+    }
+
     /// <summary>
     /// Cross-entropy between the sharpened, centered teacher assignment and the student's.
     /// </summary>
