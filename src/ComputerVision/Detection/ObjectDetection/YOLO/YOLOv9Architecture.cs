@@ -179,11 +179,14 @@ public partial class YOLOv9Backbone<T> : NeuralNetworkBase<T>, IDetectionBackbon
     public IReadOnlyList<int> Strides => new[] { 8, 16, 32 };
 
     /// <summary>Creates the backbone for a model size (Nano = t, Small = s, Medium = m, Large = c, XLarge = e).</summary>
-    public YOLOv9Backbone(ModelSize size = ModelSize.Nano, int inChannels = 3)
-        : base(DetectionBackboneArchitecture<T>.Create(inChannels), new MeanSquaredErrorLoss<T>())
+    /// <param name="options">Model size and input channels; defaults to Nano over three channels.</param>
+    public YOLOv9Backbone(YoloBackboneOptions? options = null)
+        : base(DetectionBackboneArchitecture<T>.Create((options ??= new YoloBackboneOptions()).InChannels),
+              new MeanSquaredErrorLoss<T>())
     {
-        _config = YoloV9Config.For(size);
-        Name = $"YOLOv9Backbone-{size}";
+        options.Validate();
+        _config = YoloV9Config.For(options.Size);
+        Name = $"YOLOv9Backbone-{options.Size}";
         _primary = _config.BuildStages<T>();
         var widths = _config.StageWidths;
         OutputChannels = Taps.Select(t => widths[t]).ToArray();

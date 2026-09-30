@@ -1,5 +1,11 @@
 {
   "schemaVersion": 1,
   "description": "Explicit baseline shard renames, splits, or removals. Replacement keys must upload successfully before an old key is excused.",
-  "changes": []
+  "changes": [
+    {
+      "baselineKey": "Conformance_VisionLanguage_offset_170",
+      "currentKeys": [],
+      "reason": "#2269 removed four duplicate VisionLanguage document models (Donut, LayoutLMv3, Nougat and Pix2Struct under src/VisionLanguage/Document; the document implementations elsewhere remain), so the VisionLanguage conformance set went from 173 to 169 models. Offset 165 now ends it and the offset 170 window selects none."
+    }
+  ]
 }

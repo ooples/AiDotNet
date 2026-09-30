@@ -63,7 +63,7 @@ public partial class YOLOv10<T> : ObjectDetectorBase<T>, IDetectionTrainingModel
         _useNmsFree = useNmsFree;
         // YOLOv10 builds on YOLOv8's architecture (Wang et al. 2024, section 3); its own contributions are
         // the NMS-free dual assignment below. It ran a YOLOv4/v5 CSPDarknet with a generic PANet.
-        Backbone = new YOLOv8Backbone<T>(options.Size);
+        Backbone = new YOLOv8Backbone<T>(new YoloBackboneOptions { Size = options.Size });
         Neck = new YOLOv8Neck<T>(options.Size);
 
         // Main detection head (one-to-one assignment), reading each level at its own width.

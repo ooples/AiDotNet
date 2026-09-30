@@ -76,7 +76,7 @@ public partial class YOLOv9<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<
     /// <param name="options">Detection options; <see cref="ObjectDetectionOptions{T}.Size"/> selects t/s/m/c/e.</param>
     public YOLOv9(ObjectDetectionOptions<T> options) : base(options)
     {
-        var backbone = new YOLOv9Backbone<T>(options.Size);
+        var backbone = new YOLOv9Backbone<T>(new YoloBackboneOptions { Size = options.Size });
         Backbone = backbone;
         Neck = new YOLOv9Neck<T>(options.Size);
         _head = new YOLOv8Head<T>(Neck.LevelChannels.ToArray(), options.NumClasses);
