@@ -159,8 +159,9 @@ public static class DeserializationHelper
             // other assembly defining the same full name is exactly the substitution this identity exists to stop.
             System.Reflection.Assembly? named = null;
             try { named = System.Reflection.Assembly.Load(new System.Reflection.AssemblyName(assemblyName)); }
-            catch (System.IO.IOException) { }
-            catch (BadImageFormatException) { }
+            // Not found or not loadable: reported below as "cannot be found".
+            catch (System.IO.IOException) { named = null; }
+            catch (BadImageFormatException) { named = null; }
             var fromNamed = named is null ? null : TryGetLayerType(named, fullName);
             if (fromNamed is null)
             {
@@ -216,7 +217,9 @@ public static class DeserializationHelper
     /// </summary>
     internal static string GetLayerTypeIdentity(Type layerDefinitionType)
     {
-        string fullName = layerDefinitionType.FullName ?? layerDefinitionType.Name;
+        // FullName is null only for a generic parameter or an open constructed type; fall back to the simple name.
+        string? qualified = layerDefinitionType.FullName;
+        string fullName = qualified is null ? layerDefinitionType.Name : qualified;
         if (layerDefinitionType.Assembly == typeof(DeserializationHelper).Assembly) return fullName;
         string? assemblyName = layerDefinitionType.Assembly.GetName().Name;
         return string.IsNullOrEmpty(assemblyName) ? fullName : fullName + ", " + assemblyName;

@@ -1087,7 +1087,7 @@ public static class CompiledTapeTrainingStep<T>
                 if (_configuredPlan is not null && _persistentInput is not null && PlanSupportsContinueOptimizer()
                     && _configuredOptimizerConfig is not null
                     && _configuredOptimizerConfig.Value.Equals(((int)optimizerType, learningRate, beta1, beta2, epsilon, weightDecay))
-                    && _configuredL2 == l2Regularization)
+                    && _configuredL2.Equals(l2Regularization))
                 {
                     // A batch-shape change on a configured lifecycle - typically the short last batch of an epoch.
                     // Switch to this shape's plan and let it continue the optimizer (moments, step count) from the
@@ -1383,7 +1383,7 @@ public static class CompiledTapeTrainingStep<T>
                 && !ReferenceEquals(switchedFrom, plan)
                 && _configuredOptimizerConfig is not null
                 && _configuredOptimizerConfig.Value.Equals(currentConfig)
-                && _configuredL2 == l2Regularization)
+                && _configuredL2.Equals(l2Regularization))
             {
                 // Same optimizer, new batch shape: this shape's plan takes over the optimizer state (and the clip
                 // and L2 it was configured with). A plan compiled just now used its trace's stochastic draw.
@@ -1463,7 +1463,7 @@ public static class CompiledTapeTrainingStep<T>
             }
             else if (_configuredOptimizerConfig is null
                 || !_configuredOptimizerConfig.Value.Equals(currentConfig)
-                || _configuredL2 != l2Regularization)
+                || !_configuredL2.Equals(l2Regularization))
             {
                 // Same plan, drifted hyperparameters between steps. Refuse
                 // to re-configure (would reset m/v) and let the caller

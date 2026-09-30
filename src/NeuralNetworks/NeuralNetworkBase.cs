@@ -13740,6 +13740,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// reads the subclass field (metadata, serialization, custom training
     /// shortcuts) silently reports / persists the wrong optimizer.
     /// </remarks>
+    // Instance identity through object: the optimizer is interface-typed, and ReferenceEquals on an interface that a
+    // struct could implement is always false for boxed copies (CodeQL cs/reference-equality-on-valuetypes).
+    private static bool IsSameInstance(object? left, object? right) => ReferenceEquals(left, right);
+
     internal virtual void SetBaseTrainOptimizer(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
     {
         // A different optimizer is a different trajectory: the eager path starts it from its own (fresh) state, so
@@ -13748,7 +13752,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // and the single-plan commitment rule threw ("Fused compiled training has already run successfully, but
         // the current step cannot engage the fused path") - any Train after SetBaseTrainOptimizer on a model that
         // had already trained fused. Re-installing the SAME instance is not a switch and keeps its state.
-        if (!ReferenceEquals(_baseTrainOptimizer, optimizer))
+        if (!IsSameInstance(_baseTrainOptimizer, optimizer))
         {
             Training.CompiledTapeTrainingStep<T>.Invalidate(this);
             _fusedTrainingCommitted = false;
