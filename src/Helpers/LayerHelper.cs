@@ -11157,55 +11157,58 @@ public static partial class LayerHelper<T>
         int hiddenDim = 768,
         int numLayers = 12,
         int numHeads = 12,
-        int layoutDim = 768,
         int vocabSize = 30522,
         int numClasses = 7,
-        int maxPosition2D = 1024)
+        int maxPosition2D = 1024,
+        int channelShrinkRatio = 4)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int intermediateSize = hiddenDim * 4;
         int maxSequenceLength = 512;
+        // The layout flow is hidden / channel_shrink_ratio wide (LiLT-base: 768 / 4 = 192), and so is its FFN
+        // (reference LiltLayer: hidden_size and intermediate_size both divided by channel_shrink_ratio).
+        int layoutDim = hiddenDim / channelShrinkRatio;
+        int layoutIntermediate = intermediateSize / channelShrinkRatio;
 
         // Text embeddings stream. One block: word + LEARNED 1D position, no layout terms. Keeping
         // text and layout strictly apart is LiLT's contribution (Wang et al., ACL 2022) -- it is what
         // lets one pre-trained layout encoder pair with any language's text encoder -- so this stream
-        // is fed a bare token sequence and never sees a box. The sinusoidal PositionalEncodingLayer
-        // that used to sit here is SupportsTraining => false, where LiLT's RoBERTa-derived text side
-        // uses learned positions; the dead _textPositionEmbeddings field was the leftover of that.
+        // is fed a bare token sequence and never sees a box.
         yield return new LayoutEmbeddingLayer<T>(vocabSize, hiddenDim, maxSequenceLength, maxPosition2D);
 
-        // Layout embeddings stream: the paper embeds each coordinate through a LOOKUP TABLE, the same
-        // 2D scheme LayoutLM uses, not a Dense projection of the raw numbers. A Dense over raw box
-        // values makes the model read coordinates as magnitudes, so x=101 and x=100 are near-identical
-        // by construction and a page-relative position has to be re-learned as arithmetic; a table
-        // lets each bucket mean whatever the data says it means. The dead _spatialEmbeddings and
-        // _layoutPositionEmbeddings fields were exactly these tables, allocated and never read.
+        // Layout embeddings stream (reference LiltLayoutEmbeddings): six coordinate tables of hidden / 6,
+        // concatenated, a linear map to the layout width, a box position embedding, and LayerNorm.
         yield return LayerGraphContract.FromDerivedInput(
-            new LayoutEmbeddingLayer<T>(
-                vocabSize: 1, hiddenDim: layoutDim, maxSequenceLength: maxSequenceLength,
-                maxPosition2D: maxPosition2D, includeTokens: false),
-            "layout");
-        yield return new LayerNormalizationLayer<T>();
+            new LiltLayoutEmbeddingLayer<T>(hiddenDim, maxSequenceLength, maxPosition2D, channelShrinkRatio), "layout");
 
-        // Dual-stream transformer with BiACM
+        // Each block holds both flows. LiLT.RunDualStream wires them with BiACM: the text and layout attention
+        // scores are shared, with the text scores detached in the layout flow. Each flow has its own
+        // q/k/v/o projections (with biases), post-LN residual attention and FFN. A flow's first projection
+        // reads that flow, not the previous entry, so it is declared as a branch root.
         for (int i = 0; i < numLayers; i++)
         {
-            // Text stream attention
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), identityActivation);
+            yield return LayerGraphContract.FromDerivedInput(new DenseLayer<T>(hiddenDim, identityActivation), "text");
+            yield return LayerGraphContract.FromDerivedInput(new DenseLayer<T>(hiddenDim, identityActivation), "text");
+            yield return LayerGraphContract.FromDerivedInput(new DenseLayer<T>(hiddenDim, identityActivation), "text");
+            yield return new DenseLayer<T>(hiddenDim, identityActivation);
             yield return new LayerNormalizationLayer<T>();
-
-            // Layout stream attention
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (layoutDim) / (numHeads), identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-
-            // Feed-forward
             yield return new DenseLayer<T>(intermediateSize, geluActivation);
             yield return new DenseLayer<T>(hiddenDim, identityActivation);
             yield return new LayerNormalizationLayer<T>();
+
+            yield return LayerGraphContract.FromDerivedInput(new DenseLayer<T>(layoutDim, identityActivation), "layout");
+            yield return LayerGraphContract.FromDerivedInput(new DenseLayer<T>(layoutDim, identityActivation), "layout");
+            yield return LayerGraphContract.FromDerivedInput(new DenseLayer<T>(layoutDim, identityActivation), "layout");
+            yield return new DenseLayer<T>(layoutDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>();
+            yield return new DenseLayer<T>(layoutIntermediate, geluActivation);
+            yield return new DenseLayer<T>(layoutDim, identityActivation);
+            yield return new LayerNormalizationLayer<T>();
         }
 
-        yield return new DropoutLayer<T>(0.1);
+        // The token classifier reads the TEXT flow (reference LiltForTokenClassification: Linear(hidden_size)).
+        yield return LayerGraphContract.FromDerivedInput(new DropoutLayer<T>(0.1), "text");
         yield return new DenseLayer<T>(numClasses, identityActivation);
     }
 

@@ -116,7 +116,6 @@ internal static class ModelDefectBaselines
             "CreateDefaultGenreClassifierLayers",
             "CreateDefaultHTDemucsLayers",
             "CreateDefaultInvestLMLayers(NeuralNetworkArchitecture<T>, int, int, int, int, int, int, int, double)",
-            "CreateDefaultLiLTLayers",
             "CreateDefaultLLaVAMLPProjectorLayers",
             "CreateDefaultMatchaTTSLayers",
             "CreateDefaultMERTLayers",
