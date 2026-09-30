@@ -11798,7 +11798,8 @@ public static partial class LayerHelper<T>
     public static IEnumerable<ILayer<T>> CreateDefaultABINetLanguageLayers(
         int charsetSize,
         int visionDim = 512,
-        int languageDim = 512)
+        int languageDim = 512,
+        int languageLayers = 4)
     {
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
@@ -11842,8 +11843,12 @@ public static partial class LayerHelper<T>
         // its own prediction. The layer's UseCausalMask option is not a substitute: a triangular
         // mask would also remove all right-hand context and collapse the LM to unidirectional,
         // which is the very thing the paper's BCN exists to avoid.
-        yield return new ClozeAttentionLayer<T>(languageDim);
-        yield return new LayerNormalizationLayer<T>();
+        //
+        // The reference BCN (BCNLanguage) is a stack of languageLayers cross-attention-only decoder layers:
+        // position-only queries attend to the projected probabilities plus a positional encoding, under that
+        // diagonal location mask, each followed by a ReLU feed-forward, all post-norm. Paper: 512 wide,
+        // 8 heads, 2048 feed-forward, 4 layers.
+        yield return new BidirectionalClozeNetworkLayer<T>(languageDim, numHeads: 8, feedForwardDim: 2048, numLayers: languageLayers);
 
         // The gated fusion interpolates between the vision and language streams elementwise, so
         // both must be the same width. Project when the LM runs narrower or wider than the VM.

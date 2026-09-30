@@ -362,7 +362,8 @@ public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T
         _languageModelLayers.AddRange(LayerHelper<T>.CreateDefaultABINetLanguageLayers(
             charsetSize: charsetSize,
             visionDim: _visionDim,
-            languageDim: _languageDim));
+            languageDim: _languageDim,
+            languageLayers: _languageLayers));
 
         _fusionLayers.AddRange(LayerHelper<T>.CreateDefaultABINetFusionLayers(
             visionDim: _visionDim,

@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.ComputerVision.Detection.PostProcessing;
