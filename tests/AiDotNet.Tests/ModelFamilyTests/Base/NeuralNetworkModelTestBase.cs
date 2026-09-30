@@ -1259,8 +1259,44 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 : null;
 
         int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations * 3);
+        // DIAG (diag/efficientsam-intel): per-step recalibrated eval loss and per-layer checksums.
+        var diagTrace = System.Environment.GetEnvironmentVariable("AIDOTNET_DIAG_LOSS_TRACE");
+        static string DiagSum(Tensor<T> t) { double s = 0, a = 0; var span = t.ToArray(); foreach (var v in span) { double d = Convert.ToDouble(v); s += d; a += Math.Abs(d); } return $"n={span.Length} sum={s:G9} abs={a:G9}"; }
+        void DiagLayers(string tag, AiDotNet.NeuralNetworks.NeuralNetworkBase<T> net)
+        {
+            var d = new System.Text.StringBuilder();
+            var ps = net.GetParameters(); double pAbs = 0; for (int k = 0; k < ps.Length; k++) pAbs += Math.Abs(Convert.ToDouble(ps[k]));
+            d.AppendLine($"{tag} PARAMS count={ps.Length} abs={pAbs:G9} INPUT {DiagSum(input)}");
+            var h = input;
+            for (int li = 0; li < net.Layers.Count; li++)
+            {
+                try { h = net.Layers[li].Forward(h); d.AppendLine($"{tag} L{li:D3} {net.Layers[li].GetType().Name} {DiagSum(h)}"); }
+                catch (Exception ex) { d.AppendLine($"{tag} L{li:D3} CHAIN-BREAK {ex.GetType().Name}"); break; }
+            }
+            System.IO.File.AppendAllText(diagTrace + ".layers", d.ToString());
+        }
+        var diagLine = new System.Text.StringBuilder($"{GetType().Name} iterations={iterations} initialRaw={initialLoss:G9}");
+        if (diagTrace is not null && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> diagNet0)
+        {
+            RecalibrateBatchNormalization(diagNet0, input);
+            diagLine.Append($" 0:{MeasureLoss(network, input, network.Predict(input), target):G9}");
+            DiagLayers("STEP0", diagNet0);
+        }
         for (int i = 0; i < iterations; i++)
+        {
             network.Train(input, target);
+            if (diagTrace is not null && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> diagNet)
+            {
+                RecalibrateBatchNormalization(diagNet, input);
+                diagLine.Append($" {i + 1}:{MeasureLoss(network, input, network.Predict(input), target):G9}");
+                if (i == 0) DiagLayers("STEP1", diagNet);
+            }
+        }
+        if (diagTrace is not null && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> diagNetEnd)
+        {
+            DiagLayers("END", diagNetEnd);
+            System.IO.File.AppendAllText(diagTrace, diagLine + System.Environment.NewLine);
+        }
 
         // Measure final loss
         var finalOutput = network.Predict(input);

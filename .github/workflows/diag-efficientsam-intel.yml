@@ -1,0 +1,82 @@
+name: Diag EfficientSAM Intel
+
+# Temporary diagnostic for #2272: EfficientSAMTests.Training_ShouldReduceLoss fails (0.328 -> 1.542) on an
+# Intel Xeon 8573C (AVX-512) runner and passed on three AMD EPYC 7763 (AVX2) runners. Is that an AVX-512
+# kernel difference, or training that diverges on any summation order? Each probe records its CPU and runs
+# the test with the default ISA, with AVX-512 disabled, and with 256-bit vectors preferred.
+on:
+  push:
+    branches: ['diag/efficientsam-intel']
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_gcServer: 1
+  DOTNET_GCConserveMemory: 9
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - run: |
+          dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release
+          dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 -m:4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: bin
+          path: |
+            src/bin/Release/
+            tests/AiDotNet.Tests/bin/Release/
+            tests/AiDotNet.Tests/obj/
+          retention-days: 1
+
+  probe:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        sample: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        with:
+          name: bin
+      - name: Probe
+        shell: pwsh
+        run: |
+          $cpu = (Get-Content /proc/cpuinfo | Select-String '^model name\s*:\s*(.+)$' | Select-Object -First 1).Matches.Groups[1].Value
+          $avx512 = [bool] (Get-Content /proc/cpuinfo -Raw | Select-String 'avx512f')
+          $filter = 'FullyQualifiedName~Generated.EfficientSAMTests.Training_ShouldReduceLoss'
+          function Report([string] $Line) { Write-Host $Line; Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $Line }
+          New-Item -ItemType Directory -Path traces -Force | Out-Null
+          foreach ($run in @(
+              @{ Label = 'default'; Env = @{} },
+              @{ Label = 'avx512-off'; Env = @{ DOTNET_EnableAVX512F = '0' } },
+              @{ Label = 'vec256'; Env = @{ DOTNET_PreferredVectorBitWidth = '256' } })) {
+            $trace = "$PWD/traces/$($run.Label).txt"
+            $envs = $run.Env.Clone(); $envs['AIDOTNET_DIAG_LOSS_TRACE'] = $trace
+            foreach ($k in $envs.Keys) { Set-Item "Env:$k" $envs[$k] }
+            $out = & dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --no-build --no-restore --filter $filter 2>&1 | Out-String
+            foreach ($k in $envs.Keys) { Remove-Item "Env:$k" -ErrorAction SilentlyContinue }
+            $failed = $out -match 'Failed AiDotNet.Tests.ModelFamilyTests.Generated.EfficientSAMTests'
+            $msg = ([regex]::Match($out, 'Training did not reduce loss: [^\r\n]*')).Value
+            $line = if (Test-Path $trace) { (Get-Content $trace) -join ' ' } else { 'no trace' }
+            Report "RESULT cpu=[$cpu] avx512f=$avx512 run=$($run.Label) failed=$failed $msg"
+            Report "TRACE cpu=[$cpu] run=$($run.Label) $line"
+          }
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        if: always()
+        with:
+          name: traces-${{ matrix.sample }}
+          path: traces/
+          retention-days: 3
