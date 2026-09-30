@@ -101,7 +101,7 @@ public partial class FreqPromptAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
         for (int k = 0; k < _numComponents; k++)
             for (int d = 0; d < _paramDim; d++)
             {
-                double basis = Math.Cos(Math.PI * (k + 1) * (2 * d + 1) / (2.0 * _paramDim));
+                double basis = Math.Cos(Math.PI * (k + 1.0) * (2.0 * d + 1.0) / (2.0 * _paramDim));
                 _promptBasis[k * _paramDim + d] = NumOps.FromDouble(options.PromptInitScale * basis);
             }
 
