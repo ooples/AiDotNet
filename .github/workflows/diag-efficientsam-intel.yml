@@ -42,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sample: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        sample: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
@@ -60,7 +60,7 @@ jobs:
           function Report([string] $Line) { Write-Host $Line; Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $Line }
           New-Item -ItemType Directory -Path traces -Force | Out-Null
           foreach ($run in @(
-              @{ Label = 'default'; Env = @{} },
+              @{ Label = 'default'; Env = @{ AIDOTNET_DIAG_GRADCHECK = '1' } },
               @{ Label = 'avx512-off'; Env = @{ DOTNET_EnableAVX512F = '0' } },
               @{ Label = 'vec256'; Env = @{ DOTNET_PreferredVectorBitWidth = '256' } })) {
             $trace = "$PWD/traces/$($run.Label).txt"
@@ -73,7 +73,9 @@ jobs:
             $line = if (Test-Path $trace) { (Get-Content $trace) -join ' ' } else { 'no trace' }
             Report "RESULT cpu=[$cpu] avx512f=$avx512 run=$($run.Label) failed=$failed $msg"
             Report "TRACE cpu=[$cpu] run=$($run.Label) $line"
+            if (Test-Path "$trace.grad") { Report "GRAD cpu=[$cpu] run=$($run.Label) $((Get-Content "$trace.grad") -join ' ')" }
           }
+          exit 0
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         if: always()
         with:

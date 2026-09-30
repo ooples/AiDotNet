@@ -1281,6 +1281,46 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             RecalibrateBatchNormalization(diagNet0, input);
             diagLine.Append($" 0:{MeasureLoss(network, input, network.Predict(input), target):G9}");
             DiagLayers("STEP0", diagNet0);
+            if (System.Environment.GetEnvironmentVariable("AIDOTNET_DIAG_GRADCHECK") == "1")
+            {
+                // Directional check on a clone: is -g a descent direction of the training objective, and
+                // how large a step does the objective tolerate? Separates a wrong gradient from a step
+                // that is too large.
+                var probe = (AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)network.Clone();
+                probe.SetTrainingMode(true);
+                var g = new StringBuilderLite();
+                double l0 = Convert.ToDouble(probe.EvaluateTrainingObjective(input, target));
+                var grad = probe.ComputeGradients(input, target);
+                var theta = probe.GetParameters();
+                double gg = 0; int nonzero = 0;
+                for (int k = 0; k < grad.Length; k++) { double gk = Convert.ToDouble(grad[k]); gg += gk * gk; if (gk != 0) nonzero++; }
+                double gNorm = Math.Sqrt(gg);
+                g.Add($"GRADCHECK l0={l0:G9} gNorm={gNorm:G6} nonzero={nonzero}/{grad.Length}");
+                double l0Again = Convert.ToDouble(probe.EvaluateTrainingObjective(input, target));
+                g.Add($"l0again={l0Again:G9}");
+                foreach (double stepLen in new[] { 1e-4, 1e-3, 1e-2, 1e-1 })
+                {
+                    double alpha = stepLen / gNorm;
+                    var moved = new AiDotNet.Tensors.LinearAlgebra.Vector<T>(theta.Length);
+                    for (int k = 0; k < theta.Length; k++)
+                        moved[k] = NumOps.FromDouble(Convert.ToDouble(theta[k]) - alpha * Convert.ToDouble(grad[k]));
+                    probe.SetParameters(moved);
+                    double l = Convert.ToDouble(probe.EvaluateTrainingObjective(input, target));
+                    g.Add($"sgd|step|={stepLen:G2}: dL={l - l0:G6} predicted={-alpha * gg:G6}");
+                }
+                foreach (double lr in new[] { 2e-4, 2e-5 })
+                {
+                    var moved = new AiDotNet.Tensors.LinearAlgebra.Vector<T>(theta.Length);
+                    for (int k = 0; k < theta.Length; k++)
+                        moved[k] = NumOps.FromDouble(Convert.ToDouble(theta[k]) - lr * Math.Sign(Convert.ToDouble(grad[k])));
+                    probe.SetParameters(moved);
+                    double l = Convert.ToDouble(probe.EvaluateTrainingObjective(input, target));
+                    g.Add($"adam1 lr={lr:G2}: dL={l - l0:G6}");
+                }
+                probe.SetParameters(theta);
+                System.IO.File.AppendAllText(diagTrace + ".grad", g.ToString() + System.Environment.NewLine);
+                (probe as IDisposable)?.Dispose();
+            }
         }
         for (int i = 0; i < iterations; i++)
         {
@@ -7494,3 +7534,10 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 /// intermediate base such as <c>VisionLanguageTestBase&lt;float&gt;</c>).
 /// </summary>
 public abstract class NeuralNetworkModelTestBase : NeuralNetworkModelTestBase<double> { }
+
+internal sealed class StringBuilderLite
+{
+    private readonly System.Text.StringBuilder _sb = new();
+    public void Add(string part) { if (_sb.Length > 0) _sb.Append(' '); _sb.Append(part); }
+    public override string ToString() => _sb.ToString();
+}
