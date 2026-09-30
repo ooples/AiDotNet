@@ -18,6 +18,7 @@ public class NaturalSpeech3Options : EndToEndTtsOptions
             throw new ArgumentNullException(nameof(other));
 
         DiffusionDim = other.DiffusionDim;
+        WarmupSteps = other.WarmupSteps;
     }
 
     public NaturalSpeech3Options()
@@ -29,4 +30,15 @@ public class NaturalSpeech3Options : EndToEndTtsOptions
     }
 
     public int DiffusionDim { get; set; } = 256;
+
+    /// <summary>
+    /// Gets or sets the warmup length of the paper's AdamW recipe (inverse-square-root schedule).
+    /// </summary>
+    /// <value>Defaults to 5000, the paper's warmup.</value>
+    /// <remarks>
+    /// The recipe ramps the learning rate up to 1e-4 over this many steps, so a run far shorter than the
+    /// warmup barely trains. Lower it for short fine-tuning runs; leave it at the paper value to reproduce
+    /// the paper.
+    /// </remarks>
+    public int WarmupSteps { get; set; } = 5000;
 }

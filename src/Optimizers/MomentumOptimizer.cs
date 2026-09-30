@@ -391,7 +391,7 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
     private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeVelocity = new(TensorReferenceComparer<Tensor<T>>.Instance);
 
     /// <inheritdoc />
-    public override void Step(TapeStepContext<T> context)
+    protected override void StepCore(TapeStepContext<T> context)
     {
         PrepareTapeState(context);
 

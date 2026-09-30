@@ -12,7 +12,7 @@ namespace AiDotNet.Diffusion.Conditioning;
 /// advertised no configuration surface and nothing could be set through an options object.
 /// </para>
 /// </remarks>
-public class CLIPTextConditionerOptions : ModelHyperparameterOptions
+public class CLIPTextConditionerOptions : TextConditionerOptions
 {
     /// <summary>
     /// Gets or sets which published size of the model to build. Default: <c>CLIPVariant.ViTL14</c>.
@@ -32,12 +32,12 @@ public class CLIPTextConditionerOptions : ModelHyperparameterOptions
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <see cref="Variant"/> is an enum, so every value it can hold is buildable and there is
-    /// nothing to reject. The method exists so this class states that deliberately rather than by
-    /// omission.
+    /// <see cref="Variant"/> is an enum, so every value it can hold is buildable. The dimension
+    /// overrides are checked: each one that is set must be positive.
     /// </para>
     /// </remarks>
     public void Validate()
     {
+        ValidateDimensionOverrides();
     }
 }

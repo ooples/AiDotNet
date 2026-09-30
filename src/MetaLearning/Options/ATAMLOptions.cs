@@ -33,22 +33,22 @@ public class ATAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     public IEpisodicDataLoader<T, TInput, TOutput>? DataLoader { get; set; }
 
     /// <summary>
-    /// Dimension of the compressed gradient representation used as input to the attention network.
-    /// Default: 32.
+    /// The number of classes the softmax classifier discriminates between - the N of N-way learning.
     /// </summary>
-    public int AttentionDim { get; set; } = 32;
-
-    /// <summary>
-    /// Temperature for the attention softmax. Lower values produce sharper attention
-    /// (fewer parameters get high scaling). Default: 1.0.
-    /// </summary>
-    public double AttentionTemperature { get; set; } = 1.0;
-
-    /// <summary>
-    /// Entropy regularization weight on the attention distribution to prevent collapse.
-    /// Default: 0.01.
-    /// </summary>
-    public double AttentionEntropyWeight { get; set; } = 0.01;
+    /// <remarks>
+    /// <para>
+    /// Jiang et al. eq. 6 classifies the attended context with <c>softmax(c; theta_W)</c>, so the head needs an
+    /// output width. Default 5, the standard N-way few-shot setting the paper evaluates.
+    /// </para>
+    /// <para>
+    /// <b>What went away with the rewrite.</b> AttentionDim, AttentionTemperature and AttentionEntropyWeight
+    /// configured a mechanism the paper does not contain: the previous implementation bucketed the GRADIENT,
+    /// softmaxed it and used the result as per-parameter learning-rate multipliers, which is Meta-SGD rather
+    /// than ATAML. Eq. 5's attention is a raw inner product <c>alpha_t = theta_ATT . s_t</c> over the encoder's
+    /// states - there is no softmax over it, so no temperature and no entropy to regularise.
+    /// </para>
+    /// </remarks>
+    public int NumClasses { get; set; } = 5;
 
     public ATAMLOptions(IFullModel<T, TInput, TOutput> metaModel)
     { Guard.NotNull(metaModel); MetaModel = metaModel; }
@@ -59,9 +59,7 @@ public class ATAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
         OuterLearningRate > 0 &&
         AdaptationSteps > 0 &&
         MetaBatchSize > 0 &&
-        AttentionDim > 0 &&
-        AttentionTemperature > 0 &&
-        AttentionEntropyWeight >= 0;
+        NumClasses > 0;
     public IMetaLearnerOptions<T> Clone() => new ATAMLOptions<T, TInput, TOutput>(MetaModel)
     {
         LossFunction = LossFunction, MetaOptimizer = MetaOptimizer, InnerOptimizer = InnerOptimizer,
@@ -70,7 +68,6 @@ public class ATAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
         GradientClipThreshold = GradientClipThreshold, RandomSeed = RandomSeed, EvaluationTasks = EvaluationTasks,
         EvaluationFrequency = EvaluationFrequency, EnableCheckpointing = EnableCheckpointing,
         CheckpointFrequency = CheckpointFrequency, UseFirstOrder = UseFirstOrder,
-        AttentionDim = AttentionDim, AttentionTemperature = AttentionTemperature,
-        AttentionEntropyWeight = AttentionEntropyWeight
+        NumClasses = NumClasses
     };
 }

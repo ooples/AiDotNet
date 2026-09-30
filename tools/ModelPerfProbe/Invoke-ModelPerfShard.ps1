@@ -23,7 +23,14 @@ param(
     [int] $TimeoutSeconds = 180,
 
     [ValidateRange(1, 600)]
-    [int] $CleanupGraceSeconds = 30
+    [int] $CleanupGraceSeconds = 30,
+
+    # Per-fixture memory ceiling in bytes; 0 disables it. A fixture that outgrows the runner used to take the
+    # HOST down ("The runner has received a shutdown signal", exit 143): every other fixture in the shard was lost
+    # and the model that caused it was never named. Past the ceiling the fixture is killed and recorded as
+    # 'memory-limit' instead, so it fails on its own and the shard's other records survive.
+    [ValidateRange(0, [long]::MaxValue)]
+    [long] $MemoryLimitBytes = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -106,6 +113,11 @@ foreach ($testName in $assigned) {
     # module initializer, so setting this inside the test assembly is too late: it compiles hundreds
     # of OpenCL kernels before the fixture resets to CpuEngine, contaminating both memory and time.
     $process.StartInfo.Environment['AIDOTNET_DISABLE_GPU'] = '1'
+    if ($MemoryLimitBytes -gt 0) {
+        # Managed allocations fail with OutOfMemoryException below the ceiling, before the kernel has to pick a
+        # victim; the working-set watch below still catches native growth the GC limit cannot see.
+        $process.StartInfo.Environment['DOTNET_GCHeapHardLimit'] = ('{0:X}' -f [long]($MemoryLimitBytes * 0.85))
+    }
 
     Write-Host "[$([DateTimeOffset]::UtcNow.ToString('u'))] START $fixture"
     [void]$process.Start()
@@ -119,6 +131,7 @@ foreach ($testName in $assigned) {
     [long]$peakPrivateMemoryBytes = 0
     [double]$runnerCpuMs = 0
     $completed = $false
+    $memoryExceeded = $false
     while ($stopwatch.Elapsed.TotalSeconds -lt $TimeoutSeconds) {
         if ($process.WaitForExit(250)) {
             $completed = $true
@@ -127,11 +140,13 @@ foreach ($testName in $assigned) {
         try {
             $process.Refresh()
             $peakWorkingSetBytes = [Math]::Max($peakWorkingSetBytes, $process.WorkingSet64)
+            if ($MemoryLimitBytes -gt 0 -and $process.WorkingSet64 -gt $MemoryLimitBytes) { $memoryExceeded = $true }
             $peakPrivateMemoryBytes = [Math]::Max($peakPrivateMemoryBytes, $process.PrivateMemorySize64)
             $runnerCpuMs = [Math]::Max($runnerCpuMs, $process.TotalProcessorTime.TotalMilliseconds)
         } catch {
             # The process can exit between WaitForExit and Refresh. The next loop observes exit.
         }
+        if ($memoryExceeded) { break }
     }
 
     # The workload writes its result atomically before fixture/network disposal. Treat that durable
@@ -140,7 +155,7 @@ foreach ($testName in $assigned) {
     # as a compute timeout merely because a compacting LOH collection takes a few more seconds. A
     # fixture that has not produced its record at the deadline receives no grace and is killed below.
     $workloadCompletedAtDeadline = Test-Path -LiteralPath $recordPath
-    if (-not $completed -and $workloadCompletedAtDeadline) {
+    if (-not $completed -and -not $memoryExceeded -and $workloadCompletedAtDeadline) {
         $cleanupDeadlineMs = $stopwatch.Elapsed.TotalMilliseconds + ($CleanupGraceSeconds * 1000.0)
         while ($stopwatch.Elapsed.TotalMilliseconds -lt $cleanupDeadlineMs) {
             if ($process.WaitForExit(250)) {
@@ -150,17 +165,19 @@ foreach ($testName in $assigned) {
             try {
                 $process.Refresh()
                 $peakWorkingSetBytes = [Math]::Max($peakWorkingSetBytes, $process.WorkingSet64)
+            if ($MemoryLimitBytes -gt 0 -and $process.WorkingSet64 -gt $MemoryLimitBytes) { $memoryExceeded = $true }
                 $peakPrivateMemoryBytes = [Math]::Max($peakPrivateMemoryBytes, $process.PrivateMemorySize64)
                 $runnerCpuMs = [Math]::Max($runnerCpuMs, $process.TotalProcessorTime.TotalMilliseconds)
             } catch {
                 # The process can exit between WaitForExit and Refresh. The next loop observes exit.
             }
+            if ($memoryExceeded) { break }
         }
     }
     $status = 'ok'
     $exitCode = $null
     if (-not $completed) {
-        $status = if ($workloadCompletedAtDeadline) { 'cleanup-timeout' } else { 'timeout' }
+        $status = if ($memoryExceeded) { 'memory-limit' } elseif ($workloadCompletedAtDeadline) { 'cleanup-timeout' } else { 'timeout' }
         try { $process.Kill($true) } catch { Write-Warning "Could not kill $fixture process tree: $_" }
         $process.WaitForExit()
     } else {
@@ -184,6 +201,8 @@ foreach ($testName in $assigned) {
 
     if ($status -eq 'ok' -and $exitCode -ne 0) {
         $status = if ($exitCode -eq 1) { 'failed' } else { 'crashed' }
+        # The GC heap limit set above surfaces as a managed OutOfMemoryException: name it for what it is.
+        if ($MemoryLimitBytes -gt 0 -and ($standardOutput + $standardError) -match 'OutOfMemoryException') { $status = 'memory-limit' }
     }
 
     if ($status -ne 'ok' -or -not (Test-Path -LiteralPath $recordPath)) {
