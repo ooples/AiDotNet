@@ -111,6 +111,10 @@ jobs:
           })
           Write-Host "partition $($env:PARTITION): $($mine.Count) of $($classes.Count) class(es) on $cpu"
           if ($mine.Count -eq 0) { return }
+          # What every configuration must report: the comparator checks coverage against this, so a
+          # chunk that produced nothing cannot pass as agreement.
+          New-Item -ItemType Directory -Force -Path artifacts/cross-isa | Out-Null
+          $mine | ForEach-Object { "$_.MoreData_ShouldNotDegrade" } | Set-Content -LiteralPath artifacts/expected-tests.txt -Encoding utf8
 
           $configurations = [ordered]@{
             'default'    = @{}
@@ -123,16 +127,21 @@ jobs:
             for ($i = 0; $i -lt $mine.Count; $i += 25) {
               $chunk = $mine[$i..([Math]::Min($i + 24, $mine.Count - 1))]
               $classFilter = ($chunk | ForEach-Object { "FullyQualifiedName~$_." }) -join '|'
-              # A failing test is a verdict to compare, not an error of this step.
+              # A failing test is a verdict to compare, not an error of this step; a missing TRX is.
               & dotnet test $project -c Release -f net10.0 --no-build --no-restore `
                 --filter "($invariant)&($classFilter)" `
                 --logger "trx;LogFileName=$name-$i.trx" --results-directory "artifacts/cross-isa/$name" `
                 --blame-hang --blame-hang-timeout 10min --blame-hang-dump-type none | Out-Null
+              if (-not (Test-Path -LiteralPath "artifacts/cross-isa/$name/$name-$i.trx")) {
+                throw "configuration $name, chunk $i produced no TRX (dotnet test exited $LASTEXITCODE)"
+              }
             }
             foreach ($k in $knobs.Keys) { Remove-Item "Env:$k" -ErrorAction SilentlyContinue }
           }
 
-          ./.github/scripts/Compare-IsaVerdicts.ps1 -ResultsRoot artifacts/cross-isa -SummaryFile $env:GITHUB_STEP_SUMMARY
+          ./.github/scripts/Compare-IsaVerdicts.ps1 -ResultsRoot artifacts/cross-isa `
+            -ExpectedConfigurations @($configurations.Keys) -ExpectedTestsFile artifacts/expected-tests.txt `
+            -SummaryFile $env:GITHUB_STEP_SUMMARY
           if ($LASTEXITCODE -ne 0) { throw 'a model verdict depends on the instruction set (see the summary)' }
       - name: Upload results
         if: always()
