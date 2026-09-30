@@ -60,7 +60,7 @@ public partial class YOLOv11<T> : ObjectDetectorBase<T>, IDetectionTrainingModel
         // YOLO11's own architecture (yolo11.yaml): C3k2 stages, SPPF and C2PSA attention in the backbone,
         // C3k2 in the PAN neck. This was the YOLOv4/v5 CSPDarknet with an SPPF and a generic attention
         // block bolted onto every neck output, neither of which is YOLO11's design.
-        Backbone = new YOLOv11Backbone<T>(options.Size);
+        Backbone = new YOLOv11Backbone<T>(new YoloBackboneOptions { Size = options.Size });
         Neck = new YOLOv11Neck<T>(options.Size);
         _head = new YOLOv8Head<T>(Neck.LevelChannels.ToArray(), options.NumClasses);
 

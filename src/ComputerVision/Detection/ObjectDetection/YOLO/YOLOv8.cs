@@ -56,7 +56,7 @@ public partial class YOLOv8<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<
     {
         // YOLOv8's own backbone (Conv/C2f stages + SPPF) and PAN-FPN neck with C2f, at the size's
         // depth/width/max-channel scale. This ran a YOLOv4/v5-style CSPDarknet and a generic PANet.
-        Backbone = new YOLOv8Backbone<T>(options.Size);
+        Backbone = new YOLOv8Backbone<T>(new YoloBackboneOptions { Size = options.Size });
         Neck = new YOLOv8Neck<T>(options.Size);
 
         // The decoupled head reads each level at its own width (P3, P4, P5 differ in YOLOv8).

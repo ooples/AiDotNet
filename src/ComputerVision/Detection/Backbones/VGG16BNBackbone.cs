@@ -71,10 +71,12 @@ public partial class VGG16BNBackbone<T> : NeuralNetworkBase<T>, IDetectionBackbo
     public IReadOnlyList<int> Strides => new[] { 2, 4, 8, 16, 16 };
 
     /// <summary>Creates the backbone.</summary>
-    /// <param name="inChannels">Input image channels.</param>
-    public VGG16BNBackbone(int inChannels = 3)
-        : base(DetectionBackboneArchitecture<T>.Create(inChannels), new MeanSquaredErrorLoss<T>())
+    /// <param name="options">Input channels; defaults to three.</param>
+    public VGG16BNBackbone(VGG16BNBackboneOptions? options = null)
+        : base(DetectionBackboneArchitecture<T>.Create((options ??= new VGG16BNBackboneOptions()).InChannels),
+              new MeanSquaredErrorLoss<T>())
     {
+        options.Validate();
         _blocks = BlockChannels
             .Select(block => block
                 .Select(channels => (new ConvolutionalLayer<T>(channels, 3, 1, 1, (IActivationFunction<T>?)null),

@@ -27,9 +27,12 @@ param(
     # Where the built test output lives; the checkout itself unless testing against another build.
     [string] $BuildRoot = '',
     [string] $PlanFile = 'type-impact-plan.json',
-    # Job outputs are capped at 1 MB in total, and matrix and ledger_matrix carry the same shards;
-    # narrowed filters are un-narrowed, largest first, until both together fit under this.
-    [int] $MaxMatrixCharacters = 800000
+    # Job outputs are capped at 1 MB in total, measured in UTF-16 (two bytes per ASCII character), and
+    # matrix and ledger_matrix carry the same shards; narrowed filters are un-narrowed, largest first,
+    # until both together fit under this. 400,000 characters is ~800 KB, which leaves room for the job's
+    # other outputs. The former 800,000 counted characters as bytes: #2272's plan passed it and still
+    # failed the job with "Job outputs exceed 1,048,576 bytes".
+    [int] $MaxMatrixCharacters = 400000
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'

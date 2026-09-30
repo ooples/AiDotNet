@@ -333,11 +333,13 @@ public partial class C2PSABlock<T> : LayerBase<T>, IShapeContract
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public partial class YOLOv11Backbone<T> : YoloStagedBackboneBase<T>
 {
-    /// <summary>Creates the backbone at a model size.</summary>
-    public YOLOv11Backbone(ModelSize size = ModelSize.Nano, int inChannels = 3)
-        : base($"YOLOv11Backbone-{size}", inChannels)
+    /// <summary>Creates the backbone.</summary>
+    /// <param name="options">Model size and input channels; defaults to Nano over three channels.</param>
+    public YOLOv11Backbone(YoloBackboneOptions? options = null)
+        : base($"YOLOv11Backbone-{(options ??= new YoloBackboneOptions()).Size}", options.InChannels)
     {
-        var s = YoloScale.ForV11(size);
+        options.Validate();
+        var s = YoloScale.ForV11(options.Size);
         bool c3k = s.ForcesC3k;
         int c64 = s.Channels(64), c128 = s.Channels(128), c256 = s.Channels(256), c512 = s.Channels(512), c1024 = s.Channels(1024);
         int n = s.Repeats(2);

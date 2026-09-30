@@ -72,11 +72,13 @@ internal readonly record struct YoloScale(double Depth, double Width, int MaxCha
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
 public partial class YOLOv8Backbone<T> : YoloStagedBackboneBase<T>
 {
-    /// <summary>Creates the backbone at a model size.</summary>
-    public YOLOv8Backbone(ModelSize size = ModelSize.Nano, int inChannels = 3)
-        : base($"YOLOv8Backbone-{size}", inChannels)
+    /// <summary>Creates the backbone.</summary>
+    /// <param name="options">Model size and input channels; defaults to Nano over three channels.</param>
+    public YOLOv8Backbone(YoloBackboneOptions? options = null)
+        : base($"YOLOv8Backbone-{(options ??= new YoloBackboneOptions()).Size}", options.InChannels)
     {
-        var s = YoloScale.ForV8(size);
+        options.Validate();
+        var s = YoloScale.ForV8(options.Size);
         int c64 = s.Channels(64), c128 = s.Channels(128), c256 = s.Channels(256), c512 = s.Channels(512), c1024 = s.Channels(1024);
         AddStage(new YoloConv<T>(c64, 3, 2));                       // 0  P1/2
         AddStage(new YoloConv<T>(c128, 3, 2));                      // 1  P2/4

@@ -17,7 +17,7 @@ public sealed class YOLOv9NeckTests
     private static List<Tensor<double>> Features(int seed)
     {
         LayerInitializationSeedScope.ResetForModelConstruction(seed);
-        var backbone = new YOLOv9Backbone<double>(ModelSize.Nano);
+        var backbone = new YOLOv9Backbone<double>(new AiDotNet.ComputerVision.Detection.Backbones.YoloBackboneOptions { Size = ModelSize.Nano });
         var image = new Tensor<double>(new[] { 1, 3, 64, 64 });
         for (int i = 0; i < image.Length; i++) image[i] = (i % 23) / 23.0;
         return backbone.ExtractFeatures(image);
