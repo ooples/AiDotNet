@@ -42,7 +42,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        sample: [1, 2]
+        sample: [1]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
@@ -62,6 +62,11 @@ jobs:
           $env:AIDOTNET_DIAG_LOSS_TRACE = "$PWD/traces/bn"
           $bnOut = & dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --no-build --no-restore --filter 'FullyQualifiedName~Diag.BatchNormTrainingGradientDiag' 2>&1 | Out-String
           Remove-Item Env:AIDOTNET_DIAG_LOSS_TRACE
+          $env:AIDOTNET_DIAG_LOSS_TRACE = "$PWD/traces/esam"
+          $dOut = & dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --no-build --no-restore --filter 'FullyQualifiedName~Diag.EfficientSAMDescentDiag' 2>&1 | Out-String
+          Remove-Item Env:AIDOTNET_DIAG_LOSS_TRACE
+          if (Test-Path "$PWD/traces/esam.descent") { Get-Content "$PWD/traces/esam.descent" | ForEach-Object { Report "cpu=[$cpu] $_" } } else { Report 'no descent output'; Write-Host $dOut }
+          exit 0
           if (Test-Path "$PWD/traces/bn.gradfd") { Get-Content "$PWD/traces/bn.gradfd" | ForEach-Object { Report "cpu=[$cpu] $_" } } else { Report "no gradfd output"; Write-Host $bnOut }
           foreach ($run in @(
               @{ Label = 'default'; Env = @{ AIDOTNET_DIAG_GRADCHECK = '1' } },
