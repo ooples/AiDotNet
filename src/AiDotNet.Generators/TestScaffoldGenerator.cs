@@ -3858,6 +3858,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // each production options type retains its paper-faithful ImageSize default.
         => className == "FlamingoNeuralNetwork" ? 32
          : className == "MiniGPT4" ? 28
+         // KOSMOS-1/2: a CLIP ViT with patch 14; 28 px is the smallest image with a 2x2 patch grid.
+         : className is "KOSMOS1" or "KOSMOS2" ? 28
          // SAM, SAM21, SlimSAM, MaskAdapter and Mask2Former are deliberately NOT in this list.
          // Their constructor overrides pin 112 (SAM, SAM21) and 128 (the other three), and this arm
          // shadows the IsPatchVisionModel branch below, so listing them here fed a 32px fixture to a
@@ -4332,7 +4334,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// shape-mismatch this contract prevents.
     /// </summary>
     private static bool IsTokenConsumingVisionLanguageModel(string className)
-        => className is "GPT4Point" or "Helix" or "Octo" or "ViLT" or "Florence2" or "KOSMOS1" or "KOSMOS2"
+        => className is "GPT4Point" or "Helix" or "Octo" or "ViLT" or "Florence2"
+            // KOSMOS-1/2 are NOT here: their rebuilt CLIP ViT reads raw [3, H, W] images (Huang et al. 2023; Peng et al. 2023).
             // Encoder-decoder VLM family (AiDotNet.VisionLanguage.Generative.*) built from
             // CreateDefaultEncoderDecoderVLMLayers: a ViT encoder (LayerNormalization + vision
             // MultiHeadAttention(VisionDim) blocks) -> projection -> autoregressive decoder. Like
@@ -4386,9 +4389,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // 768, 12+12 transformer layers, ~93M params) whose per-step CPU cost times out MoreData.
             // The [1,4,16] token InputShape stays in lockstep with that smoke OctoOptions width.
             "Octo" => 16,
-            // Both KOSMOS fixtures are constructed at 32-wide census/test scale above; production
-            // options remain 1024-wide. The emitted token input must follow the fixture constructor.
-            "KOSMOS1" or "KOSMOS2" => 32,
             // Encoder-decoder VLMs (PaLI/PaLI-X/PaLI-3/CoCa/GIT) are built at CI-smoke width
             // VisionDim=128 (their paper defaults are 768-4096, PaLI-X = 55B params, OOM on
             // construction). Keep the [1,4,128] token InputShape in lockstep with that config.
@@ -4918,13 +4918,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     ? "EnableGroundingTokens = true, NumLocationBins = 16, "
                     : string.Empty;
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputSize: 32, outputSize: 32), " +
+                    "inputHeight: 28, inputWidth: 28, inputDepth: 3, outputSize: 64), " +
                     $"new {kosmosOptionsType} {{ {kosmosSpecific}" +
-                    "ImageSize = 32, VisionDim = 32, DecoderDim = 32, NumVisionLayers = 1, " +
-                    "NumDecoderLayers = 1, NumHeads = 4, VocabSize = 64, MaxSequenceLength = 16, " +
-                    "MaxGenerationLength = 8, DropoutRate = 0.0 })";
+                    "ImageSize = 28, PatchSize = 14, VisionDim = 32, VisionHeads = 4, DecoderDim = 32, NumVisionLayers = 1, " +
+                    "NumDecoderLayers = 1, NumHeads = 4, DecoderFeedForwardDim = 64, NumImageTokens = 4, VocabSize = 64, MaxSequenceLength = 16, " +
+                    "MaxGenerationLength = 8, DropoutRate = 0.0" + (model.ClassName == "KOSMOS1" ? ", ResamplerDepth = 1" : string.Empty) + " })";
             }
             else if (model.ClassName == "Phi3Vision" && model.TypeParameterCount == 1)
             {

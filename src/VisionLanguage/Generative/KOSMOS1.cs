@@ -72,17 +72,16 @@ public partial class KOSMOS1<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
 {
     private readonly KOSMOS1Options _options;
 
+    /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
-    private bool _useNativeMode;
+    private readonly bool _useNativeMode;
+    private KosmosModelCore<T>? _core;
     private bool _disposed;
 
-    // Decoder layers live outside Layers as an auxiliary stream so the
-    // inherited Predict / TrainWithTape walk only the vision encoder.
-    private readonly List<ILayer<T>> _decoderLayers = new List<ILayer<T>>();
-
+    /// <summary>Creates the model backed by an ONNX export.</summary>
     public KOSMOS1(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
@@ -106,6 +105,7 @@ public partial class KOSMOS1<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
         InitializeLayers();
     }
 
+    /// <summary>Creates a trainable native model.</summary>
     public KOSMOS1(
         NeuralNetworkArchitecture<T> architecture,
         KOSMOS1Options? options = null,
@@ -117,8 +117,8 @@ public partial class KOSMOS1<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
         SyncImageSizeWithArchitecture();
         _useNativeMode = true;
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
@@ -134,34 +134,34 @@ public partial class KOSMOS1<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
             _options.ImageSize = h;
     }
 
+    /// <inheritdoc/>
     public int EmbeddingDimension => _options.DecoderDim;
     int IVisualEncoder<T>.ImageSize => _options.ImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
+
+    /// <inheritdoc/>
     public int MaxGenerationLength => _options.MaxGenerationLength;
+
+    /// <inheritdoc/>
     public int DecoderEmbeddingDim => _options.DecoderDim;
 
+    private KosmosModelCore<T> Core => _core ?? throw new NotSupportedException("KOSMOS-1 is in ONNX mode; the native model is not built.");
+
+    /// <summary>The <c>NumImageTokens</c> image embeddings the decoder reads, <c>[NumImageTokens, DecoderDim]</c>.</summary>
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null)
-            return L2Normalize(OnnxModel.Run(p));
-        var c = p;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return L2Normalize(c);
+            return OnnxModel.Run(p);
+        SetTrainingMode(false);
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return Core.ImageEmbeddings(p);
     }
 
     /// <summary>
-    /// Generates text using KOSMOS-1's unified multimodal causal LM architecture.
-    /// KOSMOS-1 (Huang et al., 2023) uses:
-    /// (1) CLIP ViT image encoder extracts visual feature tokens,
-    /// (2) Linear projection maps visual tokens into the same embedding space as text,
-    /// (3) Unified sequence: &lt;s&gt; &lt;image&gt; vis_1 ... vis_N &lt;/image&gt; text_1 ... text_M,
-    ///     where special tokens delimit the image region in the sequence,
-    /// (4) Causal transformer decoder processes the entire mixed-modality sequence
-    ///     with standard causal attention (no separate cross-attention),
-    /// (5) Trained on interleaved web data for multimodal in-context learning.
+    /// Greedy generation after <c>&lt;s&gt; &lt;image&gt; [image] &lt;/image&gt;</c> and the prompt; returns the generated
+    /// token ids (ending at EOS or after <c>MaxGenerationLength</c> tokens).
     /// </summary>
     public Tensor<T> GenerateFromImage(Tensor<T> image, string? prompt = null)
     {
@@ -169,150 +169,99 @@ public partial class KOSMOS1<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
         var p = PreprocessImage(image);
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(p);
-
-        // Step 1: CLIP ViT vision encoder + linear projection
-        var visionOut = p;
-        foreach (var l in Layers)
-            visionOut = l.Forward(visionOut);
-
-        // Step 2: Tokenize prompt
-        Tensor<T>? promptTokens = null;
-        if (prompt is not null)
-            promptTokens = TokenizeText(prompt);
-
-        // Step 3: Build unified multimodal sequence [visual_tokens | text_tokens]
-        var decoderInput = visionOut;
-        if (promptTokens is not null)
-            decoderInput = visionOut.ConcatenateTensors(promptTokens);
-
-        // Step 4: Causal transformer decoder
-        var output = decoderInput;
-        foreach (var l in _decoderLayers)
-            output = l.Forward(output);
-
-        return output;
+        SetTrainingMode(false);
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return Core.Generate(p, prompt is null ? Array.Empty<int>() : TokenizeText(prompt));
     }
 
+    /// <summary>Next-token logits <c>[NumImageTokens + 3 + prompt, VocabSize]</c> for an image and prompt token ids.</summary>
+    public Tensor<T> PredictTokens(Tensor<T> image, IReadOnlyList<int> promptIds)
+    {
+        ThrowIfDisposed();
+        if (promptIds is null) throw new ArgumentNullException(nameof(promptIds));
+        SetTrainingMode(false);
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return Core.Logits(PreprocessImage(image), promptIds);
+    }
+
+    /// <summary>Trains on one image and its caption token ids (next-token cross-entropy on the caption).</summary>
+    public void TrainCaption(Tensor<T> image, IReadOnlyList<int> captionIds)
+    {
+        if (captionIds is null) throw new ArgumentNullException(nameof(captionIds));
+        var target = new Tensor<T>(new[] { captionIds.Count });
+        for (int i = 0; i < captionIds.Count; i++) target[i] = NumOps.FromDouble(captionIds[i]);
+        Train(image, target);
+    }
+
+    /// <inheritdoc/>
     protected override void InitializeLayers()
     {
         if (!_useNativeMode)
             return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            // KOSMOS1 has two trainable streams (vision in Layers,
-            // causal decoder in _decoderLayers). A flat caller-supplied
-            // Architecture.Layers list can't be unambiguously split — the
-            // decoder layer count is encoded in KOSMOS1Options
-            // (NumDecoderLayers), and this branch would silently leave
-            // _decoderLayers empty so GenerateFromImage returns vision
-            // projection without ever running the autoregressive
-            // decoder. Reject so the caller uses the default factory
-            // path (or overrides streams post-construction).
-            throw new System.NotSupportedException(
-                "Custom Architecture.Layers is not supported for KOSMOS1: the model has two "
-                    + "separable trainable streams (vision, causal decoder) and a flat layer list "
-                    + "cannot be split unambiguously. Use the default factory (no Architecture.Layers) "
-                    + "and override streams post-construction if needed."
-            );
-        }
-
-        // CreateDefaultCausalMultimodalLayers emits:
-        //   [pre-norm + N×vision-block + (optional projection), M×decoder-block]
-        // Block size = 5 (or 6 with dropout).
-        int blockSize = _options.DropoutRate > 0 ? 6 : 5;
-        // Vision-side leading layers = input-projection Dense + LayerNorm (2). The factory now emits an
-        // input feature projection before the vision LayerNorm (see CreateDefaultCausalMultimodalLayers),
-        // so the split index accounts for both, not just the LayerNorm.
-        int visionLayerEnd =
-            2
-            + _options.NumVisionLayers * blockSize
-            + (_options.VisionDim != _options.DecoderDim ? 1 : 0);
-
-        var allLayers = LayerHelper<T>.CreateDefaultCausalMultimodalLayers(
-            _options.VisionDim,
-            _options.DecoderDim,
-            _options.NumVisionLayers,
-            _options.NumDecoderLayers,
-            _options.NumHeads,
-            _options.DropoutRate
-        );
-
-        int idx = 0;
-        foreach (var layer in allLayers)
-        {
-            if (idx < visionLayerEnd)
-                Layers.Add(layer);
-            else
-                _decoderLayers.Add(layer);
-            idx++;
-        }
-
-        RegisterAuxiliaryEncoderStream(_decoderLayers);
+            throw new NotSupportedException(
+                "Custom Architecture.Layers is not supported for KOSMOS-1: its vision encoder, resampler and decoder " +
+                "exchange image embeddings through the token sequence, which a flat layer list cannot express.");
+        _core = new KosmosModelCore<T>(_options, true, _options.ResamplerDepth, KosmosPositionEncoding.XPos);
+        Layers.AddRange(_core.Layers());
     }
 
-    private Tensor<T> TokenizeText(string text)
+    private int[] TokenizeText(string text)
     {
         if (_tokenizer is null)
             throw new InvalidOperationException("Tokenizer not initialized.");
-        var encoding = _tokenizer.Encode(text);
-        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
+        return _tokenizer.Encode(text).TokenIds.Take(_options.MaxSequenceLength).ToArray();
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// An image in; next-token logits for <c>&lt;s&gt; &lt;image&gt; [image] &lt;/image&gt;</c> out,
+    /// <c>[NumImageTokens + 3, VocabSize]</c>. The last row is the distribution of the caption's first token.
+    /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
         SetTrainingMode(false);
-        var c = PreprocessImage(input);
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+        return Core.Logits(PreprocessImage(input), Array.Empty<int>());
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <paramref name="expected"/> is either caption token ids <c>[T]</c> (next-token cross-entropy on the caption,
+    /// the pre-training objective) or a <c>[NumImageTokens + 3, VocabSize]</c> soft target over
+    /// <see cref="PredictCore"/>'s positions.
+    /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        // Pass _optimizer through to TrainWithTape so the configured (or
-        // defaulted) AdamW is used instead of the base class's
-        // GetOrCreateBaseOptimizer default Adam at lr=1e-3. See
-        // BridgeTower.Train for full rationale.
-        try
-        {
-            TrainWithTape(PreprocessImage(input), expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (expected is null) throw new ArgumentNullException(nameof(expected));
+        var core = Core;
+        TrainWithCustomObjective(PreprocessImage(input), expected, (image, target) => core.Loss(image, target), _optimizer);
     }
 
-    /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    /// <summary>
+    /// Parameters cannot be written while the model is backed by a loaded ONNX graph.
+    /// </summary>
     protected override bool SupportsParameterMutation => _useNativeMode;
-    // This forwarded to a helper the base now calls from its own
-    // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
+    /// <inheritdoc/>
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
+    /// <inheritdoc/>
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "KOSMOS-1-Native" : "KOSMOS-1-ONNX",
-            Description =
-                "KOSMOS-1: Language Is Not All You Need: Aligning Perception with Language Models (Huang et al., 2023)",
+            Description = "KOSMOS-1: Language Is Not All You Need: Aligning Perception with Language Models (Huang et al., 2023)",
             FeatureCount = _options.DecoderDim,
             Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
         };
@@ -321,16 +270,13 @@ public partial class KOSMOS1<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
         return m;
     }
 
-
-
-
-
     private void ThrowIfDisposed()
     {
         if (_disposed)
             throw new ObjectDisposedException(GetType().FullName ?? nameof(KOSMOS1<T>));
     }
 
+    /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
         if (_disposed)
@@ -338,10 +284,7 @@ public partial class KOSMOS1<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
         _disposed = true;
         if (disposing)
         {
-            // OnnxModel is allocated by the ONNX-mode constructor and
-            // wraps a native ONNX Runtime session — without disposing it
-            // here, repeated create/dispose cycles leak unmanaged session
-            // memory.
+            // OnnxModel wraps a native ONNX Runtime session; dispose it so create/dispose cycles do not leak.
             OnnxModel?.Dispose();
         }
         base.Dispose(disposing);

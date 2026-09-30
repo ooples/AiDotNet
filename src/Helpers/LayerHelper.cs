@@ -25312,66 +25312,6 @@ public static partial class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates default layers for causal multimodal LLMs (KOSMOS-1, KOSMOS-2).
-    /// Architecture: ViT encoder + projection -> causal transformer decoder with interleaved visual tokens.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultCausalMultimodalLayers(
-        int visionDim = 1024,
-        int decoderDim = 2048,
-        int numVisionLayers = 24,
-        int numDecoderLayers = 24,
-        int numHeads = 32,
-        double dropoutRate = 0.1)
-    {
-        IActivationFunction<T> geluActivation = new GELUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-        int visionFfnDim = visionDim * 4;
-        int decoderFfnDim = decoderDim * 4;
-
-        // === Vision Encoder (CLIP ViT) ===
-        // Input feature projection (the ViT patch/feature embedding): map the incoming embedding to
-        // visionDim so the vision blocks — built at visionDim — receive a correctly-sized input.
-        // Without it the first vision MultiHeadAttention (weights [visionDim, visionDim]) throws on any
-        // input whose last dim != visionDim, which is the KOSMOS1/KOSMOS2 whole-class crash
-        // "Input embedding dimension (N) does not match weight dimension (visionDim)". Mirrors the
-        // leading Dense projection in CreateDefaultProprietaryAPILayers.
-        yield return new DenseLayer<T>(visionDim, identityActivation);
-        yield return new LayerNormalizationLayer<T>();
-
-        for (int i = 0; i < numVisionLayers; i++)
-        {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (visionDim) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(visionFfnDim, geluActivation);
-            yield return new DenseLayer<T>(visionDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-        }
-
-        // === Projection to decoder dim ===
-        if (visionDim != decoderDim)
-            yield return new DenseLayer<T>(decoderDim, identityActivation);
-
-        // === Causal Transformer Decoder (processes interleaved visual + text tokens) ===
-        for (int i = 0; i < numDecoderLayers; i++)
-        {
-            // Causal self-attention
-            var decoderAttn = new MultiHeadAttentionLayer<T>(numHeads, (decoderDim) / (numHeads));
-            decoderAttn.UseCausalMask = true;
-            yield return decoderAttn;
-            yield return new LayerNormalizationLayer<T>();
-            // Cross-attention to vision features
-            yield return new CrossAttentionLayer<T>(decoderDim, visionDim, numHeads);
-            yield return new LayerNormalizationLayer<T>();
-            // Feed-forward
-            yield return new DenseLayer<T>(decoderFfnDim, geluActivation);
-            yield return new DenseLayer<T>(decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-        }
-    }
-
-    /// <summary>
     /// Creates default layers for unified generation VLMs (Emu, Emu2, Emu3).
     /// Architecture: EVA-CLIP encoder -> LLM decoder -> visual regression head.
     /// </summary>
