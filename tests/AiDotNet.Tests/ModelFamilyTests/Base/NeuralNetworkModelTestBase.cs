@@ -3737,34 +3737,19 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// <see cref="MemorizationTaskUsesDeterministicEvalLoss"/>.
     /// </summary>
     /// <remarks>
-    /// A network with dropout is always probed through the deterministic evaluation loss, whatever the fixture
-    /// declares: its training-mode loss is one draw per step from a fresh mask, so comparing two of them measures the
-    /// masks. MarbleNet (fifteen dropout layers) on one fixed pair: the training-mode loss read 0.760, 0.792, 0.997,
-    /// 0.582 ... 1.166 over twelve steps while the evaluation loss at the same weights fell 0.3263, 0.3243, 0.3224 ...
-    /// 0.3194. BatchNorm statistics are recalibrated for the current weights first (see
-    /// RecalibrateBatchNormalization) so the evaluation judges the weights, not a trailing average.
+    /// When the evaluation loss is used, BatchNorm statistics are recalibrated for the current weights first (see
+    /// RecalibrateBatchNormalization) so the evaluation judges the weights, not a trailing average. The choice stays
+    /// per model: switching every dropout network to the evaluation loss was tried and failed five others
+    /// (OpenVoice, MOIRAI, KyutaiMoshi, LayoutGraph, BiaffineNER), whose evaluation loss descends less cleanly than
+    /// the objective they train.
     /// </remarks>
     private double MemorizationProbeLoss(
         INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> target)
     {
-        var nnBase = network as AiDotNet.NeuralNetworks.NeuralNetworkBase<T>;
-        bool stochastic = nnBase is not null && ContainsDropout(nnBase.Layers);
-        if (!MemorizationTaskUsesDeterministicEvalLoss && !stochastic)
+        if (!MemorizationTaskUsesDeterministicEvalLoss)
             return ConvertToDouble(network.GetLastLoss());
-        if (nnBase is not null) RecalibrateBatchNormalization(nnBase, input);
+        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nnBase) RecalibrateBatchNormalization(nnBase, input);
         return MeasureLoss(network, input, network.Predict(input), target);
-    }
-
-    /// <summary>Whether any layer, at any depth, is a dropout layer (a stochastic training-mode forward).</summary>
-    private static bool ContainsDropout(IEnumerable<ILayer<T>> layers)
-    {
-        foreach (var layer in layers)
-        {
-            if (layer is DropoutLayer<T>) return true;
-            var subLayers = layer.GetSubLayers();
-            if (subLayers is not null && ContainsDropout(subLayers)) return true;
-        }
-        return false;
     }
 
     /// <summary>

@@ -691,6 +691,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // trained parameters in evaluation mode; the strict 1% decrease and 20 updates remain.
             { "DeepAR", new WarmupIterationOverride(deterministicMemorizationLoss: true) },
 
+            // MarbleNet inserts a DropoutLayer after every one of its fifteen separable sub-blocks. On one fixed pair its
+            // training-mode loss read 0.760, 0.792, 0.997, 0.582 ... 1.166 over twelve steps - one draw per fresh mask -
+            // while the evaluation loss at the same weights fell 0.3263, 0.3243, 0.3224 ... 0.3194. Same remedy as above.
+            { "MarbleNet", new WarmupIterationOverride(deterministicMemorizationLoss: true) },
+
             // NaturalSpeech: the same shape, over a LONGER warm-up, and on every repeated-training
             // probe rather than just one. Measured evaluation loss on a fixed pair, from untrained:
             //   0.253 | 0.267, 0.292, 0.294, 0.281, 0.294, 0.301, 0.279, 0.249, 0.207, 0.175, 0.173
