@@ -348,8 +348,8 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     }
 
     /// <summary>
-    /// When true, a training-mode forward REPLACES the running statistics with this batch's statistics instead of
-    /// folding them in with the momentum.
+    /// When true, every forward normalizes with this batch's statistics and REPLACES the running statistics with them
+    /// instead of folding them in with the momentum - regardless of the layer's training mode.
     /// </summary>
     /// <remarks>
     /// This is PyTorch's <c>torch.optim.swa_utils.update_bn</c> for a single batch: it re-estimates the statistics
@@ -802,7 +802,10 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         // GraFPrint's [1, 32, 32, 32] and FastSAM's [1, 8, 8, 8] (W == C) were normalized across WIDTH, with
         // gamma indexed by column. Rank 3 is genuinely ambiguous ([B, T, F] vs [C, H, W]) and keeps the
         // trailing-axis rule, with the declared Layout as the override.
-        bool canonicalChannelsFirst = input.Rank >= 4 && input.Shape[1] == featureSize;
+        // An explicit ChannelsLast declaration wins over the heuristic: when both axis 1 and the trailing axis
+        // equal featureSize, the declared layout is the only thing that says which one the features are on.
+        bool channelsLastDeclared = Layout == BatchNormDataLayout.ChannelsLast;
+        bool canonicalChannelsFirst = !channelsLastDeclared && input.Rank >= 4 && input.Shape[1] == featureSize;
         if (!channelsFirstDeclared && !canonicalChannelsFirst && input.Rank >= 3 && featureSize > 0
             && input.Shape[^1] == featureSize)
         {
@@ -848,7 +851,10 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         int valuesPerFeature = featureSize > 0 && input.Length % featureSize == 0
             ? input.Length / featureSize
             : (input.Rank > 0 ? input.Shape[0] : 1);
-        if (IsTrainingMode && valuesPerFeature > 1)
+        // Recalibration (OverwriteRunningStatistics) takes the batch-statistics branch whatever the layer's mode, so
+        // a caller that forces evaluation mode mid-forward (several PredictCore overrides do) cannot silently turn a
+        // recalibration pass into an ordinary inference pass over stale statistics.
+        if ((IsTrainingMode || OverwriteRunningStatistics) && valuesPerFeature > 1)
         {
             // Training: Use Engine.BatchNorm to compute batch stats and normalize
             // This is fully GPU accelerated
