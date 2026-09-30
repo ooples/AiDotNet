@@ -1013,7 +1013,7 @@ public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         // BiACM needs token-aligned flows (one box per token) so the [heads, seq, seq] score matrices are
         // addable, which is the paper's assumption. With mismatched lengths the flows run independently.
         bool coupled = sl is not null && seqL == seqT;
-        var textScores = coupled && sl is not null ? Engine.TensorAdd(st, sl) : st;
+        var textScores = sl is not null && seqL == seqT ? Engine.TensorAdd(st, sl) : st;
         var textContext = Layers[baseIdx + 3].Forward(MergeHeads(Engine.BatchMatMul(Engine.Softmax(textScores, axis: -1), vt), seqT, _hiddenDim));
         text = Layers[baseIdx + 4].Forward(Engine.TensorAdd(text, textContext));
         text = Layers[baseIdx + 7].Forward(Engine.TensorAdd(text, Layers[baseIdx + 6].Forward(Layers[baseIdx + 5].Forward(text))));

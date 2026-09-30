@@ -378,7 +378,8 @@ internal static class DetrEmbeddings
                 int row = ((y * width) + x) * numPosFeats * 2;
                 for (int i = 0; i < numPosFeats; i++)
                 {
-                    double dim = Math.Pow(temperature, 2.0 * (i / 2) / numPosFeats);
+                    int pair = i / 2; // dim_t // 2 in the reference: sin and cos share each frequency
+                    double dim = Math.Pow(temperature, 2.0 * pair / numPosFeats);
                     result[row + i] = (i % 2 == 0) ? Math.Sin(yEmbed / dim) : Math.Cos(yEmbed / dim);
                     result[row + numPosFeats + i] = (i % 2 == 0) ? Math.Sin(xEmbed / dim) : Math.Cos(xEmbed / dim);
                 }
@@ -405,7 +406,8 @@ internal static class DetrEmbeddings
                 int offset = (b * feats * 4) + (part * feats);
                 for (int i = 0; i < feats; i++)
                 {
-                    double dim = Math.Pow(10000, 2.0 * (i / 2) / feats);
+                    int pair = i / 2; // dim_t // 2 in the reference: sin and cos share each frequency
+                    double dim = Math.Pow(10000, 2.0 * pair / feats);
                     result[offset + i] = (i % 2 == 0) ? Math.Sin(embed / dim) : Math.Cos(embed / dim);
                 }
             }

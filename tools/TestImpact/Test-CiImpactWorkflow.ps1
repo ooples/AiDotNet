@@ -770,7 +770,7 @@ foreach ($k in 0..7) {
 }
 [void] $expectedInventoryShards.Add(@{ Name = 'Sweep - ParameterChunkParityTests'; Filter = 'FullyQualifiedName~ParameterChunkParityTests'; Env = @(); MustCover = 'src/NeuralNetworks/Layers/*' })
 [void] $expectedInventoryShards.Add(@{ Name = 'Sweep - ParameterEnumerationParityTests'; Filter = 'FullyQualifiedName~ParameterEnumerationParityTests'; Env = @() })
-foreach ($offset in (0..34 | ForEach-Object { $_ * 5 })) {
+foreach ($offset in (0..33 | ForEach-Object { $_ * 5 })) {
     [void] $expectedInventoryShards.Add(@{
         Name = "Conformance - VisionLanguage offset $offset"; Filter = 'FullyQualifiedName~ModelContractConformanceTests'
         MustCover = '*/VisionLanguage/*'
@@ -909,8 +909,8 @@ foreach ($workflowFile in @(Get-ChildItem -LiteralPath (Split-Path -Parent $Vali
 # closes the other direction: no shard OUTSIDE that set can carry the flag either.
 $workerBackedCount = @($expectedInventoryShards | Where-Object { $_.ContainsKey('MustCover') }).Count
 $nightlyOnlyEntries = [regex]::Matches((Get-Content -LiteralPath $ShardManifest -Raw), '(?m)^    nightlyOnly: true[ \t]*\r?$').Count
-Assert-Contract ($workerBackedCount -eq 46 -and $nightlyOnlyEntries -eq $workerBackedCount) `
-    "expected nightlyOnly on exactly the 46 worker-backed sweep shards; found $nightlyOnlyEntries entries for $workerBackedCount worker-backed shards"
+Assert-Contract ($workerBackedCount -eq 45 -and $nightlyOnlyEntries -eq $workerBackedCount) `
+    "expected nightlyOnly on exactly the 45 worker-backed sweep shards; found $nightlyOnlyEntries entries for $workerBackedCount worker-backed shards"
 Assert-Contract ($shardRun.Contains('SHARD_COVERAGE_INCLUDE: ${{ matrix.shard.coverageIncludeDirectory }}') -and
         $shardRun.Contains('& ./.github/scripts/New-CoverageRunSettings.ps1 -Base coverlet.runsettings')) `
     'a shard whose models run in the worker never instruments the worker'

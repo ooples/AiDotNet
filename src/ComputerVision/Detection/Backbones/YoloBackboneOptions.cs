@@ -34,4 +34,7 @@ public class YoloBackboneOptions : DetectionBackboneOptions
     /// Thrown when <see cref="DetectionBackboneOptions.InChannels"/> is not positive.
     /// </exception>
     public void Validate() => ValidateBackboneCore();
+
+    /// <summary>The given options, or the defaults when none were supplied.</summary>
+    internal static YoloBackboneOptions OrDefault(YoloBackboneOptions? options) => options ?? new YoloBackboneOptions();
 }

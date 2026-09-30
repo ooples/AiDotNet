@@ -44,7 +44,8 @@ public partial class YoloConv<T> : LayerBase<T>, IShapeContract
         // Ultralytics Conv is nn.Conv2d(..., bias=False) followed by BatchNorm2d, whose shift makes a conv bias
         // redundant. Stated explicitly: BiasMode.Auto asks the following layer, and inside this block the BN is not
         // in any layer list the conv can see, so Auto kept a bias the reference does not have (1 extra per channel).
-        _conv = new ConvolutionalLayer<T>(outChannels, kernelSize, stride, kernelSize / 2, (IActivationFunction<T>?)null,
+        IActivationFunction<T>? linear = null; // the activation follows the batch norm, not the conv
+        _conv = new ConvolutionalLayer<T>(outChannels, kernelSize, stride, kernelSize / 2, linear,
             initializationStrategy: null, nonlinearityForInit: null, groups: groups, biasMode: BiasMode.Never);
         // The reference YOLO initialize_weights (ultralytics and WongKinYiu/yolov9 utils/torch_utils.py)
         // sets every BatchNorm2d to eps=1e-3, momentum=0.03 (PyTorch's weight on the new batch; here the

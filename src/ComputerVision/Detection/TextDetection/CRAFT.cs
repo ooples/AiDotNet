@@ -182,7 +182,8 @@ public partial class CRAFT<T> : TextDetectorBase<T>
             int boxW = component.Max(p => p.W) - component.Min(p => p.W) + 1;
             int boxH = component.Max(p => p.H) - component.Min(p => p.H) + 1;
             int niter = (int)(Math.Sqrt(component.Count * (double)Math.Min(boxW, boxH) / (boxW * boxH)) * 2);
-            double dilation = (1 + niter) / 2;
+            int dilationPixels = (1 + niter) / 2; // floor((1 + niter) / 2) whole pixels, as the reference
+            double dilation = dilationPixels;
             var polygon = TextBoxGeometry.MinAreaRectangle(character.Count > 0 ? character : component, (_, _) => dilation)
                 .Select(p => (X: Math.Min(Math.Max(p.X * scaleX, 0.0), imageWidth),
                               Y: Math.Min(Math.Max(p.Y * scaleY, 0.0), imageHeight)))

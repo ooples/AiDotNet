@@ -73,19 +73,20 @@ public partial class VGG16BNBackbone<T> : NeuralNetworkBase<T>, IDetectionBackbo
     /// <summary>Creates the backbone.</summary>
     /// <param name="options">Input channels; defaults to three.</param>
     public VGG16BNBackbone(VGG16BNBackboneOptions? options = null)
-        : base(DetectionBackboneArchitecture<T>.Create((options ??= new VGG16BNBackboneOptions()).InChannels),
+        : base(DetectionBackboneArchitecture<T>.Create(VGG16BNBackboneOptions.OrDefault(options).InChannels),
               new MeanSquaredErrorLoss<T>())
     {
-        options.Validate();
+        VGG16BNBackboneOptions.OrDefault(options).Validate();
+        IActivationFunction<T>? linear = null; // the ReLU follows the batch norm, not the conv
         _blocks = BlockChannels
             .Select(block => block
-                .Select(channels => (new ConvolutionalLayer<T>(channels, 3, 1, 1, (IActivationFunction<T>?)null),
+                .Select(channels => (new ConvolutionalLayer<T>(channels, 3, 1, 1, linear),
                                      new BatchNormalizationLayer<T>()))
                 .ToArray())
             .ToList();
         _pools = Enumerable.Range(0, 4).Select(_ => new MaxPoolingLayer<T>(2, 2)).ToList();
         _fc6 = new DilatedConvolutionalLayer<T>(1024, 3, 6, 1, 6);
-        _fc7 = new ConvolutionalLayer<T>(1024, 1, 1, 0, (IActivationFunction<T>?)null);
+        _fc7 = new ConvolutionalLayer<T>(1024, 1, 1, 0, linear);
         EnsureArchitectureInitialized();
 
         // Layers are created in training mode; a new backbone predicts, so its batch norms must start on
@@ -143,8 +144,7 @@ public partial class VGG16BNBackbone<T> : NeuralNetworkBase<T>, IDetectionBackbo
     /// <inheritdoc/>
     protected override void InitializeLayers()
     {
-        foreach (var block in _blocks)
-            foreach (var (conv, norm) in block) { Layers.Add(conv); Layers.Add(norm); }
+        foreach (var (conv, norm) in _blocks.SelectMany(block => block)) { Layers.Add(conv); Layers.Add(norm); }
         Layers.Add(_fc6);
         Layers.Add(_fc7);
     }
