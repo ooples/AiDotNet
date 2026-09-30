@@ -67,7 +67,7 @@ public abstract class LatentDiffusionTestBase : DiffusionModelTestBase
 
     private int[] ProbeLatentShape()
     {
-        using var probe = CreateModel();
+        using var probe = CreateDeterministicModel();
         if (probe is LatentDiffusionModelBase<double> latent)
         {
             return new[] { latent.LatentChannels, LatentFixtureSpatialSize, LatentFixtureSpatialSize };
@@ -89,7 +89,7 @@ public abstract class LatentDiffusionTestBase : DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        using var model = CreateModel();
+        using var model = CreateDeterministicModel();
         var target = CreateRandomTensor(InputShape, rng);
 
         // Input with more noise vs. less noise
@@ -137,7 +137,7 @@ public abstract class LatentDiffusionTestBase : DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        using var model = CreateModel();
+        using var model = CreateDeterministicModel();
 
         var input1 = CreateRandomTensor(InputShape, rng);
         var input2 = new Tensor<double>(InputShape);
@@ -192,7 +192,7 @@ public abstract class LatentDiffusionTestBase : DiffusionModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        using var model = CreateModel();
+        using var model = CreateDeterministicModel();
         var input = CreateRandomTensor(InputShape, rng);
 
         // Train briefly then predict

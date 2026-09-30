@@ -49,7 +49,7 @@ public abstract class DiffusionModelTestBase : DiffusionModelTestBase<double>
 /// wall-clock because GC never has time to run a compacting collection.
 /// See issue #1136. The forced <c>GC.Collect → WaitForPendingFinalizers → GC.Collect</c>
 /// sequence (standard two-pass pattern) runs AFTER each test disposes its
-/// model (via <c>using var model = CreateModel()</c>), reclaiming the rented
+/// model (via <c>using var model = CreateDeterministicModel()</c>), reclaiming the rented
 /// weight buffers returned to the TensorAllocator pool on Dispose.
 /// </remarks>
 public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
@@ -190,6 +190,35 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
 
 
     protected abstract IDiffusionModel<TNum> CreateModel();
+
+    /// <summary>Seed every fixture's layer initialization is pinned to; see <see cref="CreateDeterministicModel"/>.</summary>
+    private const int FixtureInitializationSeed = 1337;
+
+    /// <summary>
+    /// <see cref="CreateModel"/> with deterministic weight initialization.
+    /// </summary>
+    /// <remarks>
+    /// A diffusion fixture built without an architecture seed initializes its layers from the process-shared RNG,
+    /// whose state depends on every test that ran before it in the same process. EmuEdit's
+    /// <c>DenoisingProgress_Monotonic</c> passed alone and failed inside its CI shard for exactly that reason: a
+    /// different draw gave a different untrained network. Pinning the ambient initialization seed around
+    /// construction makes the fixture the same network wherever it runs; an explicit architecture or model seed
+    /// still wins, and production behaviour is unchanged. The scope is thread-static, so it is set here, on the
+    /// thread that constructs, not in <see cref="InitializeAsync"/>, which a test's first await leaves behind.
+    /// </remarks>
+    protected IDiffusionModel<TNum> CreateDeterministicModel()
+    {
+        int? previous = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed;
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = FixtureInitializationSeed;
+        try
+        {
+            return CreateModel();
+        }
+        finally
+        {
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = previous;
+        }
+    }
 
     /// <summary>
     /// Relative tolerance for clone-output comparisons. Derived FP32 iterative samplers may
@@ -344,7 +373,7 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        using var model = CreateModel();
+        using var model = CreateDeterministicModel();
 
         // Treat the random tensor as the clean sample x₀ (the diffusion data point).
         var x0 = CreateRandomTensor(InputShape, rng);
@@ -429,7 +458,7 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        using var model = CreateModel();
+        using var model = CreateDeterministicModel();
         var input1 = CreateConstantTensor(InputShape, 0.1);
         var input2 = CreateConstantTensor(InputShape, 0.9);
 
@@ -461,7 +490,7 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        using var model = CreateModel();
+        using var model = CreateDeterministicModel();
 
         var input = CreateRandomTensor(InputShape, rng);
         var scaledInput = new Tensor<TNum>(InputShape);
@@ -497,7 +526,7 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        using var model = CreateModel();
+        using var model = CreateDeterministicModel();
         var input = CreateRandomTensor(InputShape, rng);
 
         var output = PredictModel(model, input);
@@ -514,7 +543,7 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        using var model = CreateModel();
+        using var model = CreateDeterministicModel();
         var input = CreateRandomTensor(InputShape, rng);
         var output = PredictModel(model, input);
 
@@ -533,7 +562,7 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        using var model = CreateModel();
+        using var model = CreateDeterministicModel();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
 
@@ -563,7 +592,7 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
-        using var model = CreateModel();
+        using var model = CreateDeterministicModel();
 
         // The noise schedule is the SCHEDULER's signal-retention curve: the cumulative product
         // of alphas (the fraction of the original signal retained at timestep t) must not
@@ -609,7 +638,7 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        using var model = CreateModel();
+        using var model = CreateDeterministicModel();
         var input = CreateRandomTensor(InputShape, rng);
 
         var output = PredictModel(model, input);
@@ -633,7 +662,7 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        using var model = CreateModel();
+        using var model = CreateDeterministicModel();
         var input = CreateRandomTensor(InputShape, rng);
 
         var out1 = PredictModel(model, input);
@@ -649,7 +678,7 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        using var model = CreateModel();
+        using var model = CreateDeterministicModel();
         var input = CreateRandomTensor(InputShape, rng);
 
         var original = PredictModel(model, input);
@@ -911,7 +940,7 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
-        using var model = CreateModel();
+        using var model = CreateDeterministicModel();
         var input = CreateRandomTensor(InputShape, rng);
         var target = CreateRandomTensor(OutputShape, rng);
         string expectedName = ExpectedModelMetadataName(model);
@@ -969,7 +998,7 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
-        using var model = CreateModel();
+        using var model = CreateDeterministicModel();
         // Check ParameterCount rather than GetParameters().Length — both answer the
         // same question ("does the model have learnable parameters?") but
         // ParameterCount reads the declared count without forcing lazy layers to
@@ -984,7 +1013,7 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();
-        using var model = CreateModel();
+        using var model = CreateDeterministicModel();
         Assert.NotNull(model.Scheduler);
     }
 
