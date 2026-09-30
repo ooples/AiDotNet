@@ -21347,7 +21347,8 @@ public static partial class LayerHelper<T>
 
         // Speaker embedding head: statistics pooling + projection
         yield return new DenseLayer<T>(embeddingDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        // Sized explicitly, as in MarbleNet: a width-less BN reads the rank-3 [B, T, F] sequence as [C, H, W].
+        yield return new BatchNormalizationLayer<T>(embeddingDim);
     }
 
     /// <summary>
@@ -21909,7 +21910,10 @@ public static partial class LayerHelper<T>
 
         // Initial conv (prologue)
         yield return new DenseLayer<T>(initialFilters, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
+        // Sized explicitly: this BN follows a Dense over a [B, T, F] sequence, and a width-less BN resolves a
+        // rank-3 input as [C, H, W], taking the batch axis as its one channel and normalizing all B*T*F values
+        // with a single mean. With its width known it normalizes each of the F features over B*T.
+        yield return new BatchNormalizationLayer<T>(initialFilters);
 
         // Jasper-style separable conv blocks
         int filters = initialFilters;
@@ -21919,7 +21923,7 @@ public static partial class LayerHelper<T>
             {
                 // Depth-wise + point-wise (simulated as FC pairs)
                 yield return new FullyConnectedLayer<T>(filters, reluActivation);
-                yield return new BatchNormalizationLayer<T>();
+                yield return new BatchNormalizationLayer<T>(filters);
                 if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
             }
         }

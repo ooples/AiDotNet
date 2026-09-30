@@ -668,6 +668,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // trained parameters in evaluation mode; the strict 1% decrease and 20 updates remain.
             { "DeepAR", new WarmupIterationOverride(deterministicMemorizationLoss: true) },
 
+            // MarbleNet inserts a DropoutLayer after every one of its fifteen separable sub-blocks. On one fixed pair its
+            // training-mode loss read 0.760, 0.792, 0.997, 0.582 ... 1.166 over twelve steps - one draw per fresh mask -
+            // while the evaluation loss at the same weights fell 0.3263, 0.3243, 0.3224 ... 0.3194. Same remedy as above.
+            { "MarbleNet", new WarmupIterationOverride(deterministicMemorizationLoss: true) },
+
             // NaturalSpeech: the same shape, over a LONGER warm-up, and on every repeated-training
             // probe rather than just one. Measured evaluation loss on a fixed pair, from untrained:
             //   0.253 | 0.267, 0.292, 0.294, 0.281, 0.294, 0.301, 0.279, 0.249, 0.207, 0.175, 0.173
@@ -15210,12 +15215,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         // Vision Mamba (Vim, Zhu et al. 2024) retains its Tiny four-stage bidirectional
         // state-space encoder. The exact U-Z shard proved FP32 alone insufficient for the
-        // default 50+200 update comparison, so cap only that repeated probe before any
-        // fixture shrink: one update versus two still exercises the no-degradation contract.
+        // default 50+200 update comparison, so the repeated probe stays capped rather than
+        // shrinking the fixture. Twelve updates, not two: once its eight conv BatchNorms
+        // normalize a single image over its spatial positions (#2272) the training-mode loss
+        // rises for the first three steps before descending (measured on the fixture pair:
+        // 5.296, 5.302, 5.419, 5.173, 5.368, 4.895 ... 4.535 at step 12), so two updates sat
+        // on the rise. Twelve clear it by a wide margin at ~18 s; the no-degradation
+        // assertion and its tolerance are unchanged - only the measurement point moves.
         if (model.ClassName == "VisionMamba")
         {
             sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
-            sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+            sb.AppendLine("    protected override int MoreDataLongIterations => 12;");
         }
 
         // Optical-flow fixtures whose MoreData window has to clear the optimizer warm-up
