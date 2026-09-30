@@ -502,33 +502,45 @@ public abstract class DetectionModelTestBase<T>
         Assert.NotEmpty(chunks);
 
         var before = chunks.Select(c => { var snap = new double[c.Tensor.Length]; for (int i = 0; i < snap.Length; i++) snap[i] = ToD(c.Tensor[i]); return snap; }).ToList();
-        model.Train(image, target);
-
+        // A tensor may legitimately see an exactly-zero gradient on the FIRST step when the reference
+        // initialization zeroes whatever is downstream of it: DINO's box MLP starts with a zero last layer
+        // and MSDeformAttn with zero offset and attention-weight projections, so the layers feeding them
+        // move only from the second step on. Only a tensor that is still unmoved after two steps is dead.
         var untouched = new List<string>();
-        for (int k = 0; k < chunks.Count; k++)
+        for (int step = 1; step <= 2; step++)
         {
-            if (ParametersUnusedByForward.Contains(chunks[k].StableId))
+            model.Train(image, target);
+            untouched.Clear();
+            for (int k = 0; k < chunks.Count; k++)
             {
-                continue;
+                if (ParametersUnusedByForward.Contains(chunks[k].StableId))
+                {
+                    continue;
+                }
+
+                var after = chunks[k].Tensor;
+                bool moved = false;
+                for (int i = 0; i < after.Length && !moved; i++)
+                {
+                    moved = ToD(after[i]) != before[k][i];
+                }
+
+                if (!moved)
+                {
+                    untouched.Add($"{chunks[k].StableId} [{string.Join(",", after.Shape.ToArray())}]");
+                }
             }
 
-            var after = chunks[k].Tensor;
-            bool moved = false;
-            for (int i = 0; i < after.Length && !moved; i++)
+            if (untouched.Count == 0)
             {
-                moved = ToD(after[i]) != before[k][i];
-            }
-
-            if (!moved)
-            {
-                untouched.Add($"{chunks[k].StableId} [{string.Join(",", after.Shape.ToArray())}]");
+                break;
             }
         }
 
         Assert.True(
             untouched.Count == 0,
-            $"{untouched.Count} of {chunks.Count} registered trainable tensors did not move after a "
-            + "training step. Either no gradient reaches them (the forward pass severs the autodiff tape "
+            $"{untouched.Count} of {chunks.Count} registered trainable tensors did not move after two "
+            + "training steps. Either no gradient reaches them (the forward pass severs the autodiff tape "
             + "upstream of them) or they are dead weights the forward never reads:\n  "
             + string.Join("\n  ", untouched.Take(25)));
     }

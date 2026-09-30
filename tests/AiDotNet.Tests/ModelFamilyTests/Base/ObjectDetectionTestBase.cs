@@ -100,11 +100,13 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
         {
             emptyTargets ? Array.Empty<AiDotNet.ComputerVision.Detection.DetectionTrainingTarget<T>>() : new[] { target }
         });
-        double expected = IndependentSigmoidSetObjective(logits, boxes, queries, classes,
+        var dino = detector as AiDotNet.ComputerVision.Detection.ObjectDetection.DETR.DINO<T>;
+        double expected = dino is not null ? double.NaN : IndependentSigmoidSetObjective(logits, boxes, queries, classes,
             emptyTargets ? -1 : goldClass, gold, varifocal);
 
         if (trainingStep is null) training.TrainDetections(input, batch);
         else trainingStep(input, batch);
+        if (dino is not null) expected = IndependentDinoObjective(dino, logits, boxes, queries, classes, emptyTargets ? -1 : goldClass, gold);
 
         double actual = ops.ToDouble(detector.GetLastLoss());
         double tolerance = typeof(T) == typeof(float) ? 2e-4 * Math.Max(1, Math.Abs(expected)) : 1e-8;
@@ -314,6 +316,82 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
         return classification + 5 * boxL1 + 2 * giouLoss;
     }
 
+    /// <summary>
+    /// DINO's full reference objective, re-derived from the step's recorded outputs:
+    /// <list type="bullet">
+    /// <item>The Hungarian sigmoid-focal set loss of the encoder proposals and of every decoder layer.</item>
+    /// <item>For each layer, the fixed-assignment denoising loss: each group's positive copy of the target
+    /// reconstructs it, and negatives and padding are background.</item>
+    /// </list>
+    /// The recording is tied to an independent forward: its final layer must equal what Predict returned
+    /// before the step.
+    /// </summary>
+    private static double IndependentDinoObjective(AiDotNet.ComputerVision.Detection.ObjectDetection.DETR.DINO<T> dino,
+        double[] logits, double[] boxes, int queries, int classes, int goldClass, double[] gold)
+    {
+        var record = dino.LastTrainingRecord;
+        Assert.NotNull(record);
+        if (record is null) return double.NaN;
+        Assert.Equal(queries, record.Queries);
+        double closeness = typeof(T) == typeof(float) ? 1e-4 : 1e-9;
+        var finalClasses = record.LayerClasses[record.LayerClasses.Length - 1];
+        var finalBoxes = record.LayerBoxes[record.LayerBoxes.Length - 1];
+        for (int i = 0; i < logits.Length; i++)
+            Assert.True(Math.Abs(finalClasses[i] - logits[i]) <= closeness * Math.Max(1, Math.Abs(logits[i])), $"recorded final logit {i} differs from Predict");
+        for (int i = 0; i < boxes.Length; i++)
+            Assert.True(Math.Abs(finalBoxes[i] - boxes[i]) <= closeness, $"recorded final box {i} differs from Predict");
+
+        double total = IndependentSigmoidSetObjective(record.EncoderClasses, record.EncoderBoxes, queries, classes, goldClass, gold, varifocal: false);
+        for (int layer = 0; layer < record.LayerClasses.Length; layer++)
+            total += IndependentSigmoidSetObjective(record.LayerClasses[layer], record.LayerBoxes[layer], queries, classes, goldClass, gold, varifocal: false);
+
+        if (goldClass < 0)
+        {
+            Assert.Null(record.Denoising);
+            Assert.Empty(record.DenoisingClasses);
+            return total;
+        }
+
+        // prepare_for_cdn with dn_number 100 and one target: 2 * 100 // (2 * 1) = 100 groups of a positive and
+        // a negative copy; group g's positive copy sits at slot 2 * g.
+        const int groups = 100;
+        var positives = Enumerable.Range(0, groups).Select(g => 2 * g).ToArray();
+        var plan = record.Denoising;
+        Assert.NotNull(plan);
+        Assert.Equal(positives, plan?.Assignments[0]);
+        Assert.Equal(record.LayerClasses.Length, record.DenoisingClasses.Length);
+        foreach (var (layerLogits, layerBoxes) in record.DenoisingClasses.Zip(record.DenoisingBoxes, (c, b) => (c, b)))
+        {
+            Assert.Equal(2 * groups * classes, layerLogits.Length);
+            total += IndependentFixedAssignmentObjective(layerLogits, layerBoxes, classes, positives, goldClass, gold);
+        }
+        return total;
+    }
+
+    /// <summary>Sigmoid-focal + L1 + GIoU with a fixed query per target copy, normalized by the number of copies.</summary>
+    private static double IndependentFixedAssignmentObjective(double[] logits, double[] boxes, int classes, int[] positives, int goldClass, double[] gold)
+    {
+        static double Sigmoid(double x) => 1 / (1 + Math.Exp(-x));
+        static double Softplus(double x) => x > 0 ? x + Math.Log(1 + Math.Exp(-x)) : Math.Log(1 + Math.Exp(x));
+        var positiveEntries = new HashSet<int>(positives.Select(query => query * classes + goldClass));
+        double classification = 0;
+        for (int index = 0; index < logits.Length; index++)
+        {
+            double x = logits[index], p = Sigmoid(x);
+            classification += positiveEntries.Contains(index) ? 0.25 * Math.Pow(1 - p, 2) * Softplus(-x) : 0.75 * p * p * Softplus(x);
+        }
+
+        double boxTerms = 0;
+        const double stabilizer = 1e-7;
+        foreach (int query in positives)
+        {
+            var predicted = boxes.Skip(query * 4).Take(4).ToArray();
+            double l1 = predicted.Zip(gold, (left, right) => Math.Abs(left - right)).Sum();
+            var (intersection, union, enclosure) = Overlap(predicted, gold);
+            boxTerms += 5 * l1 + 2 * (1 - intersection / (union + stabilizer) + (enclosure - union) / (enclosure + stabilizer));
+        }
+        return (classification + boxTerms) / positives.Length;
+    }
     private static (double Intersection, double Union, double Enclosure) Overlap(double[] predicted, double[] target)
     {
         var p = new[] { predicted[0] - predicted[2] / 2, predicted[1] - predicted[3] / 2,

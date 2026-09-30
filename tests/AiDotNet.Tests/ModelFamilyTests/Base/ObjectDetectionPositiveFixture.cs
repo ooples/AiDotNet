@@ -36,7 +36,7 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
     internal static void Verify(ObjectDetectorBase<T> detector)
     {
         var profile = ProfileOf(detector);
-        VerifyOne(detector, profile, suppressionDisabled: detector is YOLOv10<T>);
+        VerifyOne(detector, profile, suppressionDisabled: detector is YOLOv10<T> or DINO<T>);
         if (detector is YOLOv10<T>)
         {
             // YOLOv10 intentionally defaults to NMS-free. Test that public default separately
@@ -81,7 +81,7 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
         Assert.NotEmpty(trainable);
         Assert.All(trainable, chunk => Assert.True(chunk.IsWritableInPlace, chunk.StableId));
         foreach (var chunk in trainable) chunk.Tensor.Fill(ToT(0));
-        ConfigureHead(trainable, profile);
+        ConfigureHead(detector, trainable, profile);
 
         var raw = detector.Predict(normalized);
         var expected = ExpectedCandidates(raw, profile);
@@ -99,7 +99,7 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
         Assert.Empty(detector.Detect(image, 0.99, 0.45).Detections);
     }
 
-    private static void ConfigureHead(ParameterChunk<T>[] trainable, HeadProfile profile)
+    private static void ConfigureHead(ObjectDetectorBase<T> detector, ParameterChunk<T>[] trainable, HeadProfile profile)
     {
         if (profile == HeadProfile.Yolo)
         {
@@ -116,14 +116,32 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
             }
             return;
         }
-        if (profile is HeadProfile.Detr or HeadProfile.RtDetr or HeadProfile.Dino)
+        if (profile == HeadProfile.Dino)
+        {
+            // Every weight is zero except: LayerNorm gammas (1), two content queries, the class head's
+            // [0, 0] weight and bias, and the box MLP's last-layer bias D = (0, 0, 1, 1). Zero features and
+            // zero attention make every decoder sub-layer LayerNorm(its input), so a query's hidden state is
+            // 19 LayerNorms of its content row. Its box is its encoder proposal refined by D in each of the
+            // six layers, then predicted with D once more (see ExpectedDino).
+            var transformer = Assert.IsType<DINO<T>>(detector).GetTransformer();
+            foreach (var gamma in transformer.LayerNormGammas()) gamma.Fill(ToT(1));
+            var content = transformer.ContentQueries;
+            foreach (var (row, column, value) in DinoContent) content[row, column] = ToT(value);
+            transformer.ClassHead.Weight[0, 0] = ToT(1); // [input, output] storage.
+            transformer.ClassHead.Bias[0] = ToT(ForegroundBias(profile));
+            transformer.ClassHead.Bias[1] = ToT(-20);
+            var boxBias = transformer.BoxHead.Layers[transformer.BoxHead.Layers.Count - 1].Bias;
+            for (int c = 0; c < 4; c++) boxBias[c] = ToT(DinoBoxDelta[c]);
+            return;
+        }
+        if (profile is HeadProfile.Detr or HeadProfile.RtDetr)
         {
             const int hidden = 128;
             int queries = profile == HeadProfile.Detr ? 50 : 100;
             foreach (var chunk in trainable.Where(chunk => chunk.Tensor.Rank == 1 && chunk.Tensor.Length == hidden))
                 chunk.Tensor.Fill(ToT(1));
             var embeddings = trainable.Where(chunk => HasMatrixShape(chunk.Tensor, queries, hidden)).ToArray();
-            Assert.Equal(profile == HeadProfile.Dino ? 2 : 1, embeddings.Length);
+            Assert.Single(embeddings);
             foreach (var embedding in embeddings)
             {
                 // Two different zero-mean query directions survive the actual normalization
@@ -172,7 +190,8 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
         => profile switch
         {
             HeadProfile.Yolo => ExpectedYolo(raw),
-            HeadProfile.Detr or HeadProfile.RtDetr or HeadProfile.Dino => ExpectedDetr(raw, profile),
+            HeadProfile.Dino => ExpectedDino(raw),
+            HeadProfile.Detr or HeadProfile.RtDetr => ExpectedDetr(raw, profile),
             HeadProfile.FasterRcnn or HeadProfile.CascadeRcnn => ExpectedRcnn(raw, profile),
             _ => throw new ArgumentOutOfRangeException(nameof(profile))
         };
@@ -200,6 +219,76 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
         return expected.OrderByDescending(candidate => candidate.Score).ToList();
     }
 
+    private static readonly (int Row, int Column, double Value)[] DinoContent =
+    {
+        (0, 0, 1), (0, 1, 1), (0, 2, -1), (0, 3, -1),
+        (1, 0, 1), (1, 1, 1), (1, 2, 1), (1, 3, -1), (1, 4, -1), (1, 5, -1)
+    };
+
+    private static readonly double[] DinoBoxDelta = { 0, 0, 1, 1 };
+
+    /// <summary>
+    /// DINO's controlled outputs, re-derived on the host. Nano's ResNet-50 C3-C5 at 64x64 are 8x8, 4x4 and
+    /// 2x2, and the extra stride-2 level is 1x1: 85 tokens, all selected, in token order (every encoder score
+    /// ties at zero). Query q's anchor is token q's proposal ((x + 0.5) / side, (y + 0.5) / side,
+    /// 0.05 * 2^level). Its final box logits are 6 D + inverse_sigmoid(anchor): five refinements before the
+    /// last layer plus the last layer's own prediction.
+    /// </summary>
+    private static List<ExpectedDetection> ExpectedDino(Tensor<T> raw)
+    {
+        const int queries = 85, classes = 2;
+        Assert.Equal(new[] { 1, queries * (classes + 4) }, raw.Shape.ToArray());
+        var anchors = new List<double[]>();
+        int[] sides = { 8, 4, 2, 1 };
+        for (int level = 0; level < sides.Length; level++)
+            for (int y = 0; y < sides[level]; y++)
+                for (int x = 0; x < sides[level]; x++)
+                    anchors.Add(new[] { (x + 0.5) / sides[level], (y + 0.5) / sides[level], 0.05 * Math.Pow(2, level), 0.05 * Math.Pow(2, level) });
+        Assert.Equal(queries, anchors.Count);
+
+        static double InverseSigmoid(double x) => Math.Log(Math.Max(x, 1e-5) / Math.Max(1 - x, 1e-5));
+        static double Sigmoid(double x) => 1 / (1 + Math.Exp(-x));
+        var expected = new List<ExpectedDetection>();
+        for (int query = 0; query < queries; query++)
+        {
+            double classLogit = DinoHiddenFirstCoordinate(query) + ForegroundBias(HeadProfile.Dino);
+            AssertClose(classLogit, ToD(raw[0, query * classes]));
+            AssertClose(-20, ToD(raw[0, query * classes + 1]));
+            var box = new double[4];
+            for (int c = 0; c < 4; c++)
+            {
+                double logit = (6 * DinoBoxDelta[c]) + InverseSigmoid(anchors[query][c]);
+                AssertClose(logit, ToD(raw[0, queries * classes + query * 4 + c]));
+                box[c] = Sigmoid(logit) * 64;
+            }
+
+            double score = (float)Sigmoid(classLogit);
+            if (query < 2)
+            {
+                Assert.True(score > 0.05);
+                expected.Add(new ExpectedDetection(score, Math.Max(0, box[0] - box[2] / 2), Math.Max(0, box[1] - box[3] / 2),
+                    Math.Min(64, box[0] + box[2] / 2), Math.Min(64, box[1] + box[3] / 2)));
+            }
+            else Assert.True(score < 0.05);
+        }
+        return expected.OrderByDescending(candidate => candidate.Score).ToList();
+    }
+
+    /// <summary>First coordinate of 19 successive LayerNorms (gamma 1, beta 0, eps 1e-5) of a content query.</summary>
+    private static double DinoHiddenFirstCoordinate(int query)
+    {
+        var values = new double[256];
+        foreach (var (row, column, value) in DinoContent)
+            if (row == query) values[column] = value;
+        for (int normalization = 0; normalization < 19; normalization++)
+        {
+            double mean = values.Average();
+            double variance = values.Sum(value => (value - mean) * (value - mean)) / values.Length;
+            double scale = Math.Sqrt(variance + 1e-5);
+            for (int index = 0; index < values.Length; index++) values[index] = (values[index] - mean) / scale;
+        }
+        return values[0];
+    }
     private static List<ExpectedDetection> ExpectedDetr(Tensor<T> raw, HeadProfile profile)
     {
         int queries = profile == HeadProfile.Detr ? 50 : 100;
@@ -208,7 +297,7 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
         var expected = new List<ExpectedDetection>();
         for (int query = 0; query < queries; query++)
         {
-            double classLogit = NormalizedQueryFirstCoordinate(query, profile == HeadProfile.Dino ? 2 : 1) + ForegroundBias(profile);
+            double classLogit = NormalizedQueryFirstCoordinate(query, 1) + ForegroundBias(profile);
             AssertClose(classLogit, ToD(raw[0, query * classes]));
             AssertClose(-20, ToD(raw[0, query * classes + 1]));
             if (classes == 3) AssertClose(2, ToD(raw[0, query * classes + 2]));
