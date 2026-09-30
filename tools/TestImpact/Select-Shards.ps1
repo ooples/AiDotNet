@@ -86,6 +86,8 @@ $script:SharedInfrastructureFiles = @(
 # remaining keys are formatting and diagnostic severities. Escalating 164 shards - 34,421 tests -
 # to prove an indent rule is the single largest unjustified escalation measured on real PRs.
 $script:BuildOnlyFiles = @('.editorconfig')
+# Per tool directory: whether this workflow's build or tests reference it (Test-ToolDirectoryReferenced).
+$script:ToolReferenceCache = @{}
 $script:FullValidationPaths = @(
     '.github/test-shards.yml',
     '.github/test-shard-changes.json'
@@ -222,7 +224,38 @@ function Get-ChangedPathImpact {
         return [ChangedPathImpact]::FullValidation
     }
 
+    # A standalone tool that nothing in this workflow's build or tests references cannot change what any shard
+    # executes. Checked per tool directory against the tree; any doubt (a failed search) keeps the old behaviour.
+    if ($normalized.StartsWith('tools/', [StringComparison]::OrdinalIgnoreCase) -and
+        -not (Test-ToolDirectoryReferenced -Path $normalized)) {
+        return [ChangedPathImpact]::NonRuntime
+    }
+
     return [ChangedPathImpact]::MapCandidate
+}
+
+<#
+.SYNOPSIS
+Whether anything this workflow builds, tests or invokes references a tools/<name>/ directory.
+
+.DESCRIPTION
+Searched at HEAD in tests/, src/, the solution files, Directory.Build.* and this workflow file. Other workflows are
+left out on purpose: they have their own triggers and cannot change what a test shard here executes. A tool
+mentioned anywhere in that set keeps the old behaviour (MapCandidate, so it escalates as unmapped). A failed search
+counts as referenced: never trade safety for a narrower matrix.
+#>
+function Test-ToolDirectoryReferenced {
+    param([Parameter(Mandatory)] [string] $Path)
+    $segments = $Path.Split('/')
+    if ($segments.Count -lt 3) { return $true }   # a file directly under tools/: no directory to scope by
+    $directory = $segments[1]
+    if ($script:ToolReferenceCache.ContainsKey($directory)) { return $script:ToolReferenceCache[$directory] }
+    $pattern = 'tools[/\\]' + [regex]::Escape($directory) + '([/\\]|[^A-Za-z0-9_.-]|$)'
+    $null = & git grep -q -i -E $pattern HEAD -- 'tests/' 'src/' '*.sln' '*.slnx' 'Directory.Build.props' 'Directory.Build.targets' '.github/workflows/sonarcloud.yml' 2>$null
+    # git grep: 0 = found, 1 = not found, anything else = the search itself failed.
+    $referenced = $LASTEXITCODE -ne 1
+    $script:ToolReferenceCache[$directory] = $referenced
+    return $referenced
 }
 
 <#
@@ -2471,6 +2504,21 @@ file class Private { }
         '.editorconfig is not classified BuildOnly'
     Assert-True ((Get-ChangedPathImpact -Path 'src/Nested/.editorconfig') -eq [ChangedPathImpact]::BuildOnly) `
         'a nested .editorconfig is not classified BuildOnly'
+    # tools/: a standalone tool nothing here builds, tests or invokes cannot move any shard (10 of 22 escalated PR
+    # runs in late September 2026 escalated on such a file). A referenced one keeps escalating, and TestImpact stays
+    # selection control. These read the real tree, so they fail loudly if a tool gains or loses a reference.
+    if (Test-Path -LiteralPath 'tools/CoverageReportReview') {
+        Assert-True ((Get-ChangedPathImpact -Path 'tools/CoverageReportReview/Program.cs') -eq [ChangedPathImpact]::NonRuntime) `
+            'an unreferenced tool (CoverageReportReview) is not NonRuntime'
+    }
+    if (Test-Path -LiteralPath 'tools/AiDotNet.Evolve.Cli') {
+        Assert-True ((Get-ChangedPathImpact -Path 'tools/AiDotNet.Evolve.Cli/Program.cs') -eq [ChangedPathImpact]::MapCandidate) `
+            'a tool the test project references (AiDotNet.Evolve.Cli) was downgraded'
+    }
+    Assert-True ((Get-ChangedPathImpact -Path 'tools/TestImpact/Unknown-Helper.ps1') -eq [ChangedPathImpact]::SelectionControl) `
+        'tools/TestImpact lost its selection-control classification'
+    Assert-True ((Get-ChangedPathImpact -Path 'tools/loose-file.txt') -eq [ChangedPathImpact]::MapCandidate) `
+        'a file directly under tools/ has no directory to scope by and must keep the old behaviour'
     # The selection report lists every changed path, so a build-only file must be recorded as a decision even
     # beside runtime changes (it used to fall through the switch and vanish from the report).
     $reportMap = [pscustomobject]@{ knownShards = @('Alpha'); alwaysRun = @(); files = [pscustomobject]@{
