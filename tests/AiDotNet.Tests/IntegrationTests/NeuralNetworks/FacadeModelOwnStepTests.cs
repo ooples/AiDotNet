@@ -79,6 +79,10 @@ public class FacadeModelOwnStepTests
                 new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
                 {
                     MaxIterations = Epochs, BatchSize = Batch, UseEarlyStopping = false, InitialLearningRate = 1e-2,
+                    // Explicit, so both paths apply it: the model's own step applies only a regularization the
+                    // caller chose (the implicit default L2 is the flat path's alone), and this compares the paths
+                    // under the same optimizer - including the regularization reaching the fused step.
+                    Regularization = new AiDotNet.Regularization.L2Regularization<float, Tensor<float>, Tensor<float>>(),
                 });
             var result = await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
                 .ConfigureModel(network)

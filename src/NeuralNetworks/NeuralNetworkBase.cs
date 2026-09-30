@@ -13626,6 +13626,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
     {
         if (optimizer is not Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradientBased) return null;
+        // Only a regularization the caller chose. The options default to L2(0.01); applying that implicit term here
+        // changed what every network's Train does (measured: frozen SeACo backbone parameters drifted, CUPS/Kairos/
+        // Word2Vec/VideoMAE losses stopped falling) - master never applied it on this path, nor does PyTorch by default.
+        if (!gradientBased.RegularizationExplicitlyConfigured) return null;
         var regularization = gradientBased.ActiveRegularization;
         return regularization is null or AiDotNet.Regularization.NoRegularization<T, Tensor<T>, Tensor<T>> ? null : regularization;
     }

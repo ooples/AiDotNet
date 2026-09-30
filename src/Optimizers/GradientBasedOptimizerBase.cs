@@ -186,7 +186,14 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     {
         Guard.NotNull(regularization);
         Regularization = regularization;
+        RegularizationExplicitlyConfigured = true;
     }
+
+    /// <summary>
+    /// True when the regularization was chosen by the caller (options or <see cref="SetRegularization"/>) rather than
+    /// left at the options' default. See <c>GradientBasedOptimizerOptions.RegularizationExplicitlySet</c>.
+    /// </summary>
+    internal bool RegularizationExplicitlyConfigured { get; private set; }
 
     /// <summary>
     /// The active regularization applied during gradient updates. Set
@@ -445,6 +452,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         LossFunction = options.LossFunction;
         GradientCache = options.GradientCache;
         Regularization = options.Regularization;
+        RegularizationExplicitlyConfigured = options.RegularizationExplicitlySet;
 
         // Initialize learning rate scheduler from options.
         //
