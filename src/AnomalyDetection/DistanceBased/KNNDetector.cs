@@ -85,21 +85,28 @@ public partial class KNNDetector<T> : AnomalyDetectorBase<T>
         _trainingData = X;
         _nFeatures = X.Columns;
 
-        // Calculate scores for training data to set threshold
-        var trainingScores = ScoreAnomaliesInternal(X);
+        // The threshold is calibrated on leave-one-out training scores: each training point's
+        // neighbourhood excludes the point itself (PyOD's decision_scores_).
+        var trainingScores = ScoreAnomaliesInternal(X, excludeSelf: true);
         SetThresholdFromContamination(trainingScores);
 
         _isFitted = true;
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Every row is scored against the whole training set, as PyOD's decision_function does: a row equal to a
+    /// training point has that point as a zero-distance neighbour. The result depends only on the values. It used
+    /// to exclude self only when handed the very matrix instance Fit saw, so an equal copy - or a clone of the
+    /// detector - scored the same data differently.
+    /// </remarks>
     public override Vector<T> ScoreAnomalies(Matrix<T> X)
     {
         EnsureFitted();
-        return ScoreAnomaliesInternal(X);
+        return ScoreAnomaliesInternal(X, excludeSelf: false);
     }
 
-    private Vector<T> ScoreAnomaliesInternal(Matrix<T> X)
+    private Vector<T> ScoreAnomaliesInternal(Matrix<T> X, bool excludeSelf)
     {
         ValidateInput(X);
 
@@ -110,8 +117,8 @@ public partial class KNNDetector<T> : AnomalyDetectorBase<T>
                 nameof(X));
         }
 
-        // Check if X is the same as training data (for self-exclusion by index)
-        bool isSameAsTraining = ReferenceEquals(X, _trainingData);
+        // Self-exclusion by index is only meaningful when X IS the training set, which the caller states.
+        bool isSameAsTraining = excludeSelf;
 
         var scores = new Vector<T>(X.Rows);
 

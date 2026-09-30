@@ -33,6 +33,23 @@ public abstract class DeclaredModelLayoutBase<T> : NeuralNetworkBase<T>
     /// copy to each model, which could then disagree with the architecture it was built from.
     /// </remarks>
     private InputType _inputType => Architecture.InputType;
+
+    /// <summary>
+    /// Builds the sub-network a composite model trains for one of its architectures: a convolutional
+    /// network for image-shaped (three-dimensional) input and a feed-forward network otherwise.
+    /// </summary>
+    /// <remarks>
+    /// A convolutional network cannot take flat input: its default layers reject a one-dimensional shape
+    /// outright ("CNN requires 2D or 3D input"). GANs that always built one were unconstructible on flat
+    /// data unless the caller supplied explicit layers, and a clone then shares those layers with its
+    /// source because replaying the constructor hands it the same layer objects. WGAN, CycleGAN and
+    /// InfoGAN already chose by input type; this is that rule in one place.
+    /// </remarks>
+    protected static NeuralNetworkBase<T> CreateSubNetworkForInputType(
+        NeuralNetworkArchitecture<T> architecture, InputType inputType)
+        => inputType == InputType.ThreeDimensional
+            ? new ConvolutionalNeuralNetwork<T>(architecture)
+            : new FeedForwardNeuralNetwork<T>(architecture);
 }
 
 [TensorLayout(TensorAxis.Batch, TensorAxis.Features,

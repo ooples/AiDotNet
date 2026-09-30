@@ -486,7 +486,7 @@ public partial class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     }
 
     /// <inheritdoc />
-    public override void Step(TapeStepContext<T> context)
+    protected override void StepCore(TapeStepContext<T> context)
     {
         // Sparse-by-default: walk any embedding params whose gradient lives
         // only in the sparse list (Tensors stopped seeding dense alongside) and
