@@ -9258,13 +9258,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // transformer layers, vocab 30522, 224px ResNet-50 visual backbone. Each CPU training
                 // iteration is multiple seconds so MoreData (250 train steps) times out. Build the
                 // IDENTICAL architecture (visual backbone + text embeddings -> shared spatial encodings ->
-                // multimodal transformer, run via the modality-robust RunModalityForward) at CI-smoke
-                // width/depth/vocab. Token-ID InputShape [16] is emitted by the token-based document branch.
+                // multimodal transformer (two-stream MMSA) at CI-smoke
+                // width/depth/vocab. The packed [16, 5] InputShape is emitted by the token-based document branch.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputSize: 16, outputSize: 4), " +
-                    "options: new AiDotNet.Document.Options.DocFormerOptions { NumClasses = 4, ImageSize = 32, MaxSequenceLength = 64, HiddenDim = 64, NumLayers = 2, NumHeads = 4, VocabSize = 100, SpatialDim = 32 }" + ")";
+                    "inputHeight: 16, inputWidth: 5, outputSize: 4), " +
+                    "options: new AiDotNet.Document.Options.DocFormerOptions { NumClasses = 4, ImageSize = 32, MaxSequenceLength = 16, HiddenDim = 64, NumLayers = 2, NumHeads = 4, VocabSize = 100, SpatialDim = 8 }" + ")";
             }
             else if (model.ClassName == "LiLT" && model.TypeParameterCount == 1)
             {
@@ -12806,6 +12806,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // (x0, y0, x1, y1) then T token ids, and it emits one CRF tag per token slot, [N * T, tags].
                 sb.AppendLine("    protected override int[] InputShape => new[] { 3, 8 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 12, 4 };");
+            }
+            else if (model.ClassName == "DocFormer")
+            {
+                // DocFormer (Appalaraju et al. 2021) reads packed rows [S, 5]: a token id, then its box (x0, y0, x1, y1).
+                sb.AppendLine("    protected override int[] InputShape => new[] { 16, 5 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 16, 4 };");
             }
             else
             {

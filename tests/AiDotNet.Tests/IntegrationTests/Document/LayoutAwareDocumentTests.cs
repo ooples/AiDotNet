@@ -604,7 +604,7 @@ public class LayoutAwareDocumentTests
     #region DocFormer Tests
 
     private static DocFormer<float> CreateSmallDocFormer()
-        => new DocFormer<float>(CreateArchitecture(imageSize: 32), options: new DocFormerOptions { NumClasses = 7, ImageSize = 32, MaxSequenceLength = 64, HiddenDim = 64, NumLayers = 2, NumHeads = 4, VocabSize = 100 });
+        => new DocFormer<float>(CreateArchitecture(imageSize: 32), options: new DocFormerOptions { NumClasses = 7, ImageSize = 32, MaxSequenceLength = 64, HiddenDim = 64, NumLayers = 2, NumHeads = 4, VocabSize = 100, SpatialDim = 8 });
 
     /// <summary>
     /// DocFormer routes by input rank, and its text stream is now ONE LayoutEmbeddingLayer where it
