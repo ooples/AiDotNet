@@ -100,7 +100,7 @@ public partial class DINO<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
     /// The pre-update outputs, denoising plan and recorded loss of the last <see cref="TrainDetections"/> step,
     /// for tests that re-derive the objective independently.
     /// </summary>
-    internal DinoTrainingRecord<T>? LastTrainingRecord { get; private set; }
+    internal DetrTrainingRecord<T>? LastTrainingRecord { get; private set; }
 
     /// <summary>The transformer and heads, for tests that configure controlled weights.</summary>
     /// <remarks>A method, not a property: the parameter registry names components after the members that hold them.</remarks>
@@ -120,9 +120,9 @@ public partial class DINO<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
             throw new ArgumentException("DINO training requires a nonempty NCHW three-channel image batch.", nameof(input));
         targets.ValidateForModel(input.Shape[0], _trainingClassCount, _dino.NumQueries);
 
-        var plan = DinoDetectionTransformer<T>.PlanDenoising(targets, _trainingClassCount, _dino.DenoisingQueries,
+        var plan = ContrastiveDenoising<T>.Plan(targets, _trainingClassCount, _dino.DenoisingQueries,
             _dino.LabelNoiseRatio, _dino.BoxNoiseScale, _denoisingRandom);
-        DinoPass<T>? pass = null;
+        DetrPass<T>? pass = null;
         TrainWithTargets(input, targets,
             x =>
             {
@@ -133,7 +133,7 @@ public partial class DINO<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
             {
                 var current = pass ?? throw new InvalidOperationException("DINO's training forward did not run.");
                 var loss = Objective(current, batch);
-                LastTrainingRecord = DinoTrainingRecord<T>.Capture(current, NumOps.ToDouble(loss.ToArray()[0]));
+                LastTrainingRecord = DetrTrainingRecord<T>.Capture(current, NumOps.ToDouble(loss.ToArray()[0]));
                 return loss;
             });
     }
@@ -149,7 +149,7 @@ public partial class DINO<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
         if (expectedOutput is null) throw new ArgumentNullException(nameof(expectedOutput));
-        DinoPass<T>? pass = null;
+        DetrPass<T>? pass = null;
         TrainWithTargets(input, expectedOutput,
             x =>
             {
@@ -167,7 +167,7 @@ public partial class DINO<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
                 return total;
             });
     }
-    private Tensor<T> Objective(DinoPass<T> pass, DetectionTrainingBatch<T> targets)
+    private Tensor<T> Objective(DetrPass<T> pass, DetectionTrainingBatch<T> targets)
     {
         var total = _detectionLoss.ComputeTapeLoss(pass.EncoderClasses, pass.EncoderBoxes, targets);
         for (int layer = 0; layer < pass.Classes.Count; layer++)
@@ -294,10 +294,10 @@ public partial class DINO<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
 }
 
 /// <summary>Host copies of one DINO training step's head outputs and its recorded loss.</summary>
-internal sealed class DinoTrainingRecord<T>
+internal sealed class DetrTrainingRecord<T>
 {
-    private DinoTrainingRecord(double loss, int queries, int classes, double[][] classes2, double[][] boxes,
-        double[][] denoisingClasses, double[][] denoisingBoxes, double[] encoderClasses, double[] encoderBoxes, DinoDenoisingPlan<T>? plan)
+    private DetrTrainingRecord(double loss, int queries, int classes, double[][] classes2, double[][] boxes,
+        double[][] denoisingClasses, double[][] denoisingBoxes, double[] encoderClasses, double[] encoderBoxes, ContrastiveDenoisingPlan<T>? plan)
     {
         Loss = loss;
         Queries = queries;
@@ -320,13 +320,13 @@ internal sealed class DinoTrainingRecord<T>
     public double[][] DenoisingBoxes { get; }
     public double[] EncoderClasses { get; }
     public double[] EncoderBoxes { get; }
-    public DinoDenoisingPlan<T>? Denoising { get; }
+    public ContrastiveDenoisingPlan<T>? Denoising { get; }
 
-    internal static DinoTrainingRecord<T> Capture(DinoPass<T> pass, double loss)
+    internal static DetrTrainingRecord<T> Capture(DetrPass<T> pass, double loss)
     {
         var ops = MathHelper.GetNumericOperations<T>();
         double[] Host(Tensor<T> t) => t.ToArray().Select(v => ops.ToDouble(v)).ToArray();
-        return new DinoTrainingRecord<T>(loss, pass.Classes[0].Shape[1], pass.Classes[0].Shape[2],
+        return new DetrTrainingRecord<T>(loss, pass.Classes[0].Shape[1], pass.Classes[0].Shape[2],
             pass.Classes.Select(Host).ToArray(), pass.Boxes.Select(Host).ToArray(),
             pass.DenoisingClasses.Select(Host).ToArray(), pass.DenoisingBoxes.Select(Host).ToArray(),
             Host(pass.EncoderClasses), Host(pass.EncoderBoxes), pass.Denoising);

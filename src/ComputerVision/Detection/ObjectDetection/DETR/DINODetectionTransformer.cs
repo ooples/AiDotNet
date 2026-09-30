@@ -8,53 +8,8 @@ using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ComputerVision.Detection.ObjectDetection.DETR;
 
-/// <summary>
-/// The contrastive-denoising (CDN) queries of one training step (DINO Sec. 3.3; reference
-/// <c>prepare_for_cdn</c>). Every target is copied into <see cref="Groups"/> groups, each holding a positive
-/// copy (box noise below lambda) and a negative copy (between lambda and 2 lambda). Positives reconstruct
-/// their target; negatives and padding are background.
-/// </summary>
-internal sealed class DinoDenoisingPlan<T>
-{
-    public DinoDenoisingPlan(int groups, int singlePad, int[] labels, double[] unsigmoidBoxes, bool[] occupied,
-        DetectionTrainingBatch<T> targets, int[][] assignments)
-    {
-        Groups = groups;
-        SinglePad = singlePad;
-        Labels = labels;
-        UnsigmoidBoxes = unsigmoidBoxes;
-        Occupied = occupied;
-        Targets = targets;
-        Assignments = assignments;
-    }
-
-    /// <summary>Denoising groups (dn_number after the reference's rescaling).</summary>
-    public int Groups { get; }
-
-    /// <summary>Slots per copy: the largest target count in the batch.</summary>
-    public int SinglePad { get; }
-
-    /// <summary>Denoising queries per image: 2 x groups x single pad.</summary>
-    public int PadSize => 2 * Groups * SinglePad;
-
-    /// <summary>Noised label of every slot, <c>[batch * padSize]</c> (0 for padding).</summary>
-    public int[] Labels { get; }
-
-    /// <summary>Inverse-sigmoid noised box of every slot, <c>[batch * padSize * 4]</c> (0 for padding).</summary>
-    public double[] UnsigmoidBoxes { get; }
-
-    /// <summary>Whether each slot holds a target copy (padding slots are zero queries).</summary>
-    public bool[] Occupied { get; }
-
-    /// <summary>The targets each positive slot reconstructs: each image's targets repeated once per group.</summary>
-    public DetectionTrainingBatch<T> Targets { get; }
-
-    /// <summary>For each image and repeated target, the positive slot it is pinned to.</summary>
-    public int[][] Assignments { get; }
-}
-
-/// <summary>Every head output of one DINO forward. Boxes are sigmoid (cx, cy, w, h) in [0, 1].</summary>
-internal sealed class DinoPass<T>
+/// <summary>Every head output of one DETR-family forward (DINO, RT-DETR). Boxes are sigmoid (cx, cy, w, h) in [0, 1].</summary>
+internal sealed class DetrPass<T>
 {
     public List<Tensor<T>> Classes { get; } = new();
     public List<Tensor<T>> Boxes { get; } = new();
@@ -67,7 +22,7 @@ internal sealed class DinoPass<T>
     /// <summary>Pre-sigmoid encoder proposal boxes of the selected queries.</summary>
     public Tensor<T> EncoderBoxLogits { get; set; } = new Tensor<T>(new[] { 0 });
     public Tensor<T> FinalBoxLogits { get; set; } = new Tensor<T>(new[] { 0 });
-    public DinoDenoisingPlan<T>? Denoising { get; set; }
+    public ContrastiveDenoisingPlan<T>? Denoising { get; set; }
 
     public List<Tensor<T>> All()
     {
@@ -110,18 +65,18 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
     private readonly List<Conv2D<T>> _projections = new();
     private readonly List<DinoGroupNorm<T>> _projectionNorms = new();
     private readonly Tensor<T> _levelEmbed;
-    private readonly List<DinoEncoderLayer<T>> _encoder = new();
-    private readonly DinoLinear<T> _encoderOutput;
+    private readonly List<DeformableEncoderLayer<T>> _encoder = new();
+    private readonly DetrLinear<T> _encoderOutput;
     private readonly LayerNorm<T> _encoderOutputNorm;
-    private readonly DinoLinear<T> _encoderClass;
-    private readonly DinoMlp<T> _encoderBox;
+    private readonly DetrLinear<T> _encoderClass;
+    private readonly DetrMlp<T> _encoderBox;
     private readonly Tensor<T> _targetEmbed;
     private readonly Tensor<T> _labelEmbed;
-    private readonly List<DinoDecoderLayer<T>> _decoder = new();
-    private readonly DinoMlp<T> _refPointHead;
+    private readonly List<DeformableDecoderLayer<T>> _decoder = new();
+    private readonly DetrMlp<T> _refPointHead;
     private readonly LayerNorm<T> _decoderNorm;
-    private readonly DinoLinear<T> _classHead;
-    private readonly DinoMlp<T> _boxHead;
+    private readonly DetrLinear<T> _classHead;
+    private readonly DetrMlp<T> _boxHead;
 
     public DinoDetectionTransformer(DINOOptionsView options, IReadOnlyList<int> backboneChannels, int numClasses)
     {
@@ -145,9 +100,9 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
         _levelEmbed = Normal(new[] { _numLevels, _d }, random);
 
         for (int i = 0; i < options.NumEncoderLayers; i++)
-            _encoder.Add(new DinoEncoderLayer<T>(_d, options.FeedForwardDimension, _numLevels, _numHeads, options.NumSamplingPoints));
+            _encoder.Add(new DeformableEncoderLayer<T>(_d, options.FeedForwardDimension, _numLevels, _numHeads, options.NumSamplingPoints));
 
-        _encoderOutput = new DinoLinear<T>(_d, _d);
+        _encoderOutput = new DetrLinear<T>(_d, _d);
         _encoderOutput.XavierUniformWeight();
         _encoderOutputNorm = new LayerNorm<T>(_d, 1e-5);
 
@@ -159,20 +114,20 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
         _labelEmbed = Normal(new[] { numClasses + 1, _d }, random);
 
         for (int i = 0; i < options.NumDecoderLayers; i++)
-            _decoder.Add(new DinoDecoderLayer<T>(_d, options.FeedForwardDimension, _numLevels, _numHeads, options.NumSamplingPoints));
-        _refPointHead = new DinoMlp<T>(2 * _d, _d, _d, 2);
+            _decoder.Add(new DeformableDecoderLayer<T>(_d, options.FeedForwardDimension, _numLevels, _numHeads, options.NumSamplingPoints));
+        _refPointHead = new DetrMlp<T>(2 * _d, _d, _d, 2);
         foreach (var layer in _refPointHead.Layers) layer.XavierUniformWeight();
         _decoderNorm = new LayerNorm<T>(_d, 1e-5);
 
         // Shared heads: class bias = -log((1 - 0.01) / 0.01); the box MLP's last layer starts at zero.
-        _classHead = new DinoLinear<T>(_d, numClasses);
+        _classHead = new DetrLinear<T>(_d, numClasses);
         _classHead.Bias.Fill(_numOps.FromDouble(-Math.Log((1 - 0.01) / 0.01)));
-        _boxHead = new DinoMlp<T>(_d, _d, 4, 3);
+        _boxHead = new DetrMlp<T>(_d, _d, 4, 3);
         _boxHead.Layers[_boxHead.Layers.Count - 1].Zero();
         // The encoder heads are deep copies of the decoder heads (two_stage_*_embed_share = False).
-        _encoderClass = new DinoLinear<T>(_d, numClasses);
+        _encoderClass = new DetrLinear<T>(_d, numClasses);
         _encoderClass.CopyFrom(_classHead);
-        _encoderBox = new DinoMlp<T>(_d, _d, 4, 3);
+        _encoderBox = new DetrMlp<T>(_d, _d, 4, 3);
         _encoderBox.CopyFrom(_boxHead);
     }
 
@@ -194,13 +149,13 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
     internal Tensor<T> ContentQueries => _targetEmbed;
 
     /// <summary>The shared class head.</summary>
-    internal DinoLinear<T> ClassHead => _classHead;
+    internal DetrLinear<T> ClassHead => _classHead;
 
     /// <summary>The shared box-refinement MLP.</summary>
-    internal DinoMlp<T> BoxHead => _boxHead;
+    internal DetrMlp<T> BoxHead => _boxHead;
 
     /// <summary>Runs the transformer on the backbone levels; <paramref name="denoising"/> is null at inference.</summary>
-    public DinoPass<T> Forward(IReadOnlyList<Tensor<T>> backboneLevels, DinoDenoisingPlan<T>? denoising)
+    public DetrPass<T> Forward(IReadOnlyList<Tensor<T>> backboneLevels, ContrastiveDenoisingPlan<T>? denoising)
     {
         var engine = AiDotNetEngine.Current;
         if (backboneLevels.Count != _numLevels - 1)
@@ -231,7 +186,7 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
         var levelOfToken = new int[tokens];
         for (int l = 0; l < _numLevels; l++)
         {
-            var pe = DinoEmbeddings.SinePositionalEncoding(shapes[l][0], shapes[l][1], _d / 2, _temperature);
+            var pe = DetrEmbeddings.SinePositionalEncoding(shapes[l][0], shapes[l][1], _d / 2, _temperature);
             for (int t = 0; t < shapes[l][0] * shapes[l][1]; t++)
             {
                 levelOfToken[starts[l] + t] = l;
@@ -309,7 +264,7 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
             for (int i = 0; i < k; i++) rows[(b * k) + i] = (b * tokens) + order[i];
         }
         var referenceUndetached = engine.Reshape(CvTensorOps<T>.Select(engine.Reshape(encoderBoxAll, new[] { batch * tokens, 4 }), rows, 0), new[] { batch, k, 4 });
-        var pass = new DinoPass<T>
+        var pass = new DetrPass<T>
         {
             EncoderClasses = engine.Reshape(CvTensorOps<T>.Select(engine.Reshape(encoderClassAll, new[] { batch * tokens, _numClasses }), rows, 0), new[] { batch, k, _numClasses }),
             EncoderBoxes = engine.Sigmoid(referenceUndetached),
@@ -347,7 +302,7 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
                 for (int s = 0; s < pad; s++)
                     for (int c = 0; c < 4; c++)
                         referenceSigmoid[(((b * total) + s) * 4) + c] = Sigmoid(denoising.UnsigmoidBoxes[(((b * pad) + s) * 4) + c]);
-            mask = AttendMask(batch, total, denoising);
+            mask = ContrastiveDenoising<T>.AttendMask(batch, _numHeads, total, denoising);
         }
 
         // Decoder with iterative refinement. References entering a layer are detached; each layer's refined
@@ -363,7 +318,7 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
                 for (int l = 0; l < _numLevels; l++)
                     for (int c = 0; c < 4; c++)
                         referenceBoxes[(((q * _numLevels) + l) * 4) + c] = _numOps.FromDouble(referenceSigmoid[(q * 4) + c]);
-            var sineQuery = DinoEmbeddings.BoxSineEmbedding(referenceSigmoid, batch * total);
+            var sineQuery = DetrEmbeddings.BoxSineEmbedding(referenceSigmoid, batch * total);
             var queryPosition = _refPointHead.Forward(new Tensor<T>(sineQuery.Select(v => _numOps.FromDouble(v)).ToArray(), new[] { batch, total, 2 * _d }));
 
             output = _decoder[i].Forward(output, queryPosition, new Tensor<T>(referenceBoxes, new[] { batch, total, _numLevels, 4 }),
@@ -396,100 +351,8 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
         return pass;
     }
 
-    /// <summary>
-    /// Builds the CDN queries for a batch (reference <c>prepare_for_cdn</c>). Returns null when no image has a
-    /// target: the reference then adds no denoising queries and its denoising losses are zero.
-    /// </summary>
-    public static DinoDenoisingPlan<T>? PlanDenoising(DetectionTrainingBatch<T> targets, int numClasses,
-        int denoisingQueries, double labelNoiseRatio, double boxNoiseScale, Random random)
-    {
-        var ops = MathHelper.GetNumericOperations<T>();
-        int batch = targets.ImageCount;
-        int singlePad = Enumerable.Range(0, batch).Max(b => targets[b].Count);
-        if (singlePad == 0 || denoisingQueries <= 0) return null;
-        int dnNumber = 2 * denoisingQueries;
-        int groups = dnNumber >= 100 ? dnNumber / (2 * singlePad) : Math.Max(1, dnNumber);
-        if (groups == 0) groups = 1;
-        int pad = 2 * groups * singlePad;
-        var labels = new int[batch * pad];
-        var boxes = new double[batch * pad * 4];
-        var occupied = new bool[batch * pad];
-
-        // Reference order: every (copy r, concatenated target) entry, copy-major; even copies are positive.
-        for (int r = 0; r < 2 * groups; r++)
-        {
-            bool negative = (r % 2) == 1;
-            for (int b = 0; b < batch; b++)
-            {
-                for (int t = 0; t < targets[b].Count; t++)
-                {
-                    var gt = targets[b][t];
-                    int slot = (b * pad) + (singlePad * r) + t;
-                    occupied[slot] = true;
-                    int label = gt.ClassId;
-                    if (labelNoiseRatio > 0 && random.NextDouble() < labelNoiseRatio * 0.5) label = random.Next(numClasses);
-                    labels[slot] = label;
-
-                    double cx = ops.ToDouble(gt.CenterX), cy = ops.ToDouble(gt.CenterY), w = ops.ToDouble(gt.Width), h = ops.ToDouble(gt.Height);
-                    double[] corners = { cx - (w / 2), cy - (h / 2), cx + (w / 2), cy + (h / 2) };
-                    if (boxNoiseScale > 0)
-                    {
-                        double[] diff = { w / 2, h / 2, w / 2, h / 2 };
-                        for (int c = 0; c < 4; c++)
-                        {
-                            double sign = random.Next(2) * 2.0 - 1.0;
-                            double part = random.NextDouble() + (negative ? 1.0 : 0.0);
-                            corners[c] = Math.Min(1.0, Math.Max(0.0, corners[c] + (part * sign * diff[c] * boxNoiseScale)));
-                        }
-                    }
-                    double[] noised = { (corners[0] + corners[2]) / 2, (corners[1] + corners[3]) / 2, corners[2] - corners[0], corners[3] - corners[1] };
-                    for (int c = 0; c < 4; c++) boxes[(slot * 4) + c] = DinoEmbeddings.InverseSigmoid(noised[c]);
-                }
-            }
-        }
-
-        // Positives reconstruct their target: group g's copy of target t sits at slot 2 * g * singlePad + t.
-        var repeated = new DetectionTrainingTarget<T>[batch][];
-        var assignments = new int[batch][];
-        for (int b = 0; b < batch; b++)
-        {
-            int count = targets[b].Count;
-            repeated[b] = new DetectionTrainingTarget<T>[groups * count];
-            assignments[b] = new int[groups * count];
-            for (int g = 0; g < groups; g++)
-                for (int t = 0; t < count; t++)
-                {
-                    repeated[b][(g * count) + t] = targets[b][t];
-                    assignments[b][(g * count) + t] = (2 * g * singlePad) + t;
-                }
-        }
-
-        return new DinoDenoisingPlan<T>(groups, singlePad, labels, boxes, occupied, new DetectionTrainingBatch<T>(repeated), assignments);
-    }
-
-    /// <summary>
-    /// The reference CDN attention mask, as the engine's "may attend" mask. Matching queries cannot see any
-    /// denoising query, and each denoising group sees only itself and the matching queries.
-    /// </summary>
-    private Tensor<bool> AttendMask(int batch, int total, DinoDenoisingPlan<T> plan)
-    {
-        int pad = plan.PadSize, group = 2 * plan.SinglePad;
-        var mask = new Tensor<bool>(new[] { batch, _numHeads, total, total });
-        for (int b = 0; b < batch; b++)
-            for (int h = 0; h < _numHeads; h++)
-                for (int q = 0; q < total; q++)
-                    for (int key = 0; key < total; key++)
-                    {
-                        bool blocked;
-                        if (q >= pad) blocked = key < pad;
-                        else blocked = key < pad && (key / group) != (q / group);
-                        mask[b, h, q, key] = !blocked;
-                    }
-        return mask;
-    }
-
     private Tensor<T> InverseSigmoidConstant(double[] sigmoid, int batch, int total)
-        => new Tensor<T>(sigmoid.Select(v => _numOps.FromDouble(DinoEmbeddings.InverseSigmoid(v))).ToArray(), new[] { batch, total, 4 });
+        => new Tensor<T>(sigmoid.Select(v => _numOps.FromDouble(DetrEmbeddings.InverseSigmoid(v))).ToArray(), new[] { batch, total, 4 });
 
     /// <summary>The reference <c>inverse_sigmoid</c> (eps 1e-5) on the tape.</summary>
     private Tensor<T> InverseSigmoidTape(Tensor<T> x)

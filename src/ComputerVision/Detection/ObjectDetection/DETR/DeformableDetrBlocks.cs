@@ -13,11 +13,11 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.DETR;
 /// <c>torch.nn.Linear</c> (uniform in <c>+-1/sqrt(in)</c>) from the model's seed scope, so DINO can apply the
 /// reference's explicit re-initializations (zeroed box-head output, prior-probability class bias).
 /// </summary>
-internal sealed class DinoLinear<T> : CvParameterModule<T>
+internal sealed class DetrLinear<T> : CvParameterModule<T>
 {
     private readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
 
-    public DinoLinear(int inFeatures, int outFeatures)
+    public DetrLinear(int inFeatures, int outFeatures)
     {
         if (inFeatures <= 0) throw new ArgumentOutOfRangeException(nameof(inFeatures));
         if (outFeatures <= 0) throw new ArgumentOutOfRangeException(nameof(outFeatures));
@@ -63,7 +63,7 @@ internal sealed class DinoLinear<T> : CvParameterModule<T>
     }
 
     /// <summary>Copies another linear layer's values (the reference deep-copies its heads).</summary>
-    public void CopyFrom(DinoLinear<T> other)
+    public void CopyFrom(DetrLinear<T> other)
     {
         for (int i = 0; i < Weight.Length; i++) Weight[i] = other.Weight[i];
         for (int i = 0; i < Bias.Length; i++) Bias[i] = other.Bias[i];
@@ -102,17 +102,17 @@ internal sealed class DinoLinear<T> : CvParameterModule<T>
 }
 
 /// <summary>The reference <c>MLP</c>: linear layers with ReLU between them (none after the last).</summary>
-internal sealed class DinoMlp<T> : CvParameterModule<T>
+internal sealed class DetrMlp<T> : CvParameterModule<T>
 {
-    public DinoMlp(int inputDim, int hiddenDim, int outputDim, int numLayers)
+    public DetrMlp(int inputDim, int hiddenDim, int outputDim, int numLayers)
     {
         if (numLayers <= 0) throw new ArgumentOutOfRangeException(nameof(numLayers));
-        Layers = new List<DinoLinear<T>>();
+        Layers = new List<DetrLinear<T>>();
         for (int i = 0; i < numLayers; i++)
-            Layers.Add(new DinoLinear<T>(i == 0 ? inputDim : hiddenDim, i == numLayers - 1 ? outputDim : hiddenDim));
+            Layers.Add(new DetrLinear<T>(i == 0 ? inputDim : hiddenDim, i == numLayers - 1 ? outputDim : hiddenDim));
     }
 
-    public List<DinoLinear<T>> Layers { get; }
+    public List<DetrLinear<T>> Layers { get; }
 
     public Tensor<T> Forward(Tensor<T> input)
     {
@@ -125,7 +125,7 @@ internal sealed class DinoMlp<T> : CvParameterModule<T>
         return x;
     }
 
-    public void CopyFrom(DinoMlp<T> other)
+    public void CopyFrom(DetrMlp<T> other)
     {
         for (int i = 0; i < Layers.Count; i++) Layers[i].CopyFrom(other.Layers[i]);
     }
@@ -183,20 +183,20 @@ internal sealed class DinoGroupNorm<T> : CvParameterModule<T>
 /// multi-scale tokens, then a ReLU feed-forward block, each with a residual and LayerNorm. DINO trains
 /// without dropout.
 /// </summary>
-internal sealed class DinoEncoderLayer<T> : CvParameterModule<T>
+internal sealed class DeformableEncoderLayer<T> : CvParameterModule<T>
 {
     private readonly MultiScaleDeformableAttention<T> _selfAttention;
     private readonly LayerNorm<T> _norm1;
-    private readonly DinoLinear<T> _linear1;
-    private readonly DinoLinear<T> _linear2;
+    private readonly DetrLinear<T> _linear1;
+    private readonly DetrLinear<T> _linear2;
     private readonly LayerNorm<T> _norm2;
 
-    public DinoEncoderLayer(int dModel, int feedForward, int numLevels, int numHeads, int numPoints)
+    public DeformableEncoderLayer(int dModel, int feedForward, int numLevels, int numHeads, int numPoints)
     {
         _selfAttention = new MultiScaleDeformableAttention<T>(dModel, numLevels, numHeads, numPoints);
         _norm1 = new LayerNorm<T>(dModel, 1e-5);
-        _linear1 = new DinoLinear<T>(dModel, feedForward);
-        _linear2 = new DinoLinear<T>(feedForward, dModel);
+        _linear1 = new DetrLinear<T>(dModel, feedForward);
+        _linear2 = new DetrLinear<T>(feedForward, dModel);
         _linear1.XavierUniformWeight();
         _linear2.XavierUniformWeight();
         _norm2 = new LayerNorm<T>(dModel, 1e-5);
@@ -247,39 +247,39 @@ internal sealed class DinoEncoderLayer<T> : CvParameterModule<T>
 /// queries (with the denoising group mask), deformable cross-attention into the encoder memory at the query's
 /// reference box, then the feed-forward block. Each has a residual and LayerNorm.
 /// </summary>
-internal sealed class DinoDecoderLayer<T> : CvParameterModule<T>
+internal sealed class DeformableDecoderLayer<T> : CvParameterModule<T>
 {
     private readonly int _dModel;
     private readonly int _numHeads;
-    private readonly DinoLinear<T> _query;
-    private readonly DinoLinear<T> _key;
-    private readonly DinoLinear<T> _value;
-    private readonly DinoLinear<T> _selfOutput;
+    private readonly DetrLinear<T> _query;
+    private readonly DetrLinear<T> _key;
+    private readonly DetrLinear<T> _value;
+    private readonly DetrLinear<T> _selfOutput;
     private readonly LayerNorm<T> _norm2;
     private readonly MultiScaleDeformableAttention<T> _crossAttention;
     private readonly LayerNorm<T> _norm1;
-    private readonly DinoLinear<T> _linear1;
-    private readonly DinoLinear<T> _linear2;
+    private readonly DetrLinear<T> _linear1;
+    private readonly DetrLinear<T> _linear2;
     private readonly LayerNorm<T> _norm3;
 
-    public DinoDecoderLayer(int dModel, int feedForward, int numLevels, int numHeads, int numPoints)
+    public DeformableDecoderLayer(int dModel, int feedForward, int numLevels, int numHeads, int numPoints)
     {
         _dModel = dModel;
         _numHeads = numHeads;
         // nn.MultiheadAttention: Xavier-uniform in-projections with zero bias, zero out-projection bias.
-        _query = new DinoLinear<T>(dModel, dModel);
-        _key = new DinoLinear<T>(dModel, dModel);
-        _value = new DinoLinear<T>(dModel, dModel);
+        _query = new DetrLinear<T>(dModel, dModel);
+        _key = new DetrLinear<T>(dModel, dModel);
+        _value = new DetrLinear<T>(dModel, dModel);
         _query.XavierUniformZeroBias();
         _key.XavierUniformZeroBias();
         _value.XavierUniformZeroBias();
-        _selfOutput = new DinoLinear<T>(dModel, dModel);
+        _selfOutput = new DetrLinear<T>(dModel, dModel);
         _selfOutput.XavierUniformZeroBias();
         _norm2 = new LayerNorm<T>(dModel, 1e-5);
         _crossAttention = new MultiScaleDeformableAttention<T>(dModel, numLevels, numHeads, numPoints);
         _norm1 = new LayerNorm<T>(dModel, 1e-5);
-        _linear1 = new DinoLinear<T>(dModel, feedForward);
-        _linear2 = new DinoLinear<T>(feedForward, dModel);
+        _linear1 = new DetrLinear<T>(dModel, feedForward);
+        _linear2 = new DetrLinear<T>(feedForward, dModel);
         _linear1.XavierUniformWeight();
         _linear2.XavierUniformWeight();
         _norm3 = new LayerNorm<T>(dModel, 1e-5);
@@ -346,7 +346,7 @@ internal sealed class DinoDecoderLayer<T> : CvParameterModule<T>
 }
 
 /// <summary>Sine embeddings used by DINO, computed on the host for inputs the reference detaches.</summary>
-internal static class DinoEmbeddings
+internal static class DetrEmbeddings
 {
     /// <summary>
     /// <c>PositionEmbeddingSineHW</c> with normalize = true, scale 2 pi and the given temperature, for an
