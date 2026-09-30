@@ -86,8 +86,12 @@ function Test-StructuralRoute([string] $Why) {
 
 function New-SelectionReport($Selection, [int] $Total, [int] $FinalCount, [bool] $Escalated, [string] $Reason, $Plan) {
     $reasons = @(Get-Prop $Selection 'reasons' | Where-Object { $_ })
-    $would = @(Get-Prop $Selection 'wouldSelect' | Where-Object { $_ })
-    if ($would.Count -eq 0) { $would = @(Get-Prop $Selection 'shards' | Where-Object { $_ }) }
+    # Evidence, not absence: a missing or partial selection.json must not read as "coverage selected nothing".
+    $wouldProperty = if ($null -ne $Selection) { $Selection.PSObject.Properties['wouldSelect'] } else { $null }
+    $shardsProperty = if ($null -ne $Selection) { $Selection.PSObject.Properties['shards'] } else { $null }
+    $selectionAvailable = $null -ne $wouldProperty -or $null -ne $shardsProperty
+    $would = @(if ($null -ne $wouldProperty) { @($wouldProperty.Value | Where-Object { $_ }) }
+               elseif ($null -ne $shardsProperty) { @($shardsProperty.Value | Where-Object { $_ }) })
     $routes = @(Get-Prop $Selection 'routes' | Where-Object { $_ } | ForEach-Object { Split-Route ([string] $_) } | Where-Object { $_ })
     $files = @(Get-Prop $Selection 'files' | Where-Object { $_ })
 
@@ -132,7 +136,8 @@ function New-SelectionReport($Selection, [int] $Total, [int] $FinalCount, [bool]
         schemaVersion = 1
         verdict = [pscustomobject]@{
             escalated = $Escalated; finalShards = $FinalCount; totalShards = $Total
-            wouldSelect = $would.Count; workflowReason = $Reason
+            wouldSelect = $(if ($selectionAvailable) { $would.Count } else { $null })
+            selectionAvailable = $selectionAvailable; workflowReason = $Reason
         }
         map = Get-Prop $Selection 'map'
         escalations = @($escalations)
@@ -150,7 +155,9 @@ function ConvertTo-SelectionMarkdown($Report) {
     [void] $sb.AppendLine('### Shard selection')
     [void] $sb.AppendLine()
     if ($v.escalated) {
-        [void] $sb.AppendLine("**Full matrix: $($v.finalShards) of $($v.totalShards) shards.** Coverage alone would have selected **$($v.wouldSelect)** of $($v.totalShards).")
+        $alone = if ($v.selectionAvailable) { "Coverage alone would have selected **$($v.wouldSelect)** of $($v.totalShards)." }
+                 else { 'Coverage selection unavailable: the selector left no evidence of what it would have selected.' }
+        [void] $sb.AppendLine("**Full matrix: $($v.finalShards) of $($v.totalShards) shards.** $alone")
     }
     else {
         [void] $sb.AppendLine("**Selected $($v.finalShards) of $($v.totalShards) shards.**")
@@ -265,7 +272,8 @@ if ($SelfTest) {
         (Check 'unresolved type-impact causes are grouped' ($md -match '\| source generator input \| 2 \|')),
         (Check 'test-level table lists the shard' ($md -match '\| Alpha \| False \| 7 \|')),
         (Check 'report JSON carries wouldSelect' (@($r.wouldSelect).Count -eq 3)),
-        (Check 'a missing selection still renders, naming the workflow reason' ($empty -match 'Workflow override: no certified shard map'))
+        (Check 'a missing selection still renders, naming the workflow reason' ($empty -match 'Workflow override: no certified shard map')),
+        (Check 'a missing selection says coverage is unavailable, not that it selected 0' (($empty -match 'Coverage selection unavailable') -and ($empty -notmatch 'would have selected \*\*0\*\*')))
     )
     foreach ($c in $checks) { Write-Host ("  [{0}] {1}" -f $(if ($c.Ok) { 'OK' } else { 'FAIL' }), $c.Name) }
     $failed = @($checks | Where-Object { -not $_.Ok })
@@ -288,7 +296,9 @@ try {
     }
 }
 catch {
-    # The report never gates the matrix; say what failed and carry on.
+    # Never swallowed: exit nonzero so the caller sees the failure. The Select step then writes its own fallback
+    # verdict, and the Build job runs this step with continue-on-error, so the matrix is never gated on the report.
     Write-Host "::warning::selection report could not be written: $($_.Exception.Message)"
+    exit 1
 }
 exit 0

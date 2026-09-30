@@ -883,6 +883,11 @@ function Select-ImpactedShards {
                 if ($isCurrent) { Add-FileDecision $path 'NonRuntime' 'skipped' @() 'cannot affect any test' }
                 continue
             }
+            ([ChangedPathImpact]::BuildOnly) {
+                # Compiled, never routed: it can raise an analyzer to error but cannot change what a test executes.
+                if ($isCurrent) { Add-FileDecision $path 'BuildOnly' 'skipped' @() 'compiled by the build jobs; cannot change what any test executes' }
+                continue
+            }
             ([ChangedPathImpact]::SelectionControl) {
                 # A control-path edit in THIS pull request must exercise the complete matrix. The
                 # same path in the older map-to-HEAD delta was already validated when it landed and
@@ -2466,6 +2471,16 @@ file class Private { }
         '.editorconfig is not classified BuildOnly'
     Assert-True ((Get-ChangedPathImpact -Path 'src/Nested/.editorconfig') -eq [ChangedPathImpact]::BuildOnly) `
         'a nested .editorconfig is not classified BuildOnly'
+    # The selection report lists every changed path, so a build-only file must be recorded as a decision even
+    # beside runtime changes (it used to fall through the switch and vanish from the report).
+    $reportMap = [pscustomobject]@{ knownShards = @('Alpha'); alwaysRun = @(); files = [pscustomobject]@{
+        'src/Covered.cs' = @([pscustomobject]@{ s = 0; r = @(10, 20) }) } }
+    $withConfig = Select-ImpactedShards -Map $reportMap -Changed @{ '.editorconfig' = @(1, 2); 'src/Covered.cs' = @(12, 14) }
+    $configDecision = @($withConfig.Files | Where-Object { $_.path -eq '.editorconfig' })
+    Assert-True ($configDecision.Count -eq 1 -and $configDecision[0].category -eq 'BuildOnly' -and $configDecision[0].outcome -eq 'skipped') `
+        '.editorconfig beside a runtime change is missing from the per-file selection decisions'
+    Assert-True (@($withConfig.Files | Where-Object { $_.path -eq 'src/Covered.cs' -and $_.outcome -eq 'routed' }).Count -eq 1) `
+        'the runtime file beside .editorconfig lost its routed decision'
     # The neighbours it used to sit beside must keep escalating: they really can change compilation
     # output, not merely diagnostics.
     foreach ($shared in 'Directory.Build.props', 'Directory.Packages.props', 'global.json', 'nuget.config') {

@@ -596,6 +596,8 @@ jobs:
       # not. Appends to this job's summary; report-only.
       - name: Report test-level selection
         if: always() && hashFiles('type-impact-plan.json') != ''
+        # Report-only: the script exits nonzero when it cannot write the report, which must not fail Build.
+        continue-on-error: true
         shell: pwsh
         run: ./tools/TestImpact/Write-SelectionReport.ps1 -TypeImpactPlanFile type-impact-plan.json
 
@@ -1266,6 +1268,7 @@ jobs:
               & ./tools/TestImpact/Write-SelectionReport.ps1 -SelectionFile selection.json -TotalShards $all.Count `
                   -FinalShardCount $finalCount -FinalEscalated:$escalate -WorkflowReason $override `
                   -ReportFile selection-report.json
+              if ($LASTEXITCODE -ne 0) { throw "the report script exited $LASTEXITCODE" }
             }
             catch {
               Write-Host "::warning::selection report not written: $($_.Exception.Message)"
@@ -1397,6 +1400,8 @@ jobs:
       # anyone asking why a run selected what it did. Report-only; never gates anything.
       - name: Upload shard selection report
         if: always()
+        # Report-only: a transient artifact-service failure must not fail Select shards and block the matrix.
+        continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         with:
           name: shard-selection-report
