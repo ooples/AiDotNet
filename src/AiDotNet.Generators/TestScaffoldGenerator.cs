@@ -9168,10 +9168,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // input stays in range). Token-ID InputShape [16] / OutputShape [4] come from the
                 // document branch below. Only the width/depth/resolution shrink; the pattern is unchanged.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputSize: 16, outputSize: 4), " +
-                    "options: new AiDotNet.Document.Options.PICKOptions { NumEntityTypes = 4, ImageSize = 32, MaxSequenceLength = 32, HiddenDim = 32, NumGcnLayers = 1, NumHeads = 2, VocabSize = 100 }" + ")";
+                    "inputHeight: 3, inputWidth: 8, outputSize: 4), " +
+                    "options: new AiDotNet.Document.Options.PICKOptions { NumEntityTypes = 4, ImageSize = 32, MaxSequenceLength = 32, HiddenDim = 32, NumGcnLayers = 1, NumHeads = 2, VocabSize = 100, " +
+                    "FeedForwardDim = 64, NumEncoderLayers = 1, ImageFeatureDim = 16, ImageEncoderDepths = new[] { 1, 1, 1, 1 }, GraphLearningDim = 8, LstmHiddenDim = 16, LstmLayers = 1 }" + ")";
             }
             else if (model.ClassName == "Octo" && model.TypeParameterCount == 1)
             {
@@ -12799,8 +12800,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // a short token-ID sequence so the model's intended code path
             // (token embedding → 2D position embeddings → BERT-style stack)
             // runs at sensible cost.
-            sb.AppendLine("    protected override int[] InputShape => new[] { 16 };");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+            if (model.ClassName == "PICK")
+            {
+                // PICK tags OCR text SEGMENTS (Yu et al. 2020): a packed [N, 4 + T] tensor, each row a box
+                // (x0, y0, x1, y1) then T token ids, and it emits one CRF tag per token slot, [N * T, tags].
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3, 8 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 12, 4 };");
+            }
+            else
+            {
+                sb.AppendLine("    protected override int[] InputShape => new[] { 16 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+            }
 
             if (model.ClassName == "LayoutLMv2")
             {

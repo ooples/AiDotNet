@@ -130,7 +130,6 @@ internal static class ModelDefectBaselines
             "CreateDefaultParaformerLayers",
             "CreateDefaultPengiLayers",
             "CreateDefaultPerceiverResamplerLayers",
-            "CreateDefaultPICKLayers",
             "CreateDefaultPixelShuffleProjectorLayers",
             "CreateDefaultPointCloudVLMLayers",
             "CreateDefaultProprietaryAPILayers",

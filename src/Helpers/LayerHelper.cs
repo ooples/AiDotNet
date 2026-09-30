@@ -10972,65 +10972,6 @@ public static partial class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates default PICK layers for key information extraction.
-    /// </summary>
-    /// <param name="hiddenDim">Hidden dimension (default: 256).</param>
-    /// <param name="numGcnLayers">Number of GCN layers (default: 2).</param>
-    /// <param name="numHeads">Number of attention heads (default: 8).</param>
-    /// <param name="vocabSize">Vocabulary size (default: 30522).</param>
-    /// <param name="numEntityTypes">Number of entity types (default: 14).</param>
-    /// <param name="maxSequenceLength">Maximum sequence length (default: 512).</param>
-    /// <returns>A collection of layers forming a PICK model.</returns>
-    /// <remarks>
-    /// <para>
-    /// Reference: "PICK: Processing Key Information Extraction" (ICPR 2020)
-    /// </para>
-    /// </remarks>
-    public static IEnumerable<ILayer<T>> CreateDefaultPICKLayers(
-        int hiddenDim = 256,
-        int numGcnLayers = 2,
-        int numHeads = 8,
-        int vocabSize = 30522,
-        int numEntityTypes = 14,
-        int maxSequenceLength = 512)
-    {
-        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-
-        // Text encoder (BERT-style)
-        yield return new EmbeddingLayer<T>(vocabSize, hiddenDim);
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
-        yield return new LayerNormalizationLayer<T>();
-
-        // Transformer layers for text encoding
-        for (int i = 0; i < 4; i++)
-        {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads), 
-                activationFunction: identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(hiddenDim * 4, reluActivation);
-            yield return new DenseLayer<T>(hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-        }
-
-        // Graph Convolutional Network layers (simplified as dense)
-        for (int i = 0; i < numGcnLayers; i++)
-        {
-            yield return new DenseLayer<T>(hiddenDim, reluActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DropoutLayer<T>(0.1);
-        }
-
-        // BiLSTM simulation (using dense layers)
-        yield return new DenseLayer<T>(hiddenDim * 2, reluActivation);
-        yield return new DenseLayer<T>(hiddenDim, identityActivation);
-
-        // Output layer for NER
-        yield return new DropoutLayer<T>(0.1);
-        yield return new DenseLayer<T>(numEntityTypes, identityActivation);
-    }
-
-    /// <summary>
     /// Creates default LayoutXLM layers for multilingual document understanding.
     /// </summary>
     /// <param name="hiddenDim">Hidden dimension (default: 768).</param>
