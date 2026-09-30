@@ -36,7 +36,7 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
     internal static void Verify(ObjectDetectorBase<T> detector)
     {
         var profile = ProfileOf(detector);
-        VerifyOne(detector, profile, suppressionDisabled: detector is YOLOv10<T> or DINO<T>);
+        VerifyOne(detector, profile, suppressionDisabled: detector is YOLOv10<T> or DINO<T> or RTDETR<T>);
         if (detector is YOLOv10<T>)
         {
             // YOLOv10 intentionally defaults to NMS-free. Test that public default separately
@@ -134,7 +134,43 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
             for (int c = 0; c < 4; c++) boxBias[c] = ToT(DinoBoxDelta[c]);
             return;
         }
-        if (profile is HeadProfile.Detr or HeadProfile.RtDetr)
+        if (profile == HeadProfile.RtDetr)
+        {
+            // Every weight is zero except the levers below. RT-DETR's content queries are the (zero) encoder
+            // features, so the per-query signal comes through the positional path of the LAST decoder layer
+            // (see ExpectedRtdetr for the derivation).
+            // - query_pos channel 0 = 4 w + cx + 0.04 cy of the query's reference box (the cy term breaks the tie
+            //   between the two mirror-image candidates).
+            // - Head 0 of the deformable cross-attention puts weight on level 2 as a steep function of it.
+            // - Level 2's memory is 1 in channel 0 (decoder input-projection BN shift), the other levels 0.
+            // - The output projection carries that sample to channel 0 and adds a constant 1 to channel 1, so
+            //   the LayerNorms keep the magnitude.
+            // - Every layer's box MLP adds D = (0, 0, 2, 2) in logit space.
+            var decoder = Assert.IsType<RTDETR<T>>(detector).GetDecoder();
+            foreach (var gamma in decoder.LayerNormGammas()) gamma.Fill(ToT(1));
+            decoder.InputProjectionBetas().Last()[0] = ToT(1);
+            decoder.QueryPosHead.Layers[0].Weight[2, 0] = ToT(4);
+            decoder.QueryPosHead.Layers[0].Weight[0, 0] = ToT(1);
+            decoder.QueryPosHead.Layers[0].Weight[1, 0] = ToT(RtdetrCyWeight);
+            decoder.QueryPosHead.Layers[1].Weight[0, 0] = ToT(1);
+            var cross = decoder.Layers[decoder.Layers.Count - 1].CrossAttention;
+            cross.ValueWeight[0, 0] = ToT(1);
+            for (int point = 0; point < 4; point++)
+            {
+                cross.AttentionWeight[0, 8 + point] = ToT(RtdetrAttentionScale); // head 0, level 2
+                cross.AttentionBias[8 + point] = ToT(-RtdetrAttentionScale * RtdetrAttentionCenter);
+            }
+            cross.OutputWeight[0, 0] = ToT(1);
+            cross.OutputBias[1] = ToT(1);
+            var score = decoder.ScoreHeads[decoder.ScoreHeads.Count - 1];
+            score.Weight[0, 0] = ToT(1);
+            score.Bias[0] = ToT(RtdetrForegroundBias);
+            score.Bias[1] = ToT(-20);
+            foreach (var box in decoder.BoxHeads)
+                for (int c = 0; c < 4; c++) box.Layers[box.Layers.Count - 1].Bias[c] = ToT(RtdetrBoxDelta[c]);
+            return;
+        }
+        if (profile is HeadProfile.Detr)
         {
             const int hidden = 128;
             int queries = profile == HeadProfile.Detr ? 50 : 100;
@@ -191,7 +227,8 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
         {
             HeadProfile.Yolo => ExpectedYolo(raw),
             HeadProfile.Dino => ExpectedDino(raw),
-            HeadProfile.Detr or HeadProfile.RtDetr => ExpectedDetr(raw, profile),
+            HeadProfile.RtDetr => ExpectedRtdetr(raw),
+            HeadProfile.Detr => ExpectedDetr(raw, profile),
             HeadProfile.FasterRcnn or HeadProfile.CascadeRcnn => ExpectedRcnn(raw, profile),
             _ => throw new ArgumentOutOfRangeException(nameof(profile))
         };
@@ -266,8 +303,8 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
             if (query < 2)
             {
                 Assert.True(score > 0.05);
-                expected.Add(new ExpectedDetection(score, Math.Max(0, box[0] - box[2] / 2), Math.Max(0, box[1] - box[3] / 2),
-                    Math.Min(64, box[0] + box[2] / 2), Math.Min(64, box[1] + box[3] / 2)));
+                expected.Add(new ExpectedDetection(score, (float)Math.Max(0, box[0] - box[2] / 2), (float)Math.Max(0, box[1] - box[3] / 2),
+                    (float)Math.Min(64, box[0] + box[2] / 2), (float)Math.Min(64, box[1] + box[3] / 2))); // float corners, like the score
             }
             else Assert.True(score < 0.05);
         }
@@ -288,6 +325,81 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
             for (int index = 0; index < values.Length; index++) values[index] = (values[index] - mean) / scale;
         }
         return values[0];
+    }
+    private const double RtdetrAttentionScale = 40, RtdetrAttentionCenter = 4.39, RtdetrForegroundBias = -9, RtdetrCyWeight = 0.04;
+    private static readonly double[] RtdetrBoxDelta = { 0, 0, 2, 2 };
+
+    /// <summary>
+    /// RT-DETR's controlled outputs, re-derived on the host:
+    /// <list type="bullet">
+    /// <item>Tokens: Nano's R18 C3-C5 at 64x64 give hybrid-encoder levels 8x8, 4x4 and 2x2, so 84 tokens, all
+    /// selected in token order (every encoder score ties).</item>
+    /// <item>Anchors: token-centered, 0.05 * 2^level.</item>
+    /// <item>References: each of the three layers adds D, so the last layer sees anchor + 2 D (in logit space),
+    /// and the final box logits are 3 D + inverse_sigmoid(anchor).</item>
+    /// <item>Class logit: the last layer's hidden state is LN(LN((w2 * v, 1, 0, ...))), where w2 is head 0's
+    /// softmax weight on level 2 and v is the zero-padded bilinear sample of the level-2 map (1 inside) at the
+    /// reference point.</item>
+    /// </list>
+    /// </summary>
+    private static List<ExpectedDetection> ExpectedRtdetr(Tensor<T> raw)
+    {
+        const int queries = 84, classes = 2;
+        Assert.Equal(new[] { 1, queries * (classes + 4) }, raw.Shape.ToArray());
+        static double Sigmoid(double x) => 1 / (1 + Math.Exp(-x));
+        static double InverseSigmoid(double x) => Math.Log(Math.Max(x, 1e-5) / Math.Max(1 - x, 1e-5));
+        static double Coverage(double normalized, int size)
+        {
+            // Share of a bilinear sample that falls inside [0, size) with zero padding, align_corners = false.
+            double p = normalized * size - 0.5;
+            return p < -1 || p > size ? 0 : p < 0 ? p + 1 : p > size - 1 ? size - p : 1;
+        }
+        static double[] LayerNorm(double[] values)
+        {
+            double mean = values.Average();
+            double variance = values.Sum(v => (v - mean) * (v - mean)) / values.Length;
+            return values.Select(v => (v - mean) / Math.Sqrt(variance + 1e-5)).ToArray();
+        }
+
+        var anchors = new List<double[]>();
+        int[] sides = { 8, 4, 2 };
+        for (int level = 0; level < sides.Length; level++)
+            for (int y = 0; y < sides[level]; y++)
+                for (int x = 0; x < sides[level]; x++)
+                    anchors.Add(new[] { (x + 0.5) / sides[level], (y + 0.5) / sides[level], 0.05 * Math.Pow(2, level), 0.05 * Math.Pow(2, level) });
+        Assert.Equal(queries, anchors.Count);
+
+        var expected = new List<ExpectedDetection>();
+        for (int query = 0; query < queries; query++)
+        {
+            var reference = anchors[query].Select((a, c) => Sigmoid(InverseSigmoid(a) + 2 * RtdetrBoxDelta[c])).ToArray();
+            double position = 4 * reference[2] + reference[0] + RtdetrCyWeight * reference[1];
+            double z = RtdetrAttentionScale * (position - RtdetrAttentionCenter);
+            double levelTwoWeight = 4 * Math.Exp(z) / (4 * Math.Exp(z) + 8);
+            double sample = Coverage(reference[0], 2) * Coverage(reference[1], 2);
+            var hidden = new double[256];
+            hidden[0] = levelTwoWeight * sample;
+            hidden[1] = 1;
+            double classLogit = LayerNorm(LayerNorm(hidden))[0] + RtdetrForegroundBias;
+            AssertClose(classLogit, ToD(raw[0, query * classes]));
+            AssertClose(-20, ToD(raw[0, query * classes + 1]));
+
+            var box = new double[4];
+            for (int c = 0; c < 4; c++)
+            {
+                double logit = 3 * RtdetrBoxDelta[c] + InverseSigmoid(anchors[query][c]);
+                AssertClose(logit, ToD(raw[0, queries * classes + query * 4 + c]));
+                box[c] = Sigmoid(logit) * 64;
+            }
+
+            double score = (float)Sigmoid(classLogit);
+            if (score > 0.05)
+                expected.Add(new ExpectedDetection(score, (float)Math.Max(0, box[0] - box[2] / 2), (float)Math.Max(0, box[1] - box[3] / 2),
+                    (float)Math.Min(64, box[0] + box[2] / 2), (float)Math.Min(64, box[1] + box[3] / 2))); // float corners, like the score
+        }
+
+        Assert.Equal(2, expected.Count); // the two right-hand level-2 tokens
+        return expected.OrderByDescending(candidate => candidate.Score).ToList();
     }
     private static List<ExpectedDetection> ExpectedDetr(Tensor<T> raw, HeadProfile profile)
     {

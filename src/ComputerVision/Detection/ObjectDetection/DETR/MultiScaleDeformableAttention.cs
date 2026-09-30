@@ -106,6 +106,13 @@ internal sealed class MultiScaleDeformableAttention<T> : CvParameterModule<T>
     /// <summary>Number of feature levels sampled.</summary>
     public int NumLevels => _numLevels;
 
+    // Test access for controlled-weight fixtures ([in, out] storage).
+    internal Tensor<T> ValueWeight => _valueWeight;
+    internal Tensor<T> AttentionWeight => _attentionWeight;
+    internal Tensor<T> AttentionBias => _attentionBias;
+    internal Tensor<T> OutputWeight => _outputWeight;
+    internal Tensor<T> OutputBias => _outputBias;
+
     /// <summary>
     /// Runs the attention.
     /// </summary>

@@ -324,7 +324,7 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
             output = _decoder[i].Forward(output, queryPosition, new Tensor<T>(referenceBoxes, new[] { batch, total, _numLevels, 4 }),
                 memory, shapes, starts, mask);
 
-            var newReference = engine.Sigmoid(engine.TensorAdd(_boxHead.Forward(output), InverseSigmoidConstant(referenceSigmoid, batch, total)));
+            var newReference = engine.Sigmoid(engine.TensorAdd(_boxHead.Forward(output), DetrHeads<T>.InverseSigmoidConstant(referenceSigmoid, batch, total)));
             refined.Add(newReference);
             var newValues = newReference.ToArray();
             for (int j = 0; j < referenceSigmoid.Length; j++) referenceSigmoid[j] = _numOps.ToDouble(newValues[j]);
@@ -333,7 +333,7 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
 
         for (int i = 0; i < _decoder.Count; i++)
         {
-            var previous = i == 0 ? InverseSigmoidConstant(firstReference, batch, total) : InverseSigmoidTape(refined[i - 1]);
+            var previous = i == 0 ? DetrHeads<T>.InverseSigmoidConstant(firstReference, batch, total) : DetrHeads<T>.InverseSigmoid(refined[i - 1]);
             var boxLogits = engine.TensorAdd(_boxHead.Forward(hidden[i]), previous);
             var classes = _classHead.Forward(hidden[i]);
             pass.Classes.Add(engine.TensorSlice(classes, new[] { 0, pad, 0 }, new[] { batch, k, _numClasses }));
@@ -349,19 +349,6 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
         }
 
         return pass;
-    }
-
-    private Tensor<T> InverseSigmoidConstant(double[] sigmoid, int batch, int total)
-        => new Tensor<T>(sigmoid.Select(v => _numOps.FromDouble(DetrEmbeddings.InverseSigmoid(v))).ToArray(), new[] { batch, total, 4 });
-
-    /// <summary>The reference <c>inverse_sigmoid</c> (eps 1e-5) on the tape.</summary>
-    private Tensor<T> InverseSigmoidTape(Tensor<T> x)
-    {
-        var engine = AiDotNetEngine.Current;
-        var eps = _numOps.FromDouble(1e-5);
-        var numerator = engine.TensorMax(x, eps);
-        var denominator = engine.TensorMax(engine.TensorAddScalar(engine.TensorNegate(x), _numOps.One), eps);
-        return engine.TensorSubtract(engine.TensorLog(numerator), engine.TensorLog(denominator));
     }
 
     private Tensor<T> Normal(int[] shape, Random random)

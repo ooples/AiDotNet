@@ -11998,6 +11998,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // 128x128, P5 at 4x4; every other contract keeps 64x64.
                     sb.AppendLine("    protected override int[] LossReductionInputShape => new[] { 1, 3, 128, 128 };");
                 }
+                if (model.ClassName == "RTDETR")
+                {
+                    // RT-DETR's denoising class embedding is read only by the contrastive-denoising queries, which the
+                    // target-less tensor Train cannot build; TrainDetections' semantic oracle covers it.
+                    sb.AppendLine("    protected override System.Collections.Generic.IReadOnlyCollection<string> ParametersUnusedByForward =>");
+                    sb.AppendLine("        new[] { \"AiDotNet.ComputerVision.Detection.ObjectDetection.DETR.RTDETR<T>::_decoder/w0\" };");
+                }
                 if (model.ClassName == "DINO")
                 {
                     // DINO's CDN label embedding (label_enc) is read only by the contrastive-denoising queries,

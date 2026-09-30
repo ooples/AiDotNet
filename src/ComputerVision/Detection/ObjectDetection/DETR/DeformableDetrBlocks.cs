@@ -1,3 +1,4 @@
+using AiDotNet.Augmentation.Image;
 using System.IO;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.Models.Parameters;
@@ -262,7 +263,12 @@ internal sealed class DeformableDecoderLayer<T> : CvParameterModule<T>
     private readonly DetrLinear<T> _linear2;
     private readonly LayerNorm<T> _norm3;
 
-    public DeformableDecoderLayer(int dModel, int feedForward, int numLevels, int numHeads, int numPoints)
+    /// <param name="transformerWideXavier">
+    /// True for DINO, whose DeformableTransformer._reset_parameters Xavier-initializes every weight matrix,
+    /// including the FFN and the attention output. False for RT-DETR, which keeps the torch defaults:
+    /// nn.Linear init for the FFN, and nn.MultiheadAttention's out_proj with zero bias.
+    /// </param>
+    public DeformableDecoderLayer(int dModel, int feedForward, int numLevels, int numHeads, int numPoints, bool transformerWideXavier = true)
     {
         _dModel = dModel;
         _numHeads = numHeads;
@@ -274,16 +280,23 @@ internal sealed class DeformableDecoderLayer<T> : CvParameterModule<T>
         _key.XavierUniformZeroBias();
         _value.XavierUniformZeroBias();
         _selfOutput = new DetrLinear<T>(dModel, dModel);
-        _selfOutput.XavierUniformZeroBias();
+        if (transformerWideXavier) _selfOutput.XavierUniformZeroBias();
+        else _selfOutput.Bias.Fill(MathHelper.GetNumericOperations<T>().Zero);
         _norm2 = new LayerNorm<T>(dModel, 1e-5);
         _crossAttention = new MultiScaleDeformableAttention<T>(dModel, numLevels, numHeads, numPoints);
         _norm1 = new LayerNorm<T>(dModel, 1e-5);
         _linear1 = new DetrLinear<T>(dModel, feedForward);
         _linear2 = new DetrLinear<T>(feedForward, dModel);
-        _linear1.XavierUniformWeight();
-        _linear2.XavierUniformWeight();
+        if (transformerWideXavier)
+        {
+            _linear1.XavierUniformWeight();
+            _linear2.XavierUniformWeight();
+        }
         _norm3 = new LayerNorm<T>(dModel, 1e-5);
     }
+
+    /// <summary>The deformable cross-attention (test access for controlled-weight fixtures).</summary>
+    internal MultiScaleDeformableAttention<T> CrossAttention => _crossAttention;
 
     /// <summary>The layer's LayerNorms, in forward order (self-attention, cross-attention, feed-forward).</summary>
     internal IEnumerable<LayerNorm<T>> Norms() { yield return _norm2; yield return _norm1; yield return _norm3; }
@@ -406,5 +419,60 @@ internal static class DetrEmbeddings
         const double eps = 1e-5;
         x = Math.Min(Math.Max(x, 0), 1);
         return Math.Log(Math.Max(x, eps) / Math.Max(1 - x, eps));
+    }
+}
+
+/// <summary>Box and head math shared by the DETR family (DINO, RT-DETR).</summary>
+internal static class DetrHeads<T>
+{
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>The reference <c>inverse_sigmoid</c> (eps 1e-5) on the tape.</summary>
+    public static Tensor<T> InverseSigmoid(Tensor<T> x)
+    {
+        var engine = AiDotNetEngine.Current;
+        var eps = NumOps.FromDouble(1e-5);
+        var numerator = engine.TensorMax(x, eps);
+        var denominator = engine.TensorMax(engine.TensorAddScalar(engine.TensorNegate(x), NumOps.One), eps);
+        return engine.TensorSubtract(engine.TensorLog(numerator), engine.TensorLog(denominator));
+    }
+
+    /// <summary><c>inverse_sigmoid</c> of detached host values, as a constant <c>[batch, count, 4]</c> tensor.</summary>
+    public static Tensor<T> InverseSigmoidConstant(double[] sigmoid, int batch, int count)
+        => new Tensor<T>(sigmoid.Select(v => NumOps.FromDouble(DetrEmbeddings.InverseSigmoid(v))).ToArray(), new[] { batch, count, 4 });
+
+    /// <summary>
+    /// The reference NMS-free post-processing: every (query, class) pair is scored by its own sigmoid (a query
+    /// may yield several classes), then ranked, thresholded and decoded from pre-sigmoid (cx, cy, w, h) to
+    /// clipped pixel corners. Only the first image is decoded, as for every detector's Detect.
+    /// </summary>
+    public static List<Detection<T>> TopKSigmoid(Tensor<T> classLogits, Tensor<T> boxLogits, int imageWidth, int imageHeight,
+        double confidenceThreshold, IReadOnlyList<string> classNames)
+    {
+        static double Sigmoid(double x) => 1.0 / (1.0 + Math.Exp(-x));
+        int queries = classLogits.Shape[1], classes = classLogits.Shape[2];
+        var candidates = new List<(double Score, int Query, int Class)>();
+        for (int q = 0; q < queries; q++)
+            for (int c = 0; c < classes; c++)
+            {
+                double p = Sigmoid(NumOps.ToDouble(classLogits[0, q, c]));
+                if (p >= confidenceThreshold) candidates.Add((p, q, c));
+            }
+
+        var detections = new List<Detection<T>>();
+        foreach (var (score, q, c) in candidates.OrderByDescending(x => x.Score).ThenBy(x => x.Query).ThenBy(x => x.Class))
+        {
+            double cx = Sigmoid(NumOps.ToDouble(boxLogits[0, q, 0])) * imageWidth;
+            double cy = Sigmoid(NumOps.ToDouble(boxLogits[0, q, 1])) * imageHeight;
+            double w = Sigmoid(NumOps.ToDouble(boxLogits[0, q, 2])) * imageWidth;
+            double h = Sigmoid(NumOps.ToDouble(boxLogits[0, q, 3])) * imageHeight;
+            var box = new BoundingBox<T>(
+                NumOps.FromDouble((float)Math.Max(0, cx - (w / 2))),
+                NumOps.FromDouble((float)Math.Max(0, cy - (h / 2))),
+                NumOps.FromDouble((float)Math.Min(imageWidth, cx + (w / 2))),
+                NumOps.FromDouble((float)Math.Min(imageHeight, cy + (h / 2))));
+            detections.Add(new Detection<T>(box, c, NumOps.FromDouble((float)score), c < classNames.Count ? classNames[c] : null));
+        }
+        return detections;
     }
 }

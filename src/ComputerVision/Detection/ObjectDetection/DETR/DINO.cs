@@ -221,34 +221,9 @@ public partial class DINO<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
         double confidenceThreshold,
         double nmsThreshold)
     {
-        var classLogits = outputs[0];
-        var boxLogits = outputs[1];
-        int queries = classLogits.Shape[1], classes = classLogits.Shape[2];
-        // The reference PostProcess scores every (query, class) pair with its own sigmoid - a query may
-        // yield several classes - and keeps the best without NMS (see EffectiveNmsThreshold).
-        var candidates = new List<(double Score, int Query, int Class)>();
-        for (int q = 0; q < queries; q++)
-            for (int c = 0; c < classes; c++)
-            {
-                double p = Sigmoid(NumOps.ToDouble(classLogits[0, q, c]));
-                if (p >= confidenceThreshold) candidates.Add((p, q, c));
-            }
-
-        var detections = new List<Detection<T>>();
-        foreach (var (score, q, c) in candidates.OrderByDescending(x => x.Score).ThenBy(x => x.Query).ThenBy(x => x.Class))
-        {
-            double cx = Sigmoid(NumOps.ToDouble(boxLogits[0, q, 0])) * imageWidth;
-            double cy = Sigmoid(NumOps.ToDouble(boxLogits[0, q, 1])) * imageHeight;
-            double w = Sigmoid(NumOps.ToDouble(boxLogits[0, q, 2])) * imageWidth;
-            double h = Sigmoid(NumOps.ToDouble(boxLogits[0, q, 3])) * imageHeight;
-            var box = new BoundingBox<T>(
-                NumOps.FromDouble((float)Math.Max(0, cx - (w / 2))),
-                NumOps.FromDouble((float)Math.Max(0, cy - (h / 2))),
-                NumOps.FromDouble((float)Math.Min(imageWidth, cx + (w / 2))),
-                NumOps.FromDouble((float)Math.Min(imageHeight, cy + (h / 2))));
-            detections.Add(new Detection<T>(box, c, NumOps.FromDouble((float)score), c < ClassNames.Length ? ClassNames[c] : null));
-        }
-
+        // The reference PostProcess: every (query, class) pair scored by its own sigmoid, no NMS (see
+        // EffectiveNmsThreshold).
+        var detections = DetrHeads<T>.TopKSigmoid(outputs[0], outputs[1], imageWidth, imageHeight, confidenceThreshold, ClassNames);
         var kept = _nms.Apply(detections, EffectiveNmsThreshold(nmsThreshold)); return kept.Count > Options.MaxDetections ? kept.Take(Options.MaxDetections).ToList() : kept;
     }
 
@@ -290,7 +265,6 @@ public partial class DINO<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
         _transformer.Write(writer);
     }
 
-    private static double Sigmoid(double x) => 1.0 / (1.0 + Math.Exp(-x));
 }
 
 /// <summary>Host copies of one DINO training step's head outputs and its recorded loss.</summary>
