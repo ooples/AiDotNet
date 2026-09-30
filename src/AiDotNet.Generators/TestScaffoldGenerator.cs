@@ -5539,9 +5539,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "EfficientSAM" && model.TypeParameterCount == 1)
             {
+                // 128x128, not 32x32: the encoder downsamples 32x (stride 4, then 2, 2, 2), so at 32x32 its third
+                // stage runs eight BatchNorms over 2x2 = 4 values per channel and its fourth over one. Normalizing
+                // over 4 values is so sharply curved that the (exact) gradient holds only for steps below ~1e-5,
+                // and the first AdamW step raised the loss (0.33 -> 1.54 on AVX-512 runners, inside tolerance by
+                // luck on AVX2 ones). Measured descent ratio (actual / first-order) at a 1e-3 step: 32x32 -0.03,
+                // 64x64 0.25, 128x128 0.88. At 128x128 every BatchNorm sees 16-256 values per channel, as in use.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), " +
+                    "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 1), " +
                     "options: new AiDotNet.ComputerVision.Segmentation.Efficient.EfficientSAMOptions { NumClasses = 1, EncoderLayerCount = 1 })";
             }
             else if (model.ClassName == "DiffCutSegmentation" && model.TypeParameterCount == 1)
@@ -12139,8 +12145,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
         else if (model.ClassName == "EfficientSAM")
         {
-            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 3, 32, 32 };");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 32, 32 };");
+            // 128x128 so every BatchNorm normalizes over enough values per channel; see the constructor above.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 3, 128, 128 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 128, 128 };");
             sb.AppendLine("    protected override double TrainingErrorMultiplier => 10.0;");
         }
         else if (model.ClassName == "EDVR")
