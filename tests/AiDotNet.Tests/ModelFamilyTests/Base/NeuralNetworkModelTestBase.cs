@@ -1344,10 +1344,10 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// batch-1 training never touched the running statistics.
     /// </para>
     /// <para>
-    /// Only the BatchNorm layers run in training mode for the pass; dropout and every other layer stay in eval, so the
-    /// pass is deterministic. A training-mode BatchNorm normalizes with the batch statistics, so later layers see
-    /// exactly what they saw in training and every layer's statistics are those of the current weights. The network
-    /// is left in eval mode.
+    /// Every layer stays in eval mode, so dropout is off and the pass is deterministic; the BatchNorm layers'
+    /// OverwriteRunningStatistics flag makes them normalize with the batch statistics anyway, so later layers see
+    /// exactly what they saw in training and every layer's statistics are those of the current weights. No layer's
+    /// mode is changed, so a PredictCore that forces evaluation mode cannot undo the recalibration.
     /// </para>
     /// </remarks>
     private static void RecalibrateBatchNormalization(AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network, Tensor<T> input)
@@ -1357,23 +1357,17 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         network.SetTrainingMode(false);
         try
         {
-            foreach (var batchNorm in batchNorms)
-            {
-                batchNorm.OverwriteRunningStatistics = true;
-                batchNorm.SetTrainingMode(true);
-            }
+            // The overwrite flag makes BatchNorm use batch statistics whatever its training mode, so no layer's
+            // mode is touched: a PredictCore that forces evaluation mode (NeuralVaR does, unconditionally) would
+            // otherwise reset per-layer training modes mid-pass and leave the statistics stale.
+            foreach (var batchNorm in batchNorms) batchNorm.OverwriteRunningStatistics = true;
             // Through Predict, so the model's own input preparation runs (a raw forward bypassed it and fed
-            // ContextNet's transpose the wrong rank). Predict flips modes only when the NETWORK is in training mode;
-            // it is in eval here, so the BatchNorm layers keep the training mode set above.
+            // ContextNet's transpose the wrong rank).
             using var _ = network.Predict(input);
         }
         finally
         {
-            foreach (var batchNorm in batchNorms)
-            {
-                batchNorm.OverwriteRunningStatistics = false;
-                batchNorm.SetTrainingMode(false);
-            }
+            foreach (var batchNorm in batchNorms) batchNorm.OverwriteRunningStatistics = false;
             network.SetTrainingMode(false);
         }
     }
