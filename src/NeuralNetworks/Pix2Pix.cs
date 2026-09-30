@@ -89,9 +89,6 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
-    private readonly List<T> _discriminatorLosses = new List<T>();
-    private readonly List<T> _generatorLosses = new List<T>();
-
     /// <summary>
     /// The optimizer for the generator network.
     /// </summary>
@@ -332,16 +329,6 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
         var generatorObjective = Engine.TensorAdd(adversarialLoss, Engine.TensorMultiplyScalar(l1Tensor, NumOps.FromDouble(_l1Lambda)));
         T generatorLoss = StepOnTape(generatorTape, generatorObjective, Generator, _generatorOptimizer);
         T l1Loss = l1Tensor.Length > 0 ? l1Tensor[0] : NumOps.Zero;
-
-        // Track losses
-        _discriminatorLosses.Add(discriminatorLoss);
-        _generatorLosses.Add(generatorLoss);
-
-        if (_discriminatorLosses.Count > 100)
-        {
-            _discriminatorLosses.RemoveAt(0);
-            _generatorLosses.RemoveAt(0);
-        }
 
         return (discriminatorLoss, generatorLoss, l1Loss);
     }

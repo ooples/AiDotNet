@@ -146,16 +146,6 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _qNetworkOptimizer;
 
     /// <summary>
-    /// List of recent generator losses for tracking training progress.
-    /// </summary>
-    private readonly List<T> _generatorLosses = new List<T>();
-
-    /// <summary>
-    /// List of recent discriminator losses for tracking training progress.
-    /// </summary>
-    private readonly List<T> _discriminatorLosses = new List<T>();
-
-    /// <summary>
     /// The size of the latent code c.
     /// </summary>
     /// <remarks>
@@ -485,16 +475,6 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
             ((NeuralNetworkBase<T>)QNetwork, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)_qNetworkOptimizer),
         });
         T mutualInfoLoss = mutualInfoTensor.Length > 0 ? mutualInfoTensor[0] : NumOps.Zero;
-
-        // Track losses
-        _discriminatorLosses.Add(discriminatorLoss);
-        _generatorLosses.Add(generatorLoss);
-
-        if (_discriminatorLosses.Count > 100)
-        {
-            _discriminatorLosses.RemoveAt(0);
-            _generatorLosses.RemoveAt(0);
-        }
 
         return (discriminatorLoss, generatorLoss, mutualInfoLoss);
     }
