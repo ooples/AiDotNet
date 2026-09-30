@@ -85,7 +85,7 @@ public partial class CRAFT<T> : TextDetectorBase<T>
         ModelSize.Medium => 256,
         ModelSize.Large => 384,
         ModelSize.XLarge => 512,
-        _ => 256
+        _ => throw new ArgumentOutOfRangeException(nameof(size), size, "CRAFT has no decoder width for this model size."),
     };
 
     /// <inheritdoc/>
@@ -93,6 +93,12 @@ public partial class CRAFT<T> : TextDetectorBase<T>
     {
         // Extract multi-scale backbone features
         var features = EnsureBackbone.ExtractFeatures(input);
+        // The decoder reads five taps (fc7, relu5_3, relu4_3, relu3_3, relu2_2). Checked here rather than in the
+        // constructor because Backbone is a protected field a derived detector can replace afterwards.
+        if (features.Count < 5)
+            throw new InvalidOperationException(
+                $"CRAFT's decoder needs five backbone feature maps, but {Backbone?.GetType().Name ?? "the backbone"} "
+                + $"returned {features.Count}.");
 
         // U-Net decoder: fc7 with relu5_3 (both stride 16), then relu4_3, relu3_3 and relu2_2.
         var x = ApplyReLU(_upConv1.Forward(UpsampleAndConcat(features[^1], features[^2])));
@@ -243,9 +249,9 @@ public partial class CRAFT<T> : TextDetectorBase<T>
         }
 
         int version = reader.ReadInt32();
-        if (version != 1)
+        if (version != 2)
         {
-            throw new InvalidDataException($"Unsupported CRAFT model version: {version}");
+            throw new InvalidDataException($"Unsupported CRAFT model version: {version}. Version 1 files use the former ResNet backbone layout, which cannot be read as the current one; re-save or re-export the weights with this version.");
         }
 
         string name = reader.ReadString();
@@ -281,7 +287,7 @@ public partial class CRAFT<T> : TextDetectorBase<T>
 
         // Write header
         writer.Write(0x43524146); // "CRAF" in ASCII
-        writer.Write(1); // Version 1
+        writer.Write(2); // Version 2: VGG16-BN backbone and the revised decoder
         writer.Write(Name);
         writer.Write(_hiddenDim);
 

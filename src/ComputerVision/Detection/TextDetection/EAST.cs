@@ -390,6 +390,10 @@ public partial class EAST<T> : TextDetectorBase<T>
         var merged = new List<TextRegion<T>>();
         List<(double X, double Y)>? polygon = null;
         double polygonScore = 0, angleSum = 0;
+        // Unweighted fallbacks for a merge whose scores sum to zero (only reachable with a 0.0 confidence
+        // threshold): a score-weighted average there divides by zero and yields non-finite vertices and angle.
+        double angleUnweightedSum = 0;
+        int parts = 0;
         BoundingBox<T>? box = null;
 
         void Flush()
@@ -399,7 +403,8 @@ public partial class EAST<T> : TextDetectorBase<T>
                 polygon.Select(p => (NumOps.FromDouble(p.X), NumOps.FromDouble(p.Y))).ToList(),
                 NumOps.FromDouble(polygonScore));
             region.RegionType = TextRegionType.Word;
-            if (_useRotatedBoxes) region.RotationAngle = angleSum / polygonScore;
+            if (_useRotatedBoxes)
+                region.RotationAngle = polygonScore > 0 ? angleSum / polygonScore : angleUnweightedSum / parts;
             merged.Add(region);
         }
 
@@ -413,11 +418,23 @@ public partial class EAST<T> : TextDetectorBase<T>
                 && ComputeBoxIoU(box, next.Box) > iouThreshold)
             {
                 double total = polygonScore + s;
-                for (int k = 0; k < polygon.Count; k++)
-                    polygon[k] = ((polygon[k].X * polygonScore + points[k].X * s) / total,
-                                  (polygon[k].Y * polygonScore + points[k].Y * s) / total);
+                if (total > 0)
+                {
+                    for (int k = 0; k < polygon.Count; k++)
+                        polygon[k] = ((polygon[k].X * polygonScore + points[k].X * s) / total,
+                                      (polygon[k].Y * polygonScore + points[k].Y * s) / total);
+                }
+                else
+                {
+                    // Every part so far scored zero: average the vertices with equal weight per part.
+                    for (int k = 0; k < polygon.Count; k++)
+                        polygon[k] = ((polygon[k].X * parts + points[k].X) / (parts + 1),
+                                      (polygon[k].Y * parts + points[k].Y) / (parts + 1));
+                }
                 polygonScore = total;
                 angleSum += s * next.RotationAngle;
+                angleUnweightedSum += next.RotationAngle;
+                parts++;
                 box = TextRegion<T>.FromPolygon(
                     polygon.Select(p => (NumOps.FromDouble(p.X), NumOps.FromDouble(p.Y))).ToList(), next.Confidence).Box;
                 continue;
@@ -427,6 +444,8 @@ public partial class EAST<T> : TextDetectorBase<T>
             polygon = points;
             polygonScore = s;
             angleSum = s * next.RotationAngle;
+            angleUnweightedSum = next.RotationAngle;
+            parts = 1;
             box = next.Box;
         }
 
@@ -440,8 +459,15 @@ public partial class EAST<T> : TextDetectorBase<T>
         var (left, top, right, bottom) = region.Box.ToXYXY();
         double sum = 0;
         int count = 0;
-        for (int h = 0; h < score.Shape[2]; h++)
-            for (int w = 0; w < score.Shape[3]; w++)
+        // Only cells whose centre (i + 0.5) * scale can lie in [low, high] are visited, instead of the whole map
+        // for every region (up to 1000 regions x 6,400 cells at the default size). The inclusive centre test
+        // below stays the source of truth; the bounds are widened by one cell so rounding cannot drop a cell.
+        int hMin = Math.Max(0, (int)Math.Floor(top / scaleY - 0.5) - 1);
+        int hMax = Math.Min(score.Shape[2] - 1, (int)Math.Ceiling(bottom / scaleY - 0.5) + 1);
+        int wMin = Math.Max(0, (int)Math.Floor(left / scaleX - 0.5) - 1);
+        int wMax = Math.Min(score.Shape[3] - 1, (int)Math.Ceiling(right / scaleX - 0.5) + 1);
+        for (int h = hMin; h <= hMax; h++)
+            for (int w = wMin; w <= wMax; w++)
             {
                 double cx = (w + 0.5) * scaleX, cy = (h + 0.5) * scaleY;
                 if (cx < left || cx > right || cy < top || cy > bottom) continue;

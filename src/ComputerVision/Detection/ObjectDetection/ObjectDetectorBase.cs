@@ -135,6 +135,7 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
         // deterministic seed, so two models built from equal options start from equal weights (#2201).
         // A null seed leaves the scope unarmed and initialization stays unseeded.
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(options.RandomSeed);
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.OfferSeedToNestedBackbone();
         Nms = new NMS<T>();
         WeightDownloader = new WeightDownloader();
         IsTrainingMode = false;

@@ -11,6 +11,9 @@
 	       the repo and Build has just done it; repeating it on a second runner buys nothing.
 	       Last wins: this must stay below the assignment above. -->
 	  <TargetFrameworks Condition="'$(CompatBuildOnly)' == 'true'">net8.0;net471</TargetFrameworks>
+	  <!-- Pull requests compile only net471, the compatibility check itself: the library's net8.0
+	       surface is compiled by every src project in the same build, and nothing runs net8.0 tests. -->
+	  <TargetFrameworks Condition="'$(CompatBuildOnly)' == 'true' and '$(CompatNet471Only)' == 'true'">net471</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 	  <IsPackable>false</IsPackable>

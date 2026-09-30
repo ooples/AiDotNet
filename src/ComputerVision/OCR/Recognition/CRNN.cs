@@ -497,7 +497,7 @@ public partial class CRNN<T> : OCRBase<T>
 
         // Write header
         writer.Write(0x43524E4E); // "CRNN" in ASCII
-        writer.Write(1); // Version 1
+        writer.Write(2); // Version 2: batch norms 5 and 6 (parameters and running statistics) are saved
         writer.Write(Name);
         writer.Write(_hiddenDim);
         writer.Write(_sequenceFeatureDim);
@@ -509,7 +509,9 @@ public partial class CRNN<T> : OCRBase<T>
         _conv3.WriteParameters(writer);
         _conv4.WriteParameters(writer);
         _conv5.WriteParameters(writer);
+        _bn5.WriteParameters(writer);
         _conv6.WriteParameters(writer);
+        _bn6.WriteParameters(writer);
         _conv7.WriteParameters(writer);
 
         // Write LSTM weights using existing Serialize method
@@ -538,9 +540,13 @@ public partial class CRNN<T> : OCRBase<T>
         }
 
         int version = reader.ReadInt32();
-        if (version != 1)
+        if (version != 2)
         {
-            throw new InvalidDataException($"Unsupported CRNN model version: {version}");
+            throw new InvalidDataException(version == 1
+                ? "This CRNN file is version 1, which did not save batch norms 5 and 6 (their learned scale and shift "
+                    + "and their running statistics), so it cannot reproduce the saved model's predictions. Re-save the "
+                    + "model with this version."
+                : $"Unsupported CRNN model version: {version}");
         }
 
         string name = reader.ReadString();
@@ -567,7 +573,9 @@ public partial class CRNN<T> : OCRBase<T>
         _conv3.ReadParameters(reader);
         _conv4.ReadParameters(reader);
         _conv5.ReadParameters(reader);
+        _bn5.ReadParameters(reader);
         _conv6.ReadParameters(reader);
+        _bn6.ReadParameters(reader);
         _conv7.ReadParameters(reader);
 
         // Read LSTM weights using existing Deserialize method

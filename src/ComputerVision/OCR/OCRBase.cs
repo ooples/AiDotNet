@@ -259,6 +259,7 @@ public abstract class OCRBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         // deterministic seed, so two models built from equal options start from equal weights (#2201).
         // A null seed leaves the scope unarmed and initialization stays unseeded.
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(options.RandomSeed);
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.OfferSeedToNestedBackbone();
 
         string charset = options.CharacterSet ?? DefaultCharacterSet;
 

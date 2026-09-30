@@ -65,7 +65,9 @@ public sealed class ModelDefectClassAnalyzer : DiagnosticAnalyzer
             var papers = new ConcurrentBag<(string Type, string Paper, string Title, Location Location, string SimpleName)>();
             var residualFree = new ConcurrentDictionary<string, Location>(StringComparer.Ordinal);
             var factoryUses = new ConcurrentBag<(string Factory, string Type)>();
-            var declared = new ConcurrentDictionary<string, Location>(StringComparer.Ordinal);
+            // The normalized paper each [ArchitectureFromPaper] names; a blank declaration is recorded as null so it
+            // suppresses nothing.
+            var declared = new ConcurrentDictionary<string, string?>(StringComparer.Ordinal);
 
             start.RegisterSymbolAction(symbolContext =>
             {
@@ -80,8 +82,18 @@ public sealed class ModelDefectClassAnalyzer : DiagnosticAnalyzer
                     string title = primary.ConstructorArguments[0].Value as string ?? url;
                     papers.Add((name, NormalizePaper(url), title, type.Locations[0], type.Name));
                 }
-                if (attributes.Any(a => a.AttributeClass?.Name == "ArchitectureFromPaperAttribute"))
-                    declared[name] = type.Locations[0];
+                var declaration = attributes.FirstOrDefault(a => a.AttributeClass?.Name == "ArchitectureFromPaperAttribute");
+                if (declaration is not null)
+                {
+                    string? declaredUrl = declaration.ConstructorArguments.Length >= 2
+                        ? declaration.ConstructorArguments[0].Value as string : null;
+                    string? reason = declaration.ConstructorArguments.Length >= 2
+                        ? declaration.ConstructorArguments[1].Value as string : null;
+                    declared[name] = declaredUrl is string paperUrl && !string.IsNullOrWhiteSpace(paperUrl)
+                        && reason is string reasonText && !string.IsNullOrWhiteSpace(reasonText)
+                        ? NormalizePaper(paperUrl)
+                        : null;
+                }
             }, SymbolKind.NamedType);
 
             start.RegisterSyntaxNodeAction(nodeContext =>
@@ -92,7 +104,7 @@ public sealed class ModelDefectClassAnalyzer : DiagnosticAnalyzer
                     return;
                 var owner = nodeContext.ContainingSymbol?.ContainingType;
                 if (owner is null || owner.Name == "LayerHelper") return;
-                factoryUses.Add((method.Name, owner.ToDisplayString()));
+                factoryUses.Add((FactoryKey(method), owner.ToDisplayString()));
             }, SyntaxKind.InvocationExpression);
 
             start.RegisterSyntaxNodeAction(nodeContext =>
@@ -101,9 +113,8 @@ public sealed class ModelDefectClassAnalyzer : DiagnosticAnalyzer
                 if (yield.Expression is null) return;
                 var method = nodeContext.ContainingSymbol as IMethodSymbol;
                 if (method?.ContainingType?.Name != "LayerHelper") return;
-                var yielded = nodeContext.SemanticModel.GetTypeInfo(yield.Expression).Type;
-                if (yielded?.Name == "MultiHeadAttentionLayer")
-                    residualFree.TryAdd(method.Name, method.Locations.FirstOrDefault() ?? Location.None);
+                if (YieldsAttention(nodeContext.SemanticModel, yield.Expression, nodeContext.CancellationToken))
+                    residualFree.TryAdd(FactoryKey(method), method.Locations.FirstOrDefault() ?? Location.None);
             }, SyntaxKind.YieldReturnStatement);
 
             start.RegisterCompilationEndAction(end =>
@@ -141,7 +152,11 @@ public sealed class ModelDefectClassAnalyzer : DiagnosticAnalyzer
                     if (distinctPapers < 2) continue;
                     foreach (var user in users)
                     {
-                        if (declared.ContainsKey(user)) continue;
+                        // A declaration suppresses the report only when it names the paper of ANOTHER user of this
+                        // factory: that is the claim it makes. A blank one, or one naming an unrelated paper, does not.
+                        if (declared.TryGetValue(user, out var declaredPaper) && declaredPaper is not null
+                            && users.Any(other => other != user && paperOf[other] == declaredPaper))
+                            continue;
                         seenShared.Add(user);
                         if (ModelDefectBaselines.UndeclaredSharedFactoryModels.Contains(user)) continue;
                         end.ReportDiagnostic(Diagnostic.Create(UndeclaredSharedFactory, locationOf[user],
@@ -164,15 +179,74 @@ public sealed class ModelDefectClassAnalyzer : DiagnosticAnalyzer
                 end.ReportDiagnostic(Diagnostic.Create(StaleBaseline, Location.None, entry, name));
     }
 
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
+
     // One key per paper whatever link form a model cites: arXiv ids (with or without the 10.48550 DOI
     // prefix and version suffix), then DOIs, then the bare URL.
     internal static string NormalizePaper(string url)
     {
         string u = url.Trim().ToLowerInvariant().TrimEnd('/');
-        var arxiv = Regex.Match(u, @"(?:arxiv\.org/(?:abs|pdf)/|arxiv\.)(\d{4}\.\d{4,5})");
+        var arxiv = Regex.Match(u, @"(?:arxiv\.org/(?:abs|pdf)/|arxiv\.)(\d{4}\.\d{4,5})", RegexOptions.None, RegexTimeout);
         if (arxiv.Success) return "arxiv:" + arxiv.Groups[1].Value;
-        var doi = Regex.Match(u, @"doi\.org/(.+)$");
+        var doi = Regex.Match(u, @"doi\.org/(.+)$", RegexOptions.None, RegexTimeout);
         if (doi.Success) return "doi:" + doi.Groups[1].Value;
-        return Regex.Replace(u, @"^https?://(www\.)?", string.Empty);
+        return Regex.Replace(u, @"^https?://(www\.)?", string.Empty, RegexOptions.None, RegexTimeout);
+    }
+
+    /// <summary>
+    /// The identity of a LayerHelper factory: its name when LayerHelper declares only one method of that name (so the
+    /// baselines keep their plain entries), otherwise the name with its parameter types, so two overloads serving
+    /// different papers are never merged into one "shared" factory.
+    /// </summary>
+    internal static string FactoryKey(IMethodSymbol method)
+    {
+        var definition = method.OriginalDefinition;
+        bool overloaded = definition.ContainingType.GetMembers(definition.Name).OfType<IMethodSymbol>().Skip(1).Any();
+        if (!overloaded) return definition.Name;
+        return definition.Name + "("
+            + string.Join(", ", definition.Parameters.Select(p => p.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat)))
+            + ")";
+    }
+
+    /// <summary>
+    /// Whether a yield returns a bare MultiHeadAttentionLayer, looking through conversions (<c>(ILayer&lt;T&gt;)new ...</c>)
+    /// and through a yielded local to every value assigned to it in the method.
+    /// </summary>
+    private static bool YieldsAttention(SemanticModel model, ExpressionSyntax expression, System.Threading.CancellationToken cancellationToken)
+    {
+        var operation = model.GetOperation(expression, cancellationToken);
+        return IsAttentionValue(model, operation, cancellationToken, depth: 0);
+    }
+
+    private static bool IsAttentionValue(SemanticModel model, Microsoft.CodeAnalysis.IOperation? operation,
+        System.Threading.CancellationToken cancellationToken, int depth)
+    {
+        while (operation is Microsoft.CodeAnalysis.Operations.IConversionOperation conversion)
+            operation = conversion.Operand;
+        if (operation is null || depth > 4) return false;
+        if (operation.Type?.Name == "MultiHeadAttentionLayer") return true;
+        if (operation is not Microsoft.CodeAnalysis.Operations.ILocalReferenceOperation localReference) return false;
+
+        // Every value the local can hold: its initializer and each assignment in the enclosing method body.
+        var local = localReference.Local;
+        var body = expressionBody(operation.Syntax);
+        if (body is null) return false;
+        foreach (var declarator in body.DescendantNodes().OfType<VariableDeclaratorSyntax>())
+        {
+            if (declarator.Initializer is null
+                || !SymbolEqualityComparer.Default.Equals(model.GetDeclaredSymbol(declarator, cancellationToken), local)) continue;
+            if (IsAttentionValue(model, model.GetOperation(declarator.Initializer.Value, cancellationToken), cancellationToken, depth + 1))
+                return true;
+        }
+        foreach (var assignment in body.DescendantNodes().OfType<AssignmentExpressionSyntax>())
+        {
+            if (!SymbolEqualityComparer.Default.Equals(model.GetSymbolInfo(assignment.Left, cancellationToken).Symbol, local)) continue;
+            if (IsAttentionValue(model, model.GetOperation(assignment.Right, cancellationToken), cancellationToken, depth + 1))
+                return true;
+        }
+        return false;
+
+        static SyntaxNode? expressionBody(SyntaxNode node) =>
+            node.AncestorsAndSelf().FirstOrDefault(n => n is BaseMethodDeclarationSyntax or LocalFunctionStatementSyntax or AccessorDeclarationSyntax);
     }
 }

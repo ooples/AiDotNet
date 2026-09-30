@@ -87,9 +87,16 @@ public sealed class DetectionSeedingTests
             Assert.False(AiDotNet.ComputerVision.Detection.Backbones.DetectionBackboneArchitecture<double>
                 .Create(3).HasExplicitRandomSeed);
 
-            // With a seed armed, the backbone derives one from it.
+            // Inside a seeded detector's construction (the scope armed AND offered, as the detector bases do),
+            // the backbone derives its seed from it.
             LayerInitializationSeedScope.ResetForModelConstruction(7);
+            LayerInitializationSeedScope.OfferSeedToNestedBackbone();
             Assert.True(AiDotNet.ComputerVision.Detection.Backbones.DetectionBackboneArchitecture<double>
+                .Create(3).HasExplicitRandomSeed);
+
+            // The offer is spent on that one backbone: a scope left armed after the detector finished must not
+            // seed a standalone backbone built afterwards (#2269 review).
+            Assert.False(AiDotNet.ComputerVision.Detection.Backbones.DetectionBackboneArchitecture<double>
                 .Create(3).HasExplicitRandomSeed);
         }
         finally

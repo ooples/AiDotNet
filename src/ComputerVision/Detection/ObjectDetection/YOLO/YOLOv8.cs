@@ -206,9 +206,9 @@ public partial class YOLOv8<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<
         }
 
         int version = reader.ReadInt32();
-        if (version != 1)
+        if (version != 2)
         {
-            throw new InvalidDataException($"Unsupported weight file version: {version}.");
+            throw new InvalidDataException($"Unsupported weight file version: {version}. Version 1 files use the pre-YOLOv8Backbone (CSPDarknet/PANet) layout, which cannot be read as the current one; re-save or re-export the weights with this version.");
         }
 
         // Read model configuration
@@ -238,7 +238,7 @@ public partial class YOLOv8<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<
 
         // Write magic number and version for identification
         writer.Write(0x594F4C4F); // "YOLO" in ASCII
-        writer.Write(1); // Version 1
+        writer.Write(2); // Version 2: YOLOv8Backbone and YOLOv8Neck layout
 
         // Write model configuration
         writer.Write(Name);

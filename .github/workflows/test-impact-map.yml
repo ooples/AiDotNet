@@ -19,12 +19,14 @@ on:
       # safe. Pushing this branch to ci-proof/** runs the real post-merge path first.
       - 'ci-proof/**'
   schedule:
-    # 02:00 UTC. The instrumented run is ~3450 runner-minutes, which at max-parallel 12 is about
-    # 4.8 HOURS of queue occupancy - so the start time has to clear the working day by a wide
-    # margin, not just miss it. Measured activity in this repo clusters at 13:00-16:00 and 21:00
-    # UTC; starting at 02:00 finishes around 06:50 and leaves six hours of slack. At 07:00 it
-    # finished at 11:48, which only just cleared it.
-    - cron: '0 2 * * *'
+    # WEEKLY, on the weekend. The instrumented run is ~3450 runner-minutes; nightly it ran from
+    # 02:21 to 13:06 UTC on 2026-09-29 and held the shared 20-runner pool through the working day,
+    # queueing every pull request behind it. Saturday 00:00 harvests last week's run and dispatches
+    # the next; Sunday 00:00 only harvests, so the map built from that run is in effect by Sunday
+    # instead of a week later. The map artifacts are kept 14 days, so a missed week still leaves
+    # one in effect.
+    - cron: '0 0 * * 6'
+    - cron: '0 0 * * 0'
   workflow_dispatch:
     inputs:
       run_id:
@@ -588,7 +590,8 @@ jobs:
     # Never on a merge: instrumenting the whole matrix is ~5 hours of runner occupancy, and the
     # push trigger exists to re-certify from evidence that already exists, not to gather new
     # evidence. The schedule and an explicit dispatch remain the only ways to start one.
-    if: ${{ always() && github.event_name != 'push' && !inputs.skip_coverage_run && !inputs.run_id }}
+    # The Sunday schedule is harvest-only (see the schedule above).
+    if: ${{ always() && github.event_name != 'push' && github.event.schedule != '0 0 * * 0' && !inputs.skip_coverage_run && !inputs.run_id }}
     runs-on: ubuntu-latest
     permissions:
       actions: write

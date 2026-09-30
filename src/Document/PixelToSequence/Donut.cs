@@ -78,8 +78,7 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
     #region Fields
 
     private bool _useNativeMode;
-    private readonly InferenceSession? _onnxEncoderSession;
-    private readonly InferenceSession? _onnxDecoderSession;
+
     private string? _onnxEncoderModelPath;
     private string? _onnxDecoderModelPath;
     private readonly ITokenizer _tokenizer;
@@ -231,8 +230,10 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         ImageWidth = _options.ImageWidth;
         MaxSequenceLength = _options.MaxGenerationLength;
 
-        _onnxEncoderSession = new InferenceSession(encoderPath);
-        _onnxDecoderSession = new InferenceSession(decoderPath);
+        // Bound to the inherited encoder/decoder so IsOnnxMode and disposal see them. Raw private sessions were
+        // never read by RunOnnxInference, so every ONNX entry point failed with "No ONNX model is loaded".
+        OnnxEncoder = new OnnxModel<T>(encoderPath);
+        OnnxDecoder = new OnnxModel<T>(decoderPath);
 
         InitializeLayers();
     }
@@ -519,7 +520,7 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
 
     private OCRResult<T> RecognizeTextOnnx(Tensor<T> image)
     {
-        if (_onnxEncoderSession is null || _onnxDecoderSession is null)
+        if (OnnxEncoder is null || OnnxDecoder is null)
             throw new InvalidOperationException("ONNX sessions not initialized.");
 
         var preprocessed = PreprocessDocument(image);
@@ -590,7 +591,7 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
 
     private DocumentQAResult<T> AnswerQuestionOnnx(Tensor<T> image, string prompt, int maxLength)
     {
-        if (_onnxEncoderSession is null || _onnxDecoderSession is null)
+        if (OnnxEncoder is null || OnnxDecoder is null)
             throw new InvalidOperationException("ONNX sessions not initialized.");
 
         var preprocessed = PreprocessDocument(image);
@@ -735,11 +736,32 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
 
     private Tensor<T> RunEncoderOnnx(Tensor<T> input)
     {
-        if (_onnxEncoderSession is null)
-            throw new InvalidOperationException("Encoder session not initialized.");
+        var encoder = OnnxEncoder ?? throw new InvalidOperationException("Encoder session not initialized.");
+        // The exported Swin encoder takes the page (pixel_values) and returns last_hidden_state.
+        return encoder.Run(input);
+    }
 
-        // Use OnnxModel wrapper or direct inference
-        return RunOnnxInference(input);
+    /// <summary>
+    /// One decoder step through the exported decoder: the tokens so far (input_ids, int64 per the model's metadata)
+    /// cross-attending to the encoded page (encoder_hidden_states). Returns the logits [batch, seq, vocab].
+    /// </summary>
+    private Tensor<T> DecodeStepOnnx(Tensor<T> encoderOutput, List<int> tokens)
+    {
+        var decoder = OnnxDecoder ?? throw new InvalidOperationException("Decoder session not initialized.");
+        var inputNames = decoder.Metadata.Inputs.Select(i => i.Name).ToList();
+        string idsName = inputNames.FirstOrDefault(n => n.IndexOf("input_ids", StringComparison.OrdinalIgnoreCase) >= 0)
+            ?? throw new InvalidOperationException(
+                "The Donut decoder model has no input_ids input; its inputs are: " + string.Join(", ", inputNames) + ".");
+        string encoderName = inputNames.FirstOrDefault(n => n.IndexOf("encoder_hidden_states", StringComparison.OrdinalIgnoreCase) >= 0)
+            ?? throw new InvalidOperationException(
+                "The Donut decoder model has no encoder_hidden_states input; its inputs are: " + string.Join(", ", inputNames) + ".");
+
+        var ids = new Tensor<T>([1, tokens.Count]);
+        for (int t = 0; t < tokens.Count; t++)
+            ids[0, t] = NumOps.FromDouble(tokens[t]);
+
+        var outputs = decoder.Run(new Dictionary<string, Tensor<T>> { [idsName] = ids, [encoderName] = encoderOutput });
+        return outputs.TryGetValue("logits", out var logits) ? logits : outputs.Values.First();
     }
 
     private string GenerateText(Tensor<T> encoderOutput, string prompt, int maxLength = -1)
@@ -778,11 +800,21 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
 
     private string GenerateTextOnnx(Tensor<T> encoderOutput, string prompt, int maxLength = -1)
     {
-        // The ONNX path previously fell into the native decoder, which does not exist in ONNX mode, and
-        // decoded the encoder session's output as if it were the decoder's. Say so instead.
-        throw new NotSupportedException(
-            "Donut text generation through ONNX needs a step-wise decoder session with encoder cross-attention inputs, " +
-            "which this wrapper does not implement. Use native mode for generation.");
+        if (maxLength < 0) maxLength = _maxGenerationLength;
+
+        // The same greedy loop as the native path, one exported-decoder call per step: argmax of the last position,
+        // fed back until EOS or the length cap.
+        var generatedTokens = new List<int>(_tokenizer.Encode(prompt).TokenIds);
+        const int eosTokenId = 2;
+        for (int i = 0; i < maxLength && generatedTokens.Count < _maxGenerationLength; i++)
+        {
+            int nextToken = GetNextToken(DecodeStepOnnx(encoderOutput, generatedTokens));
+            if (nextToken == eosTokenId)
+                break;
+            generatedTokens.Add(nextToken);
+        }
+
+        return _tokenizer.Decode(generatedTokens);
     }
 
     private VisionEncoderDecoderLayer<T> RequireEncoderDecoder() => _encoderDecoder
@@ -960,7 +992,12 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         }
         else
         {
-            return RunOnnxInference(preprocessed);
+            // The native graph's contract: the encoder, then the decoder's first step from BOS. The inherited
+            // RunOnnxInference would feed the encoder output to the decoder as its only input, which the exported
+            // decoder (input_ids + encoder_hidden_states) cannot take.
+            var encoded = RunEncoderOnnx(preprocessed);
+            // The same zero-valued, one-position decoder prompt the native layer uses for this path.
+            return DecodeStepOnnx(encoded, new List<int> { 0 });
         }
     }
 
@@ -1011,11 +1048,7 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
     /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
-        if (disposing)
-        {
-            _onnxEncoderSession?.Dispose();
-            _onnxDecoderSession?.Dispose();
-        }
+        // The ONNX encoder and decoder are the inherited OnnxEncoder/OnnxDecoder, which the base disposes.
         base.Dispose(disposing);
     }
 

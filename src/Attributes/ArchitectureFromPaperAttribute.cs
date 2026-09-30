@@ -25,7 +25,14 @@ public sealed class ArchitectureFromPaperAttribute : Attribute
     /// <summary>Creates the declaration.</summary>
     public ArchitectureFromPaperAttribute(string paperUrl, string reason)
     {
-        PaperUrl = paperUrl ?? throw new ArgumentNullException(nameof(paperUrl));
-        Reason = reason ?? throw new ArgumentNullException(nameof(reason));
+        if (paperUrl is null) throw new ArgumentNullException(nameof(paperUrl));
+        if (reason is null) throw new ArgumentNullException(nameof(reason));
+        // A blank declaration would claim nothing while still silencing ADNDEF003.
+        if (string.IsNullOrWhiteSpace(paperUrl))
+            throw new ArgumentException("The reused architecture's paper URL must be stated.", nameof(paperUrl));
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new ArgumentException("Why the reuse is faithful to this model's paper must be stated.", nameof(reason));
+        PaperUrl = paperUrl;
+        Reason = reason;
     }
 }
