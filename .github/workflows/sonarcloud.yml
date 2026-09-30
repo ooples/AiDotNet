@@ -892,6 +892,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'New-CoverageRunSettings self-test failed' }
           ./tools/TestImpact/Test-CiImpactWorkflow.ps1
           if ($LASTEXITCODE -ne 0) { throw 'CI impact workflow contract failed' }
+          ./tools/TestImpact/Test-SelectAffectedTestsPassthrough.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Test-level selection pass-through proof failed' }
           ./tools/TestImpact/Test-TestImpactEndToEnd.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Test-impact end-to-end proof failed' }
           ./tools/TestImpact/Test-CiGateModes.ps1
