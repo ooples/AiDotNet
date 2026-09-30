@@ -6,18 +6,14 @@ name: Model Performance Census
 # best-effort HeavyTimeout allowlist.
 #
 # The nightly schedule and manual runs measure every fixture on master; that series is the baseline.
-# Pull requests reach this through the validation pipeline (sonarcloud.yml) instead of a 'src/**'
-# path filter, which put 34 jobs in the runner queue on every source push. There it measures only
-# the fixtures the change can affect - the model-family classes owned by the test shards the
-# coverage selection chose (Select-AuxiliaryWorkloads.ps1, Select-CensusFixtures.ps1) - on as many
-# shards as they need at the full census's density, and reuses the Build job's artifact instead of
-# compiling the test assembly again. A call without an artifact builds from source; an empty scope
-# is the full census.
+# Pull requests never run it: 34 census jobs per source push held the shared runner pool. A
+# regression shows up in the nightly series. A call without an artifact builds from source; an
+# empty scope is the full census.
 on:
   workflow_call:
     inputs:
       scope:
-        description: 'JSON census scope from Select-AuxiliaryWorkloads.ps1; empty measures every fixture.'
+        description: 'JSON census scope (Select-CensusFixtures.ps1); empty measures every fixture.'
         type: string
         default: ''
       build_artifact_id:
