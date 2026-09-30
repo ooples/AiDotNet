@@ -1120,8 +1120,11 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private void InitializeWeight(Tensor<T> weight, T scale)
     {
-        // Create random tensor using Tensor<T>.CreateRandom [0, 1]
-        var randomTensor = Tensor<T>.CreateRandom(weight.Shape[0], weight.Shape[1]);
+        // Uniform [0, 1) from the layer's own stream, so a seeded layer (an architecture seed, or the
+        // construction seed scope) initializes the same way wherever it is built. The unseeded
+        // overload drew from the process-shared generator, so two identically seeded models got
+        // different LSTM weights depending on what had drawn from it first.
+        var randomTensor = Tensor<T>.CreateRandom(Random, weight.Shape[0], weight.Shape[1]);
 
         // Shift to [-0.5, 0.5] range: random - 0.5
         var halfTensor = new Tensor<T>(weight._shape);
