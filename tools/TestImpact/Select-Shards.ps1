@@ -809,6 +809,14 @@ function Select-ImpactedShards {
     $mappedPaths = [System.Collections.Generic.List[string]]::new()
     $reasons = [System.Collections.Generic.List[string]]::new()
     $routes = [System.Collections.Generic.List[string]]::new()
+    # One record per pull-request path, written where it is decided, so the selection report shows the decision
+    # itself (category, outcome, shards, reason) instead of reconstructing it from the flat route strings.
+    $files = [System.Collections.Generic.List[object]]::new()
+    function Add-FileDecision([string] $Path, [string] $Category, [string] $Outcome, [string[]] $Shards, [string] $Why) {
+        [void] $files.Add([pscustomobject]@{
+            path = $Path; category = $Category; outcome = $Outcome; shards = @($Shards | Where-Object { $_ }); why = $Why
+        })
+    }
     # Per invocation and lazy: mapped changes pay no indexing cost, and selecting a
     # different map in the same process cannot reuse another map's directory owners.
     $directoryOwnerIndex = $null
@@ -855,6 +863,7 @@ function Select-ImpactedShards {
             if (-not $changedPathSet.Contains($currentPath)) {
                 $escalate = $true
                 [void] $reasons.Add("changed by this pull request but identical to the map's copy, so its effect has no map line numbers: $currentPath")
+                Add-FileDecision $currentPath 'MapCandidate' 'escalated' @() "identical to the map's copy, so its effect has no map line numbers"
             }
         }
     }
@@ -864,9 +873,16 @@ function Select-ImpactedShards {
             continue
         }
         $impact = Get-ChangedPathImpact -Path $path
-        if ($path -cin $ReviewedControlPaths) { continue }
+        $isCurrent = $currentPathSet.Contains(([string] $path).Replace('\', '/'))
+        if ($path -cin $ReviewedControlPaths) {
+            if ($isCurrent) { Add-FileDecision $path $impact.ToString() 'reviewed' @() 'reviewed control path; its policy shards are required instead' }
+            continue
+        }
         switch ($impact) {
-            ([ChangedPathImpact]::NonRuntime) { continue }
+            ([ChangedPathImpact]::NonRuntime) {
+                if ($isCurrent) { Add-FileDecision $path 'NonRuntime' 'skipped' @() 'cannot affect any test' }
+                continue
+            }
             ([ChangedPathImpact]::SelectionControl) {
                 # A control-path edit in THIS pull request must exercise the complete matrix. The
                 # same path in the older map-to-HEAD delta was already validated when it landed and
@@ -875,12 +891,14 @@ function Select-ImpactedShards {
                 if ($currentPathSet.Contains(([string] $path).Replace('\', '/'))) {
                     $escalate = $true
                     [void] $reasons.Add("current validation-selection control change: $path")
+                    Add-FileDecision $path 'SelectionControl' 'escalated' @() 'changes the selection tooling itself, so the whole matrix validates it'
                 }
                 continue
             }
             ([ChangedPathImpact]::FullValidation) {
                 $escalate = $true
                 [void] $reasons.Add("validation infrastructure or unknown GitHub configuration: $path")
+                if ($isCurrent) { Add-FileDecision $path 'FullValidation' 'escalated' @() 'validation infrastructure or unknown GitHub configuration' }
                 continue
             }
             ([ChangedPathImpact]::MapCandidate) {
@@ -930,6 +948,7 @@ function Select-ImpactedShards {
             Reasons           = $reasons
             Shards            = @($selected | Sort-Object)
             Routes            = @($routes)
+            Files             = @($files)
         }
     }
 
@@ -961,10 +980,12 @@ function Select-ImpactedShards {
                         [void] $selected.Add([string] $shard)
                         [void] $routes.Add("$shard <= runs tests affected by $path ($($route.Why))")
                     }
+                    Add-FileDecision $path 'TestSource' 'routed' @($route.Shards) $route.Why
                 }
                 else {
                     $escalate = $true
                     [void] $reasons.Add("$($route.Why): $path")
+                    Add-FileDecision $path 'TestSource' 'escalated' @() $route.Why
                 }
                 continue
             }
@@ -981,12 +1002,14 @@ function Select-ImpactedShards {
             if ($null -eq $directoryOwners) {
                 $escalate = $true
                 [void] $reasons.Add("not executed by any mapped shard: $path")
+                Add-FileDecision $path 'MapCandidate' 'escalated' @() 'not executed by any mapped shard, and not C# source with mapped neighbours'
                 continue
             }
             foreach ($shard in @($directoryOwners.Shards)) {
                 [void] $selected.Add([string] $shard)
                 [void] $routes.Add("$shard <= executes mapped files in $($directoryOwners.Directory), beside the unmapped source $path")
             }
+            Add-FileDecision $path 'MapCandidate' 'routed' @($directoryOwners.Shards) "unmapped source; routed to the shards executing $($directoryOwners.Directory)"
             continue
         }
 
@@ -994,6 +1017,7 @@ function Select-ImpactedShards {
         if ($hunks.Count -eq 0 -or $hunks.Count % 2 -ne 0) {
             $escalate = $true
             [void] $reasons.Add("changed file has no trustworthy line hunks: $path")
+            Add-FileDecision $path 'MapCandidate' 'escalated' @() 'no trustworthy line hunks'
             continue
         }
 
@@ -1042,6 +1066,10 @@ function Select-ImpactedShards {
                 [void] $routes.Add("$shardName <= executes $path, whose changed lines $(Format-LineRanges $uncovered) no shard executes")
             }
         }
+        $fileShards = @(@($hitsByShard.Keys) + @(if ($uncovered.Count -gt 0) { @($fileOwners) }) | Sort-Object -Unique)
+        $fileWhy = "$($hitsByShard.Count) shard(s) execute its changed lines" +
+            $(if ($uncovered.Count -gt 0) { "; lines $(Format-LineRanges $uncovered) run in no shard, so every $($fileOwners.Count) shard(s) executing the file run" } else { '' })
+        Add-FileDecision $path 'MapCandidate' 'routed' $fileShards $fileWhy
     }
 
     if ($selected.Count -eq 0) {
@@ -1055,6 +1083,7 @@ function Select-ImpactedShards {
         Reasons            = $reasons
         Shards             = @($selected | Sort-Object)
         Routes             = @($routes)
+        Files              = @($files)
     }
 }
 
@@ -3042,6 +3071,7 @@ try {
         $currentPaths = @($currentPaths | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     }
     Write-Host "changed files since the map: $($changed.Count); changed by the current change: $($currentPaths.Count)"
+    $changedSinceMapCount = $changed.Count
     if ($scopeToPullRequest) {
         # The change's own ranges, carried back to the map's numbering. The map-to-HEAD ranges above
         # would also sweep in every edit the base branch made to the same files since the map.
@@ -3195,6 +3225,13 @@ try {
         # every consumer that binds this to a [string[]] fail. Build the array first.
         shards            = $emittedShards
         routes            = @($selection.Routes)
+        # Report-only fields (Write-SelectionReport.ps1); the workflow's matrix decision never reads them.
+        # wouldSelect is what coverage selected even when an escalation overrides it with the full matrix.
+        wouldSelect       = @($selection.Shards)
+        files             = @(if ($selection.PSObject.Properties['Files']) { @($selection.Files) })
+        map               = [pscustomobject]@{
+            sha = $mapSha; changedSinceMap = $changedSinceMapCount; changedByThisChange = @($currentPaths).Count
+        }
     }
     if ($OutFile) { $result | ConvertTo-Json -Depth 5 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8 }
 }
