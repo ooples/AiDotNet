@@ -257,23 +257,20 @@ jobs:
     name: CodeQL Analysis
     runs-on: ubuntu-latest
     needs: [validation-source, select-shards]
-    # The traced net10 build takes about 31 minutes on generated-source-heavy PRs. The #2032
-    # analysis was still running when the 60-minute ceiling cancelled it, while master's #2026
-    # baseline completed in 57:48. Give extraction, SARIF generation, and upload enough margin
-    # for normal hosted-runner variance without hiding a genuinely hung job. Recent PR runs took
-    # 66-71 minutes (about 26 traced build + 31 analysis), and the job now also traces Serving and
-    # the playground functions (about 40 s of untraced local compile, under 1% more source), so the
-    # ceiling moves from 75 to 85 minutes to keep the same margin.
+    # Build-less on EVERY event, so a pull request's alerts are compared with a baseline produced the
+    # same way. Pull requests used to extract build-less while master's baseline came from the traced
+    # build (#2268), and the two extractors do not report the same alerts on the same code: 380
+    # error-level alerts (cs/loss-of-precision, cs/unused-collection, ...) existed only in build-less
+    # results, so a large pull request had them attributed to it and failed the ruleset for lines it
+    # never touched (#2136). Pull requests still extract only the C# files they change; master pushes,
+    # the nightly schedule and manual runs extract the whole library, which becomes that baseline.
+    # The traced analysis continues in codeql-traced below, under its own category.
+    #
+    # Build-less extraction of the whole library holds a runner about 41 minutes; 85 leaves the same
+    # margin for hosted-runner variance the traced job needed.
     timeout-minutes: 85
     # CodeQL remains mandatory even for non-runtime changes because the active Main ruleset
     # requires a CodeQL result for the candidate commit. This is one job, not a model/test matrix.
-    #
-    # Pull requests analyze C# WITHOUT a traced build (build-mode: none): the traced net10 build plus analysis
-    # held one hosted runner for ~76 minutes on every PR - Dependabot Actions bumps included - while that PR's
-    # own test shards sat in the runner queue (measured: median 77-minute shard queue wait on a 4-hour PR run
-    # whose shards ran a median 13 minutes). Build-less extraction still yields the result the ruleset needs.
-    # Master pushes, the nightly schedule and manual runs keep the full traced analysis below, so what
-    # build-less mode reads less precisely (source-generated code) is still covered before release.
     if: "${{ always() && !cancelled() && fromJSON(needs.validation-source.outputs.execute_quality) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     permissions:
       contents: read
@@ -285,49 +282,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Free runner disk space
-        if: github.event_name != 'pull_request'
-        # The full solution Release build compiles net10.0 + net471 outputs and can exhaust
-        # ubuntu-latest's runner volume before downstream cleanup steps run. Keep the .NET
-        # host frameworks intact and remove only preinstalled toolchains this job does not use.
-        run: |
-          sudo rm -rf /usr/local/lib/android || true
-          sudo rm -rf /opt/ghc || true
-          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
-          sudo rm -rf /opt/hostedtoolcache/PyPy || true
-          sudo rm -rf /opt/hostedtoolcache/Ruby || true
-          sudo rm -rf /opt/hostedtoolcache/go || true
-          sudo rm -rf /usr/share/swift || true
-          sudo rm -rf /usr/share/miniconda || true
-          sudo rm -rf /usr/local/share/boost || true
-          sudo apt-get clean || true
-          df -h /
-
       - name: Setup .NET 10.0
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
 
-      - name: Cache NuGet packages
-        if: github.event_name != 'pull_request'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
-          restore-keys: |
-            nuget-${{ runner.os }}-
-
-      - name: Restore dependencies
-        if: github.event_name != 'pull_request'
-        run: |
-          dotnet restore src/AiDotNet.csproj
-          dotnet restore src/AiDotNet.Serving/AiDotNet.Serving.csproj
-          dotnet restore src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj
-
-      # Build-less extraction of the whole library still held a runner ~41 minutes per PR. A PR's
-      # code-scanning result only gates alerts in the lines it changes, so it extracts only the C#
-      # files it changes; master pushes and the schedule still analyze everything, traced. A PR that
-      # changes no analyzed C# extracts one fixed small file, so the ruleset still gets its result.
       - name: Scope build-less analysis to this change
         id: codeql-scope
         if: github.event_name == 'pull_request'
@@ -361,8 +320,86 @@ jobs:
           config-file: ${{ steps.codeql-scope.outputs.config }}
           queries: security-and-quality
 
-      - name: Initialize CodeQL (traced build)
+      - name: Initialize CodeQL (build-less, whole library)
         if: github.event_name != 'pull_request'
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
+        with:
+          languages: csharp
+          build-mode: none
+          config-file: ./.github/codeql/codeql-config.yml
+          queries: security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
+        with:
+          category: "/language:csharp"
+          upload: always
+
+
+  # The traced analysis: what build-less extraction reads less precisely (source-generated code) is
+  # analyzed from a real build, on master pushes, the nightly schedule and manual runs. Its own category
+  # keeps it from ever being the baseline a build-less pull request is compared with. Not a CI Gate
+  # dependency: on a pull request it is skipped by design, and the ruleset's required CodeQL result is
+  # the build-less job's.
+  codeql-traced:
+    name: CodeQL Analysis (traced)
+    runs-on: ubuntu-latest
+    needs: [validation-source, select-shards]
+    # Recent traced runs took 66-71 minutes (about 26 traced build + 31 analysis) and trace Serving and
+    # the playground functions as well; 85 keeps the margin.
+    timeout-minutes: 85
+    if: "${{ always() && !cancelled() && github.event_name != 'pull_request' && fromJSON(needs.validation-source.outputs.execute_quality) && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Free runner disk space
+        # The full solution Release build compiles net10.0 + net471 outputs and can exhaust
+        # ubuntu-latest's runner volume before downstream cleanup steps run. Keep the .NET
+        # host frameworks intact and remove only preinstalled toolchains this job does not use.
+        run: |
+          sudo rm -rf /usr/local/lib/android || true
+          sudo rm -rf /opt/ghc || true
+          sudo rm -rf /opt/hostedtoolcache/CodeQL || true
+          sudo rm -rf /opt/hostedtoolcache/PyPy || true
+          sudo rm -rf /opt/hostedtoolcache/Ruby || true
+          sudo rm -rf /opt/hostedtoolcache/go || true
+          sudo rm -rf /usr/share/swift || true
+          sudo rm -rf /usr/share/miniconda || true
+          sudo rm -rf /usr/local/share/boost || true
+          sudo apt-get clean || true
+          df -h /
+
+      - name: Setup .NET 10.0
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj', '**/Directory.Build.props') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore dependencies
+        run: |
+          dotnet restore src/AiDotNet.csproj
+          dotnet restore src/AiDotNet.Serving/AiDotNet.Serving.csproj
+          dotnet restore src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj
+
+      # Build-less extraction of the whole library still held a runner ~41 minutes per PR. A PR's
+      # code-scanning result only gates alerts in the lines it changes, so it extracts only the C#
+      # files it changes; master pushes and the schedule still analyze everything, traced. A PR that
+      # changes no analyzed C# extracts one fixed small file, so the ruleset still gets its result.
+      - name: Initialize CodeQL (traced build)
         uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
         with:
           languages: csharp
@@ -379,7 +416,6 @@ jobs:
       # The core library's command is unchanged and runs first, so its extraction is identical;
       # the next two builds find it up to date and compile only their own sources.
       - name: Build for CodeQL (net10.0)
-        if: github.event_name != 'pull_request'
         run: |
           dotnet build src/AiDotNet.csproj -c Release --no-restore -f net10.0
           dotnet build src/AiDotNet.Serving/AiDotNet.Serving.csproj -c Release --no-restore
@@ -388,8 +424,9 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
         with:
-          category: "/language:csharp"
+          category: "/language:csharp-traced"
           upload: always
+
 
   # Build once on ubuntu (net10.0 + net471), then run tests in parallel shards.
   build:
