@@ -22,4 +22,7 @@ public class VGG16BNBackboneOptions : DetectionBackboneOptions
     /// Thrown when <see cref="DetectionBackboneOptions.InChannels"/> is not positive.
     /// </exception>
     public void Validate() => ValidateBackboneCore();
+
+    /// <summary>The given options, or the defaults when none were supplied.</summary>
+    internal static VGG16BNBackboneOptions OrDefault(VGG16BNBackboneOptions? options) => options ?? new VGG16BNBackboneOptions();
 }

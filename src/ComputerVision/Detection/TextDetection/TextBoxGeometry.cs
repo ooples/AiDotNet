@@ -25,7 +25,7 @@ internal static class TextBoxGeometry
             var a = hull[i];
             var b = hull[(i + 1) % hull.Count];
             double len = Math.Sqrt((b.X - a.X) * (b.X - a.X) + (b.Y - a.Y) * (b.Y - a.Y));
-            if (len == 0) continue;
+            if (len <= 0) continue; // a repeated hull point: no edge direction
             double ux = (b.X - a.X) / len, uy = (b.Y - a.Y) / len;
             double minU = double.MaxValue, maxU = double.MinValue, minV = double.MaxValue, maxV = double.MinValue;
             foreach (var p in hull)

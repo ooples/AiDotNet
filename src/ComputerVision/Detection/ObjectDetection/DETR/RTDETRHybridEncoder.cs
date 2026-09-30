@@ -211,7 +211,8 @@ internal sealed class RtdetrAifiLayer<T> : CvParameterModule<T>
         var result = new double[width * height * dim];
         for (int t = 0; t < width * height; t++)
         {
-            double w = t / height, h = t % height;
+            int column = t / height, row = t % height; // grid indices, not fractions
+            double w = column, h = row;
             for (int i = 0; i < posDim; i++)
             {
                 double omega = 1.0 / Math.Pow(temperature, (double)i / posDim);

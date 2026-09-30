@@ -336,10 +336,11 @@ public partial class YOLOv11Backbone<T> : YoloStagedBackboneBase<T>
     /// <summary>Creates the backbone.</summary>
     /// <param name="options">Model size and input channels; defaults to Nano over three channels.</param>
     public YOLOv11Backbone(YoloBackboneOptions? options = null)
-        : base($"YOLOv11Backbone-{(options ??= new YoloBackboneOptions()).Size}", options.InChannels)
+        : base($"YOLOv11Backbone-{YoloBackboneOptions.OrDefault(options).Size}", YoloBackboneOptions.OrDefault(options).InChannels)
     {
-        options.Validate();
-        var s = YoloScale.ForV11(options.Size);
+        var resolved = YoloBackboneOptions.OrDefault(options);
+        resolved.Validate();
+        var s = YoloScale.ForV11(resolved.Size);
         bool c3k = s.ForcesC3k;
         int c64 = s.Channels(64), c128 = s.Channels(128), c256 = s.Channels(256), c512 = s.Channels(512), c1024 = s.Channels(1024);
         int n = s.Repeats(2);

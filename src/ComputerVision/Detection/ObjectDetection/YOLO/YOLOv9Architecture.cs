@@ -107,8 +107,9 @@ internal sealed class YoloV9CompositeBackbone<T>
         _fuseAfter = fuseAfter;
         Stages = config.BuildStages<T>();
         var widths = config.StageWidths;
+        Interfaces.IActivationFunction<T>? linear = null;
         Projections = sourceTaps.Select((_, i) => Enumerable.Range(0, i + 1)
-            .Select(j => new ConvolutionalLayer<T>(widths[fuseAfter[j]], 1, 1, 0, (Interfaces.IActivationFunction<T>?)null))
+            .Select(j => new ConvolutionalLayer<T>(widths[fuseAfter[j]], 1, 1, 0, linear))
             .ToList()).ToList();
     }
 
@@ -181,12 +182,13 @@ public partial class YOLOv9Backbone<T> : NeuralNetworkBase<T>, IDetectionBackbon
     /// <summary>Creates the backbone for a model size (Nano = t, Small = s, Medium = m, Large = c, XLarge = e).</summary>
     /// <param name="options">Model size and input channels; defaults to Nano over three channels.</param>
     public YOLOv9Backbone(YoloBackboneOptions? options = null)
-        : base(DetectionBackboneArchitecture<T>.Create((options ??= new YoloBackboneOptions()).InChannels),
+        : base(DetectionBackboneArchitecture<T>.Create(YoloBackboneOptions.OrDefault(options).InChannels),
               new MeanSquaredErrorLoss<T>())
     {
-        options.Validate();
-        _config = YoloV9Config.For(options.Size);
-        Name = $"YOLOv9Backbone-{options.Size}";
+        var resolved = YoloBackboneOptions.OrDefault(options);
+        resolved.Validate();
+        _config = YoloV9Config.For(resolved.Size);
+        Name = $"YOLOv9Backbone-{resolved.Size}";
         _primary = _config.BuildStages<T>();
         var widths = _config.StageWidths;
         OutputChannels = Taps.Select(t => widths[t]).ToArray();
