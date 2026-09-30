@@ -592,6 +592,13 @@ jobs:
           path: type-impact-plan.json
           retention-days: 7
 
+      # Which test classes each selected shard runs, and why the type-level plan could not narrow when it did
+      # not. Appends to this job's summary; report-only.
+      - name: Report test-level selection
+        if: always() && hashFiles('type-impact-plan.json') != ''
+        shell: pwsh
+        run: ./tools/TestImpact/Write-SelectionReport.ps1 -TypeImpactPlanFile type-impact-plan.json
+
   # Everything the shards do NOT need, built concurrently with them instead of ahead of
   # them: the net471 compatibility compile, net8.0, and the pack that requires all three.
   # Compiling net471 is a real check -- it catches breakage a net10.0 build cannot see --
@@ -1242,10 +1249,31 @@ jobs:
           "requires_shards=$($requiresShards.ToString().ToLowerInvariant())" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
-          $summary = if ($escalate) { "Running the full matrix ($($all.Count) shards)." }
-                     elseif (-not $requiresValidation) { 'Non-runtime-only change; no model or test jobs required.' }
-                     else { "Selected **$($matrixShards.Count)** of $($all.Count) shards from coverage." }
-          "### Shard selection`n`n$summary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          if (-not $requiresValidation) {
+            "### Shard selection`n`nNon-runtime-only change; no model or test jobs required." |
+              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+          else {
+            # The full decision, not just the verdict: what forced the full matrix, what coverage alone would have
+            # selected, every changed file's category and shards, and every selected shard's reasons. Report-only:
+            # it reads the decision files and cannot change the matrix, so a failure here only warns.
+            try {
+              & ./tools/TestImpact/Write-SelectionReport.ps1 -SelfTest | Out-Null
+              if ($LASTEXITCODE -ne 0) { throw 'its self-test failed' }
+              $finalCount = if ($escalate) { $all.Count } else { @($matrixShards).Count }
+              $override = if (Test-Path selection.json) { '' }
+                          else { 'the selector produced no selection.json; the warning above in this step says why the full matrix runs' }
+              & ./tools/TestImpact/Write-SelectionReport.ps1 -SelectionFile selection.json -TotalShards $all.Count `
+                  -FinalShardCount $finalCount -FinalEscalated:$escalate -WorkflowReason $override `
+                  -ReportFile selection-report.json
+            }
+            catch {
+              Write-Host "::warning::selection report not written: $($_.Exception.Message)"
+              $verdict = if ($escalate) { "Running the full matrix ($($all.Count) shards)." }
+                         else { "Selected **$(@($matrixShards).Count)** of $($all.Count) shards." }
+              "### Shard selection`n`n$verdict" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            }
+          }
 
           $carried = @()
           $runWithoutInstrumentation = @()
@@ -1364,6 +1392,20 @@ jobs:
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "coverage_run_without_instrumentation=$(ConvertTo-Json -InputObject @($runWithoutInstrumentation) -Depth 3 -Compress)" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      # The selection's full record (selection.json plus the rendered report), for the replay tooling and for
+      # anyone asking why a run selected what it did. Report-only; never gates anything.
+      - name: Upload shard selection report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: shard-selection-report
+          path: |
+            selection.json
+            selection-report.json
+          if-no-files-found: ignore
+          retention-days: 14
+          overwrite: true
 
       - name: Upload carried digests
         if: ${{ inputs.collect_coverage_everywhere }}
