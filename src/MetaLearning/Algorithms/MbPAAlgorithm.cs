@@ -98,8 +98,6 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [PipelineStage(PipelineStage.Training)]
 public partial class MbPAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
-    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
-    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
 
     private readonly MbPAOptions<T, TInput, TOutput> _algoOptions;
 
@@ -250,6 +248,17 @@ public partial class MbPAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// stated behaviour.
     /// </para>
     /// </remarks>
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The adapted model emits one score row per query example, so the loss is the configured one applied to
+    /// the logarithm of those rows against the class indices - cross-entropy by default. A Vector output
+    /// carries one predicted class per example instead, and its loss is the classification error rate. The
+    /// base's default compared the whole score block against a vector of labels, which cannot be lined up and
+    /// threw "Predicted and actual vectors must have the same length".
+    /// </remarks>
+    protected override T ComputeLossFromOutput(TOutput predictions, TOutput expectedOutput)
+        => ClassifierOutputs<T>.ProbabilityLoss(LossFunction, predictions, expectedOutput);
+
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         // Adapt is public API, and both sibling algorithms (LFT, SparseMAML) guard this. Without

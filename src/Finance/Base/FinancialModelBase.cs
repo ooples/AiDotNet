@@ -64,9 +64,32 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
 
     /// <summary>
     /// Gets the model-specific optimizer used by the common tape training path.
-    /// A null value retains the neural-network default optimizer.
     /// </summary>
-    protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => null;
+    /// <remarks>
+    /// Defaults to the optimizer the model itself built into its <c>_optimizer</c> field - usually its paper
+    /// recipe from <c>PaperOptimizerFactory</c>. The default used to be null, which silently trained on the
+    /// network's generic Adam: 63 of 91 financial models built an optimizer that training never used (S4's
+    /// LAMB, and every recipe declared with [PaperOptimizer]). Null (no such field) keeps the network default.
+    /// </remarks>
+    protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer =>
+        OwnOptimizerField.GetOrAdd(GetType(), FindOwnOptimizerField)?.GetValue(this) as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>;
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, System.Reflection.FieldInfo?> OwnOptimizerField = new();
+
+    /// <summary>The <c>_optimizer</c> field a financial model declares, if any; looked up once per type.</summary>
+    private static System.Reflection.FieldInfo? FindOwnOptimizerField(Type type)
+    {
+        const System.Reflection.BindingFlags Flags = System.Reflection.BindingFlags.Instance
+            | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.DeclaredOnly;
+        for (var current = type; current is not null && current != typeof(FinancialModelBase<T>); current = current.BaseType)
+        {
+            var field = current.GetField("_optimizer", Flags);
+            if (field is not null && typeof(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>).IsAssignableFrom(field.FieldType))
+                return field;
+        }
+
+        return null;
+    }
     #region Execution Mode
 
     /// <summary>
@@ -171,6 +194,84 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
     /// </para>
     /// </remarks>
     public virtual int NumFeatures => _baseNumFeatures;
+
+    /// <summary>
+    /// Declares the [batch, sequence, features] geometry this model actually accepts.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A financial model is constructed with a sequence length and a feature count of its own -
+    /// NeuralGARCH's lookback window, RealizedVolatilityTransformer's realized-variance horizon -
+    /// and <c>ValidateInputShape</c> rejects anything else. The architecture it is handed carries
+    /// only a flat <c>InputSize</c>, which says nothing about how that width splits across time and
+    /// features, so a generic caller reading the architecture alone builds an input the model
+    /// refuses. Publishing the split here is what lets serving, shape discovery and the family
+    /// fixtures construct a conforming probe without knowing any individual model.
+    /// </para>
+    /// <para>
+    /// Only stated when the sequence contract is known: the architecture-only constructor leaves
+    /// <see cref="SequenceLength"/> at zero, and those models keep whatever contract their own
+    /// ports declare.
+    /// </para>
+    /// </remarks>
+    public override ModelInputShapeConstraint GetInputShapeConstraint()
+    {
+        int sequenceLength = SequenceLength;
+        int featureCount = NumFeatures;
+        if (sequenceLength < 1 || featureCount < 1)
+            return base.GetInputShapeConstraint();
+
+        // Axis 0 is the batch axis and is left free; the caller picks its own batch size.
+        return new ModelInputShapeConstraint(
+            MinimumRank: 0,
+            MinimumElementCount: 0,
+            ExactRank: 3,
+            MaximumRank: 0,
+            MinimumAxisSizes: null,
+            AxisDivisors: null,
+            ExactAxisSizes: new[] { 0, sequenceLength, featureCount });
+    }
+
+    /// <summary>
+    /// The [batch, features] geometry a cross-sectional model accepts: one observation per row,
+    /// rather than a window of observations over time.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="GetInputShapeConstraint"/> publishes the sequence split a forecasting model
+    /// needs. A risk, factor or language model is handed a sequence length for unrelated reasons
+    /// and never reads one - FactorVAE rejects a rank-3 input in as many words, NeuralStressTest
+    /// raises a bare feature vector to [1, features] before predicting, and an NLP model is given
+    /// token ids - so publishing that split for them handed every generic caller an axis the
+    /// model itself refuses. Such a model states this instead.
+    /// </remarks>
+    protected static ModelInputShapeConstraint CrossSectionalInputConstraint { get; } =
+        new(MinimumRank: 1, MinimumElementCount: 0, ExactRank: 0, MaximumRank: 2);
+
+    /// <summary>
+    /// Gets the value domain of this model's public output.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A volatility model forecasts a standard deviation or a variance, which is non-negative by
+    /// definition - Bollerslev 1986 states the GARCH conditional variance as a strictly positive
+    /// quantity, and the native heads in this family end in an activation whose range matches.
+    /// The base implementation reads the final layer's declared output port, which carries no
+    /// opinion about the activation in front of it and so reports continuous values.
+    /// </para>
+    /// <para>
+    /// The difference is not cosmetic. A caller that believes the output is continuous builds a
+    /// target containing negative values; no parameter setting reaches it, training drives the
+    /// head onto its lower bound, and every input then maps to the same saturated output. Stating
+    /// the domain here lets a generic caller build a reachable objective instead.
+    /// </para>
+    /// </remarks>
+    public override LayerInputDomain GetOutputDomain(int[]? outputShape)
+    {
+        if (this is IVolatilityModel<T>)
+            return NonNegativeTensorDomain.Value;
+
+        return base.GetOutputDomain(outputShape);
+    }
 
     /// <summary>
     /// Gets the last recorded training loss.
@@ -445,6 +546,113 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
 
     #endregion
 
+    #region Analytics Helpers
+
+    /// <summary>
+    /// Runs an analytic with dropout and batch normalization in inference mode, restoring the
+    /// previous mode afterwards.
+    /// </summary>
+    /// <typeparam name="TResult">Type the analytic produces.</typeparam>
+    /// <param name="analytic">The analytic to run.</param>
+    /// <returns>Whatever the analytic returns.</returns>
+    /// <remarks>
+    /// <para>
+    /// An analytic that reports on a trained model - factor loadings, a factor covariance - has to
+    /// read the same network a caller would predict with. Left in training mode, dropout would
+    /// zero a different subset of units on every call and batch normalization would fold the
+    /// probe's own statistics into the answer, so the reported number would move between calls
+    /// without anything about the model having changed.
+    /// </para>
+    /// </remarks>
+    protected TResult InInferenceMode<TResult>(Func<TResult> analytic)
+    {
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining)
+        {
+            SetTrainingMode(false);
+        }
+
+        try
+        {
+            return analytic();
+        }
+        finally
+        {
+            if (wasTraining)
+            {
+                SetTrainingMode(true);
+            }
+        }
+    }
+
+    /// <summary>Runs the layers in <c>[start, end)</c> sequentially.</summary>
+    /// <param name="input">Tensor to feed to the first layer of the span.</param>
+    /// <param name="start">Inclusive index of the first layer.</param>
+    /// <param name="end">Exclusive index of the last layer.</param>
+    /// <returns>The output of the final layer in the span.</returns>
+    protected Tensor<T> RunLayerSpan(Tensor<T> input, int start, int end)
+    {
+        var current = input;
+        for (int i = start; i < end; i++)
+        {
+            current = Layers[i].Forward(current);
+        }
+
+        return current;
+    }
+
+    /// <summary>
+    /// Averages a head output over every leading observation axis, reshaping one observation's
+    /// worth of values to <paramref name="perSampleShape"/>.
+    /// </summary>
+    /// <param name="head">Head output, whose trailing axis holds one observation's values.</param>
+    /// <param name="perSampleShape">Shape of a single observation's result.</param>
+    /// <returns>The averaged result, shaped as <paramref name="perSampleShape"/>.</returns>
+    /// <remarks>
+    /// <para>
+    /// A head reads off the input, so it emits one answer per observation, while a reporting
+    /// contract such as a loadings matrix asks for one answer for the whole panel. Averaging is
+    /// the reduction that keeps a linear head's meaning intact: the mean of beta over the panel
+    /// is the beta of the panel's mean exposure.
+    /// </para>
+    /// </remarks>
+    protected Tensor<T> AverageHeadOverSamples(Tensor<T> head, int[] perSampleShape)
+    {
+        int width = 1;
+        foreach (int size in perSampleShape)
+        {
+            width *= size;
+        }
+
+        int trailing = head.Shape[head.Shape.Length - 1];
+        if (trailing != width)
+        {
+            throw new InvalidOperationException(
+                $"Expected a head {width} values wide but got {trailing}; the layer layout and the "
+                + "configured output counts disagree.");
+        }
+
+        int samples = Math.Max(1, head.Length / width);
+        var averaged = new Tensor<T>(perSampleShape);
+        for (int i = 0; i < samples; i++)
+        {
+            for (int k = 0; k < width; k++)
+            {
+                averaged[k] = NumOps.Add(averaged[k], head[(i * width) + k]);
+            }
+        }
+
+        var scale = NumOps.FromDouble(1.0 / samples);
+        for (int k = 0; k < width; k++)
+        {
+            averaged[k] = NumOps.Multiply(averaged[k], scale);
+        }
+
+        return averaged;
+    }
+
+    #endregion
+
     #region ONNX Inference
 
     /// <summary>
@@ -553,7 +761,7 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
         SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expectedOutput, TrainingOptimizer);
+            RunTrainingStep(input, expectedOutput);
         }
         finally
         {
@@ -572,6 +780,22 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
         if (_lossHistory.Count > 1000)
             _lossHistory.RemoveAt(0);
     }
+
+    /// <summary>
+    /// Runs one gradient step for this model.
+    /// </summary>
+    /// <param name="input">The training input.</param>
+    /// <param name="expectedOutput">The supervised target.</param>
+    /// <remarks>
+    /// The default is ordinary supervised backpropagation of the configured loss against
+    /// <paramref name="expectedOutput"/>. A model whose paper defines a different objective
+    /// overrides this and routes to <c>TrainWithCustomLoss</c> instead - DeepAR, for one,
+    /// maximizes the Gaussian log-likelihood of the observed series rather than minimizing
+    /// squared error on the predicted mean. Overriding here rather than <see cref="Train"/>
+    /// keeps the training-mode toggle and the loss history in one place.
+    /// </remarks>
+    protected virtual void RunTrainingStep(Tensor<T> input, Tensor<T> expectedOutput)
+        => TrainWithTape(input, expectedOutput, TrainingOptimizer);
 
     /// <summary>
     /// Core training implementation for derived classes.

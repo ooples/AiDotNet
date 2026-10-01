@@ -25,7 +25,7 @@ public abstract class CodeModelTestBase : NeuralNetworkModelTestBase
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         var network = CreateNetwork();
-        var input = CreateRandomTensor(InputShape, rng);
+        var input = CreateRandomTensor(EffectiveInputShape, rng);
 
         var output = network.Predict(input);
         Assert.True(output.Length > 0, "Code model produced empty output.");
@@ -50,8 +50,8 @@ public abstract class CodeModelTestBase : NeuralNetworkModelTestBase
         using var _arena = TensorArena.Create();
         var network = CreateNetwork();
 
-        var code1 = CreateConstantTensor(InputShape, 0.1);
-        var code2 = CreateConstantTensor(InputShape, 0.9);
+        var code1 = CreateConstantTensor(EffectiveInputShape, 0.1);
+        var code2 = CreateConstantTensor(EffectiveInputShape, 0.9);
 
         var out1 = network.Predict(code1);
         var out2 = network.Predict(code2);
@@ -81,7 +81,7 @@ public abstract class CodeModelTestBase : NeuralNetworkModelTestBase
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var network = CreateNetwork();
-        var emptyInput = CreateConstantTensor(InputShape, 0.0);
+        var emptyInput = CreateConstantTensor(EffectiveInputShape, 0.0);
 
         var output = network.Predict(emptyInput);
         Assert.True(output.Length > 0, "Code model produced empty output for empty input.");

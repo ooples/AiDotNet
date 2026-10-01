@@ -258,6 +258,66 @@ public abstract class DetectionModelTestBase<T>
         }
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task WithParameters_ShouldRoundTripTheParameterVector()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var model = CreateModel();
+        WarmUp(model, rng);
+
+        var original = ParametersOf(model);
+        var restored = ParametersOf(model.WithParameters(original));
+
+        Assert.Equal(original.Length, restored.Length);
+        for (int i = 0; i < original.Length; i++)
+        {
+            Assert.Equal(ToD(original[i]), ToD(restored[i]), 10);
+        }
+    }
+
+    // Clone and DeepCopy are separate entry points on IFullModel, and a model can override one
+    // without the other, so the clone invariants above do not vouch for DeepCopy.
+    [Fact(Timeout = 120000)]
+    public async Task DeepCopy_ShouldPredictIdenticallyAndBeIndependent()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var model = CreateModel();
+        var image = CreateRandomImage(rng);
+        WarmUp(model, rng);
+
+        var copy = model.DeepCopy();
+
+        var original = model.Predict(image);
+        var copied = copy.Predict(image);
+        Assert.Equal(original.Length, copied.Length);
+        for (int i = 0; i < original.Length; i++)
+        {
+            Assert.Equal(ToD(original[i]), ToD(copied[i]), 10);
+        }
+
+        var before = ParametersOf(model);
+        Assert.True(before.Length > 0, "Model reports no trainable parameters.");
+
+        var mutated = new Vector<T>(before.Length);
+        for (int i = 0; i < before.Length; i++)
+        {
+            mutated[i] = NumOps.Add(before[i], ToT(1.0));
+        }
+
+        ((IParameterizable<T, Tensor<T>, Tensor<T>>)copy).SetParameters(mutated);
+
+        var after = ParametersOf(model);
+        Assert.Equal(before.Length, after.Length);
+        for (int i = 0; i < before.Length; i++)
+        {
+            Assert.Equal(ToD(before[i]), ToD(after[i]), 10);
+        }
+    }
+
     [Fact(Timeout = 300000)]
     public async Task Train_ShouldChangeParameters()
     {

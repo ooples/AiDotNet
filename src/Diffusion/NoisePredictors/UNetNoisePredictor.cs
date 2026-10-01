@@ -1053,12 +1053,63 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
     private const int MaxConcatPoolEntries = 16;
 
     /// <summary>
-    /// Concatenates two tensors along the channel dimension. Eval-mode uses
-    /// a pooled manual-copy buffer keyed by exact shape so repeated decoder
-    /// skip-merges at the same shape don't allocate.
+    /// Trims an upsampled decoder feature map to the spatial size of the skip connection it is
+    /// about to be concatenated with.
     /// </summary>
+    /// <remarks>
+    /// The encoder's stride-2, kernel-3, padding-1 convolution rounds UP (H becomes ceil(H/2))
+    /// while the decoder's stride-2, kernel-4, padding-1 transposed convolution always doubles
+    /// (H becomes 2H), so the two paths agree only while every level's resolution stays even. A
+    /// 4x4 latent under Stable Diffusion's four-level geometry collapses 4 -> 2 -> 1 -> 1: the
+    /// third downsample cannot halve 1, but the matching upsample still doubles it, and the merge
+    /// arrives with 2 rows against the skip's 1. Diffusers resolves the same asymmetry by forcing
+    /// the upsampler's output size to the stored skip's (UNet2DConditionModel passes
+    /// down_block_res_samples[-1].shape[2:] as upsample_size), and the original U-Net
+    /// (Ronneberger et al. 2015) cropped for the same reason. The deconvolution used here takes no
+    /// output-size argument, so the equivalent is to crop the doubled map back down - at most one
+    /// row and one column, because 2*ceil(H/2) - H is 0 or 1.
+    /// A map SMALLER than its skip is left alone: that cannot arise from this geometry, and
+    /// concatenation then reports the real mismatch instead of a padded-over one.
+    /// </remarks>
+    private Tensor<T> AlignSpatialToSkip(Tensor<T> upsampled, Tensor<T> skip)
+    {
+        if (upsampled.Rank != 4 || skip.Rank != 4)
+        {
+            return upsampled;
+        }
+
+        int targetHeight = skip._shape[2];
+        int targetWidth = skip._shape[3];
+        if (upsampled._shape[2] < targetHeight || upsampled._shape[3] < targetWidth)
+        {
+            return upsampled;
+        }
+        if (upsampled._shape[2] == targetHeight && upsampled._shape[3] == targetWidth)
+        {
+            return upsampled;
+        }
+
+        return Engine.TensorSlice(
+            upsampled,
+            new[] { 0, 0, 0, 0 },
+            new[] { upsampled._shape[0], upsampled._shape[1], targetHeight, targetWidth });
+    }
+
+    /// <summary>
+    /// Concatenates two tensors along the channel dimension, cropping the first to the second's
+    /// spatial size first so a decoder feature map always merges cleanly with its skip.
+    /// </summary>
+    /// <remarks>
+    /// Eval-mode uses a pooled manual-copy buffer keyed by exact shape so repeated decoder
+    /// skip-merges at the same shape don't allocate. Under a live gradient tape the engine op is
+    /// used instead, because the pooled buffer would not be recorded.
+    /// </remarks>
     private Tensor<T> ConcatenateChannels(Tensor<T> a, Tensor<T> b)
     {
+        // Skip merges are the only caller, so the crop belongs here rather than at each of the two
+        // decoder loops - that is what keeps the eager and the skip-returning forward in step.
+        a = AlignSpatialToSkip(a, b);
+
         bool useInPlace = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
                           || AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
         if (!useInPlace || a.Rank != 4 || b.Rank != 4

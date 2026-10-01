@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
@@ -85,27 +86,33 @@ public partial class TADAMModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mo
     /// <inheritdoc/>
     public TOutput Predict(TInput input)
     {
-        // Encode the input using the feature encoder
-        var encoderOutput = _featureEncoder.Predict(input);
-        var queryEmbedding = ConversionsHelper.ConvertToVector<T, TOutput>(encoderOutput);
+        // One score row per example. This used to flatten the WHOLE batch into a single vector and score
+        // that one "example" against the prototypes, so a query set of any size came back as one row of
+        // class probabilities - the task asks for one row per query example.
+        var rows = ClassifierOutputs<T>.AsRows(_featureEncoder.Predict(input));
+        int count = rows.Shape[0], width = rows.Shape[1];
+        var scores = new Tensor<T>(new[] { count, _options.NumClasses });
 
-        // Optionally normalize the embedding
-        if (_options.NormalizeEmbeddings)
+        for (int r = 0; r < count; r++)
         {
-            queryEmbedding = VectorHelper.Normalize(queryEmbedding);
+            var queryEmbedding = new Vector<T>(width);
+            for (int i = 0; i < width; i++) queryEmbedding[i] = rows[r * width + i];
+
+            // Optionally normalize the embedding
+            if (_options.NormalizeEmbeddings)
+            {
+                queryEmbedding = VectorHelper.Normalize(queryEmbedding);
+            }
+
+            // Scaled distances to each prototype, as logits (negative distance over temperature), softmaxed.
+            var probabilities = ApplySoftmax(ComputeLogits(ComputeScaledDistances(queryEmbedding)));
+            for (int c = 0; c < _options.NumClasses && c < probabilities.Length; c++)
+            {
+                scores[r * _options.NumClasses + c] = probabilities[c];
+            }
         }
 
-        // Compute scaled distances to each prototype
-        var distances = ComputeScaledDistances(queryEmbedding);
-
-        // Convert distances to logits (negative distances scaled by temperature)
-        var logits = ComputeLogits(distances);
-
-        // Apply softmax to get class probabilities
-        var probabilities = ApplySoftmax(logits);
-
-        // Convert to output type
-        return ConvertToOutput(probabilities);
+        return ClassifierOutputs<T>.ToOutput<TOutput>(scores);
     }
 
     /// <summary>

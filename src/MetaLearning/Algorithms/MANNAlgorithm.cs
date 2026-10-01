@@ -140,7 +140,11 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     public MANNAlgorithm(MANNOptions<T, TInput, TOutput> options)
         : base(
             options?.MetaModel ?? throw new ArgumentNullException(nameof(options), "MetaModel must be set in options."),
-            options.LossFunction ?? options.MetaModel.DefaultLossFunction,
+            // Santoro et al. 2016 eq. 25: the controller output is softmaxed and the episode loss is
+            // -sum_t y_t^T log p_t, cross-entropy against the one-hot label. This used to inherit the inner
+            // model's DefaultLossFunction, which is squared error - a regression objective for a classifier.
+            // The caller's own LossFunction still wins when supplied.
+            options.LossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>(),
             options,
             options.DataLoader,
             options.MetaOptimizer,
@@ -281,6 +285,16 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     /// examples by looking up similar stored examples.
     /// </para>
     /// </remarks>
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The adapted model returns one score per class for each example, so this is the configured loss of their
+    /// logarithm against the class indices - cross-entropy by default. A Vector output carries the predicted
+    /// class of each example instead, and its loss is the classification error rate. The base's default compared
+    /// the whole score block against a vector of labels, which cannot be lined up at all.
+    /// </remarks>
+    protected override T ComputeLossFromOutput(TOutput predictions, TOutput expectedOutput)
+        => ClassifierOutputs<T>.ProbabilityLoss(LossFunction, predictions, expectedOutput);
+
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)
@@ -1003,22 +1017,32 @@ public class MANNModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetada
     /// </summary>
     public TOutput Predict(TInput input)
     {
-        // Process input through controller
-        var controllerOutput = _controller.Predict(input);
+        // One score row per example. ExtractVector reads row 0 of a batched controller output, so this used
+        // to answer for the FIRST example only and return a single row of class scores however many query
+        // examples it was handed.
+        var rows = ClassifierOutputs<T>.AsRows(_controller.Predict(input));
+        int count = rows.Shape[0], width = rows.Shape[1];
+        var scores = new Tensor<T>(new[] { count, _options.NumClasses });
 
-        // Generate read key
-        var readKey = GenerateReadKey(controllerOutput);
+        for (int r = 0; r < count; r++)
+        {
+            var features = new Vector<T>(width);
+            for (int i = 0; i < width; i++) features[i] = rows[r * width + i];
 
-        // Read from memory
-        var attentionWeights = ComputeAttentionWeights(readKey);
-        var readContent = _memory.Read(attentionWeights);
+            // The read key is this example's own features, truncated to the memory's key width - what
+            // GenerateReadKey does for a single output.
+            var readKey = new Vector<T>(_options.MemoryKeySize);
+            for (int i = 0; i < Math.Min(width, _options.MemoryKeySize); i++) readKey[i] = features[i];
 
-        // Combine and generate prediction
-        var combined = CombineWithMemory(ExtractVector(controllerOutput), readContent);
-        var prediction = GeneratePrediction(combined);
+            var readContent = _memory.Read(ComputeAttentionWeights(readKey));
+            var prediction = GeneratePrediction(CombineWithMemory(features, readContent));
+            for (int c = 0; c < _options.NumClasses && c < prediction.Length; c++)
+            {
+                scores[r * _options.NumClasses + c] = prediction[c];
+            }
+        }
 
-        // Convert to output type
-        return ConvertToOutput(prediction);
+        return ClassifierOutputs<T>.ToOutput<TOutput>(scores);
     }
 
     /// <summary>

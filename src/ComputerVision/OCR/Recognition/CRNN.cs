@@ -97,6 +97,23 @@ public partial class CRNN<T> : OCRBase<T>
         _lstm2Forward = new LSTMLayer<T>( _hiddenDim, tanhActivation);
         _lstm2Backward = new LSTMLayer<T>( _hiddenDim, tanhActivation);
 
+        // LSTMLayer defers its input size until the first forward pass, but CRNN already knows both
+        // widths here - the CNN emits _sequenceFeatureDim per step and the second BiLSTM sees the
+        // first one's two directions concatenated. Leaving them deferred made the parameter surface
+        // depend on execution history: SetParameters on a freshly constructed model threw
+        // ParameterLayoutNotReadyException ("layout is ShapeDeferred") because the four LSTM slots
+        // had no shape yet, which is what broke DeepCopy and the WithParameters round trip.
+        int[] inputShape1 = new[] { 1, _sequenceFeatureDim }; // [batch, features] for single timestep
+        int[] inputShape2 = new[] { 1, _hiddenDim * 2 };
+        _lstm1Forward.ResolveFromShape(inputShape1);
+        _lstm1Forward.MaterializeParameters();
+        _lstm1Backward.ResolveFromShape(inputShape1);
+        _lstm1Backward.MaterializeParameters();
+        _lstm2Forward.ResolveFromShape(inputShape2);
+        _lstm2Forward.MaterializeParameters();
+        _lstm2Backward.ResolveFromShape(inputShape2);
+        _lstm2Backward.MaterializeParameters();
+
         // Output layer to vocabulary (512 = 256*2 from bidirectional)
         _outputLayer = new Dense<T>(_hiddenDim * 2, VocabularySize);
 

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <GeneratorProjectPath Condition="'$(GeneratorProjectPath)' == ''">../../src/AiDotNet.Generators/AiDotNet.Generators.csproj</GeneratorProjectPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Execute the real checked-in regression and generator without building every model family. -->
+    <Compile Include="../../tests/AiDotNet.Tests/Generators/TestScaffoldCoverageReportTests.cs" Link="TestScaffoldCoverageReportTests.cs" />
+    <ProjectReference Include="$(GeneratorProjectPath)" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+  </ItemGroup>
+</Project>
