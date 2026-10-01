@@ -37195,9 +37195,8 @@ public static partial class LayerHelper<T>
     /// CCDM applies them as plain normalization.
     /// </para>
     /// <para>
-    /// Deviation: the reference projects Q, K and V without bias and DenseLayer always has one. The K
-    /// bias is inert (it adds q.b to every score of a row, which softmax ignores) and the V bias is a
-    /// reparameterization of W_O's bias (attention rows sum to one); only the Q bias adds capacity.
+    /// W_Q, W_K and W_V are bias-free (<see cref="BiasMode.Never"/>), as the reference's
+    /// <c>nn.Linear(..., bias=False)</c>; W_O keeps its bias.
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultCCDMLayers(
@@ -37247,9 +37246,9 @@ public static partial class LayerHelper<T>
         {
             yield return new ActivationLayer<T>(silu);
             yield return new DenseLayer<T>(outputSize: 6 * d, activationFunction: null);
-            yield return new DenseLayer<T>(outputSize: d, activationFunction: null);
-            yield return new DenseLayer<T>(outputSize: d, activationFunction: null);
-            yield return new DenseLayer<T>(outputSize: d, activationFunction: null);
+            yield return new DenseLayer<T>(outputSize: d, activationFunction: null, biasMode: BiasMode.Never);
+            yield return new DenseLayer<T>(outputSize: d, activationFunction: null, biasMode: BiasMode.Never);
+            yield return new DenseLayer<T>(outputSize: d, activationFunction: null, biasMode: BiasMode.Never);
             yield return new DenseLayer<T>(outputSize: d, activationFunction: null);
             yield return new DropoutLayer<T>(attentionDropout);
             yield return new DenseLayer<T>(outputSize: mlpHidden, activationFunction: gelu);

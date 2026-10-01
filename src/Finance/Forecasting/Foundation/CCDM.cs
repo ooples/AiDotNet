@@ -320,22 +320,26 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
         int idx = 0;
         MlpResidualBlock NextMlp() => new(Layers[idx++], Layers[idx++], Layers[idx++], Layers[idx++], Layers[idx++]);
 
-        var parts = new DenoiserParts();
-        for (int i = 0; i < _embeddingLayers; i++) parts.PastEmbedding.Add(NextMlp());
-        for (int i = 0; i < _embeddingLayers; i++) parts.FutureEmbedding.Add(NextMlp());
-        parts.StepProjection = Layers[idx++];
-        parts.StepOutput = Layers[idx++];
+        var past = new List<MlpResidualBlock>();
+        var future = new List<MlpResidualBlock>();
+        for (int i = 0; i < _embeddingLayers; i++) past.Add(NextMlp());
+        for (int i = 0; i < _embeddingLayers; i++) future.Add(NextMlp());
+        var stepProjection = Layers[idx++];
+        var stepOutput = Layers[idx++];
+        var blocks = new List<DiTBlock>();
         for (int b = 0; b < _numLayers; b++)
         {
-            parts.Blocks.Add(new DiTBlock(
+            blocks.Add(new DiTBlock(
                 Layers[idx++], Layers[idx++], Layers[idx++], Layers[idx++], Layers[idx++],
                 Layers[idx++], Layers[idx++], Layers[idx++], Layers[idx++]));
         }
-        parts.DecoderActivation = Layers[idx++];
-        parts.DecoderModulation = Layers[idx++];
-        for (int i = 0; i < _embeddingLayers - 1; i++) parts.DecoderEmbedding.Add(NextMlp());
-        parts.DecoderOutput = Layers[idx++];
-        return parts;
+        var decoderActivation = Layers[idx++];
+        var decoderModulation = Layers[idx++];
+        var decoderEmbedding = new List<MlpResidualBlock>();
+        for (int i = 0; i < _embeddingLayers - 1; i++) decoderEmbedding.Add(NextMlp());
+        var decoderOutput = Layers[idx++];
+        return new DenoiserParts(past, future, stepProjection, stepOutput, blocks,
+            decoderActivation, decoderModulation, decoderEmbedding, decoderOutput);
     }
 
     #endregion
@@ -598,15 +602,26 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
 
     private sealed class DenoiserParts
     {
-        public List<MlpResidualBlock> PastEmbedding { get; } = [];
-        public List<MlpResidualBlock> FutureEmbedding { get; } = [];
-        public ILayer<T> StepProjection { get; set; } = null!;
-        public ILayer<T> StepOutput { get; set; } = null!;
-        public List<DiTBlock> Blocks { get; } = [];
-        public ILayer<T> DecoderActivation { get; set; } = null!;
-        public ILayer<T> DecoderModulation { get; set; } = null!;
-        public List<MlpResidualBlock> DecoderEmbedding { get; } = [];
-        public ILayer<T> DecoderOutput { get; set; } = null!;
+        public DenoiserParts(
+            List<MlpResidualBlock> pastEmbedding, List<MlpResidualBlock> futureEmbedding,
+            ILayer<T> stepProjection, ILayer<T> stepOutput, List<DiTBlock> blocks,
+            ILayer<T> decoderActivation, ILayer<T> decoderModulation,
+            List<MlpResidualBlock> decoderEmbedding, ILayer<T> decoderOutput)
+        {
+            PastEmbedding = pastEmbedding; FutureEmbedding = futureEmbedding;
+            StepProjection = stepProjection; StepOutput = stepOutput; Blocks = blocks;
+            DecoderActivation = decoderActivation; DecoderModulation = decoderModulation;
+            DecoderEmbedding = decoderEmbedding; DecoderOutput = decoderOutput;
+        }
+        public List<MlpResidualBlock> PastEmbedding { get; }
+        public List<MlpResidualBlock> FutureEmbedding { get; }
+        public ILayer<T> StepProjection { get; }
+        public ILayer<T> StepOutput { get; }
+        public List<DiTBlock> Blocks { get; }
+        public ILayer<T> DecoderActivation { get; }
+        public ILayer<T> DecoderModulation { get; }
+        public List<MlpResidualBlock> DecoderEmbedding { get; }
+        public ILayer<T> DecoderOutput { get; }
     }
 
     private sealed class MlpResidualBlock
