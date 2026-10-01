@@ -94,7 +94,8 @@ internal sealed class LoadedAssembly
         var result = new Dictionary<TypeDefinitionHandle, HashSet<string>>();
         void Add(TypeDefinitionHandle type, DocumentHandle document)
         {
-            var path = RepoRelative(Pdb.GetString(Pdb.GetDocument(document).Name), _repoRoot);
+            var name = Pdb.GetString(Pdb.GetDocument(document).Name);
+            var path = RepoRelative(name, _repoRoot) ?? GeneratedKey(name, _repoRoot);
             if (path is null)
             {
                 return;
@@ -158,6 +159,69 @@ internal sealed class LoadedAssembly
     /// </summary>
     public static string? RepoRelative(string documentPath, string repoRoot)
     {
+        var relative = Relative(documentPath, repoRoot);
+        if (relative is null || relative.Contains("/obj/", StringComparison.Ordinal) || relative.StartsWith("obj/", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        return relative;
+    }
+
+    /// <summary>
+    /// The stable key of a source generator's output document, or null for any other document.
+    /// Roslyn names a generated document &lt;project&gt;/obj/&lt;configuration&gt;/&lt;tfm&gt;/[generated/]&lt;generator
+    /// assembly&gt;/&lt;generator type&gt;/&lt;hint&gt;; the key keeps the project and the last three parts, so a base
+    /// and a head build of the same project name the same output identically.
+    /// </summary>
+    public static string? GeneratedKey(string documentPath, string repoRoot)
+    {
+        var relative = Relative(documentPath, repoRoot);
+        if (relative is null)
+        {
+            return null;
+        }
+
+        var parts = relative.Split('/');
+        int obj = Array.IndexOf(parts, "obj");
+        if (obj < 0)
+        {
+            return null;
+        }
+
+        int first = obj + 3;
+        if (first < parts.Length && parts[first] == "generated")
+        {
+            first++;
+        }
+
+        if (parts.Length - first < 3)
+        {
+            return null;
+        }
+
+        return "generated/" + string.Join('/', parts.Take(obj).Concat(parts.Skip(first)));
+    }
+
+    /// <summary>Generated output documents of this assembly by <see cref="GeneratedKey"/>, with their content hashes.</summary>
+    public Dictionary<string, string> GeneratedDocumentHashes()
+    {
+        var result = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var handle in Pdb.Documents)
+        {
+            var document = Pdb.GetDocument(handle);
+            var key = GeneratedKey(Pdb.GetString(document.Name), _repoRoot);
+            if (key is not null)
+            {
+                result[key] = Convert.ToHexString(Pdb.GetBlobBytes(document.Hash));
+            }
+        }
+
+        return result;
+    }
+
+    private static string? Relative(string documentPath, string repoRoot)
+    {
         var path = documentPath.Replace('\\', '/');
         string? relative = null;
         // Deterministic CI builds map the source root to /_/ .
@@ -172,11 +236,6 @@ internal sealed class LoadedAssembly
             {
                 relative = path[root.Length..];
             }
-        }
-
-        if (relative is null || relative.Contains("/obj/", StringComparison.Ordinal) || relative.StartsWith("obj/", StringComparison.Ordinal))
-        {
-            return null;
         }
 
         return relative;

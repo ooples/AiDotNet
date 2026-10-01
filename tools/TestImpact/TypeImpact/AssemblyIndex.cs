@@ -56,9 +56,20 @@ internal sealed class AssemblyIndex
     public IReadOnlySet<TypeNode>? TypesInDocument(string repoRelativePath) =>
         _byDocument.TryGetValue(repoRelativePath, out var set) ? set : null;
 
-    public static AssemblyIndex Load(IEnumerable<string> binDirectories, string repoRoot)
+    /// <summary>Generated output documents and their content hashes, by assembly name.</summary>
+    public Dictionary<string, Dictionary<string, string>> GeneratedDocuments() =>
+        _assemblies.ToDictionary(a => a.Name, a => a.GeneratedDocumentHashes(), StringComparer.Ordinal);
+
+    /// <summary>
+    /// Only the generated documents of another build (the merge base): no type graph, so a second
+    /// build costs a PDB read rather than a second index.
+    /// </summary>
+    public static Dictionary<string, Dictionary<string, string>> LoadGeneratedDocuments(IEnumerable<string> binDirectories, string repoRoot) =>
+        Open(binDirectories, repoRoot).ToDictionary(a => a.Name, a => a.GeneratedDocumentHashes(), StringComparer.Ordinal);
+
+    private static List<LoadedAssembly> Open(IEnumerable<string> binDirectories, string repoRoot)
     {
-        var index = new AssemblyIndex();
+        var assemblies = new List<LoadedAssembly>();
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var dir in binDirectories)
         {
@@ -73,10 +84,18 @@ internal sealed class AssemblyIndex
                 var loaded = LoadedAssembly.TryOpen(dll, pdb, repoRoot);
                 if (loaded is not null)
                 {
-                    index._assemblies.Add(loaded);
+                    assemblies.Add(loaded);
                 }
             }
         }
+
+        return assemblies;
+    }
+
+    public static AssemblyIndex Load(IEnumerable<string> binDirectories, string repoRoot)
+    {
+        var index = new AssemblyIndex();
+        index._assemblies.AddRange(Open(binDirectories, repoRoot));
 
         if (index._assemblies.Count == 0)
         {

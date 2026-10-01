@@ -26,6 +26,8 @@ using AiDotNet.TestImpact.TypeImpact;
 //   TypeImpact --inventory --repo <root> --bin <dir> [...] --project <csproj>=<assembly> [...]
 //              --shards <shard-manifest.json> --out <inventory.json> [--excluded-category <name>...]
 //              (exit 1 when a test class is selected by no shard; see ShardInventory.cs)
+//   Generator changes: --base-bin <merge-base build dir> [...] [--base-repo <its checkout>]
+//              --generator-root src/AiDotNet.Generators/ --generator-tests <namespace prefix of its tests>
 
 var options = Options.Parse(args);
 var clock = Stopwatch.StartNew();
@@ -41,8 +43,55 @@ var ignored = new List<string>();
 var changed = new HashSet<TypeNode>();
 var perFile = new JsonArray();
 var constLines = options.Diff.Length == 0 ? null : FilesEditingConstLines(options.Diff);
-foreach (var (status, path) in ReadChanges(options.Changes))
+var changes = ReadChanges(options.Changes).ToList();
+var generatorSources = new JsonArray();
+bool generatorChanged = false;
+int generatedChanges = 0;
+int generatedCompared = 0;
+if (options.BaseBins.Count > 0)
 {
+    // A generator reaches runtime only through what it emits, so with the merge base's build at hand its change is
+    // the set of generated documents whose content differs, each mapped like any other changed source.
+    var head = index.GeneratedDocuments();
+    var baseline = AssemblyIndex.LoadGeneratedDocuments(options.BaseBins, options.BaseRepo);
+    foreach (var name in head.Keys.Union(baseline.Keys, StringComparer.Ordinal).OrderBy(n => n, StringComparer.Ordinal))
+    {
+        var now = head.GetValueOrDefault(name) ?? [];
+        var before = baseline.GetValueOrDefault(name) ?? [];
+        if (now.Count > 0 && !baseline.ContainsKey(name) || before.Count > 0 && !head.ContainsKey(name))
+        {
+            unresolved.Add(new JsonObject { ["path"] = $"generated output of {name}", ["reason"] = "only one of the base and head builds has this assembly, so its generated output cannot be compared" });
+            continue;
+        }
+
+        generatedCompared += now.Count;
+        foreach (var key in now.Keys.Union(before.Keys, StringComparer.Ordinal).OrderBy(k => k, StringComparer.Ordinal))
+        {
+            char status = !before.TryGetValue(key, out var oldHash) ? 'A' : !now.TryGetValue(key, out var newHash) ? 'D' : oldHash == newHash ? ' ' : 'M';
+            if (status != ' ')
+            {
+                changes.Add((status, key));
+                generatedChanges++;
+            }
+        }
+    }
+}
+
+foreach (var (status, path) in changes)
+{
+    bool generated = path.StartsWith("generated/", StringComparison.Ordinal);
+    if (options.BaseBins.Count > 0 && options.GeneratorRoot.Length > 0 && path.StartsWith(options.GeneratorRoot, StringComparison.Ordinal))
+    {
+        // The generated-output diff above already carries this edit. A generator source that a test project also
+        // compiles (a linked file) is still mapped below as that project's own type.
+        generatorChanged = true;
+        if (status == 'D' || index.TypesInDocument(path) is not { Count: > 0 })
+        {
+            generatorSources.Add(path);
+            continue;
+        }
+    }
+
     if (IsDocumentation(path))
     {
         ignored.Add(path);
@@ -58,6 +107,12 @@ foreach (var (status, path) in ReadChanges(options.Changes))
     if (options.Unmappable.Any(prefix => path.StartsWith(prefix, StringComparison.Ordinal)))
     {
         unresolved.Add(new JsonObject { ["path"] = path, ["reason"] = "source generator input: it rewrites generated code in every assembly" });
+        continue;
+    }
+
+    if (status == 'D' && generated)
+    {
+        unresolved.Add(new JsonObject { ["path"] = path, ["reason"] = "a generator stopped emitting this output: what depended on it cannot be read from the new assemblies" });
         continue;
     }
 
@@ -78,8 +133,9 @@ foreach (var (status, path) in ReadChanges(options.Changes))
 
     // Consumers inline a const's value and keep no reference to its type, so an edited const line
     // in a type that exposes one cannot be followed. Without the diff, any such file is unmappable.
+    // A generated document has no line diff, so a visible const in it is never known to be unchanged.
     if (types.Any(t => t.DeclaresVisibleConstant) &&
-        (constLines is null || constLines.Contains(path)))
+        (generated || constLines is null || constLines.Contains(path)))
     {
         unresolved.Add(new JsonObject { ["path"] = path, ["reason"] = "edits a non-private const: consumers inline its value and hold no reference to it" });
         continue;
@@ -137,6 +193,12 @@ var enumerating = ReverseClosure(index.Nodes.Where(n => n.Enumerates && testAsse
 // types they enumerate.
 bool anySource = changed.Any(n => !index.TestAssemblies.Contains(n.Assembly));
 var selectedNodes = new HashSet<TypeNode>(affected.Where(n => n.TestClasses.Count > 0));
+// A generator's own tests drive it directly (a generator driver over sample sources), which no reference from the
+// generated output reaches.
+if (generatorChanged && options.GeneratorTests.Length > 0)
+{
+    selectedNodes.UnionWith(index.Nodes.Where(n => n.TestClasses.Any(c => c.VsTestName.StartsWith(options.GeneratorTests, StringComparison.Ordinal))));
+}
 if (anySource)
 {
     selectedNodes.UnionWith(enumerating);
@@ -198,6 +260,9 @@ var result = new JsonObject
     ["ignored"] = new JsonArray(ignored.Select(p => (JsonNode)p).ToArray()),
     ["changedFiles"] = perFile,
     ["changedTypes"] = changed.Count,
+    ["generatedDocumentsCompared"] = generatedCompared,
+    ["generatedChanges"] = generatedChanges,
+    ["generatorSources"] = generatorSources,
     ["reachableTypes"] = affected.Count,
     ["dispatchTables"] = new JsonArray(dispatchTables.Select(n => (JsonNode)n.Key).OrderBy(k => (string)k!, StringComparer.Ordinal).ToArray()),
     ["totalTestClasses"] = allClasses.Count,
@@ -313,6 +378,10 @@ internal sealed class Options
     public int CatalogMaxEntryPoints { get; private set; } = 10;
     public List<string> Unmappable { get; } = [];
     public bool Inventory { get; private set; }
+    public List<string> BaseBins { get; } = [];
+    public string BaseRepo { get; private set; } = string.Empty;
+    public string GeneratorRoot { get; private set; } = string.Empty;
+    public string GeneratorTests { get; private set; } = string.Empty;
     public List<string> ExcludedCategories { get; } = [];
 
     public static Options Parse(string[] args)
@@ -340,6 +409,10 @@ internal sealed class Options
                 case "--catalog-max-entry-points": options.CatalogMaxEntryPoints = int.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
                 case "--dispatch-threshold": options.DispatchThreshold = int.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
                 case "--inventory": options.Inventory = true; break;
+                case "--base-bin": options.BaseBins.Add(Path.GetFullPath(Next())); break;
+                case "--base-repo": options.BaseRepo = Path.GetFullPath(Next()); break;
+                case "--generator-root": options.GeneratorRoot = Next().Replace('\\', '/'); break;
+                case "--generator-tests": options.GeneratorTests = Next(); break;
                 case "--excluded-category": options.ExcludedCategories.Add(Next()); break;
                 case "--max-classes": options.MaxClasses = int.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
                 default: throw new ArgumentException($"unknown argument {args[i]}");
@@ -349,6 +422,11 @@ internal sealed class Options
         if (options.Bins.Count == 0 || options.Shards.Length == 0 || (!options.Inventory && options.Changes.Length == 0))
         {
             throw new ArgumentException("--bin and --shards are required, and --changes unless --inventory");
+        }
+
+        if (options.BaseRepo.Length == 0)
+        {
+            options.BaseRepo = options.Repo;
         }
 
         return options;

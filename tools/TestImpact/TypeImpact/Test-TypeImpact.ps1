@@ -21,8 +21,17 @@ try {
     & dotnet build (Join-Path $here 'TypeImpact.csproj') -c Release --nologo -v q
     if ($LASTEXITCODE -ne 0) { throw 'TypeImpact did not build' }
     $bin = Join-Path $work 'bin'
-    & dotnet build (Join-Path $here 'SelfTest/Tests/FixtureTests.csproj') -c Release --nologo -v q -o $bin
+    # Head and merge-base builds of one fixture: FixtureGenVariant changes what the fixture generator emits for
+    # Stamped and nothing else, so only StampedTests depends on the generated difference.
+    & dotnet build (Join-Path $here 'SelfTest/Tests/FixtureTests.csproj') -c Release --nologo -v q -o $bin -p:FixtureGenVariant=2
     if ($LASTEXITCODE -ne 0) { throw 'the self-test fixture did not build' }
+    $baseBin = Join-Path $work 'base-bin'
+    & dotnet build (Join-Path $here 'SelfTest/Tests/FixtureTests.csproj') -c Release --nologo -v q -o $baseBin -p:FixtureGenVariant=1
+    if ($LASTEXITCODE -ne 0) { throw 'the self-test fixture did not build at its base variant' }
+    $partialBase = Join-Path $work 'partial-base-bin'
+    New-Item -ItemType Directory -Path $partialBase | Out-Null
+    Get-ChildItem -LiteralPath $baseBin -File | Where-Object { $_.BaseName -ne 'FixtureLib' } | Copy-Item -Destination $partialBase
+    $generatorArguments = @('--generator-root', "$fixture/Gen/", '--generator-tests', 'Fixture.Tests.Generator.')
 
     $shards = Join-Path $work 'shards.json'
     ConvertTo-Json -Depth 4 -InputObject @(
@@ -78,6 +87,20 @@ try {
            Classes = @(); Runs = @('Other project'); Resolved = $false },
         @{ Name = 'a generator input is never mapped'
            Change = "M`tsrc/AiDotNet.Generators/SomeGenerator.cs"
+           Classes = @(); Runs = @('Other project'); Resolved = $false },
+        @{ Name = 'with the base build, a generator change selects what its changed output reaches, and its own tests'
+           Change = "M`t$fixture/Gen/FixtureGenerator.cs"
+           Extra = @('--base-bin', $baseBin) + $generatorArguments
+           Classes = @('GeneratorOwnTests', 'HelperSweepTests', 'InventoryTests', 'StampedTests')
+           Runs = @('Fast', 'Other project'); Resolved = $true },
+        @{ Name = 'a generator change with no base build of an assembly that has generated output is unresolved'
+           Change = "M`t$fixture/Gen/FixtureGenerator.cs"
+           Extra = @('--base-bin', $partialBase) + $generatorArguments
+           # Unresolved is what matters: Select-AffectedTests then keeps the coverage selection, whatever is listed.
+           Classes = @('GeneratorOwnTests', 'HelperSweepTests', 'InventoryTests'); Runs = @('Fast', 'Other project'); Resolved = $false },
+        @{ Name = 'a generator change without a base build is unresolved'
+           Change = "M`t$fixture/Gen/FixtureGenerator.cs"
+           Extra = @('--unmappable', "$fixture/Gen/")
            Classes = @(); Runs = @('Other project'); Resolved = $false }
     )
 
@@ -92,7 +115,8 @@ try {
             Set-Content -LiteralPath $diffFile -Value $case.Diff -Encoding utf8
             $diffArguments = @('--diff', $diffFile)
         }
-        & dotnet (Join-Path $here 'bin/Release/net10.0/TypeImpact.dll') --repo $repo --bin $bin @diffArguments `
+        $extraArguments = if ($case.ContainsKey('Extra')) { @($case.Extra) } else { @() }
+        & dotnet (Join-Path $here 'bin/Release/net10.0/TypeImpact.dll') --repo $repo --bin $bin @diffArguments @extraArguments `
             --project 'Fixture.csproj=FixtureTests' --unmappable 'src/AiDotNet.Generators/' `
             --catalog-threshold 3 --catalog-max-entry-points 1 `
             --changes $changes --shards $shards --out $out | Out-Null
@@ -136,7 +160,7 @@ try {
            Filters = @('Category!=Slow'); Exit = 0; Unassigned = @() },
         @{ Name = 'a class no filter selects fails the check and is named'
            Filters = @('FullyQualifiedName~AlphaTests|FullyQualifiedName~BetaTests'); Exit = 1
-           Unassigned = @('AlphaContractTests', 'CatalogTests', 'HelperSweepTests', 'InventoryTests', 'SurfaceTests') }
+           Unassigned = @('AlphaContractTests', 'CatalogTests', 'GeneratorOwnTests', 'HelperSweepTests', 'InventoryTests', 'StampedTests', 'SteadyTests', 'SurfaceTests') }
     )
     foreach ($case in $inventoryCases) {
         $inventoryShards = Join-Path $work 'inventory-shards.json'
