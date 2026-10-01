@@ -1797,11 +1797,14 @@ public class TrainableParameterGenerator : IIncrementalGenerator
         // the library -- its inference, purely because it declares two optimizer-velocity buffers
         // that are null until training allocates them, and training cannot precede the resolution
         // this infers. A restore into a fresh deferred layer therefore always sees them empty.
+        // A conditional parameter (TrainableParameter.Condition, e.g. a bias gated by UseBias) still
+        // has a complete formula: its condition is fixed at construction, so the emitted equation adds
+        // its term only when the condition holds. Refusing them cost a bias-optional DenseLayer its
+        // inference, so a payload restored before the first forward could no longer size the layer.
         bool completeLocalFormula = paramFields.Count > 0
             && subLayerFields.Count == 0
             && paramFields.All(field => field.CollectionKind == ParameterCollectionKind.Direct
                 && !field.Optional
-                && field.Condition is null
                 && !string.IsNullOrWhiteSpace(field.Shape)
                 && !field.Shape!.Contains("*"));
         if (!completeLocalFormula) return;
@@ -1856,8 +1859,9 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("                    {");
             foreach (var parameter in paramFields)
             {
-                sb.AppendLine($"                        __atOne += {ShapeProduct(parameter.Shape!, axis, "1")};");
-                sb.AppendLine($"                        __atTwo += {ShapeProduct(parameter.Shape!, axis, "2")};");
+                string gate = parameter.Condition is null ? "" : $"if ({parameter.Condition}) ";
+                sb.AppendLine($"                        {gate}__atOne += {ShapeProduct(parameter.Shape!, axis, "1")};");
+                sb.AppendLine($"                        {gate}__atTwo += {ShapeProduct(parameter.Shape!, axis, "2")};");
             }
             sb.AppendLine("                    }");
             sb.AppendLine("                    long __slope = __atTwo - __atOne;");
@@ -1871,7 +1875,10 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             sb.AppendLine("                        checked");
             sb.AppendLine("                        {");
             foreach (var parameter in paramFields)
-                sb.AppendLine($"                            __verified += {ShapeProduct(parameter.Shape!, axis, "__candidate")};");
+            {
+                string gate = parameter.Condition is null ? "" : $"if ({parameter.Condition}) ";
+                sb.AppendLine($"                            {gate}__verified += {ShapeProduct(parameter.Shape!, axis, "__candidate")};");
+            }
             sb.AppendLine("                        }");
             sb.AppendLine("                        if (__verified == parameterCount)");
             sb.AppendLine("                        {");
