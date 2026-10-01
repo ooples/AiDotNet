@@ -18,6 +18,8 @@ namespace AiDotNet.Tests.ModelLoading
     /// run a forward pass. Exercises metadata→config, GGUF→Hugging Face name remapping, tie-detection, and a
     /// non-llama-named (qwen2) architecture.
     /// </summary>
+    // Sets AiDotNetEngine.Current, a process-wide static: run apart from every other test class.
+    [Collection("EngineCurrentGlobalState")]
     public class GgufEndToEndTests
     {
         /// <summary>

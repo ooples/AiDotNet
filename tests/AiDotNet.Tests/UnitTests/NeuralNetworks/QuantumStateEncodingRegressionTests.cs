@@ -35,6 +35,8 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 /// directly as the amplitudes, so <c>sum |psi_i|^2 == 1</c>.
 /// </para>
 /// </remarks>
+// Sets AiDotNetEngine.Current, a process-wide static: run apart from every other test class.
+[Collection("EngineCurrentGlobalState")]
 public class QuantumStateEncodingRegressionTests
 {
     private static Tensor<float> Input(Func<int, float> f, int n = 128)
