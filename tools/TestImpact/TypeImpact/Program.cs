@@ -29,6 +29,11 @@ var clock = Stopwatch.StartNew();
 var index = AssemblyIndex.Load(options.Bins, options.Repo);
 Console.WriteLine($"indexed {index.Nodes.Count} types in {index.AssemblyNames.Count} assemblies in {clock.Elapsed.TotalSeconds:F1}s");
 
+if (options.CheckOwnership)
+{
+    return CheckOwnership(index, options);
+}
+
 var unresolved = new List<JsonObject>();
 var ignored = new List<string>();
 var changed = new HashSet<TypeNode>();
@@ -288,6 +293,54 @@ static bool IsDocumentation(string path)
         || path.StartsWith("docs/", StringComparison.Ordinal);
 }
 
+// Every compiled test class must be selected by at least one shard of its project, or CI never runs it: before this
+// check, 243 classes matched no shard filter and had never run. A filter this evaluator cannot decide for a class
+// (Tri.Unknown) counts as selecting it, so the check can only miss an unowned class, never fail an owned one.
+// Projects no shard names are out of scope. Exit 1 lists every unowned class.
+static int CheckOwnership(AssemblyIndex index, Options options)
+{
+    var manifest = JsonNode.Parse(File.ReadAllText(options.Shards))!.AsArray();
+    var filtersByAssembly = new Dictionary<string, List<VsTestFilter?>>(StringComparer.Ordinal);
+    foreach (var shard in manifest)
+    {
+        var project = (string)shard!["project"]!;
+        if (!options.Projects.TryGetValue(project, out var assembly)) continue;
+        var filterText = (string?)shard["filter"] ?? string.Empty;
+        if (!filtersByAssembly.TryGetValue(assembly, out var filters))
+        {
+            filters = [];
+            filtersByAssembly[assembly] = filters;
+        }
+        filters.Add(filterText.Length == 0 ? null : VsTestFilter.Parse(filterText));
+    }
+
+    var unowned = new List<string>();
+    var owned = new List<string>();
+    int checkedClasses = 0;
+    foreach (var testClass in index.Nodes.SelectMany(n => n.TestClasses))
+    {
+        if (!filtersByAssembly.TryGetValue(testClass.Node.Assembly, out var filters)) continue;
+        checkedClasses++;
+        bool isOwned = filters.Any(filter => filter is null || testClass.Methods.Any(m => filter.Evaluate(m) != Tri.False));
+        (isOwned ? owned : unowned).Add(testClass.VsTestName);
+    }
+
+    unowned.Sort(StringComparer.Ordinal);
+    Console.WriteLine($"{checkedClasses} test class(es) checked; {unowned.Count} selected by no shard");
+    foreach (var name in unowned) Console.WriteLine($"  unowned: {name}");
+    if (options.Out.Length > 0)
+    {
+        File.WriteAllText(options.Out, new JsonObject
+        {
+            ["checkedTestClasses"] = checkedClasses,
+            ["unownedTestClasses"] = new JsonArray(unowned.Select(n => (JsonNode)n).ToArray()),
+            ["ownedTestClasses"] = new JsonArray(owned.OrderBy(n => n, StringComparer.Ordinal).Select(n => (JsonNode)n).ToArray()),
+        }.ToJsonString(new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    return unowned.Count == 0 ? 0 : 1;
+}
+
 static string Escape(string value)
 {
     var builder = new System.Text.StringBuilder(value.Length);
@@ -319,6 +372,7 @@ internal sealed class Options
     public int CatalogThreshold { get; private set; } = 250;
     public int CatalogMaxEntryPoints { get; private set; } = 10;
     public List<string> Unmappable { get; } = [];
+    public bool CheckOwnership { get; private set; }
 
     public static Options Parse(string[] args)
     {
@@ -340,6 +394,7 @@ internal sealed class Options
                 case "--out": options.Out = Next(); break;
                 case "--diff": options.Diff = Next(); break;
                 case "--explain": options.Explain = true; break;
+                case "--check-ownership": options.CheckOwnership = true; break;
                 case "--unmappable": options.Unmappable.Add(Next().Replace('\\', '/')); break;
                 case "--catalog-threshold": options.CatalogThreshold = int.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
                 case "--catalog-max-entry-points": options.CatalogMaxEntryPoints = int.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
@@ -349,9 +404,9 @@ internal sealed class Options
             }
         }
 
-        if (options.Bins.Count == 0 || options.Changes.Length == 0 || options.Shards.Length == 0)
+        if (options.Bins.Count == 0 || options.Shards.Length == 0 || (!options.CheckOwnership && options.Changes.Length == 0))
         {
-            throw new ArgumentException("--bin, --changes and --shards are required");
+            throw new ArgumentException("--bin and --shards are required, and --changes unless --check-ownership");
         }
 
         return options;

@@ -237,6 +237,140 @@ shard:
   # =====================================================================
   # OTHER NON-UNIT TESTS (InferenceOpt, PromptEng, Recovery, Playground)
   # =====================================================================
+  # Test classes no shard selected, so CI had never run them (243 found by evaluating every filter, 275 by
+  # TypeImpact --check-ownership over the built assembly). Each was run locally before these were added and the
+  # failures fixed. The namespace remainders own new classes there automatically; anything else must be
+  # assigned, which the Build job's ownership check enforces.
+  - name: Unit - 14 NeuralNetworks remainder
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: >-
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.&
+      FullyQualifiedName!~AiDotNet.Tests.UnitTests.NeuralNetworks.AdvancedAlgebraNetworkTests.&
+      FullyQualifiedName!~AiDotNet.Tests.UnitTests.NeuralNetworks.Blip2NeuralNetworkTests.&
+      FullyQualifiedName!~AiDotNet.Tests.UnitTests.NeuralNetworks.BlipNeuralNetworkTests.&
+      FullyQualifiedName!~AiDotNet.Tests.UnitTests.NeuralNetworks.ClipNeuralNetworkTests.&
+      FullyQualifiedName!~AiDotNet.Tests.UnitTests.NeuralNetworks.DenseNetTests.&
+      FullyQualifiedName!~AiDotNet.Tests.UnitTests.NeuralNetworks.EfficientNetTests.&
+      FullyQualifiedName!~AiDotNet.Tests.UnitTests.NeuralNetworks.MobileNetTests.&
+      FullyQualifiedName!~AiDotNet.Tests.UnitTests.NeuralNetworks.ResNetNetworkTests.&
+      FullyQualifiedName!~AiDotNet.Tests.UnitTests.NeuralNetworks.VGGNetworkTests.
+  - name: Unit - 15 Generators and Helpers
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: >-
+      (FullyQualifiedName~AiDotNet.Tests.Generators.|
+      FullyQualifiedName~AiDotNet.Tests.Helpers.)
+  - name: Integration - NeuralNetworks remainder
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: >-
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.
+  - name: Unit - 16 Unassigned
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: >-
+      FullyQualifiedName~AiDotNet.Tests.ActivationFunctions.ActivationFunctionBehaviorTests.|
+      FullyQualifiedName~AiDotNet.Tests.ActiveLearning.ActiveLearningStrategyTests.|
+      FullyQualifiedName~AiDotNet.Tests.Benchmarks.SimdActivationFunctionBenchmarks.|
+      FullyQualifiedName~AiDotNet.Tests.Concurrency.ThreadSafetyTests.|
+      FullyQualifiedName~AiDotNet.Tests.ContinualLearning.ContinualLearningStrategyTests.|
+      FullyQualifiedName~AiDotNet.Tests.DiagnosticTest.|
+      FullyQualifiedName~AiDotNet.Tests.Diagnostics.BroadcastBackwardRankTests.|
+      FullyQualifiedName~AiDotNet.Tests.DirectGpuCorrectnessTests.|
+      FullyQualifiedName~AiDotNet.Tests.DirectGpuTests.|
+      FullyQualifiedName~AiDotNet.Tests.Factories.ActivationFunctionFactoryTests.|
+      FullyQualifiedName~AiDotNet.Tests.Factories.PromptTemplateFactoryTests.|
+      FullyQualifiedName~AiDotNet.Tests.GateTests.Phase4GateTests.|
+      FullyQualifiedName~AiDotNet.Tests.IntegrationTests.ComputerVision.ConcertoPretrainingTests.|
+      FullyQualifiedName~AiDotNet.Tests.MergedPRBugFixTests.|
+      FullyQualifiedName~AiDotNet.Tests.MetaLearning.iMAMLAlgorithmTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Base.LayerTestBaseHarnessRegressionTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Base.LossCompatibleTargetProjectionTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Diffusion.MGIETests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.ActivationLayerInvariantTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.BatchNormalizationInvariantTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.DenseLayerInvariantTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.DenseLayerWithReLUInvariantTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.FlattenLayerInvariantTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.FullyConnectedLayerInvariantTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.InteractingLayerInvariantTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.LayerInvariantCoverageTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.LayerNormalizationInvariantTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.RMSNormalizationInvariantTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.TextToSpeech.BarkModelTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelLoading.GgufEndToEndTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelLoading.LlamaRopePermuteTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelLoading.PretrainedLoadingTests.|
+      FullyQualifiedName~AiDotNet.Tests.MssCloneVsSerializeLocalization.|
+      FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.GpuTransformerWeightParityTests.|
+      FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Graph.ABCNetJointLossTests.|
+      FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Graph.ForecastOutputRankDiagnosticTests.|
+      FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Graph.FrameInterpolationShapeContractTests.|
+      FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Graph.GeneratorAxisMirrorTests.|
+      FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Graph.LayerForwardTracingTests.|
+      FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Graph.LayerGraphTests.|
+      FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Graph.LayerShapeDiscoverySweepTests.|
+      FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Graph.ModelInputMeetsFirstLayerTests.|
+      FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Graph.SequentialActivationFoldContractTests.|
+      FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Graph.ShapeContractConformanceTests.|
+      FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Graph.ShapeRelationDiscoveryTests.|
+      FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Graph.TracedChainValidationTests.|
+      FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Graph.VocoderShapeContractTests.|
+      FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Layers.SSM.RWKV7BlockGradientTests.|
+      FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.TransformerDecoderInitializationSeedTests.|
+      FullyQualifiedName~AiDotNet.Tests.Performance.Phase1GateTests.|
+      FullyQualifiedName~AiDotNet.Tests.Performance.Phase2GateTests.|
+      FullyQualifiedName~AiDotNet.Tests.Performance.Phase3GateTests.|
+      FullyQualifiedName~AiDotNet.Tests.Profiling.GpuProfilingTests.|
+      FullyQualifiedName~AiDotNet.Tests.Pruning.PruningStrategyTests.|
+      FullyQualifiedName~AiDotNet.Tests.Recovery.GpuRecoveryTests.|
+      FullyQualifiedName~AiDotNet.Tests.SelfSupervisedLearning.ContrastiveObjectiveGradientTests.|
+      FullyQualifiedName~AiDotNet.Tests.Storage.SqliteSqlSyntaxValidatorTests.|
+      FullyQualifiedName~AiDotNet.Tests.StressTests.GpuStressTests.|
+      FullyQualifiedName~AiDotNet.Tests.StressTests.MemoryLeakTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.CheckpointGradientEquivalenceTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.DiTNoisePredictorResidentCloneTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.DiffusionParameterChunkHelperTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.LowPrecisionResidentTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.DiTWeightStreamingTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.InstantStyleMechanismTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.MultiViewUNetCloneTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.NoisePredictorWeightStreamingTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.TimestepDependentLoraTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.PredictorParameterStreamingTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.QuantizationAwareTrainingTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.StyleTransfer.UniVSTComponentTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.TemporalVAEDecodeChannelTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.VaeDecodeAliasingTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.VaeTapeTrainingTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.ActiveLearning.ActiveLearningIntegrationTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.ContinualLearning.ContinualLearningIntegrationTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.CurriculumLearning.CurriculumLearningIntegrationTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Helpers.DeserializationFallbackHorizontalIssue1235Tests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Helpers.DeserializationScoredCtorMatcherIssue1239Tests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.KnowledgeDistillation.FspDistillationTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.LossFunctions.CategoricalCrossEntropyStableLogTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.LossFunctions.CategoricalCrossEntropyTapeIssue1191Tests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.LossFunctions.PatchGANAdversarialFlowLossTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.MixedPrecision.MixedPrecisionIntegrationTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.Adam8BitFusedSpecTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.AdamOptimizerLengthMismatchIssue1245Tests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.FusedActivationParityTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.FusedLrScheduleMappingTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.FusedOptimizerParityTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.OptimizerVectorUpdateStateSafetyTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Regularization.RegularizationContractTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.SyntheticData.PrivBayesDifferentialPrivacyTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Training.GradientCheckpointingTransformerIssue1341Tests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Training.TrainerTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Training.TrainingRecipeIntegrationTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Training.TransformerTrainingPipelineTests.|
+      FullyQualifiedName~AiDotNetTests.UnitTests.NeuralNetworks.GANs.GenerativeAdversarialNetworkTests.|
+      FullyQualifiedName~AiDotNetTests.UnitTests.NeuralNetworks.Layers.GraphLayerTests.|
+      FullyQualifiedName~AiDotNetTests.UnitTests.NeuralNetworks.Layers.PatchEmbeddingLayerTests.|
+      FullyQualifiedName~AiDotNetTests.UnitTests.NeuralNetworks.Layers.TransformerShapeCompatibilityTests.|
+      FullyQualifiedName~AiDotNetTests.UnitTests.NeuralNetworks.NeuralNetworkBaseResolveShapesTests.
   - name: Other - PromptEngineering
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0

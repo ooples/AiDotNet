@@ -568,6 +568,26 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/check-shard-coverage.ps1
 
+      # The same guarantee for EVERY test class, generated or written by hand: one no shard filter selects never
+      # runs, and nothing says so. Before this, 275 classes (2,890 tests) had never run in CI. Read from the
+      # assemblies just built, so traits and generated classes count exactly as VSTest will see them.
+      - name: Verify every test class is selected by a shard
+        shell: pwsh
+        run: |
+          $all = @(yq -o=json -I=0 '.shard' .github/test-shards.yml | ConvertFrom-Json)
+          $manifest = Join-Path $env:RUNNER_TEMP 'ownership-shards.json'
+          ConvertTo-Json -InputObject @($all) -Depth 6 | Set-Content -LiteralPath $manifest -Encoding utf8
+          dotnet run --project tools/TestImpact/TypeImpact/TypeImpact.csproj -c Release -- `
+            --repo . `
+            --bin tests/AiDotNet.Tests/bin/Release/net10.0 `
+            --bin tests/AiDotNet.Serving.Tests/bin/Release/net10.0 `
+            --project 'tests/AiDotNet.Tests/AiDotNetTests.csproj=AiDotNetTests' `
+            --project 'tests/AiDotNet.Serving.Tests/AiDotNet.Serving.Tests.csproj=AiDotNet.Serving.Tests' `
+            --shards $manifest --check-ownership --out test-class-ownership.json
+          if ($LASTEXITCODE -ne 0) {
+            throw 'test classes listed above are selected by no shard, so CI would never run them: add them to a shard in .github/test-shards.yml'
+          }
+
       # Test-level selection: which test classes can this change reach? Read from the assemblies this
       # job just built, so it sees generated tests too. It only narrows select-shards' decision, and
       # passes it through whenever it cannot map every changed file (Select-AffectedTests.ps1).

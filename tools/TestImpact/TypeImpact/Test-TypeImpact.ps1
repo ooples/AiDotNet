@@ -128,12 +128,34 @@ try {
         Write-Host 'pass: a narrowed filter conjoins the shard filter with the selected classes'
     }
 
+    # --check-ownership: a class no shard of its project selects fails the check by name; full coverage passes.
+    # BetaTests is the class the 'Slow' filter alone selects, so dropping that shard leaves exactly it unowned.
+    $partialShards = Join-Path $work 'partial-shards.json'
+    ConvertTo-Json -Depth 4 -InputObject @(
+        [ordered]@{ name = 'Fast'; project = 'Fixture.csproj'; framework = 'net10.0'; filter = 'Category!=Slow' }
+    ) | Set-Content -LiteralPath $partialShards -Encoding utf8
+    $ownership = Join-Path $work 'ownership.json'
+    & dotnet (Join-Path $here 'bin/Release/net10.0/TypeImpact.dll') --repo $repo --bin $bin --project 'Fixture.csproj=FixtureTests' `
+        --shards $partialShards --check-ownership --out $ownership | Out-Null
+    $partialExit = $LASTEXITCODE
+    $unowned = @((Get-Content -LiteralPath $ownership -Raw | ConvertFrom-Json).unownedTestClasses)
+    & dotnet (Join-Path $here 'bin/Release/net10.0/TypeImpact.dll') --repo $repo --bin $bin --project 'Fixture.csproj=FixtureTests' `
+        --shards $shards --check-ownership --out $ownership | Out-Null
+    $fullExit = $LASTEXITCODE
+    if ($partialExit -ne 1 -or ($unowned -join ',') -cne 'Fixture.Tests.BetaTests' -or $fullExit -ne 0) {
+        $failures++
+        Write-Host "FAIL: ownership check (partial exit $partialExit, unowned '$($unowned -join ',')', full exit $fullExit)"
+    }
+    else {
+        Write-Host 'pass: the ownership check names a class no shard selects, and passes full coverage'
+    }
+
     if ($failures -gt 0) {
         Write-Host "TypeImpact self-test FAILED ($failures case(s))"
         exit 1
     }
 
-    Write-Host "TypeImpact self-test passed ($($cases.Count + 1) cases)."
+    Write-Host "TypeImpact self-test passed ($($cases.Count + 2) cases)."
     exit 0
 }
 finally {
