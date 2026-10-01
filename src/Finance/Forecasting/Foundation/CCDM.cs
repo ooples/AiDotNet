@@ -808,8 +808,9 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
         var steps = new int[rows];
         for (int r = 0; r < rows; r++)
         {
-            if (antithetic && (r % 2) == 1) steps[r] = _diffusionSteps - 1 - steps[r - 1];
-            else steps[r] = rand.Next(_diffusionSteps);
+            steps[r] = antithetic && (r % 2) == 1
+                ? _diffusionSteps - 1 - steps[r - 1]
+                : rand.Next(_diffusionSteps);
         }
 
         var noise = new Tensor<T>(new[] { rows, _forecastHorizon, _numFeatures });
