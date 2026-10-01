@@ -1086,7 +1086,7 @@ public static class CompiledTapeTrainingStep<T>
             {
                 if (_configuredPlan is not null && _persistentInput is not null && PlanSupportsContinueOptimizer()
                     && _configuredOptimizerConfig is not null
-                    && _configuredOptimizerConfig.Value.Equals(((int)optimizerType, learningRate, beta1, beta2, epsilon, weightDecay))
+                    && _configuredOptimizerConfig.Value.Equals(((int)optimizerType, lrSchedule is null ? learningRate : 0f, beta1, beta2, epsilon, weightDecay))
                     && _configuredL2.Equals(l2Regularization))
                 {
                     // A batch-shape change on a configured lifecycle - typically the short last batch of an epoch.
@@ -1376,7 +1376,10 @@ public static class CompiledTapeTrainingStep<T>
             //
             // Drift on the SAME plan (LR or beta change between steps) also
             // returns false — reconfiguring would reset m/v.
-            var currentConfig = ((int)optimizerType, learningRate, beta1, beta2, epsilon, weightDecay);
+            // With a schedule the plan evaluates the learning rate itself, per step, so the rate passed in is the host's view of
+            // the current step and moves every step. Comparing it would report every scheduled step as drift and refuse the
+            // committed plan; only a constant rate is part of the configuration.
+            var currentConfig = ((int)optimizerType, lrSchedule is null ? learningRate : 0f, beta1, beta2, epsilon, weightDecay);
 
             bool isFirstStepForConfiguredPlan = _configuredPlan is null;
             if (_shapeSwitchFrom is ICompiledTrainingPlan<T> switchedFrom

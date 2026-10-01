@@ -196,6 +196,13 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     internal bool RegularizationExplicitlyConfigured { get; private set; }
 
     /// <summary>
+    /// The global-norm threshold this optimizer's own tape step clips gradients to, on top of whatever the network
+    /// clips: 0 when its tape step does not clip, NaN when it clips in a form a compiled plan cannot reproduce
+    /// (by value). The fused path must apply the same clip, or fused and eager training take different steps.
+    /// </summary>
+    internal virtual double TapeStepGradientClipNorm => 0.0;
+
+    /// <summary>
     /// The active regularization applied during gradient updates. Set
     /// by <see cref="SetRegularization"/>; defaults to L2 if the
     /// constructor was not given an explicit regularization.
@@ -246,6 +253,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </para>
     /// </remarks>
     protected SchedulerStepMode _schedulerStepMode;
+
+    // The fused plan's view of a per-epoch schedule; see TryGetFusedLrSchedule.
+    private Fused.HostHeldLrSchedule? _hostHeldLrSchedule;
 
     /// <summary>
     /// Puts the model into training mode at the start of an Optimize run.
@@ -344,6 +354,22 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             case null:
             case LearningRateSchedulers.ConstantLRScheduler:
                 return true;
+        }
+
+        // The plan evaluates its schedule once per optimizer step, which is StepPerBatch. StepPerEpoch (the default)
+        // holds the rate for the whole epoch, so the plan reads the rate the scheduler holds instead of advancing a
+        // mapped shape every batch. WarmupThenEpoch steps per batch during warmup, and a fused step does not advance
+        // the host scheduler, so it stays on the eager tape.
+        if (_schedulerStepMode == SchedulerStepMode.StepPerEpoch)
+        {
+            schedule = _hostHeldLrSchedule ??= new Fused.HostHeldLrSchedule(GetCurrentLearningRate);
+            return true;
+        }
+        if (_schedulerStepMode != SchedulerStepMode.StepPerBatch)
+            return false;
+
+        switch (_learningRateScheduler)
+        {
             case LearningRateSchedulers.CosineAnnealingLRScheduler cosine:
                 // Denominator reconciliation: eager CosineAnnealing uses
                 // cos(π·(N-1)/tMax) on batch N, but the fused CosineLr uses

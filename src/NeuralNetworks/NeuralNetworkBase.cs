@@ -12528,6 +12528,23 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             }
         }
 
+        // The eager tape clips twice: the network by MaxGradNorm, then Adam/AdamW's own step by the optimizer's
+        // MaxGradientNorm. The plan clips once, so give it the threshold the two compose to. Without this a model
+        // whose network clip is 0 (GraFPrint) trained unclipped when fused and clipped to 1.0 when eager.
+        double fusedGradientClip = MaxGradNormValue;
+        double optimizerTapeClip = resolvedOptimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> clippingOptimizer
+            ? clippingOptimizer.TapeStepGradientClipNorm
+            : 0.0;
+        if (double.IsNaN(optimizerTapeClip))
+        {
+            const string clipReason = "optimizer clips gradients by value; the fused plan clips only by global norm";
+            if (_fusedTrainingCommitted)
+                ResetCompiledFusedStateAfterCommittedFailure(stickyDisableFused: true);
+            return EmitFusedMissAndFallback(clipReason);
+        }
+        if (optimizerTapeClip > 0.0)
+            fusedGradientClip = fusedGradientClip > 0.0 ? Math.Min(fusedGradientClip, optimizerTapeClip) : optimizerTapeClip;
+
         // #1624 / #1640: reclaim this training step's transient activations instead of
         // letting them accumulate across steps. This is how PyTorch bounds training
         // memory: its caching allocator returns each iteration's freed blocks to a reuse
@@ -12607,7 +12624,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 epsilon: eps,
                 weightDecay: wd,
                 out lossValue,
-                maxGradNorm: MaxGradNormValue,
+                maxGradNorm: fusedGradientClip,
                 lrSchedule: lrSched,
                 useBf16Moments: useBf16Moments,
                 // Lets the compiled FP16-activation path (AIDOTNET_FP16_ACTIVATIONS=1) cover

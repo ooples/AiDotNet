@@ -205,6 +205,14 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     }
 
     /// <inheritdoc/>
+    internal override double TapeStepGradientClipNorm =>
+        !GradientOptions.EnableGradientClipping ? 0.0
+        : GradientOptions.GradientClippingMethod == GradientClippingMethod.ByNorm
+            ? Math.Max(GradientOptions.MaxGradientNorm, 0.0)
+        : GradientOptions.GradientClippingMethod == GradientClippingMethod.ByValue ? double.NaN
+        : 0.0;
+
+    /// <inheritdoc/>
     protected override bool SupportsModelOwnStep => true;
 
     /// <summary>

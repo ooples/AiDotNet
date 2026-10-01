@@ -165,6 +165,15 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     }
 
     /// <inheritdoc/>
+    /// <remarks>The tape step clips by global norm only (see <c>StepCore</c>).</remarks>
+    internal override double TapeStepGradientClipNorm =>
+        GradientOptions.EnableGradientClipping
+            && GradientOptions.GradientClippingMethod == GradientClippingMethod.ByNorm
+            && GradientOptions.MaxGradientNorm > 0.0
+            ? GradientOptions.MaxGradientNorm
+            : 0.0;
+
+    /// <inheritdoc/>
     protected override bool SupportsModelOwnStep => true;
 
     /// <summary>

@@ -949,6 +949,9 @@ public class FusedOptimizerIntegrationTests
 
         public void AddLayer(ILayer<double> layer) => AddLayerToCollection(layer);
 
+        /// <summary>Test-only: set the global grad-norm clip threshold (0 disables clipping).</summary>
+        public void SetMaxGradNormForTest(double value) => MaxGradNorm = NumOps.FromDouble(value);
+
         public void TrainPublic(
             Tensor<double> input, Tensor<double> target,
             IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>> optimizer)
