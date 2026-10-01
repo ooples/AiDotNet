@@ -91,12 +91,9 @@ internal static partial class SparseEmbeddingOptimizerHelpers
                     v[paramBase + c] = vNew;
                     vMax[paramBase + c] = vmNew;
                     T mHat = ops.Divide(mNew, bc1T);
-                    // Dense AMSGradOptimizer does NOT divide vMax by bc2 (see lines
-                    // 333-340 of AMSGradOptimizer.cs: vHat = max(vHat, v); denom =
-                    // sqrt(vHat) + eps). Match that — applying bc2 here would
-                    // produce a different effective lr from the dense path.
+                    // Same formula as the dense AMSGradOptimizer: sqrt(vMax / bc2). Callers pass bc1 = bc2 = 1 for the paper.
                     param[paramBase + c] = ops.Subtract(theta,
-                        ops.Divide(ops.Multiply(lrT, mHat), ops.Add(ops.Sqrt(vmNew), epsT)));
+                        ops.Divide(ops.Multiply(lrT, mHat), ops.Add(ops.Sqrt(ops.Divide(vmNew, bc2T)), epsT)));
                 }
             }
         }
@@ -140,8 +137,8 @@ internal static partial class SparseEmbeddingOptimizerHelpers
                     vSpan[paramBase + c] = vNew;
                     vmSpan[paramBase + c] = vmNew;
                     double mHat = mNew / bc1;
-                    // Dense AMSGrad doesn't apply bc2 to vMax — see AMSGradOptimizer.cs.
-                    paramSpan[paramBase + c] = theta - lr * mHat / (Math.Sqrt(vmNew) + eps);
+                    // Same formula as the dense AMSGradOptimizer: sqrt(vMax / bc2). Callers pass bc1 = bc2 = 1 for the paper.
+                    paramSpan[paramBase + c] = theta - lr * mHat / (Math.Sqrt(vmNew / bc2) + eps);
                 }
             }
         }
@@ -184,8 +181,8 @@ internal static partial class SparseEmbeddingOptimizerHelpers
                     vSpan[paramBase + c] = vNew;
                     vmSpan[paramBase + c] = vmNew;
                     float mHat = mNew / bc1;
-                    // Dense AMSGrad doesn't apply bc2 to vMax — see AMSGradOptimizer.cs.
-                    paramSpan[paramBase + c] = theta - lr * mHat / ((float)Math.Sqrt(vmNew) + eps);
+                    // Same formula as the dense AMSGradOptimizer: sqrt(vMax / bc2). Callers pass bc1 = bc2 = 1 for the paper.
+                    paramSpan[paramBase + c] = theta - lr * mHat / ((float)Math.Sqrt(vmNew / bc2) + eps);
                 }
             }
         }

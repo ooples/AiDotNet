@@ -93,6 +93,23 @@ public class AMSGradOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimize
     public double Epsilon { get; set; } = 1e-8;
 
     /// <summary>
+    /// Gets or sets which bias corrections AMSGrad applies.
+    /// </summary>
+    /// <value>Defaults to <see cref="AiDotNet.Enums.AMSGradBiasCorrection.Paper"/>, the paper's Algorithm 2.</value>
+    /// <remarks>
+    /// <para>
+    /// <see cref="AiDotNet.Enums.AMSGradBiasCorrection.Paper"/> follows Reddi, Kale and Kumar (2018) exactly: no
+    /// bias correction. <see cref="AiDotNet.Enums.AMSGradBiasCorrection.PyTorch"/> matches PyTorch's
+    /// <c>Adam(amsgrad=True)</c>, which corrects the first moment and the running maximum of the second.
+    /// The fused compiled-training path currently implements the PyTorch variant only; with the paper default,
+    /// training runs on the eager path so the two never disagree.
+    /// </para>
+    /// <para><b>For Beginners:</b> Leave this at the default to follow the original paper. Choose PyTorch if
+    /// you are reproducing results from PyTorch code.</para>
+    /// </remarks>
+    public AiDotNet.Enums.AMSGradBiasCorrection BiasCorrection { get; set; } = AiDotNet.Enums.AMSGradBiasCorrection.Paper;
+
+    /// <summary>
     /// Gets or sets the factor by which to increase the learning rate when the loss is consistently decreasing.
     /// </summary>
     /// <value>The learning rate increase factor, defaulting to 1.05.</value>
