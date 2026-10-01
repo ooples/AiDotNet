@@ -128,12 +128,47 @@ try {
         Write-Host 'pass: a narrowed filter conjoins the shard filter with the selected classes'
     }
 
+    # --inventory: every test class must be selected by some shard, unless the manifest excludes its category.
+    $inventoryCases = @(
+        @{ Name = 'a manifest that selects every class passes'
+           Filters = @('Category!=Slow', 'Category=Slow'); Exit = 0; Unassigned = @() },
+        @{ Name = 'a category some filter excludes with != is deliberate, not unassigned'
+           Filters = @('Category!=Slow'); Exit = 0; Unassigned = @() },
+        @{ Name = 'a class no filter selects fails the check and is named'
+           Filters = @('FullyQualifiedName~AlphaTests|FullyQualifiedName~BetaTests'); Exit = 1
+           Unassigned = @('AlphaContractTests', 'CatalogTests', 'HelperSweepTests', 'InventoryTests', 'SurfaceTests') }
+    )
+    foreach ($case in $inventoryCases) {
+        $inventoryShards = Join-Path $work 'inventory-shards.json'
+        $index = 0
+        ConvertTo-Json -Depth 4 -InputObject @($case.Filters | ForEach-Object {
+                [ordered]@{ name = "S$((++$index))"; project = 'Fixture.csproj'; framework = 'net10.0'; filter = $_ } }) |
+            Set-Content -LiteralPath $inventoryShards -Encoding utf8
+        $out = Join-Path $work 'inventory.json'
+        & dotnet (Join-Path $here 'bin/Release/net10.0/TypeImpact.dll') --inventory --repo $repo --bin $bin `
+            --project 'Fixture.csproj=FixtureTests' --shards $inventoryShards --out $out | Out-Null
+        $exit = $LASTEXITCODE
+        $lost = @((Get-Content -LiteralPath $out -Raw | ConvertFrom-Json).projects[0].unassigned |
+            ForEach-Object { ([string] $_.class -split '\.')[-1] } | Sort-Object)
+        $problems = @()
+        if ($exit -ne $case.Exit) { $problems += "exit $exit, expected $($case.Exit)" }
+        if (($lost -join ',') -cne (@($case.Unassigned | Sort-Object) -join ',')) { $problems += "unassigned [$($lost -join ', ')], expected [$($case.Unassigned -join ', ')]" }
+        if ($problems.Count -gt 0) {
+            $failures++
+            Write-Host "FAIL: inventory: $($case.Name)"
+            $problems | ForEach-Object { Write-Host "  $_" }
+        }
+        else {
+            Write-Host "pass: inventory: $($case.Name)"
+        }
+    }
+
     if ($failures -gt 0) {
         Write-Host "TypeImpact self-test FAILED ($failures case(s))"
         exit 1
     }
 
-    Write-Host "TypeImpact self-test passed ($($cases.Count + 1) cases)."
+    Write-Host "TypeImpact self-test passed ($($cases.Count + 1 + $inventoryCases.Count) cases)."
     exit 0
 }
 finally {

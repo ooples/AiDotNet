@@ -23,11 +23,18 @@ using AiDotNet.TestImpact.TypeImpact;
 //   TypeImpact --repo <root> --bin <dir> [--bin <dir>...] --project <csproj>=<assembly> [...]
 //              --changes <git diff --name-status output> --shards <shard-manifest.json>
 //              --out <plan.json> [--max-classes <n>]
+//   TypeImpact --inventory --repo <root> --bin <dir> [...] --project <csproj>=<assembly> [...]
+//              --shards <shard-manifest.json> --out <inventory.json> [--excluded-category <name>...]
+//              (exit 1 when a test class is selected by no shard; see ShardInventory.cs)
 
 var options = Options.Parse(args);
 var clock = Stopwatch.StartNew();
 var index = AssemblyIndex.Load(options.Bins, options.Repo);
 Console.WriteLine($"indexed {index.Nodes.Count} types in {index.AssemblyNames.Count} assemblies in {clock.Elapsed.TotalSeconds:F1}s");
+if (options.Inventory)
+{
+    return ShardInventory.Run(index, options);
+}
 
 var unresolved = new List<JsonObject>();
 var ignored = new List<string>();
@@ -288,21 +295,7 @@ static bool IsDocumentation(string path)
         || path.StartsWith("docs/", StringComparison.Ordinal);
 }
 
-static string Escape(string value)
-{
-    var builder = new System.Text.StringBuilder(value.Length);
-    foreach (char c in value)
-    {
-        if (c is '(' or ')' or '&' or '|' or '=' or '!' or '~' or '\\')
-        {
-            builder.Append('\\');
-        }
-
-        builder.Append(c);
-    }
-
-    return builder.ToString();
-}
+static string Escape(string value) => VsTestFilter.Escape(value);
 
 internal sealed class Options
 {
@@ -319,6 +312,8 @@ internal sealed class Options
     public int CatalogThreshold { get; private set; } = 250;
     public int CatalogMaxEntryPoints { get; private set; } = 10;
     public List<string> Unmappable { get; } = [];
+    public bool Inventory { get; private set; }
+    public List<string> ExcludedCategories { get; } = [];
 
     public static Options Parse(string[] args)
     {
@@ -344,14 +339,16 @@ internal sealed class Options
                 case "--catalog-threshold": options.CatalogThreshold = int.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
                 case "--catalog-max-entry-points": options.CatalogMaxEntryPoints = int.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
                 case "--dispatch-threshold": options.DispatchThreshold = int.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
+                case "--inventory": options.Inventory = true; break;
+                case "--excluded-category": options.ExcludedCategories.Add(Next()); break;
                 case "--max-classes": options.MaxClasses = int.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
                 default: throw new ArgumentException($"unknown argument {args[i]}");
             }
         }
 
-        if (options.Bins.Count == 0 || options.Changes.Length == 0 || options.Shards.Length == 0)
+        if (options.Bins.Count == 0 || options.Shards.Length == 0 || (!options.Inventory && options.Changes.Length == 0))
         {
-            throw new ArgumentException("--bin, --changes and --shards are required");
+            throw new ArgumentException("--bin and --shards are required, and --changes unless --inventory");
         }
 
         return options;
