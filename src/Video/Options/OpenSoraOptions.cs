@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 
 using AiDotNet.Video.Generation;
@@ -7,6 +8,7 @@ namespace AiDotNet.Video.Options;
 /// <summary>
 /// Configuration options for the OpenSora video generation model.
 /// </summary>
+[DimensionDivisibility(nameof(HiddenDim), nameof(NumHeads))]
 public class OpenSoraOptions : VideoHyperparameterOptions
 {
     /// <summary>
@@ -28,6 +30,8 @@ public class OpenSoraOptions : VideoHyperparameterOptions
     {
         NumFrames = 16;
         HiddenDim = 1152;
+        // STDiT-XL's 16 heads, which the model used to hard-code; HiddenDim must be divisible by it.
+        NumHeads = 16;
         NumLayers = 28;
         NumInferenceSteps = 50;
         GuidanceScale = 7.5;

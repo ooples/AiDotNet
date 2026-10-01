@@ -39,6 +39,22 @@ public abstract class FinancialNLPModelBase<T> : FinancialModelBase<T>, IFinanci
             _ => null,
         };
 
+
+    /// <summary>
+    /// Declares the token-id geometry this model accepts, in place of the [batch, sequence,
+    /// features] geometry a numeric financial model publishes.
+    /// </summary>
+    /// <remarks>
+    /// The public surface of an NLP model takes token ids - <c>Tokenize</c> emits them and
+    /// <c>AnalyzeSentiment</c> consumes them - which is why the axis contract above gives a
+    /// meaning to rank 1 and rank 2 and to nothing else, and why the layout attributes on this
+    /// class declare Time and Batch-by-Time inputs. Inheriting the numeric constraint instead
+    /// published a third, feature-width axis that no caller on this surface can supply, so a
+    /// generic caller conforming to the published constraint built an input the model refused.
+    /// </remarks>
+    public override ModelInputShapeConstraint GetInputShapeConstraint()
+        => CrossSectionalInputConstraint;
+
     protected readonly int _baseMaxSequenceLength;
     protected readonly int _baseVocabularySize;
     protected readonly int _baseHiddenDimension;

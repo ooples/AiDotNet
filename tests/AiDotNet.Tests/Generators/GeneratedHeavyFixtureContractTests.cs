@@ -79,8 +79,12 @@ public sealed class GeneratedHeavyFixtureContractTests
         ClassDeclarationSyntax fixture = GenerateFixture("MemFlowTests");
         ObjectCreationExpressionSyntax creation = ModelConstructor(fixture, "MemFlow");
 
-        AssertNamedInteger(creation, "numFeatures", 8);
-        AssertNamedInteger(creation, "numLayers", 2);
+        // Hyperparameters live on MemFlowOptions (#2090), not on constructor parameters.
+        ObjectCreationExpressionSyntax options = Assert.Single(creation.DescendantNodes()
+            .OfType<ObjectCreationExpressionSyntax>(),
+            node => node.Type.ToString() == "AiDotNet.Video.Options.MemFlowOptions");
+        AssertAssignedInteger(options, "NumFeatures", 8);
+        AssertAssignedInteger(options, "NumLayers", 2);
         ObjectCreationExpressionSyntax architecture = Assert.Single(creation.DescendantNodes()
             .OfType<ObjectCreationExpressionSyntax>(),
             node => node.Type.ToString().Contains("NeuralNetworkArchitecture"));

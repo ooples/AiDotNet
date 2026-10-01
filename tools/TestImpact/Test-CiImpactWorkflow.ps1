@@ -232,12 +232,13 @@ Assert-Contract (-not $codeqlHeader.Contains(
 Assert-Contract ($codeqlHeader.Contains('always()') -and $codeqlHeader.Contains('!cancelled()')) `
     'CodeQL cannot publish its required result after a selector failure'
 
-# CodeQL analyzes only what the traced build compiles. A project dropped from this step silently
-# disappears from code scanning instead of failing, which is how the Serving API and the
-# playground functions went unanalyzed. Every build must also be restored first (--no-restore).
-$codeqlBuild = Get-StepBlock -JobBlock $codeqlJob -Step 'Build for CodeQL (net10.0)'
-$codeqlRestore = Get-StepBlock -JobBlock $codeqlJob -Step 'Restore dependencies'
-Assert-Contract ([bool] $codeqlBuild) 'CodeQL has no traced build step'
+# The traced analysis runs in its own job. It analyzes only what its build compiles: a project dropped from
+# the build step silently disappears from code scanning instead of failing, which is how the Serving API and
+# the playground functions went unanalyzed. Every build must also be restored first (--no-restore).
+$tracedJob = Get-JobBlock -WorkflowText $validation -Job 'codeql-traced'
+$codeqlBuild = Get-StepBlock -JobBlock $tracedJob -Step 'Build for CodeQL (net10.0)'
+$codeqlRestore = Get-StepBlock -JobBlock $tracedJob -Step 'Restore dependencies'
+Assert-Contract ([bool] $codeqlBuild) 'the traced CodeQL job has no build step'
 foreach ($codeqlProject in @(
         'src/AiDotNet.csproj -c Release --no-restore -f net10.0',
         'src/AiDotNet.Serving/AiDotNet.Serving.csproj -c Release --no-restore',
@@ -249,20 +250,35 @@ foreach ($codeqlProject in @(
         "CodeQL builds '$projectPath' with --no-restore but never restores it"
 }
 
-# Pull requests analyze build-less; everything else keeps the traced analysis above. The traced build held a
-# hosted runner ~76 minutes on EVERY pull request (Actions-only Dependabot bumps included) while that PR's own
-# shards queued behind it. The split must stay exact: a PR that also ran the traced build would pay both, and a
-# master push that went build-less would drop source-generated code from the release analysis.
+# THE REQUIRED RESULT AND ITS BASELINE ARE PRODUCED THE SAME WAY. Build-less and traced extraction do not
+# report the same alerts on the same code (380 error-level alerts existed only in build-less results), so a
+# pull request compared build-less against a traced master baseline was blamed for alerts in lines it never
+# touched (#2136). The codeql job is build-less on every event under the standard category; the traced
+# analysis runs only off pull requests, under its own category, so it can never be that baseline, and a
+# pull request never pays for a traced build.
 $codeqlPrInit = Get-StepBlock -JobBlock $codeqlJob -Step 'Initialize CodeQL (build-less, pull requests)'
-$codeqlTracedInit = Get-StepBlock -JobBlock $codeqlJob -Step 'Initialize CodeQL (traced build)'
+$codeqlFullInit = Get-StepBlock -JobBlock $codeqlJob -Step 'Initialize CodeQL (build-less, whole library)'
+$codeqlAnalyze = Get-StepBlock -JobBlock $codeqlJob -Step 'Perform CodeQL Analysis'
 Assert-Contract ($codeqlPrInit.Contains("if: github.event_name == 'pull_request'") -and $codeqlPrInit.Contains('build-mode: none')) `
     'pull-request CodeQL is not build-less'
-Assert-Contract ($codeqlTracedInit.Contains("if: github.event_name != 'pull_request'") -and $codeqlTracedInit.Contains('build-mode: manual')) `
-    'master/nightly CodeQL lost its traced analysis'
-foreach ($tracedOnly in @($codeqlBuild, $codeqlRestore)) {
-    Assert-Contract ($tracedOnly.Contains("if: github.event_name != 'pull_request'")) `
-        'a traced-build step still runs on pull requests'
-}
+Assert-Contract ($codeqlFullInit.Contains("if: github.event_name != 'pull_request'") -and $codeqlFullInit.Contains('build-mode: none')) `
+    'the master/nightly CodeQL baseline is not build-less, so pull requests are compared with a different extractor'
+Assert-Contract ($codeqlAnalyze.Contains('category: "/language:csharp"')) `
+    'the required CodeQL result is not uploaded under the standard category'
+Assert-Contract (-not $codeqlJob.Contains('build-mode: manual') -and -not $codeqlJob.Contains('dotnet build ')) `
+    'the required CodeQL job traces a build'
+$tracedHeader = Get-JobHeader -JobBlock $tracedJob
+$tracedInit = Get-StepBlock -JobBlock $tracedJob -Step 'Initialize CodeQL (traced build)'
+$tracedAnalyze = Get-StepBlock -JobBlock $tracedJob -Step 'Perform CodeQL Analysis'
+Assert-Contract ($tracedInit.Contains('build-mode: manual')) 'master/nightly CodeQL lost its traced analysis'
+Assert-Contract ($tracedHeader.Contains("github.event_name != 'pull_request'")) `
+    'the traced CodeQL analysis runs on pull requests'
+Assert-Contract ($tracedAnalyze.Contains('category: "/language:csharp-traced"')) `
+    'the traced CodeQL analysis shares the build-less baseline category'
+Assert-Contract (Test-JobDependency -JobHeader $tracedHeader -Dependency 'validation-source') `
+    'the traced CodeQL job does not depend on validation-source'
+Assert-Contract ($tracedHeader.Contains('fromJSON(needs.validation-source.outputs.execute_quality)')) `
+    'the traced CodeQL job ignores the reuse decision'
 
 # Every Sonar step parses this value with fromJSON. It must therefore be defined on the Sonar job,
 # not on a neighboring job where it is invisible and becomes a null template value at runtime.
@@ -770,6 +786,8 @@ foreach ($k in 0..7) {
 }
 [void] $expectedInventoryShards.Add(@{ Name = 'Sweep - ParameterChunkParityTests'; Filter = 'FullyQualifiedName~ParameterChunkParityTests'; Env = @(); MustCover = 'src/NeuralNetworks/Layers/*' })
 [void] $expectedInventoryShards.Add(@{ Name = 'Sweep - ParameterEnumerationParityTests'; Filter = 'FullyQualifiedName~ParameterEnumerationParityTests'; Env = @() })
+# 34 windows of 5 cover the namespace's 166 models; a 35th window (offset 170) would select none and fail
+# the conformance test's non-vacuity assertion.
 foreach ($offset in (0..33 | ForEach-Object { $_ * 5 })) {
     [void] $expectedInventoryShards.Add(@{
         Name = "Conformance - VisionLanguage offset $offset"; Filter = 'FullyQualifiedName~ModelContractConformanceTests'
@@ -871,7 +889,7 @@ Assert-Contract ($shardRun.Contains('& ./.github/scripts/Set-ShardEnvironment.ps
     'the shard step does not apply the entry env through the validated helper'
 Assert-Contract ($shardRun.Contains("(`$heavyShards -contains `$shardName) -or (`$env:SHARD_HEAVY -eq 'true')")) `
     'a shard declaring heavy: true does not get the heavy path'
-# The 46 sweep and conformance shards exercise every model, so the map puts them on nearly every
+# The 45 sweep and conformance shards exercise every model, so the map puts them on nearly every
 # pull request (121 -> 75 shards measured on #2226). They are deferred to the nightly coverage run by
 # Get-DeferredNightlyShards, whose keep rules Test-CiWorkloads.ps1 exercises; this guards the wiring.
 Assert-Contract ($validation.Contains("if (-not `$escalate -and `$env:GITHUB_EVENT_NAME -in @('pull_request', 'push')) {") -and

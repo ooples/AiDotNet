@@ -104,8 +104,6 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [PipelineStage(PipelineStage.Training)]
 public partial class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
-    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
-    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
 
     private readonly TADAMOptions<T, TInput, TOutput> _tadamOptions;
 
@@ -129,7 +127,11 @@ public partial class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     public TADAMAlgorithm(TADAMOptions<T, TInput, TOutput> options)
         : base(
             options?.MetaModel ?? throw new ArgumentNullException(nameof(options), "MetaModel must be set in options."),
-            options.LossFunction ?? options.MetaModel.DefaultLossFunction,
+            // Oreshkin et al. 2018 minimise -log p(y = k|x) with p = softmax(-d(f(x), c_k)): cross-entropy over
+            // class indices. This used to inherit the inner model's DefaultLossFunction, which is squared error
+            // for every embedding model in the library - a regression objective for a metric classifier. The
+            // caller's own LossFunction still wins when supplied.
+            options.LossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>(),
             options,
             options.DataLoader,
             options.MetaOptimizer,
@@ -179,6 +181,16 @@ public partial class TADAMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     }
 
     /// <inheritdoc/>
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The adapted model returns one probability per class for each example, so this is the configured loss of
+    /// their logarithm against the class indices - cross-entropy by default. A Vector output carries the predicted
+    /// class of each example instead, and its loss is the classification error rate. The base's default compared
+    /// the whole score block against a vector of labels, which cannot be lined up at all.
+    /// </remarks>
+    protected override T ComputeLossFromOutput(TOutput predictions, TOutput expectedOutput)
+        => ClassifierOutputs<T>.ProbabilityLoss(LossFunction, predictions, expectedOutput);
+
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)

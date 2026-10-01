@@ -77,9 +77,9 @@ public class LEOOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     public IEpisodicDataLoader<T, TInput, TOutput>? DataLoader { get; set; }
 
     /// <summary>
-    /// Gets or sets the learning rate for the inner loop (latent space adaptation).
+    /// Gets or sets the initial latent step size; LEO then learns one step size per latent dimension.
     /// </summary>
-    /// <value>Default is 1.0 (full step in latent space).</value>
+    /// <value>Default is 1.0, the paper's initialisation (Appendix B.4).</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> Since adaptation happens in a learned latent space,
     /// the learning rate can often be larger than in parameter space. The latent
@@ -91,14 +91,31 @@ public class LEOOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     /// <summary>
     /// Gets or sets the learning rate for the outer loop (meta-update).
     /// </summary>
-    /// <value>Default is 0.001.</value>
-    public double OuterLearningRate { get; set; } = 0.001;
+    /// <value>Default is 0.00043653954, the paper's miniImageNet 1-shot value.</value>
+    /// <remarks>
+    /// <para>Table 6's value, found by random search on the miniImageNet 1-shot meta-validation set; its many
+    /// significant figures are the search's, not a derivation. Other benchmarks chose other values.</para>
+    /// </remarks>
+    public double OuterLearningRate { get; set; } = 0.00043653954;
 
     /// <summary>
     /// Gets or sets the number of adaptation steps in latent space.
     /// </summary>
-    /// <value>Default is 5.</value>
+    /// <value>Default is 5, the paper's setting (Appendix B.4).</value>
     public int AdaptationSteps { get; set; } = 5;
+
+    /// <summary>
+    /// Gets or sets the number of fine-tuning steps taken directly on the generated classifier weights after the
+    /// latent steps.
+    /// </summary>
+    /// <value>Default is 5, the paper's setting (section 4.2.3, Appendix B.4). Zero skips fine-tuning.</value>
+    public int FineTuningSteps { get; set; } = 5;
+
+    /// <summary>
+    /// Gets or sets the initial fine-tuning step size; LEO then learns one step size per embedding dimension.
+    /// </summary>
+    /// <value>Default is 0.001, the paper's initialisation (Appendix B.4).</value>
+    public double FineTuningLearningRate { get; set; } = 0.001;
 
     /// <summary>
     /// Gets or sets the number of tasks to sample per meta-training iteration.
@@ -113,10 +130,15 @@ public class LEOOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     public int NumMetaIterations { get; set; } = 1000;
 
     /// <summary>
-    /// Gets or sets the maximum gradient norm for gradient clipping.
+    /// Gets or sets the maximum norm of each meta-gradient block.
     /// </summary>
-    /// <value>Default is 10.0.</value>
-    public double? GradientClipThreshold { get; set; } = 10.0;
+    /// <value>Default is 0.1, the paper's clipping threshold (Appendix B.4).</value>
+    /// <remarks>
+    /// <para>The paper clips "the meta-gradient, as well as its norm, at an absolute value of 0.1"; this clips the norm
+    /// of each block - feature encoder, encoder, relation network, decoder and each step-size vector. The inner-loop
+    /// gradients are never clipped.</para>
+    /// </remarks>
+    public double? GradientClipThreshold { get; set; } = 0.1;
 
     /// <summary>
     /// Gets or sets the random seed for reproducibility.
@@ -144,9 +166,13 @@ public class LEOOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     public int CheckpointFrequency { get; set; } = 500;
 
     /// <summary>
-    /// Gets or sets whether to use first-order approximation.
+    /// Gets or sets whether to drop the second-order terms of the meta-gradient.
     /// </summary>
-    /// <value>Default is false (LEO uses second-order gradients through the decoder).</value>
+    /// <value>Default is false: the exact meta-gradient through every inner step.</value>
+    /// <remarks>
+    /// <para>Each inner step's gradient is taken on a nested tape that the outer tape differentiates through. True
+    /// stops the gradient at each inner step's gradient, as first-order MAML does.</para>
+    /// </remarks>
     public bool UseFirstOrder { get; set; } = false;
 
     #endregion
@@ -166,9 +192,9 @@ public class LEOOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     public int LatentDimension { get; set; } = 64;
 
     /// <summary>
-    /// Gets or sets the dimension of the feature embedding.
+    /// Gets or sets the width of each example's feature embedding: the feature encoder's per-example output width.
     /// </summary>
-    /// <value>Default is 512.</value>
+    /// <value>Default is 512. The paper's pre-trained WRN-28-10 features are 640 wide.</value>
     public int EmbeddingDimension { get; set; } = 512;
 
     /// <summary>
@@ -178,40 +204,72 @@ public class LEOOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     public int NumClasses { get; set; } = 5;
 
     /// <summary>
-    /// Gets or sets the hidden dimension for encoder/decoder networks.
+    /// Gets or sets the width of the relation network's hidden layers.
     /// </summary>
-    /// <value>Default is 256.</value>
-    public int HiddenDimension { get; set; } = 256;
+    /// <value>Default is 128, the paper's relation network (Appendix B.3), twice the latent width.</value>
+    public int HiddenDimension { get; set; } = 128;
 
     /// <summary>
     /// Gets or sets the KL divergence weight for the latent space regularization.
     /// </summary>
-    /// <value>Default is 0.01.</value>
+    /// <value>Default is 1.33365371e-9, the paper's miniImageNet 1-shot value (Table 6, a random-search value).</value>
     /// <remarks>
+    /// <para>Beta in eq. 6: the mean over sampled codes of <c>log q(z) - log p(z)</c> with <c>p = N(0, I)</c>, as the
+    /// reference implementation computes it. Evaluation samples nothing and adds no KL term.</para>
     /// <para><b>For Beginners:</b> LEO uses a variational approach where the latent
     /// space is regularized to be close to a prior distribution (usually Gaussian).
     /// This weight controls how strongly we enforce this regularization.
     /// </para>
     /// </remarks>
-    public double KLWeight { get; set; } = 0.01;
+    public double KLWeight { get; set; } = 1.33365371e-9;
 
     /// <summary>
-    /// Gets or sets the entropy weight for regularizing the decoder.
+    /// Gets or sets the weight of an entropy bonus on the decoder's weight distribution.
     /// </summary>
-    /// <value>Default is 0.001.</value>
-    public double EntropyWeight { get; set; } = 0.001;
+    /// <value>Default is 0.0 (off - the paper has no entropy term).</value>
+    /// <remarks>
+    /// <para>An extension: subtracts this weight times the mean log scale of the decoder's Gaussians - their entropy
+    /// up to a constant - from the objective, which keeps the generator from collapsing to a point mass. It used to
+    /// default to 0.001 and change nothing.</para>
+    /// </remarks>
+    public double EntropyWeight { get; set; } = 0.0;
 
     /// <summary>
-    /// Gets or sets whether to use orthogonal initialization for the decoder.
+    /// Gets or sets the weight of the penalty pulling the encoder's initial codes toward the adapted codes.
     /// </summary>
-    /// <value>Default is true.</value>
-    public bool UseOrthogonalInit { get; set; } = true;
+    /// <value>Default is 0.124171967, the paper's miniImageNet 1-shot value (Table 6, a random-search value).</value>
+    /// <remarks>
+    /// <para>Gamma in eq. 6: the mean squared error between stopgrad(adapted codes) and the initial codes.</para>
+    /// </remarks>
+    public double EncoderPenaltyWeight { get; set; } = 0.124171967;
+
+    /// <summary>
+    /// Gets or sets the weight of the decoder orthogonality penalty.
+    /// </summary>
+    /// <value>Default is 303.216647, the paper's miniImageNet 1-shot value (Table 6, a random-search value).</value>
+    /// <remarks>
+    /// <para>Lambda 2 in eq. 7: the mean squared deviation from the identity of the correlations between the decoder's
+    /// latent rows, as the reference implementation computes it.</para>
+    /// </remarks>
+    public double OrthogonalityWeight { get; set; } = 303.216647;
+
+    /// <summary>
+    /// Gets or sets whether to initialise the decoder with orthonormal latent rows.
+    /// </summary>
+    /// <value>Default is false (Glorot-uniform, the reference implementation's initializer).</value>
+    /// <remarks>
+    /// <para>An extension: Gram-Schmidt over Gaussian rows, so the decoder starts where the orthogonality penalty
+    /// wants it. It used to rescale blocks of a uniform draw, which is not orthogonal.</para>
+    /// </remarks>
+    public bool UseOrthogonalInit { get; set; } = false;
 
     /// <summary>
     /// Gets or sets whether to share the encoder across all classes.
     /// </summary>
     /// <value>Default is true.</value>
     /// <remarks>
+    /// <para>The paper shares one encoder. False is an extension: one encoder per class slot, applied to the examples
+    /// of that class index - useful only where tasks use class indices consistently.</para>
     /// <para><b>For Beginners:</b> If true, the same encoder is used to generate
     /// latent codes for all classes. If false, each class has its own encoder,
     /// which allows more flexibility but requires more parameters.
@@ -224,6 +282,9 @@ public class LEOOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     /// </summary>
     /// <value>Default is true.</value>
     /// <remarks>
+    /// <para>The paper's encoder (eq. 3): the relation network sees every ordered pair of support codes and is
+    /// averaged per class into that class's Gaussian. Without it, the encoder emits each class Gaussian's parameters
+    /// directly and they are averaged over the class's examples.</para>
     /// <para><b>For Beginners:</b> A relation network considers relationships between
     /// all support examples when generating the latent code, which can help when
     /// examples within a class are diverse.
@@ -232,16 +293,24 @@ public class LEOOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
     public bool UseRelationEncoder { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets the dropout rate for the encoder and decoder.
+    /// Gets or sets the dropout rate on the feature embeddings while meta-training.
     /// </summary>
-    /// <value>Default is 0.0 (no dropout).</value>
-    public double DropoutRate { get; set; } = 0.0;
+    /// <value>Default is 1 - 0.711524088, from the paper's miniImageNet 1-shot keep probability (Table 6).</value>
+    /// <remarks>
+    /// <para>"We applied dropout independently on the feature embedding in every step": a fresh mask for the
+    /// encoder, each inner step and the query loss. Adaptation never drops anything. Must be in [0, 1).</para>
+    /// </remarks>
+    public double DropoutRate { get; set; } = 1.0 - 0.711524088;
 
     /// <summary>
-    /// Gets or sets the L2 regularization strength.
+    /// Gets or sets the L2 weight on the encoder, relation network and decoder.
     /// </summary>
-    /// <value>Default is 0.0 (no regularization).</value>
-    public double L2Regularization { get; set; } = 0.0;
+    /// <value>Default is 0.000108982953, the paper's miniImageNet 1-shot value (Table 6, a random-search value).</value>
+    /// <remarks>
+    /// <para>Lambda 1 in eq. 7, as the reference implementation's l2_regularizer: lambda times half the sum of
+    /// squared weights.</para>
+    /// </remarks>
+    public double L2Regularization { get; set; } = 0.000108982953;
 
     #endregion
 
@@ -279,7 +348,13 @@ public class LEOOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
                MetaBatchSize > 0 &&
                NumMetaIterations > 0 &&
                KLWeight >= 0 &&
-               EntropyWeight >= 0;
+               EntropyWeight >= 0 &&
+               FineTuningSteps >= 0 &&
+               FineTuningLearningRate > 0 &&
+               EncoderPenaltyWeight >= 0 &&
+               OrthogonalityWeight >= 0 &&
+               L2Regularization >= 0 &&
+               DropoutRate >= 0 && DropoutRate < 1;
     }
 
     /// <summary>
@@ -297,6 +372,8 @@ public class LEOOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
             InnerLearningRate = InnerLearningRate,
             OuterLearningRate = OuterLearningRate,
             AdaptationSteps = AdaptationSteps,
+            FineTuningSteps = FineTuningSteps,
+            FineTuningLearningRate = FineTuningLearningRate,
             MetaBatchSize = MetaBatchSize,
             NumMetaIterations = NumMetaIterations,
             GradientClipThreshold = GradientClipThreshold,
@@ -312,6 +389,8 @@ public class LEOOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<
             HiddenDimension = HiddenDimension,
             KLWeight = KLWeight,
             EntropyWeight = EntropyWeight,
+            EncoderPenaltyWeight = EncoderPenaltyWeight,
+            OrthogonalityWeight = OrthogonalityWeight,
             UseOrthogonalInit = UseOrthogonalInit,
             ShareEncoder = ShareEncoder,
             UseRelationEncoder = UseRelationEncoder,

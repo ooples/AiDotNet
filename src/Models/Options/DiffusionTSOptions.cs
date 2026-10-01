@@ -54,6 +54,16 @@ public class DiffusionTSOptions<T> : TimeSeriesRegressionOptions<T>
     /// </remarks>
     public DiffusionTSOptions()
     {
+        // Seed is INHERITED from ModelOptions and set here rather than shadowed with `new`,
+        // which would leave anything holding a ModelOptions reference reading null.
+        //
+        // Defaulted so repeated predictions agree. This does not collapse the sampling: the
+        // NumSamples paths still differ from one another, so the spread stays a real estimate
+        // and the intervals the paper reports remain meaningful. It fixes only that Predict
+        // called twice on the same input returns the same answer - the sampler equivalent of
+        // seeding a generator before inference, not of switching sampling off. Set it to
+        // another value for a different sample set, or vary it per call for independent draws.
+        Seed = 1;
     }
 
     /// <summary>

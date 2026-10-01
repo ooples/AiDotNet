@@ -110,7 +110,7 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
     private readonly double[] _alphasCumprod;
     private readonly double[] _sqrtAlphasCumprod;
     private readonly double[] _sqrtOneMinusAlphasCumprod;
-    private readonly Random _random;
+    private Random _random;
     #endregion
 
     #region Shared Fields
@@ -283,7 +283,7 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
 
         (_betas, _alphas, _alphasCumprod, _sqrtAlphasCumprod, _sqrtOneMinusAlphasCumprod) =
             InitializeDiffusionSchedule(_numDiffusionSteps, _options.BetaStart, _options.BetaEnd, _betaSchedule);
-        _random = RandomHelper.CreateSecureRandom();
+        _random = CreateSamplingStream();
     }
 
     /// <summary>
@@ -330,7 +330,7 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
 
         (_betas, _alphas, _alphasCumprod, _sqrtAlphasCumprod, _sqrtOneMinusAlphasCumprod) =
             InitializeDiffusionSchedule(_numDiffusionSteps, _options.BetaStart, _options.BetaEnd, _betaSchedule);
-        _random = RandomHelper.CreateSecureRandom();
+        _random = CreateSamplingStream();
 
         InitializeLayers();
     }
@@ -492,6 +492,24 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
     #region NeuralNetworkBase Overrides
 
     /// <summary>
+    /// Creates a fresh sampling noise stream at the configured seed.
+    /// </summary>
+    /// <remarks>
+    /// Called at every public inference entry point, not inside the per-sample loop. Seeding
+    /// once in the constructor is not enough: one Random carried for the model's lifetime keeps
+    /// advancing, so Predict called twice on the same input drew different noise and returned a
+    /// different answer. Reseeding inside the per-sample loop would be the opposite mistake --
+    /// every one of the NumSamples paths would draw the same noise and the spread would collapse
+    /// to a point. Restarting the stream per CALL leaves the samples within a call distinct while
+    /// making the call itself reproducible. With Seed null the draw is secure and deliberately
+    /// not reproducible.
+    /// </remarks>
+    private Random CreateSamplingStream() =>
+        _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
+
+    /// <summary>
     /// Performs forward prediction on the input tensor.
     /// </summary>
     /// <param name="input">Input tensor containing historical time series data.</param>
@@ -506,6 +524,7 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
+        _random = CreateSamplingStream();
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }
 
@@ -644,6 +663,7 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
     /// </remarks>
     public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
     {
+        _random = CreateSamplingStream();
         if (quantiles is not null && quantiles.Length > 0)
         {
             var samples = GenerateSamples(historicalData, _numSamples);
@@ -669,6 +689,7 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
         Tensor<T> input,
         double confidenceLevel = 0.95)
     {
+        _random = CreateSamplingStream();
         var samples = GenerateSamples(input, _numSamples);
         return ComputePredictionIntervals(samples, confidenceLevel);
     }

@@ -190,10 +190,14 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>, IShapeContract
         // The FFN input widths are also constructor-known. Resolve only the
         // sublayers—not this block's sequence dimension—so sequence length stays
         // dynamic while parameter enumeration is complete and stable from birth.
+        // Shapes only: the declared shapes give an exact count, and the weights
+        // materialize on first read or forward. Allocating here made every block
+        // of a text encoder allocate at construction, which ran T5-XXL (24 blocks
+        // of 2 x 4096x10240) out of memory before it was ever used.
         if (_ffnGate is not null)
-            _ffnGate.ResolveFromShape(new[] { hiddenSize });
-        _ffnUp.ResolveFromShape(new[] { hiddenSize });
-        _ffnDown.ResolveFromShape(new[] { ffnDim });
+            _ffnGate.ResolveShapesOnly(new[] { hiddenSize });
+        _ffnUp.ResolveShapesOnly(new[] { hiddenSize });
+        _ffnDown.ResolveShapesOnly(new[] { ffnDim });
 
         // Register every sublayer so TapeTrainingStep<T>.CollectParameters
         // recursively discovers their trainable tensors. Without this the

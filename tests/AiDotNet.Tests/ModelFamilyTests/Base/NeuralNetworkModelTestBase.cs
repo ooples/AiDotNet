@@ -4418,6 +4418,26 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// output. This mirrors the legal-label handling the NER/CRF test bases already do for their
     /// type-constrained targets. Non-CE models keep their (MSE-appropriate) raw target unchanged.
     /// </summary>
+    /// <summary>
+    /// Whether <paramref name="loss"/> is defined only for targets that are probabilities in [0, 1]:
+    /// binary cross-entropy (with or without logits), focal, Dice, and the logits-domain focal+Dice
+    /// composite segmentation models default to.
+    /// </summary>
+    /// <remarks>
+    /// The composite was missing, so SAM's mask objective (sigmoid, then focal + Dice) was handed a
+    /// uniform target in [-1, 1]. Focal takes log(p_t) with p_t = p*t + (1-p)(1-t), which is negative
+    /// for t = -0.93 and p = 0.9, so the loss went NaN as soon as the outputs drifted there. That
+    /// happened after the BatchNorm recalibration in Training_ShouldReduceLoss: "ComputeTapeLoss returned
+    /// non-finite loss NaN for SAM". The objective was ill-posed, the same defect the SAMHQ note below
+    /// records for plain BCE.
+    /// </remarks>
+    private static bool HasProbabilityTargets(ILossFunction<T> loss) =>
+        loss is AiDotNet.LossFunctions.BinaryCrossEntropyWithLogitsLoss<T>
+            or AiDotNet.LossFunctions.BinaryCrossEntropyLoss<T>
+            or AiDotNet.LossFunctions.CompositeLossWithLogits<T>
+            or AiDotNet.LossFunctions.FocalLoss<T>
+            or AiDotNet.LossFunctions.DiceLoss<T>;
+
     protected Tensor<T> MakeTargetWellPosedForLoss(INeuralNetworkModel<T> network, Tensor<T> target, Random rng)
     {
         if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> ctcNetwork
@@ -4526,8 +4546,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // Same treatment, same reason, as the CrossEntropyWithLogitsLoss branch below.
         if (target.Length > 0
             && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> binary
-            && (binary.DefaultLossFunction is AiDotNet.LossFunctions.BinaryCrossEntropyWithLogitsLoss<T>
-                || binary.DefaultLossFunction is AiDotNet.LossFunctions.BinaryCrossEntropyLoss<T>))
+            && HasProbabilityTargets(binary.DefaultLossFunction))
         {
             var projected = new Tensor<T>(target.Shape.ToArray());
             var zero = NumOps.Zero;
@@ -4680,9 +4699,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             return;
         }
 
-        bool binaryCrossEntropy =
-            nn.DefaultLossFunction is AiDotNet.LossFunctions.BinaryCrossEntropyWithLogitsLoss<T>
-            || nn.DefaultLossFunction is AiDotNet.LossFunctions.BinaryCrossEntropyLoss<T>;
+        bool binaryCrossEntropy = HasProbabilityTargets(nn.DefaultLossFunction);
         bool bornRule = nn.DefaultLossFunction is AiDotNet.LossFunctions.BornRuleMseLoss<T>;
         double totalMass = 0.0;
 
