@@ -35185,7 +35185,7 @@ public static partial class LayerHelper<T>
     private static int SwiGLUHiddenDim(int dim, int multipleOf)
     {
         if (multipleOf < 1) multipleOf = 1;
-        int hidden = (int)(2.0 * (4 * dim) / 3.0);
+        int hidden = (int)(2.0 * (4.0 * dim) / 3.0);
         hidden = multipleOf * ((hidden + multipleOf - 1) / multipleOf);
         return Math.Max(multipleOf, hidden);
     }
