@@ -29,6 +29,8 @@ using AiDotNet.TestImpact.TypeImpact;
 //   Generator changes: --base-bin <merge-base build dir> [...] [--base-repo <its checkout>]
 //              --generator-root src/AiDotNet.Generators/ --generator-tests <namespace prefix of its tests>
 
+// Marks a const line whose declaration could not be read (a file with one stays unmappable).
+const string UnreadableConst = "<unreadable const>";
 var options = Options.Parse(args);
 var clock = Stopwatch.StartNew();
 var index = AssemblyIndex.Load(options.Bins, options.Repo);
@@ -131,14 +133,25 @@ foreach (var (status, path) in changes)
         continue;
     }
 
-    // Consumers inline a const's value and keep no reference to its type, so an edited const line
-    // in a type that exposes one cannot be followed. Without the diff, any such file is unmappable.
-    // A generated document has no line diff, so a visible const in it is never known to be unchanged.
+    // Consumers inline a const's value and keep no reference to its type, so the type graph cannot follow an edited
+    // const line. They do name it in source, though: every file that mentions an edited const's name is treated as
+    // changed with it. Without the diff, when a const line's name cannot be read, or for a generated document (it has
+    // no line diff, so a visible const in it is never known to be unchanged), the file stays unmappable.
     if (types.Any(t => t.DeclaresVisibleConstant) &&
-        (generated || constLines is null || constLines.Contains(path)))
+        (generated || constLines is null || constLines.ContainsKey(path)))
     {
-        unresolved.Add(new JsonObject { ["path"] = path, ["reason"] = "edits a non-private const: consumers inline its value and hold no reference to it" });
-        continue;
+        var names = constLines?.GetValueOrDefault(path);
+        var consumers = names is null || names.Count == 0 ? null : FilesNaming(options.Repo, names);
+        if (consumers is null)
+        {
+            unresolved.Add(new JsonObject { ["path"] = path, ["reason"] = "edits a non-private const: consumers inline its value and hold no reference to it" });
+            continue;
+        }
+
+        foreach (var consumer in consumers)
+        {
+            if (index.TypesInDocument(consumer) is { } consumerTypes) changed.UnionWith(consumerTypes);
+        }
     }
 
     changed.UnionWith(types);
@@ -303,10 +316,14 @@ static HashSet<TypeNode> ReverseClosure(IEnumerable<TypeNode> roots, HashSet<Typ
 }
 
 // Files whose added or removed lines in a unified diff mention `const`.
-static HashSet<string> FilesEditingConstLines(string diffFile)
+// Per file with an edited line that mentions const: the const names declared on those lines. A line whose declaration
+// cannot be read poisons its file's set, which keeps the file unmappable.
+static Dictionary<string, HashSet<string>> FilesEditingConstLines(string diffFile)
 {
-    var result = new HashSet<string>(StringComparer.Ordinal);
+    var result = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
     var constWord = new System.Text.RegularExpressions.Regex(@"\bconst\b");
+    // "const <type> A = ..., B = ...": every declarator's name.
+    var declarators = new System.Text.RegularExpressions.Regex(@"\bconst\b[^=;]*?\b(\w+)\s*=|,\s*(\w+)\s*=");
     string? current = null;
     foreach (var line in File.ReadLines(diffFile))
     {
@@ -325,11 +342,54 @@ static HashSet<string> FilesEditingConstLines(string diffFile)
 
         if (current is not null && line.Length > 0 && line[0] is '+' or '-' && constWord.IsMatch(line))
         {
-            result.Add(current);
+            if (!result.TryGetValue(current, out var names))
+            {
+                result[current] = names = new HashSet<string>(StringComparer.Ordinal);
+            }
+
+            var found = declarators.Matches(line)
+                .Select(m => m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value)
+                .Where(n => n.Length > 0)
+                .ToList();
+            if (found.Count == 0)
+            {
+                names.Add(UnreadableConst);
+            }
+            else
+            {
+                names.UnionWith(found);
+            }
         }
     }
 
     return result;
+}
+
+// The repository C# files that name any of these identifiers as a whole word (git grep over the checkout). Null when the
+// search fails, a name could not be read, or so many files match that the selection would not be selective anyway.
+static List<string>? FilesNaming(string repo, IReadOnlyCollection<string> names)
+{
+    if (names.Contains(UnreadableConst)) return null;
+    var psi = new System.Diagnostics.ProcessStartInfo("git") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+    psi.ArgumentList.Add("-C"); psi.ArgumentList.Add(repo);
+    psi.ArgumentList.Add("grep"); psi.ArgumentList.Add("--untracked"); psi.ArgumentList.Add("-l"); psi.ArgumentList.Add("-w"); psi.ArgumentList.Add("-F");
+    foreach (var name in names) { psi.ArgumentList.Add("-e"); psi.ArgumentList.Add(name); }
+    psi.ArgumentList.Add("--"); psi.ArgumentList.Add("*.cs");
+    try
+    {
+        using var process = System.Diagnostics.Process.Start(psi);
+        if (process is null) return null;
+        var files = process.StandardOutput.ReadToEnd()
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        process.WaitForExit();
+        // git grep: 0 = found, 1 = nothing found, anything else = the search failed.
+        if (process.ExitCode is not (0 or 1)) return null;
+        return files.Count > 2000 ? null : files.Select(f => f.Replace('\\', '/')).ToList();
+    }
+    catch (System.ComponentModel.Win32Exception)
+    {
+        return null;
+    }
 }
 
 static IEnumerable<(char Status, string Path)> ReadChanges(string file)
