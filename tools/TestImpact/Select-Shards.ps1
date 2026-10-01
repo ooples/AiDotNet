@@ -224,9 +224,12 @@ function Get-ChangedPathImpact {
         return [ChangedPathImpact]::FullValidation
     }
 
-    # A standalone tool that nothing in this workflow's build or tests references cannot change what any shard
-    # executes. Checked per tool directory against the tree; any doubt (a failed search) keeps the old behaviour.
-    if ($normalized.StartsWith('tools/', [StringComparison]::OrdinalIgnoreCase) -and
+    # A standalone tool, or a top-level tree such as api/ (an Azure Function with its own deploy workflow), that
+    # nothing in this workflow's build or tests references cannot change what any shard executes. Checked per
+    # directory against the tree; any doubt (a failed search, a root-level file, a dot-directory) keeps the old
+    # behaviour. src/ and tests/ are the product and are never eligible.
+    $top = $normalized.Split('/')[0]
+    if ($normalized.Contains('/') -and -not $top.StartsWith('.') -and $top -notin @('src', 'tests') -and
         -not (Test-ToolDirectoryReferenced -Path $normalized)) {
         return [ChangedPathImpact]::NonRuntime
     }
@@ -247,13 +250,33 @@ counts as referenced: never trade safety for a narrower matrix.
 function Test-ToolDirectoryReferenced {
     param([Parameter(Mandatory)] [string] $Path)
     $segments = $Path.Split('/')
-    if ($segments.Count -lt 3) { return $true }   # a file directly under tools/: no directory to scope by
-    $directory = $segments[1]
+    if ($segments[0] -ieq 'tools') {
+        if ($segments.Count -lt 3) { return $true }   # a file directly under tools/: no directory to scope by
+        $directory = 'tools/' + $segments[1]
+        if ($script:ToolReferenceCache.ContainsKey($directory)) { return $script:ToolReferenceCache[$directory] }
+        $pattern = 'tools[/\\]' + [regex]::Escape($segments[1]) + '([/\\]|[^A-Za-z0-9_.-]|$)'
+        $null = & git grep -q -i -E $pattern HEAD -- 'tests/' 'src/' '*.sln' '*.slnx' 'Directory.Build.props' 'Directory.Build.targets' '.github/workflows/sonarcloud.yml' 2>$null
+        # git grep: 0 = found, 1 = not found, anything else = the search itself failed.
+        $referenced = $LASTEXITCODE -ne 1
+        $script:ToolReferenceCache[$directory] = $referenced
+        return $referenced
+    }
+
+    # Any other top-level tree (api/, schemas/, ...). A file reaches a test shard through the build (an MSBuild item,
+    # a solution entry, this workflow) or by a test reading it at run time. Product .cs files are not searched: a
+    # route such as [Route("api/...")] is text, not a path, and product code does not read the checkout's layout.
+    # Tests are searched for the directory as a path, or as a Path.Combine/Path.Join argument ("samples").
+    $directory = $segments[0]
     if ($script:ToolReferenceCache.ContainsKey($directory)) { return $script:ToolReferenceCache[$directory] }
-    $pattern = 'tools[/\\]' + [regex]::Escape($directory) + '([/\\]|[^A-Za-z0-9_.-]|$)'
-    $null = & git grep -q -i -E $pattern HEAD -- 'tests/' 'src/' '*.sln' '*.slnx' 'Directory.Build.props' 'Directory.Build.targets' '.github/workflows/sonarcloud.yml' 2>$null
-    # git grep: 0 = found, 1 = not found, anything else = the search itself failed.
+    $name = [regex]::Escape($directory)
+    $asPath = '(^|["''\s=;(,>]|\.\.[/\\])' + $name + '[/\\]'
+    $null = & git grep -q -i -E $asPath HEAD -- '*.csproj' '*.props' '*.targets' '*.sln' '*.slnx' '.github/workflows/sonarcloud.yml' 2>$null
     $referenced = $LASTEXITCODE -ne 1
+    if (-not $referenced) {
+        $joined = 'Path\.(Combine|Join)\([^)]*["'']' + $name + '["'']'
+        $null = & git grep -q -i -E "($asPath)|($joined)" HEAD -- 'tests/' 2>$null
+        $referenced = $LASTEXITCODE -ne 1
+    }
     $script:ToolReferenceCache[$directory] = $referenced
     return $referenced
 }
@@ -1030,6 +1053,10 @@ function Select-ImpactedShards {
                         [void] $routes.Add("$shard <= runs tests affected by $path ($($route.Why))")
                     }
                     Add-FileDecision $path 'TestSource' 'routed' @($route.Shards) $route.Why
+                }
+                elseif ($route.PSObject.Properties['Unassigned'] -and $route.Unassigned) {
+                    [void] $routes.Add("(none) <= $path`: $($route.Why); the shard inventory gate fails the build until one does")
+                    Add-FileDecision $path 'TestSource' 'unassigned' @() "$($route.Why); the shard inventory gate fails the build until one does"
                 }
                 else {
                     $escalate = $true
@@ -1895,7 +1922,9 @@ function Get-TestFileRoutes {
             $routes[$path] = [pscustomobject]@{ Routable = $false; Shards = @(); Why = 'a shard filter for this test project cannot be parsed' }
         }
         elseif ($shards.Count -eq 0) {
-            $routes[$path] = [pscustomobject]@{ Routable = $false; Shards = @(); Why = 'no shard filter selects any test this source affects' }
+            # Not an escalation: the full matrix would not run these tests either. The Build job's inventory gate
+            # (Assert-ShardInventory.ps1) fails the pull request until a shard filter selects them.
+            $routes[$path] = [pscustomobject]@{ Routable = $false; Unassigned = $true; Shards = @(); Why = 'no shard filter selects any test this source affects' }
         }
         else {
             $closure = $visited.Count - 1
@@ -2391,6 +2420,12 @@ if ($SelfTest) {
     }
     Assert-True ($r.Escalate -and ($r.Reasons -join ';') -like '*declares extension methods*') `
         'an unroutable test source did not escalate with its reason'
+    $r = Select-ImpactedShards -Map $map -Changed @{ 'tests/P/NewTests.cs' = @(1, 30) } -TestRoutes @{
+        'tests/P/NewTests.cs' = [pscustomobject]@{ Routable = $false; Unassigned = $true; Shards = @(); Why = 'no shard filter selects any test this source affects' }
+    }
+    Assert-True (-not $r.Escalate -and (@($r.Shards) -join ',') -eq 'HeavyNoCoverage' -and
+        @($r.Files | Where-Object { $_.path -eq 'tests/P/NewTests.cs' -and $_.outcome -eq 'unassigned' }).Count -eq 1) `
+        'a test source no shard selects escalated, though the full matrix would not run it either'
     $r = Select-ImpactedShards -Map $map -Changed @{ 'tests/P/FooTests.cs' = @(1, 30) }
     Assert-True $r.Escalate 'a test source with no route (no manifest) did not fail closed'
 
@@ -2530,6 +2565,23 @@ file class Private { }
         'tools/TestImpact lost its selection-control classification'
     Assert-True ((Get-ChangedPathImpact -Path 'tools/loose-file.txt') -eq [ChangedPathImpact]::MapCandidate) `
         'a file directly under tools/ has no directory to scope by and must keep the old behaviour'
+    # Other top-level trees, by the same rule (api/ escalated PR #2275 on a package-lock.json). A route string
+    # such as [Route("api/...")] in product code is not a reference; a solution entry or a test's
+    # Path.Combine(..., "samples", ...) is. These read the real tree too.
+    if (Test-Path -LiteralPath 'api/package.json') {
+        Assert-True ((Get-ChangedPathImpact -Path 'api/package-lock.json') -eq [ChangedPathImpact]::NonRuntime) `
+            'an unreferenced top-level tree (api/) is not NonRuntime'
+    }
+    if (Test-Path -LiteralPath 'benchmarks') {
+        Assert-True ((Get-ChangedPathImpact -Path 'benchmarks/AiDotNet.Benchmarks/Program.cs') -eq [ChangedPathImpact]::MapCandidate) `
+            'a tree the solution builds (benchmarks/) was downgraded'
+    }
+    if (Test-Path -LiteralPath 'samples') {
+        Assert-True ((Get-ChangedPathImpact -Path 'samples/x/y.txt') -eq [ChangedPathImpact]::MapCandidate) `
+            'a tree a test reads through Path.Combine (samples/) was downgraded'
+    }
+    Assert-True ((Get-ChangedPathImpact -Path 'root-file.txt') -eq [ChangedPathImpact]::MapCandidate) `
+        'a root-level file has no tree to scope by and must keep the old behaviour'
     # The selection report lists every changed path, so a build-only file must be recorded as a decision even
     # beside runtime changes (it used to fall through the switch and vanish from the report).
     $reportMap = [pscustomobject]@{ knownShards = @('Alpha'); alwaysRun = @(); files = [pscustomobject]@{
