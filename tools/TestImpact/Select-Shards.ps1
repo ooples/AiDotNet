@@ -3093,6 +3093,8 @@ if ($ClassifyOnly) {
     $requiresValidation = $true
     $reason = 'classification-failed'
     $changedFiles = @()
+    # Per path, so the Build job's test-level selection can leave out paths that cannot affect any test.
+    $pathImpacts = [ordered]@{}
     try {
         if ($PullRequestHeadSha -and $BaseSha) { throw 'pass PullRequestHeadSha or BaseSha, not both' }
         if ($PullRequestHeadSha) { $BaseSha = Resolve-PullRequestBase -PullRequestHeadSha $PullRequestHeadSha }
@@ -3120,6 +3122,10 @@ if ($ClassifyOnly) {
                 }
             ).Count -or $reviewed.Shards.Count -gt 0
             $reason = $(if ($requiresValidation) { 'runtime-or-unknown' } else { 'non-runtime-only' })
+            foreach ($path in $changedFiles) {
+                $pathImpacts[[string] $path] = if ([string] $path -cin $reviewed.Paths) { 'ReviewedControl' }
+                    else { [string] (Get-ChangedPathImpact -Path ([string] $path)) }
+            }
         }
     }
     catch {
@@ -3131,6 +3137,7 @@ if ($ClassifyOnly) {
         reason = $reason
         baseSha = [string] $BaseSha
         changedPaths = @($changedFiles)
+        pathImpacts = $pathImpacts
     }
     if ($OutFile) { $result | ConvertTo-Json -Depth 5 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8 }
     exit 0

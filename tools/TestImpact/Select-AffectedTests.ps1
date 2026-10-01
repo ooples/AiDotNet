@@ -74,6 +74,28 @@ function Write-Passthrough([string] $Why) {
     "### Test-level selection`n`nNot applied: $Why." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 }
 
+function Get-InertChangedPaths([string] $Base) {
+    # Select-Shards' path classifier, the same one the Select shards job applies. NonRuntime and BuildOnly paths
+    # cannot change what any test executes; every other category (and any failure) keeps the path.
+    $classifier = Join-Path $Repository 'tools/TestImpact/Select-Shards.ps1'
+    if (-not (Test-Path -LiteralPath $classifier)) { return @() }
+    $out = Join-Path ([IO.Path]::GetTempPath()) 'type-impact-path-classification.json'
+    try {
+        & pwsh -NoProfile -File $classifier -ClassifyOnly -BaseSha $Base -OutFile $out | Out-Host
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $out)) { return @() }
+        $result = Get-Content -LiteralPath $out -Raw | ConvertFrom-Json
+        $impacts = $result.PSObject.Properties['pathImpacts']
+        if ($null -eq $impacts -or $null -eq $impacts.Value) { return @() }
+        return @($impacts.Value.PSObject.Properties |
+            Where-Object { [string] $_.Value -cin @('NonRuntime', 'BuildOnly') } | ForEach-Object Name)
+    }
+    catch {
+        Write-Host "path classification unavailable ($($_.Exception.Message)); every changed path stays a type-impact input"
+        return @()
+    }
+    finally { $global:LASTEXITCODE = 0 }
+}
+
 if (-not $BuildRoot) { $BuildRoot = $Repository }
 $eventName = [string] $env:GITHUB_EVENT_NAME
 if ($env:COLLECT_COVERAGE_EVERYWHERE -eq 'true') { Write-Passthrough 'coverage-everywhere run'; return }
@@ -95,6 +117,15 @@ try {
     $changes = Join-Path ([IO.Path]::GetTempPath()) 'type-impact-changes.txt'
     $changeLines = @(& git -c core.quotepath=false diff --no-renames --name-status $parents[1] HEAD)
     if ($LASTEXITCODE -ne 0) { throw 'git diff failed' }
+    # A path the shard selector proves cannot affect a test (documentation, an unreferenced tool or test project,
+    # a .github file only GitHub reads, .editorconfig) is not a type-impact input: TypeImpact cannot map a non-C#
+    # file, so one such file used to pass the whole decision through. Classification that fails removes nothing.
+    $inert = @(Get-InertChangedPaths -Base $parents[1])
+    if ($inert.Count -gt 0) {
+        $inertSet = [Collections.Generic.HashSet[string]]::new([string[]] $inert, [StringComparer]::Ordinal)
+        $changeLines = @($changeLines | Where-Object { -not $inertSet.Contains(([string] $_).Split("`t")[-1]) })
+        Write-Host "left out $($inert.Count) path(s) that cannot affect a test: $(@($inert | Select-Object -First 5) -join ', ')"
+    }
     [IO.File]::WriteAllLines($changes, [string[]] $changeLines)
     # Line-level diff, for the const edits the type graph cannot follow.
     $diff = Join-Path ([IO.Path]::GetTempPath()) 'type-impact-changes.diff'
