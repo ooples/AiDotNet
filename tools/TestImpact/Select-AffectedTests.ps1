@@ -27,9 +27,12 @@ param(
     # Where the built test output lives; the checkout itself unless testing against another build.
     [string] $BuildRoot = '',
     [string] $PlanFile = 'type-impact-plan.json',
-    # Job outputs are capped at 1 MB in total, and matrix and ledger_matrix carry the same shards;
-    # narrowed filters are un-narrowed, largest first, until both together fit under this.
-    [int] $MaxMatrixCharacters = 800000
+    # Job outputs are capped at 1 MB in total, measured in UTF-16 (two bytes per ASCII character), and
+    # matrix and ledger_matrix carry the same shards; narrowed filters are un-narrowed, largest first,
+    # until both together fit under this. 400,000 characters is ~800 KB, which leaves room for the job's
+    # other outputs. The former 800,000 counted characters as bytes: #2272's plan passed it and still
+    # failed the job with "Job outputs exceed 1,048,576 bytes".
+    [int] $MaxMatrixCharacters = 400000
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -44,9 +47,12 @@ function Write-Passthrough([string] $Why) {
     # the step failed after deliberately falling back.
     $global:LASTEXITCODE = 0
     Write-Host "test-level selection not applied: $Why - keeping the shard selection as chosen"
-    Write-Output-Value 'matrix' $env:SELECTED_MATRIX
-    Write-Output-Value 'ledger_matrix' $env:SELECTED_LEDGER_MATRIX
-    Write-Output-Value 'skipped' $env:SELECTED_SKIPPED
+    # Publish nothing for the selection itself: every consumer reads `needs.build.outputs.X || needs.select-shards
+    # .outputs.X`, so an empty value IS the passthrough. Re-publishing select-shards' matrices here added their full
+    # size to this job's outputs, which a large selection pushes past GitHub's 1,048,576-byte (UTF-16) job cap.
+    Write-Output-Value 'matrix' ''
+    Write-Output-Value 'ledger_matrix' ''
+    Write-Output-Value 'skipped' ''
     Write-Output-Value 'impact_mode' 'passthrough'
     "### Test-level selection`n`nNot applied: $Why." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 }

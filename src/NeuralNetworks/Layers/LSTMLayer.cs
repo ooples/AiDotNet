@@ -750,6 +750,10 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     [AiDotNet.Attributes.Scratch]
     private Tensor<float>? _cpuStackedBiasIh;
     private bool _cpuStackedWeightsValid;
+    // The source tensors' summed mutation versions when the stack was packed. An in-place write (an optimizer step, a
+    // finite-difference probe) bumps a version without going through an invalidating method; without this the cached
+    // stack kept serving the old weights, so eval-mode inference ignored every such update.
+    private long _cpuStackedWeightsSourceVersion = -1;
 
     // Fused kernel output cache buffers
     private IGpuBuffer? _gpuFusedAllH;
@@ -1474,7 +1478,9 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         // subsequent forward calls until the weights mutate (the cache is cleared
         // by InvalidateCpuStackedWeights, called at the same sites that invalidate
         // the GPU stacked weights). This keeps repeated inference allocation-free.
+        long sourceVersion = StackedWeightsSourceVersion();
         if (!_cpuStackedWeightsValid
+            || _cpuStackedWeightsSourceVersion != sourceVersion
             || _cpuStackedWeightsIh is null
             || _cpuStackedWeightsHh is null
             || _cpuStackedBiasIh is null)
@@ -1527,6 +1533,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
             _cpuStackedWeightsHh = new Tensor<float>(wHhArr, new[] { gateRows, _hiddenSize });
             _cpuStackedBiasIh = new Tensor<float>(bIhArr, new[] { gateRows });
             _cpuStackedWeightsValid = true;
+            _cpuStackedWeightsSourceVersion = sourceVersion;
         }
 
         var wIh = _cpuStackedWeightsIh;
@@ -1972,6 +1979,12 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     /// Drops the cached CPU stacked weights so the next fused forward repacks
     /// them. Called whenever the underlying split weights/biases change.
     /// </summary>
+    // Every version only grows, so the sum changes whenever any of the twelve source tensors is written in place.
+    private long StackedWeightsSourceVersion() =>
+        (long)_weightsIi.Version + _weightsFi.Version + _weightsCi.Version + _weightsOi.Version
+        + _weightsIh.Version + _weightsFh.Version + _weightsCh.Version + _weightsOh.Version
+        + _biasI.Version + _biasF.Version + _biasC.Version + _biasO.Version;
+
     private void InvalidateCpuStackedWeights()
     {
         _cpuStackedWeightsIh = null;
