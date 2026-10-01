@@ -5002,15 +5002,23 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// training for the rest of the run and discarded the optimizer's fused state. Anything this cannot establish
     /// (gradients not observed, the plan's step unknown) counts as "could have moved", so the guard keeps catching a
     /// genuinely decoupled plan.
+    /// <para>
+    /// An optimizer that CAN produce an exactly-zero update says nothing about whether this step did: a nonzero
+    /// gradient at a nonzero rate usually moves an FTRL or L1-proximal weight. So the capability alone never excuses an
+    /// unchanged step; it does only when the plan's own introspection confirms it updates this model's live
+    /// parameters, which rules out the decoupled plan the guard exists to catch. Without that confirmation the step
+    /// stays eligible to fail the guard, whose worst case is a fallback to the eager tape, not a silent no-op.
+    /// </para>
     /// </remarks>
     private static bool FusedStepCouldHaveMovedParameters(
         AiDotNet.Optimizers.Fused.FusedOptimizerConfig config,
         float learningRate,
         AiDotNet.Tensors.Engines.Compilation.LrSchedule? schedule,
         bool gradientsObserved,
-        bool anyGradientNonZero)
+        bool anyGradientNonZero,
+        bool planConfirmedAttached)
     {
-        if (config.UpdateCanBeExactlyZero) return false;
+        if (config.UpdateCanBeExactlyZero && planConfirmedAttached) return false;
         if (gradientsObserved && !anyGradientNonZero) return false;
 
         if (schedule is null)
@@ -12832,8 +12840,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 // The plan reports which tensors its update writes. Any that is not a live parameter of this model
                 // proves the plan has come loose, even on a step that could legitimately have moved nothing, where
                 // the checksum alone is inconclusive.
-                bool planDetached = Training.CompiledTapeTrainingStep<T>.ConfiguredPlanTrainsLiveParameters(
-                    selectedParameters ?? EnumerateFusedLiveParameters(trainableLayers, fusedExtraParameters)) == false;
+                bool? planTrainsLiveParameters = Training.CompiledTapeTrainingStep<T>.ConfiguredPlanTrainsLiveParameters(
+                    selectedParameters ?? EnumerateFusedLiveParameters(trainableLayers, fusedExtraParameters));
+                bool planDetached = planTrainsLiveParameters == false;
                 // Do NOT gate on fusedParamChecksumBefore != 0.0: the checksum is a sum of
                 // squares, so 0.0 means every trainable parameter starts exactly at zero. A
                 // non-persisting fused step then leaves it at 0.0 too (persisted == false),
@@ -12847,7 +12856,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 // changing a single parameter. Treat every non-persisting first step as an
                 // unsafe plan and retry it through the eager tape in this same Train() call.
                 if (!persisted && !planDetached
-                    && !FusedStepCouldHaveMovedParameters(fusedCfg, lr, lrSched, fusedGradientsObserved, fusedGradientNonZero))
+                    && !FusedStepCouldHaveMovedParameters(fusedCfg, lr, lrSched, fusedGradientsObserved, fusedGradientNonZero,
+                        planTrainsLiveParameters == true))
                 {
                     // Inconclusive, not a failure: this step could not have moved anything (zero learning rate, all-zero
                     // gradients, or an optimizer whose update is legitimately exactly zero). Leave the plan unverified and

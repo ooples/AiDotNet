@@ -967,6 +967,7 @@ public static class CompiledTapeTrainingStep<T>
         if (_fusedUnavailableTypes is not null && _fusedUnavailableTypes.Contains(optimizerType))
             { Fd($"optimizerType {optimizerType} latched-unavailable"); return false; }
 
+        AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>? restoredStateAwaitingStep = null;
         try
         {
             // AiDotNet#1406: drop the cached compiled plan + parameter array
@@ -1328,7 +1329,7 @@ public static class CompiledTapeTrainingStep<T>
                 // fused. Pass 0 to disable.
                 if (maxGradNorm > 0.0)
                     TrySetPlanMaxGradNorm(plan, maxGradNorm);
-                LinkFusedOptimizerState(plan, eagerOptimizer);
+                restoredStateAwaitingStep = LinkFusedOptimizerState(plan, eagerOptimizer);
             }
             else if (!ReferenceEquals(_configuredPlan, plan))
             {
@@ -1384,6 +1385,10 @@ public static class CompiledTapeTrainingStep<T>
             // a silent fallback to the eager path.
             _fusedStepCount++;
             if (CurrentState.planOptimizerStep >= 0) CurrentState.planOptimizerStep++;
+            // Only now has the restored checkpoint state been carried through a whole fused step. Until here a failure
+            // drops the plan, and the state must still be pending: the next attempt re-imports it, and the eager
+            // fallback refuses to run rather than silently restart the optimizer.
+            restoredStateAwaitingStep?.MarkPendingFusedOptimizerStateInstalled();
             return true;
         }
         catch (Exception ex)
@@ -1430,20 +1435,24 @@ public static class CompiledTapeTrainingStep<T>
     /// counter and schedule position live inside the plan, so the optimizer must be able to read them when it is
     /// serialized, and a state restored from a checkpoint must be installed into the plan before its first step.
     /// </summary>
-    private static void LinkFusedOptimizerState(
+    /// <returns>The optimizer whose restored checkpoint state was imported, to be marked installed once the first fused
+    /// step succeeds; <c>null</c> when there was none.</returns>
+    private static AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>? LinkFusedOptimizerState(
         ICompiledTrainingPlan<T> plan,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? eagerOptimizer)
     {
         if (eagerOptimizer is not AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> optimizer)
-            return;
+            return null;
 
+        AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>? imported = null;
         if (optimizer.PeekPendingFusedOptimizerState() is { } restored)
         {
             // Reconfigures the plan's optimizer from the checkpoint (hyperparameters, schedule position, step and
-            // moments), so the next Step continues the checkpointed trajectory exactly. Marked installed only after
-            // the import succeeds: a failed import leaves it pending, so the eager fallback still refuses to run.
+            // moments), so the next Step continues the checkpointed trajectory exactly. NOT marked installed here: the
+            // caller marks it once the whole fused step has succeeded, so a failure in the import, the step or the
+            // gradient publication leaves it pending and the eager fallback still refuses to run.
             plan.ImportOptimizerState(restored);
-            optimizer.MarkPendingFusedOptimizerStateInstalled();
+            imported = optimizer;
             // The import carried the checkpoint's step; the plan reports it (AiDotNet.Tensors plan introspection), so a
             // schedule evaluated after a resume uses the resumed step rather than an unknown one.
             CurrentState.planOptimizerStep = plan is AiDotNet.Tensors.Engines.Compilation.ICompiledTrainingPlanIntrospection<T> resumed
@@ -1469,6 +1478,7 @@ public static class CompiledTapeTrainingStep<T>
                 }
                 finally { _currentState = previous; }
             }));
+        return imported;
     }
 
     private static void RefreshCompiledStochasticState(IReadOnlyList<ITrainableLayer<T>> layers)
