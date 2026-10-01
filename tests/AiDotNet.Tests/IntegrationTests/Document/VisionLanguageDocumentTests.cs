@@ -284,11 +284,27 @@ public class VisionLanguageDocumentTests
 
     #region UDOP Tests
 
+    // The scale these tests have always run at. The model used to rewrite any ImageSize <= 64 options to it
+    // silently; that rewrite is gone, so the scale is stated here instead of being hidden in the constructor.
+    private static UDOPOptions SmallUdopOptions() => new()
+    {
+        ImageSize = 64,
+        MaxSequenceLength = 64,
+        HiddenDim = 64,
+        NumEncoderLayers = 2,
+        NumDecoderLayers = 2,
+        NumHeads = 4,
+        KeyValueDim = 16,
+        FeedForwardDim = 256,
+        VocabSize = 256,
+        NumLocationBins = 64
+    };
+
     [Fact(Timeout = 120000)]
     public async Task UDOP_NativeConstruction_Succeeds()
     {
         var arch = CreateArchitecture();
-        using var model = new UDOP<double>(arch, options: new UDOPOptions { ImageSize = 64 });
+        using var model = new UDOP<double>(arch, options: SmallUdopOptions());
         Assert.NotNull(model);
     }
 
@@ -296,7 +312,7 @@ public class VisionLanguageDocumentTests
     public async Task UDOP_Predict_ReturnsOutput()
     {
         var arch = CreateArchitecture();
-        using var model = new UDOP<double>(arch, options: new UDOPOptions { ImageSize = 64 });
+        using var model = new UDOP<double>(arch, options: SmallUdopOptions());
         using var input = CreateSmallImage();
         using var output = model.Predict(input);
         Assert.NotNull(output);
@@ -308,7 +324,7 @@ public class VisionLanguageDocumentTests
     public async Task UDOP_GetModelMetadata_ReturnsValidData()
     {
         var arch = CreateArchitecture();
-        using var model = new UDOP<double>(arch, options: new UDOPOptions { ImageSize = 64 });
+        using var model = new UDOP<double>(arch, options: SmallUdopOptions());
         var meta = model.GetModelMetadata();
         Assert.Equal("UDOP", meta.Name);
     }
@@ -325,7 +341,7 @@ public class VisionLanguageDocumentTests
         // finally-based cleanup would never run, leaking every model already constructed.
         using var docOwl = new DocOwl<double>(CreateArchitecture(), options: new DocOwlOptions { ImageSize = 64 });
         using var infographicVqa = new InfographicVQA<double>(CreateArchitecture(), options: new InfographicVQAOptions { ImageSize = 64 });
-        using var udop = new UDOP<double>(CreateArchitecture(), options: new UDOPOptions { ImageSize = 64 });
+        using var udop = new UDOP<double>(CreateArchitecture(), options: SmallUdopOptions());
 
         var models = new DocumentNeuralNetworkBase<double>[] { docOwl, infographicVqa, udop };
 

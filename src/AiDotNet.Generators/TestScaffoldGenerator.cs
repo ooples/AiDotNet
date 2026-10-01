@@ -939,8 +939,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // 1e-4/1e-3 (the cache-vs-fresh path diff on the ~1e-5 enhanced STFT is ~8e-10 — real but far
         // below float epsilon). Self-relative training invariants are preserved.
         "DCCRN",
-        // UDOP (Tang 2023) — T5-large vision-text-layout encoder-decoder. Even test-scaled, its conv stem
-        // + 2+2 transformer stack + cross-attending decoder + classification head makes each CPU training
+        // UDOP (Tang 2023) — T5-large vision-text-layout encoder-decoder. Even test-scaled, its 2+2 T5 stack
+        // with per-step relative-bias lookups and a cross-attending decoder made each CPU training
         // iteration multi-second, so the 100-iter memorization / MoreData tests overran the gate at
         // <double>. <float> halves per-step cost. (DocumentNNModelTestBase was made generic over T so this
         // float entry compiles as DocumentNNModelTestBase<float>.)
@@ -9228,22 +9228,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "UDOP" && model.TypeParameterCount == 1)
             {
-                // UDOP (Tang et al. 2023, CVPR) unifies vision/text/layout in ONE T5-large encoder-decoder
-                // — native defaults are 1024-wide, 12 encoder + 12 decoder layers, vocab 50000, 224px,
-                // maxSeqLen 2048 (~794M params, a foundation model). Every CPU training iteration is many
-                // seconds, so the heavy invariants (LossStrictlyDecreases, MoreData) time out and the
-                // full-scale weight/activation footprint pressures the 16 GB runner. Build the IDENTICAL
-                // vision-text-layout encoder-decoder (CNN stem -> reshape-to-sequence -> T5 encoder ->
-                // cross-attending T5 decoder) at CI-smoke width/depth/vocab; only scale shrinks, the
-                // architecture is preserved. numHeads must divide hiddenDim (32/4). UDOP is image-first
-                // (conv stem), so its InputShape is an RGB [3,32,32] page (emitted by the UDOP image
-                // branch), matching this ThreeDimensional 32x32x3 architecture.
+                // UDOP (Tang et al. 2023, CVPR) is a T5-large encoder-decoder: 1024 wide, 24+24 blocks, vocab 33201,
+                // 224px pages (~740M parameters). Build the IDENTICAL architecture (layout-induced patch fusion, 2-D
+                // relative biases, tied T5 decoder) at CI-smoke width/depth/vocab. The packed [16, 5] InputShape is
+                // emitted by the token-based document branch.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, inputFrames: 4, outputSize: 4), " +
+                    "inputHeight: 16, inputWidth: 5, outputSize: 64), " +
                     "tokenizer: null, " +
-                    "options: new AiDotNet.Document.Options.UDOPOptions { NumClasses = 4, ImageSize = 32, MaxSequenceLength = 64, HiddenDim = 32, NumEncoderLayers = 2, NumDecoderLayers = 2, NumHeads = 4, VocabSize = 64 }" + ")";
+                    "options: new AiDotNet.Document.Options.UDOPOptions { ImageSize = 32, PatchSize = 16, MaxSequenceLength = 16, HiddenDim = 32, NumEncoderLayers = 2, NumDecoderLayers = 2, NumHeads = 4, KeyValueDim = 8, FeedForwardDim = 64, VocabSize = 64, RelativeAttentionBuckets = 8, RelativeAttentionMaxDistance = 16, RelativeAttentionMaxDistance2D = 10, Max2DPositions = 64, NumLocationBins = 16, MaxGenerationLength = 8 }" + ")";
             }
             else if (model.ClassName == "LayoutXLM" && model.TypeParameterCount == 1)
             {
@@ -12642,16 +12636,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] InputShape => new[] { 3, 64, 64 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 8, 8 };");
         }
-        else if (model.ClassName == "UDOP")
-        {
-            // UDOP (Tang et al. 2023) patchifies a document IMAGE and fuses it with text/layout in a T5
-            // encoder-decoder. Its native CreateDefaultUDOPLayers begins with a convolutional image stem,
-            // so — unlike the token-ID LayoutLM family — Forward requires an RGB [C,H,W] pixel tensor. Feed
-            // a small [3,32,32] page (in lockstep with the imageSize:32 ctor override) so the SAME
-            // architecture runs at CI-smoke cost. OutputShape is the numClasses:4 layout logits.
-            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 32, 32 };");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
-        }
         else if (model.ClassName == "TableTransformer")
         {
             // Matches the reduced public-constructor fixture above. The /32 DETR
@@ -12788,11 +12772,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                   || model.ClassName.StartsWith("DocGCN", System.StringComparison.Ordinal)
                   || model.ClassName.StartsWith("PICK", System.StringComparison.Ordinal)
                   || model.ClassName.StartsWith("TRIE", System.StringComparison.Ordinal)
-                  // NOTE: UDOP is NOT here — unlike the token-ID LayoutLM family, UDOP's native
-                  // CreateDefaultUDOPLayers begins with a CONVOLUTIONAL image stem (the paper patchifies
-                  // the document image), so its Forward requires an RGB [C,H,W] tensor, not a token-ID
-                  // sequence. Feeding [16] token IDs made the stem conv throw "expects rank-3/4, got
-                  // rank 1". It has its own image-input branch below.
+                  || model.ClassName == "UDOP"
                   ))
         {
             // LayoutLM-family document models (Xu et al. 2020 KDD "LayoutLM",
@@ -12819,6 +12799,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // DocFormer (Appalaraju et al. 2021) reads packed rows [S, 5]: a token id, then its box (x0, y0, x1, y1).
                 sb.AppendLine("    protected override int[] InputShape => new[] { 16, 5 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 16, 4 };");
+            }
+            else if (model.ClassName == "UDOP")
+            {
+                // UDOP (Tang et al. 2023) reads packed OCR rows [S, 5] (token id, then its box on the 0-1000 grid) and
+                // returns the T5 decoder's next-token logits [1, vocab] for the start token. Vocab 64 matches the fixture.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 16, 5 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 64 };");
             }
             else
             {

@@ -70,6 +70,16 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
 
     #region Fields
 
+    /// <summary>T5 decoder start token, which is also the pad token.</summary>
+    private const int DecoderStartTokenId = 0;
+
+    /// <summary>T5 end-of-sequence token.</summary>
+    private const int EosTokenId = 1;
+
+    private const string QuestionAnsweringPrompt = "Question answering. ";
+    private const string ClassificationPrompt = "Document Classification on RVLCDIP.";
+    private const string LayoutAnalysisPrompt = "Layout Analysis.";
+
     private readonly bool _useNativeMode;
     private readonly InferenceSession? _onnxSession;
     private readonly ITokenizer _tokenizer;
@@ -79,33 +89,8 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
     private readonly int _numDecoderLayers;
     private readonly int _numHeads;
     private readonly int _vocabSize;
-    private readonly int _numClasses;
 
-    // Native mode layers
-    private readonly List<ILayer<T>> _visualEncoderLayers = [];
-    private readonly List<ILayer<T>> _textEncoderLayers = [];
-    private readonly List<ILayer<T>> _unifiedEncoderLayers = [];
-    private readonly List<ILayer<T>> _decoderLayers = [];
-
-    // Document-classification head. UDOP is a generative encoder-decoder whose raw forward emits a
-    // [seq, vocab] token-logit tensor, but it also implements IDocumentClassifier — the ModelFamily
-    // invariant harness drives it as classification (numClasses logits vs a class target). This head
-    // pools the generated sequence to one document vector and projects it to numClasses so the forward
-    // yields a fixed rank-1 [numClasses] logit vector that aligns with the classification target (the
-    // raw [seq, vocab] tensor cannot be aligned to a class target, so CrossEntropyWithLogits over-indexed
-    // ClassIndicesToOneHot and threw). Held outside the sequential layer walk, applied after pooling.
-    private DenseLayer<T>? _classHead;
-
-    // True only when InitializeLayers built the default architecture and appended its own classification
-    // head as the last layer. For a custom Architecture.Layers stack we do NOT own a head — even one that
-    // happens to end in a DenseLayer is a user layer, not our pooled class head. Persisted so
-    // DeserializeNetworkSpecificData rebinds _classHead only when we actually created it, instead of
-    // blindly grabbing the last layer (which for a custom stack would wrongly skip that layer in the
-    // sequential walk AND reapply it after pooling).
-    private bool _hasBuiltInClassHead;
-
-    /// <summary>Guards <see cref="ResolveLazyLayerShapes"/> so the one-shot warm forward runs at most once.</summary>
-    private bool _lazyShapesWarmed;
+    private UdopTransformerLayer<T>? _transformer;
 
     #endregion
 
@@ -117,18 +102,16 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
     /// <inheritdoc/>
     public override bool RequiresOCR => true;
 
-    /// <inheritdoc/>
+    /// <summary>Side of the square page image the patch embedding expects.</summary>
     public int ExpectedImageSize => ImageSize;
 
-    /// <summary>
-    /// Selects UDOP's public modality from tensor geometry. Images are continuous; rank-one and
-    /// rank-two inputs are token IDs. The document base owns the general rule and this override
-    /// supplies only UDOP's configuration-specific vocabulary bound.
-    /// </summary>
-    protected override LayerInputDomain ResolveDocumentInputDomain(int[]? inputShape) =>
-        inputShape is { Length: < 3 }
-            ? LayerInputDomain.Indices(_vocabSize)
-            : LayerInputDomain.Continuous;
+    /// <inheritdoc/>
+    protected override LayerInputDomain ResolveDocumentInputDomain(int[]? inputShape) => inputShape switch
+    {
+        [_, 5] => LayerInputDomain.Indices(Math.Max(_vocabSize, UdopTransformerLayer<T>.CoordinateGrid + 1)),
+        { Length: < 3 } => LayerInputDomain.Indices(_vocabSize),
+        _ => LayerInputDomain.Continuous
+    };
 
     /// <inheritdoc/>
     public IReadOnlyList<LayoutElementType> SupportedElementTypes { get; } =
@@ -145,9 +128,7 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         LayoutElementType.Equation
     ];
 
-    /// <summary>
-    /// Gets the available document classification categories.
-    /// </summary>
+    /// <inheritdoc/>
     public IReadOnlyList<string> AvailableCategories { get; } =
     [
         "letter", "form", "email", "handwritten", "advertisement",
@@ -160,7 +141,7 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
     #region Constructors
 
     /// <summary>
-    /// Creates a UDOP model using a pre-trained ONNX model for inference.
+    /// Creates a UDOP model that runs a pretrained ONNX export.
     /// </summary>
     public UDOP(
         NeuralNetworkArchitecture<T> architecture,
@@ -182,29 +163,15 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         Guard.NotNull(tokenizer);
         _tokenizer = tokenizer;
         _useNativeMode = false;
-        // Validated after the path checks so a missing model file reports itself
-        // as FileNotFoundException rather than being pre-empted by the options.
         _options.Validate();
 
-        _numClasses = _options.NumClasses;
         _hiddenDim = _options.HiddenDim;
         _numEncoderLayers = _options.NumEncoderLayers;
         _numDecoderLayers = _options.NumDecoderLayers;
         _numHeads = _options.NumHeads;
         _vocabSize = _options.VocabSize;
-        // Tang et al. 2022 S4.1: learning rate 5e-5, beta1 0.9, beta2 0.98, weight decay 1e-2.
-        // Built with no options, this ran at Adam's 1e-3 default -- twenty times the paper rate.
-        // The paper pairs Adam with weight decay, which is AdamW's behaviour, so that is the
-        // faithful mapping here.
         _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
-            optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-                {
-                    InitialLearningRate = _options.LearningRate,
-                    Beta1 = 0.9,
-                    Beta2 = 0.98,
-                    WeightDecay = 0.01
-                }));
+            optimizer ?? CreatePaperOptimizer());
 
         ImageSize = _options.ImageSize;
         MaxSequenceLength = _options.MaxSequenceLength;
@@ -215,19 +182,8 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
     }
 
     /// <summary>
-    /// Creates a UDOP model using native layers for training and inference.
+    /// Creates a trainable UDOP model built from <paramref name="options"/>. With no options, it builds UDOP-large.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>Default Configuration (UDOP-Large from CVPR 2023):</b>
-    /// - Vision Transformer for image encoding
-    /// - T5-style text encoder
-    /// - Unified cross-modal encoder
-    /// - T5-style decoder for generation
-    /// - Hidden dimension: 1024
-    /// - Encoder/Decoder layers: 12 each
-    /// </para>
-    /// </remarks>
     public UDOP(
         NeuralNetworkArchitecture<T> architecture,
         UDOPOptions? options = null,
@@ -240,46 +196,31 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         _options.Validate();
         Options = _options;
 
-        // A 64px native instance is a smoke-scale model, not a useful carrier for UDOP-Large's
-        // 1024-wide 12+12-layer defaults. Scale only default-valued parameters in that explicit
-        // tiny-image mode; the normal 224px production constructor remains paper-faithful.
-        if (_options.ImageSize <= 64)
-        {
-            if (_options.MaxSequenceLength == 2048) _options.MaxSequenceLength = 64;
-            if (_options.HiddenDim == 1024) _options.HiddenDim = 64;
-            if (_options.NumEncoderLayers == 12) _options.NumEncoderLayers = 2;
-            if (_options.NumDecoderLayers == 12) _options.NumDecoderLayers = 2;
-            if (_options.NumHeads == 16) _options.NumHeads = 4;
-            if (_options.VocabSize == 50000) _options.VocabSize = 256;
-        }
-
         _useNativeMode = true;
-        _numClasses = _options.NumClasses;
         _hiddenDim = _options.HiddenDim;
         _numEncoderLayers = _options.NumEncoderLayers;
         _numDecoderLayers = _options.NumDecoderLayers;
         _numHeads = _options.NumHeads;
         _vocabSize = _options.VocabSize;
-        // Tang et al. 2022 S4.1: learning rate 5e-5, beta1 0.9, beta2 0.98, weight decay 1e-2.
-        // Built with no options, this ran at Adam's 1e-3 default -- twenty times the paper rate.
-        // The paper pairs Adam with weight decay, which is AdamW's behaviour, so that is the
-        // faithful mapping here.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                Beta1 = 0.9,
-                Beta2 = 0.98,
-                WeightDecay = 0.01
-            });
+        _optimizer = optimizer ?? CreatePaperOptimizer();
 
         ImageSize = _options.ImageSize;
         MaxSequenceLength = _options.MaxSequenceLength;
 
-        _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.OPT);
+        // UDOP's tokenizer is T5's SentencePiece vocabulary plus layout tokens.
+        _tokenizer = tokenizer ?? LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5);
 
         InitializeLayers();
     }
+
+    private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer() =>
+        new(this, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = _options.LearningRate,
+            Beta1 = 0.9,
+            Beta2 = 0.98,
+            WeightDecay = 0.01
+        });
 
     #endregion
 
@@ -297,131 +238,237 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         {
             Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
-            _hasBuiltInClassHead = false;
             return;
         }
 
-        var (encoderLayers, decoderLayers) = LayerHelper<T>.CreateDefaultUDOPLayers(
-            hiddenDim: _hiddenDim,
-            numEncoderLayers: _numEncoderLayers,
-            numDecoderLayers: _numDecoderLayers,
-            numHeads: _numHeads,
-            vocabSize: _vocabSize,
-            imageSize: ImageSize,
-            maxSequenceLength: MaxSequenceLength);
-
-        var encoder = encoderLayers.ToArray();
-        var decoder = decoderLayers.ToArray();
-        Layers.AddRange(encoder);
-        Layers.AddRange(decoder);
-        PartitionDefaultGraph(encoder, decoder);
-
-        // Classification head (see field docs): pools the generative sequence and projects to numClasses.
-        // Added to Layers so it trains and serializes with the rest, but skipped in the sequential Forward
-        // walk (applied explicitly after mean-pooling).
-        _classHead = new DenseLayer<T>(_numClasses);
-        Layers.Add(_classHead);
-        _hasBuiltInClassHead = true;
+        var transformer = new UdopTransformerLayer<T>(
+            _vocabSize, _hiddenDim, _numHeads, _options.KeyValueDim, _options.FeedForwardDim,
+            _numEncoderLayers, _numDecoderLayers, ImageSize, _options.PatchSize,
+            _options.RelativeAttentionBuckets, _options.RelativeAttentionMaxDistance,
+            _options.RelativeAttentionMaxDistance2D, _options.Max2DPositions, _options.LayerNormEpsilon);
+        Layers.Add(LayerGraphContract.FromExternalInput(transformer));
+        _transformer = transformer;
     }
 
-    /// <summary>Builds runtime partitions from the same factory graph inspected by the generator.</summary>
-    private void PartitionDefaultGraph(
-        IReadOnlyList<ILayer<T>> encoder,
-        IReadOnlyList<ILayer<T>> decoder)
+    private UdopTransformerLayer<T> Transformer => _transformer
+        ?? throw new NotSupportedException(_useNativeMode
+            ? "This UDOP was built from custom layers, so it has no encoder-decoder to prompt."
+            : "Prompted decoding needs the native model. The ONNX session exposes a single forward pass.");
+
+    #endregion
+
+    #region Encoder-decoder
+
+    /// <summary>
+    /// Builds the encoder input from a task prompt, the OCR tokens and the page, then encodes it.
+    /// </summary>
+    /// <remarks>
+    /// As in the reference, the prompt goes first with all-zero boxes. Zero boxes mark the prompt as a target
+    /// segment, so its tokens do not take an image patch.
+    /// </remarks>
+    private Tensor<T> EncodeInputs(IReadOnlyList<int> prompt, Tensor<T>? packedTokens, Tensor<T>? preprocessedImage)
     {
-        _visualEncoderLayers.Clear();
-        _textEncoderLayers.Clear();
-        _unifiedEncoderLayers.Clear();
-        _decoderLayers.Clear();
-
-        int textRoot = -1;
-        for (int i = 0; i < encoder.Count; i++)
+        var transformer = Transformer;
+        var tokens = new List<int>(prompt.Select(transformer.ClampToken));
+        var boxes = new List<double[]>(prompt.Select(_ => new double[4]));
+        if (packedTokens is not null)
         {
-            if (encoder[i] is EmbeddingLayer<T>)
-            {
-                textRoot = i;
-                break;
-            }
+            if (packedTokens.Rank != 2 || packedTokens.Shape[1] != 5)
+                throw new ArgumentException("UDOP expects packed rows [S, 5] (token, x0, y0, x1, y1) on the 0-1000 grid.", nameof(packedTokens));
+            var (ocrTokens, ocrBoxes) = transformer.Unpack(packedTokens);
+            tokens.AddRange(ocrTokens);
+            boxes.AddRange(ocrBoxes);
         }
-
-        if (textRoot < 0)
+        if (tokens.Count > MaxSequenceLength)
+            throw new ArgumentException($"UDOP takes at most {MaxSequenceLength} prompt and OCR tokens; got {tokens.Count}.", nameof(packedTokens));
+        Tensor<T>? image = null;
+        if (preprocessedImage is not null)
         {
-            _unifiedEncoderLayers.AddRange(encoder);
+            image = EnsureBatchDimension(preprocessedImage);
+            if (image.Shape[0] != 1)
+                throw new ArgumentException($"UDOP encodes one page at a time; got a batch of {image.Shape[0]}.", nameof(preprocessedImage));
         }
-        else
-        {
-            for (int i = 0; i < textRoot; i++) _visualEncoderLayers.Add(encoder[i]);
-            _textEncoderLayers.Add(encoder[textRoot]);
-            int unifiedStart = textRoot + 1;
-            if (unifiedStart < encoder.Count && encoder[unifiedStart] is PositionalEncodingLayer<T>)
-            {
-                _textEncoderLayers.Add(encoder[unifiedStart]);
-                unifiedStart++;
-            }
-            for (int i = unifiedStart; i < encoder.Count; i++)
-                _unifiedEncoderLayers.Add(encoder[i]);
-        }
-
-        _decoderLayers.AddRange(decoder);
+        return transformer.Encode(tokens.ToArray(), boxes.ToArray(), image);
     }
 
-    private Tensor<T> RunUdopSequence(IReadOnlyList<ILayer<T>> layers, Tensor<T> input)
+    /// <summary>Splits a model input into its packed tokens or its page: packed <c>[S, 5]</c>, ids <c>[S]</c>, or an image.</summary>
+    private (Tensor<T>? Packed, Tensor<T>? Image) RouteInput(Tensor<T> input)
     {
-        Tensor<T> output = input;
-        bool hasPassedConvLayer = false;
-        bool hasReshapedToSequence = false;
-        for (int i = 0; i < layers.Count; i++)
+        if (input.Rank >= 3) return (null, input);
+        if (input.Rank == 2 && input.Shape[1] == 5) return (input, null);
+        if (input.Rank == 1 || (input.Rank == 2 && input.Shape[1] == 1))
         {
-            var layer = layers[i];
-            if (layer is ConvolutionalLayer<T> or BatchNormalizationLayer<T>
-                    or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>)
-                hasPassedConvLayer = true;
-
-            bool isNonSpatial = layer is not (ConvolutionalLayer<T> or BatchNormalizationLayer<T>
-                or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>);
-            if (!hasReshapedToSequence && hasPassedConvLayer && output.Rank >= 3 && isNonSpatial)
-            {
-                int channels = output.Rank == 4 ? output.Shape[1] : output.Shape[0];
-                int height = output.Rank == 4 ? output.Shape[2] : output.Shape[1];
-                int width = output.Rank == 4 ? output.Shape[3] : output.Shape[2];
-                output = Engine.Reshape(output, [height * width, channels]);
-                hasReshapedToSequence = true;
-            }
-            output = layer.Forward(output);
+            int s = input.Shape[0];
+            var packed = new Tensor<T>(new[] { s, 5 });
+            for (int i = 0; i < s; i++) packed[i, 0] = input.Rank == 1 ? input[i] : input[i, 0];
+            return (packed, null);
         }
-        return output;
+        throw new ArgumentException(
+            $"UDOP expects packed rows [S, 5] (token, x0, y0, x1, y1), token ids [S], or a page image; got shape [{string.Join(", ", input.Shape.ToArray())}].",
+            nameof(input));
+    }
+
+    private Tensor<T> EncodeRouted(Tensor<T> input)
+    {
+        var (packed, image) = RouteInput(input);
+        return EncodeInputs(Array.Empty<int>(), packed, image);
     }
 
     /// <summary>
-    /// Resolves every lazy layer's shape by running ONE dummy image forward. UDOP's forward is a custom
-    /// encoder-decoder (conv stem -> reshape -> cross-attending decoder -> pooled classification head),
-    /// not a plain sequential walk, so the base per-layer shape inference doesn't materialize all weights;
-    /// leaving them lazy meant a freshly-cloned model's SetParameters silently skipped the unresolved
-    /// layers and the clone kept its own random init (Clone_* diverged by ~O(1), the #1221 class). One
-    /// eval-mode warm forward at the real [3, ImageSize, ImageSize] page shape resolves them all.
+    /// Returns the decoder's next-token logits <c>[1, vocab]</c> for the start token, given OCR tokens and a page.
     /// </summary>
-    protected override void ResolveLazyLayerShapes()
-    {
-        if (_lazyShapesWarmed) return;
-        _lazyShapesWarmed = true;
-        if (!_useNativeMode) return;
+    /// <param name="packedTokens">Packed rows <c>[S, 5]</c>: token id, then x0, y0, x1, y1 on the 0-1000 grid.</param>
+    /// <param name="pageImage">The page, <c>[3, H, W]</c> or <c>[1, 3, H, W]</c>, at <see cref="ExpectedImageSize"/>.</param>
+    public Tensor<T> PredictDocument(Tensor<T> packedTokens, Tensor<T> pageImage) =>
+        DecoderLogits(packedTokens, pageImage, new[] { DecoderStartTokenId });
 
-        var dummy = new Tensor<T>([3, ImageSize, ImageSize]);
-        bool wasTraining = IsTrainingMode;
-        if (wasTraining) SetTrainingMode(false);
-        // The warm-up is genuinely best-effort -- a real forward failure surfaces again on the actual
-        // Train/Predict call -- but a bare `catch { }` also swallowed the diagnosis. When shapes fail to
-        // resolve here, the later failure carries no hint that the warm-up already saw the same problem,
-        // so the exception is reported rather than discarded. It is still not rethrown: the caller has
-        // not asked to run the model yet.
-        try { _ = Forward(dummy); }
-        catch (Exception ex)
+    /// <summary>
+    /// Teacher-forced decoder logits <c>[T, vocab]</c>: row <c>t</c> predicts the token after
+    /// <c>decoderInput[t]</c>. Either input may be null, but not both.
+    /// </summary>
+    public Tensor<T> DecoderLogits(Tensor<T>? packedTokens, Tensor<T>? pageImage, IReadOnlyList<int> decoderInput)
+    {
+        if (decoderInput is null) throw new ArgumentNullException(nameof(decoderInput));
+        if (packedTokens is null && pageImage is null)
+            throw new ArgumentException("Pass OCR tokens, a page image, or both.", nameof(packedTokens));
+        SetTrainingMode(false);
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var memory = EncodeInputs(Array.Empty<int>(), packedTokens, PreparePage(pageImage));
+        return Transformer.Decode(decoderInput.ToArray(), memory);
+    }
+
+    /// <summary>
+    /// Greedily decodes from the start token until EOS or <see cref="UDOPOptions.MaxGenerationLength"/>. The
+    /// returned ids include the EOS token when one was produced.
+    /// </summary>
+    /// <param name="packedTokens">Optional OCR tokens, packed <c>[S, 5]</c>.</param>
+    /// <param name="pageImage">Optional page image.</param>
+    /// <param name="promptTokens">Optional task-prompt token ids, placed in front of the OCR tokens.</param>
+    public Tensor<T> GenerateTokens(Tensor<T>? packedTokens, Tensor<T>? pageImage, IReadOnlyList<int>? promptTokens = null)
+    {
+        if (packedTokens is null && pageImage is null && (promptTokens is null || promptTokens.Count == 0))
+            throw new ArgumentException("Pass OCR tokens, a page image, or a prompt.", nameof(packedTokens));
+        SetTrainingMode(false);
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var memory = EncodeInputs(promptTokens ?? Array.Empty<int>(), packedTokens, PreparePage(pageImage));
+        var generated = Generate(memory, _options.MaxGenerationLength, 0.0);
+        var result = new Tensor<T>(new[] { generated.Count });
+        for (int i = 0; i < generated.Count; i++) result[i] = NumOps.FromDouble(generated[i].Token);
+        return result;
+    }
+
+    /// <summary>
+    /// One teacher-forced training step on target token ids, which should end with EOS (id 1). The model learns to
+    /// generate <paramref name="targetTokens"/> from the OCR tokens and page.
+    /// </summary>
+    public void TrainDocument(Tensor<T>? packedTokens, Tensor<T>? pageImage, IReadOnlyList<int> targetTokens)
+    {
+        if (targetTokens is null) throw new ArgumentNullException(nameof(targetTokens));
+        if (!_useNativeMode) throw new NotSupportedException("Training not supported in ONNX mode.");
+        if (packedTokens is null && pageImage is null)
+            throw new ArgumentException("Pass OCR tokens, a page image, or both.", nameof(packedTokens));
+        var target = new Tensor<T>(new[] { targetTokens.Count });
+        for (int i = 0; i < targetTokens.Count; i++) target[i] = NumOps.FromDouble(targetTokens[i]);
+        var page = PreparePage(pageImage);
+        if (packedTokens is not null)
         {
-            System.Diagnostics.Debug.WriteLine(
-                $"{nameof(UDOP<T>)}: lazy shape resolution failed on a {ImageSize}x{ImageSize} warm-up "
-                + $"pass; shapes stay unresolved until the first real Train/Predict. {ex}");
+            TrainWithCustomObjective(packedTokens, target,
+                (tokens, labels) => SequenceLoss(EncodeInputs(Array.Empty<int>(), tokens, page), labels), _optimizer);
+            return;
         }
-        finally { if (wasTraining) SetTrainingMode(true); }
+        var onlyPage = page ?? throw new ArgumentNullException(nameof(pageImage));
+        TrainWithCustomObjective(onlyPage, target,
+            (image, labels) => SequenceLoss(EncodeInputs(Array.Empty<int>(), null, image), labels), _optimizer);
+    }
+
+    private Tensor<T>? PreparePage(Tensor<T>? pageImage)
+    {
+        if (pageImage is null) return null;
+        ValidateImageShape(pageImage);
+        return PreprocessDocument(pageImage);
+    }
+
+    /// <summary>
+    /// Cross-entropy of the decoder against <paramref name="target"/>. A <c>[1, vocab]</c> target is a
+    /// distribution over the first generated token. Anything else is read as target token ids, trained with
+    /// teacher forcing: the decoder sees the start token followed by the target shifted right.
+    /// </summary>
+    private Tensor<T> SequenceLoss(Tensor<T> memory, Tensor<T> target)
+    {
+        var transformer = Transformer;
+        if (target.Rank == 2 && target.Shape[0] == 1 && target.Shape[1] == _vocabSize)
+        {
+            var logProbabilities = Engine.TensorLogSoftmax(transformer.Decode(new[] { DecoderStartTokenId }, memory), axis: 1);
+            return Engine.TensorMultiplyScalar(Engine.ReduceSum(Engine.TensorMultiply(target, logProbabilities), null), NumOps.FromDouble(-1.0));
+        }
+
+        var labels = new int[target.Length];
+        for (int i = 0; i < labels.Length; i++) labels[i] = transformer.ClampToken((int)Math.Round(NumOps.ToDouble(target.Data.Span[i])));
+        if (labels.Length == 0) throw new ArgumentException("A UDOP target needs at least one token.", nameof(target));
+        var decoderInput = new int[labels.Length];
+        decoderInput[0] = DecoderStartTokenId;
+        for (int t = 1; t < labels.Length; t++) decoderInput[t] = labels[t - 1];
+        var log = Engine.TensorLogSoftmax(transformer.Decode(decoderInput, memory), axis: 1);
+        var entries = new int[labels.Length];
+        for (int t = 0; t < labels.Length; t++) entries[t] = (t * _vocabSize) + labels[t];
+        var picked = AiDotNet.ComputerVision.CvTensorOps<T>.Select(Engine.Reshape(log, new[] { log.Length }), entries, 0);
+        return Engine.TensorMultiplyScalar(Engine.ReduceSum(picked, null), NumOps.FromDouble(-1.0 / labels.Length));
+    }
+
+    /// <summary>
+    /// Decodes from the start token: greedy when <paramref name="temperature"/> is 0, sampled otherwise. Stops
+    /// after EOS, which is included in the result.
+    /// </summary>
+    private List<(int Token, double Probability)> Generate(Tensor<T> memory, int maxLength, double temperature)
+    {
+        var transformer = Transformer;
+        var ids = new List<int> { DecoderStartTokenId };
+        var generated = new List<(int Token, double Probability)>();
+        var random = RandomHelper.Shared;
+        for (int step = 0; step < maxLength; step++)
+        {
+            var logits = transformer.Decode(ids.ToArray(), memory);
+            int last = logits.Shape[0] - 1;
+            var row = new double[_vocabSize];
+            double max = double.NegativeInfinity;
+            for (int v = 0; v < _vocabSize; v++)
+            {
+                row[v] = NumOps.ToDouble(logits[last, v]) / (temperature > 0 ? temperature : 1.0);
+                max = Math.Max(max, row[v]);
+            }
+            double total = 0;
+            for (int v = 0; v < _vocabSize; v++) { row[v] = Math.Exp(row[v] - max); total += row[v]; }
+            int pick = 0;
+            if (temperature > 0)
+            {
+                double u = random.NextDouble() * total, running = 0;
+                for (pick = 0; pick < _vocabSize - 1; pick++)
+                {
+                    running += row[pick];
+                    if (running >= u) break;
+                }
+            }
+            else
+            {
+                for (int v = 1; v < _vocabSize; v++) if (row[v] > row[pick]) pick = v;
+            }
+            generated.Add((pick, row[pick] / total));
+            if (pick == EosTokenId) break;
+            ids.Add(pick);
+        }
+        return generated;
+    }
+
+    private int[] EncodeText(string text) =>
+        _tokenizer.Encode(text).TokenIds.Where(id => id != DecoderStartTokenId && id != EosTokenId).ToArray();
+
+    /// <summary>Encodes a page under a task prompt. Native mode only.</summary>
+    private Tensor<T> EncodePrompted(Tensor<T> documentImage, string prompt)
+    {
+        ValidateImageShape(documentImage);
+        if (!_useNativeMode) throw new NotSupportedException("Prompted decoding needs the native model. The ONNX session exposes a single forward pass.");
+        SetTrainingMode(false);
+        return EncodeInputs(EncodeText(prompt), null, PreprocessDocument(documentImage));
     }
 
     #endregion
@@ -434,20 +481,58 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         return DetectLayout(documentImage, 0.5);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Layout analysis by prompting: the decoder writes a category name followed by four location tokens per
+    /// region, as UDOP's layout task does.
+    /// </summary>
+    /// <remarks>
+    /// Location tokens are the last <see cref="UDOPOptions.NumLocationBins"/> ids of the vocabulary. Each one
+    /// quantises a 0-1 coordinate. A region's confidence is the mean probability of its location tokens.
+    /// </remarks>
     public DocumentLayoutResult<T> DetectLayout(Tensor<T> documentImage, double confidenceThreshold)
     {
-        ValidateImageShape(documentImage);
         var startTime = DateTime.UtcNow;
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var memory = EncodePrompted(documentImage, LayoutAnalysisPrompt);
+        var generated = Generate(memory, _options.MaxGenerationLength, 0.0);
 
-        var preprocessed = PreprocessDocument(documentImage);
-        // Layout detection is a generative/per-region task: it needs the rank-2 [numDetections, numClasses]
-        // sequence output that ParseLayoutOutput indexes as output[i, c]. Use the raw encoder-decoder
-        // forward, NOT Forward — Forward pools + projects through the classification head to a rank-1
-        // [numClasses] vector, which would collapse every detection and break the two-dimensional indexing.
-        var output = _useNativeMode ? ForwardEncoderDecoder(preprocessed) : RunOnnxInference(preprocessed);
-
-        var regions = ParseLayoutOutput(output, confidenceThreshold);
+        int height = documentImage.Shape[documentImage.Rank - 2], width = documentImage.Shape[documentImage.Rank - 1];
+        int bins = _options.NumLocationBins, firstLocation = _vocabSize - bins;
+        var regions = new List<LayoutRegion<T>>();
+        var label = new List<int>();
+        var corners = new List<(double Value, double Probability)>();
+        foreach (var (token, probability) in generated)
+        {
+            if (token == EosTokenId) break;
+            if (token >= firstLocation)
+            {
+                corners.Add(((double)(token - firstLocation) / (bins - 1), probability));
+                if (corners.Count < 4) continue;
+                double confidence = corners.Average(c => c.Probability);
+                if (confidence >= confidenceThreshold)
+                {
+                    regions.Add(new LayoutRegion<T>
+                    {
+                        ElementType = ParseElementType(label),
+                        Confidence = NumOps.FromDouble(confidence),
+                        ConfidenceValue = confidence,
+                        Index = regions.Count,
+                        BoundingBox = new Vector<T>(new[]
+                        {
+                            NumOps.FromDouble(corners[0].Value * width), NumOps.FromDouble(corners[1].Value * height),
+                            NumOps.FromDouble(corners[2].Value * width), NumOps.FromDouble(corners[3].Value * height)
+                        })
+                    });
+                }
+                corners.Clear();
+                label.Clear();
+            }
+            else
+            {
+                if (corners.Count > 0) corners.Clear();
+                if (token != DecoderStartTokenId) label.Add(token);
+            }
+        }
 
         return new DocumentLayoutResult<T>
         {
@@ -456,36 +541,12 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         };
     }
 
-    private List<LayoutRegion<T>> ParseLayoutOutput(Tensor<T> output, double threshold)
+    private LayoutElementType ParseElementType(List<int> label)
     {
-        var regions = new List<LayoutRegion<T>>();
-        int numDetections = output.Shape[0];
-        int numClasses = output.Shape.Length > 1 ? output.Shape[1] : _numClasses;
-
-        for (int i = 0; i < numDetections; i++)
-        {
-            double maxConf = 0;
-            int maxClass = 0;
-            for (int c = 0; c < numClasses; c++)
-            {
-                double conf = NumOps.ToDouble(output[i, c]);
-                if (conf > maxConf) { maxConf = conf; maxClass = c; }
-            }
-
-            if (maxConf >= threshold && maxClass > 0)
-            {
-                regions.Add(new LayoutRegion<T>
-                {
-                    ElementType = (LayoutElementType)Math.Min(maxClass, (int)LayoutElementType.Other),
-                    Confidence = NumOps.FromDouble(maxConf),
-                    ConfidenceValue = maxConf,
-                    Index = i,
-                    BoundingBox = Vector<T>.Empty()
-                });
-            }
-        }
-
-        return regions;
+        string text = label.Count > 0 ? _tokenizer.Decode(label, skipSpecialTokens: true).Trim() : string.Empty;
+        foreach (var type in SupportedElementTypes)
+            if (text.IndexOf(type.ToString(), StringComparison.OrdinalIgnoreCase) >= 0) return type;
+        return LayoutElementType.Text;
     }
 
     #endregion
@@ -498,88 +559,29 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         return AnswerQuestion(documentImage, question, 256, 0.0);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Answers by prompting the encoder with <c>"Question answering. {question}"</c> and decoding. Decoding is
+    /// greedy at temperature 0 and sampled otherwise.
+    /// </summary>
     public DocumentQAResult<T> AnswerQuestion(Tensor<T> documentImage, string question, int maxAnswerLength, double temperature = 0.0)
     {
-        ValidateImageShape(documentImage);
+        if (question is null) throw new ArgumentNullException(nameof(question));
         var startTime = DateTime.UtcNow;
-
-        var preprocessed = PreprocessDocument(documentImage);
-        // Question answering is generative: DecodeGenerativeOutput indexes the rank-2 [seq, vocab]
-        // sequence as output[t, v]. Use the raw encoder-decoder forward, NOT Forward — Forward pools +
-        // projects through the classification head to a rank-1 [numClasses] vector, which would leave no
-        // per-token axis to decode.
-        var output = _useNativeMode ? ForwardEncoderDecoder(preprocessed) : RunOnnxInference(preprocessed);
-
-        // UDOP uses generative output - decode the sequence
-        var (answer, confidence) = DecodeGenerativeOutput(output, maxAnswerLength);
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var memory = EncodePrompted(documentImage, QuestionAnsweringPrompt + question);
+        var generated = Generate(memory, Math.Max(0, Math.Min(maxAnswerLength, _options.MaxGenerationLength)), temperature)
+            .Where(g => g.Token != EosTokenId && g.Token != DecoderStartTokenId).ToList();
+        string answer = generated.Count > 0 ? _tokenizer.Decode(generated.Select(g => g.Token).ToList(), skipSpecialTokens: true).Trim() : string.Empty;
+        double confidence = generated.Count > 0 && answer.Length > 0 ? generated.Average(g => g.Probability) : 0.0;
 
         return new DocumentQAResult<T>
         {
-            Answer = answer,
+            Answer = answer.Length > 0 ? answer : "[No answer found]",
             Confidence = NumOps.FromDouble(confidence),
             ConfidenceValue = confidence,
             Question = question,
             ProcessingTimeMs = (DateTime.UtcNow - startTime).TotalMilliseconds
         };
-    }
-
-    /// <summary>
-    /// Decodes generative output from UDOP model.
-    /// </summary>
-    private (string answer, double confidence) DecodeGenerativeOutput(Tensor<T> output, int maxLength)
-    {
-        var tokens = new List<int>();
-        double totalConfidence = 0;
-        int seqLen = Math.Min(output.Shape[0], maxLength);
-
-        for (int t = 0; t < seqLen; t++)
-        {
-            int vocabSize = output.Shape.Length > 1 ? output.Shape[1] : _vocabSize;
-            double maxVal = double.MinValue;
-            int maxIdx = 0;
-
-            for (int v = 0; v < vocabSize; v++)
-            {
-                double val = NumOps.ToDouble(output[t, v]);
-                if (val > maxVal) { maxVal = val; maxIdx = v; }
-            }
-
-            // T5-style tokens: 0=PAD, 1=EOS
-            if (maxIdx == 1) break; // EOS
-            if (maxIdx == 0) continue; // Skip PAD
-            tokens.Add(maxIdx);
-            totalConfidence += maxVal;
-        }
-
-        string answer = DecodeTokensToText(tokens);
-        double confidence = tokens.Count > 0 ? Math.Max(0, Math.Min(1, totalConfidence / tokens.Count)) : 0;
-
-        return (string.IsNullOrEmpty(answer) ? "[No answer found]" : answer, confidence);
-    }
-
-    /// <summary>
-    /// Decodes token IDs to text using T5-style vocabulary.
-    /// </summary>
-    private static string DecodeTokensToText(List<int> tokens)
-    {
-        if (tokens.Count == 0) return string.Empty;
-
-        var sb = new System.Text.StringBuilder();
-        foreach (int token in tokens)
-        {
-            char c = token switch
-            {
-                >= 2 and <= 33 => (char)(token - 2 + 32),    // Space, punctuation, digits
-                >= 34 and <= 59 => (char)(token - 34 + 65),  // A-Z
-                >= 60 and <= 85 => (char)(token - 60 + 97),  // a-z
-                >= 86 and <= 213 => (char)(token - 86 + 128), // Extended ASCII
-                _ => (char)((token % 95) + 32) // Fallback
-            };
-            sb.Append(c);
-        }
-
-        return sb.ToString();
     }
 
     /// <inheritdoc/>
@@ -608,17 +610,35 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         return ClassifyDocument(documentImage, 5);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Classifies by prompting with UDOP's RVL-CDIP task prompt and scoring every category name as a decoder target.
+    /// </summary>
+    /// <remarks>
+    /// Each category's score is the total log-probability of its tokens followed by EOS. A softmax over those
+    /// scores gives the reported probabilities. UDOP has no classification head: the label is generated text.
+    /// </remarks>
     public DocumentClassificationResult<T> ClassifyDocument(Tensor<T> documentImage, int topK)
     {
-        ValidateImageShape(documentImage);
         var startTime = DateTime.UtcNow;
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var memory = EncodePrompted(documentImage, ClassificationPrompt);
+        var transformer = Transformer;
 
-        var preprocessed = PreprocessDocument(documentImage);
-        var output = _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
-
-        var probs = ApplySoftmax(output);
-        var topPredictions = GetTopKPredictions(probs, topK);
+        var scores = new double[AvailableCategories.Count];
+        for (int c = 0; c < scores.Length; c++)
+        {
+            var labels = EncodeText(AvailableCategories[c].Replace('_', ' ')).Select(transformer.ClampToken).Append(EosTokenId).ToArray();
+            var decoderInput = new int[labels.Length];
+            decoderInput[0] = DecoderStartTokenId;
+            for (int t = 1; t < labels.Length; t++) decoderInput[t] = labels[t - 1];
+            var log = Engine.TensorLogSoftmax(transformer.Decode(decoderInput, memory), axis: 1);
+            for (int t = 0; t < labels.Length; t++) scores[c] += NumOps.ToDouble(log[t, labels[t]]);
+        }
+        double best = scores.Max();
+        var weights = scores.Select(s => Math.Exp(s - best)).ToArray();
+        double total = weights.Sum();
+        var topPredictions = AvailableCategories.Select((category, i) => (Category: category, Score: weights[i] / total))
+            .OrderByDescending(p => p.Score).Take(Math.Max(1, topK)).ToList();
 
         return new DocumentClassificationResult<T>
         {
@@ -630,34 +650,19 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         };
     }
 
-    private List<(string Category, double Score)> GetTopKPredictions(Tensor<T> probs, int k)
-    {
-        var predictions = new List<(string Category, double Score)>();
-        int numClasses = Math.Min(probs.Data.Length, AvailableCategories.Count);
-
-        for (int i = 0; i < numClasses; i++)
-        {
-            predictions.Add((AvailableCategories[i], NumOps.ToDouble(probs.Data.Span[i])));
-        }
-
-        return predictions.OrderByDescending(p => p.Score).Take(k).ToList();
-    }
-
-    private Tensor<T> ApplySoftmax(Tensor<T> input)
-    {
-        return Engine.Softmax(input, -1);
-    }
-
     #endregion
 
     #region IDocumentModel Implementation
 
-    /// <inheritdoc/>
+    /// <summary>Returns the encoder's output states for a page: one row per unclaimed image patch.</summary>
     public Tensor<T> EncodeDocument(Tensor<T> documentImage)
     {
         ValidateImageShape(documentImage);
         var preprocessed = PreprocessDocument(documentImage);
-        return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
+        if (!_useNativeMode) return RunOnnxInference(preprocessed);
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        SetTrainingMode(false);
+        return EncodeInputs(Array.Empty<int>(), null, preprocessed);
     }
 
     /// <inheritdoc/>
@@ -673,15 +678,16 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         sb.AppendLine("UDOP Model Summary");
         sb.AppendLine("==================");
         sb.AppendLine($"Mode: {(_useNativeMode ? "Native (Trainable)" : "ONNX (Inference)")}");
-        sb.AppendLine($"Architecture: Unified Vision-Text-Layout Encoder-Decoder");
+        sb.AppendLine("Architecture: T5 encoder-decoder with layout-induced vision-text fusion and 2-D relative biases");
         sb.AppendLine($"Hidden Dimension: {_hiddenDim}");
         sb.AppendLine($"Encoder Layers: {_numEncoderLayers}");
         sb.AppendLine($"Decoder Layers: {_numDecoderLayers}");
-        sb.AppendLine($"Attention Heads: {_numHeads}");
-        sb.AppendLine($"Image Size: {ImageSize}x{ImageSize}");
+        sb.AppendLine($"Attention Heads: {_numHeads} x {_options.KeyValueDim}");
+        sb.AppendLine($"Feed-Forward Dimension: {_options.FeedForwardDim}");
+        sb.AppendLine($"Vocabulary: {_vocabSize}");
+        sb.AppendLine($"Image Size: {ImageSize}x{ImageSize} (patch {_options.PatchSize})");
         sb.AppendLine($"Max Sequence Length: {MaxSequenceLength}");
-        sb.AppendLine($"Number of Classes: {_numClasses}");
-        sb.AppendLine($"Capabilities: Layout, QA, Classification, Generation");
+        sb.AppendLine("Capabilities: Layout, QA, Classification, Generation (all by prompting)");
         sb.AppendLine($"Total Layers: {Layers.Count}");
         return sb.ToString();
     }
@@ -690,13 +696,7 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
 
     #region Preprocessing
 
-    /// <summary>
-    /// Applies UDOP's industry-standard preprocessing: ImageNet normalization.
-    /// </summary>
-    /// <remarks>
-    /// UDOP (Unified Document Processing) uses ImageNet normalization with
-    /// mean=[0.485, 0.456, 0.406] and std=[0.229, 0.224, 0.225] (Microsoft paper).
-    /// </remarks>
+    /// <inheritdoc/>
     protected override Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage)
     {
         var image = EnsureBatchDimension(rawImage);
@@ -728,9 +728,7 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         return normalized;
     }
 
-    /// <summary>
-    /// Applies UDOP's industry-standard postprocessing: pass-through (unified outputs are already final).
-    /// </summary>
+    /// <inheritdoc/>
     protected override Tensor<T> ApplyDefaultPostprocessing(Tensor<T> modelOutput) => modelOutput;
 
     #endregion
@@ -752,157 +750,52 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
                 { "num_encoder_layers", _numEncoderLayers },
                 { "num_decoder_layers", _numDecoderLayers },
                 { "num_heads", _numHeads },
+                { "key_value_dim", _options.KeyValueDim },
+                { "feed_forward_dim", _options.FeedForwardDim },
                 { "image_size", ImageSize },
+                { "patch_size", _options.PatchSize },
                 { "vocab_size", _vocabSize },
-                { "num_classes", _numClasses },
                 { "use_native_mode", _useNativeMode }
             },
             ModelDataProvider = () => SafeSerialize()
         };
     }
 
-    /// <inheritdoc/>
-
-
-    /// <inheritdoc/>
-
-
     #endregion
 
     #region NeuralNetworkBase Implementation
 
     /// <summary>
-    /// Raw encoder-decoder forward pass: runs encoder layers, then feeds encoder output as
-    /// cross-attention context to decoder layers, and returns the generative sequence tensor
-    /// (rank-2 <c>[seq, vocab]</c>) WITHOUT the classification head. This is what the generative
-    /// task heads (<see cref="DetectLayout(Tensor{T}, double)"/> per-region logits and
-    /// <see cref="AnswerQuestion(Tensor{T}, string, int, double)"/> per-token logits) index by
-    /// <c>output[i, c]</c> / <c>output[t, v]</c>. The classification head is NOT applied here.
-    /// </summary>
-    private Tensor<T> ForwardEncoderDecoder(Tensor<T> input)
-    {
-        if (_hasBuiltInClassHead && _decoderLayers.Count > 0)
-        {
-            // UDOP is a graph, not a flat list: select the public modality, run the shared
-            // encoder, then seed the autoregressive decoder with BOS and cross-attend to the
-            // encoder memory. This topology is the unique model logic; parameters, contracts,
-            // initialization and validation remain base/generator-owned.
-            var modalityLayers = input.Rank <= 2 ? _textEncoderLayers : _visualEncoderLayers;
-            Tensor<T> encoderMemory = RunUdopSequence(modalityLayers, input);
-            encoderMemory = RunUdopSequence(_unifiedEncoderLayers, encoderMemory);
-
-            int decoderIndex = 0;
-            Tensor<T> decoderOutput;
-            if (_decoderLayers[0] is EmbeddingLayer<T> tokenEmbedding)
-            {
-                var bos = new Tensor<T>([1]);
-                bos[0] = NumOps.FromDouble(1.0);
-                decoderOutput = tokenEmbedding.Forward(bos);
-                decoderIndex = 1;
-            }
-            else
-            {
-                decoderOutput = encoderMemory;
-            }
-
-            for (; decoderIndex < _decoderLayers.Count; decoderIndex++)
-            {
-                var layer = _decoderLayers[decoderIndex];
-                decoderOutput = layer is TransformerDecoderLayer<T> decoder
-                    ? decoder.Forward(decoderOutput, encoderMemory)
-                    : layer.Forward(decoderOutput);
-            }
-            return decoderOutput;
-        }
-
-        Tensor<T> output = input;
-        Tensor<T>? encoderOutput = null;
-        bool hasPassedConvLayer = false;
-        bool hasReshapedToSequence = false;
-
-        foreach (var layer in Layers)
-        {
-            // The classification head is applied AFTER sequence pooling, not inline in the walk.
-            if (ReferenceEquals(layer, _classHead)) continue;
-
-            if (layer is ConvolutionalLayer<T> or BatchNormalizationLayer<T>
-                     or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>)
-            {
-                hasPassedConvLayer = true;
-            }
-
-            // Auto-reshape spatial to sequence when transitioning from CNN to non-spatial layers
-            bool isNonSpatialLayer = layer is not (ConvolutionalLayer<T> or BatchNormalizationLayer<T>
-                or PoolingLayer<T> or MaxPoolingLayer<T> or AveragePoolingLayer<T>);
-            if (!hasReshapedToSequence && hasPassedConvLayer && output.Shape.Length >= 3 && isNonSpatialLayer)
-            {
-                int channels = output.Shape.Length == 4 ? output.Shape[1] : output.Shape[0];
-                int spatialH = output.Shape.Length == 4 ? output.Shape[2] : output.Shape[1];
-                int spatialW = output.Shape.Length == 4 ? output.Shape[3] : output.Shape[2];
-                int numPatches = spatialH * spatialW;
-                // Tape-aware reshape: the old `new Tensor<T>(output.Data.ToArray(), ...)` copied the raw
-                // buffer, which SEVERS the gradient tape — the CNN stem never received gradients, so the
-                // encoder/decoder trained on a detached input and the training invariants (loss decrease,
-                // param change, gradient flow) failed. Engine.Reshape keeps the op on the tape.
-                output = Engine.Reshape(output, [numPatches, channels]);
-                hasReshapedToSequence = true;
-            }
-
-            if (layer is TransformerDecoderLayer<T> decoderLayer)
-            {
-                // Save encoder output before first decoder layer
-                encoderOutput ??= output;
-                output = decoderLayer.Forward(output, encoderOutput);
-            }
-            else
-            {
-                output = layer.Forward(output);
-            }
-        }
-
-        return output;
-    }
-
-    /// <summary>
-    /// Default (classification) forward pass used by <see cref="PredictCore"/> and
-    /// <see cref="ClassifyDocument(Tensor{T}, int)"/>: runs the encoder-decoder, then applies the
-    /// classification head — mean-pool the generated sequence to one document vector and project to
-    /// numClasses. Produces a fixed rank-1 <c>[numClasses]</c> logit vector (tape-aware) that matches
-    /// the classification target's rank so the loss aligns; the raw <c>[seq, vocab]</c> generative
-    /// tensor could not be aligned to a class target. The generative task heads (DetectLayout /
-    /// AnswerQuestion) deliberately bypass this and call <see cref="ForwardEncoderDecoder"/> directly,
-    /// so the per-region / per-token rank-2 output survives and their two-dimensional indexing works.
+    /// Next-token logits <c>[1, vocab]</c> for the decoder start token. The input is packed OCR rows <c>[S, 5]</c>,
+    /// token ids <c>[S]</c>, or a page image.
     /// </summary>
     protected override Tensor<T> Forward(Tensor<T> input)
-    {
-        Tensor<T> output = ForwardEncoderDecoder(input);
-
-        if (_classHead is not null)
-        {
-            if (output.Shape.Length >= 2)
-            {
-                int lastAxis = output.Shape.Length - 1;
-                var poolAxes = new int[lastAxis];
-                for (int a = 0; a < lastAxis; a++) poolAxes[a] = a;
-                output = Engine.ReduceMean(output, poolAxes, keepDims: false); // → [D]
-            }
-            output = Engine.Reshape(output, [1, output.Length]);   // [1, D]
-            output = _classHead.Forward(output);                   // [1, numClasses]
-            output = Engine.Reshape(output, [_numClasses]);        // [numClasses]
-        }
-
-        return output;
-    }
+        => _transformer is not null
+            ? _transformer.Decode(new[] { DecoderStartTokenId }, EncodeRouted(input))
+            : base.Forward(input);
 
     /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
-        // UDOP is an encoder-decoder graph with cross-attention, followed by sequence
-        // pooling and a classification head. The base implementation treats Layers as a
-        // flat sequential chain, which bypasses that topology and applies the class head
-        // before pooling. Run the same tape-aware graph used by inference instead.
         EnsureLayerRandomSeedsWired();
         return Forward(input);
+    }
+
+    /// <inheritdoc/>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+        if (_transformer is null)
+            return base.GetNamedLayerActivations(input);
+
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var memory = EncodeRouted(PreprocessDocument(input));
+        return new Dictionary<string, Tensor<T>>
+        {
+            ["encoder"] = memory,
+            ["output"] = _transformer.Decode(new[] { DecoderStartTokenId }, memory)
+        };
     }
 
     /// <inheritdoc/>
@@ -912,54 +805,32 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// One training step. A <c>[1, vocab]</c> target is a distribution over the first generated token. Any other
+    /// target is a token-id sequence, trained with teacher forcing.
+    /// </summary>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode)
             throw new NotSupportedException("Training not supported in ONNX mode.");
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (expectedOutput is null) throw new ArgumentNullException(nameof(expectedOutput));
 
-        SetTrainingMode(true);
-        try
+        if (_transformer is null)
         {
-            // TrainWithTape runs the full forward + backward + optimizer step over the tape. The previous
-            // code then ALSO called UpdateParameters(CollectGradients()) — a SECOND, manual gradient-descent
-            // step (lr=1e-4) on top of the tape's optimizer step, double-updating the weights (and reading
-            // per-layer gradients that TrainWithTape had already consumed). One tape step is the correct,
-            // complete update. Pass the constructor-supplied gradient-based optimizer directly so a
-            // user-configured optimizer actually drives the update.
-            // PredictCore evaluates ImageNet-normalized pages, so train on that same representation rather
-            // than fitting raw pixels and measuring the objective on a different input distribution.
-            TrainWithTape(
-                PreprocessDocument(input),
-                expectedOutput,
-                _optimizer);
+            SetTrainingMode(true);
+            try { TrainWithTape(PreprocessDocument(input), expectedOutput, _optimizer); }
+            finally { SetTrainingMode(false); }
+            return;
         }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+
+        // PredictCore evaluates ImageNet-normalised pages, so train on that same representation.
+        TrainWithCustomObjective(PreprocessDocument(input), expectedOutput,
+            (routed, target) => SequenceLoss(EncodeRouted(routed), target), _optimizer);
     }
 
-    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
-
-
-    /// <summary>
-    /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
-    /// belong to that graph, not to this instance.
-    /// </summary>
-    /// <remarks>
-    /// Replaces a hand-written throw that used to sit inside UpdateParameters. The base checks this
-    /// on every mutating entry point rather than the one member the throw happened to guard, and
-    /// reading -- ParameterCount and GetParameters -- stays available either way.
-    /// </remarks>
+    /// <inheritdoc/>
     protected override bool SupportsParameterMutation => _useNativeMode;
-    private Vector<T> CollectGradients()
-    {
-        var grads = new List<T>();
-        foreach (var layer in Layers)
-            grads.AddRange(layer.GetParameterGradients());
-        return new Vector<T>([.. grads]);
-    }
 
     #endregion
 
