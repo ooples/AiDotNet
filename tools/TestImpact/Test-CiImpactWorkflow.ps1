@@ -417,6 +417,14 @@ Assert-Contract ($affectedText.Contains("Write-Passthrough 'coverage-everywhere 
         $affectedText.Contains("Write-Passthrough 'post-merge delta re-run'") -and
         $affectedText.Contains('if (-not $plan.resolved)')) `
     'the test-level selection does not pass through the runs it must never narrow'
+# A passthrough publishes empty values instead of re-publishing select-shards' matrices (which would add their full
+# size to the Build job's capped outputs). That is only a passthrough while every consumer falls back to select-shards.
+$buildOutputUses = [regex]::Matches($validation, 'needs\.build\.outputs\.(matrix|ledger_matrix|skipped)\b[^}]*')
+Assert-Contract ($buildOutputUses.Count -gt 0 -and
+        @($buildOutputUses | Where-Object { $_.Value -notmatch ('\|\|\s*needs\.select-shards\.outputs\.' + $_.Groups[1].Value + '\b') }).Count -eq 0) `
+    'a consumer of the Build job''s matrix outputs does not fall back to select-shards, so an empty passthrough would run nothing'
+Assert-Contract (-not [regex]::IsMatch($affectedText, "Write-Output-Value 'matrix' \`$env:SELECTED_MATRIX")) `
+    'a passthrough re-publishes select-shards'' matrix into the Build job''s capped outputs'
 Assert-Contract (Test-JobDependency -JobHeader $selectorHeader -Dependency 'validation-source') `
     'select-shards does not depend on validation-source'
 Assert-Contract ($selectorHeader.Contains('fromJSON(needs.validation-source.outputs.execute_validation)')) `

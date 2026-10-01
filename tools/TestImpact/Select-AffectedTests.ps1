@@ -47,9 +47,12 @@ function Write-Passthrough([string] $Why) {
     # the step failed after deliberately falling back.
     $global:LASTEXITCODE = 0
     Write-Host "test-level selection not applied: $Why - keeping the shard selection as chosen"
-    Write-Output-Value 'matrix' $env:SELECTED_MATRIX
-    Write-Output-Value 'ledger_matrix' $env:SELECTED_LEDGER_MATRIX
-    Write-Output-Value 'skipped' $env:SELECTED_SKIPPED
+    # Publish nothing for the selection itself: every consumer reads `needs.build.outputs.X || needs.select-shards
+    # .outputs.X`, so an empty value IS the passthrough. Re-publishing select-shards' matrices here added their full
+    # size to this job's outputs, which a large selection pushes past GitHub's 1,048,576-byte (UTF-16) job cap.
+    Write-Output-Value 'matrix' ''
+    Write-Output-Value 'ledger_matrix' ''
+    Write-Output-Value 'skipped' ''
     Write-Output-Value 'impact_mode' 'passthrough'
     "### Test-level selection`n`nNot applied: $Why." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 }
