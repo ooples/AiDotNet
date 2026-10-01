@@ -381,6 +381,17 @@ public static class CompiledTapeTrainingStep<T>
         return true;
     }
 
+    /// <summary>
+    /// The learning-rate schedules the plan that ran the last fused step evaluates, as the plan reports them
+    /// (AiDotNet.Tensors plan introspection). Null when no configured plan ran the last step or the plan does not
+    /// report them.
+    /// </summary>
+    internal static IReadOnlyList<AiDotNet.Tensors.Engines.Compilation.LrSchedule>? ConfiguredPlanLearningRateSchedules()
+    {
+        if (CurrentState.planOptimizerStep < 0) return null;
+        return (_configuredPlan as AiDotNet.Tensors.Engines.Compilation.ICompiledTrainingPlanIntrospection<T>)?.LearningRateSchedules;
+    }
+
     /// <summary>Resets the fused-step counter on the calling thread to zero.</summary>
     public static void ResetFusedStepCount() { _fusedStepCount = 0; }
 
@@ -1458,6 +1469,16 @@ public static class CompiledTapeTrainingStep<T>
             CurrentState.planOptimizerStep = plan is AiDotNet.Tensors.Engines.Compilation.ICompiledTrainingPlanIntrospection<T> resumed
                 ? resumed.OptimizerStep
                 : -1;
+            // The import rebuilt the plan's schedules. A per-epoch schedule is external: hand the optimizer the restored
+            // instance so its epoch-end rate changes keep reaching the plan.
+            if (plan is AiDotNet.Tensors.Engines.Compilation.ICompiledTrainingPlanIntrospection<T> withSchedules)
+            {
+                foreach (var schedule in withSchedules.LearningRateSchedules)
+                {
+                    if (schedule is AiDotNet.Tensors.Engines.Compilation.ExternalLrSchedule external)
+                        optimizer.AdoptRestoredFusedLrSchedule(external);
+                }
+            }
         }
         else
         {

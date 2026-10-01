@@ -306,6 +306,23 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </remarks>
     protected SchedulerStepMode _schedulerStepMode;
 
+    // The fused plan's view of a per-epoch schedule (see TryGetFusedLrSchedule). SetLearningRate keeps it at the rate
+    // the host scheduler holds, and the plan reads it on every step.
+    private Tensors.Engines.Compilation.ExternalLrSchedule? _epochLrSchedule;
+
+    /// <summary>
+    /// Drives the external schedule a plan restored from a checkpoint reads. <c>ImportOptimizerState</c> rebuilds the
+    /// plan's schedules, so the instance this optimizer handed out no longer reaches the plan; without this, a resumed
+    /// run kept its epoch-end rate changes on the host while the plan stayed at the checkpointed rate.
+    /// </summary>
+    internal void AdoptRestoredFusedLrSchedule(Tensors.Engines.Compilation.ExternalLrSchedule restored)
+    {
+        if (restored is null) throw new ArgumentNullException(nameof(restored));
+        if (_epochLrSchedule is null) return;
+        _epochLrSchedule = restored;
+        restored.LearningRate = _currentLearningRate;
+    }
+
     /// <summary>
     /// Puts the model into training mode at the start of an Optimize run.
     /// Mirror call: <see cref="EndOptimizeRun"/>. Lifted to base in
@@ -405,10 +422,16 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 return true;
         }
 
-        // The compiled plan evaluates its schedule once per optimizer step, which is StepPerBatch. The other modes
-        // advance the scheduler at epoch boundaries (StepPerEpoch, the default) or switch cadence after warmup
-        // (WarmupThenEpoch), which a per-step schedule cannot express. Mapping them anyway made the fused path
-        // follow a different learning-rate trajectory from the eager path and from the configuration, so decline.
+        // The compiled plan evaluates its schedule once per optimizer step, which is StepPerBatch. StepPerEpoch (the
+        // default) holds the rate for the whole epoch, so the plan reads the rate the host scheduler holds through an
+        // external schedule instead of advancing a mapped shape every batch. WarmupThenEpoch switches cadence after
+        // warmup, which neither expresses, so it declines: mapping it anyway made the fused path follow a different
+        // learning-rate trajectory from the eager path and from the configuration.
+        if (_schedulerStepMode == SchedulerStepMode.StepPerEpoch)
+        {
+            schedule = _epochLrSchedule ??= Tensors.Engines.Compilation.LrSchedule.External(GetCurrentLearningRate());
+            return true;
+        }
         if (_schedulerStepMode != SchedulerStepMode.StepPerBatch)
             return false;
 
@@ -638,6 +661,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     {
         _currentLearningRate = learningRate;
         CurrentLearningRate = NumOps.FromDouble(learningRate);
+        if (_epochLrSchedule is not null) _epochLrSchedule.LearningRate = learningRate;
     }
 
     #region DataLoader Integration

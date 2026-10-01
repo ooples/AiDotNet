@@ -67,7 +67,8 @@ public class StreamingStepTrainingTests : IDisposable
             N, (i, _) => Task.FromResult((x[i], y[i])), BatchSize);
     }
 
-    private static AdamOptimizer<float, Tensor<float>, Tensor<float>> Optimizer(int epochs, ILearningRateScheduler? scheduler = null)
+    private static AdamOptimizer<float, Tensor<float>, Tensor<float>> Optimizer(
+        int epochs, ILearningRateScheduler? scheduler = null, SchedulerStepMode stepMode = SchedulerStepMode.StepPerBatch)
     {
         var options = new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
         {
@@ -77,7 +78,7 @@ public class StreamingStepTrainingTests : IDisposable
             UseEarlyStopping = false,
             Tolerance = 0.0,
             LearningRateScheduler = scheduler,
-            SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+            SchedulerStepMode = stepMode,
             FitnessCalculator = new MeanSquaredErrorFitnessCalculator<float, Tensor<float>, Tensor<float>>()
         };
         return new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null, options);
@@ -251,6 +252,46 @@ public class StreamingStepTrainingTests : IDisposable
         var foreign = live.Select(parameter => new Tensor<float>(parameter.Shape.ToArray())).ToList();
         Assert.False(AiDotNet.Training.CompiledTapeTrainingStep<float>.ConfiguredPlanTrainsLiveParameters(foreign),
             "a plan compared against tensors it does not train was reported as attached");
+    }
+
+    [Fact(Timeout = 180000)]
+    public async Task FusedCheckpoint_Resumed_PerEpochSchedule_KeepsReachingTheRestoredPlan()
+    {
+        // A per-epoch schedule reaches the plan as an external rate the optimizer sets at each epoch end. Importing a
+        // checkpoint rebuilds the plan's schedules, so the optimizer must drive the restored one; it used to keep
+        // setting the instance the import replaced, and the resumed plan stayed at the checkpointed rate.
+        await Task.Yield();
+        var (x, y) = Data(1);
+        var batchX = Stack(x.Take(BatchSize).ToArray());
+        var batchY = Stack(y.Take(BatchSize).ToArray());
+        StepLRScheduler Halving() => new StepLRScheduler(0.02, stepSize: 1, gamma: 0.5);
+
+        var sourceOptimizer = Optimizer(epochs: 100, Halving(), SchedulerStepMode.StepPerEpoch);
+        var source = Model(sourceOptimizer);
+        source.SetParameters(InitialWeights());
+        source.SetBaseTrainOptimizer(sourceOptimizer);
+        for (int i = 0; i < 3; i++) source.Train(batchX, batchY);
+        sourceOptimizer.OnEpochEnd();
+        byte[] optimizerState = sourceOptimizer.Serialize();
+
+        var optimizer = Optimizer(epochs: 100, Halving(), SchedulerStepMode.StepPerEpoch);
+        var model = Model(optimizer);
+        model.SetParameters(source.GetParameters());
+        model.SetBaseTrainOptimizer(optimizer);
+        optimizer.Deserialize(optimizerState);
+        model.Train(batchX, batchY);
+        Assert.True(AiDotNet.Training.CompiledTapeTrainingStep<float>.TryGetPlanOptimizerStep(out _),
+            "the resumed run did not take the fused path, so there is no restored plan to check");
+
+        double before = optimizer.GetCurrentLearningRate();
+        optimizer.OnEpochEnd();
+        double after = optimizer.GetCurrentLearningRate();
+        Assert.True(after < before, $"the epoch end did not move the host rate ({before} -> {after})");
+
+        var schedules = AiDotNet.Training.CompiledTapeTrainingStep<float>.ConfiguredPlanLearningRateSchedules();
+        Assert.NotNull(schedules);
+        var external = Assert.IsType<AiDotNet.Tensors.Engines.Compilation.ExternalLrSchedule>(Assert.Single(schedules!));
+        Assert.Equal(after, external.LearningRate, 12);
     }
 
     [Fact(Timeout = 180000)]
