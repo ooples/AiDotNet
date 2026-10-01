@@ -4163,6 +4163,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
     protected double MeasureLoss(INeuralNetworkModel<T> network, Tensor<T> output, Tensor<T> target)
     {
+        var diagPath = System.Environment.GetEnvironmentVariable("AIDOTNET_DIAG_LOSS_TRACE");
+        if (diagPath is not null)
+        {
+            static string St(Tensor<T> t) { var v = t.ToArray().Select(x => Convert.ToDouble(x)).ToArray(); return $"shape=[{string.Join(",", t.Shape.ToArray())}] n={v.Length} nan={v.Count(double.IsNaN)} min={(v.Length > 0 ? v.Min() : 0):G4} max={(v.Length > 0 ? v.Max() : 0):G4} distinct={v.Distinct().Count()}"; }
+            System.IO.File.AppendAllText(diagPath + ".measure", $"MEASURE {network.GetType().Name} output {St(output)} | target {St(target)}" + System.Environment.NewLine);
+        }
         // FAIL, do not return NaN. Every branch below used to answer an empty output or target with
         // double.NaN, and the callers treat NaN as "not measurable, skip": Training_ShouldReduceLoss
         // and the train/test comparison both guard their Assert on !IsNaN. So a model that predicted

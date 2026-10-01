@@ -60,9 +60,9 @@ jobs:
           function Report([string] $Line) { Write-Host $Line; Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value $Line }
           New-Item -ItemType Directory -Path traces -Force | Out-Null
           $env:AIDOTNET_DIAG_LOSS_TRACE = "$PWD/traces/sam"
-          $sOut = & dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --no-build --no-restore --filter 'FullyQualifiedName~Diag.SAMRecalibrationDiag' 2>&1 | Out-String
+          $sOut = & dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --no-build --no-restore --filter 'FullyQualifiedName~Generated.SAMTests.MoreData_ShouldNotDegrade' 2>&1 | Out-String
           Remove-Item Env:AIDOTNET_DIAG_LOSS_TRACE
-          if (Test-Path "$PWD/traces/sam.sam") { Get-Content "$PWD/traces/sam.sam" | ForEach-Object { Report "cpu=[$cpu] $_" } } else { Report 'no sam output'; Write-Host $sOut }
+          if (Test-Path "$PWD/traces/sam.measure") { Get-Content "$PWD/traces/sam.measure" | ForEach-Object { Report "cpu=[$cpu] $_" } } else { Report 'no sam output'; Write-Host $sOut }
           exit 0
           $env:AIDOTNET_DIAG_LOSS_TRACE = "$PWD/traces/bn"
           $bnOut = & dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 --no-build --no-restore --filter 'FullyQualifiedName~Diag.BatchNormTrainingGradientDiag' 2>&1 | Out-String
