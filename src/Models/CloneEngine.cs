@@ -206,6 +206,7 @@ public static partial class CloneEngine
         }
 
         Assign(type, clone, pending);
+        if (clone is IConfigurationCopyCompletion completion) completion.CompleteConfigurationCopy(source);
         RebindSourceBoundOptimizers(source, clone);
         return clone;
     }

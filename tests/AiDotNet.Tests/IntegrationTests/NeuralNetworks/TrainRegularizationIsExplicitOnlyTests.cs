@@ -80,4 +80,18 @@ public class TrainRegularizationIsExplicitOnlyTests
         Assert.False(new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>(defaults).RegularizationExplicitlySet);
         Assert.True(new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>(chosen).RegularizationExplicitlySet);
     }
+
+    // A model clone rebuilds its optimizer from a configuration copy, which assigns Regularization through its setter;
+    // the copy of an untouched default must not come out "chosen", or the clone trains with an L2 its source never had.
+    [Fact]
+    public void A_configuration_clone_keeps_whether_the_regularization_was_chosen()
+    {
+        var defaults = new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>();
+        var chosen = new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>
+        {
+            Regularization = new L2Regularization<double, Tensor<double>, Tensor<double>>(),
+        };
+        Assert.False(((AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>)CloneEngine.CopyConfiguration(defaults)).RegularizationExplicitlySet);
+        Assert.True(((AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>)CloneEngine.CopyConfiguration(chosen)).RegularizationExplicitlySet);
+    }
 }

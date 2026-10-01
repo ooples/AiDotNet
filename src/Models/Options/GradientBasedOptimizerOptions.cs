@@ -28,7 +28,8 @@ namespace AiDotNet.Models.Options;
 /// gradient-based methods.
 /// </para>
 /// </remarks>
-public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlgorithmOptions<T, TInput, TOutput>
+public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlgorithmOptions<T, TInput, TOutput>,
+    IConfigurationCopyCompletion
 {
     private double _armijoConstant = 1e-4;
     private double _lineSearchContractionFactor = 0.5;
@@ -258,6 +259,18 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
     /// near-full learning-rate step on every parameter, frozen ones included.
     /// </summary>
     internal bool RegularizationExplicitlySet { get; private set; }
+
+    /// <summary>
+    /// A configuration clone assigns <see cref="Regularization"/> through its setter, which would mark even the untouched
+    /// default as chosen; the clone takes whether it was chosen from its source instead.
+    /// </summary>
+    void IConfigurationCopyCompletion.CompleteConfigurationCopy(object source)
+    {
+        if (source is GradientBasedOptimizerOptions<T, TInput, TOutput> other)
+        {
+            RegularizationExplicitlySet = other.RegularizationExplicitlySet;
+        }
+    }
 
     /// <summary>Copies <paramref name="other"/>'s regularization together with whether it was explicitly chosen.</summary>
     private protected void CopyRegularizationFrom(GradientBasedOptimizerOptions<T, TInput, TOutput> other)

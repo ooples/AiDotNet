@@ -254,8 +254,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </remarks>
     protected SchedulerStepMode _schedulerStepMode;
 
-    // The fused plan's view of a per-epoch schedule; see TryGetFusedLrSchedule.
-    private Fused.HostHeldLrSchedule? _hostHeldLrSchedule;
+    // The fused plan's view of a per-epoch schedule (see TryGetFusedLrSchedule). SetLearningRate keeps it at the rate
+    // the host scheduler holds, and the plan reads it on every step.
+    private Tensors.Engines.Compilation.ExternalLrSchedule? _epochLrSchedule;
 
     /// <summary>
     /// Puts the model into training mode at the start of an Optimize run.
@@ -362,7 +363,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // the host scheduler, so it stays on the eager tape.
         if (_schedulerStepMode == SchedulerStepMode.StepPerEpoch)
         {
-            schedule = _hostHeldLrSchedule ??= new Fused.HostHeldLrSchedule(GetCurrentLearningRate);
+            schedule = _epochLrSchedule ??= Tensors.Engines.Compilation.LrSchedule.External(GetCurrentLearningRate());
             return true;
         }
         if (_schedulerStepMode != SchedulerStepMode.StepPerBatch)
@@ -595,6 +596,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     {
         _currentLearningRate = learningRate;
         CurrentLearningRate = NumOps.FromDouble(learningRate);
+        if (_epochLrSchedule is not null) _epochLrSchedule.LearningRate = learningRate;
     }
 
     #region DataLoader Integration
