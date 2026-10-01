@@ -985,6 +985,9 @@ jobs:
           Write-Host "shard list: $($all.Count) shard(s)"
 
           $escalate = $true
+          # Why the workflow overrode or bypassed the selector, for the selection report. Empty means the selector's own
+          # decision stands; selection.json existing (or not) cannot tell those apart, so every override sets it.
+          $decisionReason = ''
           $requiresValidation = $true
           # Defaults to true so every path that does not explicitly prove a change is build-only
           # still runs the shard matrix. Only the selector may lower it.
@@ -1043,11 +1046,13 @@ jobs:
             }
             catch {
               Write-Host "::warning::certified map provenance is invalid ($($_.Exception.Message)) - running the full matrix"
+              $decisionReason = 'the certified map provenance was invalid'
             }
           }
 
           if (-not $selectorTrusted) {
             Write-Host '::error::the impact tooling failed its own self-test - running the full matrix.'
+            $decisionReason = 'the impact tooling failed its own self-test'
             $deltaPartial = $false
           }
           elseif ($deltaPartial) {
@@ -1055,9 +1060,11 @@ jobs:
             $unknown = @(@($partialShards) + @($importShards) | Where-Object { -not $knownNames.Contains($_) })
             if ($unknown.Count -gt 0) {
               Write-Host "::warning::delta plan names shard(s) absent from test-shards.yml: $($unknown -join ', ') - running the full matrix"
+              $decisionReason = 'the post-merge delta plan named shard(s) absent from test-shards.yml'
               $deltaPartial = $false
             }
             else {
+              $decisionReason = 'post-merge delta reuse: shards come from the delta plan, so the selector did not run'
               $escalate = $false
               $requiresValidation = $true
               $requiresShards = $true
@@ -1084,6 +1091,7 @@ jobs:
             }
             catch {
               Write-Host "::warning::path classification unavailable ($($_.Exception.Message)) - runtime validation remains required"
+              $decisionReason = 'path classification was unavailable, so runtime validation stays required'
             }
 
             if (-not $pathRequiresValidation) {
@@ -1134,6 +1142,7 @@ jobs:
               }
               catch {
                 Write-Host "::warning::shard selection output unavailable or invalid ($($_.Exception.Message)) - running the full matrix"
+                $decisionReason = 'the selector output was unavailable or invalid'
                 $escalate = $true
                 $requiresValidation = $true
                 $requiresShards = $true
@@ -1142,6 +1151,7 @@ jobs:
             }
             else {
               Write-Host '::warning::no certified shard map - running the full matrix'
+              $decisionReason = 'no certified shard map was available'
             }
           }
 
@@ -1165,6 +1175,7 @@ jobs:
             if ($matrixShards.Count -ne $wanted.Count) {
               $missing = $wanted | Where-Object { $n = $_; -not ($all | Where-Object { $_.name -eq $n }) }
               Write-Host "::warning::selected shard(s) absent from test-shards.yml: $($missing -join ', ') - running the full matrix"
+              $decisionReason = 'the selector chose shard(s) absent from test-shards.yml'
               $matrixShards = $all
               $escalate = $true
             }
@@ -1192,6 +1203,7 @@ jobs:
           # that unexpectedly becomes empty still fails safe to the complete matrix.
           if ($requiresValidation -and $matrixShards.Count -eq 0) {
             Write-Host '::warning::shard selection produced an empty matrix - running the full matrix'
+            $decisionReason = 'shard selection produced an empty matrix'
             $matrixShards = $all
             $escalate = $true
           }
@@ -1202,6 +1214,7 @@ jobs:
             -RequiresValidation $requiresValidation -Escalated $escalate -ImportedNames $ledgerImports
           if ($runnable.Escalated -and -not $escalate) {
             Write-Host '::warning::no ordinary ledger-producing shard was selected; full validation is required for reuse evidence'
+            $decisionReason = 'no ordinary ledger-producing shard was selected; full validation is required for reuse evidence'
           }
           $matrixShards = @($runnable.Shards)
           $ledgerShards = @($runnable.LedgerShards)
@@ -1263,10 +1276,8 @@ jobs:
               & ./tools/TestImpact/Write-SelectionReport.ps1 -SelfTest | Out-Null
               if ($LASTEXITCODE -ne 0) { throw 'its self-test failed' }
               $finalCount = if ($escalate) { $all.Count } else { @($matrixShards).Count }
-              $override = if (Test-Path selection.json) { '' }
-                          else { 'the selector produced no selection.json; the warning above in this step says why the full matrix runs' }
               & ./tools/TestImpact/Write-SelectionReport.ps1 -SelectionFile selection.json -TotalShards $all.Count `
-                  -FinalShardCount $finalCount -FinalEscalated:$escalate -WorkflowReason $override `
+                  -FinalShardCount $finalCount -FinalEscalated:$escalate -WorkflowReason $decisionReason `
                   -ReportFile selection-report.json
               if ($LASTEXITCODE -ne 0) { throw "the report script exited $LASTEXITCODE" }
             }
