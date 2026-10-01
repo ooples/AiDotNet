@@ -320,6 +320,8 @@ public sealed class CustomObjectiveTrainingContractTests
                 InitialLoss = context.Loss;
                 first[0] += 0.5;
                 // The step runs under no-grad; this re-evaluation must record, as a line search would.
+                ReevaluateWithGradients(context);
+                ReevaluatedLoss = context.Loss;
 
                 // The perturbation above is this test's, not the optimizer's. Re-snapshot after it so
                 // ParameterChanged reports whether base.Step moved anything; measured against the
