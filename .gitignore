@@ -43,6 +43,10 @@ Generated\ Files/
 
 # Source generator output (rebuilt at build time)
 src/Generated/
+# Emitted only when a build passes EmitCompilerGeneratedFiles. It lands inside the project directory,
+# so the default **/*.cs glob compiles it alongside the generator's in-memory output and every generated
+# type is then declared twice - a build that fails with thousands of CS0111s until the folder is deleted.
+tests/AiDotNet.Tests/Generated/
 
 # MSTest test Results
 [Tt]est[Rr]esult*/

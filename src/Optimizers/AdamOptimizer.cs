@@ -824,7 +824,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         return storageOffset == 0 ? array as TElement[] : null;
     }
 
-    public override void Step(TapeStepContext<T> context)
+    protected override void StepCore(TapeStepContext<T> context)
     {
         PrepareTapeState(context);
 

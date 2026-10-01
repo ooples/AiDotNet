@@ -3,9 +3,13 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
@@ -19,9 +23,10 @@ namespace AiDotNet.MetaLearning.Models;
 /// <typeparam name="TOutput">The output data type.</typeparam>
 /// <remarks>
 /// <para>
-/// This model stores the adapted state of LEO after latent space optimization.
-/// It contains the feature encoder, adapted classifier parameters, and the
-/// optimized latent code.
+/// The adapted state of LEO for one task: its own copy of the feature encoder, the linear softmax classifier LEO
+/// generated and adapted - one weight row per class - and the adapted latent codes. <see cref="Predict"/> returns
+/// class probabilities per example, <c>[rows, NumClasses]</c>, for Tensor and Matrix outputs - a class the task did
+/// not contain gets probability zero - and the most probable class of each example for a Vector output.
 /// </para>
 /// <para><b>For Beginners:</b> After LEO adapts to a new task by optimizing
 /// in latent space, this model stores:
@@ -54,41 +59,65 @@ public partial class LEOModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mode
     [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _latentCode;
     private readonly LEOOptions<T, TInput, TOutput> _options;
+    private readonly int[] _classSlots;
 
     /// <summary>
-    /// Initializes a new instance of the LEOModel.
+    /// Initializes a new instance of the LEOModel with one classifier row per class, class <c>c</c> in row <c>c</c>.
     /// </summary>
-    /// <param name="featureEncoder">The feature encoder network.</param>
-    /// <param name="classifierParams">The adapted classifier parameters.</param>
+    /// <param name="featureEncoder">The feature encoder network; the model keeps its own copy.</param>
+    /// <param name="classifierParams">
+    /// The classifier weights, <c>NumClasses * EmbeddingDimension</c> values, one row per class.
+    /// </param>
     /// <param name="latentCode">The optimized latent code.</param>
     /// <param name="options">The LEO options.</param>
     /// <exception cref="ArgumentNullException">Thrown when required parameters are null.</exception>
+    /// <exception cref="ArgumentException">The classifier weights do not hold one row per class.</exception>
     public LEOModel(
         IFullModel<T, TInput, TOutput> featureEncoder,
         Vector<T> classifierParams,
         Vector<T> latentCode,
         LEOOptions<T, TInput, TOutput> options)
+        : this(featureEncoder, classifierParams, latentCode, options,
+            Enumerable.Range(0, options?.NumClasses ?? 0).ToArray())
+    {
+    }
+
+    /// <summary>Initializes the model with classifier rows for the given class labels, in order.</summary>
+    internal LEOModel(
+        IFullModel<T, TInput, TOutput> featureEncoder,
+        Vector<T> classifierParams,
+        Vector<T> latentCode,
+        LEOOptions<T, TInput, TOutput> options,
+        int[] classSlots)
     {
         Guard.NotNull(featureEncoder);
-        _featureEncoder = featureEncoder;
         Guard.NotNull(classifierParams);
-        _classifierParams = classifierParams;
         Guard.NotNull(latentCode);
-        _latentCode = latentCode;
         Guard.NotNull(options);
+        if (classifierParams.Length != classSlots.Length * options.EmbeddingDimension)
+        {
+            throw new ArgumentException(
+                $"{classifierParams.Length} classifier weights are not {classSlots.Length} rows of "
+                + $"{options.EmbeddingDimension}.", nameof(classifierParams));
+        }
+
+        _featureEncoder = featureEncoder.DeepCopy();
+        _classifierParams = classifierParams;
+        _latentCode = latentCode;
         _options = options;
+        _classSlots = classSlots;
     }
 
     /// <inheritdoc/>
     public ModelMetadata<T> Metadata { get; } = new ModelMetadata<T>();
 
     /// <summary>
-    /// Gets the adapted classifier parameters.
+    /// Gets the adapted classifier parameters, one row of EmbeddingDimension weights per class.
     /// </summary>
     public Vector<T> ClassifierParams => _classifierParams;
 
     /// <summary>
-    /// Gets the optimized latent code.
+    /// Gets the optimized latent code, one LatentDimension block per class.
     /// </summary>
     public Vector<T> LatentCode => _latentCode;
 
@@ -105,13 +134,42 @@ public partial class LEOModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mode
     /// <inheritdoc/>
     public TOutput Predict(TInput input)
     {
-        // Extract features using the encoder
-        var embeddings = ExtractEmbeddings(input);
+        using var noGrad = new NoGradScope<T>();
+        var engine = AiDotNetEngine.Current;
+        var rows = ClassifierOutputs<T>.AsRows(_featureEncoder.Predict(input));
+        if (rows.Shape[1] != _options.EmbeddingDimension)
+        {
+            throw new InvalidOperationException(
+                $"The feature encoder emits {rows.Shape[1]}-wide embeddings but EmbeddingDimension is "
+                + $"{_options.EmbeddingDimension}.");
+        }
 
-        // Apply classifier
-        var logits = ComputeLogits(embeddings);
+        int classes = _classSlots.Length;
+        var weights = Tensor<T>.FromVector(_classifierParams).Reshape(classes, _options.EmbeddingDimension);
+        var logits = engine.TensorMatMul(rows, engine.TensorTranspose(weights));
+        var probabilities = engine.Softmax(logits, axis: 1);
 
-        return ConvertToOutput(logits);
+        if (typeof(TOutput) == typeof(Vector<T>))
+        {
+            int n = probabilities.Shape[0];
+            var predicted = new Vector<T>(n);
+            for (int r = 0; r < n; r++)
+            {
+                int best = 0;
+                for (int c = 1; c < classes; c++)
+                {
+                    if (NumOps.GreaterThan(probabilities[r * classes + c], probabilities[r * classes + best])) best = c;
+                }
+
+                predicted[r] = NumOps.FromDouble(_classSlots[best]);
+            }
+
+            return (TOutput)(object)predicted;
+        }
+
+        var columns = new Tensor<T>(new[] { classes, _options.NumClasses });
+        for (int c = 0; c < classes; c++) columns[c * _options.NumClasses + _classSlots[c]] = NumOps.One;
+        return ClassifierOutputs<T>.ToOutput<TOutput>(engine.TensorMatMul(probabilities, columns));
     }
 
     /// <inheritdoc/>
@@ -155,77 +213,5 @@ public partial class LEOModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mode
     public ModelMetadata<T> GetModelMetadata()
     {
         return Metadata;
-    }
-
-    /// <summary>
-    /// Extracts embeddings from input using the feature encoder.
-    /// </summary>
-    private Vector<T> ExtractEmbeddings(TInput input)
-    {
-        var output = _featureEncoder.Predict(input);
-
-        if (output is Vector<T> vec)
-        {
-            return vec;
-        }
-
-        if (output is Tensor<T> tensor)
-        {
-            return tensor.ToVector();
-        }
-
-        return new Vector<T>(_options.EmbeddingDimension);
-    }
-
-    /// <summary>
-    /// Computes logits from embeddings using classifier parameters.
-    /// </summary>
-    private Vector<T> ComputeLogits(Vector<T> embeddings)
-    {
-        var logits = new Vector<T>(_options.NumClasses);
-        int embDim = Math.Min(embeddings.Length, _options.EmbeddingDimension);
-
-        for (int c = 0; c < _options.NumClasses; c++)
-        {
-            T sum = NumOps.Zero;
-            for (int e = 0; e < embDim; e++)
-            {
-                int paramIdx = c * _options.EmbeddingDimension + e;
-                if (paramIdx < _classifierParams.Length)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(embeddings[e], _classifierParams[paramIdx]));
-                }
-            }
-            logits[c] = sum;
-        }
-
-        return logits;
-    }
-
-    /// <summary>
-    /// Converts logits to the expected output type.
-    /// </summary>
-    private TOutput ConvertToOutput(Vector<T> logits)
-    {
-        if (typeof(TOutput) == typeof(Vector<T>))
-        {
-            return (TOutput)(object)logits;
-        }
-
-        // Handle Tensor<T>
-        if (typeof(TOutput) == typeof(Tensor<T>))
-        {
-            return (TOutput)(object)Tensor<T>.FromVector(logits);
-        }
-
-        // Handle T[]
-        if (typeof(TOutput) == typeof(T[]))
-        {
-            return (TOutput)(object)logits.ToArray();
-        }
-
-        throw new InvalidOperationException(
-            $"Cannot convert Vector<{typeof(T).Name}> to {typeof(TOutput).Name}. " +
-            $"Supported types: Vector<T>, Tensor<T>, T[]");
     }
 }

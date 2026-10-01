@@ -52,8 +52,18 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     {
         RegisterParameterComponent(ParamModel);
     }
+    /// <summary>A cached parameter view of <see cref="MetaModel"/>: the same storage, never a second copy.</summary>
+    [AiDotNet.Attributes.ParameterAlias(nameof(MetaModel))]
     private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
-    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
+
+    /// <summary>The meta-model's parameter surface, for every algorithm.</summary>
+    /// <remarks>
+    /// Each algorithm used to declare its own copy of this cache, and the parameter generator registered every copy
+    /// - with the base's, and <see cref="BaseModel"/> - as a component. The learner's parameter vector repeated the
+    /// meta-model's weights once per populated view, so it changed length as caches filled and a copy of a learner
+    /// serialized a different vector from the original. One cache, declared an alias, now serves them all.
+    /// </remarks>
+    protected IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
 
     #region Fields
 
@@ -111,6 +121,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     // Engine inherited from ModelBase
 
     /// <inheritdoc/>
+    [AiDotNet.Attributes.ParameterAlias(nameof(MetaModel))]
     public IFullModel<T, TInput, TOutput> BaseModel => MetaModel;
 
     /// <inheritdoc/>
@@ -1357,8 +1368,29 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     /// <summary>
     /// Computes scalar tanh(x) = (e^x - e^-x) / (e^x + e^-x) using NumOps primitives.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The saturating branches are load-bearing, not an optimisation. Past about 709 a double's <c>e^x</c>
+    /// overflows to infinity, and the quotient is then <c>(inf - 0) / (inf + 0)</c>, which evaluates to NaN
+    /// instead of saturating at 1 - so a large input silently produced NaN rather than the value tanh has.
+    /// ATAML fed this the bucket mean of SQUARED gradients, which is unbounded, so one large gradient made
+    /// every attention weight NaN, then every adapted parameter NaN, and meta-training threw on the first
+    /// step. The other callers - CompressVector here, HyperCLIP, GNNMeta and ConstellationNet - pass bucket
+    /// means and activations that are bounded in practice but not by construction, so the guard belongs in
+    /// the shared helper rather than at one call site.
+    /// </para>
+    /// <para>
+    /// tanh(20) differs from 1 by about 8e-18, which is below a double's epsilon, so clamping there is exact
+    /// at this precision while leaving the identity untouched over the range that carries any signal.
+    /// </para>
+    /// </remarks>
     protected T ScalarTanh(T x)
     {
+        double value = NumOps.ToDouble(x);
+        if (double.IsNaN(value)) return x;
+        if (value >= 20.0) return NumOps.One;
+        if (value <= -20.0) return NumOps.Negate(NumOps.One);
+
         T expX = NumOps.Exp(x);
         T expNegX = NumOps.Exp(NumOps.Negate(x));
         return NumOps.Divide(NumOps.Subtract(expX, expNegX), NumOps.Add(expX, expNegX));
@@ -1526,8 +1558,20 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// It used to be a bare <c>MemberwiseClone</c>: a copy shared the original's meta-model and every piece of
+    /// learned state, so meta-training the copy silently trained the original too. The copy now owns a
+    /// duplicate of everything mutable (<see cref="AiDotNet.Models.CloneEngine.CopyFittedFields"/>) - its random
+    /// generator included, at the same stream position - and its declared state registers against the copy rather
+    /// than the original.
+    /// </remarks>
     public override IFullModel<T, TInput, TOutput> DeepCopy()
-        => (MetaLearnerBase<T, TInput, TOutput>)MemberwiseClone();
+    {
+        var copy = (MetaLearnerBase<T, TInput, TOutput>)MemberwiseClone();
+        copy.ResetBookkeepingAfterMemberwiseClone();
+        AiDotNet.Models.CloneEngine.CopyFittedFields(this, copy);
+        return copy;
+    }
 
     #endregion
 }

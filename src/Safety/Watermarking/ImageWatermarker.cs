@@ -131,13 +131,6 @@ public class ImageWatermarker<T> : ImageSafetyModuleBase<T>
         return findings;
     }
 
-    /// <inheritdoc />
-    public override IReadOnlyList<SafetyFinding> Evaluate(Vector<T> content)
-    {
-        var tensor = new Tensor<T>(content.ToArray(), new[] { content.Length });
-        return EvaluateImage(tensor);
-    }
-
     /// <summary>
     /// Detects watermarks by analyzing frequency-domain characteristics of the image.
     /// </summary>

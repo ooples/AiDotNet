@@ -299,7 +299,7 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeN = new(TensorReferenceComparer<Tensor<T>>.Instance);
 
     /// <inheritdoc />
-    public override void Step(TapeStepContext<T> context)
+    protected override void StepCore(TapeStepContext<T> context)
     {
         PrepareTapeState(context);
 

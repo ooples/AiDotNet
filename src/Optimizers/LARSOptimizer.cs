@@ -485,7 +485,7 @@ public partial class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     private int _tapeStep;
 
     /// <inheritdoc />
-    public override void Step(TapeStepContext<T> context)
+    protected override void StepCore(TapeStepContext<T> context)
     {
         PrepareTapeState(context);
 
