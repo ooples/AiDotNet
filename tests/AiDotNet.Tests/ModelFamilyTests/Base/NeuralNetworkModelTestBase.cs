@@ -3740,6 +3740,14 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     private double MemorizationProbeLoss(
         INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> target)
     {
+        // A denoising-diffusion learner draws a fresh (timestep, noise) per step by design - DDPM
+        // training is a Monte Carlo estimate of an expectation over noise levels - so GetLastLoss() is
+        // one draw of a random objective, and comparing step 1 with step N compares two draws. CCDM
+        // failed this probe in a full shard (1.2016 -> 1.1975 over 200 steps) and passed it rerun
+        // alone. Such models already declare a deterministic quadrature of the same objective; judge
+        // the probe on that, without running the reverse sampler Predict would add for nothing.
+        if (network is ITrainingObjectiveProvider<T> { TrainingObjectiveKind: TrainingObjectiveKind.DiffusionDenoising } diffusion)
+            return MeasureDeclaredTrainingObjective(network, diffusion, input, target);
         if (!MemorizationTaskUsesDeterministicEvalLoss)
             return ConvertToDouble(network.GetLastLoss());
         if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nnBase) RecalibrateBatchNormalization(nnBase, input);
