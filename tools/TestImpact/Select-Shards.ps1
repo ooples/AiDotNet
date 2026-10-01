@@ -300,8 +300,9 @@ function Test-GitHubFileReferenced {
     if ($script:ToolReferenceCache.ContainsKey($key)) { return $script:ToolReferenceCache[$key] }
     # Matches the name only where a path ends, so 'bug_report.yml' is not found inside 'old_bug_report.yml'.
     $pattern = '(^|[^A-Za-z0-9_.-])' + [regex]::Escape($name) + '($|[^A-Za-z0-9_.-])'
-    # The file itself is left out: it names itself (CODEOWNERS lists /.github/CODEOWNERS), which is no reference.
-    $null = & git grep -q -i -E $pattern HEAD -- '.github/' 'tools/' ":(exclude)$Path" 2>$null
+    # The file itself is left out: it names itself (CODEOWNERS lists /.github/CODEOWNERS), which is no reference. So is
+    # this classifier: it names such files in its comments and self-test, and reads none of them.
+    $null = & git grep -q -i -E $pattern HEAD -- '.github/' 'tools/' ":(exclude)$Path" ':(exclude)tools/TestImpact/Select-Shards.ps1' 2>$null
     $referenced = $LASTEXITCODE -ne 1
     $script:ToolReferenceCache[$key] = $referenced
     return $referenced
@@ -2232,7 +2233,6 @@ if ($SelfTest) {
         @{ Path = 'tools/TestImpact/Unknown-Helper.ps1'; Why = 'unreviewed tooling must escalate' },
         @{ Path = 'tools/TestImpact/Receive-RequiredArtifact.ps1.backup'; Why = 'transport lookalikes must escalate' },
         @{ Path = 'src/AiDotNet.Generators/TestScaffoldGenerator.cs'; Why = 'build-time source generators must escalate' },
-        @{ Path = '.github/dependabot.yml'; Why = 'unknown GitHub configuration must escalate' },
         @{ Path = '.github/workflows/release-please.yml.backup'; Why = 'workflow lookalikes must escalate' },
         @{ Path = '.github/workflows/new-unknown.yml'; Why = 'unknown workflows must escalate' }
     )) {
@@ -2612,6 +2612,10 @@ file class Private { }
     if (Test-Path -LiteralPath '.github/CODEOWNERS') {
         Assert-True ((Get-ChangedPathImpact -Path '.github/CODEOWNERS') -eq [ChangedPathImpact]::NonRuntime) `
             'CODEOWNERS, which no workflow reads, is not NonRuntime'
+    }
+    if (Test-Path -LiteralPath '.github/dependabot.yml') {
+        Assert-True ((Get-ChangedPathImpact -Path '.github/dependabot.yml') -eq [ChangedPathImpact]::NonRuntime) `
+            'dependabot.yml, which no workflow reads, is not NonRuntime'
     }
     if (Test-Path -LiteralPath '.github/scripts/Invoke-Shard.ps1') {
         Assert-True ((Get-ChangedPathImpact -Path '.github/scripts/Invoke-Shard.ps1') -eq [ChangedPathImpact]::FullValidation) `
