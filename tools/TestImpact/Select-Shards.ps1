@@ -90,6 +90,8 @@ $script:BuildOnlyFiles = @('.editorconfig')
 $script:ToolReferenceCache = @{}
 # Per .github file name: whether anything this workflow runs mentions it (Test-GitHubFileReferenced).
 $script:GitHubFileReferenceCache = @{}
+# Per tests/<project>/ directory: whether anything outside it that this workflow builds references it.
+$script:TestProjectReferenceCache = @{}
 $script:FullValidationPaths = @(
     '.github/test-shards.yml',
     '.github/test-shard-changes.json'
@@ -236,6 +238,14 @@ function Get-ChangedPathImpact {
         return [ChangedPathImpact]::NonRuntime
     }
 
+    # A separate test project that no shard runs and nothing this workflow builds references (the review and
+    # contract-test projects outside AiDotNet.sln) cannot change any shard either. Projects in the solution or the
+    # manifest are mentioned by AiDotNet.sln, so they keep the old routing.
+    if ($normalized.StartsWith('tests/', [StringComparison]::OrdinalIgnoreCase) -and
+        -not (Test-TestProjectDirectoryReferenced -Path $normalized)) {
+        return [ChangedPathImpact]::NonRuntime
+    }
+
     return [ChangedPathImpact]::MapCandidate
 }
 
@@ -265,6 +275,38 @@ function Test-ToolDirectoryReferenced {
 
 <#
 .SYNOPSIS
+Whether anything outside a tests/<project>/ directory that this workflow builds, tests or invokes references it.
+
+.DESCRIPTION
+Searched at HEAD in AiDotNet.sln, src/, the rest of tests/, Directory.Build.* and this workflow file, excluding the
+directory itself. The solution lists every project CI builds, and the shard manifest only names solution projects,
+so a project absent from all of these is neither compiled nor run here. A file directly under tests/ has no project
+to scope by, and a failed search counts as referenced.
+#>
+function Test-TestProjectDirectoryReferenced {
+    param([Parameter(Mandatory)] [string] $Path)
+    $segments = $Path.Split('/')
+    if ($segments.Count -lt 3) { return $true }
+    $directory = $segments[1]
+    if ($script:TestProjectReferenceCache.ContainsKey($directory)) { return $script:TestProjectReferenceCache[$directory] }
+    # Only a real project directory qualifies, and only where the solution records what CI builds: a directory
+    # without a project file of its own, or a tree without AiDotNet.sln, keeps the old behaviour.
+    $null = & git cat-file -e 'HEAD:AiDotNet.sln' 2>$null
+    $hasSolution = $LASTEXITCODE -eq 0
+    $projectFiles = @(& git ls-tree --name-only HEAD "tests/$directory/" 2>$null | Where-Object { $_ -like '*.csproj' })
+    if (-not $hasSolution -or $LASTEXITCODE -ne 0 -or $projectFiles.Count -eq 0) {
+        $script:TestProjectReferenceCache[$directory] = $true
+        return $true
+    }
+    $pattern = 'tests[/\]' + [regex]::Escape($directory) + '([/\]|[^A-Za-z0-9_.-]|$)'
+    $null = & git grep -q -i -E $pattern HEAD -- 'AiDotNet.sln' '*.slnx' 'src/' 'tests/' ":(exclude)tests/$directory/" 'Directory.Build.props' 'Directory.Build.targets' '.github/workflows/sonarcloud.yml' '.github/scripts/' '.github/actions/' 2>$null
+    $referenced = $LASTEXITCODE -ne 1
+    $script:TestProjectReferenceCache[$directory] = $referenced
+    return $referenced
+}
+
+<#
+.SYNOPSIS
 Whether anything this workflow runs mentions a non-workflow .github file.
 
 .DESCRIPTION
@@ -278,7 +320,9 @@ function Test-GitHubFileReferenced {
     $name = [System.IO.Path]::GetFileName($Path)
     if ([string]::IsNullOrEmpty($name)) { return $true }
     if ($script:GitHubFileReferenceCache.ContainsKey($name)) { return $script:GitHubFileReferenceCache[$name] }
-    $null = & git grep -q -i -F $name HEAD -- '.github/workflows/sonarcloud.yml' '.github/actions/' '.github/scripts/' 'tools/' 'src/' 'tests/' 'Directory.Build.props' 'Directory.Build.targets' 2>$null
+    # This script is excluded: its self-tests name these files, and the only .github files it reads (the shard
+    # manifest and its change log) are selection control and never reach this check.
+    $null = & git grep -q -i -F $name HEAD -- '.github/workflows/sonarcloud.yml' '.github/actions/' '.github/scripts/' 'tools/' ':(exclude)tools/TestImpact/Select-Shards.ps1' 'src/' 'tests/' 'Directory.Build.props' 'Directory.Build.targets' 2>$null
     # git grep: 0 = found, 1 = not found, anything else = the search itself failed.
     $referenced = $LASTEXITCODE -ne 1
     $script:GitHubFileReferenceCache[$name] = $referenced
@@ -2193,7 +2237,7 @@ if ($SelfTest) {
         @{ Path = 'tools/TestImpact/Unknown-Helper.ps1'; Why = 'unreviewed tooling must escalate' },
         @{ Path = 'tools/TestImpact/Receive-RequiredArtifact.ps1.backup'; Why = 'transport lookalikes must escalate' },
         @{ Path = 'src/AiDotNet.Generators/TestScaffoldGenerator.cs'; Why = 'build-time source generators must escalate' },
-        @{ Path = '.github/dependabot.yml'; Why = 'unknown GitHub configuration must escalate' },
+        @{ Path = '.github/codeql/codeql-config.yml'; Why = 'GitHub configuration this workflow reads must escalate' },
         @{ Path = '.github/workflows/release-please.yml.backup'; Why = 'workflow lookalikes must escalate' },
         @{ Path = '.github/workflows/new-unknown.yml'; Why = 'unknown workflows must escalate' }
     )) {
@@ -2548,7 +2592,7 @@ file class Private { }
         'a file directly under tools/ has no directory to scope by and must keep the old behaviour'
     # .github/: a file only GitHub itself reads cannot change a shard; one this workflow reads keeps full validation.
     # These read the real tree, so they fail loudly if a workflow starts reading one of them.
-    foreach ($githubOnly in '.github/CODEOWNERS', '.github/FUNDING.yml', '.github/ISSUE_TEMPLATE/bug_report.yml') {
+    foreach ($githubOnly in '.github/CODEOWNERS', '.github/FUNDING.yml', '.github/ISSUE_TEMPLATE/bug_report.yml', '.github/dependabot.yml') {
         if (Test-Path -LiteralPath $githubOnly) {
             Assert-True ((Get-ChangedPathImpact -Path $githubOnly) -eq [ChangedPathImpact]::NonRuntime) `
                 "$githubOnly is read only by GitHub but is not NonRuntime"
@@ -2560,6 +2604,18 @@ file class Private { }
     }
     Assert-True ((Get-ChangedPathImpact -Path '.github/never-mentioned-anywhere-1f3a.json') -eq [ChangedPathImpact]::NonRuntime) `
         'an unreferenced new .github file is not NonRuntime'
+    # tests/: a project outside the solution that nothing references is never built or run here; the solution's
+    # projects (sharded, or built for the shards like the sweep worker) keep the old routing.
+    if (Test-Path -LiteralPath 'tests/AiDotNet.MatchaAlignmentReview') {
+        Assert-True ((Get-ChangedPathImpact -Path 'tests/AiDotNet.MatchaAlignmentReview/Program.cs') -eq [ChangedPathImpact]::NonRuntime) `
+            'an unreferenced review project (MatchaAlignmentReview) is not NonRuntime'
+    }
+    foreach ($built in 'tests/AiDotNet.Tests/UnitTests/Any.cs', 'tests/AiDotNet.ParameterSweepWorker/Program.cs', 'tests/AiDotNet.Serving.Tests/Any.cs') {
+        Assert-True ((Get-ChangedPathImpact -Path $built) -eq [ChangedPathImpact]::MapCandidate) `
+            "$built belongs to a project CI builds but was downgraded"
+    }
+    Assert-True ((Get-ChangedPathImpact -Path 'tests/local.runsettings') -eq [ChangedPathImpact]::MapCandidate) `
+        'a file directly under tests/ has no project to scope by and must keep the old behaviour'
     # The selection report lists every changed path, so a build-only file must be recorded as a decision even
     # beside runtime changes (it used to fall through the switch and vanish from the report).
     $reportMap = [pscustomobject]@{ knownShards = @('Alpha'); alwaysRun = @(); files = [pscustomobject]@{
