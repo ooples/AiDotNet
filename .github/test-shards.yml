@@ -1031,11 +1031,13 @@ shard:
     env:
       ADNSHAPE_WORKERS: '2'
       ADNSHAPE_MODEL_TIMEOUT_SECONDS: '180'
-  # VisionLanguage models in five-model windows. The current reflected inventory has 173 models,
-  # so offset 170 covers the final three. A partial final window is valid; a window that lands
-  # entirely past the end declares zero contracts and FAILS (asserted in the test), which is the
-  # signal that the family shrank and these entries need updating. Five models is the resource
-  # envelope: each concrete contract gets up to three minutes and 1 GiB in its own worker.
+  # VisionLanguage models in five-model windows (170 models, 34 windows). Membership comes from the
+  # committed, append-only table in ModelContractConformanceTests.Windows.cs, selected by
+  # ADNSHAPE_CONF_WINDOW, so adding a model changes only the window it joins; the offset windows it
+  # replaced moved every later model. ConformanceWindowTableTests fails when a model is unlisted and
+  # prints the line to add. A window with no contracts FAILS (asserted in the test). The names keep
+  # the old offsets (5 x window) so the coverage map still recognises them. Five models is the
+  # resource envelope: each concrete contract gets up to three minutes and 1 GiB in its own worker.
   - name: Conformance - VisionLanguage offset 0
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1047,8 +1049,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '0'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '0'
   - name: Conformance - VisionLanguage offset 5
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1060,8 +1061,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '5'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '1'
   - name: Conformance - VisionLanguage offset 10
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1073,8 +1073,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '10'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '2'
   - name: Conformance - VisionLanguage offset 15
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1086,8 +1085,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '15'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '3'
   - name: Conformance - VisionLanguage offset 20
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1099,8 +1097,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '20'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '4'
   - name: Conformance - VisionLanguage offset 25
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1112,8 +1109,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '25'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '5'
   - name: Conformance - VisionLanguage offset 30
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1125,8 +1121,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '30'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '6'
   - name: Conformance - VisionLanguage offset 35
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1138,8 +1133,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '35'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '7'
   - name: Conformance - VisionLanguage offset 40
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1151,8 +1145,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '40'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '8'
   - name: Conformance - VisionLanguage offset 45
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1164,8 +1157,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '45'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '9'
   - name: Conformance - VisionLanguage offset 50
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1177,8 +1169,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '50'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '10'
   - name: Conformance - VisionLanguage offset 55
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1190,8 +1181,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '55'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '11'
   - name: Conformance - VisionLanguage offset 60
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1203,8 +1193,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '60'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '12'
   - name: Conformance - VisionLanguage offset 65
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1216,8 +1205,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '65'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '13'
   - name: Conformance - VisionLanguage offset 70
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1229,8 +1217,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '70'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '14'
   - name: Conformance - VisionLanguage offset 75
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1242,8 +1229,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '75'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '15'
   - name: Conformance - VisionLanguage offset 80
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1255,8 +1241,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '80'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '16'
   - name: Conformance - VisionLanguage offset 85
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1268,8 +1253,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '85'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '17'
   - name: Conformance - VisionLanguage offset 90
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1281,8 +1265,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '90'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '18'
   - name: Conformance - VisionLanguage offset 95
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1294,8 +1277,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '95'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '19'
   - name: Conformance - VisionLanguage offset 100
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1307,8 +1289,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '100'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '20'
   - name: Conformance - VisionLanguage offset 105
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1320,8 +1301,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '105'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '21'
   - name: Conformance - VisionLanguage offset 110
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1333,8 +1313,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '110'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '22'
   - name: Conformance - VisionLanguage offset 115
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1346,8 +1325,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '115'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '23'
   - name: Conformance - VisionLanguage offset 120
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1359,8 +1337,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '120'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '24'
   - name: Conformance - VisionLanguage offset 125
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1372,8 +1349,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '125'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '25'
   - name: Conformance - VisionLanguage offset 130
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1385,8 +1361,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '130'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '26'
   - name: Conformance - VisionLanguage offset 135
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1398,8 +1373,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '135'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '27'
   - name: Conformance - VisionLanguage offset 140
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1411,8 +1385,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '140'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '28'
   - name: Conformance - VisionLanguage offset 145
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1424,8 +1397,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '145'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '29'
   - name: Conformance - VisionLanguage offset 150
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1437,8 +1409,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '150'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '30'
   - name: Conformance - VisionLanguage offset 155
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1450,8 +1421,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '155'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '31'
   - name: Conformance - VisionLanguage offset 160
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1463,8 +1433,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '160'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '32'
   - name: Conformance - VisionLanguage offset 165
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1476,8 +1445,7 @@ shard:
     hangTimeout: 20min
     env:
       ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'
-      ADNSHAPE_CONF_OFFSET: '165'
-      ADNSHAPE_CONF_BUDGET: '5'
+      ADNSHAPE_CONF_WINDOW: '33'
   # =====================================================================
   # SERVING TESTS
   # =====================================================================
@@ -1500,6 +1468,8 @@ shard:
     # 134 classes, about 344 s of test time measured locally.
     filter: >-
       Category!=GPU&Category!=Stress&Category!=Sweep&(
+      FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Graph.ConformanceWindowTableTests.|
+      FullyQualifiedName~AiDotNet.Tests.IntegrationTests.StableModelShardingTests.|
       FullyQualifiedName~AiDotNet.Tests.ActivationFunctions.ActivationFunctionBehaviorTests.|
       FullyQualifiedName~AiDotNet.Tests.Benchmarks.SimdActivationFunctionBenchmarks.|
       FullyQualifiedName~AiDotNet.Tests.ContinualLearning.ContinualLearningStrategyTests.|

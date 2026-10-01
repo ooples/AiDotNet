@@ -715,7 +715,18 @@ function Add-UnmappedShardsAsAlwaysRun {
 # windows Skip/Take a sorted type list and the parameter-count sweep takes index % 8. Adding one
 # model moves others between such shards without touching their executed lines, so their coverage
 # index is only trusted while the inventory is unchanged (see Test-AuxiliaryInventoryChange).
-$script:InventoryWindowEnvironment = @('ADNSHAPE_CONF_OFFSET', 'AIDOTNET_PARAMETER_COUNT_SHARD')
+$script:InventoryWindowEnvironment = @('ADNSHAPE_CONF_OFFSET', 'ADNSHAPE_CONF_WINDOW', 'AIDOTNET_PARAMETER_COUNT_SHARD')
+# Of those, the windows keyed by model name rather than position (see Get-AuxiliaryWindowInvalidation).
+$script:NameKeyedWindowEnvironment = @('ADNSHAPE_CONF_WINDOW', 'AIDOTNET_PARAMETER_COUNT_SHARD')
+
+function Test-NameKeyedWindow {
+    param([Parameter(Mandatory)] [object] $Shard)
+    $environment = if ($Shard -is [System.Collections.IDictionary]) { $Shard['env'] } else { $Shard.PSObject.Properties['env']?.Value }
+    if ($null -eq $environment) { return $false }
+    $names = if ($environment -is [System.Collections.IDictionary]) { @($environment.Keys) } else { @($environment.PSObject.Properties.Name) }
+    return @($names | Where-Object { [string] $_ -cin $script:NameKeyedWindowEnvironment }).Count -gt 0 -and
+        @($names | Where-Object { [string] $_ -ceq 'ADNSHAPE_CONF_OFFSET' }).Count -eq 0
+}
 
 function Test-InventoryWindow {
     param([Parameter(Mandatory)] [object] $Shard)
@@ -3209,18 +3220,28 @@ try {
         . "$PSScriptRoot/AuxiliaryInventory.ps1"
         $auxiliary = @($manifest | Where-Object { Test-InventoryWindow $_ })
         $indexedAuxiliary = @($auxiliary | Where-Object { $_.name -cin $map.knownShards })
-        if ($indexedAuxiliary.Count -gt 0 -and (Test-AuxiliaryInventoryChange -MapSha $mapSha)) {
+        # Windows keyed by model name (the committed conformance table, the hashed parameter-count split) are
+        # invalidated only where a changed model identity lands. Workload sweeps keep the whole-catalog rule.
+        $windows = @($auxiliary | Where-Object { Test-NameKeyedWindow $_ })
+        $workloads = @($auxiliary | Where-Object { -not (Test-NameKeyedWindow $_) })
+        $invalidated = @()
+        if (@($indexedAuxiliary | Where-Object { $_ -cin $workloads }).Count -gt 0 -and (Test-AuxiliaryInventoryChange -MapSha $mapSha)) {
+            $invalidated += @($workloads | ForEach-Object { [pscustomobject]@{ Name = $_.name; Why = 'reflection inventory changed or could not be established' } })
+        }
+        if (@($indexedAuxiliary | Where-Object { $_ -cin $windows }).Count -gt 0) {
+            $windowCheck = Get-AuxiliaryWindowInvalidation -MapSha $mapSha -BaseSha $BaseSha -Windows $windows
+            $invalidated += @($windowCheck.Shards | ForEach-Object { [pscustomobject]@{ Name = $_; Why = $windowCheck.Reason } })
+        }
+        if ($invalidated.Count -gt 0) {
             if ($DeltaFromTree) {
-                # Imported ordinal-window results refer to the old catalog. Refuse imports
+                # Imported window results refer to the old catalog. Refuse imports
                 # rather than overwrite newly rerun results under the same window names.
                 $selection.Escalate = $true
                 $selection.Reasons = @($selection.Reasons) + @('auxiliary inventory changed; delta imports are unsafe')
             }
             else {
-                $selection.Shards = @(@($selection.Shards) + @($auxiliary.name) | Sort-Object -Unique)
-                $selection.Routes = @($selection.Routes) + @($auxiliary | ForEach-Object {
-                    "$($_.name) <= reflection inventory changed or could not be established"
-                })
+                $selection.Shards = @(@($selection.Shards) + @($invalidated.Name) | Sort-Object -Unique)
+                $selection.Routes = @($selection.Routes) + @($invalidated | ForEach-Object { "$($_.Name) <= $($_.Why)" })
             }
         }
     }
