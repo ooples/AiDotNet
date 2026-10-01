@@ -333,7 +333,7 @@ public class CreditRuleFacadeTrainingTests
     {
         // Isolate credit-rule correctness from any GPU transformer-training issue: force the CPU engine.
         Environment.SetEnvironmentVariable("AIDOTNET_DISABLE_GPU", "1");
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
 
         var (trainX, trainY, _) = MakeSeqData(240, seed: 1);
         var (testX, _, testLabels) = MakeSeqData(120, seed: 999);
@@ -561,7 +561,7 @@ public class CreditRuleFacadeTrainingTests
     public void SignSymmetric_OnTransformer_ThrowsClearly_ButDFADoesNot()
     {
         Environment.SetEnvironmentVariable("AIDOTNET_DISABLE_GPU", "1");
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
 
         var (x, y, _) = MakeSeqData(4, seed: 3);
         var transformer = BuildTransformer();

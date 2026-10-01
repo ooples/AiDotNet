@@ -46,7 +46,7 @@ public class TensorArenaTrainingEquivalenceTests
         NeuralNetworkArchitecture<double>.DefaultRandomSeedOverride = 1234;
         NeuralNetworkArchitecture<float>.DefaultRandomSeedOverride = 1234;
         if (AiDotNetEngine.Current is not CpuEngine)
-            AiDotNetEngine.ResetToCpu();
+            AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
     }
 
     private static void ResetGlobalTrainingState()

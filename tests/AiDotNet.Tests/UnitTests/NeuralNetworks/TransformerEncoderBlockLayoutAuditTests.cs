@@ -46,7 +46,7 @@ public class TransformerEncoderBlockLayoutAuditTests
     [Fact]
     public void DecoderBlock_CrossAttention_ConsumesEncoderOutput()
     {
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
         var block = new TransformerDecoderBlock<float>(hiddenSize: 8, numHeads: 2, ffnDim: 16, dropoutRate: 0.0);
         block.SetTrainingMode(false);
 
@@ -77,7 +77,7 @@ public class TransformerEncoderBlockLayoutAuditTests
     [Fact]
     public void DecoderBlock_ParamsForward_DispatchesByArity()
     {
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
         var block = new TransformerDecoderBlock<float>(hiddenSize: 8, numHeads: 2, ffnDim: 16, dropoutRate: 0.0);
         block.SetTrainingMode(false);
 
@@ -118,7 +118,7 @@ public class TransformerEncoderBlockLayoutAuditTests
     [Fact]
     public void AuxiliaryLossDiagnostics_CountBlockHostedAttention()
     {
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
         var model = CreateDefaultTransformer(numEncoder: 2, numDecoder: 1);
 
         var diagnostics = model.GetAuxiliaryLossDiagnostics();
@@ -137,7 +137,7 @@ public class TransformerEncoderBlockLayoutAuditTests
     [Fact]
     public void EncoderDecoderTransformer_Predict_FiniteAndDeterministic()
     {
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
         var model = CreateDefaultTransformer(numEncoder: 1, numDecoder: 2);
 
         var input = RandTensor(new[] { 2, 4, 8 }, seed: 7);
@@ -163,7 +163,7 @@ public class TransformerEncoderBlockLayoutAuditTests
     [Fact]
     public void EncoderDecoderTransformer_Train_RunsAndUpdatesParameters()
     {
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
         var model = CreateDefaultTransformer(numEncoder: 1, numDecoder: 1);
 
         var input = RandTensor(new[] { 2, 4, 8 }, seed: 11);
@@ -199,7 +199,7 @@ public class TransformerEncoderBlockLayoutAuditTests
     [Fact]
     public void WeightOnlyQuantization_ReachesBlockHostedFfnAndDecoderSelfAttention()
     {
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
         var model = CreateDefaultTransformer(numEncoder: 1, numDecoder: 1);
 
         var input = RandTensor(new[] { 2, 4, 8 }, seed: 21);
@@ -266,7 +266,7 @@ public class TransformerEncoderBlockLayoutAuditTests
     [Fact]
     public void ApplyLoRA_RecursesIntoEncoderBlockSublayers()
     {
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
         var block = new TransformerEncoderBlock<float>(hiddenSize: 8, numHeads: 2, ffnDim: 16, dropoutRate: 0.0);
         block.SetTrainingMode(false);
         // Resolve lazy sublayer shapes (mirrors the warmup forward AiModelBuilder runs).
@@ -295,7 +295,7 @@ public class TransformerEncoderBlockLayoutAuditTests
     [Fact]
     public void ApplyLoRA_RecursesIntoDecoderBlock_SkipsCrossAttention()
     {
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
         var block = new TransformerDecoderBlock<float>(hiddenSize: 8, numHeads: 2, ffnDim: 16, dropoutRate: 0.0);
         block.SetTrainingMode(false);
         _ = block.Forward(RandTensor(new[] { 1, 4, 8 }, seed: 25), RandTensor(new[] { 1, 4, 8 }, seed: 26));
@@ -335,7 +335,7 @@ public class TransformerEncoderBlockLayoutAuditTests
     [Fact]
     public void EncoderDecoderTransformer_CheckpointedTraining_MatchesUncheckpointed()
     {
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
         var input = RandTensor(new[] { 2, 4, 8 }, seed: 31);
         var target = RandTensor(new[] { 2, 4, 8 }, seed: 32);
 
