@@ -345,10 +345,19 @@ public class CategoricalCrossEntropyTapeIssue1191Tests
 
             transformer.SetTrainingMode(true);
 
-            // First call exposes the random-init loss. Pre-fix this is
-            // ~ln(V)/V ≈ 0.26 at V=8 instead of ~ln(V) ≈ 2.08.
-            transformer.Train(inputs[0], targets[0]);
-            float initialLoss = transformer.GetLastLoss();
+            // The first epoch (one step per fact) exposes the random-init loss level. Pre-fix it is
+            // ~ln(V)/V ≈ 0.26 at V=8 instead of ~ln(V) ≈ 2.08. A single sample's loss at init is far too
+            // noisy for that check (measured 0.06 to 4.1 across seeds), so the epoch mean is used.
+            // Those steps are the start of the run: they open the loss history, so the windows below keep
+            // meaning the first and last `window` training steps.
+            var lossesOverTime = new System.Collections.Generic.List<float>(totalIters);
+            float initialLoss = 0f;
+            for (int k = 0; k < numFacts; k++)
+            {
+                transformer.Train(inputs[k], targets[k]);
+                lossesOverTime.Add(transformer.GetLastLoss());
+                initialLoss += transformer.GetLastLoss() / numFacts;
+            }
 
             // initialLoss after one training step depends on init — it
             // can drift toward 0.5 × ln(V) on lucky inits even though
@@ -368,8 +377,7 @@ public class CategoricalCrossEntropyTapeIssue1191Tests
             // that region, both upward (correct loss reporting) and
             // downward (gradients drive learning toward correct
             // configurations).
-            var lossesOverTime = new System.Collections.Generic.List<float>(totalIters);
-            for (int iter = 0; iter < totalIters; iter++)
+            for (int iter = numFacts; iter < totalIters; iter++)
             {
                 int k = iter % numFacts;
                 transformer.Train(inputs[k], targets[k]);
