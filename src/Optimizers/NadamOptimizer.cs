@@ -1,4 +1,4 @@
-﻿using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using System.Collections.Concurrent;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -283,6 +283,9 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         T biasCorrectionM = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t));
         T biasCorrectionV = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t));
         T nesterovFactor = NumOps.Divide(oneMinusBeta1, biasCorrectionM);
+        // Dozat (2016), Algorithm 8: the look-ahead momentum term is corrected for step t+1, the gradient term
+        // for step t. Correcting both at t (the previous form here) disagreed with the fused kernel.
+        T momentumBiasCorrection = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t + 1));
 
         // Update biased first moment estimate: m = beta1 * m + (1 - beta1) * gradient
         var beta1TimesM = (Vector<T>)Engine.Multiply(_m!, beta1);
@@ -295,8 +298,8 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         var oneMinusBeta2TimesGradSq = (Vector<T>)Engine.Multiply(gradSquared, oneMinusBeta2);
         _v = (Vector<T>)Engine.Add(beta2TimesV, oneMinusBeta2TimesGradSq);
 
-        // Compute bias-corrected first moment estimate: mHat = m / (1 - beta1^t)
-        var mHat = (Vector<T>)Engine.Divide(_m, biasCorrectionM);
+        // Look-ahead momentum term, corrected for step t+1 (Dozat 2016, Alg. 8): mHat = m / (1 - beta1^(t+1))
+        var mHat = (Vector<T>)Engine.Divide(_m, momentumBiasCorrection);
 
         // Compute bias-corrected second raw moment estimate: vHat = v / (1 - beta2^t)
         var vHat = (Vector<T>)Engine.Divide(_v, biasCorrectionV);
@@ -376,6 +379,9 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         T biasCorrectionM = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t));
         T biasCorrectionV = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t));
         T nesterovFactor = NumOps.Divide(oneMinusBeta1, biasCorrectionM);
+        // Dozat (2016), Algorithm 8: the look-ahead momentum term is corrected for step t+1, the gradient term
+        // for step t. Correcting both at t (the previous form here) disagreed with the fused kernel.
+        T momentumBiasCorrection = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t + 1));
 
         // Update biased first moment estimate: m = beta1 * m + (1 - beta1) * gradient
         // ONE FUSED IN-PLACE PASS -- same rewrite as Adam/AdamW/Adagrad/Lion, same reason.
@@ -389,7 +395,7 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         // Per-element operand and association order preserved exactly (Dozat 2016), including the
         // Nesterov term built from the bias-corrected mHat and the raw gradient:
         //   m = b1*m + (1-b1)*g ;  v = b2*v + ((g*g)*(1-b2))
-        //   mHatNesterov = b1*(m/bcM) + nesterovFactor*g
+        //   mHatNesterov = b1*(m/(1-b1^(t+1))) + nesterovFactor*g   (Dozat 2016, Alg. 8)
         //   out = p - (mHatNesterov*lr) / (sqrt(v/bcV) + eps)
         var updatedParams = new Vector<T>(parameters.Length, skipZeroInit: true);
         var pSpan = parameters.AsSpan();
@@ -411,7 +417,7 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                 NumOps.Multiply(NumOps.Multiply(g, g), oneMinusBeta2));
             vSpan[i] = v;
 
-            T mHat = NumOps.Divide(m, biasCorrectionM);
+            T mHat = NumOps.Divide(m, momentumBiasCorrection);
             T vHat = NumOps.Divide(v, biasCorrectionV);
 
             T mHatNesterov = NumOps.Add(
@@ -446,6 +452,7 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         T biasCorrectionM = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _tapeStep));
         T biasCorrectionV = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _tapeStep));
         T nesterovFactor = NumOps.Divide(oneMinusBeta1, biasCorrectionM);
+        T momentumBiasCorrection = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _tapeStep + 1));
 
         // GPU-resident step (AIDOTNET_GPU_ADAM=1); gated off, CPU fallback per-param when not GPU-resident.
         bool gpuAdam = typeof(T) == typeof(float)
@@ -460,11 +467,12 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                 if (!_tapeM.TryGetValue(param, out var mSp)) { mSp = new Tensor<T>(param._shape); _tapeM[param] = mSp; }
                 if (!_tapeV2.TryGetValue(param, out var vSp)) { vSp = new Tensor<T>(param._shape); _tapeV2[param] = vSp; }
                 double bc1 = 1.0 - Math.Pow(_options.Beta1, _tapeStep);
+                double bc1Next = 1.0 - Math.Pow(_options.Beta1, _tapeStep + 1);
                 double bc2 = 1.0 - Math.Pow(_options.Beta2, _tapeStep);
                 if (SparseEmbeddingOptimizerHelpers.TryApplyNadamSparse(
                         param, mSp, vSp,
                         NumOps.ToDouble(CurrentLearningRate),
-                        _options.Beta1, _options.Beta2, bc1, bc2,
+                        _options.Beta1, _options.Beta2, bc1, bc1Next, bc2,
                         _options.Epsilon, weightDecay: 0.0))
                 {
                     continue;
@@ -489,7 +497,7 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             Engine.TensorCopy(Engine.TensorAdd(Engine.TensorMultiplyScalar(v, beta2), Engine.TensorMultiplyScalar(Engine.TensorMultiply(grad, grad), oneMinusBeta2)), v);
 
             // Bias-corrected estimates
-            var mHat = Engine.TensorDivideScalar(m, biasCorrectionM);
+            var mHat = Engine.TensorDivideScalar(m, momentumBiasCorrection);
             var vHat = Engine.TensorDivideScalar(v, biasCorrectionV);
 
             // Nesterov momentum term: mHatNesterov = beta1 * mHat + nesterovFactor * grad
@@ -556,7 +564,8 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         // Bias-corrected moments
         var biasCorr1Vec = Vector<T>.CreateDefault(_m.Length, biasCorrection1);
         var biasCorr2Vec = Vector<T>.CreateDefault(_v.Length, biasCorrection2);
-        var mHat = (Vector<T>)Engine.Divide(_m, biasCorr1Vec);
+        var momentumCorrVec = Vector<T>.CreateDefault(_m.Length, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t + 1)));
+        var mHat = (Vector<T>)Engine.Divide(_m, momentumCorrVec);
         var vHat = (Vector<T>)Engine.Divide(_v, biasCorr2Vec);
 
         // Recalculate the Nesterov momentum term
