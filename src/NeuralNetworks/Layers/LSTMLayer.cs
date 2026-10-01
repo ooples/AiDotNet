@@ -958,6 +958,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     }
 
 
+
     /// <summary>
     /// Resolves <see cref="_inputSize"/> from <c>input.Shape[^1]</c> and propagates the
     /// full input shape into the layer's resolved input/output shapes (output preserves
@@ -1062,8 +1063,18 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private void InitializeWeights()
     {
-        // Xavier/Glorot initialization
-        T scale = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(2.0, (_inputSize + _hiddenSize))));
+        // Glorot/Xavier UNIFORM initialization: U(-limit, limit) with limit = sqrt(6 / (fan_in + fan_out)),
+        // per Glorot & Bengio 2010 eq. 16, and matching Keras glorot_uniform / PyTorch xavier_uniform_.
+        // InitializeWeight draws U(-0.5, 0.5), so it is handed 2*limit and scales that draw onto (-limit, limit).
+        //
+        // This previously passed sqrt(2 / (fan_in + fan_out)) - the Glorot standard DEVIATION - as a multiplier
+        // on a U(-0.5, 0.5) draw, which yields a standard deviation of only sqrt(2/n)/sqrt(12), i.e. 0.289x the
+        // Glorot value the comment claimed. Every LSTM in the library therefore started ~3.5x too small: with a
+        // 1-feature input and 40 hidden units the gates sat at sigmoid(~0.06) and the cell state never charged,
+        // so the hidden state stayed near zero and the analytic gradient on the input weights measured 3.3E-8
+        // against a loss of 0.4 - a recurrent trunk that is registered and serialized but cannot learn.
+        T limit = NumOps.Sqrt(NumOps.FromDouble(NumericalStabilityHelper.SafeDiv(6.0, (_inputSize + _hiddenSize))));
+        T scale = NumOps.Multiply(NumOps.FromDouble(2.0), limit);
 
         InitializeWeight(_weightsFi, scale);
         InitializeWeight(_weightsIi, scale);
@@ -1074,7 +1085,13 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         InitializeWeight(_weightsCh, scale);
         InitializeWeight(_weightsOh, scale);
 
-        InitializeBias(_biasF);
+        // Forget-gate bias starts at 1.0 so the cell state is retained rather than half-erased at step one;
+        // the remaining gate biases start at zero. Jozefowicz et al. 2015 section 3 recommends this, Keras
+        // applies it by default (unit_forget_bias=True) and TensorFlow's LSTMCell defaults forget_bias=1.0.
+        // DeepAR (Salinas et al. 2020) section 4 states it outright: "standard LSTM cells with a forget bias
+        // set to 1.0 in all experiment". With a zero forget bias the gate opens at sigmoid(0)=0.5, halving
+        // the cell state every step, so over a 96-step context nothing survives to carry a gradient.
+        _biasF.Fill(NumOps.One);
         InitializeBias(_biasI);
         InitializeBias(_biasC);
         InitializeBias(_biasO);
@@ -1103,7 +1120,10 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private void InitializeWeight(Tensor<T> weight, T scale)
     {
-        // Create random tensor using Tensor<T>.CreateRandom [0, 1]
+        // Uniform [0, 1) from the layer's own stream, so a seeded layer (an architecture seed, or the
+        // construction seed scope) initializes the same way wherever it is built. The unseeded
+        // overload drew from the process-shared generator, so two identically seeded models got
+        // different LSTM weights depending on what had drawn from it first.
         var randomTensor = Tensor<T>.CreateRandom(Random, weight.Shape[0], weight.Shape[1]);
 
         // Shift to [-0.5, 0.5] range: random - 0.5

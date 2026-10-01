@@ -5,7 +5,7 @@
     {
       "baselineKey": "Conformance_VisionLanguage_offset_170",
       "currentKeys": [],
-      "reason": "#2269 removed four duplicate VisionLanguage document models (Donut, LayoutLMv3, Nougat and Pix2Struct under src/VisionLanguage/Document; the document implementations elsewhere remain), so the VisionLanguage conformance set went from 173 to 169 models. Offset 165 now ends it and the offset 170 window selects none."
+      "reason": "Two changes shrank the VisionLanguage conformance set from 173 to 166 models: #2136 moved EmuEdit, MGIE and SmartEdit onto LatentDiffusionModelBase (diffusion models do not implement IShapeContract; the diffusion test bases check them instead), and #2269 removed four duplicate VisionLanguage document models (Donut, LayoutLMv3, Nougat and Pix2Struct under src/VisionLanguage/Document; the document implementations elsewhere remain). Offset 165 now ends it and the offset 170 window selects none."
     }
   ]
 }

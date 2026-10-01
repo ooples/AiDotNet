@@ -45,7 +45,7 @@ namespace AiDotNet.Generators;
 /// </para>
 /// </remarks>
 [Generator]
-public class ClonePlanGenerator : IIncrementalGenerator
+public partial class ClonePlanGenerator : IIncrementalGenerator
 {
     /// <summary>
     /// Stands in a recorded constructor for "pass this parameter's declared default".
@@ -195,6 +195,8 @@ public class ClonePlanGenerator : IIncrementalGenerator
         int registrationIndex = 0;
         foreach (var type in distinct)
         {
+            ReportShadowedPlanMembers(context, type);
+
             if (EmitRegistration(registrationMethods, type, registrationIndex))
             {
                 sb.AppendLine($"        Register_{registrationIndex:D6}();");
@@ -218,6 +220,7 @@ public class ClonePlanGenerator : IIncrementalGenerator
         sb.AppendLine("        var p = owner.GetProperty(name, BindingFlags.Public | BindingFlags.Instance);");
         sb.AppendLine("        if (p is not null && p.CanRead && p.SetMethod?.IsPublic == true) entries.Add(new ClonePlanEntry(p, kind));");
         sb.AppendLine("    }");
+        EmitBindingMemberResolver(sb);
         sb.AppendLine("}");
 
         context.AddSource("CloneRegistrations.g.cs", sb.ToString());
@@ -226,8 +229,10 @@ public class ClonePlanGenerator : IIncrementalGenerator
     private static bool EmitRegistration(StringBuilder sb, INamedTypeSymbol type, int registrationIndex)
     {
         var entries = CollectConfiguration(type);
-        var candidates = CollectConstructorCandidates(
+        var sourceCandidates = CollectConstructorSources(
             type, type.AllInterfaces.Any(i => i.Name == "IFullModel"));
+        var candidates = sourceCandidates?.Select(candidate =>
+            candidate.Arguments.Select(argument => argument.MemberName).ToList()).ToList();
         var constructor = candidates is null || candidates.Count == 0 ? null : candidates[0];
 
         // A type with no settable configuration is still worth a plan when its constructor was
@@ -263,11 +268,13 @@ public class ClonePlanGenerator : IIncrementalGenerator
         else
         {
             var names = string.Join(", ", constructor.Select(n => $"\"{n}\""));
-            var all = string.Join(", ", candidates!.Select(c =>
+            var all = string.Join(", ", (candidates ?? new List<List<string>>()).Select(c =>
                 "new string[] { " + string.Join(", ", c.Select(n => $"\"{n}\"")) + " }"));
+            string explicitBindings = sourceCandidates is not null && sourceCandidates.Any(candidate => HasShadowedSource(type, candidate))
+                ? ", " + EmitConstructorBindings(type, sourceCandidates) : string.Empty;
             sb.AppendLine(
                 $"        CloneRegistry.Register(new ClonePlan(t, e, new[] {{ {names} }}, "
-                + $"new IReadOnlyList<string>[] {{ {all} }}));");
+                + $"new IReadOnlyList<string>[] {{ {all} }}{explicitBindings}));");
         }
         sb.AppendLine("    }");
         sb.AppendLine();
@@ -401,6 +408,10 @@ public class ClonePlanGenerator : IIncrementalGenerator
     /// <param name="isModel">Whether the library treats this type as a model.</param>
     /// <returns>One entry per satisfiable constructor, or <see langword="null"/> when none is.</returns>
     internal static List<List<string>>? CollectConstructorCandidates(INamedTypeSymbol type, bool isModel)
+        => CollectConstructorSources(type, isModel)?.Select(candidate =>
+            candidate.Arguments.Select(argument => argument.MemberName).ToList()).ToList();
+
+    private static List<ConstructorSourceCandidate>? CollectConstructorSources(INamedTypeSymbol type, bool isModel)
     {
         var constructors = type.InstanceConstructors
             .Where(c => c.DeclaredAccessibility is Accessibility.Public or Accessibility.Internal)
@@ -425,11 +436,11 @@ public class ClonePlanGenerator : IIncrementalGenerator
         // Width still orders the candidates, because a narrower overload usually forwards to the
         // wider one with defaults filled in and re-deriving from more state is better. CloneEngine
         // walks them in this order and takes the first whose required arguments the instance holds.
-        var candidates = new List<List<string>>();
+        var candidates = new List<ConstructorSourceCandidate>();
 
         foreach (var constructor in constructors.OrderByDescending(c => c.Parameters.Length))
         {
-            var mapped = new string?[constructor.Parameters.Length];
+            var mapped = new ConstructorArgumentSource?[constructor.Parameters.Length];
             var satisfied = true;
 
             // RESOLVE BY ELIMINATION, IN TWO PASSES. A parameter named after a member takes it
@@ -444,15 +455,18 @@ public class ClonePlanGenerator : IIncrementalGenerator
                 // ref/out cannot be reproduced from reading a stored value.
                 if (constructor.Parameters[i].RefKind != RefKind.None) { satisfied = false; break; }
 
-                mapped[i] = FindDirectConstructorAssignment(type, constructor, constructor.Parameters[i])
-                    ?? FindNestedSource(type, constructor.Parameters[i])
-                    ?? FindSource(type, constructor.Parameters[i]);
+                var direct = FindDirectConstructorAssignment(type, constructor, constructor.Parameters[i]);
+                var nested = direct is null ? FindNestedSource(type, constructor.Parameters[i]) : null;
+                var named = direct is null && nested is null ? FindSourceMember(type, constructor.Parameters[i]) : null;
+                mapped[i] = direct is not null ? new ConstructorArgumentSource(new[] { direct })
+                    : nested is not null ? new ConstructorArgumentSource(nested)
+                    : named is not null ? new ConstructorArgumentSource(new[] { named }) : null;
             }
 
             var claimed = new HashSet<string>(System.StringComparer.Ordinal);
             foreach (var already in mapped)
             {
-                if (already is not null) claimed.Add(already);
+                if (already is not null) claimed.Add(already.MemberName);
             }
 
             for (int i = 0; satisfied && i < constructor.Parameters.Length; i++)
@@ -480,29 +494,182 @@ public class ClonePlanGenerator : IIncrementalGenerator
                     // an ONNX model from being rebuilt as a native one.
                     if (!parameter.IsOptional) { satisfied = false; break; }
 
-                    mapped[i] = UseDefault;
+                    mapped[i] = ConstructorArgumentSource.Default;
                     continue;
                 }
 
-                mapped[i] = member;
-                claimed.Add(member);
+                mapped[i] = new ConstructorArgumentSource(new[] { member });
+                claimed.Add(member.Name);
             }
 
             if (!satisfied) continue;
 
-            var resolved = new List<string>(mapped.Length);
+            var resolved = new List<ConstructorArgumentSource>(mapped.Length);
             foreach (var member in mapped)
             {
                 // Only reachable with every slot decided: pass one leaves a name or null, and pass
                 // two replaces every remaining null with a member or the default sentinel, or the
                 // constructor was abandoned above.
-                resolved.Add(member ?? UseDefault);
+                resolved.Add(member ?? ConstructorArgumentSource.Default);
             }
 
-            candidates.Add(resolved);
+            candidates.Add(new ConstructorSourceCandidate(constructor, resolved));
         }
 
         return candidates.Count == 0 ? null : candidates;
+    }
+
+    private static readonly DiagnosticDescriptor ShadowedPlanMemberDescriptor = new DiagnosticDescriptor(
+        id: "ADNCLONE001",
+        title: "A clone plan records a member name that is shadowed with a different type",
+        messageFormat: "'{0}' declares '{1}', shadowing a member of the same name on '{2}' that holds "
+                       + "a different type. A clone plan addresses members by bare name and the runtime "
+                       + "read takes the first declaration walking up from the derived type, so a plan "
+                       + "that meant the base's member silently receives the derived one, its "
+                       + "constructor candidate fails its type check, and the clone is rebuilt from "
+                       + "constructor defaults instead of the values it was given. Rename the derived "
+                       + "member.",
+        category: "AiDotNet.ClonePlan",
+        // WARNING, NOT ERROR. The three models this was written for are fixed, but how many other
+        // types shadow a base member with a differing type is not known until a full build reports
+        // it, and erroring first would redden the build on models nobody has looked at yet. The flip
+        // to Error is the point of the rule once that backlog is known to be empty.
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
+    /// <summary>
+    /// Reports every bare member name a plan would record for <paramref name="type"/> that is
+    /// ambiguous across the inheritance chain.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A plan addresses members by BARE NAME, and <c>CloneEngine.TryReadMember</c> resolves one by
+    /// walking <c>type -&gt; BaseType</c> and taking the FIRST declaration. A derived member that
+    /// shadows a base member of the same name therefore wins silently, whatever the plan intended.
+    /// </para>
+    /// <para>
+    /// MGIE, EmuEdit and SmartEdit each declared their own <c>_options</c> beside
+    /// <c>DiffusionModelBase</c>'s <c>DiffusionModelOptions&lt;T&gt; _options</c>. The type search
+    /// correctly matched the BASE field for the <c>diffusionOptions</c> parameter and recorded
+    /// "_options", but the runtime read returned the DERIVED options. The only recorded candidate
+    /// then failed its type check and the clone was rebuilt from constructor defaults - a
+    /// 320-channel U-Net in place of the one it was handed, 711,458,851 parameters against the
+    /// source's 29,315,931.
+    /// </para>
+    /// <para>
+    /// REPORT ONLY, deliberately. <c>CloneAutomationAnalyzer</c> reads
+    /// <see cref="CollectConstructorParameters"/> as a null/non-null predicate, so changing what the
+    /// resolver RETURNS would move that analyzer's diagnostics too. Refusing the candidate would
+    /// also be worse than useless here: the shadowed name is legitimately right for one of the two
+    /// parameters, so dropping it leaves the type with no candidate at all and the clone rebuilds
+    /// from defaults anyway - the same bug by another route.
+    /// </para>
+    /// </remarks>
+    private static void ReportShadowedPlanMembers(SourceProductionContext context, INamedTypeSymbol type)
+    {
+        var candidates = CollectConstructorCandidates(
+            type, type.AllInterfaces.Any(i => i.Name == "IFullModel"));
+        if (candidates is null) return;
+
+        var reported = new HashSet<string>(System.StringComparer.Ordinal);
+        foreach (var candidate in candidates)
+        {
+            foreach (var member in candidate)
+            {
+                // UseDefault is a sentinel, not a member, and a dotted owner.member form is already
+                // qualified enough for TryReadMember to resolve it unambiguously.
+                if (string.Equals(member, UseDefault, System.StringComparison.Ordinal)) continue;
+                if (member.IndexOf('.') >= 0) continue;
+                if (!reported.Add(member)) continue;
+
+                // RECORDED TWICE IS THE WHOLE FAULT. A shadowed name read once is read correctly: the
+                // first declaration walking up from the derived type is the one the resolver meant, so
+                // nothing is lost. It only goes wrong when TWO parameters resolve to the same bare
+                // name and they cannot both be right - MGIE recorded "_options" for its own
+                // MGIEOptions parameter AND for the base's DiffusionModelOptions<T> parameter, and one
+                // of the two was always going to receive the other's value.
+                //
+                // Without this condition the rule reported 32 types (BigGAN over
+                // GenerativeAdversarialNetwork, the embedding networks over TransformerEmbeddingNetwork,
+                // the PINNs, Tacotron2) whose shadowing is real but inert: not one of them has a
+                // recorded constructor candidate, so no plan ever addresses the name and there is
+                // nothing to corrupt. Reporting a hazard that cannot fire is how a rule gets
+                // suppressed wholesale instead of fixed.
+                int timesRecorded = 0;
+                foreach (var other in candidate)
+                {
+                    if (string.Equals(other, member, System.StringComparison.Ordinal)) timesRecorded++;
+                }
+
+                if (timesRecorded < 2) continue;
+
+                if (FindShadowedDeclaration(type, member) is not INamedTypeSymbol shadowed) continue;
+
+                context.ReportDiagnostic(Diagnostic.Create(
+                    ShadowedPlanMemberDescriptor,
+                    type.Locations.FirstOrDefault() ?? Location.None,
+                    type.Name, member, shadowed.Name));
+            }
+        }
+    }
+
+    /// <summary>
+    /// The base type that redeclares <paramref name="memberName"/> with a type UNRELATED to the
+    /// derived one, or <see langword="null"/> when the name is safe.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// DIFFERENT IS NOT ENOUGH, and flagging mere difference is why the first version of this rule
+    /// reported 94 sites and broke the build. Narrowing a redeclared member to a more-derived type is
+    /// the library's normal idiom - AdaBoostClassifier over ClassifierBase.Options, ElasticNetRegression
+    /// over RegressionBase.Options, BigGAN over GenerativeAdversarialNetwork._options, ColBERT over
+    /// TransformerEmbeddingNetwork._options, 94 in all - and it is harmless precisely because the
+    /// derived value still satisfies a parameter typed as the base. <see cref="IsCarriedAs"/> is the
+    /// same predicate the resolver uses to decide a member can supply a parameter, so asking it in
+    /// BOTH directions is what separates the idiom from the fault.
+    /// </para>
+    /// <para>
+    /// MGIE's <c>MGIEOptions</c> against <c>DiffusionModelBase</c>'s
+    /// <c>DiffusionModelOptions&lt;T&gt;</c> is neither: two unrelated types sharing one name, so
+    /// whichever the runtime read returns first is wrong for one of the two parameters that recorded
+    /// it. That is the only shape worth a diagnostic.
+    /// </para>
+    /// </remarks>
+    private static INamedTypeSymbol? FindShadowedDeclaration(INamedTypeSymbol type, string memberName)
+    {
+        ITypeSymbol? first = null;
+
+        for (var current = type; current is not null; current = current.BaseType)
+        {
+            foreach (var member in current.GetMembers(memberName))
+            {
+                ITypeSymbol? memberType = member switch
+                {
+                    IPropertySymbol { IsStatic: false, IsIndexer: false } property => property.Type,
+                    IFieldSymbol { IsStatic: false, IsConst: false } field => field.Type,
+                    _ => null,
+                };
+
+                if (memberType is null) continue;
+
+                if (first is null)
+                {
+                    first = memberType;
+                    continue;
+                }
+
+                // Asked in BOTH directions on purpose. IsCarriedAs already accepts a derived/base
+                // pair either way round, so one call would very nearly do; spelling out both makes
+                // the intent - "neither declaration can stand in for the other" - survive any later
+                // narrowing of that predicate, and costs nothing at generation time.
+                if (!IsCarriedAs(first, memberType) && !IsCarriedAs(memberType, first))
+                {
+                    return current;
+                }
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -514,12 +681,13 @@ public class ClonePlanGenerator : IIncrementalGenerator
     /// operation. Only a direct parameter RHS is accepted. Derived expressions remain unresolved so
     /// the generator cannot mistake a computed runtime value for the original argument.
     /// </remarks>
-    private static string? FindDirectConstructorAssignment(
+    private static ISymbol? FindDirectConstructorAssignment(
         INamedTypeSymbol type,
         IMethodSymbol constructor,
-        IParameterSymbol parameter)
+        IParameterSymbol parameter,
+        int depth = 0)
     {
-        string? found = null;
+        ISymbol? found = null;
         foreach (var syntaxReference in constructor.DeclaringSyntaxReferences)
         {
             if (syntaxReference.GetSyntax() is not ConstructorDeclarationSyntax declaration)
@@ -533,14 +701,7 @@ public class ClonePlanGenerator : IIncrementalGenerator
                 // authoritative value, and replaying it reproduces both the explicit and default
                 // cases. Requiring a bare identifier dropped exactly these option members and let a
                 // same-named base property win later by heuristic.
-                ExpressionSyntax carried = assignment.Right is BinaryExpressionSyntax coalesce
-                        && coalesce.IsKind(SyntaxKind.CoalesceExpression)
-                    ? coalesce.Left
-                    : assignment.Right;
-                if (carried is not IdentifierNameSyntax right
-                    || !string.Equals(right.Identifier.ValueText, parameter.Name,
-                        System.StringComparison.Ordinal))
-                    continue;
+                if (!CarriesParameter(assignment.Right, parameter.Name)) continue;
 
                 string? memberName = assignment.Left switch
                 {
@@ -554,10 +715,10 @@ public class ClonePlanGenerator : IIncrementalGenerator
                 };
                 if (memberName is null) continue;
 
-                bool isReadableMember = false;
-                for (var current = type; current is not null && !isReadableMember; current = current.BaseType)
+                ISymbol? readableMember = null;
+                for (var current = type; current is not null && readableMember is null; current = current.BaseType)
                 {
-                    isReadableMember = current.GetMembers(memberName).Any(member => member switch
+                    readableMember = current.GetMembers(memberName).FirstOrDefault(member => member switch
                     {
                         IPropertySymbol { IsStatic: false, IsIndexer: false } property
                             when property.GetMethod is not null
@@ -569,16 +730,156 @@ public class ClonePlanGenerator : IIncrementalGenerator
                         _ => false,
                     });
                 }
-                if (!isReadableMember) continue;
+                if (readableMember is null) continue;
 
                 if (found is not null
-                    && !string.Equals(found, memberName, System.StringComparison.Ordinal))
+                    && !SymbolEqualityComparer.Default.Equals(found, readableMember))
                     return null;
-                found = memberName;
+                found = readableMember;
             }
         }
 
-        return found;
+        return found ?? FollowThisInitializer(type, constructor, parameter, depth);
+    }
+
+    /// <summary>
+    /// Resolves a parameter that this constructor forwards to another one with <c>: this(...)</c>.
+    /// </summary>
+    /// <remarks>
+    /// An overload that forwards stores nothing itself, so the search above finds no assignment and
+    /// the parameter falls through to the by-name and by-type heuristics. Those accept a member
+    /// holding the value MORE GENERALLY -- a model's own <c>MGIEOptions options</c> matching the
+    /// base's <c>ModelOptions Options</c> property -- and at runtime that member is not an instance
+    /// of the parameter type, so CloneEngine rejects the candidate. With every candidate rejected
+    /// the model is rebuilt from constructor defaults and silently comes back at default size.
+    /// Following the delegation finds the field the target constructor actually stores.
+    /// </remarks>
+    private static ISymbol? FollowThisInitializer(
+        INamedTypeSymbol type,
+        IMethodSymbol constructor,
+        IParameterSymbol parameter,
+        int depth)
+    {
+        // Forwarding chains are short by construction; the bound only guards against a cycle in
+        // source Roslyn has already reported on separately.
+        if (depth >= 4) return null;
+
+        foreach (var syntaxReference in constructor.DeclaringSyntaxReferences)
+        {
+            if (syntaxReference.GetSyntax() is not ConstructorDeclarationSyntax declaration
+                || declaration.Initializer is not ConstructorInitializerSyntax initializer
+                || !initializer.ThisOrBaseKeyword.IsKind(SyntaxKind.ThisKeyword))
+                continue;
+
+            var arguments = initializer.ArgumentList.Arguments;
+            for (int i = 0; i < arguments.Count; i++)
+            {
+                if (!CarriesParameter(arguments[i].Expression, parameter.Name)) continue;
+
+                var target = FindDelegationTarget(type, constructor, arguments);
+                if (target is null) return null;
+
+                var targetParameter = arguments[i].NameColon is NameColonSyntax nameColon
+                    ? target.Parameters.FirstOrDefault(candidate => string.Equals(
+                        candidate.Name, nameColon.Name.Identifier.ValueText, System.StringComparison.Ordinal))
+                    : i < target.Parameters.Length ? target.Parameters[i] : null;
+                if (targetParameter is null) return null;
+
+                var resolved = FindDirectConstructorAssignment(type, target, targetParameter, depth + 1);
+                // The forwarded value must still be carried as THIS parameter's type: an overload is
+                // free to widen or substitute what it passes on.
+                ITypeSymbol? storedType = resolved switch
+                {
+                    IPropertySymbol property => property.Type,
+                    IFieldSymbol field => field.Type,
+                    _ => null,
+                };
+                return storedType is not null && IsCarriedAs(storedType, parameter.Type) ? resolved : null;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Whether an expression carries the named parameter's effective value.</summary>
+    /// <remarks>
+    /// Three shapes all mean "this is where the argument went". A bare identifier is the plain case.
+    /// <c>x ?? new Default()</c> and <c>x ?? throw ...</c> carry x, with the right-hand side being
+    /// the substitute applied when x is null -- which the member then holds, so replaying it
+    /// reproduces both cases. A COPY, <c>new TOptions(x)</c>, is the third: a model that defends
+    /// itself against later mutation of the caller's options stores its own copy, and that copy is
+    /// the authoritative configuration afterwards. Matching it is safe because the caller still
+    /// checks that the MEMBER's type is carried as the parameter's type, so a constructor call that
+    /// merely consumes the parameter -- a layer built from a width -- cannot match.
+    /// </remarks>
+    private static bool CarriesParameter(ExpressionSyntax expression, string parameterName)
+    {
+        ExpressionSyntax carried = expression;
+        for (int unwrapped = 0; unwrapped < 4; unwrapped++)
+        {
+            switch (carried)
+            {
+                case BinaryExpressionSyntax coalesce when coalesce.IsKind(SyntaxKind.CoalesceExpression):
+                    carried = coalesce.Left;
+                    continue;
+                case ObjectCreationExpressionSyntax
+                {
+                    ArgumentList: { Arguments.Count: 1 } copyArguments
+                }:
+                    carried = copyArguments.Arguments[0].Expression;
+                    continue;
+                case ParenthesizedExpressionSyntax parenthesized:
+                    carried = parenthesized.Expression;
+                    continue;
+            }
+
+            break;
+        }
+
+        return carried is IdentifierNameSyntax identifier
+            && string.Equals(identifier.Identifier.ValueText, parameterName, System.StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The one constructor a <c>: this(...)</c> call can bind to, or null when more than one could.
+    /// </summary>
+    /// <remarks>
+    /// Arity alone is not enough: MGIE forwards eight arguments and has two eight-parameter
+    /// constructors. Each argument that passes a parameter straight through carries that
+    /// parameter's type, which rules out the overload whose slot cannot hold it. Anything less
+    /// certain than a single surviving candidate is left to the existing heuristics rather than
+    /// guessed at -- overload resolution is the compiler's job, not this generator's.
+    /// </remarks>
+    private static IMethodSymbol? FindDelegationTarget(
+        INamedTypeSymbol type,
+        IMethodSymbol constructor,
+        SeparatedSyntaxList<ArgumentSyntax> arguments)
+    {
+        IMethodSymbol? target = null;
+        foreach (var candidate in type.InstanceConstructors)
+        {
+            if (SymbolEqualityComparer.Default.Equals(candidate, constructor)
+                || candidate.Parameters.Length < arguments.Count
+                || candidate.Parameters.Count(p => !p.IsOptional) > arguments.Count)
+                continue;
+
+            bool compatible = true;
+            for (int i = 0; compatible && i < arguments.Count; i++)
+            {
+                if (arguments[i].NameColon is not null) continue;
+                var source = constructor.Parameters.FirstOrDefault(
+                    p => CarriesParameter(arguments[i].Expression, p.Name));
+                if (source is null || i >= candidate.Parameters.Length) continue;
+                compatible = IsCarriedAs(source.Type, candidate.Parameters[i].Type)
+                    || IsCarriedAs(candidate.Parameters[i].Type, source.Type);
+            }
+
+            if (!compatible) continue;
+            if (target is not null) return null;
+            target = candidate;
+        }
+
+        return target;
     }
 
     /// <summary>
@@ -592,10 +893,10 @@ public class ClonePlanGenerator : IIncrementalGenerator
     /// constructible but structurally wrong. A one-level path whose concatenated member names
     /// exactly equal the parameter name is stronger evidence than that direct suffix match.
     /// </remarks>
-    private static string? FindNestedSource(INamedTypeSymbol type, IParameterSymbol parameter)
+    private static IReadOnlyList<ISymbol>? FindNestedSource(INamedTypeSymbol type, IParameterSymbol parameter)
     {
         string parameterName = parameter.Name.Replace("_", string.Empty);
-        string? found = null;
+        IReadOnlyList<ISymbol>? found = null;
 
         for (var current = type; current is not null; current = current.BaseType)
         {
@@ -638,11 +939,11 @@ public class ClonePlanGenerator : IIncrementalGenerator
                     };
                     if (nestedType is null || !IsCarriedAs(nestedType, parameter.Type)) continue;
 
-                    string path = owner.Name + "." + nested.Name;
                     if (found is not null
-                        && !string.Equals(found, path, System.StringComparison.Ordinal))
+                        && (!SymbolEqualityComparer.Default.Equals(found[0], owner)
+                            || !SymbolEqualityComparer.Default.Equals(found[1], nested)))
                         return null;
-                    found = path;
+                    found = new[] { owner, nested };
                 }
             }
 
@@ -678,6 +979,9 @@ public class ClonePlanGenerator : IIncrementalGenerator
     /// </para>
     /// </remarks>
     internal static string? FindSource(INamedTypeSymbol type, IParameterSymbol parameter)
+        => FindSourceMember(type, parameter)?.Name;
+
+    private static ISymbol? FindSourceMember(INamedTypeSymbol type, IParameterSymbol parameter)
     {
         var candidates = new[]
         {
@@ -698,12 +1002,12 @@ public class ClonePlanGenerator : IIncrementalGenerator
                             when property.GetMethod is not null
                                  && IsCloneConstructionSource(property)
                                  && IsCarriedAs(property.Type, parameter.Type):
-                            return property.Name;
+                            return property;
 
                         case IFieldSymbol { IsStatic: false, IsConst: false } field
                             when IsCloneConstructionSource(field)
                                  && IsCarriedAs(field.Type, parameter.Type):
-                            return field.Name;
+                            return field;
                     }
                 }
             }
@@ -733,15 +1037,15 @@ public class ClonePlanGenerator : IIncrementalGenerator
     /// nothing else could be meant. Where two members qualify, neither is chosen.
     /// </para>
     /// </remarks>
-    private static string? FindByNameSuffix(INamedTypeSymbol type, IParameterSymbol parameter)
+    private static ISymbol? FindByNameSuffix(INamedTypeSymbol type, IParameterSymbol parameter)
     {
         var suffix = char.ToUpperInvariant(parameter.Name[0]) + parameter.Name.Substring(1);
-        string? found = null;
+        ISymbol? found = null;
 
         for (var current = type; current is not null; current = current.BaseType)
         {
-            var fields = new List<string>();
-            var properties = new List<string>();
+            var fields = new List<ISymbol>();
+            var properties = new List<ISymbol>();
 
             foreach (var member in current.GetMembers())
             {
@@ -772,7 +1076,7 @@ public class ClonePlanGenerator : IIncrementalGenerator
                         && bare.StartsWith(parameter.Name, System.StringComparison.OrdinalIgnoreCase));
                 if (!decorated) continue;
 
-                if (member is IFieldSymbol) fields.Add(name); else properties.Add(name);
+                if (member is IFieldSymbol) fields.Add(member); else properties.Add(member);
             }
 
             // A PROPERTY AND ITS OWN BACKING FIELD ARE ONE VALUE, NOT TWO CANDIDATES. Counting them
@@ -782,7 +1086,7 @@ public class ClonePlanGenerator : IIncrementalGenerator
             // unrebuildable over a parameter they do store, by the very lookup written to find it.
             // The field is preferred because it is the slot the constructor assigned.
             properties.RemoveAll(p => fields.Any(
-                f => string.Equals(f.TrimStart('_'), p, System.StringComparison.OrdinalIgnoreCase)));
+                f => string.Equals(f.Name.TrimStart('_'), p.Name, System.StringComparison.OrdinalIgnoreCase)));
 
             // Anything still standing alongside another is genuinely ambiguous, and neither is chosen.
             var matches = fields.Count + properties.Count;
@@ -831,11 +1135,11 @@ public class ClonePlanGenerator : IIncrementalGenerator
     /// parameter. The plan itself resolves a constructor as a whole, so it uses the two passes.
     /// </remarks>
     internal static string? FindAnySource(INamedTypeSymbol type, IParameterSymbol parameter)
-        => FindSource(type, parameter) ?? FindUniqueByType(type, parameter, NothingClaimed);
+        => FindSource(type, parameter) ?? FindUniqueByType(type, parameter, NothingClaimed)?.Name;
 
     private static readonly HashSet<string> NothingClaimed = new(System.StringComparer.Ordinal);
 
-    private static string? FindUniqueByType(
+    private static ISymbol? FindUniqueByType(
         INamedTypeSymbol type,
         IParameterSymbol parameter,
         HashSet<string> claimed)
@@ -845,8 +1149,8 @@ public class ClonePlanGenerator : IIncrementalGenerator
         if (parameter.Type.SpecialType is not SpecialType.None) return null;
         if (parameter.Type.TypeKind == TypeKind.Enum) return null;
 
-        var fields = new List<string>();
-        var properties = new List<string>();
+        var fields = new List<ISymbol>();
+        var properties = new List<ISymbol>();
 
         for (var current = type; current is not null; current = current.BaseType)
         {
@@ -869,7 +1173,7 @@ public class ClonePlanGenerator : IIncrementalGenerator
                 // this one -- that is what lets the last unclaimed member of a repeated type resolve.
                 if (claimed.Contains(name)) continue;
 
-                if (member is IFieldSymbol) fields.Add(name); else properties.Add(name);
+                if (member is IFieldSymbol) fields.Add(member); else properties.Add(member);
             }
         }
 
@@ -879,7 +1183,7 @@ public class ClonePlanGenerator : IIncrementalGenerator
         // method is built with is stored as _projector and read back through Projector, so the pair
         // alone was enough to lose it.
         properties.RemoveAll(p => fields.Any(
-            f => string.Equals(f.TrimStart('_'), p, System.StringComparison.OrdinalIgnoreCase)));
+            f => string.Equals(f.Name.TrimStart('_'), p.Name, System.StringComparison.OrdinalIgnoreCase)));
 
         if (fields.Count + properties.Count != 1) return null;
 

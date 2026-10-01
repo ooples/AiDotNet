@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
@@ -234,9 +234,21 @@ public abstract partial class AnomalyDetectorBase<T> : ModelBase<T, Matrix<T>, V
         new MeanSquaredErrorLoss<T>();
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// A detector's learned state is mostly not a parameter vector: fitted weights whose shapes exist only
+    /// after Fit, the member detectors of an ensemble, the training data a distance detector scores against.
+    /// The serialize-and-restore clone had nothing to pour them into and failed or silently scored
+    /// differently, so the copy carries every fitted field instead - deep-copied, which the shallow
+    /// MemberwiseClone this replaces (#2150) was not.
+    /// </remarks>
     public override IFullModel<T, Matrix<T>, Vector<T>> DeepCopy()
     {
-        return (AnomalyDetectorBase<T>)MemberwiseClone();
+        using (ModelPersistenceGuard.InternalOperation())
+        {
+            var copy = CloneEngine.CopyConfiguration(this);
+            CloneEngine.CopyFittedFields(this, copy);
+            return (AnomalyDetectorBase<T>)copy;
+        }
     }
 
     /// <inheritdoc/>

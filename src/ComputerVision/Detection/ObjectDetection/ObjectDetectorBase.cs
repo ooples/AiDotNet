@@ -1,4 +1,4 @@
-using AiDotNet.ComputerVision.Detection.Necks;
+﻿using AiDotNet.ComputerVision.Detection.Necks;
 using AiDotNet.Interfaces;
 using AiDotNet.ComputerVision.Detection.PostProcessing;
 using AiDotNet.ComputerVision.Weights;
@@ -45,8 +45,10 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     protected IDetectionBackbone<T>? Backbone { get; set; }
 
     /// <summary>
-    /// The neck module for feature fusion.
+    /// The neck module for feature fusion. Optional: a detector such as DETR feeds the
+    /// backbone straight into its transformer and has no neck at all.
     /// </summary>
+    [AiDotNet.Attributes.TrainableParameter(Optional = true)]
     protected NeckBase<T>? Neck { get; set; }
 
     /// <summary>

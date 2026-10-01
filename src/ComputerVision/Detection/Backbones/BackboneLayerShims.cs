@@ -19,6 +19,18 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 internal class Conv2D<T> : IParameterSource<T>, IParameterChunkSource<T>, IParameterLayoutSource
 {
     private readonly ConvolutionalLayer<T> _layer;
+
+    /// <summary>The wrapped layer, so a model holding this shim registers, trains and restores its parameters.</summary>
+    /// <remarks>
+    /// The generated parameter registration follows the EnumerateLayers convention and does not see through a
+    /// type that is not itself a layer. Without this, CRNN registered only its LSTMs: its seven convolutions and
+    /// output layer were missing from GetParameters, so SetParameters never reached them and a clone rebuilt them
+    /// from a separate path that disagreed with the original.
+    /// </remarks>
+    internal IEnumerable<LayerBase<T>> EnumerateLayers()
+    {
+        yield return _layer;
+    }
     private readonly int _inChannels;
     private readonly int _outChannels;
     private readonly int _kernelSize;
@@ -171,6 +183,18 @@ internal class Conv2D<T> : IParameterSource<T>, IParameterChunkSource<T>, IParam
 internal class Dense<T> : IParameterSource<T>, IParameterChunkSource<T>, IParameterLayoutSource
 {
     private readonly DenseLayer<T> _layer;
+
+    /// <summary>The wrapped layer, so a model holding this shim registers, trains and restores its parameters.</summary>
+    /// <remarks>
+    /// The generated parameter registration follows the EnumerateLayers convention and does not see through a
+    /// type that is not itself a layer. Without this, CRNN registered only its LSTMs: its seven convolutions and
+    /// output layer were missing from GetParameters, so SetParameters never reached them and a clone rebuilt them
+    /// from a separate path that disagreed with the original.
+    /// </remarks>
+    internal IEnumerable<LayerBase<T>> EnumerateLayers()
+    {
+        yield return _layer;
+    }
     private readonly int _inDim;
     private readonly int _outDim;
 
@@ -339,6 +363,18 @@ internal class Dense<T> : IParameterSource<T>, IParameterChunkSource<T>, IParame
 internal class MultiHeadSelfAttention<T> : IParameterSource<T>, IParameterChunkSource<T>, IParameterLayoutSource
 {
     private readonly MultiHeadAttentionLayer<T> _layer;
+
+    /// <summary>The wrapped layer, so a model holding this shim registers, trains and restores its parameters.</summary>
+    /// <remarks>
+    /// The generated parameter registration follows the EnumerateLayers convention and does not see through a
+    /// type that is not itself a layer. Without this, CRNN registered only its LSTMs: its seven convolutions and
+    /// output layer were missing from GetParameters, so SetParameters never reached them and a clone rebuilt them
+    /// from a separate path that disagreed with the original.
+    /// </remarks>
+    internal IEnumerable<LayerBase<T>> EnumerateLayers()
+    {
+        yield return _layer;
+    }
     private readonly int _dim;
     private readonly int _numHeads;
 

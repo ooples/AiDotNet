@@ -363,7 +363,7 @@ public class MetaLearningFailurePathIntegrationTests
             new MetaOptNetOptions<double, Matrix<double>, Vector<double>>(new LinearVectorModel(2))
             {
                 NumClasses = 2,
-                EmbeddingDimension = 2,
+                EmbeddingDimension = 1,
                 SolverType = ConvexSolverType.RidgeRegression,
                 OuterLearningRate = 0.01,
                 MaxSolverIterations = 1
@@ -496,7 +496,7 @@ public class MetaLearningFailurePathIntegrationTests
         var options = new MetaOptNetOptions<double, Matrix<double>, Vector<double>>(model)
         {
             NumClasses = 2,
-            EmbeddingDimension = 2,
+            EmbeddingDimension = 1,
             SolverType = ConvexSolverType.RidgeRegression
         };
         var classifierWeights = new Matrix<double>(options.NumClasses, options.EmbeddingDimension);

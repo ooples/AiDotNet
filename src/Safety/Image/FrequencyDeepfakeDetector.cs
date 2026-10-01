@@ -47,10 +47,8 @@ namespace AiDotNet.Safety.Image;
     "https://arxiv.org/abs/1911.00686",
     Year = 2019,
     Authors = "Ricard Durall, Margret Keuper, Franz-Josef Pfreundt, Janis Keuper")]
-public class FrequencyDeepfakeDetector<T> : ImageSafetyModuleBase<T>
+public class FrequencyDeepfakeDetector<T> : DeepfakeDetectorBase<T>
 {
-
-    private readonly double _threshold;
     private readonly FastFourierTransform<T> _fft;
 
     private static readonly T Zero = NumOps.Zero;
@@ -65,8 +63,8 @@ public class FrequencyDeepfakeDetector<T> : ImageSafetyModuleBase<T>
     /// </summary>
     /// <param name="threshold">Detection threshold (0-1). Default: 0.5.</param>
     public FrequencyDeepfakeDetector(double threshold = 0.5)
+        : base(threshold)
     {
-        _threshold = threshold;
         _fft = new FastFourierTransform<T>();
     }
 
@@ -74,17 +72,70 @@ public class FrequencyDeepfakeDetector<T> : ImageSafetyModuleBase<T>
     public override IReadOnlyList<SafetyFinding> EvaluateImage(Tensor<T> image)
     {
         var findings = new List<SafetyFinding>();
+        var analysis = Analyze(image);
+        if (analysis is null) return findings;
+
+        double finalScore = analysis.Score;
+        if (finalScore >= Threshold)
+        {
+            findings.Add(new SafetyFinding
+            {
+                Category = SafetyCategory.Deepfake,
+                Severity = finalScore >= 0.8 ? SafetySeverity.High : SafetySeverity.Medium,
+                Confidence = finalScore,
+                Description = $"Frequency domain analysis: potential AI-generated image (score: {finalScore:F3}). " +
+                              $"Spectral flatness: {analysis.Flatness:F3}, periodic peaks: {analysis.Periodic:F3}, " +
+                              $"high-freq energy ratio: {analysis.HighFrequency:F3}.",
+                RecommendedAction = SafetyAction.Warn,
+                SourceModule = ModuleName
+            });
+        }
+
+        return findings;
+    }
+
+    /// <inheritdoc />
+    /// <exception cref="ArgumentNullException"><paramref name="image"/> is null.</exception>
+    /// <exception cref="ArgumentException">
+    /// The image is smaller than 8x8 pixels. A score of 0 would read as "authentic" for an image that
+    /// was never analysed.
+    /// </exception>
+    public override double GetDeepfakeScore(Tensor<T> image)
+    {
+        if (image is null) throw new ArgumentNullException(nameof(image));
+        var analysis = Analyze(image);
+        if (analysis is null)
+        {
+            throw new ArgumentException(
+                "Frequency analysis needs an image of at least 8x8 pixels.", nameof(image));
+        }
+
+        return analysis.Score;
+    }
+
+    /// <summary>The row-averaged spectral measurements and their weighted score.</summary>
+    private sealed class Analysis
+    {
+        public double Flatness { get; set; }
+        public double Periodic { get; set; }
+        public double HighFrequency { get; set; }
+        public double Score { get; set; }
+    }
+
+    /// <summary>Measures the image's row spectra, or returns null when it is too small to analyse.</summary>
+    private Analysis? Analyze(Tensor<T> image)
+    {
         var span = image.Data.Span;
-        if (span.Length == 0) return findings;
+        if (span.Length == 0) return null;
 
         var layout = DetermineLayout(image._shape, span.Length);
-        if (layout.Height < 8 || layout.Width < 8) return findings;
+        if (layout.Height < 8 || layout.Width < 8) return null;
 
         // Find nearest power of 2 for FFT
         int fftSize = 1;
         while (fftSize < layout.Width && fftSize < 512) fftSize *= 2;
         if (fftSize > layout.Width) fftSize /= 2;
-        if (fftSize < 8) return findings;
+        if (fftSize < 8) return null;
 
         // Analyze multiple rows from different parts of the image
         int numRows = Math.Min(16, layout.Height);
@@ -146,7 +197,7 @@ public class FrequencyDeepfakeDetector<T> : ImageSafetyModuleBase<T>
             analyzedRows++;
         }
 
-        if (analyzedRows == 0) return findings;
+        if (analyzedRows == 0) return null;
 
         double avgFlatness = spectralFlatnessSum / analyzedRows;
         double avgPeriodic = periodicPeakSum / analyzedRows;
@@ -166,24 +217,13 @@ public class FrequencyDeepfakeDetector<T> : ImageSafetyModuleBase<T>
                            avgHighFreq > 0.5 ? (avgHighFreq - 0.5) * 2 : 0;
         hfAnomaly = Math.Min(1.0, hfAnomaly);
 
-        double finalScore = 0.35 * flatnessAnomaly + 0.40 * periodicAnomaly + 0.25 * hfAnomaly;
-
-        if (finalScore >= _threshold)
+        return new Analysis
         {
-            findings.Add(new SafetyFinding
-            {
-                Category = SafetyCategory.Deepfake,
-                Severity = finalScore >= 0.8 ? SafetySeverity.High : SafetySeverity.Medium,
-                Confidence = Math.Min(1.0, finalScore),
-                Description = $"Frequency domain analysis: potential AI-generated image (score: {finalScore:F3}). " +
-                              $"Spectral flatness: {avgFlatness:F3}, periodic peaks: {avgPeriodic:F3}, " +
-                              $"high-freq energy ratio: {avgHighFreq:F3}.",
-                RecommendedAction = SafetyAction.Warn,
-                SourceModule = ModuleName
-            });
-        }
-
-        return findings;
+            Flatness = avgFlatness,
+            Periodic = avgPeriodic,
+            HighFrequency = avgHighFreq,
+            Score = Math.Min(1.0, 0.35 * flatnessAnomaly + 0.40 * periodicAnomaly + 0.25 * hfAnomaly),
+        };
     }
 
     private static double ComputeSpectralFlatness(double[] magnitudes, int start, int end)
