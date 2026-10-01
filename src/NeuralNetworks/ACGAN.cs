@@ -84,9 +84,6 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
             Beta2 = 0.999,
         };
 
-    private readonly List<T> _generatorLosses = new List<T>();
-    private readonly List<T> _discriminatorLosses = new List<T>();
-
     /// <summary>
     /// The number of classes for classification.
     /// </summary>
@@ -348,16 +345,6 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
             SourceNegativeLogLikelihood(generatorOutput, isReal: true),
             ClassNegativeLogLikelihood(generatorOutput, fakeLabels, emitsProbabilities));
         T generatorLoss = StepOnTape(generatorTape, generatorObjective, Generator, _generatorOptimizer);
-
-        // Track losses
-        _discriminatorLosses.Add(discriminatorLoss);
-        _generatorLosses.Add(generatorLoss);
-
-        if (_discriminatorLosses.Count > 100)
-        {
-            _discriminatorLosses.RemoveAt(0);
-            _generatorLosses.RemoveAt(0);
-        }
 
         return (discriminatorLoss, generatorLoss);
     }
