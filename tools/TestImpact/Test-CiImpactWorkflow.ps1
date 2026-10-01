@@ -407,10 +407,24 @@ foreach ($output in 'matrix', 'ledger_matrix', 'skipped') {
 Assert-Contract ($impactStep.Contains('COLLECT_COVERAGE_EVERYWHERE: ${{ inputs.collect_coverage_everywhere }}')) `
     'the test-level selection could narrow the coverage-everywhere run that feeds the map'
 $affectedText = Get-Content -LiteralPath 'tools/TestImpact/Select-AffectedTests.ps1' -Raw
+# GitHub caps a job's outputs at 1,048,576 bytes counted in UTF-16, two bytes per ASCII character, so the two
+# matrices must stay well under 524,288 characters together with the job's other outputs. 800,000 passed the old
+# character check and failed #2272's Build job with "Job outputs exceed 1,048,576 bytes".
+$budgetMatch = [regex]::Match($affectedText, '\[int\]\s*\$MaxMatrixCharacters\s*=\s*(\d+)')
+Assert-Contract ($budgetMatch.Success -and [int] $budgetMatch.Groups[1].Value -le 450000) `
+    'the test-level matrix budget does not fit the 1 MB UTF-16 job-output cap with headroom for other outputs'
 Assert-Contract ($affectedText.Contains("Write-Passthrough 'coverage-everywhere run'") -and
         $affectedText.Contains("Write-Passthrough 'post-merge delta re-run'") -and
         $affectedText.Contains('if (-not $plan.resolved)')) `
     'the test-level selection does not pass through the runs it must never narrow'
+# A passthrough publishes empty values instead of re-publishing select-shards' matrices (which would add their full
+# size to the Build job's capped outputs). That is only a passthrough while every consumer falls back to select-shards.
+$buildOutputUses = [regex]::Matches($validation, 'needs\.build\.outputs\.(matrix|ledger_matrix|skipped)\b[^}]*')
+Assert-Contract ($buildOutputUses.Count -gt 0 -and
+        @($buildOutputUses | Where-Object { $_.Value -notmatch ('\|\|\s*needs\.select-shards\.outputs\.' + $_.Groups[1].Value + '\b') }).Count -eq 0) `
+    'a consumer of the Build job''s matrix outputs does not fall back to select-shards, so an empty passthrough would run nothing'
+Assert-Contract (-not [regex]::IsMatch($affectedText, "Write-Output-Value 'matrix' \`$env:SELECTED_MATRIX")) `
+    'a passthrough re-publishes select-shards'' matrix into the Build job''s capped outputs'
 Assert-Contract (Test-JobDependency -JobHeader $selectorHeader -Dependency 'validation-source') `
     'select-shards does not depend on validation-source'
 Assert-Contract ($selectorHeader.Contains('fromJSON(needs.validation-source.outputs.execute_validation)')) `

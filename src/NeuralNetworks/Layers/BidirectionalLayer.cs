@@ -367,9 +367,12 @@ public partial class BidirectionalLayer<T> : LayerBase<T>, IShapeContract
         var forwardInput = input;
         _lastForwardOutput = _forwardLayer.Forward(forwardInput);
 
-        // Backward pass (reverse the input sequence)
-        var backwardInput = ReverseSequence(input);
-        _lastBackwardOutput = _backwardLayer.Forward(backwardInput);
+        // Backward direction: run the wrapped layer over the time-reversed sequence, then reverse its output back so
+        // position t pairs the forward state at t with the backward state at t (Schuster & Paliwal 1997; PyTorch's and
+        // Keras's bidirectional RNNs, and this layer's own GPU path). Both reversals are tape-tracked flips: the old
+        // SetSlice copy was not an autodiff node, so no gradient reached the input through the backward direction.
+        var backwardOutput = _backwardLayer.Forward(ReverseTime(input));
+        _lastBackwardOutput = ReverseTime(backwardOutput);
 
         // Merge outputs
         return MergeOutputs(_lastForwardOutput, _lastBackwardOutput);
@@ -610,20 +613,14 @@ public partial class BidirectionalLayer<T> : LayerBase<T>, IShapeContract
     /// - The gradients from the backward layer need to be reversed again during training
     /// </para>
     /// </remarks>
-    private static Tensor<T> ReverseSequence(Tensor<T> input)
+    private Tensor<T> ReverseTime(Tensor<T> sequence)
     {
-        var reversed = TensorAllocator.Rent<T>(input._shape);
-        int timeSteps = input.Shape[1];
-
-        for (int i = 0; i < timeSteps; i++)
-        {
-            // Slice along dimension 1 (time axis), getting a [batch, features] tensor
-            var slice = input.GetSliceAlongDimension(timeSteps - 1 - i, 1);
-            // Set into reversed tensor at position i along dimension 1
-            reversed.SetSlice(1, i, slice);
-        }
-
-        return reversed;
+        // The time axis the wrapped layer reads (see the layout note on this class): [Time, Features] at rank 2 for every
+        // recurrent family; at rank 3 RecurrentLayer is time-major and LSTM/GRU are batch-major. A rank-1 tensor is a
+        // single step, which has no order to reverse.
+        if (sequence.Shape.Length < 2) return sequence;
+        int timeAxis = sequence.Shape.Length == 2 || _forwardLayer is RecurrentLayer<T> ? 0 : 1;
+        return Engine.TensorFlip(sequence, new[] { timeAxis });
     }
 
     /// <summary>
