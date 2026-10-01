@@ -88,6 +88,8 @@ $script:SharedInfrastructureFiles = @(
 $script:BuildOnlyFiles = @('.editorconfig')
 # Per tool directory: whether this workflow's build or tests reference it (Test-ToolDirectoryReferenced).
 $script:ToolReferenceCache = @{}
+# Per .github file name: whether anything this workflow runs mentions it (Test-GitHubFileReferenced).
+$script:GitHubFileReferenceCache = @{}
 $script:FullValidationPaths = @(
     '.github/test-shards.yml',
     '.github/test-shard-changes.json'
@@ -221,6 +223,9 @@ function Get-ChangedPathImpact {
     # Unknown GitHub configuration can affect analysis, generated reports, or a required check. It
     # is intentionally not eligible for coverage-map reduction until classified explicitly.
     if ($normalized.StartsWith('.github/', [StringComparison]::OrdinalIgnoreCase)) {
+        # A file nothing in this workflow reads (CODEOWNERS, FUNDING.yml, issue templates, dependabot.yml) is
+        # consumed by GitHub itself, never by a build or test step, so it cannot change a shard's result.
+        if (-not (Test-GitHubFileReferenced -Path $normalized)) { return [ChangedPathImpact]::NonRuntime }
         return [ChangedPathImpact]::FullValidation
     }
 
@@ -255,6 +260,28 @@ function Test-ToolDirectoryReferenced {
     # git grep: 0 = found, 1 = not found, anything else = the search itself failed.
     $referenced = $LASTEXITCODE -ne 1
     $script:ToolReferenceCache[$directory] = $referenced
+    return $referenced
+}
+
+<#
+.SYNOPSIS
+Whether anything this workflow runs mentions a non-workflow .github file.
+
+.DESCRIPTION
+Searched at HEAD, by file name, in this workflow file, the composite actions and scripts it runs, tools/, src/,
+tests/ and Directory.Build.*. A name match anywhere keeps the file FullValidation, even a coincidental one: the
+search only has to be a superset of the real readers. Files under .github/actions/ and .github/scripts/ never get
+here (they are FullValidation directories), and a failed search counts as referenced.
+#>
+function Test-GitHubFileReferenced {
+    param([Parameter(Mandatory)] [string] $Path)
+    $name = [System.IO.Path]::GetFileName($Path)
+    if ([string]::IsNullOrEmpty($name)) { return $true }
+    if ($script:GitHubFileReferenceCache.ContainsKey($name)) { return $script:GitHubFileReferenceCache[$name] }
+    $null = & git grep -q -i -F $name HEAD -- '.github/workflows/sonarcloud.yml' '.github/actions/' '.github/scripts/' 'tools/' 'src/' 'tests/' 'Directory.Build.props' 'Directory.Build.targets' 2>$null
+    # git grep: 0 = found, 1 = not found, anything else = the search itself failed.
+    $referenced = $LASTEXITCODE -ne 1
+    $script:GitHubFileReferenceCache[$name] = $referenced
     return $referenced
 }
 
@@ -2519,6 +2546,20 @@ file class Private { }
         'tools/TestImpact lost its selection-control classification'
     Assert-True ((Get-ChangedPathImpact -Path 'tools/loose-file.txt') -eq [ChangedPathImpact]::MapCandidate) `
         'a file directly under tools/ has no directory to scope by and must keep the old behaviour'
+    # .github/: a file only GitHub itself reads cannot change a shard; one this workflow reads keeps full validation.
+    # These read the real tree, so they fail loudly if a workflow starts reading one of them.
+    foreach ($githubOnly in '.github/CODEOWNERS', '.github/FUNDING.yml', '.github/ISSUE_TEMPLATE/bug_report.yml') {
+        if (Test-Path -LiteralPath $githubOnly) {
+            Assert-True ((Get-ChangedPathImpact -Path $githubOnly) -eq [ChangedPathImpact]::NonRuntime) `
+                "$githubOnly is read only by GitHub but is not NonRuntime"
+        }
+    }
+    foreach ($workflowRead in '.github/ci-test-baseline.json', '.github/scripts/Invoke-Shard.ps1', '.github/test-shards.yml') {
+        Assert-True ((Get-ChangedPathImpact -Path $workflowRead) -ne [ChangedPathImpact]::NonRuntime) `
+            "$workflowRead is read by this workflow but was downgraded to NonRuntime"
+    }
+    Assert-True ((Get-ChangedPathImpact -Path '.github/never-mentioned-anywhere-1f3a.json') -eq [ChangedPathImpact]::NonRuntime) `
+        'an unreferenced new .github file is not NonRuntime'
     # The selection report lists every changed path, so a build-only file must be recorded as a decision even
     # beside runtime changes (it used to fall through the switch and vanish from the report).
     $reportMap = [pscustomobject]@{ knownShards = @('Alpha'); alwaysRun = @(); files = [pscustomobject]@{
