@@ -359,12 +359,17 @@
 Bumped 0.130.3 to 0.132.1 for AiDotNet.Tensors #1035 (non-causal FlashAttention with more
          queries than keys, which RectangularAttention needs). 0.132.1 depends on AiDotNet.Evolution,
          so it can only land once the in-repo engine is gone. It also replaces the process-global
-         GradientTape.ReleaseStreamingActivations flag with the per-tape StreamingGraphRetention option. -->
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.133.0" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.133.0" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.133.0" />
+         GradientTape.ReleaseStreamingActivations flag with the per-tape StreamingGraphRetention option.
+
+         Bumped 0.133.0 to 0.133.2 for AiDotNet.Tensors #1069: one sigmoid kernel on every CPU vendor
+         (an Intel-only table path made RepViTSAM and EfficientSAM train differently on Intel runners)
+         and sigmoid(+/-inf) no longer NaN. DeferredArrayMaterializer became HostSync (same TryMaterialize,
+         Register and Remove). -->
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.133.2" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.133.2" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.133.2" />
     <PackageVersion Include="AiDotNet.Evolution" Version="0.2.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.133.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.133.2" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />
