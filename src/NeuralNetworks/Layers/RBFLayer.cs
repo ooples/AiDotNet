@@ -549,25 +549,82 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Initializes the centers and widths of the RBF layer with random values.
+    /// Number of nearest centres the width heuristic of Moody and Darken (1989) averages over.
+    /// </summary>
+    private const int WidthNearestCenters = 2;
+
+    /// <summary>
+    /// Initializes the centers, then sets each width from the spacing of the centers around it.
     /// </summary>
     /// <remarks>
-    /// This private method initializes the centers with random values scaled by the input and output dimensions,
-    /// and initializes the widths with random values between 0 and 1. This provides a good starting point for
-    /// training the RBF layer.
+    /// <para>
+    /// Widths follow the P-nearest-neighbour heuristic of Moody and Darken (1989), "Fast Learning in
+    /// Networks of Locally-Tuned Processing Units": the width of unit j is the root-mean-square distance
+    /// from its center to its P nearest other centers, so each Gaussian overlaps its neighbours and the
+    /// units together cover the region the centers span.
+    /// </para>
+    /// <para>
+    /// Widths used to be drawn from U(0, 1). A width w gives epsilon = 1 / (2 w^2), so a small draw made
+    /// the unit a spike that outputs zero for any input a short distance from its center: a dead unit
+    /// with no gradient. Measured on the generated fixture (4 centers, float), 25 of 50,000 freshly
+    /// initialized layers mapped every probed input to the same output, and every one of those had all
+    /// four widths below 0.23 (the smallest 0.0004).
+    /// </para>
+    /// <para>
+    /// A layer with a single center has no neighbour to measure, and coincident centers measure zero; both
+    /// fall back to a width of 1, the common default when no spacing information exists.
+    /// </para>
     /// </remarks>
     private void InitializeParameters()
     {
         InitializeLayerWeights(_centers, _inputSize, _numCenters);
-
-        // Widths are RBF-specific: random positive values, not Xavier
-        var widthSpan = _widths.AsWritableSpan();
-        for (int i = 0; i < widthSpan.Length; i++)
-            widthSpan[i] = NumOps.FromDouble(Random.NextDouble());
+        InitializeWidthsFromCenterSpacing();
 
         // Register after initialization so tensor references are final
         RegisterTrainableParameter(_centers, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_widths, PersistentTensorRole.Biases);
+    }
+
+    /// <summary>
+    /// Sets each width to the RMS distance from its center to its <see cref="WidthNearestCenters"/>
+    /// nearest other centers (Moody and Darken 1989), or to 1 where that distance is undefined or zero.
+    /// </summary>
+    private void InitializeWidthsFromCenterSpacing()
+    {
+        int centers = _numCenters;
+        int dims = _inputSize;
+        var c = _centers.AsSpan();
+        var widthSpan = _widths.AsWritableSpan();
+        var squaredDistances = new double[Math.Max(0, centers - 1)];
+
+        for (int j = 0; j < centers; j++)
+        {
+            int count = 0;
+            for (int i = 0; i < centers; i++)
+            {
+                if (i == j) continue;
+                double sum = 0.0;
+                for (int d = 0; d < dims; d++)
+                {
+                    double diff = NumOps.ToDouble(c[j * dims + d]) - NumOps.ToDouble(c[i * dims + d]);
+                    sum += diff * diff;
+                }
+                squaredDistances[count++] = sum;
+            }
+
+            int neighbours = Math.Min(WidthNearestCenters, count);
+            double width = 1.0;
+            if (neighbours > 0)
+            {
+                Array.Sort(squaredDistances, 0, count);
+                double mean = 0.0;
+                for (int k = 0; k < neighbours; k++) mean += squaredDistances[k];
+                double rms = Math.Sqrt(mean / neighbours);
+                if (rms > 0.0 && !double.IsNaN(rms) && !double.IsInfinity(rms)) width = rms;
+            }
+
+            widthSpan[j] = NumOps.FromDouble(width);
+        }
     }
 
 }
