@@ -56,6 +56,17 @@ internal sealed class AssemblyIndex
     public IReadOnlySet<TypeNode>? TypesInDocument(string repoRelativePath) =>
         _byDocument.TryGetValue(repoRelativePath, out var set) ? set : null;
 
+    /// <summary>Every type with a source document whose key starts with <paramref name="prefix"/>.</summary>
+    public HashSet<TypeNode> TypesInDocumentsUnder(string prefix)
+    {
+        var result = new HashSet<TypeNode>();
+        foreach (var (document, types) in _byDocument)
+        {
+            if (document.StartsWith(prefix, StringComparison.Ordinal)) result.UnionWith(types);
+        }
+        return result;
+    }
+
     public static AssemblyIndex Load(IEnumerable<string> binDirectories, string repoRoot)
     {
         var index = new AssemblyIndex();

@@ -125,7 +125,7 @@ try {
         --bin (Join-Path $BuildRoot 'tests/AiDotNet.Serving.Tests/bin/Release/net10.0') `
         --project 'tests/AiDotNet.Tests/AiDotNetTests.csproj=AiDotNetTests' `
         --project 'tests/AiDotNet.Serving.Tests/AiDotNet.Serving.Tests.csproj=AiDotNet.Serving.Tests' `
-        --unmappable 'src/AiDotNet.Generators/' `
+        --generator-project 'src/AiDotNet.Generators/=AiDotNet.Generators' `
         --unmappable "tools/" `
         --changes $changes --diff $diff --shards $manifest --out $PlanFile
     if ($LASTEXITCODE -ne 0) { throw "TypeImpact exited $LASTEXITCODE" }

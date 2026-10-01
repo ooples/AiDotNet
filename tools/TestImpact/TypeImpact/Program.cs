@@ -53,6 +53,20 @@ foreach (var (status, path) in ReadChanges(options.Changes))
         continue;
     }
 
+    if (ResolveGeneratorChange(index, options, status, path) is { } generatorChange)
+    {
+        if (generatorChange.Unresolved is { } why)
+        {
+            unresolved.Add(new JsonObject { ["path"] = path, ["reason"] = why });
+        }
+        else
+        {
+            changed.UnionWith(generatorChange.Types);
+            perFile.Add(new JsonObject { ["path"] = path, ["types"] = generatorChange.Types.Count, ["generator"] = true });
+        }
+        continue;
+    }
+
     if (options.Unmappable.Any(prefix => path.StartsWith(prefix, StringComparison.Ordinal)))
     {
         unresolved.Add(new JsonObject { ["path"] = path, ["reason"] = "source generator input: it rewrites generated code in every assembly" });
@@ -133,7 +147,10 @@ var enumerating = ReverseClosure(index.Nodes.Where(n => n.Enumerates && testAsse
     .ToHashSet();
 // Inventories react to production code: an edit confined to test sources cannot move the set of
 // types they enumerate.
-bool anySource = changed.Any(n => !index.TestAssemblies.Contains(n.Assembly));
+// A source generator's own assembly is not part of what the inventories enumerate; the code it generates is, and that
+// arrives here as types of the assemblies it was generated into.
+var generatorAssemblies = options.GeneratorProjects.Select(g => g.Assembly).ToHashSet(StringComparer.Ordinal);
+bool anySource = changed.Any(n => !index.TestAssemblies.Contains(n.Assembly) && !generatorAssemblies.Contains(n.Assembly));
 var selectedNodes = new HashSet<TypeNode>(affected.Where(n => n.TestClasses.Count > 0));
 if (anySource)
 {
@@ -293,6 +310,61 @@ static bool IsDocumentation(string path)
         || path.StartsWith("docs/", StringComparison.Ordinal);
 }
 
+// A source generator changes tests only through the code it emits, and the compiler records that code in the PDB under
+// "<generator assembly>/<generator type>/<hint>". So a change to a generator project's source maps to:
+//   - a file declaring [Generator] classes: the types those generators emitted into the loaded assemblies;
+//   - a file declaring only analyzers ([DiagnosticAnalyzer]): nothing - diagnostics change the build, not a test;
+//   - any other file (a shared helper, baseline data): the types EVERY generator of the project emitted;
+//   - plus, always, the types compiled from the file itself (a test project that links generator sources).
+// AnalyzerReleases.*.md is analyzer release tracking (build diagnostics only). A deleted source, a generator whose
+// output cannot be found, or an unreadable file stays unresolved. Not visible here: a generated member that the new
+// generator stops emitting into an otherwise unchanged type. The nightly full run covers that, as it covers reflection.
+static (HashSet<TypeNode> Types, string? Unresolved)? ResolveGeneratorChange(AssemblyIndex index, Options options, char status, string path)
+{
+    var project = options.GeneratorProjects.FirstOrDefault(g => path.StartsWith(g.Directory, StringComparison.Ordinal));
+    if (project.Directory is null) return null;
+
+    var none = new HashSet<TypeNode>();
+    string fileName = Path.GetFileName(path);
+    if (!path.EndsWith(".cs", StringComparison.OrdinalIgnoreCase))
+    {
+        return fileName.StartsWith("AnalyzerReleases.", StringComparison.Ordinal) && fileName.EndsWith(".md", StringComparison.Ordinal)
+            ? (none, null)
+            : (none, "a non-C# file in a source generator project: its effect on the generated code cannot be read");
+    }
+    if (status == 'D') return (none, "deleted source generator file: what it generated cannot be read from the new assemblies");
+
+    string text;
+    try { text = File.ReadAllText(Path.Combine(options.Repo, path)); }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return (none, "source generator file could not be read: " + ex.Message); }
+
+    var types = new HashSet<TypeNode>();
+    if (index.TypesInDocument(path) is { } compiled) types.UnionWith(compiled);
+
+    string? ns = System.Text.RegularExpressions.Regex.Match(text, @"(?m)^\s*namespace\s+([\w.]+)") is { Success: true } nsMatch ? nsMatch.Groups[1].Value : null;
+    var generators = System.Text.RegularExpressions.Regex.Matches(text,
+            @"\[Generator\b[^\]]*\]\s*(?:\[[^\]]*\]\s*)*(?:(?:public|internal|sealed|partial|abstract)\s+)*class\s+(\w+)")
+        .Select(m => m.Groups[1].Value).ToList();
+    if (generators.Count > 0)
+    {
+        foreach (var generator in generators)
+        {
+            string prefix = LoadedAssembly.GeneratedDocumentPrefix + project.Assembly + "/" + (ns is null ? generator : ns + "." + generator) + "/";
+            var emitted = index.TypesInDocumentsUnder(prefix);
+            if (emitted.Count == 0) return (none, $"generator {generator} emitted nothing into the loaded assemblies");
+            types.UnionWith(emitted);
+        }
+        return (types, null);
+    }
+
+    if (System.Text.RegularExpressions.Regex.IsMatch(text, @"\[DiagnosticAnalyzer\b")) return (types, null);
+
+    var everything = index.TypesInDocumentsUnder(LoadedAssembly.GeneratedDocumentPrefix + project.Assembly + "/");
+    if (everything.Count == 0) return (none, "no generated code from this project is in the loaded assemblies");
+    types.UnionWith(everything);
+    return (types, null);
+}
+
 // Every compiled test class must be selected by at least one shard of its project, or CI never runs it: before this
 // check, 243 classes matched no shard filter and had never run. A filter this evaluator cannot decide for a class
 // (Tri.Unknown) counts as selecting it, so the check can only miss an unowned class, never fail an owned one.
@@ -373,6 +445,7 @@ internal sealed class Options
     public int CatalogMaxEntryPoints { get; private set; } = 10;
     public List<string> Unmappable { get; } = [];
     public bool CheckOwnership { get; private set; }
+    public List<(string Directory, string Assembly)> GeneratorProjects { get; } = [];
 
     public static Options Parse(string[] args)
     {
@@ -395,6 +468,11 @@ internal sealed class Options
                 case "--diff": options.Diff = Next(); break;
                 case "--explain": options.Explain = true; break;
                 case "--check-ownership": options.CheckOwnership = true; break;
+                case "--generator-project":
+                    var generatorPair = Next().Split('=', 2);
+                    if (generatorPair.Length != 2) { throw new ArgumentException("--generator-project takes <directory>=<generator assembly name>"); }
+                    options.GeneratorProjects.Add((generatorPair[0].Replace('\\', '/'), generatorPair[1]));
+                    break;
                 case "--unmappable": options.Unmappable.Add(Next().Replace('\\', '/')); break;
                 case "--catalog-threshold": options.CatalogThreshold = int.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
                 case "--catalog-max-entry-points": options.CatalogMaxEntryPoints = int.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;

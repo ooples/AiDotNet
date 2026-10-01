@@ -78,6 +78,20 @@ try {
            Classes = @(); Runs = @('Other project'); Resolved = $false },
         @{ Name = 'a generator input is never mapped'
            Change = "M`tsrc/AiDotNet.Generators/SomeGenerator.cs"
+           Classes = @(); Runs = @('Other project'); Resolved = $false },
+        @{ Name = 'a source generator maps to the types it emitted, read from the PDB'
+           Change = "M`t$fixture/Gen/GreetingGenerator.cs"
+           Classes = @('GreetingTests', 'HelperSweepTests', 'InventoryTests')
+           Runs = @('Fast', 'Other project'); Resolved = $true },
+        @{ Name = 'a shared generator helper maps to everything the project generated'
+           Change = "M`t$fixture/Gen/GenHelpers.cs"
+           Classes = @('GreetingTests', 'HelperSweepTests', 'InventoryTests')
+           Runs = @('Fast', 'Other project'); Resolved = $true },
+        @{ Name = 'an analyzer changes diagnostics, not tests'
+           Change = "M`t$fixture/Gen/QuietAnalyzer.cs"
+           Classes = @(); Runs = @('Other project'); Resolved = $true },
+        @{ Name = 'a deleted generator source is unresolved'
+           Change = "D`t$fixture/Gen/OldGenerator.cs"
            Classes = @(); Runs = @('Other project'); Resolved = $false }
     )
 
@@ -94,6 +108,7 @@ try {
         }
         & dotnet (Join-Path $here 'bin/Release/net10.0/TypeImpact.dll') --repo $repo --bin $bin @diffArguments `
             --project 'Fixture.csproj=FixtureTests' --unmappable 'src/AiDotNet.Generators/' `
+            --generator-project "$fixture/Gen/=FixtureGen" `
             --catalog-threshold 3 --catalog-max-entry-points 1 `
             --changes $changes --shards $shards --out $out | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "TypeImpact exited $LASTEXITCODE on '$($case.Name)'" }

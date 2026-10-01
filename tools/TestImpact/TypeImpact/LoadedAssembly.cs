@@ -62,7 +62,8 @@ internal sealed class LoadedAssembly
             provider = MetadataReaderProvider.FromPortablePdbStream(File.OpenRead(pdb));
             var reader = provider.GetMetadataReader();
             var root = repoRoot;
-            bool ours = reader.Documents.Any(d => RepoRelative(reader.GetString(reader.GetDocument(d).Name), root) is not null);
+            bool ours = reader.Documents.Any(d => RepoRelative(reader.GetString(reader.GetDocument(d).Name), root) is { } relative
+                && !relative.StartsWith(GeneratedDocumentPrefix, StringComparison.Ordinal));
             if (!ours)
             {
                 return null;
@@ -156,6 +157,17 @@ internal sealed class LoadedAssembly
     /// A PDB document path as a repository-relative, forward-slash path; null when it lies outside
     /// the repository (generated sources in obj/, SDK sources, other checkouts).
     /// </summary>
+    /// <summary>Prefix of the document keys for source-generator output; see <see cref="RepoRelative"/>.</summary>
+    public const string GeneratedDocumentPrefix = "<generated>/";
+
+    // "<assembly>/<namespace-qualified generator type>/<hint>": relative, at least three segments, the second dotted.
+    private static bool IsGeneratedDocument(string path)
+    {
+        if (path.Length == 0 || path[0] == '/' || (path.Length > 1 && path[1] == ':')) return false;
+        var segments = path.Split('/');
+        return segments.Length >= 3 && segments[1].Contains('.', StringComparison.Ordinal);
+    }
+
     public static string? RepoRelative(string documentPath, string repoRoot)
     {
         var path = documentPath.Replace('\\', '/');
@@ -172,6 +184,24 @@ internal sealed class LoadedAssembly
             {
                 relative = path[root.Length..];
             }
+        }
+
+        // A source generator's output is recorded as ".../obj/<configuration>/<framework>/<generator assembly>/<generator
+        // type>/<hint>", or as just "<generator assembly>/<generator type>/<hint>" when nothing roots it. It is kept as
+        // "<generated>/<generator assembly>/<generator type>/<hint>", a key no repository path can have, so a change to a
+        // generator maps to exactly the types that generator emitted. Everything else under obj/ is dropped.
+        if (relative is null && IsGeneratedDocument(path))
+        {
+            return GeneratedDocumentPrefix + path;
+        }
+
+        if (relative is not null && (relative.StartsWith("obj/", StringComparison.Ordinal) || relative.Contains("/obj/", StringComparison.Ordinal)))
+        {
+            var parts = relative.Split('/');
+            int obj = Array.LastIndexOf(parts, "obj");
+            return obj >= 0 && parts.Length - obj >= 6 && parts[^2].Contains('.', StringComparison.Ordinal)
+                ? GeneratedDocumentPrefix + string.Join('/', parts[^3..])
+                : null;
         }
 
         if (relative is null || relative.Contains("/obj/", StringComparison.Ordinal) || relative.StartsWith("obj/", StringComparison.Ordinal))
