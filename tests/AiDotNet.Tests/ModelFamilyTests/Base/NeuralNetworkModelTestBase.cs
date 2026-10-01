@@ -4418,6 +4418,19 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// output. This mirrors the legal-label handling the NER/CRF test bases already do for their
     /// type-constrained targets. Non-CE models keep their (MSE-appropriate) raw target unchanged.
     /// </summary>
+    /// <summary>
+    /// True for a loss that reads its target as a per-element probability in [0, 1]: binary cross-entropy
+    /// (with or without logits), focal and dice, and a logit composite of them (SAM's focal + dice mask loss).
+    /// A target outside [0, 1] makes these objectives ill-posed - negative cross-entropy, or log of a
+    /// negative focal p_t - so fixtures project into that range and validation rejects anything outside it.
+    /// </summary>
+    private static bool TargetIsProbability(AiDotNet.Interfaces.ILossFunction<T>? loss)
+        => loss is AiDotNet.LossFunctions.BinaryCrossEntropyWithLogitsLoss<T>
+            or AiDotNet.LossFunctions.BinaryCrossEntropyLoss<T>
+            or AiDotNet.LossFunctions.CompositeLossWithLogits<T>
+            or AiDotNet.LossFunctions.FocalLoss<T>
+            or AiDotNet.LossFunctions.DiceLoss<T>;
+
     protected Tensor<T> MakeTargetWellPosedForLoss(INeuralNetworkModel<T> network, Tensor<T> target, Random rng)
     {
         if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> ctcNetwork
@@ -4524,10 +4537,15 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // PyTorch documents binary_cross_entropy_with_logits targets as probabilities between 0 and
         // 1, so clamping into that range is what makes the objective the one the loss is defined for.
         // Same treatment, same reason, as the CrossEntropyWithLogitsLoss branch below.
+        //
+        // The same holds for every loss that reads its target as a probability (TargetIsProbability).
+        // MEASURED on SAM, whose mask loss is focal + dice on sigmoid(logits): the random target spanned
+        // [-0.93, 0.98], so focal's p_t = t*p + (1-t)*(1-p) went negative for any p away from 0.5 and
+        // log(p_t) was NaN. While BatchNorm left single-sample activations unnormalized, SAM's logits sat
+        // near 0 (p ~ 0.5, where p_t = 0.5 for ANY t) and hid the ill-posed target; normalized ones did not.
         if (target.Length > 0
             && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> binary
-            && (binary.DefaultLossFunction is AiDotNet.LossFunctions.BinaryCrossEntropyWithLogitsLoss<T>
-                || binary.DefaultLossFunction is AiDotNet.LossFunctions.BinaryCrossEntropyLoss<T>))
+            && TargetIsProbability(binary.DefaultLossFunction))
         {
             var projected = new Tensor<T>(target.Shape.ToArray());
             var zero = NumOps.Zero;
@@ -4680,9 +4698,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             return;
         }
 
-        bool binaryCrossEntropy =
-            nn.DefaultLossFunction is AiDotNet.LossFunctions.BinaryCrossEntropyWithLogitsLoss<T>
-            || nn.DefaultLossFunction is AiDotNet.LossFunctions.BinaryCrossEntropyLoss<T>;
+        bool binaryCrossEntropy = TargetIsProbability(nn.DefaultLossFunction);
         bool bornRule = nn.DefaultLossFunction is AiDotNet.LossFunctions.BornRuleMseLoss<T>;
         double totalMass = 0.0;
 
