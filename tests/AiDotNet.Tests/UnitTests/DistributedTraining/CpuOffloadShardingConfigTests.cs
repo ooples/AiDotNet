@@ -265,7 +265,7 @@ public class CpuOffloadShardingConfigTests
         // Register a deferred materializer that flips the flag when the array is requested.
         // This mimics what FinishGpuOp does after a GPU op — the array is registered as
         // deferred until the first host read.
-        DeferredArrayMaterializer.Register(backing, arr =>
+        HostSync.Register(backing, arr =>
         {
             var typed = (double[])arr;
             for (int i = 0; i < typed.Length; i++) typed[i] = i + 1; // "download"
@@ -283,7 +283,7 @@ public class CpuOffloadShardingConfigTests
         {
             // Remove the registration even if the assertion fails, so a leaked deferred
             // entry can't pollute later tests that reuse array identities.
-            DeferredArrayMaterializer.Remove(backing);
+            HostSync.Remove(backing);
         }
     }
 
@@ -297,7 +297,7 @@ public class CpuOffloadShardingConfigTests
         var gradients = new Vector<double>(new double[8]);
         var backing = gradients.GetDataArray();
         bool materializerFired = false;
-        DeferredArrayMaterializer.Register(backing, _ => materializerFired = true);
+        HostSync.Register(backing, _ => materializerFired = true);
         try
         {
             var probe = new GradientProbeOptimizer<double, Matrix<double>, Vector<double>>(config);
@@ -308,7 +308,7 @@ public class CpuOffloadShardingConfigTests
         }
         finally
         {
-            DeferredArrayMaterializer.Remove(backing);
+            HostSync.Remove(backing);
         }
     }
 

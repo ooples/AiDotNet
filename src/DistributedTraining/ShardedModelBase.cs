@@ -375,7 +375,7 @@ public abstract partial class ShardedModelBase<T, TInput, TOutput> :
         if (!Config.CpuOffloadGradients || gradients is null || gradients.Length == 0) return;
         var array = gradients.GetDataArray();
         if (array is null) return;
-        AiDotNet.Tensors.Helpers.DeferredArrayMaterializer.TryMaterialize(array);
+        AiDotNet.Tensors.Helpers.HostSync.TryMaterialize(array);
         if (AiDotNetEngine.Current is DirectGpuTensorEngine gpu)
         {
             gpu.InvalidateWeightCache(array);
@@ -405,7 +405,7 @@ public abstract partial class ShardedModelBase<T, TInput, TOutput> :
         if (parameters is null || parameters.Length == 0) return;
         var array = parameters.GetDataArray();
         if (array is null) return;
-        AiDotNet.Tensors.Helpers.DeferredArrayMaterializer.TryMaterialize(array);
+        AiDotNet.Tensors.Helpers.HostSync.TryMaterialize(array);
         gpu.InvalidateWeightCache(array);
     }
 
