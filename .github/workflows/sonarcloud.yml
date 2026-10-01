@@ -589,7 +589,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         with:
           name: type-impact-plan
-          path: type-impact-plan.json
+          path: |
+            type-impact-plan.json
+            type-impact-effective.json
           retention-days: 7
 
       # Which test classes each selected shard runs, and why the type-level plan could not narrow when it did
@@ -599,7 +601,7 @@ jobs:
         # Report-only: the script exits nonzero when it cannot write the report, which must not fail Build.
         continue-on-error: true
         shell: pwsh
-        run: ./tools/TestImpact/Write-SelectionReport.ps1 -TypeImpactPlanFile type-impact-plan.json
+        run: ./tools/TestImpact/Write-SelectionReport.ps1 -TypeImpactPlanFile type-impact-plan.json -EffectiveFile type-impact-effective.json
 
   # Everything the shards do NOT need, built concurrently with them instead of ahead of
   # them: the net471 compatibility compile, net8.0, and the pack that requires all three.

@@ -17,6 +17,7 @@ It never influences the matrix: it only reads the decision files. Missing or mal
 .PARAMETER FinalEscalated     Whether the workflow ran the full matrix.
 .PARAMETER WorkflowReason     Why the workflow overrode or skipped the selector, when it did.
 .PARAMETER TypeImpactPlanFile type-impact-plan.json from Select-AffectedTests.ps1 (Build job).
+.PARAMETER EffectiveFile      type-impact-effective.json: what actually ran after Select-AffectedTests post-processing.
 .PARAMETER SummaryFile        Markdown destination; defaults to GITHUB_STEP_SUMMARY.
 .PARAMETER ReportFile         JSON report destination.
 #>
@@ -28,6 +29,7 @@ param(
     [Parameter(ParameterSetName = 'Report')] [switch] $FinalEscalated,
     [Parameter(ParameterSetName = 'Report')] [string] $WorkflowReason = '',
     [Parameter(ParameterSetName = 'Report')] [string] $TypeImpactPlanFile = '',
+    [Parameter(ParameterSetName = 'Report')] [string] $EffectiveFile = '',
     [Parameter(ParameterSetName = 'Report')] [string] $SummaryFile = $env:GITHUB_STEP_SUMMARY,
     [Parameter(ParameterSetName = 'Report')] [string] $ReportFile = '',
     [Parameter(Mandatory, ParameterSetName = 'SelfTest')] [switch] $SelfTest
@@ -84,7 +86,7 @@ function Test-StructuralRoute([string] $Why) {
     return $Why -match '^(is always run|is not in the coverage map yet|changed its manifest definition|reflection inventory changed|its manifest or execution policy changed)'
 }
 
-function New-SelectionReport($Selection, [int] $Total, [int] $FinalCount, [bool] $Escalated, [string] $Reason, $Plan) {
+function New-SelectionReport($Selection, [int] $Total, [int] $FinalCount, [bool] $Escalated, [string] $Reason, $Plan, $Effective = $null) {
     $reasons = @(Get-Prop $Selection 'reasons' | Where-Object { $_ })
     # Evidence, not absence: a missing or partial selection.json must not read as "coverage selected nothing".
     $wouldProperty = if ($null -ne $Selection) { $Selection.PSObject.Properties['wouldSelect'] } else { $null }
@@ -123,6 +125,7 @@ function New-SelectionReport($Selection, [int] $Total, [int] $FinalCount, [bool]
             unresolved = @(foreach ($g in ($unresolved | Group-Object { [string] (Get-Prop $_ 'why') + [string] (Get-Prop $_ 'reason') } | Sort-Object Count -Descending)) {
                 [pscustomobject]@{ reason = $g.Name; count = $g.Count; paths = @($g.Group | ForEach-Object { Get-Prop $_ 'path' } | Where-Object { $_ }) }
             })
+            effective = $(if ($null -ne $Effective) { [pscustomobject]@{ mode = [string] (Get-Prop $Effective 'mode'); reason = [string] (Get-Prop $Effective 'reason'); shards = @(Get-Prop $Effective 'shards' | Where-Object { $_ }) } } else { $null })
             shards = @(foreach ($s in $planShards) {
                 [pscustomobject]@{
                     name = Get-Prop $s 'name'; run = [bool] (Get-Prop $s 'run'); narrowed = [bool] (Get-Prop $s 'narrowed')
@@ -221,11 +224,29 @@ function ConvertTo-SelectionMarkdown($Report) {
                 [void] $sb.AppendLine("| $(Format-Cell $u.reason) | $($u.count) | $((@($u.paths | Select-Object -First 3 | ForEach-Object { '`' + (Format-Cell $_) + '`' })) -join '<br>') |")
             }
         }
-        $ran = @($t.shards | Where-Object { $_.run })
-        if ($ran.Count -gt 0) {
-            [void] $sb.AppendLine(); [void] $sb.AppendLine("| Shard | Narrowed | Test classes |"); [void] $sb.AppendLine('| --- | --- | ---: |')
-            foreach ($s in @($ran | Sort-Object { -[int] $_.classes } | Select-Object -First $MaxRows)) {
-                [void] $sb.AppendLine("| $(Format-Cell $s.name) | $($s.narrowed) | $($s.classes) |")
+        # What actually runs: the effective matrix when Select-AffectedTests recorded it. The plan alone lists
+        # candidates for every manifest shard, before the intersection with the chosen matrix, passthrough, and
+        # any narrowing undone to fit the output limit.
+        if ($null -ne $t.effective) {
+            [void] $sb.AppendLine(); [void] $sb.AppendLine("Applied: **$($t.effective.mode)**$(if ($t.effective.reason) { " ($(Format-Cell $t.effective.reason))" })")
+            $rows = @($t.effective.shards)
+            if ($rows.Count -gt 0) {
+                [void] $sb.AppendLine(); [void] $sb.AppendLine('| Shard | Runs | Test classes |'); [void] $sb.AppendLine('| --- | --- | ---: |')
+                foreach ($s in @($rows | Sort-Object { if ($_.narrowed) { -[int] $_.classes } else { 1 } } | Select-Object -First $MaxRows)) {
+                    $runs = if ($s.narrowed) { 'narrowed' } else { 'whole shard' }
+                    $count = if ($s.narrowed) { "$($s.classes)" } else { 'all' }
+                    [void] $sb.AppendLine("| $(Format-Cell $s.name) | $runs | $count |")
+                }
+            }
+        }
+        else {
+            [void] $sb.AppendLine(); [void] $sb.AppendLine('_The effective matrix was not recorded; the plan below lists candidates, not what ran._')
+            $ran = @($t.shards | Where-Object { $_.run })
+            if ($ran.Count -gt 0) {
+                [void] $sb.AppendLine(); [void] $sb.AppendLine('| Shard (candidate) | Narrowed | Test classes |'); [void] $sb.AppendLine('| --- | --- | ---: |')
+                foreach ($s in @($ran | Sort-Object { -[int] $_.classes } | Select-Object -First $MaxRows)) {
+                    [void] $sb.AppendLine("| $(Format-Cell $s.name) | $($s.narrowed) | $($s.classes) |")
+                }
             }
         }
     }
@@ -262,6 +283,14 @@ if ($SelfTest) {
     $md = ConvertTo-SelectionMarkdown $r
     function Check([string] $Name, [bool] $Ok) { [pscustomobject]@{ Name = $Name; Ok = $Ok } }
     $empty = ConvertTo-SelectionMarkdown (New-SelectionReport $null 164 164 $true 'no certified shard map' $null)
+    # The plan claims Alpha narrowed and lists a candidate Gamma; the effective record says the plan was unresolved,
+    # so the chosen matrix (Alpha only) ran whole. The report must follow the effective record.
+    $planWithCandidate = [pscustomobject]@{ resolved = $false; unresolved = @(); shards = @(
+        [pscustomobject]@{ name = 'Alpha'; run = $true; narrowed = $true; classes = 7; testClasses = @('T1') },
+        [pscustomobject]@{ name = 'Gamma'; run = $true; narrowed = $true; classes = 3; testClasses = @('T2') }) }
+    $effectiveRecord = [pscustomobject]@{ mode = 'passthrough'; reason = 'a changed file cannot be mapped to types'; shards = @(
+        [pscustomobject]@{ name = 'Alpha'; narrowed = $false; classes = $null }) }
+    $eff = ConvertTo-SelectionMarkdown (New-SelectionReport $null 5 5 $false '' $planWithCandidate $effectiveRecord)
     $checks = @(
         (Check 'verdict names the full matrix and the would-select count' ($md -match 'Full matrix: 5 of 5 shards\.\*\* Coverage alone would have selected \*\*3\*\* of 5')),
         (Check 'two abstract-base reasons collapse into one rule row with count 2' ($md -match '\| Abstract test base: generated subclasses unresolved \| 2 \|')),
@@ -273,7 +302,9 @@ if ($SelfTest) {
         (Check 'test-level table lists the shard' ($md -match '\| Alpha \| False \| 7 \|')),
         (Check 'report JSON carries wouldSelect' (@($r.wouldSelect).Count -eq 3)),
         (Check 'a missing selection still renders, naming the workflow reason' ($empty -match 'Workflow override: no certified shard map')),
-        (Check 'a missing selection says coverage is unavailable, not that it selected 0' (($empty -match 'Coverage selection unavailable') -and ($empty -notmatch 'would have selected \*\*0\*\*')))
+        (Check 'a missing selection says coverage is unavailable, not that it selected 0' (($empty -match 'Coverage selection unavailable') -and ($empty -notmatch 'would have selected \*\*0\*\*'))),
+        (Check 'with the effective record, a plan-narrowed shard that passed through shows as a whole shard' (($eff -match '\| Alpha \| whole shard \| all \|') -and ($eff -match 'Applied: \*\*passthrough\*\*'))),
+        (Check 'a candidate the effective matrix did not run is not listed' ($eff -notmatch '\| Gamma \|'))
     )
     foreach ($c in $checks) { Write-Host ("  [{0}] {1}" -f $(if ($c.Ok) { 'OK' } else { 'FAIL' }), $c.Name) }
     $failed = @($checks | Where-Object { -not $_.Ok })
@@ -286,7 +317,8 @@ try {
     $selection = Read-JsonFile $SelectionFile
     $plan = Read-JsonFile $TypeImpactPlanFile
     $finalCount = if ($FinalShardCount -ge 0) { $FinalShardCount } else { @(Get-Prop $selection 'shards').Count }
-    $report = New-SelectionReport $selection $TotalShards $finalCount ([bool] $FinalEscalated) $WorkflowReason $plan
+    $effective = Read-JsonFile $EffectiveFile
+    $report = New-SelectionReport $selection $TotalShards $finalCount ([bool] $FinalEscalated) $WorkflowReason $plan $effective
     if ($ReportFile) { $report | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $ReportFile -Encoding utf8 }
     if ($SummaryFile) {
         # With a plan, the Build job appends only the test-level section; the selection part is Select shards' own.

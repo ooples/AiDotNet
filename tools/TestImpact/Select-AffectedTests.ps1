@@ -27,6 +27,10 @@ param(
     # Where the built test output lives; the checkout itself unless testing against another build.
     [string] $BuildRoot = '',
     [string] $PlanFile = 'type-impact-plan.json',
+    # What actually runs after this script's post-processing (for the selection report). The plan file lists
+    # candidates for every manifest shard; this records the chosen intersection, passthrough, and any narrowing
+    # undone to fit the output limit.
+    [string] $EffectiveFile = 'type-impact-effective.json',
     # Job outputs are capped at 1 MB in total, and matrix and ledger_matrix carry the same shards;
     # narrowed filters are un-narrowed, largest first, until both together fit under this.
     [int] $MaxMatrixCharacters = 800000
@@ -36,6 +40,23 @@ $ErrorActionPreference = 'Stop'
 
 function Write-Output-Value([string] $Name, [string] $Value) {
     "$Name=$Value" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+}
+
+function Write-Effective([string] $Mode, [string] $Why, $Shards) {
+    # Report-only and never fatal: the matrix outputs above are what the workflow consumes.
+    try {
+        $rows = @(foreach ($shard in @($Shards)) {
+            $narrowed = [bool] ($shard.PSObject.Properties['narrowed'] -and $shard.narrowed)
+            [pscustomobject]@{
+                name = [string] $shard.name
+                narrowed = $narrowed
+                classes = $(if ($narrowed -and $shard.PSObject.Properties['narrowedClasses']) { [int] $shard.narrowedClasses } else { $null })
+            }
+        })
+        ConvertTo-Json -InputObject ([pscustomobject]@{ schemaVersion = 1; mode = $Mode; reason = $Why; shards = $rows }) -Depth 4 |
+            Set-Content -LiteralPath (Join-Path $Repository $EffectiveFile) -Encoding utf8
+    }
+    catch { Write-Host "::warning::effective test-level selection not recorded: $($_.Exception.Message)" }
 }
 
 function Write-Passthrough([string] $Why) {
@@ -48,6 +69,8 @@ function Write-Passthrough([string] $Why) {
     Write-Output-Value 'ledger_matrix' $env:SELECTED_LEDGER_MATRIX
     Write-Output-Value 'skipped' $env:SELECTED_SKIPPED
     Write-Output-Value 'impact_mode' 'passthrough'
+    $passed = @(try { @($env:SELECTED_MATRIX | ConvertFrom-Json) } catch { @() })
+    Write-Effective 'passthrough' $Why $passed
     "### Test-level selection`n`nNot applied: $Why." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 }
 
@@ -171,6 +194,7 @@ Write-Output-Value 'matrix' $json
 Write-Output-Value 'ledger_matrix' (ConvertTo-Json -InputObject @($runnable.LedgerShards) -Depth 6 -Compress)
 Write-Output-Value 'skipped' (ConvertTo-Json -InputObject @($skipped) -Depth 3 -Compress)
 Write-Output-Value 'impact_mode' 'narrowed'
+Write-Effective 'narrowed' '' $tests
 
 $narrowedCount = @($tests | Where-Object { $_.PSObject.Properties['narrowed'] -and $_.narrowed }).Count
 $lines = @(
