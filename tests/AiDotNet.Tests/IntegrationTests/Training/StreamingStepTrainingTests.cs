@@ -222,6 +222,38 @@ public class StreamingStepTrainingTests : IDisposable
     }
 
     [Fact(Timeout = 180000)]
+    public async Task FusedCheckpoint_Resumed_ReportsTheResumedPlanStep_AndALivePlan()
+    {
+        // After a checkpoint import the plan continues from the checkpoint's optimizer step. The #1822 probe evaluates
+        // the learning-rate schedule at that step, so it must read it from the plan (it used to mark it unknown), and
+        // the plan it verifies must be updating this model's own tensors.
+        await Task.Yield();
+        var init = InitialWeights();
+        var fused = await Train(13, resume: false, Checkpoints("fused-plan-step", saveEvery: 1000), init);
+        byte[] optimizerState = fused.Opt.Serialize();
+
+        var optimizer = Optimizer(epochs: 100);
+        var model = Model(optimizer);
+        model.SetParameters(fused.Model.GetParameters());
+        model.SetBaseTrainOptimizer(optimizer);
+        optimizer.Deserialize(optimizerState);
+        var (x, y) = Data(1);
+        model.Train(Stack(x.Take(BatchSize).ToArray()), Stack(y.Take(BatchSize).ToArray()));
+
+        Assert.True(AiDotNet.Training.CompiledTapeTrainingStep<float>.TryGetPlanOptimizerStep(out int step),
+            "the resumed plan's optimizer step was not readable");
+        Assert.True(step > 1, $"the resumed plan reported step {step}, as if the optimizer had restarted");
+
+        var live = model.Layers.OfType<AiDotNet.Interfaces.ITrainableLayer<float>>()
+            .SelectMany(layer => layer.GetTrainableParameters()).ToList();
+        Assert.True(AiDotNet.Training.CompiledTapeTrainingStep<float>.ConfiguredPlanTrainsLiveParameters(live),
+            "the plan does not report this model's live parameter tensors");
+        var foreign = live.Select(parameter => new Tensor<float>(parameter.Shape.ToArray())).ToList();
+        Assert.False(AiDotNet.Training.CompiledTapeTrainingStep<float>.ConfiguredPlanTrainsLiveParameters(foreign),
+            "a plan compared against tensors it does not train was reported as attached");
+    }
+
+    [Fact(Timeout = 180000)]
     public async Task FusedCheckpoint_ResumedOnTheEagerPath_IsRefusedRatherThanRestartingTheOptimizer()
     {
         await Task.Yield();

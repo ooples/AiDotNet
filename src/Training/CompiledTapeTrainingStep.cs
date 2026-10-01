@@ -363,6 +363,24 @@ public static class CompiledTapeTrainingStep<T>
         return step >= 0;
     }
 
+    /// <summary>
+    /// Whether the plan that ran the last fused step updates only tensors in <paramref name="liveParameters"/>, by
+    /// reference, as the plan itself reports them (AiDotNet.Tensors plan introspection). False is proof the plan has
+    /// come loose from the model (ooples/AiDotNet#1822). Null when that cannot be read: no configured plan ran the
+    /// last step (a mixed-precision plan, or none), or the plan does not report its parameters.
+    /// </summary>
+    internal static bool? ConfiguredPlanTrainsLiveParameters(IEnumerable<Tensor<T>> liveParameters)
+    {
+        if (CurrentState.planOptimizerStep < 0) return null;
+        if (_configuredPlan is not AiDotNet.Tensors.Engines.Compilation.ICompiledTrainingPlanIntrospection<T> plan) return null;
+        var live = new HashSet<Tensor<T>>(liveParameters, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        foreach (var parameter in plan.OptimizedParameters)
+        {
+            if (!live.Contains(parameter)) return false;
+        }
+        return true;
+    }
+
     /// <summary>Resets the fused-step counter on the calling thread to zero.</summary>
     public static void ResetFusedStepCount() { _fusedStepCount = 0; }
 
@@ -1426,8 +1444,11 @@ public static class CompiledTapeTrainingStep<T>
             // the import succeeds: a failed import leaves it pending, so the eager fallback still refuses to run.
             plan.ImportOptimizerState(restored);
             optimizer.MarkPendingFusedOptimizerStateInstalled();
-            // The import carried the checkpoint's step, which this side cannot read.
-            CurrentState.planOptimizerStep = -1;
+            // The import carried the checkpoint's step; the plan reports it (AiDotNet.Tensors plan introspection), so a
+            // schedule evaluated after a resume uses the resumed step rather than an unknown one.
+            CurrentState.planOptimizerStep = plan is AiDotNet.Tensors.Engines.Compilation.ICompiledTrainingPlanIntrospection<T> resumed
+                ? resumed.OptimizerStep
+                : -1;
         }
         else
         {

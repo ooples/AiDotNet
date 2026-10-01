@@ -12493,6 +12493,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return acc;
     }
 
+    private static IEnumerable<Tensor<T>> EnumerateFusedLiveParameters(
+        IReadOnlyList<ITrainableLayer<T>> layers,
+        IReadOnlyList<Tensor<T>>? extraParameters)
+    {
+        for (int layerIndex = 0; layerIndex < layers.Count; layerIndex++)
+        {
+            foreach (var parameter in layers[layerIndex].GetTrainableParameters())
+            {
+                if (parameter is not null) yield return parameter;
+            }
+        }
+        if (extraParameters is null) yield break;
+        for (int i = 0; i < extraParameters.Count; i++) yield return extraParameters[i];
+    }
+
     private double FusedTrainableParamChecksum(
         IReadOnlyList<ITrainableLayer<T>> layers,
         IReadOnlyList<Tensor<T>>? extraParameters)
@@ -12814,6 +12829,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     ? FusedTrainableParamChecksum(selectedParameters)
                     : FusedTrainableParamChecksum(trainableLayers, fusedExtraParameters);
                 bool persisted = fusedParamChecksumAfter != fusedParamChecksumBefore;
+                // The plan reports which tensors its update writes. Any that is not a live parameter of this model
+                // proves the plan has come loose, even on a step that could legitimately have moved nothing, where
+                // the checksum alone is inconclusive.
+                bool planDetached = Training.CompiledTapeTrainingStep<T>.ConfiguredPlanTrainsLiveParameters(
+                    selectedParameters ?? EnumerateFusedLiveParameters(trainableLayers, fusedExtraParameters)) == false;
                 // Do NOT gate on fusedParamChecksumBefore != 0.0: the checksum is a sum of
                 // squares, so 0.0 means every trainable parameter starts exactly at zero. A
                 // non-persisting fused step then leaves it at 0.0 too (persisted == false),
@@ -12826,14 +12846,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 // regression fixture) therefore made Train() return successfully without
                 // changing a single parameter. Treat every non-persisting first step as an
                 // unsafe plan and retry it through the eager tape in this same Train() call.
-                if (!persisted && !FusedStepCouldHaveMovedParameters(fusedCfg, lr, lrSched, fusedGradientsObserved, fusedGradientNonZero))
+                if (!persisted && !planDetached
+                    && !FusedStepCouldHaveMovedParameters(fusedCfg, lr, lrSched, fusedGradientsObserved, fusedGradientNonZero))
                 {
                     // Inconclusive, not a failure: this step could not have moved anything (zero learning rate, all-zero
                     // gradients, or an optimizer whose update is legitimately exactly zero). Leave the plan unverified and
                     // re-probe on the next step, so a truly decoupled plan is still caught the first time it should move.
                     _fusedStepsSincePersistenceCheck = FusedPersistenceRecheckInterval;
                 }
-                else if (!persisted)
+                else if (!persisted || planDetached)
                 {
                     if (_fusedTrainingCommitted)
                     {

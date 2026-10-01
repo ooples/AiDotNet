@@ -363,12 +363,15 @@ Bumped 0.130.3 to 0.132.1 for AiDotNet.Tensors #1035 (non-causal FlashAttention 
 
          Bumped to 0.133.1 (managed and natives together) for AiDotNet.Tensors #1051's
          ImportOptimizerState/ExportOptimizerState, which the fused-plan checkpoint restore uses, and
-         #1054's FTRL/ASGD fused-kernel fixes the parity tests pin. -->
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.133.1" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.133.1" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.133.1" />
+         #1054's FTRL/ASGD fused-kernel fixes the parity tests pin.
+
+         0.133.2 for AiDotNet.Tensors #1068: a compiled BatchNorm's running-statistics update used the previous step's
+         batch statistics (GraFPrintPaperFidelityTests.CompiledTraining_RebuildsKnnForEachInput). -->
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.133.2" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.133.2" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.133.2" />
     <PackageVersion Include="AiDotNet.Evolution" Version="0.2.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.133.1" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.133.2" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />
