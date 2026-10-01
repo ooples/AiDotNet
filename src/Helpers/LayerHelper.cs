@@ -37167,43 +37167,101 @@ public static partial class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates default layers for the CCDM conditional continuous diffusion model.
+    /// Creates the denoiser of CCDM, the Channel-aware Contrastive Conditional Diffusion model
+    /// (Li, Chen and Xiong 2024, arXiv:2410.02168), in the fixed order <c>CCDM</c> binds it.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Mirrors the authors' reference <c>Denoiser</c> (github.com/LSY-Cython/CCDM, network.py and
+    /// embed.py). Every variable is a token; its past window and its noisy future are embedded
+    /// independently (channel-independent dense modules, CiDM), concatenated to width
+    /// 2*hiddenDimension, mixed ACROSS variables by channel-wise DiT blocks whose norms are modulated
+    /// by the diffusion-step embedding (adaLN-Zero), and decoded back to the horizon.
+    /// </para>
+    /// <para>Order (n = embeddingLayers, d = 2*hiddenDimension):</para>
+    /// <list type="number">
+    /// <item>past-window CiDM: n MLPResidual blocks (contextLength to hiddenDimension, then
+    /// hiddenDimension to hiddenDimension);</item>
+    /// <item>noisy-future CiDM: n MLPResidual blocks from forecastHorizon;</item>
+    /// <item>step embedding: Linear(256, hiddenDimension) + SiLU, Linear(hiddenDimension, hiddenDimension);</item>
+    /// <item>numLayers DiT blocks: SiLU, adaLN Linear(6d), W_Q, W_K, W_V, W_O, attention dropout,
+    /// MLP Linear(d*mlpRatio) + GELU(tanh), MLP Linear(d);</item>
+    /// <item>decoder: SiLU, adaLN Linear(2d), n-1 MLPResidual blocks at width d, Linear(forecastHorizon).</item>
+    /// </list>
+    /// <para>
+    /// An MLPResidual block is <c>LayerNorm(Dropout(Linear(ReLU(Linear(x)))) + Linear(x))</c>: the
+    /// four layers Linear+ReLU, Linear, Dropout, residual Linear, then LayerNorm. The adaLN norms
+    /// are non-affine (<c>elementwise_affine=False</c> in the reference), so they carry no layer here;
+    /// CCDM applies them as plain normalization.
+    /// </para>
+    /// <para>
+    /// Deviation: the reference projects Q, K and V without bias and DenseLayer always has one. The K
+    /// bias is inert (it adds q.b to every score of a row, which softmax ignores) and the V bias is a
+    /// reparameterization of W_O's bias (attention rows sum to one); only the Q bias adds capacity.
+    /// </para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultCCDMLayers(
         NeuralNetworkArchitecture<T> architecture,
         int contextLength = 168, int forecastHorizon = 24, int hiddenDimension = 128,
-        int numLayers = 4, int numHeads = 8, double dropout = 0.1)
+        int numLayers = 2, int numHeads = 8, double dropout = 0.1,
+        int embeddingLayers = 2, double mlpRatio = 1.0, double attentionDropout = 0.1)
     {
         if (contextLength < 1) throw new ArgumentOutOfRangeException(nameof(contextLength));
         if (forecastHorizon < 1) throw new ArgumentOutOfRangeException(nameof(forecastHorizon));
+        if (hiddenDimension < 1) throw new ArgumentOutOfRangeException(nameof(hiddenDimension));
+        if (numLayers < 1) throw new ArgumentOutOfRangeException(nameof(numLayers));
+        if (embeddingLayers < 1) throw new ArgumentOutOfRangeException(nameof(embeddingLayers));
+        if (numHeads < 1 || (2 * hiddenDimension) % numHeads != 0)
+            throw new ArgumentException(
+                $"numHeads ({numHeads}) must divide the transformer width 2 * hiddenDimension ({2 * hiddenDimension}).",
+                nameof(numHeads));
+        if (mlpRatio <= 0) throw new ArgumentOutOfRangeException(nameof(mlpRatio));
 
-        int intermediateDim = hiddenDimension * 4;
+        int d = 2 * hiddenDimension;
+        int mlpHidden = Math.Max(1, (int)(d * mlpRatio));
+        var relu = (IActivationFunction<T>)new ReLUActivation<T>();
+        var silu = (IActivationFunction<T>)new SiLUActivation<T>();
+        var gelu = (IActivationFunction<T>)new GELUActivation<T>();
 
-        // Wen et al. 2023 "Conditional Continuous Diffusion Models for Probabilistic Time
-        // Series Forecasting" (CCDM) runs the score network once per reverse-diffusion step
-        // on a per-step packed input (current x_t + condition encoding + time embedding),
-        // NOT on the flattened contextLength × hiddenDimension. Same per-call
-        // denoiser-hidden-width anti-pattern as CSDI / TSDiff / TimeDiff / MG-TSD. Layer
-        // count and structure are unchanged.
-
-        // Input projection — per-step packed input to per-position hidden width.
-        yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: null);
-
-        // Score network layers (each acts on the per-position hidden vector).
-        for (int layer = 0; layer < numLayers; layer++)
+        IEnumerable<ILayer<T>> MlpResidual(int width)
         {
-            yield return new BatchNormalizationLayer<T>();
-            yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: null);
-            yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: null);
-            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
-            yield return new BatchNormalizationLayer<T>();
-            yield return new DenseLayer<T>( outputSize: intermediateDim, activationFunction: new GELUActivation<T>());
-            yield return new DenseLayer<T>( outputSize: hiddenDimension, activationFunction: null);
-            if (dropout > 0) yield return new DropoutLayer<T>(dropout);
+            yield return new DenseLayer<T>(outputSize: width, activationFunction: relu);
+            yield return new DenseLayer<T>(outputSize: width, activationFunction: null);
+            yield return new DropoutLayer<T>(dropout);
+            yield return new DenseLayer<T>(outputSize: width, activationFunction: null);
+            yield return new LayerNormalizationLayer<T>();
         }
 
-        // Output projection — emit per-horizon noise / score estimates.
-        yield return new DenseLayer<T>( outputSize: forecastHorizon, activationFunction: null);
+        // 1-2. Channel-independent dense modules for the past window and the noisy future.
+        for (int i = 0; i < embeddingLayers; i++)
+            foreach (var layer in MlpResidual(hiddenDimension)) yield return layer;
+        for (int i = 0; i < embeddingLayers; i++)
+            foreach (var layer in MlpResidual(hiddenDimension)) yield return layer;
+
+        // 3. Diffusion-step embedding: sinusoidal (256 frequencies) -> Linear + SiLU -> Linear.
+        yield return new DenseLayer<T>(outputSize: hiddenDimension, activationFunction: silu);
+        yield return new DenseLayer<T>(outputSize: hiddenDimension, activationFunction: null);
+
+        // 4. Channel-wise DiT blocks.
+        for (int block = 0; block < numLayers; block++)
+        {
+            yield return new ActivationLayer<T>(silu);
+            yield return new DenseLayer<T>(outputSize: 6 * d, activationFunction: null);
+            yield return new DenseLayer<T>(outputSize: d, activationFunction: null);
+            yield return new DenseLayer<T>(outputSize: d, activationFunction: null);
+            yield return new DenseLayer<T>(outputSize: d, activationFunction: null);
+            yield return new DenseLayer<T>(outputSize: d, activationFunction: null);
+            yield return new DropoutLayer<T>(attentionDropout);
+            yield return new DenseLayer<T>(outputSize: mlpHidden, activationFunction: gelu);
+            yield return new DenseLayer<T>(outputSize: d, activationFunction: null);
+        }
+
+        // 5. Decoder: adaLN-modulated norm, n-1 MLPResidual blocks at width d, projection to H.
+        yield return new ActivationLayer<T>(silu);
+        yield return new DenseLayer<T>(outputSize: 2 * d, activationFunction: null);
+        for (int i = 0; i < embeddingLayers - 1; i++)
+            foreach (var layer in MlpResidual(d)) yield return layer;
+        yield return new DenseLayer<T>(outputSize: forecastHorizon, activationFunction: null);
     }
 
     /// <summary>
