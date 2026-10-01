@@ -75,10 +75,9 @@ public partial class DINO<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
 
         // ModelSize selects the paper's backbone: ResNet-50 4-scale, Swin-L 4-scale, or Swin-L 5-scale.
         bool fiveScale = options.Size == ModelSize.XLarge;
-        if (options.Size is ModelSize.Large or ModelSize.XLarge)
-            Backbone = new SwinTransformer<T>(new SwinTransformerOptions { Variant = SwinVariant.SwinLarge });
-        else
-            Backbone = new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetVariant.ResNet50 });
+        Backbone = options.Size is ModelSize.Large or ModelSize.XLarge
+            ? new SwinTransformer<T>(new SwinTransformerOptions { Variant = SwinVariant.SwinLarge })
+            : new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetVariant.ResNet50 });
         _backboneTaps = fiveScale ? new[] { 0, 1, 2, 3 } : new[] { 1, 2, 3 };
         var channels = _backboneTaps.Select(tap => Backbone.OutputChannels[tap]).ToArray();
 

@@ -263,6 +263,12 @@ internal sealed class DeformableDecoderLayer<T> : CvParameterModule<T>
     private readonly DetrLinear<T> _linear2;
     private readonly LayerNorm<T> _norm3;
 
+    /// <summary>Creates a deformable decoder layer: self-attention, multi-scale deformable cross-attention and a FFN.</summary>
+    /// <param name="dModel">The model width.</param>
+    /// <param name="feedForward">The FFN hidden width.</param>
+    /// <param name="numLevels">The number of feature levels the cross-attention samples.</param>
+    /// <param name="numHeads">The number of attention heads.</param>
+    /// <param name="numPoints">The sampling points per head and level.</param>
     /// <param name="transformerWideXavier">
     /// True for DINO, whose DeformableTransformer._reset_parameters Xavier-initializes every weight matrix,
     /// including the FFN and the attention output. False for RT-DETR, which keeps the torch defaults:
@@ -301,6 +307,7 @@ internal sealed class DeformableDecoderLayer<T> : CvParameterModule<T>
     /// <summary>The layer's LayerNorms, in forward order (self-attention, cross-attention, feed-forward).</summary>
     internal IEnumerable<LayerNorm<T>> Norms() { yield return _norm2; yield return _norm1; yield return _norm3; }
 
+    /// <summary>Runs the layer: self-attention over the queries, deformable cross-attention into the memory, then the FFN.</summary>
     /// <param name="target">Queries <c>[batch, queries, d]</c>.</param>
     /// <param name="queryPosition">Positional queries from the reference boxes, <c>[batch, queries, d]</c>.</param>
     /// <param name="referenceBoxes">Reference boxes per level, <c>[batch, queries, levels, 4]</c>.</param>

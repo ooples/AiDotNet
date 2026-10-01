@@ -182,9 +182,9 @@ public partial class DocFormerEncoderLayer<T> : LayerBase<T>, IShapeContract
     private readonly int _headDim;
 
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
-    private Tensor<T> _relativeText;
+    private readonly Tensor<T> _relativeText;
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
-    private Tensor<T> _relativeImage;
+    private readonly Tensor<T> _relativeImage;
 
     [SubLayerInput("_hidden")] private readonly List<LayerNormalizationLayer<T>> _normT = new();
     [SubLayerInput("_hidden")] private readonly List<LayerNormalizationLayer<T>> _normV = new();

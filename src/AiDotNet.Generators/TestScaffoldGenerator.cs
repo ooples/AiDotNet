@@ -3536,12 +3536,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // cannot be matched against its ADNGEN001 line or checked by hand.
                     model.FullyQualifiedName));
             }
-            foreach (var baselined in DefectBaselines.UntestedModels)
-            {
-                if (!coverageMeasurable || untestedNames.Contains(baselined))
-                    continue;
+            foreach (var baselined in DefectBaselines.UntestedModels.Where(b => coverageMeasurable && !untestedNames.Contains(b)))
                 context.ReportDiagnostic(Diagnostic.Create(StaleUntestedBaselineEntry, Location.None, baselined));
-            }
 
             // Emit AIDN041 summary
             var totalCount = testedModels.Count + untestedModels.Count;

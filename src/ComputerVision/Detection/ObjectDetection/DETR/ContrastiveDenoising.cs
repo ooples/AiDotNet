@@ -138,9 +138,9 @@ internal static class ContrastiveDenoising<T>
                 for (int q = 0; q < total; q++)
                     for (int key = 0; key < total; key++)
                     {
-                        bool blocked;
-                        if (q >= pad) blocked = key < pad;
-                        else blocked = key < pad && (key / group) != (q / group);
+                        bool blocked = q >= pad
+                            ? key < pad
+                            : key < pad && (key / group) != (q / group);
                         mask[b, h, q, key] = !blocked;
                     }
         return mask;

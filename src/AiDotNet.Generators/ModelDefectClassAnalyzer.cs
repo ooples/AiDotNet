@@ -137,9 +137,8 @@ public sealed class ModelDefectClassAnalyzer : DiagnosticAnalyzer
                 }
 
                 // ADNDEF002: residual-free attention in a factory.
-                foreach (var entry in residualFree)
-                    if (!ModelDefectBaselines.ResidualFreeFactories.Contains(entry.Key))
-                        end.ReportDiagnostic(Diagnostic.Create(ResidualFreeAttention, entry.Value, entry.Key));
+                foreach (var entry in residualFree.Where(e => !ModelDefectBaselines.ResidualFreeFactories.Contains(e.Key)))
+                    end.ReportDiagnostic(Diagnostic.Create(ResidualFreeAttention, entry.Value, entry.Key));
 
                 // ADNDEF003: a factory shared across papers, used without a declaration.
                 var paperOf = papers.GroupBy(p => p.Type).ToDictionary(g => g.Key, g => g.First().Paper, StringComparer.Ordinal);
@@ -174,9 +173,8 @@ public sealed class ModelDefectClassAnalyzer : DiagnosticAnalyzer
 
     private static void ReportStale(CompilationAnalysisContext end, HashSet<string> baseline, HashSet<string> current, string name)
     {
-        foreach (var entry in baseline)
-            if (!current.Contains(entry))
-                end.ReportDiagnostic(Diagnostic.Create(StaleBaseline, Location.None, entry, name));
+        foreach (var entry in baseline.Where(e => !current.Contains(e)))
+            end.ReportDiagnostic(Diagnostic.Create(StaleBaseline, Location.None, entry, name));
     }
 
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
@@ -238,9 +236,9 @@ public sealed class ModelDefectClassAnalyzer : DiagnosticAnalyzer
             if (IsAttentionValue(model, model.GetOperation(declarator.Initializer.Value, cancellationToken), cancellationToken, depth + 1))
                 return true;
         }
-        foreach (var assignment in body.DescendantNodes().OfType<AssignmentExpressionSyntax>())
+        foreach (var assignment in body.DescendantNodes().OfType<AssignmentExpressionSyntax>()
+                     .Where(a => SymbolEqualityComparer.Default.Equals(model.GetSymbolInfo(a.Left, cancellationToken).Symbol, local)))
         {
-            if (!SymbolEqualityComparer.Default.Equals(model.GetSymbolInfo(assignment.Left, cancellationToken).Symbol, local)) continue;
             if (IsAttentionValue(model, model.GetOperation(assignment.Right, cancellationToken), cancellationToken, depth + 1))
                 return true;
         }

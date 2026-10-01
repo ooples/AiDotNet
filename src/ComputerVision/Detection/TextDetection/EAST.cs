@@ -394,7 +394,6 @@ public partial class EAST<T> : TextDetectorBase<T>
         // threshold): a score-weighted average there divides by zero and yields non-finite vertices and angle.
         double angleUnweightedSum = 0;
         int parts = 0;
-        BoundingBox<T>? box = null;
 
         void Flush()
         {
@@ -414,8 +413,10 @@ public partial class EAST<T> : TextDetectorBase<T>
             var points = next.Polygon?.Select(v => (X: NumOps.ToDouble(v.X), Y: NumOps.ToDouble(v.Y))).ToList();
             if (points is null || points.Count == 0) continue;
 
-            if (polygon is not null && box is not null && polygon.Count == points.Count
-                && ComputeBoxIoU(box, next.Box) > iouThreshold)
+            // Overlap of the quadrilaterals themselves, as LANMS does: their axis-aligned boxes overlap for rotated
+            // neighbouring words whose quadrilaterals are disjoint, which merged them.
+            if (polygon is not null && polygon.Count == points.Count
+                && Metrics.TextDetectionMetrics<double>.PolygonIoU(polygon, points) > iouThreshold)
             {
                 double total = polygonScore + s;
                 if (total > 0)
@@ -435,8 +436,6 @@ public partial class EAST<T> : TextDetectorBase<T>
                 angleSum += s * next.RotationAngle;
                 angleUnweightedSum += next.RotationAngle;
                 parts++;
-                box = TextRegion<T>.FromPolygon(
-                    polygon.Select(p => (NumOps.FromDouble(p.X), NumOps.FromDouble(p.Y))).ToList(), next.Confidence).Box;
                 continue;
             }
 
@@ -446,16 +445,44 @@ public partial class EAST<T> : TextDetectorBase<T>
             angleSum = s * next.RotationAngle;
             angleUnweightedSum = next.RotationAngle;
             parts = 1;
-            box = next.Box;
         }
 
         Flush();
         return merged;
     }
 
-    // Mean score-map value over the cells whose centres fall inside the region's box.
+    // The decoded quadrilateral in doubles, or null when a region carries no polygon.
+    private List<(double X, double Y)>? PolygonOf(TextRegion<T> region)
+    {
+        var polygon = region.Polygon?.Select(v => (X: NumOps.ToDouble(v.X), Y: NumOps.ToDouble(v.Y))).ToList();
+        return polygon is { Count: >= 3 } ? polygon : null;
+    }
+
+    // Polygon IoU when both regions carry their quadrilateral (always, for EAST's own output); box IoU otherwise.
+    private double RegionIoU(TextRegion<T> a, TextRegion<T> b)
+        => PolygonOf(a) is { } pa && PolygonOf(b) is { } pb
+            ? Metrics.TextDetectionMetrics<double>.PolygonIoU(pa, pb)
+            : ComputeBoxIoU(a.Box, b.Box);
+
+    // Even-odd ray casting: whether a point lies inside a simple polygon.
+    private static bool Contains(List<(double X, double Y)> polygon, double x, double y)
+    {
+        bool inside = false;
+        for (int i = 0, j = polygon.Count - 1; i < polygon.Count; j = i++)
+        {
+            var (xi, yi) = polygon[i];
+            var (xj, yj) = polygon[j];
+            if ((yi > y) != (yj > y) && x < ((xj - xi) * (y - yi) / (yj - yi)) + xi)
+                inside = !inside;
+        }
+        return inside;
+    }
+
+    // Mean score-map value over the cells whose centres fall inside the region's quadrilateral (its box when it has
+    // none): averaging the whole axis-aligned box of a rotated word diluted the score with background corners.
     private double MeanScoreInside(TextRegion<T> region, Tensor<T> score, double scaleX, double scaleY)
     {
+        var quadrilateral = PolygonOf(region);
         var (left, top, right, bottom) = region.Box.ToXYXY();
         double sum = 0;
         int count = 0;
@@ -471,6 +498,7 @@ public partial class EAST<T> : TextDetectorBase<T>
             {
                 double cx = (w + 0.5) * scaleX, cy = (h + 0.5) * scaleY;
                 if (cx < left || cx > right || cy < top || cy > bottom) continue;
+                if (quadrilateral is not null && !Contains(quadrilateral, cx, cy)) continue;
                 sum += NumOps.ToDouble(score[0, 0, h, w]);
                 count++;
             }
@@ -497,7 +525,7 @@ public partial class EAST<T> : TextDetectorBase<T>
             {
                 if (used[j]) continue;
 
-                double iou = ComputeBoxIoU(sorted[i].Box, sorted[j].Box);
+                double iou = RegionIoU(sorted[i], sorted[j]);
                 if (iou > iouThreshold)
                 {
                     used[j] = true;
