@@ -87,17 +87,23 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
     private readonly Random _rng;
 
     // T5 has NO biases on Q/K/V/O projections (Raffel 2020 §2.1).
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    // Allocated on first use (EnsureWeightsAllocated): a conditioner now builds its whole stack at
+    // construction, and eager [hidden, hidden] x 4 per layer made T5-XXL (24 x 4096^2 x 4) run out of
+    // memory before any forward. The shapes are declared so ParameterCount needs no allocation.
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenSize, _hiddenSize")]
     private Tensor<T> _qWeights;
 
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenSize, _hiddenSize")]
     private Tensor<T> _kWeights;
 
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenSize, _hiddenSize")]
     private Tensor<T> _vWeights;
 
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenSize, _hiddenSize")]
     private Tensor<T> _oWeights;
+
+    /// <summary>True once Q/K/V/O hold real, initialized storage.</summary>
+    private bool _projectionsAllocated;
 
     // Relative position bias table. [numBuckets, numHeads].
     // Marked trainable only if this layer owns it; otherwise the owning
@@ -122,6 +128,12 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
     private Tensor<T>? _oGradient;
     [Scratch]
     private Tensor<T>? _biasTableGradient;
+
+    private readonly bool _usesExternalPositionBias;
+
+    /// <summary>The bias the enclosing stack computed for the current forward pass.</summary>
+    [Scratch]
+    private Tensor<T>? _externalPositionBias;
 
     public override bool SupportsTraining => true;
 
@@ -189,7 +201,8 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
         int maxDistance = 128,
         bool bidirectional = true,
         int? seed = null,
-        Tensor<T>? sharedRelativeBiasTable = null)
+        Tensor<T>? sharedRelativeBiasTable = null,
+        bool usesExternalPositionBias = false)
         : base(new[] { hiddenSize }, new[] { hiddenSize })
     {
         if (hiddenSize <= 0)
@@ -215,18 +228,27 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
             ? Tensors.Helpers.RandomHelper.CreateSeededRandom(seed.Value)
             : Tensors.Helpers.RandomHelper.CreateSecureRandom();
 
-        // Q/K/V/O projections: shape [hiddenSize, hiddenSize], Xavier-initialised.
-        _qWeights = InitProjection(hiddenSize, hiddenSize);
-        _kWeights = InitProjection(hiddenSize, hiddenSize);
-        _vWeights = InitProjection(hiddenSize, hiddenSize);
-        _oWeights = InitProjection(hiddenSize, hiddenSize);
+        // Q/K/V/O projections are [hiddenSize, hiddenSize] placeholders until first use; see
+        // EnsureWeightsAllocated. The bias table is small and may be shared, so it is built here.
+        _qWeights = new Tensor<T>([0, 0]);
+        _kWeights = new Tensor<T>([0, 0]);
+        _vWeights = new Tensor<T>([0, 0]);
+        _oWeights = new Tensor<T>([0, 0]);
 
-        RegisterTrainableParameter(_qWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_kWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_vWeights, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_oWeights, PersistentTensorRole.Weights);
+        _usesExternalPositionBias = usesExternalPositionBias;
+        if (usesExternalPositionBias)
+        {
+            if (sharedRelativeBiasTable is not null)
+                throw new ArgumentException(
+                    "A layer that receives its position bias from its stack cannot also hold a shared table.",
+                    nameof(sharedRelativeBiasTable));
 
-        if (sharedRelativeBiasTable is not null)
+            // The enclosing T5EncoderStack owns the one table and hands each block the bias it computed,
+            // so this layer holds no table and no reference to one: nothing here can come apart on clone.
+            _relativeBiasTable = new Tensor<T>([0, 0]);
+            _ownsBiasTable = false;
+        }
+        else if (sharedRelativeBiasTable is not null)
         {
             // Validate the shared table matches this layer's geometry. A
             // mismatched shape would silently break attention scoring.
@@ -254,7 +276,65 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
             double biasStd = 1.0 / Math.Sqrt(hiddenSize);
             _relativeBiasTable = SampleNormalTensor(new[] { numBuckets, numHeads }, std: biasStd);
             _ownsBiasTable = true;
-            RegisterTrainableParameter(_relativeBiasTable, PersistentTensorRole.Weights);
+            // Registered with the projections in EnsureWeightsAllocated, so the registered order
+            // stays Q, K, V, O, bias - the order the generated parameter surface declares.
+        }
+    }
+
+    /// <inheritdoc />
+    protected override bool ParametersAreConstructionSized => true;
+
+    /// <inheritdoc />
+    protected override void EnsureInitialized()
+    {
+        EnsureWeightsAllocated();
+        base.EnsureInitialized();
+    }
+
+    /// <inheritdoc />
+    internal override bool TryDeclareShape()
+    {
+        EnsureWeightsAllocated();
+        return true;
+    }
+
+    /// <summary>
+    /// Allocates, initializes and registers Q/K/V/O once. Idempotent, and it keeps weights a
+    /// clone or checkpoint restore already installed rather than re-initializing over them.
+    /// </summary>
+    private void EnsureWeightsAllocated()
+    {
+        if (_projectionsAllocated) return;
+
+        lock (InitializationLock)
+        {
+            if (_projectionsAllocated) return;
+
+            if (WeightsAlreadyAllocated(_qWeights, _hiddenSize, _hiddenSize)
+                && WeightsAlreadyAllocated(_kWeights, _hiddenSize, _hiddenSize)
+                && WeightsAlreadyAllocated(_vWeights, _hiddenSize, _hiddenSize)
+                && WeightsAlreadyAllocated(_oWeights, _hiddenSize, _hiddenSize))
+            {
+                // The restore path (SetTrainableParameters) already registered them.
+                _projectionsAllocated = true;
+                return;
+            }
+
+            // Xavier-initialised, drawn from the layer's RNG after the bias table.
+            _qWeights = InitProjection(_hiddenSize, _hiddenSize);
+            _kWeights = InitProjection(_hiddenSize, _hiddenSize);
+            _vWeights = InitProjection(_hiddenSize, _hiddenSize);
+            _oWeights = InitProjection(_hiddenSize, _hiddenSize);
+
+            RegisterTrainableParameter(_qWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_kWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_vWeights, PersistentTensorRole.Weights);
+            RegisterTrainableParameter(_oWeights, PersistentTensorRole.Weights);
+            // Do NOT register a shared table: the owning layer does, so the optimizer sees it once.
+            if (_ownsBiasTable)
+                RegisterTrainableParameter(_relativeBiasTable, PersistentTensorRole.Weights);
+
+            _projectionsAllocated = true;
         }
     }
 
@@ -303,6 +383,8 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
     /// </summary>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
+        EnsureWeightsAllocated();
+
         // Accept [batch, seq, hidden] or [seq, hidden]. Flatten leading
         // dims to [batch, seq, hidden] for processing.
         int rank = input.Shape.Length;
@@ -340,7 +422,9 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
         var v = Engine.TensorPermute(vReshaped, new[] { 0, 2, 1, 3 });
 
         // ---- 2. Build the T5 relative position bias [numHeads, seqLen, seqLen] ----
-        var biasForAttn = BuildT5RelativeBias(seqLen);
+        var biasForAttn = _usesExternalPositionBias
+            ? ExternalPositionBias(seqLen)
+            : BuildT5RelativeBias(seqLen);
 
         // ---- 3. Scaled dot-product attention with bias added pre-softmax ----
         // Manual SDPA composition via tape-tracked Engine ops only.
@@ -402,6 +486,24 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
     /// through <see cref="IEngine.TensorEmbeddingLookup{T,T2}"/> so gradients
     /// flow back into <see cref="_relativeBiasTable"/> on backward.
     /// </summary>
+    private Tensor<T> ExternalPositionBias(int seqLen)
+    {
+        var bias = _externalPositionBias
+            ?? throw new InvalidOperationException(
+                "This T5 attention layer takes its relative position bias from its T5EncoderStack; run it " +
+                "through the stack, which computes the shared bias once per forward pass.");
+        if (bias.Shape.Length != 3 || bias.Shape[0] != _numHeads || bias.Shape[1] != seqLen || bias.Shape[2] != seqLen)
+            throw new ArgumentException(
+                $"The supplied position bias must be [{_numHeads}, {seqLen}, {seqLen}], got [{string.Join(", ", bias.Shape.ToArray())}].");
+        return bias;
+    }
+
+    /// <summary>Whether this layer receives its relative position bias from its stack.</summary>
+    public bool UsesExternalPositionBias => _usesExternalPositionBias;
+
+    /// <summary>Supplies the bias for the next forward pass; the stack clears it afterwards.</summary>
+    internal void SetExternalPositionBias(Tensor<T>? bias) => _externalPositionBias = bias;
+
     private Tensor<T> BuildT5RelativeBias(int seqLen)
     {
         // Bucket-index matrix depends only on seqLen (and the layer's
@@ -500,6 +602,7 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
     /// <inheritdoc/>
     public override Vector<T> GetParameterGradients()
     {
+        EnsureWeightsAllocated();
         if (_qGradient is null)
             return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
 
@@ -529,6 +632,7 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
     /// <inheritdoc/>
     public override void UpdateParameters(T learningRate)
     {
+        EnsureWeightsAllocated();
         if (_qGradient is null)
             throw new InvalidOperationException(
                 "Backward pass must be called before updating parameters.");

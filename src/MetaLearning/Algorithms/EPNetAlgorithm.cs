@@ -94,8 +94,6 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [PipelineStage(PipelineStage.Training)]
 public partial class EPNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
-    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
-    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
 
     private readonly EPNetOptions<T, TInput, TOutput> _epnetOptions;
 

@@ -233,7 +233,7 @@ public partial class GradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     /// </remarks>
 
     /// <inheritdoc />
-    public override void Step(TapeStepContext<T> context)
+    protected override void StepCore(TapeStepContext<T> context)
     {
         bool gpuAdam = typeof(T) == typeof(float)
             && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"

@@ -88,6 +88,16 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
     private int _hiddenDimension;
     private int _numResidualLayers;
     private int _numDiffusionSteps;
+
+    /// <summary>
+    /// Sample paths drawn per prediction, aggregated by median. Tashiro et al.
+    /// (arXiv:2107.03502) define CSDI's deterministic output as "the median of 100 generated
+    /// samples" - a single path is a draw from the predictive distribution, not the estimate.
+    /// </summary>
+    private int _numSamples;
+
+    /// <summary>Seed for the sampling noise; null draws securely and is not reproducible.</summary>
+    private int? _seed;
     private int _numHeads;
     private int _timeEmbeddingDim;
     private double _dropout;
@@ -194,6 +204,8 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
         _dropout = options.DropoutRate;
         _betaStart = options.BetaStart;
         _betaEnd = options.BetaEnd;
+        _numSamples = Math.Max(1, options.NumSamples);
+        _seed = options.Seed;
         ComputeNoiseSchedule();
     }
 
@@ -299,25 +311,39 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
 
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
 
-        // Preferred fused path: MultiSlotFusedStep with the sampled (noise,
-        // xt-scale, sinT) tuple passed as persistent slots. Refreshes per step
-        // by host-sampling a fresh (t, ε) pair and copying values into the
-        // slot tensors — the compiled forward reads the CURRENT slot data on
-        // every replay. See ooples/AiDotNet#1846.
-        if (trainableParams.Length > 0
-            && NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
-                _optimizer,
-                out var mfsOptType, out var mfsLr, out var mfsB1, out var mfsB2,
-                out var mfsEps, out var mfsWd, out _, out _))
+        // One draw of (t, epsilon) feeds whichever path runs below. Hoisting it out of the
+        // fused branch is what lets the eager path reuse DenoiserForwardFromSlots, so the two
+        // paths share ONE denoiser graph instead of two hand-written ones that can drift
+        // apart. Null means a degenerate (zero-length) target, so there is nothing to train.
+        var slots = BuildCsdiSlots(input, target);
+        if (slots is null)
+            return;
+
+        // Every training entry point on the base puts the layers in training mode for the
+        // duration of the step. This override is a training entry point too, and without
+        // the call the residual stack's DropoutLayer stayed in inference mode for the whole
+        // of training, so the configured DropoutRate (0.1 by default, the rate Tashiro et
+        // al. 2021 report) was silently inert and the model trained an architecture the
+        // caller never asked for.
+        SetTrainingMode(true);
+        try
         {
-            var slots = BuildCsdiSlots(input, target);
-            if (slots is not null)
+            // Preferred fused path: MultiSlotFusedStep with the sampled (noise,
+            // xt-scale, sinT) tuple passed as persistent slots. Refreshes per step
+            // by host-sampling a fresh (t, eps) pair and copying values into the
+            // slot tensors -- the compiled forward reads the CURRENT slot data on
+            // every replay. See ooples/AiDotNet#1846.
+            if (trainableParams.Length > 0
+                && NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
+                    _optimizer,
+                    out var mfsOptType, out var mfsLr, out var mfsB1, out var mfsB2,
+                    out var mfsEps, out var mfsWd, out _, out _))
             {
                 using var multiSlotStep = new AiDotNet.Training.MultiSlotFusedStep<T>();
                 Tensor<T> ForwardFromSlots(IReadOnlyList<Tensor<T>> s) => DenoiserForwardFromSlots(s);
                 Tensor<T> ComputeLossFromSlots(Tensor<T> pred, IReadOnlyList<Tensor<T>> s)
                 {
-                    // s[1] = ε_true (noise slot). Loss = MSE(ε_pred, ε_true) via
+                    // s[1] = eps_true (noise slot). Loss = MSE(eps_pred, eps_true) via
                     // the model's LossFunctionBase so custom losses are respected.
                     return loss.ComputeTapeLoss(pred, s[1]);
                 }
@@ -339,63 +365,50 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
                     return;
                 }
             }
+
+            // Eager fallback: runs the same denoiser graph on the tape. Used when the fused
+            // path cannot engage (non-fuse-able optimizer, non-GPU host, etc.).
+            using var tape = new GradientTape<T>();
+            var epsilonPred = DenoiserForwardFromSlots(slots);
+            var epsilonTarget = slots[1];
+
+            // Use the model's registered loss (defaults to MSE) so custom
+            // loss functions are respected -- the denoising-objective shape
+            // matches any per-element loss.
+            var lossTensor = loss.ComputeTapeLoss(epsilonPred, epsilonTarget);
+
+            // Publish through the base instead of calling tape.ComputeGradients directly.
+            // GetParameterGradients() answers from the published surface, and with nothing
+            // published it falls back to the layer accessors, which fabricate a zero for every
+            // parameter -- 184804 of them here. A caller then cannot tell a genuinely zero
+            // gradient from one that was never written, and a gradient-flow check reads the
+            // whole model as severed while the weights visibly move.
+            var grads = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParams);
+
+            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+            LastLoss = lossValue;
+
+            // The optimizer handed to the constructor drives the update. The hand-rolled
+            // `param -= 0.001 * grad` this replaces ignored it outright, so an Adam, a
+            // configured learning rate, a schedule and any weight decay a caller passed all
+            // had no effect whatsoever. Recomputation is pinned to THIS draw of (t, eps):
+            // a line-searching optimizer that re-sampled would be comparing losses from two
+            // different diffusion timesteps and would read the difference as progress.
+            Tensor<T> ComputeForward(Tensor<T> _, Tensor<T> __) => DenoiserForwardFromSlots(slots);
+            Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> __) => loss.ComputeTapeLoss(pred, epsilonTarget);
+
+            var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
+                trainableParams, grads, lossValue,
+                input, target, ComputeForward, RecomputeLoss);
+
+            MarkTrainMutationStarted();
+            _optimizer.Step(context);
+            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+            StepSchedulerIfSupported(_optimizer);
         }
-
-        // Eager fallback: samples (t, ε) inline and runs the denoising pair on
-        // the tape. Same objective; used when the fused path can't engage
-        // (non-fuse-able optimizer, non-GPU host, etc.).
-        using var tape = new GradientTape<T>();
-        var (epsilonPred, epsilonTarget) = ComputeDenoisingPairTape(input, target);
-
-        // Use the model's registered loss (defaults to MSE) so custom
-        // loss functions are respected — the denoising-objective shape
-        // matches any per-element loss.
-        var lossTensor = loss.ComputeTapeLoss(epsilonPred, epsilonTarget);
-
-        var allGrads = tape.ComputeGradients(lossTensor, sources: null);
-        var grads = new Dictionary<Tensor<T>, Tensor<T>>(
-            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-        foreach (var param in trainableParams)
+        finally
         {
-            if (allGrads.TryGetValue(param, out var grad))
-                grads[param] = grad;
-        }
-
-        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-        LastLoss = lossValue;
-
-        T lr = NumOps.FromDouble(0.001);
-        foreach (var param in trainableParams)
-        {
-            if (grads.TryGetValue(param, out var grad))
-            {
-                // Reshape gradient to match parameter shape when element
-                // counts agree but ranks differ (matches AdamOptimizer.Step's
-                // safety path). When element counts truly disagree that
-                // indicates a layer-contract bug (e.g. a 3D BN gradient
-                // dropping the seq axis from a 2D-sized gamma/beta), so fail
-                // loudly rather than silently no-oping — a silent skip would
-                // mean this parameter never trains while the optimizer step
-                // still reports success.
-                if (!param._shape.SequenceEqual(grad._shape))
-                {
-                    if (param.Length == grad.Length)
-                    {
-                        grad = Engine.Reshape(grad, param._shape);
-                    }
-                    else
-                    {
-                        throw new InvalidOperationException(
-                            $"CSDI optimizer: gradient/parameter element counts disagree ("
-                            + $"param shape=[{string.Join(",", param._shape)}], length={param.Length}; "
-                            + $"grad shape=[{string.Join(",", grad._shape)}], length={grad.Length}). "
-                            + "This is a layer-contract bug — the producing layer's backward returned a "
-                            + "gradient with the wrong element count for this parameter.");
-                    }
-                }
-                var update = Engine.TensorMultiplyScalar(grad, lr);
-                Engine.TensorSubtractInPlace(param, update);
-            }
+            SetTrainingMode(false);
         }
     }
 
@@ -505,108 +518,6 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
         return eps;
     }
 
-    /// <summary>
-    /// Builds the (predicted-noise, true-noise) pair for one DDPM
-    /// training step. Samples a timestep and a fresh noise tensor,
-    /// forms the noised version of the target, runs it through the
-    /// denoiser conditioned on the observed input + sin(t) embedding,
-    /// and returns <c>(ε_pred, ε_true)</c> — both tape-tracked so the
-    /// caller can compute MSE and backprop through the denoiser.
-    /// </summary>
-    private (Tensor<T> epsilonPred, Tensor<T> epsilonTrue) ComputeDenoisingPairTape(Tensor<T> input, Tensor<T> target)
-    {
-        var rand = RandomHelper.CreateSecureRandom();
-
-        // 1. Sample timestep t uniformly.
-        int t = rand.Next(_numDiffusionSteps);
-
-        // 2. Sample noise matching target shape.
-        int targetLen = target.Length;
-        var noiseData = new T[targetLen];
-        for (int i = 0; i < targetLen; i++)
-            noiseData[i] = SampleStandardNormal(rand);
-        var epsilonTrue = new Tensor<T>(target._shape, new Vector<T>(noiseData));
-
-        // 3. Form x_t = sqrt(α̅_t) * target + sqrt(1-α̅_t) * ε. The
-        // target and noise tensors are treated as constants here
-        // (user-supplied target + freshly-sampled noise), so the
-        // tape sees x_t as a constant feeding the denoiser. That's
-        // fine — we want gradients only for denoiser parameters.
-        T sqrtAlphaBar = NumOps.Sqrt(_alphasCumprod[t]);
-        T sqrtOneMinus = NumOps.Sqrt(NumOps.Subtract(NumOps.One, _alphasCumprod[t]));
-        var scaledTarget = Engine.TensorMultiplyScalar(target, sqrtAlphaBar);
-        var scaledNoise = Engine.TensorMultiplyScalar(epsilonTrue, sqrtOneMinus);
-        var xt = Engine.TensorAdd(scaledTarget, scaledNoise);
-
-        // 4. Condition on the raw instance-normalized observed input. As in the
-        // inference path, the conditioning is NOT pre-projected: it is packed raw
-        // into the per-step denoiser input, and _inputProjection projects the
-        // WHOLE packed vector to hidden width (its intended role). This keeps the
-        // training and inference denoiser graphs identical so the residual stack
-        // (BatchNorm channels = hiddenDimension) always receives a hidden-width
-        // input on both paths.
-        var conditioned = ApplyInstanceNormalization(input);
-        if (conditioned.Rank == 1)
-            conditioned = Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
-        var condFlat = conditioned.Rank == 2
-            ? conditioned
-            : Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
-
-        // Flatten xt to rank-2 [1, targetLen] for packing.
-        var xt2d = xt.Rank == 1 ? Engine.Reshape(xt, new[] { 1, targetLen }) : xt;
-        int condLen = Math.Min(condFlat.Length, _hiddenDimension);
-
-        // Build the [xt | conditioning[0:condLen] | sin(t)] packed denoiser
-        // input. xt, the conditioning slice, and the sin(t) scalar are all
-        // constants here; gradients flow through the denoiser (_inputProjection
-        // + residual stack + _outputProjection), whose tape-aware Forward passes
-        // run on this packed tensor.
-        var denoisingInput = new Tensor<T>(new[] { 1, targetLen + condLen + 1 });
-        for (int i = 0; i < targetLen; i++) denoisingInput.Data.Span[i] = xt2d[0, i];
-        for (int i = 0; i < condLen; i++) denoisingInput.Data.Span[targetLen + i] = condFlat[i];
-        denoisingInput.Data.Span[targetLen + condLen] = NumOps.FromDouble(
-            Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
-
-        // 5. Predict noise: project packed input to hidden width, run the
-        // residual stack, then the output projection. All Forward passes are
-        // tape-aware so gradients flow back to every denoiser parameter.
-        var eps = (Tensor<T>)denoisingInput;
-        if (_inputProjection is not null)
-            eps = _inputProjection.Forward(eps);
-        foreach (var layer in _residualLayers)
-            eps = layer.Forward(eps);
-        if (_outputProjection is not null)
-            eps = _outputProjection.Forward(eps);
-
-        // The output projection emits the flat score vector
-        // (sequenceLength × numFeatures); the denoised target here is the
-        // univariate series of length targetLen, so take the leading targetLen
-        // scores (tape-safe) to align with the true-noise tensor.
-        if (eps.Rank == 2 && eps.Shape[1] > epsilonTrue.Length)
-            eps = Engine.TensorNarrow(eps, dim: 1, start: 0, length: epsilonTrue.Length);
-
-        // Align predicted-noise shape with true-noise shape so the loss
-        // operates element-wise without a broadcast fallback. By construction
-        // the denoiser head emits one value per target element, so lengths
-        // MUST match — if they don't, that's a head-contract bug and the loss
-        // would silently train against the wrong slice. Fail loudly; then
-        // reshape once so ranks agree (Engine.Reshape is tape-recorded).
-        if (eps.Length != epsilonTrue.Length)
-        {
-            throw new InvalidOperationException(
-                $"CSDI denoising pair: predicted-noise length ({eps.Length}, shape=["
-                + $"{string.Join(",", eps._shape)}]) does not match true-noise length ("
-                + $"{epsilonTrue.Length}, shape=[{string.Join(",", epsilonTrue._shape)}]). "
-                + "This is a denoiser head bug — the residual stack should emit exactly "
-                + "one prediction per target element.");
-        }
-
-        if (!eps._shape.AsEnumerable().SequenceEqual(epsilonTrue._shape))
-            eps = Engine.Reshape(eps, epsilonTrue._shape);
-
-        return (eps, epsilonTrue);
-    }
-
     // UpdateParameters was an empty override, silently dropping every restore. The base
     // distributes the vector over the declared enumeration.
     public override ModelMetadata<T> GetModelMetadata() => new()
@@ -704,55 +615,62 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
     /// <summary>
     /// DDPM reverse process: iteratively denoise from pure noise conditioned on observed values.
     /// </summary>
+    /// <summary>
+    /// Reverse diffusion, drawing <c>_numSamples</c> paths and returning their per-position median.
+    /// </summary>
+    /// <remarks>
+    /// <para>The paths are drawn as ONE BATCH, not in a loop. xt is [S, outputLen] and the packed
+    /// denoiser input is [S, xtLen + condLen + 1], so the reverse process still runs exactly
+    /// _numDiffusionSteps times - each step just carries S rows through the same projections and
+    /// residual layers. That turns S independent sampling runs into S-wide matrix multiplies, which
+    /// is how a batched engine is meant to be fed; a per-sample loop would multiply the layer-call
+    /// count by S and leave every GEMM at batch 1.</para>
+    ///
+    /// <para>The conditioning and the sin(t) encoding are identical across rows - only the noise
+    /// differs - so they are broadcast into each row rather than recomputed.</para>
+    /// </remarks>
     private Tensor<T> ForwardNative(Tensor<T> input)
     {
         var conditioned = ApplyInstanceNormalization(input);
         bool addedBatchDim = false;
         if (conditioned.Rank == 1) { conditioned = conditioned.Reshape(new[] { 1, conditioned.Length }); addedBatchDim = true; }
 
-        // Conditioning = raw instance-normalized observed values, flattened to
-        // [1, N]. The packed per-step denoiser input (noisy sample + conditioning
-        // + diffusion-time embedding) is what gets projected to hidden width by
-        // _inputProjection — its intended role per Tashiro et al. 2021 "CSDI" and
-        // the layer-helper layout (input projection -> residual blocks ->
-        // output projection). The conditioning is therefore NOT pre-projected
-        // here: pre-projecting it consumed _inputProjection's resolved input
-        // width on the conditioning shape, so the raw packed input fell straight
-        // through to the residual stack whose BatchNorm channels are sized to
-        // hiddenDimension — the [1, 33] vs [1, 24] broadcast crash.
         var condFlat = conditioned.Rank == 2
             ? conditioned
             : Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
 
         int outputLen = _sequenceLength;
-        var rand = RandomHelper.CreateSecureRandom();
+        int samples = Math.Max(1, _numSamples);
+        var rand = _seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_seed.Value)
+            : RandomHelper.CreateSecureRandom();
 
-        // Start from pure noise
-        var xt = new Tensor<T>(new[] { 1, outputLen });
-        for (int i = 0; i < outputLen; i++)
+        var xt = new Tensor<T>(new[] { samples, outputLen });
+        for (int i = 0; i < samples * outputLen; i++)
             xt.Data.Span[i] = SampleStandardNormal(rand);
 
-        // Iterative denoising: t = T-1, T-2, ..., 0
+        int condLen = Math.Min(condFlat.Length, _hiddenDimension);
+        int rowLen = outputLen + condLen + 1;
         T eps10 = NumOps.FromDouble(1e-10);
+
         for (int t = _numDiffusionSteps - 1; t >= 0; t--)
         {
-            // Pack the per-step denoiser input: [noisy sample | conditioning | sin(t)].
-            int xtLen = Math.Min(xt.Length, outputLen);
-            int condLen = Math.Min(condFlat.Length, _hiddenDimension);
-            var denoisingInput = new Tensor<T>(new[] { 1, xtLen + condLen + 1 });
-            for (int i = 0; i < xtLen; i++) denoisingInput.Data.Span[i] = xt[i];
-            for (int i = 0; i < condLen; i++) denoisingInput.Data.Span[xtLen + i] = condFlat[i];
-            denoisingInput.Data.Span[xtLen + condLen] = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
+            var denoisingInput = new Tensor<T>(new[] { samples, rowLen });
+            T sinT = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
+            var din = denoisingInput.Data.Span;
+            for (int s = 0; s < samples; s++)
+            {
+                int baseIdx = s * rowLen;
+                for (int i = 0; i < outputLen; i++) din[baseIdx + i] = xt[s * outputLen + i];
+                for (int i = 0; i < condLen; i++) din[baseIdx + outputLen + i] = condFlat[i];
+                din[baseIdx + outputLen + condLen] = sinT;
+            }
 
-            // Project the packed input to hidden width, then run the residual
-            // stack (whose BatchNorm channels are hiddenDimension), then the
-            // output projection back to the flat score vector.
             var eps = denoisingInput;
             if (_inputProjection is not null) eps = _inputProjection.Forward(eps);
             foreach (var layer in _residualLayers) eps = layer.Forward(eps);
             if (_outputProjection is not null) eps = _outputProjection.Forward(eps);
 
-            // DDPM reverse step
             T alphaT = _alphas[t];
             T betaT = _betas[t];
             T sqrtOneMinusAlphaBarT = NumOps.Sqrt(NumOps.Subtract(NumOps.One, _alphasCumprod[t]));
@@ -760,17 +678,45 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
             T sqrtAlphaT = NumOps.Sqrt(alphaT);
             T sigmaT = t > 0 ? NumOps.Sqrt(betaT) : NumOps.Zero;
 
-            for (int i = 0; i < outputLen && i < xt.Length; i++)
+            int epsCols = samples > 0 ? eps.Length / samples : 0;
+            for (int s = 0; s < samples; s++)
             {
-                T epsVal = i < eps.Length ? eps[i] : NumOps.Zero;
-                T meanT = NumOps.Divide(NumOps.Subtract(xt[i], NumOps.Multiply(noiseCoeffT, epsVal)), NumOps.Add(sqrtAlphaT, eps10));
-                T z = t > 0 ? SampleStandardNormal(rand) : NumOps.Zero;
-                xt.Data.Span[i] = NumOps.Add(meanT, NumOps.Multiply(sigmaT, z));
+                for (int i = 0; i < outputLen; i++)
+                {
+                    int flat = s * outputLen + i;
+                    if (flat >= xt.Length) break;
+                    int epsIdx = s * epsCols + i;
+                    T epsVal = i < epsCols && epsIdx < eps.Length ? eps[epsIdx] : NumOps.Zero;
+                    T meanT = NumOps.Divide(NumOps.Subtract(xt[flat], NumOps.Multiply(noiseCoeffT, epsVal)), NumOps.Add(sqrtAlphaT, eps10));
+                    T z = t > 0 ? SampleStandardNormal(rand) : NumOps.Zero;
+                    xt.Data.Span[flat] = NumOps.Add(meanT, NumOps.Multiply(sigmaT, z));
+                }
             }
         }
 
-        if (addedBatchDim && xt.Rank == 2 && xt.Shape[0] == 1) xt = xt.Reshape(new[] { xt.Shape[1] });
-        return xt;
+        var median = MedianAcrossSamples(xt, samples, outputLen);
+        if (!addedBatchDim) return Engine.Reshape(median, new[] { 1, outputLen });
+        return median;
+    }
+
+    /// <summary>
+    /// Per-position median over the sample axis - the paper's deterministic estimate. The same
+    /// sample set is what its 5% and 95% prediction intervals come from.
+    /// </summary>
+    private Tensor<T> MedianAcrossSamples(Tensor<T> paths, int samples, int outputLen)
+    {
+        var result = new Tensor<T>(new[] { outputLen });
+        var column = new T[samples];
+        for (int i = 0; i < outputLen; i++)
+        {
+            for (int s = 0; s < samples; s++) column[s] = paths[s * outputLen + i];
+            Array.Sort(column, (a, b) => NumOps.LessThan(a, b) ? -1 : NumOps.LessThan(b, a) ? 1 : 0);
+            result[i] = (samples % 2) == 1
+                ? column[samples / 2]
+                : NumOps.Divide(NumOps.Add(column[samples / 2 - 1], column[samples / 2]), NumOps.FromDouble(2.0));
+        }
+
+        return result;
     }
 
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)

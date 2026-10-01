@@ -271,7 +271,8 @@ jobs:
             -OutputDirectory $env:AIDOTNET_MODEL_PERF_DIR `
             -ShardIndex ${{ matrix.shard }} `
             -ShardCount ${{ needs.prepare.outputs.shard_count }} `
-            -TimeoutSeconds $env:PERF_MODEL_TIMEOUT_SECONDS
+            -TimeoutSeconds $env:PERF_MODEL_TIMEOUT_SECONDS `
+            -MemoryLimitBytes 12884901888
 
       - name: Upload shard records
         if: always()
@@ -374,7 +375,7 @@ jobs:
             if (-not $document.entries -or $document.entries.Count -lt 1) { continue }
             $document | Add-Member -NotePropertyName commit -NotePropertyValue $run.headSha -Force
             $document | ConvertTo-Json -Depth 12 -Compress | Set-Content -Path $file -Encoding utf8
-            $kept += ,@($run.createdAt, $file)
+            $kept += ,@($run.createdAt, $file, $run.databaseId)
           }
 
           if ($kept.Count -eq 0) {
@@ -385,8 +386,17 @@ jobs:
 
           # The most recent point stays the single-baseline comparison, so a repository without
           # enough history behaves exactly as it did before.
-          $newest = ($kept | Sort-Object { $_[0] } -Descending)[0][1]
+          $newestRun = ($kept | Sort-Object { $_[0] } -Descending)[0]
+          $newest = $newestRun[1]
           Copy-Item $newest 'artifacts/model-performance/prior/baseline.json' -Force
+
+          # That run's own records carry each fixture's workload (input shape, parameter count), which baselines
+          # written before they recorded it lack. Without them a fixture whose workload changed is compared with
+          # numbers for different work. Best effort: missing records only mean those workloads stay unknown.
+          $records = 'artifacts/model-performance/prior/records'
+          New-Item -ItemType Directory -Force -Path $records | Out-Null
+          gh run download $newestRun[2] --pattern 'model-performance-[0-9]*' --dir $records 2>$null
+          if ($LASTEXITCODE -ne 0) { Write-Host 'prior records unavailable; workloads the baseline lacks stay unknown' }
           'present=true' | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           'path=artifacts/model-performance/prior/baseline.json' | Out-File -FilePath $env:GITHUB_OUTPUT -Append
           "count=$($kept.Count)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
@@ -426,6 +436,9 @@ jobs:
             '--max-correctness-probe-ms', '120000')
           if ('${{ steps.baseline.outputs.present }}' -eq 'true') {
             $arguments += @('--baseline', '${{ steps.baseline.outputs.path }}')
+            if (Test-Path 'artifacts/model-performance/prior/records') {
+              $arguments += @('--prior-records', 'artifacts/model-performance/prior/records')
+            }
             # The series behind that single point. With fewer than four usable runs the probe says
             # so and compares against the one point, exactly as before.
             $arguments += @('--history', 'artifacts/model-performance/history')

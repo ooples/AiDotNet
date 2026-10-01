@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -155,6 +155,27 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
 
     /// <inheritdoc/>
     public override int SequenceLength => _sequenceLength;
+    /// <summary>The input DCRNN reads: [numNodes, sequenceLength, featuresPerNode].</summary>
+    /// <remarks>
+    /// The financial base states [batch, sequenceLength, NumFeatures], but DCRNN's NumFeatures is numNodes *
+    /// featuresPerNode and its first axis is the graph's nodes, not a batch (Li et al. 2018 run every node as one
+    /// row of a shared DCGRU). The base contract therefore pinned the last axis to numNodes * featuresPerNode and
+    /// rejected the very [nodes, steps, features] tensor the forward pass consumes.
+    /// </remarks>
+    public override ModelInputShapeConstraint GetInputShapeConstraint()
+    {
+        if (_numNodes < 1 || _sequenceLength < 1 || _numFeatures < 1)
+            return base.GetInputShapeConstraint();
+
+        return new ModelInputShapeConstraint(
+            MinimumRank: 0,
+            MinimumElementCount: 0,
+            ExactRank: 3,
+            MaximumRank: 0,
+            MinimumAxisSizes: null,
+            AxisDivisors: null,
+            ExactAxisSizes: new[] { _numNodes, _sequenceLength, _numFeatures });
+    }
 
     /// <inheritdoc/>
     public override int PredictionHorizon => _forecastHorizon;

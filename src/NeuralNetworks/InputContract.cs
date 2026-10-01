@@ -30,8 +30,10 @@ public static class InputContractShapeResolver
         ValidateConstraint(constraint);
         var shape = requestedShape.ToArray();
         int declaredAxisCount = Math.Max(
-            constraint.MinimumAxisSizes?.Count ?? 0,
-            constraint.AxisDivisors?.Count ?? 0);
+            constraint.ExactAxisSizes?.Count ?? 0,
+            Math.Max(
+                constraint.MinimumAxisSizes?.Count ?? 0,
+                constraint.AxisDivisors?.Count ?? 0));
         int requiredRank = constraint.ExactRank > 0
             ? constraint.ExactRank
             : Math.Max(constraint.MinimumRank, declaredAxisCount);
@@ -61,7 +63,7 @@ public static class InputContractShapeResolver
             shape = Enumerable.Repeat(1, targetRank - shape.Length).Concat(shape).ToArray();
         }
 
-        ApplyAxisRules(shape, constraint.MinimumAxisSizes, constraint.AxisDivisors);
+        ApplyAxisRules(shape, constraint.MinimumAxisSizes, constraint.AxisDivisors, constraint.ExactAxisSizes);
 
         if (constraint.MinimumElementCount > 0)
         {
@@ -74,8 +76,11 @@ public static class InputContractShapeResolver
                 throw new InputContractBindingException(
                     $"Minimum element count {constraint.MinimumElementCount} cannot be represented "
                     + $"by input shape [{string.Join(",", shape)}].");
-            shape[shape.Length - 1] = Math.Max(shape[shape.Length - 1], (int)requiredLast);
-            RoundAxisToDivisor(shape, shape.Length - 1, constraint.AxisDivisors);
+            if (!IsExactAxis(constraint.ExactAxisSizes, shape.Length - 1))
+            {
+                shape[shape.Length - 1] = Math.Max(shape[shape.Length - 1], (int)requiredLast);
+                RoundAxisToDivisor(shape, shape.Length - 1, constraint.AxisDivisors);
+            }
         }
 
         var reasons = new List<string>();
@@ -100,20 +105,54 @@ public static class InputContractShapeResolver
         if (constraint.MaximumRank > 0 && constraint.MinimumRank > constraint.MaximumRank)
             throw new InputContractBindingException(
                 "Minimum input rank cannot be greater than maximum input rank.");
+
+        var exact = constraint.ExactAxisSizes;
+        if (exact is null) return;
+        for (int axis = 0; axis < exact.Count; axis++)
+        {
+            if (exact[axis] < 0)
+                throw new InputContractBindingException("Input shape constraints cannot be negative.");
+            if (!IsExactAxis(exact, axis)) continue;
+
+            var minima = constraint.MinimumAxisSizes;
+            if (minima is not null && axis < minima.Count && minima[axis] > exact[axis])
+                throw new InputContractBindingException(
+                    $"Input axis {axis} is pinned to {exact[axis]} but the contract also requires at "
+                    + $"least {minima[axis]}.");
+
+            var divisors = constraint.AxisDivisors;
+            if (divisors is not null && axis < divisors.Count && divisors[axis] > 1
+                && exact[axis] % divisors[axis] != 0)
+                throw new InputContractBindingException(
+                    $"Input axis {axis} is pinned to {exact[axis]}, which is not divisible by the "
+                    + $"required {divisors[axis]}.");
+        }
     }
 
     private static void ApplyAxisRules(
         int[] shape,
         IReadOnlyList<int>? minima,
-        IReadOnlyList<int>? divisors)
+        IReadOnlyList<int>? divisors,
+        IReadOnlyList<int>? exact = null)
     {
         for (int axis = 0; axis < shape.Length; axis++)
         {
+            // An exact size is the model's whole answer for that axis, so it is applied last and a
+            // divisor is not allowed to round it away - the model would reject the rounded extent.
+            if (IsExactAxis(exact, axis))
+            {
+                shape[axis] = exact![axis];
+                continue;
+            }
+
             if (minima is not null && axis < minima.Count && minima[axis] > 0)
                 shape[axis] = Math.Max(shape[axis], minima[axis]);
             RoundAxisToDivisor(shape, axis, divisors);
         }
     }
+
+    private static bool IsExactAxis(IReadOnlyList<int>? exact, int axis)
+        => exact is not null && axis < exact.Count && exact[axis] > 0;
 
     private static void RoundAxisToDivisor(
         int[] shape,
@@ -375,7 +414,8 @@ public sealed class InputContractManifest
         if (constraint.MinimumElementCount > 0 && elements < constraint.MinimumElementCount)
             reasons.Add($"primary input has {elements} elements, but the contract requires at least {constraint.MinimumElementCount}");
 
-        ValidateAxes(shape, constraint.MinimumAxisSizes, constraint.AxisDivisors, "primary input", reasons);
+        ValidateAxes(shape, constraint.MinimumAxisSizes, constraint.AxisDivisors, "primary input", reasons,
+            constraint.ExactAxisSizes);
     }
 
     internal static void ValidatePortShape(
@@ -403,8 +443,16 @@ public sealed class InputContractManifest
         IReadOnlyList<int>? minima,
         IReadOnlyList<int>? divisors,
         string label,
-        ICollection<string> reasons)
+        ICollection<string> reasons,
+        IReadOnlyList<int>? exact = null)
     {
+        if (exact is not null)
+        {
+            for (int axis = 0; axis < exact.Count && axis < shape.Length; axis++)
+                if (exact[axis] > 0 && shape[axis] != exact[axis])
+                    reasons.Add($"{label} axis {axis} is {shape[axis]}; expected exactly {exact[axis]}");
+        }
+
         if (minima is not null)
         {
             for (int axis = 0; axis < minima.Count && axis < shape.Length; axis++)

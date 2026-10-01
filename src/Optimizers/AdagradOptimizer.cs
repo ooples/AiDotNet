@@ -403,7 +403,7 @@ public partial class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     private readonly ConcurrentDictionary<Tensor<T>, Tensor<T>> _tapeAccSqGrad = new(TensorReferenceComparer<Tensor<T>>.Instance);
 
     /// <inheritdoc />
-    public override void Step(TapeStepContext<T> context)
+    protected override void StepCore(TapeStepContext<T> context)
     {
         PrepareTapeState(context);
 

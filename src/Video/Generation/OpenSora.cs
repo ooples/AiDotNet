@@ -69,7 +69,7 @@ namespace AiDotNet.Video.Generation;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Frames, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
-public partial class OpenSora<T> : NeuralNetworkBase<T>
+public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITrainingObjectiveProvider<T>
 {
     private readonly OpenSoraOptions _options;
 
@@ -85,6 +85,8 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>
     private int _hiddenDim;
     private int _numLayers;
     private int _numInferenceSteps;
+    // The timestep of the Train call in progress, read by ForwardForTraining; null outside Train.
+    private double? _trainingTime;
     private double _guidanceScale;
 
     // Patch embedding for spatiotemporal input
@@ -121,6 +123,13 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>
     // Noise schedule
     private double[] _betas = [];
     private double[] _alphasCumprod = [];
+
+    // LayerNorm's unit gamma and zero beta: derived from the feature shape, never parameters.
+    // Rebuilt when the spatial shape changes.
+    [Scratch]
+    private Tensor<T>? _layerNormGamma;
+    [Scratch]
+    private Tensor<T>? _layerNormBeta;
 
     #endregion
 
@@ -209,7 +218,12 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>
         _numInferenceSteps = _options.NumInferenceSteps;
         _guidanceScale = _options.GuidanceScale;
         GuidanceScale = _options.GuidanceScale;
-        _numHeads = 16;
+        _numHeads = _options.NumHeads;
+        // Each head owns a contiguous block of _headDim channels, so the heads must tile hiddenDim
+        // exactly - the same requirement as PyTorch's nn.MultiheadAttention.
+        if (_hiddenDim % _numHeads != 0)
+            throw new ArgumentOutOfRangeException(nameof(options), _hiddenDim,
+                $"OpenSoraOptions.HiddenDim must be divisible by NumHeads ({_numHeads}).");
         _headDim = _hiddenDim / _numHeads;
 
         // Initialize noise schedule before InitializeLayers
@@ -377,52 +391,81 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>
     /// <param name="expectedOutput">Target (typically the same as input for diffusion training).</param>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Sample a random timestep
+        // DDPM epsilon-prediction (Ho et al. 2020, Algorithm 1), the objective Open-Sora trains its DiT on: draw a
+        // timestep and noise, form x_t = sqrt(alpha_bar_t) x_0 + sqrt(1 - alpha_bar_t) eps, and fit the network's
+        // predicted noise to eps. The regression target is the drawn noise, so expectedOutput is not used.
+        // This used to compute the loss and a gradient by hand, never backpropagate it, and then call
+        // UpdateParameters with a hard-coded rate on every layer, so the model never trained. It now runs on the
+        // tape like every other network, with the base training loop's optimizer and loss.
         var random = RandomHelper.CreateSecureRandom();
         int timestep = random.Next(_numInferenceSteps);
-        double t = 1.0 - (double)timestep / _numInferenceSteps;
-
-        // Get noise schedule parameters
         double alphaCumprod = _alphasCumprod[timestep];
-        double sqrtAlphaCumprod = Math.Sqrt(alphaCumprod);
-        double sqrtOneMinusAlphaCumprod = Math.Sqrt(1 - alphaCumprod);
-
-        // Sample noise
         var noise = InitializeLatents(input._shape, random);
+        var noisyInput = Engine.TensorAdd(
+            Engine.TensorMultiplyScalar(input, NumOps.FromDouble(Math.Sqrt(alphaCumprod))),
+            Engine.TensorMultiplyScalar(noise, NumOps.FromDouble(Math.Sqrt(1 - alphaCumprod))));
 
-        // Create noisy input: x_t = sqrt(alpha_cumprod) * x_0 + sqrt(1 - alpha_cumprod) * noise
-        var scaledInput = Engine.TensorMultiplyScalar(input, NumOps.FromDouble(sqrtAlphaCumprod));
-        var scaledNoise = Engine.TensorMultiplyScalar(noise, NumOps.FromDouble(sqrtOneMinusAlphaCumprod));
-        var noisyInput = Engine.TensorAdd(scaledInput, scaledNoise);
-
-        // Forward pass: predict the noise
-        var timeEmbed = CreateTimeEmbedding(t);
-        var predictedNoise = PredictNoise(noisyInput, null, timeEmbed);
-
-        // Compute MSE loss between predicted and actual noise
-        T loss = NumOps.Zero;
-        for (int i = 0; i < noise.Length; i++)
+        _trainingTime = 1.0 - (double)timestep / _numInferenceSteps;
+        SetTrainingMode(true);
+        try
         {
-            T diff = NumOps.Subtract(predictedNoise.Data.Span[i], noise.Data.Span[i]);
-            loss = NumOps.Add(loss, NumOps.Multiply(diff, diff));
+            // The step's timestep reaches the forward as DATA (the auxiliary input), not as a value captured while a
+            // plan is traced: a compile-once plan that captured it would train every later step at the first step's
+            // noise level. The base routes an auxiliary-input step through the eager tape until the compiled cache
+            // carries such inputs, so this model needs no fused-training opt-out of its own.
+            using (UseAuxiliaryInput(TimeInput(_trainingTime.Value)))
+            {
+                TrainWithTape(noisyInput, noise);
+            }
         }
-        loss = NumOps.Divide(loss, NumOps.FromDouble(noise.Length));
-        LastLoss = loss;
-
-        // Compute gradient: d(MSE)/d(pred) = 2 * (pred - target) / N
-        var gradient = new Tensor<T>(predictedNoise._shape);
-        T scale = NumOps.FromDouble(2.0 / noise.Length);
-        for (int i = 0; i < noise.Length; i++)
+        finally
         {
-            T diff = NumOps.Subtract(predictedNoise.Data.Span[i], noise.Data.Span[i]);
-            gradient.Data.Span[i] = NumOps.Multiply(diff, scale);
+            _trainingTime = null;
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <summary>
+    /// During <see cref="Train"/>, the denoiser's forward at the step's timestep: the time embedding is built here,
+    /// inside the taped forward, so its layer receives gradients too. Outside training it is the ordinary forward.
+    /// </summary>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        => _trainingTime is not null && AuxiliaryInput is { } timeInput
+            ? PredictNoise(input, null, _timeEmbed.Forward(timeInput))
+            : base.ForwardForTraining(input);
+
+    /// <inheritdoc/>
+    AiDotNet.Enums.TrainingObjectiveKind AiDotNet.Interfaces.ITrainingObjectiveProvider<T>.TrainingObjectiveKind
+        => AiDotNet.Enums.TrainingObjectiveKind.DiffusionDenoising;
+
+    /// <summary>The clip being learned is x_0 itself: Train noises its input, not a separate target.</summary>
+    Tensor<T> AiDotNet.Interfaces.ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget)
+        => input;
+
+    /// <summary>
+    /// L_simple over a fixed (timestep, noise) quadrature, through the configured loss: four timesteps spread over
+    /// the schedule, each with seeded noise. A single Train call draws one random timestep, and the epsilon-MSE at
+    /// one noise level is not comparable with the next step's at another, so this is the quantity whose decrease
+    /// means the denoiser learned. It is deterministic and never updates parameters.
+    /// </summary>
+    T AiDotNet.Interfaces.ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        const int Points = 4;
+        int points = Math.Min(Points, _numInferenceSteps);
+        double total = 0;
+        for (int k = 0; k < points; k++)
+        {
+            int timestep = Math.Min(_numInferenceSteps - 1, (int)((k + 0.5) * _numInferenceSteps / points));
+            double alphaCumprod = _alphasCumprod[timestep];
+            var noise = InitializeLatents(target._shape, RandomHelper.CreateSeededRandom(20260928 + k));
+            var noisy = Engine.TensorAdd(
+                Engine.TensorMultiplyScalar(target, NumOps.FromDouble(Math.Sqrt(alphaCumprod))),
+                Engine.TensorMultiplyScalar(noise, NumOps.FromDouble(Math.Sqrt(1 - alphaCumprod))));
+            var predicted = PredictNoise(noisy, null, CreateTimeEmbedding(1.0 - (double)timestep / _numInferenceSteps));
+            total += NumOps.ToDouble(LossFunction.CalculateLoss(predicted.ToVector(), noise.ToVector()));
         }
 
-        // Backpropagate through the network
-
-        // Update parameters
-        T lr = NumOps.FromDouble(0.0001);
-        foreach (var layer in Layers) layer.UpdateParameters(lr);
+        return NumOps.FromDouble(total / points);
     }
 
     #endregion
@@ -487,11 +530,14 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>
         return _textProjection.Forward(textEmbedding);
     }
 
-    private Tensor<T> CreateTimeEmbedding(double t)
+    private Tensor<T> CreateTimeEmbedding(double t) => _timeEmbed.Forward(TimeInput(t));
+
+    /// <summary>The normalized timestep as the [1, 1, 1, 1] tensor the time embedding reads.</summary>
+    private Tensor<T> TimeInput(double t)
     {
         var timeInput = new Tensor<T>([1, 1, 1, 1]);
         timeInput[0, 0, 0, 0] = NumOps.FromDouble(t);
-        return _timeEmbed.Forward(timeInput);
+        return timeInput;
     }
 
     private Tensor<T> PredictNoise(Tensor<T> latents, Tensor<T>? textCondition, Tensor<T> timeEmbed)
@@ -506,33 +552,28 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>
         }
         features = AddCondition(features, timeEmbed);
 
-        // DiT blocks with multi-head self-attention
-        for (int i = 0; i < _numLayers; i++)
+        // DiT blocks with multi-head self-attention. Training checkpoints them: only segment boundaries are kept
+        // and each segment is recomputed in the backward (Chen et al. 2016). At Open-Sora's sequence length a taped step that kept every block's
+        // activations would not fit; the reference implementation trains with gradient checkpointing as well.
+        if (_trainingTime is not null)
         {
-            var residual = features;
+            var blocks = new Func<Tensor<T>, Tensor<T>>[_numLayers];
+            for (int b = 0; b < _numLayers; b++)
+            {
+                int block = b;
+                blocks[b] = x => DiTBlock(block, x);
+            }
 
-            // Pre-norm (layer normalization)
-            var normed = LayerNorm(features);
-
-            // Multi-head self-attention
-            var qkv = _ditQKV[i].Forward(normed);
-            var attended = DiTMultiHeadAttention(qkv, features._shape);
-            attended = _ditAttnProj[i].Forward(attended);
-
-            // First residual connection
-            features = AddTensors(features, attended);
-
-            // Pre-norm for FFN
-            residual = features;
-            normed = LayerNorm(features);
-
-            // FFN with GELU activation
-            var ffnOut = _ditFFN1[i].Forward(normed);
-            ffnOut = ApplyGELU(ffnOut);
-            ffnOut = _ditFFN2[i].Forward(ffnOut);
-
-            // Second residual connection
-            features = AddTensors(features, ffnOut);
+            // One block per segment, as Open-Sora checkpoints each block: only the block boundaries are kept, and the
+            // backward recomputes a single block at a time. At its sequence length one block's taped activations are
+            // estimated at about 1.4 GB, so a sqrt(N)-block segment (5 blocks) would recompute ~7 GB at once; with that
+            // segment size the first real-training census run was killed on the 16 GB runner.
+            features = AiDotNet.Tensors.Engines.Autodiff.GradientCheckpointing<T>.Checkpoint(blocks, features, segmentSize: 1);
+        }
+        else
+        {
+            for (int i = 0; i < _numLayers; i++)
+                features = DiTBlock(i, features);
         }
 
         // Final prediction
@@ -542,56 +583,57 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>
         return UnpatchifyNoise(noise, latents._shape);
     }
 
+    /// <summary>One pre-norm DiT block: self-attention and a GELU feed-forward, each with a residual.</summary>
+    private Tensor<T> DiTBlock(int i, Tensor<T> features)
+    {
+        var residual = features;
+
+        // Pre-norm (layer normalization)
+        var normed = LayerNorm(features);
+
+        // Multi-head self-attention
+        var qkv = _ditQKV[i].Forward(normed);
+        var attended = DiTMultiHeadAttention(qkv, features._shape);
+        attended = _ditAttnProj[i].Forward(attended);
+
+        // First residual connection
+        features = AddTensors(features, attended);
+
+        // Pre-norm for FFN
+        residual = features;
+        normed = LayerNorm(features);
+
+        // FFN with GELU activation
+        var ffnOut = _ditFFN1[i].Forward(normed);
+        ffnOut = ApplyGELU(ffnOut);
+        ffnOut = _ditFFN2[i].Forward(ffnOut);
+
+        // Second residual connection
+        features = AddTensors(features, ffnOut);
+        return features;
+    }
+
     /// <summary>
     /// Converts patched noise back to full resolution using pixel shuffle and bilinear interpolation.
     /// </summary>
     private Tensor<T> UnpatchifyNoise(Tensor<T> patchedNoise, int[] targetShape)
     {
-        int batchSize = targetShape[0];
-        int channels = targetShape[1];
-        int height = targetShape[2];
-        int width = targetShape[3];
-
-        int srcH = patchedNoise.Shape[2];
-        int srcW = patchedNoise.Shape[3];
-
-        // Use bilinear interpolation for smooth upsampling
-        var noise = new Tensor<T>(targetShape);
-
-        for (int b = 0; b < batchSize; b++)
-            for (int c = 0; c < channels; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                    {
-                        // Compute source coordinates with bilinear interpolation
-                        double srcY = (h + 0.5) * srcH / height - 0.5;
-                        double srcX = (w + 0.5) * srcW / width - 0.5;
-
-                        // Clamp to valid range
-                        srcY = Math.Max(0, Math.Min(srcY, srcH - 1));
-                        srcX = Math.Max(0, Math.Min(srcX, srcW - 1));
-
-                        // Bilinear interpolation
-                        int y0 = (int)Math.Floor(srcY);
-                        int x0 = (int)Math.Floor(srcX);
-                        int y1 = Math.Min(y0 + 1, srcH - 1);
-                        int x1 = Math.Min(x0 + 1, srcW - 1);
-
-                        double wy = srcY - y0;
-                        double wx = srcX - x0;
-
-                        double v00 = Convert.ToDouble(patchedNoise[b, c, y0, x0]);
-                        double v01 = Convert.ToDouble(patchedNoise[b, c, y0, x1]);
-                        double v10 = Convert.ToDouble(patchedNoise[b, c, y1, x0]);
-                        double v11 = Convert.ToDouble(patchedNoise[b, c, y1, x1]);
-
-                        double top = v00 * (1 - wx) + v01 * wx;
-                        double bottom = v10 * (1 - wx) + v11 * wx;
-                        double value = top * (1 - wy) + bottom * wy;
-                        noise[b, c, h, w] = NumOps.FromDouble(value);
-                    }
-
-        return noise;
+        if (patchedNoise.Rank != 4 || targetShape.Length != 4 || patchedNoise.Shape[1] < targetShape[1])
+            throw new ArgumentException(
+                $"OpenSora cannot unpatchify [{string.Join(", ", patchedNoise._shape)}] to [{string.Join(", ", targetShape)}].");
+        // The final layer emits more channels than the latent has; the noise is read from the leading ones, as the
+        // element loop this replaces did (it indexed channel c < targetShape[1] of the patched output).
+        if (patchedNoise.Shape[1] > targetShape[1])
+            // TensorSlice copies into a contiguous result and records its backward; a Narrow view is strided, and a
+            // batch > 1 then reached code that needs a contiguous span.
+            patchedNoise = Engine.TensorSlice(patchedNoise, new[] { 0, 0, 0, 0 },
+                new[] { patchedNoise.Shape[0], targetShape[1], patchedNoise.Shape[2], patchedNoise.Shape[3] });
+        if (patchedNoise.Shape[2] == targetShape[2] && patchedNoise.Shape[3] == targetShape[3])
+            return patchedNoise;
+        // Bilinear with half-pixel centres and edge clamping (PyTorch's align_corners=False): the arithmetic the
+        // element loop computed, as an engine op the tape can differentiate.
+        return Engine.Interpolate(patchedNoise, new[] { targetShape[2], targetShape[3] },
+            AiDotNet.Tensors.Engines.InterpolateMode.Bilinear, alignCorners: false);
     }
 
     private Tensor<T> DenoisingStep(Tensor<T> latents, Tensor<T> noisePred, int step)
@@ -826,16 +868,16 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>
 
     private Tensor<T> AddCondition(Tensor<T> features, Tensor<T> condition)
     {
-        int batchSize = features.Shape[0];
-        int channels = features.Shape[1];
-        int height = features.Shape[2];
-        int width = features.Shape[3];
-
-        return features.Transform((v, idx) =>
-        {
-            int condIdx = idx % condition.Data.Length;
-            return NumOps.Add(v, condition.Data.Span[condIdx]);
-        });
+        // A per-channel conditioning vector ([1 or B, C, 1, 1]) added to every position of [B, C, H, W] features.
+        // The previous element loop indexed the condition by flat NCHW position modulo its length, which is not the
+        // channel, so the embedding landed on scrambled channels; and it was invisible to the tape.
+        if (condition.Rank != 4 || condition.Shape[1] != features.Shape[1] || condition.Shape[2] != 1 || condition.Shape[3] != 1
+            || (condition.Shape[0] != 1 && condition.Shape[0] != features.Shape[0]))
+            throw new ArgumentException(
+                $"OpenSora conditioning must be [1 or batch, {features.Shape[1]}, 1, 1] against features " +
+                $"[{string.Join(", ", features._shape)}], got [{string.Join(", ", condition._shape)}].", nameof(condition));
+        // TensorAdd broadcasts by the NumPy rule, so [1 or B, C, 1, 1] reaches every position of its channel.
+        return Engine.TensorAdd(features, condition);
     }
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b) =>
@@ -865,13 +907,10 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>
         return output;
     }
 
-    private Tensor<T> ApplyGELU(Tensor<T> input) =>
-        input.Transform((v, _) =>
-        {
-            double x = Convert.ToDouble(v);
-            double c = Math.Sqrt(2.0 / Math.PI);
-            return NumOps.FromDouble(0.5 * x * (1.0 + Math.Tanh(c * (x + 0.044715 * x * x * x))));
-        });
+    // Engine.GELU is the tanh approximation this used to evaluate per element in double,
+    // 0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³))), vectorized and without a boxed value per element.
+    internal Tensor<T> ApplyGELU(Tensor<T> input) =>
+        Engine.GELU(input);
 
     private Tensor<T> ApplySiLU(Tensor<T> input) =>
         input.Transform((v, _) =>
@@ -886,147 +925,140 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>
     /// <summary>
     /// Applies layer normalization (standardization) across spatial dimensions.
     /// </summary>
-    private Tensor<T> LayerNorm(Tensor<T> input)
+    /// <summary>
+    /// Normalizes each sample over all of its channels and positions (no learned affine).
+    /// </summary>
+    /// <remarks>
+    /// A per-element indexer loop here allocated an index array and boxed a value on every read and
+    /// write: 22 GB of the 81 GB the paper-scale fixture allocated came from this method alone, and
+    /// it ran on one thread. <c>Engine.LayerNorm</c> normalizes over the trailing dimensions that
+    /// gamma's shape names, so a [C, H, W] gamma of ones and beta of zeros is the same computation -
+    /// population variance, epsilon 1e-5 - in one vectorized pass.
+    /// </remarks>
+    internal Tensor<T> LayerNorm(Tensor<T> input)
     {
-        int batchSize = input.Shape[0];
-        int channels = input.Shape[1];
-        int height = input.Shape[2];
-        int width = input.Shape[3];
-
-        var result = new Tensor<T>(input._shape);
-        const double eps = 1e-5;
-
-        for (int b = 0; b < batchSize; b++)
+        int[] normalizedShape = [input.Shape[1], input.Shape[2], input.Shape[3]];
+        if (_layerNormGamma is null || !_layerNormGamma._shape.AsSpan().SequenceEqual(normalizedShape))
         {
-            double sum = 0, sumSq = 0;
-            int count = channels * height * width;
-
-            for (int c = 0; c < channels; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                    {
-                        double val = Convert.ToDouble(input[b, c, h, w]);
-                        sum += val;
-                        sumSq += val * val;
-                    }
-
-            double mean = sum / count;
-            double variance = (sumSq / count) - (mean * mean);
-            double std = Math.Sqrt(variance + eps);
-
-            for (int c = 0; c < channels; c++)
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                    {
-                        double val = Convert.ToDouble(input[b, c, h, w]);
-                        result[b, c, h, w] = NumOps.FromDouble((val - mean) / std);
-                    }
+            _layerNormGamma = new Tensor<T>(normalizedShape);
+            _layerNormGamma.Data.Span.Fill(NumOps.One);
+            _layerNormBeta = new Tensor<T>(normalizedShape);
         }
 
-        return result;
+        return Engine.LayerNorm(input, _layerNormGamma, _layerNormBeta!, 1e-5, out _, out _);
     }
 
     /// <summary>
-    /// Applies multi-head self-attention for DiT blocks following the Transformer architecture.
+    /// Local-window multi-head self-attention over the flattened spatial positions.
     /// </summary>
-    /// <param name="qkv">Combined Q, K, V tensor [B, 3*C, H, W].</param>
-    /// <param name="inputShape">Original input shape [B, C, H, W].</param>
-    /// <returns>Attention output [B, C, H, W].</returns>
-    private Tensor<T> DiTMultiHeadAttention(Tensor<T> qkv, int[] inputShape)
+    /// <remarks>
+    /// <para>
+    /// Query i attends to keys j with <c>max(0, i - w/2) &lt;= j &lt; min(seqLen, i + w/2)</c>, where
+    /// <c>w = min(seqLen, 64)</c>, and each head owns a contiguous block of <c>_headDim</c> channels.
+    /// </para>
+    /// <para>
+    /// Queries are processed in tiles of <see cref="AttentionQueryTile"/>. A tile's queries can only
+    /// reach the keys within half a window of it, so each tile is two batched GEMMs over at most
+    /// <c>tile + w</c> keys with an additive mask for the exact band. That keeps the cost linear in the
+    /// sequence, as the window intends: a dense score matrix at a 256x256 frame (16,384 positions) would
+    /// be ~17 GB per sample. The previous scalar loop computed the same scores one element at a time
+    /// through the tensor indexer, and was 28% of the paper-scale fixture's CPU and 18 GB of its
+    /// allocation, on a single thread.
+    /// </para>
+    /// </remarks>
+    internal Tensor<T> DiTMultiHeadAttention(Tensor<T> qkv, int[] inputShape)
     {
         int batchSize = inputShape[0];
         int channels = inputShape[1];
         int height = inputShape[2];
         int width = inputShape[3];
         int seqLen = height * width;
+        int halfWindow = Math.Min(seqLen, 64) / 2;
 
-        var output = new Tensor<T>(inputShape);
-        double scale = 1.0 / Math.Sqrt(_headDim);
+        // A window of zero width (seqLen == 1) attends to nothing, so the block contributes nothing.
+        if (halfWindow == 0)
+            return new Tensor<T>(inputShape);
 
-        for (int b = 0; b < batchSize; b++)
+        int batchHeads = batchSize * _numHeads;
+        int headDim = _headDim;
+
+        // qkv is [B, 3C, H, W] = [B, 3, heads, headDim, seq]; permuted to [3, B*heads, seq, headDim],
+        // each of Q, K and V is one contiguous block.
+        var seqMajor = Engine.TensorPermute(
+            Engine.Reshape(qkv, [batchSize, 3, _numHeads, headDim, seqLen]), [1, 0, 2, 4, 3]).Contiguous();
+        var all = seqMajor.Data.Span;
+        int block = batchHeads * seqLen * headDim;
+
+        var attended = new Tensor<T>([batchHeads, seqLen, headDim]);
+        T scale = NumOps.FromDouble(1.0 / Math.Sqrt(headDim));
+        T excluded = NumOps.FromDouble(-1e30);
+
+        for (int tileStart = 0; tileStart < seqLen; tileStart += AttentionQueryTile)
         {
-            // Extract Q, K, V from combined tensor
-            var q = new double[channels, seqLen];
-            var k = new double[channels, seqLen];
-            var v = new double[channels, seqLen];
+            int tileEnd = Math.Min(seqLen, tileStart + AttentionQueryTile);
+            int queries = tileEnd - tileStart;
+            int keyStart = Math.Max(0, tileStart - halfWindow);
+            int keyEnd = Math.Min(seqLen, tileEnd - 1 + halfWindow);
+            int keys = keyEnd - keyStart;
 
-            for (int c = 0; c < channels; c++)
+            var query = CopySequenceRows(all.Slice(0, block), batchHeads, seqLen, headDim, tileStart, queries);
+            var key = CopySequenceRows(all.Slice(block, block), batchHeads, seqLen, headDim, keyStart, keys);
+            var value = CopySequenceRows(all.Slice(2 * block, block), batchHeads, seqLen, headDim, keyStart, keys);
+
+            var scores = Engine.BatchMatMul(query, Engine.TensorPermute(key, [0, 2, 1]).Contiguous());
+            Engine.TensorMultiplyScalarInPlace(scores, scale);
+
+            // Zero inside each query's band, a large negative value outside it. Finite rather than
+            // -infinity: it underflows exp() to exactly zero without producing inf - inf in the
+            // softmax's max subtraction, and fits a float.
+            var mask = new Tensor<T>([1, queries, keys]);
+            var maskSpan = mask.Data.Span;
+            for (int r = 0; r < queries; r++)
             {
-                int pos = 0;
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                    {
-                        q[c, pos] = Convert.ToDouble(qkv[b, c, h, w]);
-                        k[c, pos] = Convert.ToDouble(qkv[b, channels + c, h, w]);
-                        v[c, pos] = Convert.ToDouble(qkv[b, channels * 2 + c, h, w]);
-                        pos++;
-                    }
+                int i = tileStart + r;
+                int allowedStart = Math.Max(0, i - halfWindow) - keyStart;
+                int allowedEnd = Math.Min(seqLen, i + halfWindow) - keyStart;
+                var row = maskSpan.Slice(r * keys, keys);
+                row.Slice(0, allowedStart).Fill(excluded);
+                row.Slice(allowedEnd).Fill(excluded);
             }
 
-            // Multi-head attention with local window for efficiency
-            var attOutput = new double[channels, seqLen];
-            int windowSize = Math.Min(seqLen, 64); // Local window attention for efficiency
+            Engine.TensorBroadcastAddInPlace(scores, mask);
+            var output = Engine.BatchMatMul(Engine.Softmax(scores, -1), value);   // [B*heads, queries, headDim]
 
-            for (int headIdx = 0; headIdx < _numHeads; headIdx++)
+            var source = output.Data.Span;
+            var destination = attended.Data.Span;
+            for (int bh = 0; bh < batchHeads; bh++)
             {
-                int headStart = headIdx * _headDim;
-                int headEnd = Math.Min(headStart + _headDim, channels);
-
-                for (int i = 0; i < seqLen; i++)
-                {
-                    // Local attention window
-                    int wStart = Math.Max(0, i - windowSize / 2);
-                    int wEnd = Math.Min(seqLen, i + windowSize / 2);
-
-                    // Compute attention scores
-                    var scores = new double[wEnd - wStart];
-                    double maxScore = double.MinValue;
-
-                    for (int j = wStart; j < wEnd; j++)
-                    {
-                        double score = 0;
-                        for (int c = headStart; c < headEnd; c++)
-                            score += q[c, i] * k[c, j];
-                        score *= scale;
-                        scores[j - wStart] = score;
-                        if (score > maxScore) maxScore = score;
-                    }
-
-                    // Softmax
-                    double sumExp = 0;
-                    for (int j = 0; j < scores.Length; j++)
-                    {
-                        scores[j] = Math.Exp(scores[j] - maxScore);
-                        sumExp += scores[j];
-                    }
-                    for (int j = 0; j < scores.Length; j++)
-                        scores[j] /= Math.Max(sumExp, 1e-12);
-
-                    // Weighted sum of values
-                    for (int c = headStart; c < headEnd; c++)
-                    {
-                        double weightedSum = 0;
-                        for (int j = wStart; j < wEnd; j++)
-                            weightedSum += scores[j - wStart] * v[c, j];
-                        attOutput[c, i] = weightedSum;
-                    }
-                }
-            }
-
-            // Copy to output
-            for (int c = 0; c < channels; c++)
-            {
-                int pos = 0;
-                for (int h = 0; h < height; h++)
-                    for (int w = 0; w < width; w++)
-                    {
-                        output[b, c, h, w] = NumOps.FromDouble(attOutput[c, pos]);
-                        pos++;
-                    }
+                source.Slice(bh * queries * headDim, queries * headDim)
+                    .CopyTo(destination.Slice((bh * seqLen + tileStart) * headDim, queries * headDim));
             }
         }
 
-        return output;
+        var headMajor = Engine.TensorPermute(
+            Engine.Reshape(attended, [batchSize, _numHeads, seqLen, headDim]), [0, 1, 3, 2]);
+        return Engine.Reshape(headMajor.Contiguous(), [batchSize, channels, height, width]);
+    }
+
+    /// <summary>Queries per attention tile; with the 64-wide window a tile reads at most 128 keys.</summary>
+    private const int AttentionQueryTile = 64;
+
+    /// <summary>
+    /// Copies sequence rows [start, start + count) of every batch-head of a contiguous
+    /// [batchHeads, seqLen, headDim] block into a new [batchHeads, count, headDim] tensor.
+    /// </summary>
+    private static Tensor<T> CopySequenceRows(
+        ReadOnlySpan<T> source, int batchHeads, int seqLen, int headDim, int start, int count)
+    {
+        var result = new Tensor<T>([batchHeads, count, headDim]);
+        var destination = result.Data.Span;
+        for (int bh = 0; bh < batchHeads; bh++)
+        {
+            source.Slice((bh * seqLen + start) * headDim, count * headDim)
+                .CopyTo(destination.Slice(bh * count * headDim, count * headDim));
+        }
+
+        return result;
     }
 
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)

@@ -1,5 +1,11 @@
 {
   "schemaVersion": 1,
   "description": "Explicit baseline shard renames, splits, or removals. Replacement keys must upload successfully before an old key is excused.",
-  "changes": []
+  "changes": [
+    {
+      "baselineKey": "Conformance_VisionLanguage_offset_170",
+      "currentKeys": [],
+      "reason": "#2136 moved EmuEdit, MGIE and SmartEdit onto LatentDiffusionModelBase. Diffusion models do not implement IShapeContract (the diffusion test bases check them instead, including DenoisingProgress_Monotonic), so the VisionLanguage conformance set went from 173 to 170 models. Offset 165 now ends it (5 candidates) and the offset 170 window selects 0, checked by running that window locally."
+    }
+  ]
 }

@@ -105,8 +105,6 @@ namespace AiDotNet.MetaLearning.Algorithms;
 [PipelineStage(PipelineStage.Training)]
 public partial class LFTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInput, TOutput>
 {
-    private IParameterizable<T, TInput, TOutput>? _cachedParamModel;
-    private IParameterizable<T, TInput, TOutput> ParamModel => _cachedParamModel ??= InterfaceGuard.Parameterizable(MetaModel);
 
     private readonly LFTOptions<T, TInput, TOutput> _algoOptions;
     private readonly int _paramDim;
@@ -239,11 +237,19 @@ public partial class LFTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             {
                 ParamModel.SetParameters(initParams);
 
+                // The metric head composed into the loss: the encoder emits features, not class scores, so
+                // differentiating the configured loss against its raw output compares a feature vector with a
+                // class index and trains the encoder to BE the label, leaving the head out of the objective.
+                var headLoss = new MbPAHeadLoss<T>(
+                    _metricHead, _algoOptions.FeatureDimension, _algoOptions.OutputDimension,
+                    MbPAOutputDistribution.Categorical);
+
                 var adaptedParams = initParams.Clone();
                 for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
                 {
                     ParamModel.SetParameters(adaptedParams);
-                    var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
+                    var grad = ClipGradients(
+                        ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput, headLoss));
                     for (int d = 0; d < _paramDim; d++)
                     {
                         adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
@@ -519,9 +525,29 @@ public partial class LFTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
 
     /// <inheritdoc/>
     /// <remarks>
+    /// The adapted model returns one probability per class for each example, so this is the configured loss of
+    /// their logarithm against the class indices - cross-entropy by default. A Vector output carries the predicted
+    /// class of each example instead, and its loss is the classification error rate. The base's default compared
+    /// the adapted model's whole score block against a vector of labels, which cannot even be lined up.
+    /// </remarks>
+    protected override T ComputeLossFromOutput(TOutput predictions, TOutput expectedOutput)
+        => ClassifierOutputs<T>.ProbabilityLoss(LossFunction, predictions, expectedOutput);
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// <para>
     /// Standard metric-based adaptation with the transformation OFF. The paper is explicit that the
     /// layers are removed before the model is used, so applying them here would inject noise into
     /// inference — the opposite of what the method is for.
+    /// </para>
+    /// <para>
+    /// Both the encoder and a task-local copy of the metric head take support-set steps, and the adapted
+    /// model applies that head. Adaptation used to step the encoder against the configured loss applied to
+    /// its RAW features — comparing a feature vector with a class index, which trains the encoder to be the
+    /// label — and then returned the bare encoder, so predicting gave one feature vector per example where
+    /// the task asks for one score per class. The head the meta-training loop trains is the only part that
+    /// knows how many classes there are, and it was discarded at the moment it was needed.
+    /// </para>
     /// </remarks>
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
@@ -529,20 +555,54 @@ public partial class LFTAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
 
         var initParams = ParamModel.GetParameters();
         var adaptedParams = initParams.Clone();
+        var adaptedHead = CloneHead(_metricHead);
+
+        // The head composed into the loss, so the encoder is trained THROUGH it rather than around it.
+        var headLoss = new MbPAHeadLoss<T>(
+            adaptedHead, _algoOptions.FeatureDimension, _algoOptions.OutputDimension,
+            MbPAOutputDistribution.Categorical);
 
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
             ParamModel.SetParameters(adaptedParams);
-            var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
+            var grad = ClipGradients(
+                ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput, headLoss));
             for (int d = 0; d < _paramDim; d++)
             {
                 adaptedParams[d] = NumOps.Subtract(adaptedParams[d],
                     NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(grad[d])));
             }
+
+            // The head steps on the same support set, by the same closed-form rule meta-training uses.
+            var features = EncodeWithOptionalTransform(task.SupportInput);
+            var targets = TargetVectors(task.SupportOutput, features.Count);
+            for (int i = 0; i < features.Count; i++)
+            {
+                var headGrad = MbPAOutputNetwork<T>.Gradient(
+                    adaptedHead, features[i], targets[i], weight: 1.0,
+                    _algoOptions.FeatureDimension, _algoOptions.OutputDimension,
+                    MbPAOutputDistribution.Categorical);
+                for (int d = 0; d < adaptedHead.Length; d++)
+                {
+                    adaptedHead[d] = NumOps.Subtract(adaptedHead[d],
+                        NumOps.FromDouble(_algoOptions.InnerLearningRate * NumOps.ToDouble(headGrad[d])));
+                }
+            }
         }
 
+        var adaptedEncoder = MetaModel.DeepCopy();
+        InterfaceGuard.Parameterizable(adaptedEncoder).SetParameters(adaptedParams);
         ParamModel.SetParameters(initParams);
-        return new AdaptedMetaModel<T, TInput, TOutput>(MetaModel, adaptedParams);
+        return new AiDotNet.MetaLearning.Models.LFTAdaptedModel<T, TInput, TOutput>(
+            adaptedEncoder, adaptedHead, _algoOptions.FeatureDimension, _algoOptions.OutputDimension);
+    }
+
+    /// <summary>A copy of the head, so adaptation never writes to the meta-learned one.</summary>
+    private static Vector<T> CloneHead(Vector<T> head)
+    {
+        var copy = new Vector<T>(head.Length);
+        for (int i = 0; i < head.Length; i++) copy[i] = head[i];
+        return copy;
     }
 
     #endregion
