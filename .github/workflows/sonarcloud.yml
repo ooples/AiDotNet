@@ -568,6 +568,13 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/check-shard-coverage.ps1
 
+      # The same guarantee for every test class, hand-written ones included: 269 of them matched no shard
+      # filter and never ran on any matrix until the Unassigned shards took them in. Fails the build when a
+      # class is selected by no shard, and prints the filter clause that assigns it.
+      - name: Verify every test class is covered by a shard
+        shell: pwsh
+        run: ./tools/TestImpact/Assert-ShardInventory.ps1
+
       # Test-level selection: which test classes can this change reach? Read from the assemblies this
       # job just built, so it sees generated tests too. It only narrows select-shards' decision, and
       # passes it through whenever it cannot map every changed file (Select-AffectedTests.ps1).
