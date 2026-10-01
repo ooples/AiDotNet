@@ -259,7 +259,9 @@ public abstract class OCRBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         // deterministic seed, so two models built from equal options start from equal weights (#2201).
         // A null seed leaves the scope unarmed and initialization stays unseeded.
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(options.RandomSeed);
-        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.OfferSeedToNestedBackbone();
+        // No backbone offer: a recognizer builds no DetectionBackboneArchitecture, so an offer made here was never
+        // consumed and the next standalone backbone on this thread inherited this model's seed. A detector built inside
+        // a reader (DocumentReader, SceneTextReader) makes its own offer from its own base.
 
         string charset = options.CharacterSet ?? DefaultCharacterSet;
 

@@ -53,6 +53,10 @@ public class RTDETROptions<T> : ObjectDetectionOptions<T>
     public int NumSamplingPoints { get; set; }
 
     /// <summary>Denoising query budget (num_denoising), split into positive/negative groups. Paper: 100.</summary>
+    /// <remarks>
+    /// The budget counts each polarity, as in the reference: with up to <c>T</c> targets per image the plan holds
+    /// <c>budget / T</c> groups of one positive and one negative copy, about <c>2 * budget</c> denoising slots in all.
+    /// </remarks>
     public int DenoisingQueries { get; set; }
 
     /// <summary>Label noise ratio. Half of it is the probability of flipping a label. Paper: 0.5.</summary>

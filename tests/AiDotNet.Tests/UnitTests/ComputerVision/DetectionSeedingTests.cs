@@ -106,6 +106,25 @@ public sealed class DetectionSeedingTests
         }
     }
 
+    [Fact]
+    public void A_seeded_recognizer_leaves_no_offer_for_a_later_standalone_backbone()
+    {
+        // A recognizer builds no detection backbone, so an offer from its base was never spent and the next standalone
+        // backbone on the thread inherited the recognizer's seed (#2269 review).
+        var ambient = LayerInitializationSeedScope.AmbientFallbackSeed;
+        LayerInitializationSeedScope.AmbientFallbackSeed = null;
+        try
+        {
+            using var recognizer = (IDisposable)Build("CRNN", 7).Model;
+            Assert.False(AiDotNet.ComputerVision.Detection.Backbones.DetectionBackboneArchitecture<double>
+                .Create(3).HasExplicitRandomSeed);
+        }
+        finally
+        {
+            LayerInitializationSeedScope.ResetForModelConstruction(null);
+            LayerInitializationSeedScope.AmbientFallbackSeed = ambient;
+        }
+    }
     private static (AiDotNet.Models.ModelBase<double, Tensor<double>, Tensor<double>> Model, Tensor<double> Input)
         Build(string model, int? seed) => model switch
     {

@@ -59,6 +59,11 @@ public class DINOOptions<T> : ObjectDetectionOptions<T>
     /// Contrastive-denoising query budget (dn_number). It is split into groups of one positive and one
     /// negative copy of every target. Paper: 100.
     /// </summary>
+    /// <remarks>
+    /// As in the reference <c>prepare_for_cdn</c>, the budget counts each polarity: it is doubled before the groups are
+    /// derived, so with up to <c>T</c> targets per image the plan holds <c>2 * budget / (2T)</c> groups, about
+    /// <c>2 * budget</c> denoising slots in all (the default with one target: 100 groups, 200 slots).
+    /// </remarks>
     public int DenoisingQueries { get; set; }
 
     /// <summary>Label noise ratio. Half of it is the probability of flipping a label. Paper: 0.5.</summary>
