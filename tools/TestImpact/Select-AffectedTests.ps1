@@ -110,6 +110,13 @@ try {
     # Known-answer cases over a compiled fixture; a selector that fails them must not narrow anything.
     & pwsh -NoProfile -File (Join-Path $Repository 'tools/TestImpact/TypeImpact/Test-TypeImpact.ps1')
     if ($LASTEXITCODE -ne 0) { throw 'TypeImpact failed its self-test' }
+    # A generator change maps through its generated output when Build-GeneratorBase.ps1 built the merge base;
+    # without that build it stays unmappable and the coverage selection is kept.
+    $generatorArguments = @('--unmappable', 'src/AiDotNet.Generators/')
+    if ($env:TYPE_IMPACT_BASE_BIN -and (Test-Path -LiteralPath $env:TYPE_IMPACT_BASE_BIN)) {
+        $generatorArguments = @('--base-bin', $env:TYPE_IMPACT_BASE_BIN, '--base-repo', $env:TYPE_IMPACT_BASE_REPO,
+            '--generator-root', 'src/AiDotNet.Generators/', '--generator-tests', 'AiDotNet.Tests.Generators.')
+    }
     $tool = Join-Path $Repository 'tools/TestImpact/TypeImpact/TypeImpact.csproj'
     & dotnet run --project $tool -c Release --no-build -- `
         --repo $BuildRoot `
@@ -117,7 +124,7 @@ try {
         --bin (Join-Path $BuildRoot 'tests/AiDotNet.Serving.Tests/bin/Release/net10.0') `
         --project 'tests/AiDotNet.Tests/AiDotNetTests.csproj=AiDotNetTests' `
         --project 'tests/AiDotNet.Serving.Tests/AiDotNet.Serving.Tests.csproj=AiDotNet.Serving.Tests' `
-        --unmappable 'src/AiDotNet.Generators/' `
+        @generatorArguments `
         --unmappable "tools/" `
         --changes $changes --diff $diff --shards $manifest --out $PlanFile
     if ($LASTEXITCODE -ne 0) { throw "TypeImpact exited $LASTEXITCODE" }

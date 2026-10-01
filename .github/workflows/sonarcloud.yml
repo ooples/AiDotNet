@@ -575,6 +575,18 @@ jobs:
         shell: pwsh
         run: ./tools/TestImpact/Assert-ShardInventory.ps1
 
+      # Only on a pull request that changes a source generator: build the merge base, so the step below can map the
+      # generator change through the generated output that differs between the two builds instead of running the
+      # full matrix. Any failure exports nothing and the change stays unmappable, the behaviour before.
+      - name: Build the merge base for a generator change
+        shell: pwsh
+        timeout-minutes: 45
+        continue-on-error: true
+        env:
+          REQUIRES_SHARDS: ${{ needs.select-shards.outputs.requires_shards }}
+          COLLECT_COVERAGE_EVERYWHERE: ${{ inputs.collect_coverage_everywhere }}
+        run: ./tools/TestImpact/Build-GeneratorBase.ps1
+
       # Test-level selection: which test classes can this change reach? Read from the assemblies this
       # job just built, so it sees generated tests too. It only narrows select-shards' decision, and
       # passes it through whenever it cannot map every changed file (Select-AffectedTests.ps1).
