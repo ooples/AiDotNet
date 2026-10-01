@@ -219,8 +219,11 @@ function Get-ChangedPathImpact {
     }
 
     # Unknown GitHub configuration can affect analysis, generated reports, or a required check. It
-    # is intentionally not eligible for coverage-map reduction until classified explicitly.
+    # is intentionally not eligible for coverage-map reduction until classified explicitly. The exception (R9) is a
+    # file no workflow, action, script or tool names (CODEOWNERS, issue templates, FUNDING.yml, dependabot.yml): GitHub
+    # reads those itself, and none of them can change what a test shard executes.
     if ($normalized.StartsWith('.github/', [StringComparison]::OrdinalIgnoreCase)) {
+        if (-not (Test-GitHubFileReferenced -Path $normalized)) { return [ChangedPathImpact]::NonRuntime }
         return [ChangedPathImpact]::FullValidation
     }
 
@@ -278,6 +281,29 @@ function Test-ToolDirectoryReferenced {
         $referenced = $LASTEXITCODE -ne 1
     }
     $script:ToolReferenceCache[$directory] = $referenced
+    return $referenced
+}
+
+<#
+.SYNOPSIS
+Whether any workflow, composite action, script or tool names a .github/ file.
+
+.DESCRIPTION
+Searched at HEAD for the file name in .github/ (workflows, actions, scripts and other config) and tools/. Names
+shorter than six characters are too generic to search for and count as referenced, as does any failed search.
+#>
+function Test-GitHubFileReferenced {
+    param([Parameter(Mandatory)] [string] $Path)
+    $name = [IO.Path]::GetFileName($Path)
+    if ($name.Length -lt 6) { return $true }
+    $key = '.github:' + $name
+    if ($script:ToolReferenceCache.ContainsKey($key)) { return $script:ToolReferenceCache[$key] }
+    # Matches the name only where a path ends, so 'bug_report.yml' is not found inside 'old_bug_report.yml'.
+    $pattern = '(^|[^A-Za-z0-9_.-])' + [regex]::Escape($name) + '($|[^A-Za-z0-9_.-])'
+    # The file itself is left out: it names itself (CODEOWNERS lists /.github/CODEOWNERS), which is no reference.
+    $null = & git grep -q -i -E $pattern HEAD -- '.github/' 'tools/' ":(exclude)$Path" 2>$null
+    $referenced = $LASTEXITCODE -ne 1
+    $script:ToolReferenceCache[$key] = $referenced
     return $referenced
 }
 
@@ -2582,6 +2608,17 @@ file class Private { }
     }
     Assert-True ((Get-ChangedPathImpact -Path 'root-file.txt') -eq [ChangedPathImpact]::MapCandidate) `
         'a root-level file has no tree to scope by and must keep the old behaviour'
+    # R9: .github/ files nothing reads are non-runtime; one a workflow invokes stays full validation.
+    if (Test-Path -LiteralPath '.github/CODEOWNERS') {
+        Assert-True ((Get-ChangedPathImpact -Path '.github/CODEOWNERS') -eq [ChangedPathImpact]::NonRuntime) `
+            'CODEOWNERS, which no workflow reads, is not NonRuntime'
+    }
+    if (Test-Path -LiteralPath '.github/scripts/Invoke-Shard.ps1') {
+        Assert-True ((Get-ChangedPathImpact -Path '.github/scripts/Invoke-Shard.ps1') -eq [ChangedPathImpact]::FullValidation) `
+            'a script the test workflow invokes (Invoke-Shard.ps1) was downgraded'
+    }
+    Assert-True ((Get-ChangedPathImpact -Path '.github/a.yml') -eq [ChangedPathImpact]::FullValidation) `
+        'a short, generic .github file name must not be trusted as unreferenced'
     # The selection report lists every changed path, so a build-only file must be recorded as a decision even
     # beside runtime changes (it used to fall through the switch and vanish from the report).
     $reportMap = [pscustomobject]@{ knownShards = @('Alpha'); alwaysRun = @(); files = [pscustomobject]@{
