@@ -80,4 +80,24 @@ public class DenseLayerBiasModeTests
         var actual = restored.Forward(x);
         for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], actual[i], precision: 12);
     }
+
+    [Theory(Timeout = 120000)]
+    [InlineData(BiasMode.Auto, 2)]
+    [InlineData(BiasMode.Never, 1)]
+    public async Task TheParameterViewIsStableAndHoldsOnlyThePresentTensors(BiasMode biasMode, int expectedCount)
+    {
+        await Task.Yield();
+        // The bias is gated by a Condition, which used to make every GetTrainableParameters call build a
+        // new list. The generated view is reused while the present set is unchanged.
+        using var layer = new DenseLayer<double>(outputSize: 4, activationFunction: null, biasMode: biasMode);
+        _ = layer.Forward(Input());
+
+        var first = layer.GetTrainableParameters();
+        var second = layer.GetTrainableParameters();
+
+        Assert.Same(first, second);
+        Assert.Equal(expectedCount, first.Count);
+        Assert.All(first, tensor => Assert.True(tensor.Length > 0));
+        Assert.Equal(layer.ParameterCount, first.Sum(tensor => (long)tensor.Length));
+    }
 }

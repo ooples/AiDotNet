@@ -1144,8 +1144,17 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             (p.CollectionKind == ParameterCollectionKind.Direct && p.Optional) || p.Condition is not null);
         if (paramFields.Count > 0 && !useRuntimeParameterRegistry && !suppressGeneratedParameterAccessors)
         {
-            bool hasFixedParameterView = !hasCollections && !hasOptional;
-            if (hasFixedParameterView)
+            // A field gated by TrainableParameter.Condition still has a fixed slot; only which slots are
+            // live depends on the condition, and for a layer such as DenseLayer (UseBias) that is set at
+            // construction. Collections and nullable optional fields still enumerate into a fresh list.
+            bool hasConditionalFields = paramFields.Any(p => p.Condition is not null);
+            bool hasFixedParameterView = !hasCollections
+                && !paramFields.Any(p => p.CollectionKind == ParameterCollectionKind.Direct && p.Optional);
+            if (hasFixedParameterView && hasConditionalFields)
+            {
+                EmitConditionalParameterView(sb, paramFields, $"Tensor<{GetTypeParamName(classSymbol)}>");
+            }
+            else if (hasFixedParameterView)
             {
                 string tensorType = $"Tensor<{GetTypeParamName(classSymbol)}>";
                 sb.AppendLine($"    private {tensorType}[]? __aidnTrainableParameterViewStorage;");
@@ -1222,7 +1231,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             // shared readiness state rather than repeating the older whole-input-shape gate, so
             // the optimizer view and the flat parameter surface materialize at the same boundary.
             sb.AppendLine("        if (OwnParameterReadiness == AiDotNet.Models.Parameters.ParameterReadiness.ShapeResolvedUnmaterialized) EnsureInitializationSerialized();");
-            if (hasOptional || hasCollections)
+            if (!hasFixedParameterView)
             {
                 sb.AppendLine($"        var __params = new System.Collections.Generic.List<Tensor<{GetTypeParamName(classSymbol)}>>({paramFields.Count});");
                 foreach (var f in paramFields)
@@ -1251,7 +1260,7 @@ public class TrainableParameterGenerator : IIncrementalGenerator
             {
                 sb.AppendLine("        EnsureSubLayersRegistered();");
             }
-            if (hasOptional || hasCollections)
+            if (!hasFixedParameterView)
             {
                 sb.AppendLine($"        var __counting = new System.Collections.Generic.List<Tensor<{GetTypeParamName(classSymbol)}>>({paramFields.Count});");
                 foreach (var f in paramFields)
@@ -1401,6 +1410,8 @@ public class TrainableParameterGenerator : IIncrementalGenerator
                         sb.AppendLine("        __i++;");
                     }
                 }
+                if (hasFixedParameterView)
+                    sb.AppendLine("        __aidnRefreshTrainableParameterViewIfCreated();");
                 sb.AppendLine("        if (RegisteredTrainableParameterCount == parameters.Count)");
                 sb.AppendLine("        {");
                 sb.AppendLine("            base.SetTrainableParameters(parameters);");
@@ -2965,6 +2976,89 @@ public class TrainableParameterGenerator : IIncrementalGenerator
     /// placeholder awaiting materialization -- both must be skipped, and dereferencing the first
     /// to test the second throws.
     /// </summary>
+    /// <summary>
+    /// Emits the stable parameter view for a layer whose direct fields include conditional ones.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The view holds the fields that are present, by the same predicate the list path used
+    /// (<see cref="PresenceExpr"/>), in declaration order. Its array and read-only wrapper are reused
+    /// for as long as the number of present fields is unchanged, so after warm-up a call allocates
+    /// nothing, as the unconditional view does. A change in that number (a deferred bias placeholder
+    /// materializing, or a condition flipping) publishes a new array, and a caller holding the old
+    /// view keeps the set it was handed.
+    /// </para>
+    /// <para>
+    /// The array and its wrapper are published together as one reference, so a reader can never pair
+    /// one thread's array with another thread's wrapper.
+    /// </para>
+    /// </remarks>
+    private static void EmitConditionalParameterView(
+        StringBuilder sb, System.Collections.Generic.List<ParameterFieldInfo> paramFields, string tensorType)
+    {
+        string pairType = $"System.Tuple<{tensorType}[], System.Collections.ObjectModel.ReadOnlyCollection<{tensorType}>>";
+        sb.AppendLine($"    private {pairType}? __aidnTrainableParameterView;");
+        sb.AppendLine();
+        sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
+        sb.AppendLine("    private int __aidnPresentTrainableParameterCount()");
+        sb.AppendLine("    {");
+        sb.AppendLine("        int __count = 0;");
+        foreach (var pf in paramFields)
+        {
+            if (pf.Condition is not null)
+                sb.AppendLine($"        if ({PresenceExpr(pf)}) __count++;");
+            else
+                sb.AppendLine("        __count++;");
+        }
+        sb.AppendLine("        return __count;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
+        sb.AppendLine($"    private void __aidnFillTrainableParameterView({tensorType}[] __storage)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        int __index = 0;");
+        foreach (var pf in paramFields)
+        {
+            if (pf.Condition is not null)
+                sb.AppendLine($"        if ({PresenceExpr(pf)}) __storage[__index++] = {pf.Name};");
+            else
+                sb.AppendLine($"        __storage[__index++] = {pf.Name};");
+        }
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    /// <summary>Returns the stable view of the present generated parameter fields.</summary>");
+        sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
+        sb.AppendLine($"    private System.Collections.Generic.IReadOnlyList<{tensorType}> __aidnGetTrainableParameterView()");
+        sb.AppendLine("    {");
+        sb.AppendLine("        int __count = __aidnPresentTrainableParameterCount();");
+        sb.AppendLine("        var __pair = System.Threading.Volatile.Read(ref __aidnTrainableParameterView);");
+        sb.AppendLine("        if (__pair is null || __pair.Item1.Length != __count)");
+        sb.AppendLine("        {");
+        sb.AppendLine($"            var __created = new {tensorType}[__count];");
+        sb.AppendLine("            var __createdPair = System.Tuple.Create(__created, System.Array.AsReadOnly(__created));");
+        sb.AppendLine("            var __prior = System.Threading.Interlocked.CompareExchange(");
+        sb.AppendLine("                ref __aidnTrainableParameterView, __createdPair, __pair);");
+        sb.AppendLine("            // Lost the race to a writer that saw the same set: share its view. A writer that saw a");
+        sb.AppendLine("            // different set answers its own call; this call answers from the pair it built.");
+        sb.AppendLine("            __pair = ReferenceEquals(__prior, __pair) || __prior is null || __prior.Item1.Length != __count");
+        sb.AppendLine("                ? __createdPair");
+        sb.AppendLine("                : __prior;");
+        sb.AppendLine("        }");
+        sb.AppendLine("        __aidnFillTrainableParameterView(__pair.Item1);");
+        sb.AppendLine("        return __pair.Item2;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    [global::System.CodeDom.Compiler.GeneratedCode(\"AiDotNet.Generators.TrainableParameterGenerator\", \"1.0.0\")]");
+        sb.AppendLine("    private void __aidnRefreshTrainableParameterViewIfCreated()");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var __pair = System.Threading.Volatile.Read(ref __aidnTrainableParameterView);");
+        sb.AppendLine("        if (__pair is null) return;");
+        sb.AppendLine("        if (__pair.Item1.Length == __aidnPresentTrainableParameterCount())");
+        sb.AppendLine("            __aidnFillTrainableParameterView(__pair.Item1);");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+    }
+
     private static void EmitCollectionAdd(StringBuilder sb, ParameterFieldInfo pf, string destination)
     {
         if (pf.CollectionKind == ParameterCollectionKind.Direct)
