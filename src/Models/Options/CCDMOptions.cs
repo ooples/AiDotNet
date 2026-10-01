@@ -36,7 +36,19 @@ public class CCDMOptions<T> : TimeSeriesRegressionOptions<T>
     /// <summary>
     /// Initializes a new instance with default values.
     /// </summary>
-    public CCDMOptions() { }
+    public CCDMOptions()
+    {
+        // Seed is INHERITED from ModelOptions and set here rather than shadowed with `new`,
+        // which would leave anything holding a ModelOptions reference reading null.
+        //
+        // Defaulted so repeated predictions agree. This does not collapse the sampling: the
+        // NumSamples paths still differ from one another, so the spread stays a real estimate
+        // and the intervals the paper reports remain meaningful. It fixes only that Predict
+        // called twice on the same input returns the same answer - the sampler equivalent of
+        // seeding a generator before inference, not of switching sampling off. Set it to
+        // another value for a different sample set, or vary it per call for independent draws.
+        Seed = 1;
+    }
 
     /// <summary>
     /// Initializes a new instance by copying from another instance.
@@ -65,11 +77,12 @@ public class CCDMOptions<T> : TimeSeriesRegressionOptions<T>
         NumLayers = other.NumLayers;
         NumHeads = other.NumHeads;
         DiffusionSteps = other.DiffusionSteps;
+        NumSamples = other.NumSamples;
+        TrainingBatchSize = other.TrainingBatchSize;
+        LearningRate = other.LearningRate;
         DropoutRate = other.DropoutRate;
         BetaStart = other.BetaStart;
         BetaEnd = other.BetaEnd;
-        SigmaMin = other.SigmaMin;
-        SigmaMax = other.SigmaMax;
     }
 
     /// <summary>
@@ -132,6 +145,62 @@ public class CCDMOptions<T> : TimeSeriesRegressionOptions<T>
     public int DiffusionSteps { get; set; } = 100;
 
     /// <summary>
+    /// Gets or sets the number of sample paths drawn per forecast.
+    /// </summary>
+    /// <value>Defaults to 100.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> A diffusion forecaster is generative: every call draws a random
+    /// path, so a single path carries the full spread of the predictive distribution rather than
+    /// its centre. Drawing several paths and reporting the per-position median gives the point
+    /// forecast, and the spread across paths gives the uncertainty.</para>
+    /// <para><b>Provenance:</b> 100 is the number of samples Tashiro et al. (CSDI, NeurIPS 2021)
+    /// draw before taking the median, and the sibling <see cref="CSDIOptions.NumSamples"/> in this
+    /// library uses the same default. Lower it to trade forecast stability for inference time.</para>
+    /// </remarks>
+    public int NumSamples { get; set; } = 100;
+
+    /// <summary>
+    /// Number of (timestep, noise) draws averaged into a single training step.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Ho et al. (2020), "Denoising Diffusion Probabilistic Models", Algorithm 1 draws one
+    /// timestep per example and averages the step over a minibatch - 128 examples in their
+    /// Section 4. A caller here supplies one example at a time, so the averaging has to happen
+    /// over the noise process instead: without it, a step's gradient (and its reported loss) is a
+    /// one-sample estimate of an expectation taken over every noise level, and successive steps
+    /// differ mostly by which timestep came up.
+    /// </para>
+    /// <para><b>For Beginners:</b> Diffusion training asks "given this partly noised series, what
+    /// noise was added?" at a randomly chosen noise level. Asking once gives a very jumpy answer;
+    /// asking 32 times at different levels and averaging gives a steady one. Raise this for
+    /// smoother training at proportionally more work per step, lower it to train faster.</para>
+    /// </remarks>
+    public int TrainingBatchSize { get; set; } = 32;
+
+    /// <summary>
+    /// Learning rate for the default Adam optimizer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Koa et al. (2023), "Diffusion Variational Autoencoder for Tackling Stochasticity in
+    /// Multi-Step Regression Stock Price Prediction" - the paper this model carries in its
+    /// ResearchPaper attribute - state in Section 4.1.3: "The Adam optimizer was used to optimize
+    /// the model, with an initial learning rate of 5e-4."
+    /// </para>
+    /// <para>
+    /// Without this the model fell back to
+    /// <see cref="OptimizationAlgorithmOptions{T, TInput, TOutput}.InitialLearningRate"/>&apos;s
+    /// generic 0.01, which is 20x the paper rate - at that step size the epsilon-prediction loss
+    /// rises instead of falling.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is how big a step training takes each time it learns
+    /// something. Too big and the model overshoots and gets worse; too small and it barely moves.
+    /// 5e-4 is the value this model&apos;s own paper reports.</para>
+    /// </remarks>
+    public double LearningRate { get; set; } = 5e-4;
+
+    /// <summary>
     /// Gets or sets the dropout rate for regularization.
     /// </summary>
     /// <value>Defaults to 0.1 (10%).</value>
@@ -154,35 +223,23 @@ public class CCDMOptions<T> : TimeSeriesRegressionOptions<T>
     /// <summary>
     /// Gets or sets the ending beta value for the linear noise schedule.
     /// </summary>
-    /// <value>Defaults to 0.5.</value>
+    /// <value>Defaults to 0.1.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> Controls how much noise is added at the final diffusion step.
     /// A larger value means more aggressive noise at the end of the schedule.</para>
+    /// <para><b>Provenance:</b> beta_T belongs WITH the step count, and this model runs a LINEAR
+    /// schedule over DiffusionSteps = 100. Ho et al., "Denoising Diffusion Probabilistic Models"
+    /// (NeurIPS 2020) Section 4 pair 0.02 with T = 1000, where the cumulative product alphaBar_T
+    /// reaches ~4e-5 and x_T is indistinguishable from the pure noise the sampler starts at. Over
+    /// 100 steps that same 0.02 leaves alphaBar_T ~= 0.37, so the forward process still carries
+    /// ~61% of the signal while the sampler starts from pure noise - the two ends do not meet and
+    /// training cannot close the gap. The 100-step time-series diffusion literature uses 0.1 for
+    /// exactly this reason: Rasul et al. (TimeGrad, ICML 2021) and Kollovieh et al. (TSDiff, 2023
+    /// Appendix, "a linear scheduler with beta_1 = 0.0001 and beta_100 = 0.1"). The earlier 0.5
+    /// was borrowed from Tashiro et al. (CSDI, NeurIPS 2021), where it is the endpoint of a
+    /// QUADRATIC schedule over 50 steps; applied linearly over 100 steps it drives alphaBar_T to
+    /// ~5e-14, so the reverse process amplifies its input by ~5e6 before the denoiser has learned
+    /// anything.</para>
     /// </remarks>
-    public double BetaEnd { get; set; } = 0.5;
-
-    /// <summary>
-    /// Gets or sets the minimum noise level for the continuous diffusion schedule.
-    /// </summary>
-    /// <value>Defaults to 0.002.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The smallest noise scale used in the continuous
-    /// diffusion process. Lower values preserve more detail at the finest level.</para>
-    /// </remarks>
-    public double SigmaMin { get; set; } = 0.002;
-
-    /// <summary>
-    /// Gets or sets the maximum noise level for the continuous diffusion schedule.
-    /// </summary>
-    /// <value>Defaults to 80.0 (from Song et al., "Score-Based Generative Modeling through SDEs", ICLR 2021).</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The largest noise scale used. Higher values mean the
-    /// model learns to recover signal from more aggressive corruption.</para>
-    /// <para><b>Provenance:</b> Default noise schedule parameters (BetaStart=0.0001, BetaEnd=0.5,
-    /// SigmaMin=0.002, SigmaMax=80.0) follow standard continuous diffusion practice from
-    /// Song et al. (2021) and Ho et al. "Denoising Diffusion Probabilistic Models" (NeurIPS 2020).
-    /// Architecture defaults (HiddenDimension=128, NumLayers=4, NumHeads=8, DiffusionSteps=100)
-    /// are common baselines for time series diffusion models.</para>
-    /// </remarks>
-    public double SigmaMax { get; set; } = 80.0;
+    public double BetaEnd { get; set; } = 0.1;
 }

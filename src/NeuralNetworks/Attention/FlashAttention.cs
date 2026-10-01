@@ -70,17 +70,86 @@ internal static class FlashAttention<T>
         bool is4D = query.Shape.Length == 4;
         int seqLenQ = is4D ? query.Shape[2] : query.Shape[1];
         int seqLenKV = is4D ? key.Shape[2] : key.Shape[1];
-        if (queryOffset < 0 || queryOffset + seqLenQ > seqLenKV)
+        // A noncausal cross-attention query is not a window into the key sequence:
+        // learned queries may outnumber memory tokens. Preserve window bounds for causal
+        // attention or an explicit nonzero offset; subtraction prevents overflow.
+        if (queryOffset < 0 || ((config.UseCausalMask || queryOffset != 0) && queryOffset > seqLenKV - seqLenQ))
         {
             throw new ArgumentOutOfRangeException(
                 nameof(queryOffset),
-                $"queryOffset ({queryOffset}) must satisfy 0 <= queryOffset and queryOffset + seqLenQ ({seqLenQ}) <= seqLenKV ({seqLenKV}).");
+                $"queryOffset ({queryOffset}) must be nonnegative and, for causal attention or a nonzero offset, queryOffset + seqLenQ ({seqLenQ}) must not exceed seqLenKV ({seqLenKV}).");
+        }
+
+        if (!config.UseCausalMask && queryOffset == 0 && seqLenQ > seqLenKV)
+        {
+            // The fused engine treats every query block as a WINDOW into the key sequence and rejects
+            // seqQ > seqKV for every configuration, causal or not. Noncausal cross-attention whose
+            // learned queries outnumber the memory tokens is a legitimate shape — the MGIE edit mapper
+            // reads its query embeddings off a shorter joint context — so compute it exactly here
+            // instead of failing.
+            return RectangularAttention(query, key, value, config, attentionBias, is4D);
         }
 
         var tensorsConfig = MapConfig(config, queryOffset);
         return AiDotNet.Tensors.Engines.Autodiff.FusedAttention<T>.Forward(
             query, key, value, tensorsConfig, attentionBias);
     }
+
+    /// <summary>
+    /// Exact attention for the one shape the fused kernel refuses: more queries than keys, with no
+    /// causal mask and no query offset. This materializes the [batch, heads, seqQ, seqKV] scores —
+    /// the very cost the fused path exists to avoid — which is acceptable precisely because this
+    /// branch only runs when the key axis is the SHORTER one.
+    /// </summary>
+    private static (Tensor<T> Output, Tensor<T>? AttentionWeights) RectangularAttention(
+        Tensor<T> query,
+        Tensor<T> key,
+        Tensor<T> value,
+        FlashAttentionConfig config,
+        Tensor<T>? attentionBias,
+        bool is4D)
+    {
+        var engine = AiDotNetEngine.Current;
+        var queries4D = is4D ? query : PromoteToFourD(engine, query);
+        var keys4D = is4D ? key : PromoteToFourD(engine, key);
+        var values4D = is4D ? value : PromoteToFourD(engine, value);
+        double scale = config.ScaleFactor ?? 1.0 / Math.Sqrt(queries4D.Shape[3]);
+
+        Tensor<T> output;
+        Tensor<T>? weights;
+        if (attentionBias is null)
+        {
+            output = engine.ScaledDotProductAttention(
+                queries4D, keys4D, values4D, mask: null, scale: scale, out var produced);
+            weights = config.ReturnAttentionWeights ? produced : null;
+        }
+        else
+        {
+            // The engine's attention takes a boolean mask, not an additive bias, so the biased case
+            // walks the three ops itself: scores, softmax, and the value average.
+            var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var scores = engine.TensorAdd(
+                engine.TensorMultiplyScalar(
+                    engine.BatchMatMul(queries4D, engine.TensorPermute(keys4D, new[] { 0, 1, 3, 2 })),
+                    numOps.FromDouble(scale)),
+                attentionBias);
+            var probabilities = engine.TensorSoftmax(scores, 3);
+            output = engine.BatchMatMul(probabilities, values4D);
+            weights = config.ReturnAttentionWeights ? probabilities : null;
+        }
+
+        if (!is4D)
+        {
+            output = engine.Reshape(output, new[] { output.Shape[0], output.Shape[2], output.Shape[3] });
+            if (weights is not null)
+                weights = engine.Reshape(weights, new[] { weights.Shape[0], weights.Shape[2], weights.Shape[3] });
+        }
+        return (output, weights);
+    }
+
+    /// <summary>Adds the singleton head axis a 3D [batch, seq, dim] input leaves implicit.</summary>
+    private static Tensor<T> PromoteToFourD(IEngine engine, Tensor<T> tensor)
+        => engine.Reshape(tensor, new[] { tensor.Shape[0], 1, tensor.Shape[1], tensor.Shape[2] });
 
     /// <summary>
     /// Map the framework's <see cref="FlashAttentionConfig"/> onto the Tensors-side

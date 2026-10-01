@@ -11,6 +11,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Validation;
 using Microsoft.ML.OnnxRuntime;
@@ -64,7 +65,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
 [ResearchPaper("Predict, Refine, Synthesize: Self-Guiding Diffusion Models for Probabilistic Time Series Forecasting", "https://arxiv.org/abs/2307.11494", Year = 2023, Authors = "Marcel Kollovieh, Abdul Fatir Ansari, Michael Bohlke-Schneider, Jasper Zschiegner, Hao Wang, Yuyang Wang")]
 [PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-3, ReferenceBatchSize = 64,
                 Source = "Kollovieh et al. 2023, experimental setup: Adam for 1,000 epochs with a learning rate of 1e-3, each epoch 128 batches of 64 sequences.")]
-public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>
+public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingObjectiveProvider<T>
 {
     #region Fields
 
@@ -89,6 +90,9 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>
     private double _betaStart;
     private double _betaEnd;
     private double _guidanceScale;
+    private double _unconditionalProbability;
+    private int _trainingBatchSize;
+    private int _numSamples;
 
     // DDPM noise schedule (precomputed as generic vectors)
     [Buffer]
@@ -130,8 +134,8 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>
         options ??= new TSDiffOptions<T>(); _options = options; Options = _options;
         _useNativeMode = false; OnnxModelPath = onnxModelPath; OnnxSession = new InferenceSession(onnxModelPath);
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this); _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = options.LearningRate }); _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         CopyOptionsToFields(options);
     }
 
@@ -142,8 +146,8 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>
         options ??= new TSDiffOptions<T>(); _options = options; Options = _options;
         _useNativeMode = true; OnnxSession = null; OnnxModelPath = null;
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this); _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = options.LearningRate }); _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
         CopyOptionsToFields(options); InitializeLayers();
     }
 
@@ -164,6 +168,9 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>
         _numDiffusionSteps = options.NumDiffusionSteps; _numAttentionHeads = options.NumAttentionHeads;
         _dropout = options.DropoutRate; _betaStart = options.BetaStart;
         _betaEnd = options.BetaEnd; _guidanceScale = options.GuidanceScale;
+        _unconditionalProbability = options.UnconditionalProbability;
+        _trainingBatchSize = options.TrainingBatchSize;
+        _numSamples = options.NumSamples;
         ComputeNoiseSchedule();
     }
 
@@ -227,42 +234,230 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>
     protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
 
     /// <summary>
-    /// Tape-aware training forward. Runs the existing Layers stack as a
-    /// deterministic context → forecast regression head so
-    /// <c>NeuralNetworkBase.TrainWithTape</c> can record the tape, compute the
-    /// user-injected loss, and step the optimizer.
+    /// One epsilon-prediction training step over the same denoiser graph the sampler runs.
     /// </summary>
     /// <remarks>
-    /// Same bug family as CCDM / TimeDiff / TimeGrad: the previous Train
-    /// hand-built DDPM noise perturbation and fed <c>_residualLayers</c> a
-    /// [noisyTarget | condHidden | t-embedding] tensor whose last-dim
-    /// mismatched the layers' baked-in input sizes, then called
-    /// <c>_optimizer.UpdateParameters(Layers)</c> without running backward.
-    /// Self-guiding DDPM reverse process with guidance-scale refinement
-    /// remains in <see cref="ForwardNative"/> for probabilistic inference via
-    /// <see cref="Predict"/>/<see cref="Forecast"/>. Noise-prediction training
-    /// would need a denoiser-shaped layer architecture and is out of scope.
+    /// What this replaces ran the whole Layers stack as a deterministic context-to-forecast
+    /// regression head, while <see cref="ForwardNative"/> read the very same layer objects as a
+    /// denoiser over an additively composed [x_t + condition + timestep] row. Nothing inference
+    /// did had ever been trained. The two paths also pack different widths, and the input
+    /// projection is lazily sized, so whichever path ran first baked the layer widths.
+    ///
+    /// Training now follows Ho et al. 2020 Algorithm 1: draw t uniformly, draw epsilon, form
+    /// x_t = sqrt(alphaBar_t) * y + sqrt(1 - alphaBar_t) * epsilon, and regress the denoiser
+    /// output onto epsilon through the configured <see cref="ILossFunction{T}"/>.
+    ///
+    /// With probability <c>UnconditionalProbability</c> the conditioning is dropped for the step.
+    /// That is Ho and Salimans, "Classifier-Free Diffusion Guidance" (2022) Section 3: a single
+    /// network is trained jointly on the conditional and unconditional objectives so the guidance
+    /// blend in <see cref="ForwardNative"/> has a trained unconditional estimate to blend in. It
+    /// is applied whatever the guidance scale, because GuidanceScale is an inference knob and
+    /// raising it after training must not find a branch the model has never seen.
+    ///
+    /// The draw is deliberately NOT seeded from <c>Options.Seed</c>. That seed makes inference
+    /// reproducible; reusing it here would hand every call the same t and the same epsilon, so
+    /// the model would be fitted at one single noise level out of NumDiffusionSteps.
     /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException("Training is only supported in native mode.");
+
+        if (expectedOutput.Length <= 0) return;
+
+        // Without this the denoiser's DropoutLayers stay in inference mode and the configured
+        // DropoutRate is silently inert for the whole of training.
+        SetTrainingMode(true);
+        try
+        {
+            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
+
+            var conditioned = ApplyInstanceNormalization(input);
+            var condHidden = conditioned.Rank == 2
+                ? conditioned
+                : Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
+
+            // The denoiser is sized for exactly one horizon, so the target is read into a row of
+            // that width whatever the caller's framing. A shorter target leaves the tail at zero
+            // rather than changing the packed width, which the lazily-sized input projection
+            // would bake and then reject on the next call.
+            int outputLen = _forecastHorizon;
+            var rand = RandomHelper.CreateSecureRandom();
+
+            // One row per (timestep, noise) draw. Ho et al. 2020 Algorithm 1 draws a single t per
+            // EXAMPLE and averages the step over a minibatch (128 in their Section 4); a caller
+            // here hands us one example, so the minibatch is taken over the noise process instead.
+            // Without it the gradient is a one-sample estimate of an expectation over
+            // NumDiffusionSteps noise levels, so consecutive steps are dominated by which t came
+            // up rather than by what the model learned - and the reported loss is too, which is
+            // what made the training probes read as noise. The conditioning drop is decided per
+            // row for the same reason: an all-or-nothing decision per step would train the two
+            // branches in alternating bursts.
+            int batch = Math.Max(1, _trainingBatchSize);
+            var timesteps = new int[batch];
+            var dropConditioning = new bool[batch];
+            var epsilonTrue = new Tensor<T>(new[] { batch, outputLen });
+            var xt = new Tensor<T>(new[] { batch, outputLen });
+            for (int b = 0; b < batch; b++)
+            {
+                int tb = rand.Next(_numDiffusionSteps);
+                timesteps[b] = tb;
+                dropConditioning[b] = rand.NextDouble() < _unconditionalProbability;
+                T sqrtAlphaBar = _sqrtAlphasCumprod[tb];
+                T sqrtOneMinus = _sqrtOneMinusAlphasCumprod[tb];
+                for (int i = 0; i < outputLen; i++)
+                {
+                    T noise = SampleStandardNormal(rand);
+                    T y = i < expectedOutput.Length ? expectedOutput[i] : NumOps.Zero;
+                    int flat = b * outputLen + i;
+                    epsilonTrue.Data.Span[flat] = noise;
+                    xt.Data.Span[flat] = NumOps.Add(
+                        NumOps.Multiply(sqrtAlphaBar, y),
+                        NumOps.Multiply(sqrtOneMinus, noise));
+                }
+            }
+            using var tape = new GradientTape<T>();
+            var epsilonPred = DenoiserForward(xt, condHidden, timesteps, dropConditioning);
+            var lossTensor = _lossFunction.ComputeTapeLoss(epsilonPred, epsilonTrue);
+
+            // Publish through the base rather than calling tape.ComputeGradients directly.
+            // GetParameterGradients() answers from the published surface, and with nothing
+            // published it falls back to the per-layer accessors, which fabricate an exact zero
+            // for every parameter - indistinguishable from a severed tape.
+            var grads = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParams);
+
+            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+            LastLoss = lossValue;
+
+            // All three closures are pinned to this step's (t, epsilon, conditioning). A
+            // line-searching optimizer that re-drew them would be comparing losses from two
+            // different noise levels and reading the difference as progress.
+            Tensor<T> ComputeForward(Tensor<T> _, Tensor<T> __) =>
+                DenoiserForward(xt, condHidden, timesteps, dropConditioning);
+            Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> __) =>
+                _lossFunction.ComputeTapeLoss(pred, epsilonTrue);
+
+            var context = new TapeStepContext<T>(
+                trainableParams, grads, lossValue,
+                input, expectedOutput, ComputeForward, RecomputeLoss);
+
+            MarkTrainMutationStarted();
+            _optimizer.Step(context);
+            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+            StepSchedulerIfSupported(_optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <summary>
+    /// Tape-aware forward over the denoiser graph, at the noisiest step, from pure noise. This is
+    /// the function <see cref="Train"/> fits and <see cref="ForwardNative"/> iterates, so a caller
+    /// that records a tape over it is recording the graph inference actually uses.
+    /// </summary>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
 
-        var x = ApplyInstanceNormalization(input);
-        if (x.Rank == 3 && x.Shape[2] == 1)
-            x = x.Reshape(new[] { x.Shape[0], x.Shape[1] });
-        else if (x.Rank == 1)
-            x = x.Reshape(new[] { 1, x.Length });
+        var conditioned = ApplyInstanceNormalization(input);
+        var condHidden = conditioned.Rank == 2
+            ? conditioned
+            : Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
 
-        foreach (var layer in Layers) x = layer.Forward(x);
-        return x;
+        var rand = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
+        var xt = new Tensor<T>(new[] { 1, _forecastHorizon });
+        for (int i = 0; i < _forecastHorizon; i++)
+            xt.Data.Span[i] = SampleStandardNormal(rand);
+
+        return DenoiserForward(xt, condHidden, _numDiffusionSteps - 1);
+    }
+
+    /// <summary>
+    /// The denoiser: one epsilon estimate for <paramref name="xt"/> at diffusion step
+    /// <paramref name="t"/>, optionally conditioned on the encoded context.
+    /// </summary>
+    /// <remarks>
+    /// Ho et al. 2020 Section 3.2 add the timestep to the residual stream through an embedding
+    /// rather than concatenating it, so x_t, the conditioning and the timestep are summed at the
+    /// hidden width. The sum is built with Engine ops because the conditioning arrives through
+    /// ApplyInstanceNormalization and the whole composition has to stay on the tape. The
+    /// unconditional estimate the guidance blend needs comes from the batched overload's drop
+    /// mask, which zeroes the conditioning slots without changing the packed row width.
+    /// </remarks>
+    private Tensor<T> DenoiserForward(Tensor<T> xt, Tensor<T>? condHidden, int t)
+        => DenoiserForward(xt, condHidden, new[] { t }, dropConditioning: null);
+
+    /// <summary>
+    /// The batched denoiser: one row per (x_t, timestep) pair. A <paramref name="timesteps"/> of
+    /// length one means every row shares that step, which is what the sampler needs; one entry per
+    /// row is what a training step needs, since each draw sits at its own noise level. A row whose
+    /// <paramref name="dropConditioning"/> entry is set gets the unconditional estimate.
+    /// </summary>
+    private Tensor<T> DenoiserForward(
+        Tensor<T> xt, Tensor<T>? condHidden, IReadOnlyList<int> timesteps, IReadOnlyList<bool>? dropConditioning)
+    {
+        // One row per sample path. The additive composition is built by a direct span fill
+        // rather than traced engine arithmetic because none of its three parts carries a
+        // parameter dependency: x_t is either prior noise or a noised target, the conditioning
+        // is a normalized copy of the input, and the timestep encoding is a constant. Only the
+        // layer chain below needs the tape.
+        int rows = xt.Rank == 2 ? xt.Shape[0] : 1;
+        int xtCols = rows > 0 ? xt.Length / rows : 0;
+        var condFlat = condHidden is null
+            ? null
+            : (condHidden.Rank == 1 ? condHidden : Engine.Reshape(condHidden, new[] { condHidden.Length }));
+        int condLen = condFlat is null ? 0 : Math.Min(condFlat.Length, _hiddenDimension);
+
+        // x_t, the conditioning and the timestep occupy SEPARATE slots of the packed row, and
+        // _inputProjection maps the whole row to hidden width. Tashiro et al. 2021 (CSDI,
+        // Section 3.3) feed the conditional observations as their own channel, and Kollovieh et
+        // al. 2023 condition TSDiff the same way; only the timestep is added to the residual
+        // stream (Ho et al. 2020 Section 3.2). Summing x_t INTO the conditioning slots, as this
+        // did, leaves the denoiser unable to tell the noised target from its context - it saw one
+        // blurred vector, and more training moved the sampler further from the target.
+        int rowLen = xtCols + condLen + DiffusionTimestepEmbeddingDim;
+        var packed = new Tensor<T>(new[] { rows, rowLen });
+        var din = packed.Data.Span;
+        for (int r = 0; r < rows; r++)
+        {
+            int stepR = timesteps.Count == 1 ? timesteps[0] : timesteps[r];
+            bool dropR = dropConditioning is not null
+                && (dropConditioning.Count == 1 ? dropConditioning[0] : dropConditioning[r]);
+            int baseIdx = r * rowLen;
+            for (int i = 0; i < xtCols; i++)
+            {
+                int flat = r * xtCols + i;
+                din[baseIdx + i] = flat < xt.Length ? xt[flat] : NumOps.Zero;
+            }
+
+            // The unconditional branch keeps the same row WIDTH with the conditioning zeroed, so
+            // classifier-free guidance blends two estimates from one lazily-sized projection
+            // rather than baking a second input width on the first unconditional call.
+            if (!dropR && condFlat is not null)
+                for (int i = 0; i < condLen; i++) din[baseIdx + xtCols + i] = condFlat[i];
+
+            WriteDiffusionTimestepEmbedding(
+                din.Slice(baseIdx + xtCols + condLen, DiffusionTimestepEmbeddingDim), stepR);
+        }
+
+        var eps = packed;
+
+        if (_inputProjection is not null) eps = _inputProjection.Forward(eps);
+        foreach (var layer in _residualLayers) eps = layer.Forward(eps);
+        if (_outputProjection is not null) eps = _outputProjection.Forward(eps);
+        return eps;
     }
 
     // UpdateParameters was an empty override, silently dropping every restore. The base
     // distributes the vector over the declared enumeration.
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        AdditionalInfo = new Dictionary<string, object> { { "NetworkType", "TSDiff" }, { "SequenceLength", _sequenceLength }, { "ForecastHorizon", _forecastHorizon }, { "HiddenDimension", _hiddenDimension }, { "NumDiffusionSteps", _numDiffusionSteps }, { "GuidanceScale", _guidanceScale }, { "UseNativeMode", _useNativeMode } },
+        AdditionalInfo = new Dictionary<string, object> { { "NetworkType", "TSDiff" }, { "SequenceLength", _sequenceLength }, { "ForecastHorizon", _forecastHorizon }, { "HiddenDimension", _hiddenDimension }, { "NumDiffusionSteps", _numDiffusionSteps }, { "GuidanceScale", _guidanceScale }, { "NumSamples", _numSamples }, { "UseNativeMode", _useNativeMode } },
         ModelDataProvider = () => _useNativeMode ? this.Serialize() : Array.Empty<byte>()
     };
 
@@ -314,41 +509,30 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>
             : Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
 
         int outputLen = _forecastHorizon;
-        var rand = RandomHelper.CreateSecureRandom();
+        // A diffusion forecaster is generative: one path carries the full spread of the
+        // predictive distribution rather than its centre, so NumSamples paths are drawn as rows
+        // and the per-position median is returned. That is the estimate Tashiro et al. (CSDI,
+        // NeurIPS 2021) report and what the sibling CSDI implementation in this library does.
+        // NumSamples was already declared on the options and simply never read here.
+        int samples = Math.Max(1, _numSamples);
+
+        // Restart the noise stream at the configured seed so Predict called twice on the same
+        // input returns the same answer. Seeding here does not collapse the sample set: the
+        // NumSamples paths draw successive values from the one stream and so still differ from
+        // one another. With Seed null the draw is secure and deliberately not reproducible.
+        var rand = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
+            : RandomHelper.CreateSecureRandom();
 
         // Start from pure Gaussian noise
-        var xt = new Tensor<T>(new[] { 1, outputLen });
-        for (int i = 0; i < outputLen; i++)
+        var xt = new Tensor<T>(new[] { samples, outputLen });
+        for (int i = 0; i < samples * outputLen; i++)
             xt.Data.Span[i] = SampleStandardNormal(rand);
 
         // Iterative DDPM reverse process: t = T-1 ... 0
         for (int t = _numDiffusionSteps - 1; t >= 0; t--)
         {
-            // Denoising input: hiddenDim-wide additive composition of x_t,
-            // conditioning, and the time embedding — same fix as CCDM (the
-            // raw [x_t | condHidden | t_embed] concatenation feeds a
-            // shape-mismatched tensor into the first BatchNorm of the
-            // residual stack, since _residualLayers were lazy-sized to
-            // _hiddenDimension by an earlier _inputProjection.Forward).
-            // Ho et al. 2020 §3.2 / Hatamizadeh et al. 2023 §3.2 add the
-            // time step to the residual stream via a positional embedding;
-            // we likewise sum x_t (zero-padded), condHidden, and the time
-            // embedding broadcast across all positions.
-            T timeEmbed = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));
-            // Build the additive components as separate hiddenDim-wide
-            // rank-2 tensors and sum via Engine ops — see CCDM's matching
-            // PadOrTruncateRank2 helper for the rationale.
-            var xtPadded = PadOrTruncateRank2(xt, _hiddenDimension);
-            var condPadded = PadOrTruncateRank2(condHidden, _hiddenDimension);
-            var summed = Engine.TensorAdd(xtPadded, condPadded);
-            var denoisingInput = Engine.TensorAddScalar(summed, timeEmbed);
-
-            // Predict conditioned noise estimate eps_cond. Project the packed
-            // input to hidden width before the residual stack.
-            var epsCond = denoisingInput;
-            if (_inputProjection is not null) epsCond = _inputProjection.Forward(epsCond);
-            foreach (var layer in _residualLayers) epsCond = layer.Forward(epsCond);
-            if (_outputProjection is not null) epsCond = _outputProjection.Forward(epsCond);
+            var epsCond = DenoiserForward(xt, condHidden, t);
 
             // Self-guided diffusion: compute unconditional estimate (no conditioning)
             // eps_guided = eps_uncond + guidance_scale * (eps_cond - eps_uncond)
@@ -356,27 +540,20 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>
             Tensor<T> epsGuided;
             if (Math.Abs(_guidanceScale - 1.0) > 1e-6)
             {
-                // Unconditional estimate: x_t padded to hiddenDim + time
-                // embedding broadcast, no conditioning sum. Same Engine-op
-                // composition as the conditioned branch above.
-                var uncondInput = Engine.TensorAddScalar(
-                    PadOrTruncateRank2(xt, _hiddenDimension), timeEmbed);
+                // Unconditional estimate: the same denoiser with the conditioning dropped,
+                // which is the branch Train's conditioning dropout keeps trained.
+                // Drop the conditioning by MASK, not by passing null: the packed row keeps its
+                // width so both estimates go through the one lazily-sized input projection.
+                var epsUncond = DenoiserForward(xt, condHidden, new[] { t }, new[] { true });
 
-                var epsUncond = uncondInput;
-                if (_inputProjection is not null) epsUncond = _inputProjection.Forward(epsUncond);
-                foreach (var layer in _residualLayers) epsUncond = layer.Forward(epsUncond);
-                if (_outputProjection is not null) epsUncond = _outputProjection.Forward(epsUncond);
-
-                // Classifier-free guidance blend (Ho & Salimans 2022):
-                //   ε_guided = ε_uncond + scale · (ε_cond − ε_uncond)
+                // Classifier-free guidance blend (Ho and Salimans 2022):
+                //   eps_guided = eps_uncond + scale * (eps_cond - eps_uncond)
                 // Built out of Engine SIMD ops so the per-element work
-                // vectorises at paper scale (outputLen × hiddenDim ≥ 1024).
+                // vectorises at paper scale (outputLen x hiddenDim >= 1024).
                 T guidanceT = NumOps.FromDouble(_guidanceScale);
-                var uncondAligned = PadOrTruncateRank2(epsUncond, outputLen);
-                var condAligned = PadOrTruncateRank2(epsCond, outputLen);
-                var delta = Engine.TensorSubtract(condAligned, uncondAligned);
+                var delta = Engine.TensorSubtract(epsCond, epsUncond);
                 var weighted = Engine.TensorMultiplyScalar(delta, guidanceT);
-                epsGuided = Engine.TensorAdd(uncondAligned, weighted);
+                epsGuided = Engine.TensorAdd(epsUncond, weighted);
             }
             else
             {
@@ -392,35 +569,96 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>
             T sqrtAlphaT = NumOps.Sqrt(alphaT);
             T sigmaT = t > 0 ? NumOps.Sqrt(betaT) : NumOps.Zero;
 
-            for (int i = 0; i < outputLen && i < xt.Length; i++)
+            int epsCols = samples > 0 ? epsGuided.Length / samples : 0;
+            for (int s = 0; s < samples; s++)
             {
-                T epsVal = i < epsGuided.Length ? epsGuided[i] : NumOps.Zero;
-                T meanT = NumOps.Divide(NumOps.Subtract(xt[i], NumOps.Multiply(noiseCoeffT, epsVal)), NumOps.Add(sqrtAlphaT, eps10));
-                T z = t > 0 ? SampleStandardNormal(rand) : NumOps.Zero;
-                xt.Data.Span[i] = NumOps.Add(meanT, NumOps.Multiply(sigmaT, z));
+                for (int i = 0; i < outputLen; i++)
+                {
+                    int flat = s * outputLen + i;
+                    if (flat >= xt.Length) break;
+                    int epsIdx = s * epsCols + i;
+                    T epsVal = i < epsCols && epsIdx < epsGuided.Length ? epsGuided[epsIdx] : NumOps.Zero;
+                    T meanT = NumOps.Divide(NumOps.Subtract(xt[flat], NumOps.Multiply(noiseCoeffT, epsVal)), NumOps.Add(sqrtAlphaT, eps10));
+                    T z = t > 0 ? SampleStandardNormal(rand) : NumOps.Zero;
+                    xt.Data.Span[flat] = NumOps.Add(meanT, NumOps.Multiply(sigmaT, z));
+                }
             }
         }
 
-        if (addedBatchDim && xt.Rank == 2 && xt.Shape[0] == 1) xt = xt.Reshape(new[] { xt.Shape[1] });
-        return xt;
+        var median = MedianAcrossSamples(xt, samples, outputLen);
+        if (addedBatchDim) return median;
+        return Engine.Reshape(median, new[] { 1, outputLen });
     }
 
-    /// <summary>Pads-or-truncates a rank-1 / rank-2 [1, len] tensor along the
-    /// last axis to a target width via Engine ops (TensorNarrow for truncate;
-    /// TensorConcatenate with a zero pad for extend). See CCDM for the
-    /// shared rationale.</summary>
-    private Tensor<T> PadOrTruncateRank2(Tensor<T> src, int targetWidth)
+    /// <summary>
+    /// Per-position median over the sample axis - the deterministic estimate a probabilistic
+    /// forecaster reports. The same sample set is what a prediction interval would come from.
+    /// </summary>
+    private Tensor<T> MedianAcrossSamples(Tensor<T> paths, int samples, int outputLen)
     {
-        var src2d = src.Rank == 2 ? src : Engine.Reshape(src, new[] { 1, src.Length });
-        int srcLen = src2d.Shape[1];
-        if (srcLen == targetWidth) return src2d;
-        if (srcLen > targetWidth)
-            return Engine.TensorNarrow(src2d, dim: 1, start: 0, length: targetWidth);
-        var pad = new Tensor<T>(new[] { 1, targetWidth - srcLen });
-        return Engine.TensorConcatenate(new[] { src2d, pad }, axis: 1);
+        var result = new Tensor<T>(new[] { outputLen });
+        var column = new T[samples];
+        for (int i = 0; i < outputLen; i++)
+        {
+            for (int s = 0; s < samples; s++) column[s] = paths[s * outputLen + i];
+            Array.Sort(column, (a, b) => NumOps.LessThan(a, b) ? -1 : NumOps.LessThan(b, a) ? 1 : 0);
+            result[i] = (samples % 2) == 1
+                ? column[samples / 2]
+                : NumOps.Divide(NumOps.Add(column[samples / 2 - 1], column[samples / 2]), NumOps.FromDouble(2.0));
+        }
+
+        return result;
     }
 
     protected override Tensor<T> ForecastOnnx(Tensor<T> input) { if (OnnxSession == null) throw new InvalidOperationException("ONNX session is not initialized."); int batchSize = input.Rank > 1 ? input.Shape[0] : 1; int seqLen = input.Rank > 1 ? input.Shape[1] : input.Length; int features = input.Rank > 2 ? input.Shape[2] : 1; var inputData = new float[batchSize * seqLen * features]; for (int i = 0; i < input.Length && i < inputData.Length; i++) inputData[i] = (float)NumOps.ToDouble(input[i]); var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, new[] { batchSize, seqLen, features }); string inputName = OnnxSession.InputMetadata.Keys.FirstOrDefault() ?? "input"; var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, inputTensor) }; using var results = OnnxSession.Run(inputs); var outputTensor = results.First().AsTensor<float>(); var outputShape = outputTensor.Dimensions.ToArray(); var output = new Tensor<T>(outputShape); int totalElements = 1; foreach (var dim in outputShape) totalElements *= dim; for (int i = 0; i < totalElements && i < output.Length; i++) output.Data.Span[i] = NumOps.FromDouble(outputTensor.GetValue(i)); return output; }
 
+
+    #region ITrainingObjectiveProvider
+
+    /// <summary>
+    /// The learner is denoising diffusion, not supervised regression of the forecast onto the
+    /// target: <see cref="Train"/> minimizes the noise-prediction error of Ho et al. 2020
+    /// Algorithm 1, and the forecast is an ancestral sampler run on top of it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Declaring the objective is what lets a loss-trajectory probe measure the quantity training
+    /// actually descends. Judging the model on the sampler instead measures something the
+    /// optimizer never sees: the reverse chain divides by sqrt(alpha_bar_T) overall, about 16x on
+    /// the T=100, beta_T=0.1 schedule Kollovieh et al. 2023 specify, so it magnifies whatever bias
+    /// a partially trained noise predictor still has.
+    /// </para>
+    /// </remarks>
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind =>
+        TrainingObjectiveKind.DiffusionDenoising;
+
+    /// <summary>The supplied forecast target IS the x_0 the denoiser learns to recover.</summary>
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget)
+        => proposedTarget;
+
+    /// <summary>
+    /// Evaluates L_simple over a fixed (timestep, noise) quadrature, through the configured loss
+    /// function so a caller who overrides it is scored on what the model is optimizing. Every row
+    /// keeps its conditioning: the unconditional branch is a training-time dropout, not part of
+    /// the objective being measured.
+    /// </summary>
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException("The training objective is only defined in native mode.");
+
+        var conditioned = ApplyInstanceNormalization(input);
+        var condHidden = conditioned.Rank == 2
+            ? conditioned
+            : Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
+
+        var (noisy, noise, timesteps) = BuildDeterministicDenoisingBatch(
+            target, _forecastHorizon, _numDiffusionSteps, _sqrtAlphasCumprod, _sqrtOneMinusAlphasCumprod);
+
+        var predicted = DenoiserForward(noisy, condHidden, timesteps, dropConditioning: null);
+        return _lossFunction.ComputeLoss(predicted, noise);
+    }
+
+    #endregion
     #endregion
 }
