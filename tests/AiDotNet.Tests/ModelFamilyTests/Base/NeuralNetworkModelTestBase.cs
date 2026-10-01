@@ -4698,7 +4698,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             return;
         }
 
-        bool binaryCrossEntropy = TargetIsProbability(nn.DefaultLossFunction);
+        bool targetIsProbability = TargetIsProbability(nn.DefaultLossFunction);
         bool bornRule = nn.DefaultLossFunction is AiDotNet.LossFunctions.BornRuleMseLoss<T>;
         double totalMass = 0.0;
 
@@ -4724,7 +4724,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 continue;
             }
 
-            if (binaryCrossEntropy)
+            if (targetIsProbability)
             {
                 if ((value < 0.0 || value > 1.0) && outOfRangeIndex < 0)
                 {
@@ -4742,7 +4742,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         Assert.True(nonFiniteIndex < 0,
             $"Loss-compatible target[{nonFiniteIndex}] is non-finite: {nonFiniteValue:G17}.");
         Assert.True(outOfRangeIndex < 0,
-            $"Binary-cross-entropy target[{outOfRangeIndex}] must lie in [0, 1]; got "
+            $"Probability-valued target[{outOfRangeIndex}] must lie in [0, 1]; got "
             + $"{outOfRangeValue:G17}.");
         Assert.True(negativeIndex < 0,
             $"Born-rule target[{negativeIndex}] must be non-negative; got {negativeValue:G17}.");
