@@ -66,9 +66,14 @@ try {
            Diff = "--- a/$fixture/Lib/Limits.cs`n+++ b/$fixture/Lib/Limits.cs`n@@ -8 +8 @@`n-    public static int Describe() => MaxDepth;`n+    public static int Describe() => MaxDepth + 0;"
            Classes = @('HelperSweepTests', 'InventoryTests')
            Runs = @('Fast', 'Other project'); Resolved = $true },
-        @{ Name = 'an edited const line is unresolved: its consumers hold no reference'
+        @{ Name = 'an edited const reaches the files that name it, though the IL holds no reference'
            Change = "M`t$fixture/Lib/Limits.cs"
            Diff = "--- a/$fixture/Lib/Limits.cs`n+++ b/$fixture/Lib/Limits.cs`n@@ -6 +6 @@`n-    public const int MaxDepth = 3;`n+    public const int MaxDepth = 4;"
+           Classes = @('HelperSweepTests', 'InventoryTests', 'LimitsTests')
+           Runs = @('Fast', 'Other project'); Resolved = $true },
+        @{ Name = 'a const line whose declaration cannot be read stays unresolved'
+           Change = "M`t$fixture/Lib/Limits.cs"
+           Diff = "--- a/$fixture/Lib/Limits.cs`n+++ b/$fixture/Lib/Limits.cs`n@@ -5 +5 @@`n-    // limits`n+    // const values below"
            Classes = @(); Runs = @('Other project'); Resolved = $false },
         @{ Name = 'a deleted C# source is unresolved: its former dependents are not in the new build'
            Change = "D`t$fixture/Lib/Gamma.cs"
