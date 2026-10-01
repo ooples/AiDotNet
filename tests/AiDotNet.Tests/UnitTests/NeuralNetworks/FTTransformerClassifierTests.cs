@@ -98,6 +98,27 @@ public class FTTransformerClassifierTests
     }
 
     [Fact]
+    public void TrainStep_UpdatesTheWholeNetwork_NotOnlyTheHead()
+    {
+        // The [CLS] token used to be copied out element by element into a tensor the tape never saw, so gradients
+        // stopped at the classification head: the tokenizer, every encoder layer and the final LayerNorm stayed at
+        // their initial values (34 of 2,403 parameters moved). The loss still fell - the head alone can lower it -
+        // which is why the convergence test above did not notice. Measured with the slice on the tape: ~2,130.
+        var model = NewModel();
+        var (x, y) = MakeSeparable(9, seed: 2);
+        _ = model.PredictProbabilities(x);
+        var before = model.GetParameters().ToArray();
+        model.TrainStep(x, y, learningRate: 0.05);
+        model.TrainStep(x, y, learningRate: 0.05);
+        var after = model.GetParameters().ToArray();
+
+        int changed = 0;
+        for (int i = 0; i < before.Length; i++) if (before[i] != after[i]) changed++;
+        Assert.True(changed >= 0.8 * before.Length,
+            $"Only {changed} of {before.Length} parameters changed after two training steps; gradients are not reaching the backbone.");
+    }
+
+    [Fact]
     public void Train_ReducesCrossEntropy_OnSeparableData_AndStaysFinite()
     {
         // The classifier train path: TrainStep runs a tape-tracked forward +
