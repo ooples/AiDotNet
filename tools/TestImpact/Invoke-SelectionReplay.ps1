@@ -4,8 +4,9 @@
     before it ships.
 .DESCRIPTION
     For each pull request the merge CI would have validated is rebuilt in a scratch worktree: the pull request head
-    merged onto its base (the base branch now for an open pull request; the base-branch commit just before the
-    squash for a merged one). Select-Shards.ps1 then runs exactly as the Select shards job runs it - against the
+    merged onto its base (the base branch now for an open pull request; the first parent of the commit GitHub
+    recorded as its merge commit, for a merged one). Pull requests into another branch, and closed ones, are
+    skipped. Select-Shards.ps1 then runs exactly as the Select shards job runs it - against the
     given map, with the manifest converted from that merge's .github/test-shards.yml - using the selection tools
     from -ToolsRef. Comparing two runs that differ only in -ToolsRef shows what a selector change does.
 
@@ -34,6 +35,7 @@ param(
     [Parameter(Mandatory)] [string] $WorkTree,
     [Parameter(Mandatory)] [string] $OutDirectory,
     [string] $Remote = 'origin',
+    [string] $Repository = 'ooples/AiDotNet',
     [string] $BaseBranch = 'master'
 )
 Set-StrictMode -Version Latest
@@ -48,8 +50,8 @@ function Invoke-Git {
 
 # The selector reads the shard manifest with yq, as the workflow does.
 if (-not (Get-Command yq -ErrorAction SilentlyContinue)) { throw 'yq (https://github.com/mikefarah/yq) must be on PATH' }
+if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw 'gh (the GitHub CLI) must be on PATH and signed in' }
 $numbers = @($PullRequest | ForEach-Object { $_ -split '[,\s]+' } | Where-Object { $_ } | ForEach-Object { [int] $_ })
-$repository = @(Invoke-Git @('rev-parse', '--show-toplevel'))[0]
 $MapFile = (Resolve-Path -LiteralPath $MapFile).Path
 New-Item -ItemType Directory -Force -Path $OutDirectory | Out-Null
 $OutDirectory = (Resolve-Path -LiteralPath $OutDirectory).Path
@@ -82,14 +84,37 @@ foreach ($number in $numbers) {
         $head = @(Invoke-Git @('rev-parse', "refs/replay/pr/$number"))[0]
         $record.head = $head
 
-        # A merged pull request: its merge commit ("Merge pull request #<number> from ...") or squash commit
-        # ("... (#<number>)") on the base branch. The base it was validated against is that commit's first parent.
-        $squash = @(Invoke-Git @('log', '--format=%H', '--first-parent', '-E',
-                "--grep=^Merge pull request #$number |\(#$number\)$", 'refs/replay/base')) |
-            Select-Object -First 1
-        $base = if ($squash) { @(Invoke-Git @('rev-parse', "$squash^1"))[0] } else { @(Invoke-Git @('rev-parse', 'refs/replay/base'))[0] }
+        # GitHub says whether the pull request merged, into which branch, and as which commit. A pull request into
+        # another branch is not part of this base branch's history and is skipped rather than replayed against it.
+        $described = @(& gh pr view $number --repo $Repository --json state,baseRefName,mergeCommit 2>&1)
+        if ($LASTEXITCODE -ne 0) { throw "gh could not describe pull request #${number}: $($described -join ' ')" }
+        $info = ($described -join "`n") | ConvertFrom-Json
+        if ($info.baseRefName -cne $BaseBranch) {
+            $record.status = 'other-base'
+            $record.error = "targets $($info.baseRefName), not $BaseBranch"
+            $summary.Add([pscustomobject] $record)
+            Write-Host "#${number}: $($record.error); skipped"
+            continue
+        }
+        if ($info.state -eq 'MERGED') {
+            # The commit the pull request became on the base branch: a merge commit or a squash. Its first parent is
+            # the base the merge was validated against.
+            $landed = [string] $info.mergeCommit.oid
+            Invoke-Git @('fetch', '--quiet', $Remote, $landed) | Out-Null
+            $base = @(Invoke-Git @('rev-parse', "$landed^1"))[0]
+            $record.state = 'merged'
+        }
+        elseif ($info.state -eq 'OPEN') {
+            $base = @(Invoke-Git @('rev-parse', 'refs/replay/base'))[0]
+            $record.state = 'open'
+        }
+        else {
+            $record.status = 'closed'
+            $summary.Add([pscustomobject] $record)
+            Write-Host "#${number}: closed without merging; skipped"
+            continue
+        }
         $record.base = $base
-        $record.state = if ($squash) { 'merged' } else { 'open' }
 
         Invoke-Git @('checkout', '--quiet', '--force', '--detach', $base) -In $WorkTree | Out-Null
         $merge = & git -C $WorkTree -c user.name=replay -c user.email=replay@localhost merge --no-ff --no-edit --quiet $head 2>&1
