@@ -95,12 +95,6 @@ public partial class S4<T> : ForecastingModelBase<T>
 
     #region Native Mode Fields
     private DenseLayer<T>? _inputEmbedding;
-    private List<DenseLayer<T>>? _ssmBLayers;
-    private List<DenseLayer<T>>? _ssmDiagLayers;
-    private List<DenseLayer<T>>? _ssmPLayers;
-    private List<DenseLayer<T>>? _ssmQLayers;
-    private List<DenseLayer<T>>? _ssmCLayers;
-    private List<DenseLayer<T>>? _ssmDLayers;
     private List<LayerNormalizationLayer<T>>? _layerNorms;
     private DenseLayer<T>? _outputProjection;
     #endregion
@@ -484,23 +478,6 @@ public partial class S4<T> : ForecastingModelBase<T>
         _inputEmbedding = Layers.OfType<DenseLayer<T>>().FirstOrDefault();
         _layerNorms = Layers.OfType<LayerNormalizationLayer<T>>().ToList();
         _outputProjection = Layers.OfType<DenseLayer<T>>().LastOrDefault();
-
-        // Get all dense layers between input and output for SSM components
-        var allDense = Layers.OfType<DenseLayer<T>>().ToList();
-        if (allDense.Count > 2)
-        {
-            _ssmBLayers = allDense.Skip(1).Take(allDense.Count - 2).ToList();
-        }
-        else
-        {
-            _ssmBLayers = new List<DenseLayer<T>>();
-        }
-
-        _ssmDiagLayers = new List<DenseLayer<T>>();
-        _ssmPLayers = new List<DenseLayer<T>>();
-        _ssmQLayers = new List<DenseLayer<T>>();
-        _ssmCLayers = new List<DenseLayer<T>>();
-        _ssmDLayers = new List<DenseLayer<T>>();
     }
 
     /// <summary>
