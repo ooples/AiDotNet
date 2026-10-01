@@ -165,7 +165,7 @@ try {
            Filters = @('Category!=Slow'); Exit = 0; Unassigned = @() },
         @{ Name = 'a class no filter selects fails the check and is named'
            Filters = @('FullyQualifiedName~AlphaTests|FullyQualifiedName~BetaTests'); Exit = 1
-           Unassigned = @('AlphaContractTests', 'CatalogTests', 'GeneratorOwnTests', 'HelperSweepTests', 'InventoryTests', 'StampedTests', 'SteadyTests', 'SurfaceTests') }
+           Unassigned = @('AlphaContractTests', 'CatalogTests', 'GeneratorOwnTests', 'HelperSweepTests', 'InventoryTests', 'LimitsTests', 'StampedTests', 'SteadyTests', 'SurfaceTests') }
     )
     foreach ($case in $inventoryCases) {
         $inventoryShards = Join-Path $work 'inventory-shards.json'
