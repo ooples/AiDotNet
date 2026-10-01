@@ -29,7 +29,13 @@ public class TransformerTrainingTraceTest
             numEncoderLayers: 1, numDecoderLayers: 0, numHeads: 2,
             modelDimension: 16, feedForwardDimension: 32,
             inputSize: ctxLen, outputSize: vocab,
-            maxSequenceLength: ctxLen, vocabularySize: vocab);
+            maxSequenceLength: ctxLen, vocabularySize: vocab,
+            // The same fixture settings as the other Transformer training tests (TransformerEndToEndIntegrationTests
+            // .MakeArch). Vaswani's default Noam warmup of 4000 steps keeps the learning rate near zero for this
+            // 100-step budget, dropout 0.1 makes a single training-mode loss noisy, and an unseeded init drew its
+            // weights from the process-wide random stream, so the result depended on which tests ran first: the
+            // test failed every run alone and passed or failed by order in a batch. The assertions are unchanged.
+            dropoutRate: 0.0, warmupSteps: 10, randomSeed: 42);
         var model = new Transformer<float>(arch, lossFunction: new CategoricalCrossEntropyLoss<float>());
 
         // Verify default optimizer is Adam — assert in addition to logging,
