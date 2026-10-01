@@ -133,7 +133,7 @@ public sealed class ModelStateOwnershipContractTests
     [Fact]
     public void APartialTypeWhoseDeclarationsEachNameABaseIsEmittedOnce()
     {
-        // CSDI declares its training objective in a second partial file with its own base list. The
+        // A type may declare an interface in a second partial file with its own base list. The
         // generator emitted state once per such declaration, and the second AddSource of the same hint
         // name failed the generator for the whole compilation.
         const string source = """
