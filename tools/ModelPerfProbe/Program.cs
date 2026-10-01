@@ -55,8 +55,14 @@ internal static class Program
 
             IReadOnlyList<BaselineDocument> history = LoadHistory(options.HistoryDirectory, diagnostics);
             PerfIntent[] intents = LoadIntents(options.PerfIntentPath, diagnostics);
+            IReadOnlyDictionary<string, string>? priorWorkloads = options.PriorRecordsDirectory is null
+                ? null
+                : LoadRecords(options.PriorRecordsDirectory)
+                    .Where(r => r.Workload.Length > 0)
+                    .GroupBy(r => r.Fixture, StringComparer.Ordinal)
+                    .ToDictionary(g => g.Key, g => g.First().Workload, StringComparer.Ordinal);
 
-            CompareBaseline(records, baseline, options, diagnostics, history, intents);
+            CompareBaseline(records, baseline, options, diagnostics, history, intents, priorWorkloads);
             DetectCohortOutliers(records, diagnostics);
             ValidateAbsoluteCeilings(records, options, diagnostics);
 
@@ -241,7 +247,8 @@ internal static class Program
         Options options,
         ICollection<Diagnostic> diagnostics,
         IReadOnlyList<BaselineDocument>? historyDocuments = null,
-        IReadOnlyList<PerfIntent>? declaredIntents = null)
+        IReadOnlyList<PerfIntent>? declaredIntents = null,
+        IReadOnlyDictionary<string, string>? priorWorkloads = null)
     {
         IReadOnlyList<BaselineDocument> history = historyDocuments ?? Array.Empty<BaselineDocument>();
         IReadOnlyList<PerfIntent> intents = declaredIntents ?? Array.Empty<PerfIntent>();
@@ -269,6 +276,22 @@ internal static class Program
             {
                 missingByEnvironment.TryGetValue(record.Environment, out int missingCount);
                 missingByEnvironment[record.Environment] = missingCount + 1;
+                continue;
+            }
+
+            // A DIFFERENT WORKLOAD IS NOT A REGRESSION. A fixture whose input shape or parameter count changed
+            // measures other work: #2136 moved four generated fixtures from a flat 512-vector to real sequences
+            // (FlowState 512 -> 1x2048x1) and was failed for being 122x "slower" than a workload it no longer runs.
+            // The prior workload comes from the baseline entry, or, for a baseline written before entries carried
+            // it, from that run's own records. Unknown on either side still compares, so nothing escapes silently.
+            string priorWorkload = !string.IsNullOrEmpty(prior.Workload)
+                ? prior.Workload
+                : priorWorkloads is not null && priorWorkloads.TryGetValue(record.Fixture, out string? recorded) ? recorded : "";
+            if (priorWorkload.Length > 0 && record.Workload.Length > 0
+                && !string.Equals(priorWorkload, record.Workload, StringComparison.Ordinal))
+            {
+                diagnostics.Add(Diagnostic.Warning(record.Fixture, "workload",
+                    $"workload changed ({priorWorkload} -> {record.Workload}); not compared with the prior baseline"));
                 continue;
             }
 
@@ -736,6 +759,47 @@ internal static class Program
         if (!comparisonDiagnostics.Any(d => d.Severity == "error" && d.Metric == Allocated))
             return Fail("a genuine undeclared allocation regression must remain an error");
 
+        // A changed workload is not a regression (#2136: FlowState's fixture moved from a 512-vector to 1x2048x1).
+        CensusRecord Shaped(string workload) => new()
+        {
+            Fixture = Fixture,
+            Model = "Synthetic",
+            Status = "ok",
+            Environment = Environment,
+            Cohort = "System.Single|10^1",
+            Phase = "",
+            Error = "",
+            Workload = workload,
+            Metrics = new Dictionary<string, double>(StringComparer.Ordinal) { [Allocated] = 300_000_000 },
+        };
+        BaselineDocument ShapedBaseline(string? workload)
+        {
+            BaselineDocument document = DirectBaseline("base000", (Allocated, 100_000_000));
+            document.Entries[0].Workload = workload;
+            return document;
+        }
+
+        comparisonDiagnostics.Clear();
+        CompareBaseline([Shaped("1x2048x1|623328")], ShapedBaseline("512|758240"), new Options(), comparisonDiagnostics);
+        if (comparisonDiagnostics.Any(d => d.Severity == "error")
+            || !comparisonDiagnostics.Any(d => d.Severity == "warning" && d.Metric == "workload"))
+            return Fail("a fixture whose workload changed must be reported as a warning, not compared");
+
+        comparisonDiagnostics.Clear();
+        CompareBaseline([Shaped("1x2048x1|623328")], ShapedBaseline(null), new Options(), comparisonDiagnostics,
+            priorWorkloads: new Dictionary<string, string>(StringComparer.Ordinal) { [Fixture] = "512|758240" });
+        if (comparisonDiagnostics.Any(d => d.Severity == "error"))
+            return Fail("a baseline without workloads must take the prior workload from that run's records");
+
+        comparisonDiagnostics.Clear();
+        CompareBaseline([Shaped("512|758240")], ShapedBaseline("512|758240"), new Options(), comparisonDiagnostics);
+        if (!comparisonDiagnostics.Any(d => d.Severity == "error" && d.Metric == Allocated))
+            return Fail("the same workload must still be compared");
+
+        comparisonDiagnostics.Clear();
+        CompareBaseline([Shaped("512|758240")], ShapedBaseline(null), new Options(), comparisonDiagnostics);
+        if (!comparisonDiagnostics.Any(d => d.Severity == "error" && d.Metric == Allocated))
+            return Fail("an unknown prior workload must still be compared, so nothing escapes silently");
         var allocationIntent = new[]
         {
             new PerfIntent
@@ -1425,6 +1489,7 @@ internal static class Program
         {
             Fixture = record.Fixture,
             Environment = record.Environment,
+            Workload = record.Workload.Length > 0 ? record.Workload : null,
             Metrics = new Dictionary<string, double>(record.Metrics),
         }).OrderBy(entry => entry.Fixture, StringComparer.Ordinal).ToArray(),
     };
@@ -1629,6 +1694,8 @@ internal static class Program
         public double MaxPeakBytesPerParameter { get; private set; } = 32.0;
         public double MaxCorrectnessProbeMs { get; private set; } = 120_000.0;
         public bool SelfTest { get; private set; }
+        /// <summary>The prior baseline run's own records, for the workloads a baseline written without them lacks.</summary>
+        public string? PriorRecordsDirectory { get; private set; }
 
         public static Options? Parse(string[] args)
         {
@@ -1643,6 +1710,7 @@ internal static class Program
                     case "--baseline": options.BaselinePath = Next(); break;
                     case "--write-baseline": options.WriteBaselinePath = Next(); break;
                     case "--history": options.HistoryDirectory = Next(); break;
+                    case "--prior-records": options.PriorRecordsDirectory = Next(); break;
                     case "--perf-intent": options.PerfIntentPath = Next(); break;
                     case "--commit": options.Commit = Next() ?? ""; break;
                     case "--expected-count": options.ExpectedCount = int.Parse(Next(), CultureInfo.InvariantCulture); break;
@@ -1680,6 +1748,8 @@ internal static class Program
         public required string Error { get; init; }
         public double ElapsedMs { get; init; }
         public long ParameterCount { get; init; }
+        /// <summary>What the fixture measured: input shape without size-1 axes, and parameter count ("2048|623328"), or empty.</summary>
+        public string Workload { get; init; } = "";
         public required IReadOnlyDictionary<string, double> Metrics { get; init; }
         public double Metric(string name) => Metrics.TryGetValue(name, out double value) ? value : 0.0;
 
@@ -1709,10 +1779,21 @@ internal static class Program
                      }))
                 metrics[metric] = Number(metric);
 
+            string workload = "";
+            if (root.TryGetProperty("inputShape", out JsonElement shape) && shape.ValueKind == JsonValueKind.Array
+                && shape.GetArrayLength() > 0 && parameters > 0)
+            {
+                // Size-1 axes are dropped: 64 and 1x64x1 are the same work, only one of them batched.
+                string[] axes = shape.EnumerateArray().Select(d => d.ToString()).Where(d => d != "1").ToArray();
+                workload = (axes.Length == 0 ? "1" : string.Join("x", axes))
+                    + "|" + parameters.ToString(CultureInfo.InvariantCulture);
+            }
+
             return new CensusRecord
             {
                 Fixture = Text("fixture"),
                 Model = Text("model"),
+                Workload = workload,
                 Status = Text("status"),
                 Environment = environment,
                 Cohort = $"{Text("precision")}|10^{magnitude}",
@@ -1753,6 +1834,8 @@ internal static class Program
     {
         [JsonPropertyName("fixture")] public string Fixture { get; set; } = "";
         [JsonPropertyName("environment")] public string Environment { get; set; } = "";
+        /// <summary>The measured workload (see <see cref="CensusRecord.Workload"/>); absent in older baselines.</summary>
+        [JsonPropertyName("workload")] public string? Workload { get; set; }
         [JsonPropertyName("metrics")] public Dictionary<string, double> Metrics { get; set; } = new();
     }
 

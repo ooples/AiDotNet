@@ -516,7 +516,7 @@ public partial class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientB
     /// </para>
     /// </remarks>
     /// <exception cref="NotSupportedException">Always, when driven from a gradient tape.</exception>
-    public override void Step(TapeStepContext<T> context)
+    protected override void StepCore(TapeStepContext<T> context)
     {
         throw new NotSupportedException(
             "LevenbergMarquardtOptimizer cannot be used for tape-based (neural network) training. It solves " +

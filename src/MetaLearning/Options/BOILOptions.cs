@@ -142,10 +142,15 @@ public class BOILOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
     public int CheckpointFrequency { get; set; } = 500;
 
     /// <summary>
-    /// Gets or sets whether to use first-order approximation.
+    /// Gets or sets whether to drop the second-order terms of the meta-gradient.
     /// </summary>
-    /// <value>Default is true (BOIL typically uses first-order for efficiency).</value>
-    public bool UseFirstOrder { get; set; } = true;
+    /// <value>Default is false: the exact meta-gradient, as MAML's outer loop computes it.</value>
+    /// <remarks>
+    /// BOIL's outer loop "updates the meta-initialized parameters using the meta-loss" as MAML does (Oh et al. 2021,
+    /// Sec. 2.1). The exact gradient runs through every body step: body Hessian-vector products, and the head's cross
+    /// term through each step's support gradient. True keeps only the query gradient at the adapted body.
+    /// </remarks>
+    public bool UseFirstOrder { get; set; } = false;
 
     #endregion
 
@@ -158,38 +163,42 @@ public class BOILOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
     public int NumClasses { get; set; } = 5;
 
     /// <summary>
-    /// Gets or sets the dimension of the final feature representation (before head).
+    /// Gets or sets the width of each example's representation the head reads: the body's per-example output width.
     /// </summary>
     /// <value>Default is 512.</value>
     public int FeatureDimension { get; set; } = 512;
 
     /// <summary>
-    /// Gets or sets the fraction of body parameters to adapt (for efficiency).
+    /// Gets or sets the fraction of the body's layers the inner loop adapts, counted from the top.
     /// </summary>
-    /// <value>Default is 1.0 (adapt all body parameters).</value>
+    /// <value>Default is 1.0 (adapt every body layer, the paper's setting).</value>
     /// <remarks>
-    /// <para><b>For Beginners:</b> If your body has millions of parameters, adapting
-    /// all of them might be slow. This setting lets you adapt only a fraction
-    /// (e.g., 0.5 = adapt only half the body parameters).
+    /// <para>
+    /// An extension. BOIL's analysis finds representation change concentrated in the high-level body and reuse in
+    /// the low and middle layers (Oh et al. 2021, Sec. 4), so adapting only the top layers keeps the change where it
+    /// happens and costs less. Layers come from the body's own layer structure; a body with none counts as one layer.
+    /// At least one layer is always adapted.
     /// </para>
     /// </remarks>
     public double BodyAdaptationFraction { get; set; } = 1.0;
 
     /// <summary>
-    /// Gets or sets whether to use layer-wise learning rates for the body.
+    /// Gets or sets whether to meta-learn one inner learning rate per body layer and per inner step.
     /// </summary>
-    /// <value>Default is false.</value>
+    /// <value>Default is false (one shared inner learning rate, the paper's setting).</value>
     /// <remarks>
-    /// <para><b>For Beginners:</b> Different layers might need different learning rates.
-    /// Earlier layers (close to input) might need smaller updates than later layers.
+    /// <para>
+    /// MAML++'s LSLR (Antoniou et al. 2019): "a learning rate and direction for each layer in the network as well as
+    /// ... different learning rates for each adaptation" step. The rates are trained by the outer loop on the exact
+    /// meta-gradient; their sign can flip a layer's update.
     /// </para>
     /// </remarks>
     public bool UseLayerwiseLearningRates { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets the learning rate multiplier for earlier layers (if using layerwise rates).
+    /// Gets or sets the initial scale of the learned rates in the lower half of the body's layers.
     /// </summary>
-    /// <value>Default is 0.1 (earlier layers update 10x slower).</value>
+    /// <value>Default is 0.1 (lower layers start 10x slower; the outer loop then learns every rate).</value>
     public double EarlyLayerLrMultiplier { get; set; } = 0.1;
 
     /// <summary>
@@ -198,11 +207,6 @@ public class BOILOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
     /// <value>Default is 0.0 (no regularization).</value>
     public double BodyL2Regularization { get; set; } = 0.0;
 
-    /// <summary>
-    /// Gets or sets whether to reinitialize the body for each task.
-    /// </summary>
-    /// <value>Default is false (use meta-learned initialization).</value>
-    public bool ReinitializeBody { get; set; } = false;
 
     #endregion
 
@@ -269,8 +273,7 @@ public class BOILOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
             BodyAdaptationFraction = BodyAdaptationFraction,
             UseLayerwiseLearningRates = UseLayerwiseLearningRates,
             EarlyLayerLrMultiplier = EarlyLayerLrMultiplier,
-            BodyL2Regularization = BodyL2Regularization,
-            ReinitializeBody = ReinitializeBody
+            BodyL2Regularization = BodyL2Regularization
         };
     }
 

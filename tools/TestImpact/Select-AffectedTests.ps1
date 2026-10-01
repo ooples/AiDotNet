@@ -39,6 +39,10 @@ function Write-Output-Value([string] $Name, [string] $Value) {
 }
 
 function Write-Passthrough([string] $Why) {
+    # Passing through is a success. A native command this script tolerated (TypeImpact, yq) leaves its exit code in
+    # $LASTEXITCODE, and the Actions pwsh wrapper ends the step with `exit $LASTEXITCODE`, so without this reset
+    # the step failed after deliberately falling back.
+    $global:LASTEXITCODE = 0
     Write-Host "test-level selection not applied: $Why - keeping the shard selection as chosen"
     Write-Output-Value 'matrix' $env:SELECTED_MATRIX
     Write-Output-Value 'ledger_matrix' $env:SELECTED_LEDGER_MATRIX
@@ -63,13 +67,17 @@ try {
         throw 'the checkout is not the pull request merge commit'
     }
 
+    # Written with WriteAllLines, not piped to Set-Content: a pipeline with no input never runs Set-Content, so a
+    # change with no C# edits (a workflow-only PR) left no diff file at all and TypeImpact died opening it.
     $changes = Join-Path ([IO.Path]::GetTempPath()) 'type-impact-changes.txt'
-    & git -c core.quotepath=false diff --no-renames --name-status $parents[1] HEAD | Set-Content -LiteralPath $changes -Encoding utf8
+    $changeLines = @(& git -c core.quotepath=false diff --no-renames --name-status $parents[1] HEAD)
     if ($LASTEXITCODE -ne 0) { throw 'git diff failed' }
+    [IO.File]::WriteAllLines($changes, [string[]] $changeLines)
     # Line-level diff, for the const edits the type graph cannot follow.
     $diff = Join-Path ([IO.Path]::GetTempPath()) 'type-impact-changes.diff'
-    & git -c core.quotepath=false diff --no-renames -U0 $parents[1] HEAD -- '*.cs' | Set-Content -LiteralPath $diff -Encoding utf8
+    $diffLines = @(& git -c core.quotepath=false diff --no-renames -U0 $parents[1] HEAD -- '*.cs')
     if ($LASTEXITCODE -ne 0) { throw 'git diff -U0 failed' }
+    [IO.File]::WriteAllLines($diff, [string[]] $diffLines)
 
     $all = @(yq -o=json -I=0 '.shard' (Join-Path $Repository '.github/test-shards.yml') | ConvertFrom-Json)
     if ($all.Count -eq 0) { throw 'test-shards.yml yielded no shards' }

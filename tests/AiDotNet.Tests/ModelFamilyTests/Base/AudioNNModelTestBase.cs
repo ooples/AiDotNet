@@ -77,9 +77,10 @@ public abstract class AudioNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
 
     // =====================================================
     // AUDIO INVARIANT: Silence Handling Matches the Output Domain
-    // Waveform-producing models should emit near-silence. Speech recognizers emit
-    // categorical scores, where zero RMS is neither meaningful nor attainable for
-    // normalized log probabilities; those outputs must instead be finite and normalized.
+    // Waveform-producing models should emit near-silence. Speech recognizers and language
+    // identifiers emit categorical scores, where zero RMS is neither meaningful nor attainable
+    // (a classifier's logits carry no amplitude meaning); those outputs must instead be finite,
+    // and CTC log probabilities normalized.
     // =====================================================
 
     [Fact(Timeout = 120000)]
@@ -92,9 +93,9 @@ public abstract class AudioNNModelTestBase<T> : NeuralNetworkModelTestBase<T>
 
         var output = network.Predict(silence);
 
-        if (network is ISpeechRecognizer<T>)
+        if (network is ISpeechRecognizer<T> || network is ILanguageIdentifier<T>)
         {
-            Assert.True(output.Length > 0, "Speech recognizer output should not be empty for silence.");
+            Assert.True(output.Length > 0, "Categorical-score output should not be empty for silence.");
             for (int i = 0; i < output.Length; i++)
             {
                 double value = ConvertToDouble(output[i]);
