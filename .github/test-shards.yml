@@ -168,7 +168,7 @@ shard:
   - name: Unit - 08d NN-Adapters/Other
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
-    filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests)'
+    filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~LoRAAdapterTests|FullyQualifiedName~LoRALayerTests|FullyQualifiedName~VBLoRAAdapterTests|FullyQualifiedName~AdvancedAlgebraNetworkTests|FullyQualifiedName~MixtureOfExpertsNeuralNetworkTests|FullyQualifiedName~RBFLayerInitializationTests)'
   # 'Unit - 08e NN-Remaining (catch-all)' removed: it was a duplicate
   # of the ModelFamily NeuralNetworks shards (`A-F` + `G-L` + `M-N` +
   # `O-R` + `S` + `T` + `U-Z`, same ModelFamilyTests.NeuralNetworks scope,
