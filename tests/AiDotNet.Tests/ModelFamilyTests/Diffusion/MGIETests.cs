@@ -56,6 +56,21 @@ public class MGIETests : DiffusionModelTestBase<float>
             {
                 // The one inference setting that made a smoke test into a fifty-step sampler.
                 NumDiffusionSteps = 1,
+
+                // The MLLM, scaled like the U-Net and VAE above. Left at its defaults it is LLaVA-7B
+                // (DecoderDim 4096 x 32 layers over a CLIP ViT-L tower), and Clone_ShouldProduceIdenticalOutput
+                // materializes and copies all of it: past the 120-second budget on every run. The structure is
+                // unchanged (vision tower -> LLM -> [IMG] tokens -> edit head -> 768-wide context); only widths,
+                // depths and vocabulary shrink. Production defaults are untouched.
+                ImageSize = 28,
+                VisionPatchSize = 14,
+                VisionDim = 32,
+                NumVisionLayers = 1,
+                DecoderDim = 64,
+                NumDecoderLayers = 1,
+                NumHeads = 4,
+                VocabSize = 1000,
+                MaxSequenceLength = 32,
             },
             unet: new UNetNoisePredictor<float>(
                 inputChannels: 8,
