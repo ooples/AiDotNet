@@ -142,6 +142,23 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// preparing the optimizer for a new optimization run.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The learning rate and epsilon to hand a PyTorch (bias-corrected) AMSGrad kernel so it computes the configured
+    /// variant. For the paper, lr·bc1/sqrt(bc2) and eps/sqrt(bc2) turn lr·(m/bc1)/(sqrt(vMax/bc2)+eps) into
+    /// lr·m/(sqrt(vMax)+eps) exactly, with bc1 = 1-beta1^t and bc2 = 1-beta2^t.
+    /// </summary>
+    private (float LearningRate, float Epsilon) KernelLearningRateAndEpsilon(double learningRate, int step)
+    {
+        if (_options.BiasCorrection == AMSGradBiasCorrection.PyTorch)
+        {
+            return ((float)learningRate, (float)_options.Epsilon);
+        }
+
+        double bc1 = 1 - Math.Pow(_options.Beta1, step);
+        double sqrtBc2 = Math.Sqrt(1 - Math.Pow(_options.Beta2, step));
+        return ((float)(learningRate * bc1 / sqrtBc2), (float)(_options.Epsilon / sqrtBc2));
+    }
+
     /// <summary>The first-moment bias correction for step <paramref name="step"/>: 1 - beta1^t, or 1 for the paper.</summary>
     private double FirstMomentCorrection(int step)
         => _options.BiasCorrection == AMSGradBiasCorrection.PyTorch ? 1 - Math.Pow(_options.Beta1, step) : 1.0;
@@ -407,10 +424,12 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
             if (!_tapeV.TryGetValue(param, out var v)) { v = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) v.AsWritableSpan().Clear(); _tapeV[param] = v; }
             if (!_tapeVHat.TryGetValue(param, out var vHat)) { vHat = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) vHat.AsWritableSpan().Clear(); _tapeVHat[param] = vHat; }
 
-            // The GPU kernel is PyTorch's bias-corrected AMSGrad; the paper variant stays on the CPU path below.
-            if (gpuAdam && _options.BiasCorrection == AMSGradBiasCorrection.PyTorch && param.Length == grad.Length
+            // The GPU kernel is PyTorch's bias-corrected AMSGrad; KernelLearningRateAndEpsilon makes it compute the
+            // configured variant exactly.
+            var (kernelLr, kernelEps) = KernelLearningRateAndEpsilon(NumOps.ToDouble(CurrentLearningRate), _tapeStep);
+            if (gpuAdam && param.Length == grad.Length
                 && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAmsgradStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)m, (Tensor<float>)(object)v, (Tensor<float>)(object)vHat,
-                    (float)NumOps.ToDouble(CurrentLearningRate), (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon, 0f, _tapeStep))
+                    kernelLr, (float)_options.Beta1, (float)_options.Beta2, kernelEps, 0f, _tapeStep))
                 continue;
 
             // m = beta1 * m + (1 - beta1) * grad
@@ -505,31 +524,31 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// </summary>
     public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
     {
-        if (_options.BiasCorrection != AMSGradBiasCorrection.PyTorch)
-        {
-            // backend.AmsgradUpdate applies PyTorch's bias corrections; running it for the paper variant would
-            // silently train a different optimizer than the one configured.
-            throw new NotSupportedException(
-                "The GPU AMSGrad kernel implements the PyTorch bias-corrected variant only. Set " +
-                "AMSGradOptimizerOptions.BiasCorrection to PyTorch for GPU updates, or train on the CPU path.");
-        }
         if (!_gpuStateInitialized || _gpuM == null || _gpuV == null || _gpuVMax == null)
         {
             InitializeGpuState(parameterCount, backend);
         }
 
+        if (_gpuM is not { } gpuM || _gpuV is not { } gpuV || _gpuVMax is not { } gpuVMax)
+        {
+            throw new InvalidOperationException("AMSGrad GPU state was not allocated.");
+        }
+
         _t++;
 
+        // backend.AmsgradUpdate is PyTorch's bias-corrected kernel; the rescaled lr and epsilon make it compute the
+        // configured variant exactly (KernelLearningRateAndEpsilon).
+        var (kernelLr, kernelEps) = KernelLearningRateAndEpsilon(NumOps.ToDouble(CurrentLearningRate), _t);
         backend.AmsgradUpdate(
             parameters,
             gradients,
-            _gpuM!,
-            _gpuV!,
-            _gpuVMax!,
-            (float)NumOps.ToDouble(CurrentLearningRate),
+            gpuM,
+            gpuV,
+            gpuVMax,
+            kernelLr,
             (float)_options.Beta1,
             (float)_options.Beta2,
-            (float)_options.Epsilon,
+            kernelEps,
             0.0f, // AMSGrad doesn't use weight decay in standard formulation
             _t,
             parameterCount);

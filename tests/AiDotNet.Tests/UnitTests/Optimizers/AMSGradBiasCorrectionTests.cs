@@ -82,4 +82,41 @@ public sealed class AMSGradBiasCorrectionTests
         Assert.False(paper.TryGetFusedOptimizerConfig(out _));
         Assert.True(pytorch.TryGetFusedOptimizerConfig(out _));
     }
+
+    /// <summary>
+    /// The GPU path runs the PyTorch (bias-corrected) kernel for both variants, fed a rescaled learning rate and
+    /// epsilon for the paper; both must still land on their own formula.
+    /// </summary>
+    [SkippableTheory]
+    [Trait("Category", "GPU")]
+    [InlineData(AMSGradBiasCorrection.Paper)]
+    [InlineData(AMSGradBiasCorrection.PyTorch)]
+    public void GpuUpdates_MatchTheVariantsFormula(AMSGradBiasCorrection mode)
+    {
+        using var gpu = new AiDotNet.Tensors.Engines.DirectGpu.DirectGpuEngine();
+        Skip.IfNot(gpu.IsAvailable && gpu.Backend is not null, "no GPU backend resolved");
+        if (gpu.Backend is not { } backend) return;
+
+        var p0 = new[] { 0.5, -1.0, 2.0 };
+        var grads = new[] { new[] { 0.3, -0.2, 0.1 }, new[] { 0.01, -0.4, 0.05 } };
+        var optimizer = new AMSGradOptimizer<float, Vector<float>, Vector<float>>(null, new AMSGradOptimizerOptions<float, Vector<float>, Vector<float>>
+        {
+            InitialLearningRate = Lr, Beta1 = B1, Beta2 = B2, Epsilon = Eps, BiasCorrection = mode,
+            UseAdaptiveLearningRate = false,
+        });
+
+        using var parameters = backend.AllocateBuffer(p0.Select(x => (float)x).ToArray());
+        foreach (var g in grads)
+        {
+            using var gradient = backend.AllocateBuffer(g.Select(x => (float)x).ToArray());
+            optimizer.UpdateParametersGpu(parameters, gradient, p0.Length, backend);
+        }
+
+        var actual = backend.DownloadBuffer(parameters);
+        optimizer.DisposeGpuState();
+        var expected = Reference(mode, p0, grads);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.True(Math.Abs(expected[i] - actual[i]) <= 1e-5 * Math.Max(1, Math.Abs(expected[i])),
+                $"{mode}: p[{i}] expected {expected[i]:R}, got {actual[i]:R}");
+    }
 }
