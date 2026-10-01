@@ -95,8 +95,6 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     
     #region Native Mode Fields
     private DenseLayer<T>? _inputProjection;
-    private List<GRULayer<T>> _encoderGRUs;
-    private List<GRULayer<T>> _decoderGRUs;
     private List<DiffusionConvolutionalGRULayer<T>> _encoderDCGRUs;
     private List<DiffusionConvolutionalGRULayer<T>> _decoderDCGRUs;
     private DenseLayer<T>? _outputLayer;
@@ -292,8 +290,6 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
             _random = _options.Seed.HasValue
                 ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
                 : RandomHelper.CreateSecureRandom();
-            _encoderGRUs = new List<GRULayer<T>>();
-            _decoderGRUs = new List<GRULayer<T>>();
             _encoderDCGRUs = new List<DiffusionConvolutionalGRULayer<T>>();
             _decoderDCGRUs = new List<DiffusionConvolutionalGRULayer<T>>();
             _forwardPowers = new List<double[,]>();
@@ -357,8 +353,6 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         _random = _options.Seed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
-        _encoderGRUs = new List<GRULayer<T>>();
-        _decoderGRUs = new List<GRULayer<T>>();
         _encoderDCGRUs = new List<DiffusionConvolutionalGRULayer<T>>();
         _decoderDCGRUs = new List<DiffusionConvolutionalGRULayer<T>>();
         _forwardPowers = new List<double[,]>();
@@ -447,13 +441,10 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     /// </remarks>
     private void ExtractLayerReferences()
     {
-        _encoderGRUs = new List<GRULayer<T>>();
-        _decoderGRUs = new List<GRULayer<T>>();
         _encoderDCGRUs = new List<DiffusionConvolutionalGRULayer<T>>();
         _decoderDCGRUs = new List<DiffusionConvolutionalGRULayer<T>>();
 
         var denseLayers = new List<DenseLayer<T>>();
-        int gruCount = 0;
         int dcgruCount = 0;
 
         foreach (var layer in Layers)
@@ -469,14 +460,6 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
                     _encoderDCGRUs.Add(dcgru);
                 else
                     _decoderDCGRUs.Add(dcgru);
-            }
-            else if (layer is GRULayer<T> gru)
-            {
-                gruCount++;
-                if (gruCount <= _numEncoderLayers)
-                    _encoderGRUs.Add(gru);
-                else
-                    _decoderGRUs.Add(gru);
             }
         }
 
@@ -1494,8 +1477,6 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
         if (disposing)
         {
             OnnxSession?.Dispose();
-            _encoderGRUs.Clear();
-            _decoderGRUs.Clear();
             _encoderDCGRUs.Clear();
             _decoderDCGRUs.Clear();
             _forwardPowers.Clear();

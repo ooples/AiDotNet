@@ -344,7 +344,7 @@ public partial class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>,
     public IReadOnlyList<LanguageSegment<T>> IdentifyLanguageSegments(Tensor<T> audio, int windowSizeMs = 2000)
     {
         var segments = new List<LanguageSegment<T>>();
-        int samplesPerWindow = (int)(SampleRate * windowSizeMs / 1000.0);
+        int samplesPerWindow = (int)((double)SampleRate * windowSizeMs / 1000.0);
         int hopSamples = samplesPerWindow / 2; // 50% overlap
 
         int totalSamples = audio.Length;
