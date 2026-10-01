@@ -112,6 +112,17 @@ public class SImPaOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     public int KLEstimatorHiddenWidth { get; set; } = 64;
 
     /// <summary>
+    /// Gets or sets the ascent step size for <c>phi_0</c>, the meta-level initialisation of the
+    /// phi-network (Algorithm 1 line 13). Default 1e-2.
+    /// </summary>
+    /// <remarks>
+    /// Separate from <see cref="KLEstimatorLearningRate"/> because the two move different objects: that
+    /// one is the WITHIN-task ascent that produces <c>phi_i</c> from <c>phi_0</c> (line 20), this one is
+    /// the ACROSS-task ascent that moves <c>phi_0</c> itself. The paper states neither value.
+    /// </remarks>
+    public double PhiMetaLearningRate { get; set; } = 1e-2;
+
+    /// <summary>
     /// Gets or sets epsilon, the bound's confidence parameter. Default 0.1, the paper's value.
     /// </summary>
     public double Epsilon { get; set; } = PacBayesMetaBound.PaperEpsilon;
@@ -149,7 +160,7 @@ public class SImPaOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
         && GeneratorFirstHiddenWidth > 0 && GeneratorSecondHiddenWidth > 0
         && TrainingPosteriorSamples > 0 && AdaptationPosteriorSamples > 0
         && KLMonteCarloSamples > 0 && KLEstimatorSteps >= 0 && KLEstimatorLearningRate > 0
-        && KLEstimatorHiddenWidth > 0
+        && KLEstimatorHiddenWidth > 0 && PhiMetaLearningRate > 0
         && Epsilon > 0 && Epsilon <= 1
         && PriorStdDev > 0 && MetaPosteriorStdDev > 0;
 
@@ -171,6 +182,7 @@ public class SImPaOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
         KLEstimatorSteps = KLEstimatorSteps,
         KLEstimatorLearningRate = KLEstimatorLearningRate,
         KLEstimatorHiddenWidth = KLEstimatorHiddenWidth,
+        PhiMetaLearningRate = PhiMetaLearningRate,
         Epsilon = Epsilon, PriorStdDev = PriorStdDev, MetaPosteriorStdDev = MetaPosteriorStdDev,
     };
 }

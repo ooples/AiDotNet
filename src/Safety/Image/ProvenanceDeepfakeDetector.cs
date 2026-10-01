@@ -49,10 +49,8 @@ namespace AiDotNet.Safety.Image;
     "https://arxiv.org/abs/2408.09647",
     Year = 2024,
     Authors = "Chuangchuang Tan, Renshuai Tao, et al.")]
-public class ProvenanceDeepfakeDetector<T> : ImageSafetyModuleBase<T>
+public class ProvenanceDeepfakeDetector<T> : DeepfakeDetectorBase<T>
 {
-
-    private readonly double _threshold;
 
     private static readonly T Zero = NumOps.Zero;
     private static readonly T One = NumOps.One;
@@ -65,54 +63,88 @@ public class ProvenanceDeepfakeDetector<T> : ImageSafetyModuleBase<T>
     /// </summary>
     /// <param name="threshold">Detection threshold (0-1). Default: 0.5.</param>
     public ProvenanceDeepfakeDetector(double threshold = 0.5)
+        : base(threshold)
     {
-        _threshold = threshold;
     }
 
     /// <inheritdoc />
     public override IReadOnlyList<SafetyFinding> EvaluateImage(Tensor<T> image)
     {
         var findings = new List<SafetyFinding>();
-        var span = image.Data.Span;
-        if (span.Length == 0) return findings;
+        var analysis = Analyze(image);
+        if (analysis is null) return findings;
 
-        var layout = DetermineLayout(image._shape, span.Length);
-        if (layout.Height < 16 || layout.Width < 16) return findings;
-
-        // 1. Noise floor analysis
-        double noiseFloorAnomaly = AnalyzeNoiseFloor(span, layout);
-
-        // 2. JPEG artifact consistency
-        double jpegAnomaly = AnalyzeJPEGArtifacts(span, layout);
-
-        // 3. LBP texture fingerprint
-        double textureAnomaly = AnalyzeLBPTexture(span, layout);
-
-        // 4. Color channel statistics
-        double colorAnomaly = AnalyzeColorStatistics(span, layout);
-
-        // Combined score
-        double finalScore = 0.25 * noiseFloorAnomaly +
-                           0.25 * jpegAnomaly +
-                           0.25 * textureAnomaly +
-                           0.25 * colorAnomaly;
-
-        if (finalScore >= _threshold)
+        double finalScore = analysis.Score;
+        if (finalScore >= Threshold)
         {
             findings.Add(new SafetyFinding
             {
                 Category = SafetyCategory.AIGenerated,
                 Severity = finalScore >= 0.8 ? SafetySeverity.High : SafetySeverity.Medium,
-                Confidence = Math.Min(1.0, finalScore),
+                Confidence = finalScore,
                 Description = $"Provenance analysis: potential AI-generated image (score: {finalScore:F3}). " +
-                              $"Noise floor: {noiseFloorAnomaly:F3}, JPEG artifacts: {jpegAnomaly:F3}, " +
-                              $"texture: {textureAnomaly:F3}, color: {colorAnomaly:F3}.",
+                              $"Noise floor: {analysis.NoiseFloor:F3}, JPEG artifacts: {analysis.Jpeg:F3}, " +
+                              $"texture: {analysis.Texture:F3}, color: {analysis.Color:F3}.",
                 RecommendedAction = SafetyAction.Warn,
                 SourceModule = ModuleName
             });
         }
 
         return findings;
+    }
+
+    /// <inheritdoc />
+    /// <exception cref="ArgumentNullException"><paramref name="image"/> is null.</exception>
+    /// <exception cref="ArgumentException">
+    /// The image is smaller than 16x16 pixels. A score of 0 would read as "authentic" for an image that
+    /// was never analysed.
+    /// </exception>
+    public override double GetDeepfakeScore(Tensor<T> image)
+    {
+        if (image is null) throw new ArgumentNullException(nameof(image));
+        var analysis = Analyze(image);
+        if (analysis is null)
+        {
+            throw new ArgumentException(
+                "Provenance analysis needs an image of at least 16x16 pixels.", nameof(image));
+        }
+
+        return analysis.Score;
+    }
+
+    /// <summary>The four provenance measurements and their weighted score.</summary>
+    private sealed class Analysis
+    {
+        public double NoiseFloor { get; set; }
+        public double Jpeg { get; set; }
+        public double Texture { get; set; }
+        public double Color { get; set; }
+        public double Score { get; set; }
+    }
+
+    /// <summary>Measures the image, or returns null when it is too small to analyse.</summary>
+    private Analysis? Analyze(Tensor<T> image)
+    {
+        var span = image.Data.Span;
+        if (span.Length == 0) return null;
+
+        var layout = DetermineLayout(image._shape, span.Length);
+        if (layout.Height < 16 || layout.Width < 16) return null;
+
+        var analysis = new Analysis
+        {
+            // 1. Noise floor analysis
+            NoiseFloor = AnalyzeNoiseFloor(span, layout),
+            // 2. JPEG artifact consistency
+            Jpeg = AnalyzeJPEGArtifacts(span, layout),
+            // 3. LBP texture fingerprint
+            Texture = AnalyzeLBPTexture(span, layout),
+            // 4. Color channel statistics
+            Color = AnalyzeColorStatistics(span, layout),
+        };
+        analysis.Score = Math.Min(1.0,
+            0.25 * analysis.NoiseFloor + 0.25 * analysis.Jpeg + 0.25 * analysis.Texture + 0.25 * analysis.Color);
+        return analysis;
     }
 
     /// <summary>

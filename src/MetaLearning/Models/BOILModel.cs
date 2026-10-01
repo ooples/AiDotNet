@@ -3,9 +3,11 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Options;
 using AiDotNet.Models;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
@@ -19,21 +21,12 @@ namespace AiDotNet.MetaLearning.Models;
 /// <typeparam name="TOutput">The output data type.</typeparam>
 /// <remarks>
 /// <para>
-/// This model stores the adapted state of BOIL after inner-loop adaptation.
-/// It contains the adapted feature extractor (body) and the frozen classification head.
+/// The adapted state of BOIL for one task: its own copy of the body, carrying the parameters the inner loop adapted,
+/// and the head, which the inner loop does not change. The body embeds every row and the head scores each embedding,
+/// so a batch of <c>n</c> examples yields <c>[n, NumClasses]</c> scores.
 /// </para>
-/// <para><b>For Beginners:</b> After BOIL adapts to a new task by training only
-/// the feature extractor (body) on support examples, this model stores:
-/// </para>
-/// <list type="bullet">
-/// <item>The adapted body (feature extractor) specific to this task</item>
-/// <item>The frozen head weights from meta-training</item>
-/// <item>The frozen head bias (if used)</item>
-/// </list>
-/// <para>
-/// When making predictions, the model extracts features using the adapted body
-/// and classifies using the frozen head. This is the opposite of ANIL which
-/// freezes the body and adapts the head.
+/// <para><b>For Beginners:</b> After BOIL adapts its feature extractor to a new task, this model stores that adapted
+/// extractor together with the shared classifier head, and uses both to score new examples.
 /// </para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
@@ -50,9 +43,7 @@ namespace AiDotNet.MetaLearning.Models;
 [PipelineStage(PipelineStage.Training)]
 public partial class BOILModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-
-    private readonly IFullModel<T, TInput, TOutput> _baseModel;
+    private readonly IFullModel<T, TInput, TOutput> _body;
     [AiDotNet.Attributes.TrainableParameter]
     private readonly Vector<T> _adaptedBodyParams;
     [AiDotNet.Attributes.TrainableParameter]
@@ -64,12 +55,17 @@ public partial class BOILModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
     /// <summary>
     /// Initializes a new instance of the BOILModel.
     /// </summary>
-    /// <param name="baseModel">The base model to use for feature extraction.</param>
+    /// <param name="baseModel">The body whose architecture the adapted parameters belong to; this model copies it.</param>
     /// <param name="adaptedBodyParams">The adapted body parameters for this task.</param>
-    /// <param name="headWeights">The frozen head weight parameters.</param>
-    /// <param name="headBias">The frozen head bias parameters (optional).</param>
+    /// <param name="headWeights">The head weights, <c>[NumClasses x FeatureDimension]</c> row-major.</param>
+    /// <param name="headBias">The head bias, <c>[NumClasses]</c>, or null for none.</param>
     /// <param name="options">The BOIL options.</param>
     /// <exception cref="ArgumentNullException">Thrown when required parameters are null.</exception>
+    /// <remarks>
+    /// The model keeps its own copy of the body. It used to write the adapted parameters into the base model it was
+    /// handed on every Predict - and Adapt handed it the meta-model itself, so predicting with an adapted model
+    /// overwrote the meta-learned body.
+    /// </remarks>
     public BOILModel(
         IFullModel<T, TInput, TOutput> baseModel,
         Vector<T> adaptedBodyParams,
@@ -78,13 +74,14 @@ public partial class BOILModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
         BOILOptions<T, TInput, TOutput> options)
     {
         Guard.NotNull(baseModel);
-        _baseModel = baseModel;
         Guard.NotNull(adaptedBodyParams);
-        _adaptedBodyParams = adaptedBodyParams;
         Guard.NotNull(headWeights);
+        Guard.NotNull(options);
+        _body = baseModel.DeepCopy();
+        InterfaceGuard.Parameterizable(_body).SetParameters(adaptedBodyParams);
+        _adaptedBodyParams = adaptedBodyParams;
         _headWeights = headWeights;
         _headBias = headBias;
-        Guard.NotNull(options);
         _options = options;
     }
 
@@ -97,12 +94,12 @@ public partial class BOILModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
     public Vector<T> AdaptedBodyParams => _adaptedBodyParams;
 
     /// <summary>
-    /// Gets the frozen head weights.
+    /// Gets the head weights.
     /// </summary>
     public Vector<T> HeadWeights => _headWeights;
 
     /// <summary>
-    /// Gets the frozen head bias (may be null if not used).
+    /// Gets the head bias (may be null if not used).
     /// </summary>
     public Vector<T>? HeadBias => _headBias;
 
@@ -117,19 +114,22 @@ public partial class BOILModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
     public int FeatureDimension => _options.FeatureDimension;
 
     /// <inheritdoc/>
+    /// <remarks>One score row per example, <c>[rows, NumClasses]</c>.</remarks>
     public TOutput Predict(TInput input)
     {
-        // Apply adapted body parameters to model
-        ApplyAdaptedBodyParameters();
+        using var noGrad = new NoGradScope<T>();
+        var embeddings = ClassifierOutputs<T>.AsRows(_body.Predict(input));
+        if (embeddings.Shape[1] != _options.FeatureDimension)
+        {
+            throw new InvalidOperationException(
+                $"The body emits {embeddings.Shape[1]}-wide embeddings per example but the head reads "
+                + $"FeatureDimension = {_options.FeatureDimension}.");
+        }
 
-        // Extract features using adapted body
-        var features = ExtractFeatures(input);
-
-        // Apply frozen head
-        var logits = ComputeLogits(features);
-
-        // Convert to output type
-        return ConvertToOutput(logits);
+        var weights = Tensor<T>.FromVector(_headWeights).Reshape(_options.NumClasses, _options.FeatureDimension);
+        var bias = _headBias is { Length: > 0 } ? Tensor<T>.FromVector(_headBias) : null;
+        var scores = EmbeddingClassificationLoss<T>.LinearHead(embeddings, weights, bias);
+        return ClassifierOutputs<T>.ToOutput<TOutput>(scores);
     }
 
     /// <inheritdoc/>
@@ -175,107 +175,5 @@ public partial class BOILModel<T, TInput, TOutput> : IModel<TInput, TOutput, Mod
     public ModelMetadata<T> GetModelMetadata()
     {
         return Metadata;
-    }
-
-    /// <summary>
-    /// Applies the adapted body parameters to the base model.
-    /// </summary>
-    private void ApplyAdaptedBodyParameters()
-    {
-        var currentParams = InterfaceGuard.Parameterizable(_baseModel).GetParameters();
-        var updatedParams = new Vector<T>(currentParams.Length);
-
-        // Apply adapted body parameters
-        int copyLen = Math.Min(_adaptedBodyParams.Length, currentParams.Length);
-        for (int i = 0; i < copyLen; i++)
-        {
-            updatedParams[i] = _adaptedBodyParams[i];
-        }
-
-        // Keep head parameters from the original model
-        for (int i = copyLen; i < currentParams.Length; i++)
-        {
-            updatedParams[i] = currentParams[i];
-        }
-
-        InterfaceGuard.Parameterizable(_baseModel).SetParameters(updatedParams);
-    }
-
-    /// <summary>
-    /// Extracts features from input using the adapted body.
-    /// </summary>
-    private Vector<T> ExtractFeatures(TInput input)
-    {
-        var output = _baseModel.Predict(input);
-
-        if (output is Vector<T> vec)
-        {
-            return vec;
-        }
-
-        if (output is Tensor<T> tensor)
-        {
-            return tensor.ToVector();
-        }
-
-        // Return a default feature vector
-        return new Vector<T>(_options.FeatureDimension);
-    }
-
-    /// <summary>
-    /// Computes logits from features using frozen head parameters.
-    /// </summary>
-    private Vector<T> ComputeLogits(Vector<T> features)
-    {
-        var logits = new Vector<T>(_options.NumClasses);
-        int featureDim = Math.Min(features.Length, _options.FeatureDimension);
-
-        for (int c = 0; c < _options.NumClasses; c++)
-        {
-            T sum = NumOps.Zero;
-
-            for (int f = 0; f < featureDim; f++)
-            {
-                int weightIdx = c * _options.FeatureDimension + f;
-                if (weightIdx < _headWeights.Length)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(features[f], _headWeights[weightIdx]));
-                }
-            }
-
-            if (_headBias != null && c < _headBias.Length)
-            {
-                sum = NumOps.Add(sum, _headBias[c]);
-            }
-
-            logits[c] = sum;
-        }
-
-        return logits;
-    }
-
-    /// <summary>
-    /// Converts logits to the expected output type.
-    /// </summary>
-    private TOutput ConvertToOutput(Vector<T> logits)
-    {
-        if (typeof(TOutput) == typeof(Vector<T>))
-        {
-            return (TOutput)(object)logits;
-        }
-
-        if (typeof(TOutput) == typeof(Tensor<T>))
-        {
-            return (TOutput)(object)Tensor<T>.FromVector(logits);
-        }
-
-        if (typeof(TOutput) == typeof(T[]))
-        {
-            return (TOutput)(object)logits.ToArray();
-        }
-
-        throw new InvalidOperationException(
-            $"Cannot convert Vector<{typeof(T).Name}> to {typeof(TOutput).Name}. " +
-            $"Supported types: Vector<T>, Tensor<T>, T[]");
     }
 }

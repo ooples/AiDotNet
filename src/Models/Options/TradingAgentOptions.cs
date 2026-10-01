@@ -1,4 +1,4 @@
-﻿using AiDotNet.Interfaces;
+using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 
 namespace AiDotNet.Models.Options;

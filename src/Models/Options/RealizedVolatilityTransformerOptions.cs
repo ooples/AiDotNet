@@ -69,6 +69,24 @@ public class RealizedVolatilityTransformerOptions<T> : ModelOptions
     public double DropoutRate { get; set; } = 0.1;
 
     /// <summary>
+    /// Gets or sets the Adam learning rate used when no optimizer is supplied to the constructor.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Defaults to 3e-4 rather than Adam's stock 1e-3. Adam's first update is very close to
+    /// sign(gradient) * learningRate on every parameter at once, and at 1e-3 that coherent step
+    /// is large enough on a 128-wide, 2-block encoder to throw the forecast far past the target
+    /// before the moment estimates settle. Measured over eight random initializations at ten
+    /// steps each, 1e-3 left the loss above where it started once in eight runs while 3e-4
+    /// reduced it every time and to the lowest value of any rate tried.
+    /// </para>
+    /// <para><b>For Beginners:</b> How big a step the model takes each time it learns. Pass your
+    /// own optimizer to the constructor if you want a different rule entirely; this only sets the
+    /// rate of the default one.</para>
+    /// </remarks>
+    public double LearningRate { get; set; } = 3e-4;
+
+    /// <summary>
     /// Validates the option values.
     /// </summary>
     /// <remarks>
@@ -90,5 +108,7 @@ public class RealizedVolatilityTransformerOptions<T> : ModelOptions
             throw new ArgumentOutOfRangeException(nameof(NumLayers), "NumLayers must be at least 1.");
         if (DropoutRate < 0 || DropoutRate >= 1)
             throw new ArgumentOutOfRangeException(nameof(DropoutRate), "DropoutRate must be in [0, 1).");
+        if (double.IsNaN(LearningRate) || double.IsInfinity(LearningRate) || LearningRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(LearningRate), "LearningRate must be finite and positive.");
     }
 }

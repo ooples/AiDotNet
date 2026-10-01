@@ -12,7 +12,7 @@ namespace AiDotNet.Diffusion.Conditioning;
 /// advertised no configuration surface and nothing could be set through an options object.
 /// </para>
 /// </remarks>
-public class ChatGLM3TextConditionerOptions : ModelHyperparameterOptions
+public class ChatGLM3TextConditionerOptions : TextConditionerOptions
 {
     /// <summary>
     /// Gets or sets which published size of the model to build. Default: <c>ChatGLM3Variant.SixB</c>.
@@ -28,16 +28,23 @@ public class ChatGLM3TextConditionerOptions : ModelHyperparameterOptions
     public ChatGLM3Variant Variant { get; set; } = ChatGLM3Variant.SixB;
 
     /// <summary>
+    /// Key/value heads for grouped-query attention; must divide <see cref="TextConditionerOptions.NumHeads"/>.
+    /// Null keeps the variant's value.
+    /// </summary>
+    public int? NumKvHeads { get; set; }
+
+    /// <summary>
     /// Throws when a value on this instance cannot produce a working conditioner.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <see cref="Variant"/> is an enum, so every value it can hold is buildable and there is
-    /// nothing to reject. The method exists so this class states that deliberately rather than by
-    /// omission.
+    /// <see cref="Variant"/> is an enum, so every value it can hold is buildable. The dimension
+    /// overrides are checked: each one that is set must be positive.
     /// </para>
     /// </remarks>
     public void Validate()
     {
+        ValidateDimensionOverrides();
+        RequireIfSet(NumKvHeads, nameof(NumKvHeads));
     }
 }

@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -85,15 +85,22 @@ public abstract partial class TextConditioningBase<T> : NeuralNetworkBase<T>, IC
     /// <param name="maxSequenceLength">Maximum token sequence length.</param>
     /// <param name="embeddingDimension">Output embedding dimension.</param>
     /// <param name="lossFunction">Optional loss function; defaults to MSE for inference-only paths.</param>
+    /// <param name="options">
+    /// The conditioner's own options. Kept in the base <c>Options</c>, which is where the clone generator sources a
+    /// subclass's <c>options</c> constructor argument: left at the default <see cref="NeuralNetworkOptions"/>, a clone
+    /// found a value that is not the subclass's options type and could not rebuild the conditioner at all.
+    /// </param>
     protected TextConditioningBase(
         NeuralNetworkArchitecture<T> architecture,
         ITokenizer tokenizer,
         int maxSequenceLength,
         int embeddingDimension,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        TextConditionerOptions? options = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>())
     {
         Guard.NotNull(tokenizer);
+        if (options is not null) Options = options;
         Tokenizer = tokenizer;
         MaxSequenceLength = maxSequenceLength;
         EmbeddingDimension = embeddingDimension;
@@ -145,12 +152,17 @@ public abstract partial class TextConditioningBase<T> : NeuralNetworkBase<T>, IC
     /// </summary>
     private Tensor<T> RunLayerStack(Tensor<T> input)
     {
-        // Lazy layer init: defer materialising the layer stack until the
-        // first forward pass. Cheap construction of large variants (T5-XXL,
-        // CLIP-bigG, Qwen2-7B) — caller pays only when they actually run
-        // a forward, not when they merely build the object. Matches the
-        // PyTorch convention where nn.Module subclasses build their
-        // submodules eagerly but weights are lazy.
+        // Safety net only. Every concrete conditioner now calls InitializeLayers() from its own
+        // constructor, where its fields are set — the base cannot, because CreateDefaultLayers is
+        // abstract and reads subclass state.
+        //
+        // This used to be the ONLY place the stack was built, which meant ParameterCount,
+        // GetParameters, named activations, serialization and clone all saw a model with no layers
+        // until someone ran a forward (#2151). The comment here claimed it matched "the PyTorch
+        // convention where nn.Module subclasses build their submodules eagerly but weights are
+        // lazy" while doing the opposite — PyTorch defers WEIGHTS, not submodules. AiDotNet's
+        // layers are weight-lazy already, so building the objects costs no weights and the
+        // large-variant saving the deferral protected is untouched.
         if (Layers.Count == 0) InitializeLayers();
         var x = input;
         foreach (var layer in Layers) x = layer.Forward(x);

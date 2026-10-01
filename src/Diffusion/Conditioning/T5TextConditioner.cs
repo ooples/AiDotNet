@@ -1,4 +1,4 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -31,9 +31,15 @@ namespace AiDotNet.Diffusion.Conditioning;
 public class T5TextConditioner<T> : TextConditioningBase<T>
 {
     private readonly T5Variant _variant;
+    /// <summary>Explicit transformer dimensions; null means the variant's paper value.</summary>
+    private readonly int? _hiddenSizeOverride;
+    private readonly int? _numLayersOverride;
+    private readonly int? _numHeadsOverride;
 
     public override bool ProducesPooledOutput => false;
 
+    /// <param name="options">The variant and optional transformer dimensions; each unset dimension
+    /// keeps the variant's paper value, and the embedding dimension follows the hidden size.</param>
     public T5TextConditioner(ITokenizer tokenizer,
         NeuralNetworkArchitecture<T>? architecture = null,
         T5TextConditionerOptions? options = null)
@@ -41,10 +47,36 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
             architecture: architecture ?? BuildDefaultArchitecture((options ??= new T5TextConditionerOptions()).Variant),
             tokenizer: tokenizer,
             maxSequenceLength: 512,
-            embeddingDimension: GetEmbeddingDim((options ??= new T5TextConditionerOptions()).Variant))
+            embeddingDimension: (options ??= new T5TextConditionerOptions()).HiddenSize ?? GetEmbeddingDim(options.Variant),
+            options: options)
     {
         Guard.NotNull(tokenizer);
+        options.Validate();
         _variant = options.Variant;
+        int? hiddenSize = options.HiddenSize;
+        int? numLayers = options.NumLayers;
+        int? numHeads = options.NumHeads;
+        int effectiveHidden = hiddenSize ?? GetHiddenSize(_variant);
+        int effectiveHeads = numHeads ?? GetNumHeads(_variant);
+        if (effectiveHidden % effectiveHeads != 0)
+            throw new ArgumentException(
+                $"hiddenSize ({effectiveHidden}) must be divisible by numHeads ({effectiveHeads}).",
+                nameof(options));
+        _hiddenSizeOverride = hiddenSize;
+        _numLayersOverride = numLayers;
+        _numHeadsOverride = numHeads;
+    
+        // Build the layer stack here, where this subclass's own fields are set. The base cannot do
+        // it: CreateDefaultLayers is abstract and reads subclass state (CLIP reads _variant), so a
+        // call from the base constructor would run before those fields exist - which is why the
+        // stack was previously deferred to the first forward instead.
+        //
+        // Deferring it made ParameterCount, GetParameters, named activations, serialization and
+        // clone all see a model with no layers at all until someone ran a forward (#2151). The
+        // saving that deferral was protecting is unaffected: AiDotNet's layers are weight-lazy
+        // (InputShape[0] = -1 until resolved), so constructing the layer OBJECTS allocates no
+        // weights, and a T5-XXL variant still pays for its parameters only at first forward.
+        InitializeLayers();
     }
 
     /// <summary>
@@ -74,9 +106,9 @@ public class T5TextConditioner<T> : TextConditioningBase<T>
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers() =>
         LayerHelper<T>.CreateDefaultT5TextLayers(
             vocabSize: VocabSize,
-            hiddenSize: GetHiddenSize(_variant),
-            numLayers: GetNumLayers(_variant),
-            numHeads: GetNumHeads(_variant));
+            hiddenSize: _hiddenSizeOverride ?? GetHiddenSize(_variant),
+            numLayers: _numLayersOverride ?? GetNumLayers(_variant),
+            numHeads: _numHeadsOverride ?? GetNumHeads(_variant));
 
     /// <summary>
     /// T5 pools by mean over non-pad tokens. With fixed-length padding (the

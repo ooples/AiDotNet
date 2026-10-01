@@ -780,7 +780,9 @@ foreach ($k in 0..7) {
 }
 [void] $expectedInventoryShards.Add(@{ Name = 'Sweep - ParameterChunkParityTests'; Filter = 'FullyQualifiedName~ParameterChunkParityTests'; Env = @(); MustCover = 'src/NeuralNetworks/Layers/*' })
 [void] $expectedInventoryShards.Add(@{ Name = 'Sweep - ParameterEnumerationParityTests'; Filter = 'FullyQualifiedName~ParameterEnumerationParityTests'; Env = @() })
-foreach ($offset in (0..34 | ForEach-Object { $_ * 5 })) {
+# 34 windows of 5 cover the namespace's 170 models; a 35th window (offset 170) would select none and fail
+# the conformance test's non-vacuity assertion.
+foreach ($offset in (0..33 | ForEach-Object { $_ * 5 })) {
     [void] $expectedInventoryShards.Add(@{
         Name = "Conformance - VisionLanguage offset $offset"; Filter = 'FullyQualifiedName~ModelContractConformanceTests'
         MustCover = '*/VisionLanguage/*'
@@ -881,7 +883,7 @@ Assert-Contract ($shardRun.Contains('& ./.github/scripts/Set-ShardEnvironment.ps
     'the shard step does not apply the entry env through the validated helper'
 Assert-Contract ($shardRun.Contains("(`$heavyShards -contains `$shardName) -or (`$env:SHARD_HEAVY -eq 'true')")) `
     'a shard declaring heavy: true does not get the heavy path'
-# The 46 sweep and conformance shards exercise every model, so the map puts them on nearly every
+# The 45 sweep and conformance shards exercise every model, so the map puts them on nearly every
 # pull request (121 -> 75 shards measured on #2226). They are deferred to the nightly coverage run by
 # Get-DeferredNightlyShards, whose keep rules Test-CiWorkloads.ps1 exercises; this guards the wiring.
 Assert-Contract ($validation.Contains("if (-not `$escalate -and `$env:GITHUB_EVENT_NAME -in @('pull_request', 'push')) {") -and
@@ -919,8 +921,8 @@ foreach ($workflowFile in @(Get-ChildItem -LiteralPath (Split-Path -Parent $Vali
 # closes the other direction: no shard OUTSIDE that set can carry the flag either.
 $workerBackedCount = @($expectedInventoryShards | Where-Object { $_.ContainsKey('MustCover') }).Count
 $nightlyOnlyEntries = [regex]::Matches((Get-Content -LiteralPath $ShardManifest -Raw), '(?m)^    nightlyOnly: true[ \t]*\r?$').Count
-Assert-Contract ($workerBackedCount -eq 46 -and $nightlyOnlyEntries -eq $workerBackedCount) `
-    "expected nightlyOnly on exactly the 46 worker-backed sweep shards; found $nightlyOnlyEntries entries for $workerBackedCount worker-backed shards"
+Assert-Contract ($workerBackedCount -eq 45 -and $nightlyOnlyEntries -eq $workerBackedCount) `
+    "expected nightlyOnly on exactly the 45 worker-backed sweep shards; found $nightlyOnlyEntries entries for $workerBackedCount worker-backed shards"
 Assert-Contract ($shardRun.Contains('SHARD_COVERAGE_INCLUDE: ${{ matrix.shard.coverageIncludeDirectory }}') -and
         $shardRun.Contains('& ./.github/scripts/New-CoverageRunSettings.ps1 -Base coverlet.runsettings')) `
     'a shard whose models run in the worker never instruments the worker'
