@@ -780,13 +780,13 @@ foreach ($k in 0..7) {
 }
 [void] $expectedInventoryShards.Add(@{ Name = 'Sweep - ParameterChunkParityTests'; Filter = 'FullyQualifiedName~ParameterChunkParityTests'; Env = @(); MustCover = 'src/NeuralNetworks/Layers/*' })
 [void] $expectedInventoryShards.Add(@{ Name = 'Sweep - ParameterEnumerationParityTests'; Filter = 'FullyQualifiedName~ParameterEnumerationParityTests'; Env = @() })
-# 34 windows of 5 cover the namespace's 170 models; a 35th window (offset 170) would select none and fail
-# the conformance test's non-vacuity assertion.
+# 34 windows cover the namespace's models. Each shard keeps its "offset" name but selects its models by the
+# name-keyed window table (ADNSHAPE_CONF_WINDOW = offset / 5), so a new model moves only the window it joins.
 foreach ($offset in (0..33 | ForEach-Object { $_ * 5 })) {
     [void] $expectedInventoryShards.Add(@{
         Name = "Conformance - VisionLanguage offset $offset"; Filter = 'FullyQualifiedName~ModelContractConformanceTests'
         MustCover = '*/VisionLanguage/*'
-        Env = @("ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'", "ADNSHAPE_CONF_OFFSET: '$offset'", "ADNSHAPE_CONF_BUDGET: '5'") })
+        Env = @("ADNSHAPE_CONF_NAMESPACE: 'VisionLanguage'", "ADNSHAPE_CONF_WINDOW: '$($offset / 5)'") })
 }
 # The two repaired model-shape sweeps. Both were Category=Sweep tests that no shard filter selected and
 # that could not pass until their models were moved into the ParameterSweepWorker child process. They run
