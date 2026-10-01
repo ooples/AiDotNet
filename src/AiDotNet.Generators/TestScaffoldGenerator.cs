@@ -1081,8 +1081,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // ITrainingObjectiveProvider, so that measurement is taken over a FIXED (timestep,
             // noise) quadrature - the quantity the optimizer descends - and not the sampler's
             // forecast, whose reverse chain magnifies the bias a partially trained denoiser still
-            // carries. The strict-decrease threshold is unchanged. CSDI trains the same way and is
-            // a candidate for the same entry if its stochastic probe ever reverses.
+            // carries. The strict-decrease threshold is unchanged. CSDI trains the same way, and its
+            // stochastic probe reversed on PR #2277 (GetLastLoss 1.512 -> 1.549 over 20 steps:
+            // two single-timestep draws), so it now declares its objective and takes the entry.
             // The 200-step count is measured under that objective, not assumed: at the emitted 20
             // steps CCDM reads 0.996003 -> 1.006925, which is Adam's warm-up rather than a
             // training defect, and at 200 the models pass 3 runs of 3. TimeDiff predicts x_0
@@ -1095,6 +1096,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 "CCDM",
                 new WarmupIterationOverride(memorization: 200, deterministicMemorizationLoss: true)
+            },
+            {
+                "CSDI",
+                new WarmupIterationOverride(deterministicMemorizationLoss: true)
             },
             {
                 "TimeDiff",
