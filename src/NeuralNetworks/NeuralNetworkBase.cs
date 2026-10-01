@@ -3556,7 +3556,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         if (pending.Count > 0)
             destination.RebindLayerAliases(previousDestinationLayers, destination._layers);
-            destination.BindLayerGraphReferences();
+        destination.BindLayerGraphReferences();
 
         return true;
     }
@@ -14128,7 +14128,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     internal virtual void SetBaseTrainOptimizer(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
     {
-        if (!ReferenceEquals(_baseTrainOptimizer, optimizer))
+        // Interface-typed, so != is reference identity; ReferenceEquals would box a struct implementation and never match.
+        if (_baseTrainOptimizer != optimizer)
         {
             // The fused plan holds the PREVIOUS optimizer's moments. A different optimizer instance starts from its
             // own (fresh) state, as it would eagerly, so this model's compiled optimizer state is dropped rather than
