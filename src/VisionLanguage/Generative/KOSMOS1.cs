@@ -33,10 +33,10 @@ namespace AiDotNet.VisionLanguage.Generative;
 /// linearly projected into the same embedding space as text, then the combined image-text
 /// sequence is processed by a standard causal transformer for unified multimodal understanding
 /// and generation. Default values follow the original paper settings.</para>
-/// <para><b>Architecture layout:</b> Vision encoder + projection live in
-/// <see cref="NeuralNetworkBase{T}.Layers"/>; the causal transformer decoder lives in a private
-/// auxiliary stream. <see cref="Predict"/> returns the vision-only embedding;
-/// <see cref="GenerateFromImage"/> walks both streams to generate the multimodal output.</para>
+/// <para><b>Architecture layout:</b> the vision encoder, the image resampler and the causal MAGNETO decoder are all in
+/// <see cref="NeuralNetworkBase{T}.Layers"/>, so each is trained, serialized and counted. They are not a sequential
+/// pass: <see cref="Predict"/> runs them directly and returns the next-token logits after the image block, and
+/// <see cref="GenerateFromImage"/> decodes a caption.</para>
 /// </remarks>
 /// <example>
 /// <code>
@@ -204,6 +204,7 @@ public partial class KOSMOS1<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
                 "exchange image embeddings through the token sequence, which a flat layer list cannot express.");
         _core = new KosmosModelCore<T>(_options, true, _options.ResamplerDepth, KosmosPositionEncoding.XPos);
         Layers.AddRange(_core.Layers());
+        RegisterAuxiliaryEncoderStream(_core.DecoderStream());
     }
 
     private int[] TokenizeText(string text)

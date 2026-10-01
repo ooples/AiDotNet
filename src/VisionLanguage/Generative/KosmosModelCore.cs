@@ -36,8 +36,15 @@ internal sealed class KosmosModelCore<T>
     {
         yield return Vision;
         yield return Resampler;
-        // The decoder reads the token sequence; the resampler's output enters it through the image slots.
+        // The decoder reads the token sequence; the resampler's output enters it through the image slots. It is not a
+        // step of this sequence, so a model registers it as an auxiliary stream (see DecoderStream).
     }
+
+    /// <summary>
+    /// The decoder as an auxiliary stream: it owns the token embeddings and every MAGNETO block, which must be trained,
+    /// counted and checkpointed like the layers above, but it is not a sequential step after the resampler.
+    /// </summary>
+    public List<ILayer<T>> DecoderStream() => new() { Decoder };
 
     /// <summary><c>&lt;s&gt; &lt;image&gt; [K slots] &lt;/image&gt;</c>.</summary>
     public int HeaderLength => _options.NumImageTokens + 3;

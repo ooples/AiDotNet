@@ -135,6 +135,32 @@ public class KosmosBehaviourTests
         for (int i = 0; i < tokens.Length; i++) Assert.InRange(tokens[i], 0, 39);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void The_decoder_is_counted_and_checkpointed(bool kosmos1)
+    {
+        // The decoder holds the token embeddings and every MAGNETO block. Outside the model's parameter walk it was
+        // missing from ParameterCount and from every checkpoint, so a reloaded model got a fresh decoder.
+        IDisposable Build() => kosmos1
+            ? new KOSMOS1<double>(Architecture(), Small(new KOSMOS1Options { ResamplerDepth = 1 }))
+            : new KOSMOS2<double>(Architecture(), Small(new KOSMOS2Options()));
+        using var trained = Build();
+        using var image = Image(6);
+        int[] caption = { 9, 14, 3, 21, 2 };
+        var handle = trained is KOSMOS1<double> t1 ? new VisionLanguageModelBaseHandle(t1) : new VisionLanguageModelBaseHandle((KOSMOS2<double>)trained);
+        for (int step = 0; step < 3; step++) handle.TrainCaption(image, caption);
+        var network = (NeuralNetworkBase<double>)trained;
+        // 40 x 16 token embeddings alone exceed what the vision encoder and resampler of this size hold together.
+        Assert.True(network.ParameterCount > 40 * 16, $"ParameterCount {network.ParameterCount} leaves out the decoder");
+
+        using var reloaded = Build();
+        ((NeuralNetworkBase<double>)reloaded).Deserialize(network.Serialize());
+        var expected = Predict(trained, image, new[] { 9, 14 });
+        var actual = Predict(reloaded, image, new[] { 9, 14 });
+        for (int i = 0; i < expected.Length; i++)
+            Assert.True(Math.Abs(expected[i] - actual[i]) < 1e-9, $"logit {i} differs after a checkpoint round trip: the decoder was not saved");
+    }
     private static Tensor<double> Predict(IDisposable model, Tensor<double> image, int[] prompt) => model switch
     {
         KOSMOS1<double> k1 => k1.PredictTokens(image, prompt),

@@ -200,6 +200,7 @@ public partial class KOSMOS2<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
                 "exchange image embeddings through the token sequence, which a flat layer list cannot express.");
         _core = new KosmosModelCore<T>(_options, false, 1, KosmosPositionEncoding.Sinusoidal);
         Layers.AddRange(_core.Layers());
+        RegisterAuxiliaryEncoderStream(_core.DecoderStream());
     }
 
     private int[] TokenizeText(string text)
