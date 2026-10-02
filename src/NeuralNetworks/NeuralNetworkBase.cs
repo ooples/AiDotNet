@@ -10818,7 +10818,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </summary>
     private void ClampStreamingGradientByValue(Tensor<T> grad, double maxValue)
     {
-        if (!(maxValue > 0.0) || double.IsInfinity(maxValue)) return;
+        if (double.IsNaN(maxValue) || maxValue <= 0.0 || double.IsInfinity(maxValue)) return;
         T upper = NumOps.FromDouble(maxValue);
         T lower = NumOps.FromDouble(-maxValue);
         var span = grad.Data.Span;
@@ -10990,19 +10990,20 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // Match ApplyGradientClipping exactly: only scale down when the norm
             // exceeds the cap; the +1e-6 mirrors PyTorch's clip_grad_norm_ denominator.
             double totalNorm = Math.Sqrt(totalNormSq);
-            double networkScale = maxGradNorm > 0.0 && totalNormSq > 0.0 && totalNorm > maxGradNorm
-                ? maxGradNorm / (totalNorm + 1e-6)
-                : 1.0;
+            bool networkClips = maxGradNorm > 0.0 && totalNormSq > 0.0 && totalNorm > maxGradNorm;
+            double networkScale = networkClips ? maxGradNorm / (totalNorm + 1e-6) : 1.0;
             // Then the optimizer's own clip, over the network-clipped gradients, as its Step sees them:
             // scale by maxNorm / globalNorm, with no epsilon (ApplyGlobalNormGradientClipping).
+            bool optimizerClips = false;
             double optimizerScale = 1.0;
             if (optimizerClipNorm > 0.0)
             {
                 double clippedNorm = Math.Sqrt(networkScale * networkScale * totalNormSq + outsideClipSetNormSq);
-                if (clippedNorm > optimizerClipNorm && !double.IsNaN(clippedNorm) && !double.IsInfinity(clippedNorm))
+                optimizerClips = clippedNorm > optimizerClipNorm && !double.IsNaN(clippedNorm) && !double.IsInfinity(clippedNorm);
+                if (optimizerClips)
                     optimizerScale = optimizerClipNorm / clippedNorm;
             }
-            bool scaleDown = networkScale != 1.0 || optimizerScale != 1.0;
+            bool scaleDown = networkClips || optimizerClips;
             T scale = NumOps.FromDouble(networkScale * optimizerScale);
             T outsideClipSetScale = NumOps.FromDouble(optimizerScale);
 
