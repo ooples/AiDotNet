@@ -158,7 +158,6 @@ jobs:
           }
           $memTotalBytes = [long]$memTotalLine.Matches[0].Groups[1].Value * 1024
           $heapCapBytes  = [long]($memTotalBytes * 0.7)
-          $env:DOTNET_GCHeapHardLimit = '0x{0:X}' -f $heapCapBytes
           Write-Host ("--- per-chunk managed heap cap: {0:N0} MB of {1:N0} MB ---" -f ($heapCapBytes / 1MB), ($memTotalBytes / 1MB))
           function Get-AvailableMemoryMb {
             # /proc/meminfo is the runner's own view. nproc-based estimates and GC counters both
@@ -210,6 +209,8 @@ jobs:
           $failed = 0
           $index  = 0
 
+          # Set only now, so discovery above is never constrained by the cap.
+          $env:DOTNET_GCHeapHardLimit = '0x{0:X}' -f $heapCapBytes
           foreach ($chunk in $chunks) {
             $index++
             $label   = 'chunk{0:d3}' -f $index

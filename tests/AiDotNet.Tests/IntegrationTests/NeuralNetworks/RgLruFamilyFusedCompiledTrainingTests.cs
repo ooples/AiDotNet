@@ -47,6 +47,68 @@ public sealed class RgLruFamilyFusedCompiledTrainingTests
     }
 
     /// <summary>
+    /// The recurrence's own parameters must train the same compiled as eager. The assertions above accept any
+    /// non-zero model gradient, which the residual path satisfies even if the fused scan contributed none; this
+    /// pins the scan itself. Both runs start from one parameter vector and take one step at a learning rate
+    /// small enough that the update is the gradient.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task Griffin_RecurrenceParameters_TrainTheSameCompiledAndEager()
+    {
+        await Task.Yield();
+        var originalOptions = TensorCodecOptions.Current;
+        try
+        {
+            using var compiled = new TestableGriffin(CreateArchitecture());
+            using var eager = new TestableGriffin(CreateArchitecture());
+            eager.UpdateParameters(compiled.GetParameters());
+
+            var input = new Tensor<double>([32]);
+            for (int i = 0; i < input.Length; i++) input[i] = i % 128;
+            var prediction = compiled.Predict(input);
+            var target = new Tensor<double>(prediction.Shape.ToArray());
+            int rows = target.Length / 128;
+            for (int row = 0; row < rows; row++) target[(row * 128) + ((row + 1) % 128)] = 1.0;
+
+            double[] Step(TestableGriffin model, bool compile)
+            {
+                TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = compile });
+                CompiledTapeTrainingStep<double>.Invalidate();
+                CompiledTapeTrainingStep<double>.ResetFusedStepCount();
+                var before = RecurrenceParameters(model);
+                model.Train(input, target);
+                if (compile)
+                    Assert.True(CompiledTapeTrainingStep<double>.GetFusedStepCount() > 0, "the compiled run did not take the fused step");
+                var after = RecurrenceParameters(model);
+                var delta = new double[before.Length];
+                for (int i = 0; i < before.Length; i++) delta[i] = after[i] - before[i];
+                return delta;
+            }
+
+            var compiledDelta = Step(compiled, compile: true);
+            var eagerDelta = Step(eager, compile: false);
+
+            Assert.Equal(eagerDelta.Length, compiledDelta.Length);
+            Assert.Contains(eagerDelta, value => value != 0.0);
+            double scale = eagerDelta.Max(Math.Abs);
+            for (int i = 0; i < eagerDelta.Length; i++)
+                Assert.True(Math.Abs(compiledDelta[i] - eagerDelta[i]) <= 1e-6 * scale,
+                    $"recurrence parameter {i}: compiled update {compiledDelta[i]:R}, eager {eagerDelta[i]:R}");
+        }
+        finally
+        {
+            CompiledTapeTrainingStep<double>.Invalidate();
+            TensorCodecOptions.SetCurrent(originalOptions);
+        }
+    }
+
+    private static double[] RecurrenceParameters(INeuralNetworkModel<double> model)
+        => ((ILayeredModel<double>)model).Layers
+            .OfType<RealGatedLinearRecurrenceLayer<double>>()
+            .SelectMany(layer => layer.GetParameters().ToArray())
+            .ToArray();
+
+    /// <summary>
     /// Finite check that exists on every target framework.
     /// </summary>
     /// <remarks>

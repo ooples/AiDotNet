@@ -58,8 +58,18 @@ public class GraphAttentionNetworkTests : GraphNNModelTestBase<float>
         float[] first = Train(out float[] firstInitial);
         float[] second = Train(out float[] secondInitial);
 
-        Assert.Equal(firstInitial, secondInitial);
-        Assert.NotEqual(firstInitial, first);
-        Assert.Equal(first, second);
+        Assert.All(first, value => Assert.False(float.IsNaN(value) || float.IsInfinity(value), "a trained parameter is not finite"));
+        // Bit patterns, not float equality: float equality treats NaN as unequal to itself and -0f as equal to 0f,
+        // so it can pass on vectors that are not identical or fail on ones that are.
+        Assert.Equal(Bits(firstInitial), Bits(secondInitial));
+        Assert.NotEqual(Bits(firstInitial), Bits(first));
+        Assert.Equal(Bits(first), Bits(second));
+    }
+
+    private static int[] Bits(float[] values)
+    {
+        var bits = new int[values.Length];
+        for (int i = 0; i < values.Length; i++) bits[i] = BitConverter.ToInt32(BitConverter.GetBytes(values[i]), 0);
+        return bits;
     }
 }

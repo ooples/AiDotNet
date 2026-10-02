@@ -58,7 +58,7 @@ public class Adam8BitBf16TrainingTests
             float lastLoss = Convert.ToSingle(network.GetLastLoss());
             var trained = network.GetParameters().ToArray();
 
-            Assert.All(trained, value => Assert.True(float.IsFinite(value), "a parameter became non-finite"));
+            Assert.All(trained, value => Assert.True(!float.IsNaN(value) && !float.IsInfinity(value), "a parameter became non-finite"));
             Assert.NotEqual(initial, trained);
             Assert.True(lastLoss < firstLoss, $"20 BF16-moment Adam steps did not reduce the loss ({firstLoss} -> {lastLoss}).");
         }
