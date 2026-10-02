@@ -198,22 +198,27 @@ public class FusedOptimizerParityTests
 
     /// <summary>
     /// A scheduler stepped per epoch (the default mode) cannot be expressed by the compiled plan's per-step schedule.
-    /// Mapping it made the fused path ramp the learning rate every batch while the eager path, following the
-    /// configuration, held it until the epoch ended. It must stay eager, and so train exactly like the eager model.
+    /// Mapping it as one made the fused path ramp the learning rate every batch while the eager path, following the
+    /// configuration, held it until the epoch ended. It runs fused with an external schedule instead: the optimizer
+    /// sets the rate when its scheduler steps, so the fused model must train like the eager one within the Adam
+    /// control. A per-batch ramp moves the rate by far more than that bound.
     /// </summary>
     [Fact]
-    public void Adam_WithAPerEpochScheduler_StaysEager_AndMatchesTheEagerStep()
+    public void Adam_WithAPerEpochScheduler_RunsFused_AndMatchesTheEagerStep()
     {
-        var (diff, fusedSteps, _) = Divergence(() =>
+        var (adamDiff, _, _) = Divergence(Adam);
+        var (diff, fusedSteps, trainDelta) = Divergence(() =>
             new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null, new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
             {
                 InitialLearningRate = 1e-2,
                 LearningRateScheduler = new AiDotNet.LearningRateSchedulers.CosineAnnealingLRScheduler(1e-2, tMax: 40),
                 SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerEpoch,
             }));
-        _output.WriteLine($"Adam + per-epoch cosine: fusedSteps={fusedSteps}, maxAbsDiff={diff:E3}");
-        Assert.Equal(0, fusedSteps);
-        Assert.Equal(0.0, diff);
+        _output.WriteLine($"Adam + per-epoch cosine: fusedSteps={fusedSteps}, maxAbsDiff={diff:E3} (Adam control {adamDiff:E3})");
+        Assert.Equal(Steps, fusedSteps);
+        Assert.True(trainDelta > 1e-6, $"training barely moved the parameters ({trainDelta:E3}); the comparison would be vacuous.");
+        Assert.True(diff <= Math.Max(adamDiff * 10.0, 1e-4),
+            $"fused and eager per-epoch schedules differ by {diff:E3}, against {adamDiff:E3}: the fused rate moved within the epoch.");
     }
     /// <summary>
     /// FTRL's L1 term holds a weight at exactly zero while its accumulator stays inside lambda1, so under this init a
