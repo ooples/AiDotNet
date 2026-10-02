@@ -41,7 +41,7 @@ public partial class PiecewiseLinearEncodingLayer<T> : LayerBase<T>, IShapeContr
 
     /// <summary>The bin edges, [numFeatures, numBins + 1], strictly increasing per feature.</summary>
     [Buffer(Name = "bin_edges", Role = PersistentTensorRole.Constant)]
-    private Tensor<T> _binEdges;
+    private readonly Tensor<T> _binEdges;
 
     /// <summary>
     /// Gets the output dimension (numFeatures * numBins).

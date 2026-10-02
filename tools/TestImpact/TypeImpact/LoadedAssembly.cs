@@ -207,9 +207,8 @@ internal sealed class LoadedAssembly
     public Dictionary<string, string> GeneratedDocumentHashes()
     {
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var handle in Pdb.Documents)
+        foreach (var document in Pdb.Documents.Select(Pdb.GetDocument))
         {
-            var document = Pdb.GetDocument(handle);
             var key = GeneratedKey(Pdb.GetString(document.Name), _repoRoot);
             if (key is not null)
             {

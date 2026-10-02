@@ -13997,7 +13997,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     internal virtual void SetBaseTrainOptimizer(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
     {
-        bool replaced = !ReferenceEquals(_baseTrainOptimizer, optimizer);
+        // Interface-typed, so != is reference identity; ReferenceEquals would box a struct implementation and never match.
+        bool replaced = _baseTrainOptimizer != optimizer;
         _baseTrainOptimizer = optimizer;
         _baseTrainOptimizerExplicitlyConfigured = optimizer is not null;
         _baseTrainOptimizerLearningRate = null;
