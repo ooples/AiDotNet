@@ -1230,7 +1230,10 @@ public static class CompiledTapeTrainingStep<T>
             //
             // Drift on the SAME plan (LR or beta change between steps) also
             // returns false — reconfiguring would reset m/v.
-            var currentConfig = ((int)optimizerType, learningRate, beta1, beta2, epsilon, weightDecay);
+            // With a schedule the plan reads the rate from it on every step and never uses the baked
+            // learningRate, so a rate change is the schedule working, not drift. Keying on it would refuse
+            // the step after a per-epoch scheduler moved the optimizer's rate (OptimizerTrackingLrSchedule).
+            var currentConfig = ((int)optimizerType, lrSchedule is null ? learningRate : 0f, beta1, beta2, epsilon, weightDecay);
 
             bool isFirstStepForConfiguredPlan = _configuredPlan is null;
             if (_configuredPlan is null)

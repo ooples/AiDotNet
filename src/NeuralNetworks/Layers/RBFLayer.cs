@@ -1,4 +1,5 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Gpu;
@@ -110,6 +111,16 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
     [TrainableParameter(Role = PersistentTensorRole.Biases)]
     private Tensor<T> _widths;
 
+    /// <summary>How the widths start out; see <see cref="RbfWidthInitialization"/>.</summary>
+    private readonly RbfWidthInitialization _widthInitialization;
+
+    /// <summary>
+    /// Where the centres come from; see <see cref="RbfCenterInitialization"/>. Not readonly: placement and
+    /// SetParameters switch it to <see cref="RbfCenterInitialization.AsInitialized"/>, and the generated layer state
+    /// reads this field, so a clone or a saved model never places its centres a second time.
+    /// </summary>
+    private RbfCenterInitialization _centerInitialization;
+
     /// <summary>
     /// The radial basis function implementation used to compute neuron activations.
     /// </summary>
@@ -210,6 +221,7 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
         // Input: [batch, inputSize] (ensure 2D)
         int batch = input.Shape[0];
         var input2D = input.Shape.Length == 1 ? gpuEngine.ReshapeGpu(input, [1, input.Shape[0]]) : input;
+        PlaceCentersFromFirstBatch(input2D);
 
         // Use custom RBF kernel on GPU
         // Weights are persistent tensors, handled by engine
@@ -254,10 +266,14 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
         [LayerState] int inputSize,
         [LayerState] int outputSize,
         [LayerState] IRadialBasisFunction<T>? rbf = null,
-        IInitializationStrategy<T>? initializationStrategy = null)
+        IInitializationStrategy<T>? initializationStrategy = null,
+        [LayerState] RbfWidthInitialization widthInitialization = RbfWidthInitialization.CenterSpread,
+        [LayerState] RbfCenterInitialization centerInitialization = RbfCenterInitialization.FromFirstBatch)
         : base([inputSize], [outputSize])
     {
         _outputSize = outputSize;
+        _widthInitialization = widthInitialization;
+        _centerInitialization = centerInitialization;
         InitializationStrategy = initializationStrategy ?? Initialization.InitializationStrategies<T>.Eager;
         _inputSize = inputSize;
         _numCenters = outputSize;
@@ -281,10 +297,14 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
     /// <param name="rbf">Radial basis function implementation.</param>
     /// <param name="initializationStrategy">Optional weight init strategy.</param>
     public RBFLayer(int outputSize, IRadialBasisFunction<T>? rbf = null,
-        IInitializationStrategy<T>? initializationStrategy = null)
+        IInitializationStrategy<T>? initializationStrategy = null,
+        RbfWidthInitialization widthInitialization = RbfWidthInitialization.CenterSpread,
+        RbfCenterInitialization centerInitialization = RbfCenterInitialization.FromFirstBatch)
         : base([-1], [outputSize])
     {
         _outputSize = outputSize;
+        _widthInitialization = widthInitialization;
+        _centerInitialization = centerInitialization;
         if (outputSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(outputSize), "Output size (number of RBF centers) must be positive.");
 
@@ -384,6 +404,8 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
         var processedInput = wasUnbatched
             ? Engine.Reshape(input, [1, input.Shape[0]])
             : input;
+
+        PlaceCentersFromFirstBatch(processedInput);
 
         // Store 2D input for backward pass (RBFKernelBackward requires 2D)
         _lastInput = ShouldCacheForBackward ? processedInput : null; // #1668: skip in inference (arena safety)
@@ -556,14 +578,90 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
     /// and initializes the widths with random values between 0 and 1. This provides a good starting point for
     /// training the RBF layer.
     /// </remarks>
+    /// <summary>
+    /// d_max / sqrt(2M) over the initialized centres (Broomhead and Lowe 1988; Haykin, Neural Networks, 5.10): the
+    /// Gaussian exp(-(M/d_max²)·||x - c||²) is exp(-||x - c||²/(2σ²)) with σ = d_max/sqrt(2M). With fewer than two
+    /// distinct centres there is no spread to measure, and the width falls back to 1, the unit Gaussian.
+    /// </summary>
+    private double CenterSpreadWidth() => CenterSpreadWidth(_centers.AsSpan().ToArray(), _numCenters);
+
+    private double CenterSpreadWidth(T[] centers, int count)
+    {
+        int dims = count == 0 ? 0 : centers.Length / count;
+        double maxSquared = 0;
+        for (int a = 0; a < count; a++)
+        for (int b = a + 1; b < count; b++)
+        {
+            double squared = 0;
+            for (int d = 0; d < dims; d++)
+            {
+                double diff = NumOps.ToDouble(centers[a * dims + d]) - NumOps.ToDouble(centers[b * dims + d]);
+                squared += diff * diff;
+            }
+            if (squared > maxSquared) maxSquared = squared;
+        }
+
+        return maxSquared > 0 ? Math.Sqrt(maxSquared) / Math.Sqrt(2.0 * count) : 1.0;
+    }
+
+    /// <summary>
+    /// Places the centres on the first batch the layer sees (Broomhead and Lowe 1988; Moody and Darken 1989): centre i
+    /// is row floor(i·rows/M) of the batch. A batch with fewer rows than centres places one centre per row and leaves
+    /// the rest at their random initialization. The rows
+    /// are chosen by position, not drawn, so a clone placed from the same batch matches. Widths are then set from the
+    /// placed centres, written through SetParameters (the sanctioned writer for registered tensors), and the layer then
+    /// switches to <see cref="RbfCenterInitialization.AsInitialized"/>. A caller who sets its own centres before the
+    /// first forward constructs the layer with AsInitialized.
+    /// </summary>
+    private void PlaceCentersFromFirstBatch(Tensor<T> input2D)
+    {
+        if (_centerInitialization != RbfCenterInitialization.FromFirstBatch) return;
+        int rows = input2D.Shape[0], dims = _inputSize, count = _numCenters;
+        if (rows <= 0 || dims <= 0 || count <= 0 || input2D.Length != rows * dims) return;
+
+        var data = input2D.ToArray();
+        var parameters = GetParameters();
+        var centers = new T[count * dims];
+        for (int i = 0; i < centers.Length; i++) centers[i] = parameters[i];
+        // One centre per row while rows last. A batch smaller than the layer cannot supply every centre, and stacking
+        // several on one row would only duplicate a unit; the rest keep their random initialization, so the set still
+        // spans the space and the widths below measure a real spread.
+        for (int i = 0; i < Math.Min(count, rows); i++)
+        {
+            int row = rows >= count ? (int)((long)i * rows / count) : i;
+            Array.Copy(data, row * dims, centers, i * dims, dims);
+        }
+
+        for (int i = 0; i < centers.Length; i++) parameters[i] = centers[i];
+        if (_widthInitialization == RbfWidthInitialization.CenterSpread)
+        {
+            T width = NumOps.FromDouble(CenterSpreadWidth(centers, count));
+            for (int i = 0; i < count; i++) parameters[centers.Length + i] = width;
+        }
+
+        SetParameters(parameters);
+        _centerInitialization = RbfCenterInitialization.AsInitialized;
+    }
+
     private void InitializeParameters()
     {
         InitializeLayerWeights(_centers, _inputSize, _numCenters);
 
-        // Widths are RBF-specific: random positive values, not Xavier
+        // Widths are RBF-specific, not Xavier. Uniform(0, 1) could draw a width near 0: epsilon = 1/(2·width²)
+        // then exceeds the exponent float can hold (about 88 at width 0.075), exp(-epsilon·d²) is exactly 0 for any
+        // input off the centre, and the unit is dead from the start - every input gave the same all-zero output.
         var widthSpan = _widths.AsWritableSpan();
-        for (int i = 0; i < widthSpan.Length; i++)
-            widthSpan[i] = NumOps.FromDouble(Random.NextDouble());
+        if (_widthInitialization == RbfWidthInitialization.Uniform)
+        {
+            for (int i = 0; i < widthSpan.Length; i++)
+                widthSpan[i] = NumOps.FromDouble(Random.NextDouble());
+        }
+        else
+        {
+            double width = CenterSpreadWidth();
+            for (int i = 0; i < widthSpan.Length; i++)
+                widthSpan[i] = NumOps.FromDouble(width);
+        }
 
         // Register after initialization so tensor references are final
         RegisterTrainableParameter(_centers, PersistentTensorRole.Weights);
