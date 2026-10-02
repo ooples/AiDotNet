@@ -203,6 +203,13 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     internal virtual double TapeStepGradientClipNorm => 0.0;
 
     /// <summary>
+    /// The per-element bound this optimizer's own tape step clamps gradients to when it clips by value (the case
+    /// <see cref="TapeStepGradientClipNorm"/> reports as NaN), or 0 when it does not. Streaming training applies it
+    /// gradient by gradient, since a clamp needs no global norm.
+    /// </summary>
+    internal virtual double TapeStepGradientClipValue => 0.0;
+
+    /// <summary>
     /// The active regularization applied during gradient updates. Set
     /// by <see cref="SetRegularization"/>; defaults to L2 if the
     /// constructor was not given an explicit regularization.

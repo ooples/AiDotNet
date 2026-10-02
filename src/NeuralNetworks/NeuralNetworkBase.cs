@@ -10811,6 +10811,22 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// configured first-order optimizer while replacing its full-precision state
     /// tensors with per-parameter 8-bit block-quantized state.
     /// </summary>
+    /// <summary>
+    /// Clamps one streamed gradient element-wise to [-<paramref name="maxValue"/>, <paramref name="maxValue"/>],
+    /// the per-element clip an optimizer's eager Step applies when it clips by value. No-op when
+    /// <paramref name="maxValue"/> is not positive.
+    /// </summary>
+    private void ClampStreamingGradientByValue(Tensor<T> grad, double maxValue)
+    {
+        if (!(maxValue > 0.0) || double.IsInfinity(maxValue)) return;
+        T upper = NumOps.FromDouble(maxValue);
+        T lower = NumOps.FromDouble(-maxValue);
+        var span = grad.Data.Span;
+        int len = grad.Length;
+        for (int i = 0; i < len; i++)
+            span[i] = MathHelper.Max(lower, MathHelper.Min(upper, span[i]));
+    }
+
     protected void TrainWithTapeStreaming(
         Tensor<T> input,
         Tensor<T> expected,
@@ -10831,8 +10847,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // passes over a PERSISTENT tape in that case (norm pass, then apply pass) —
         // a persistent tape keeps its recorded graph between backward calls. When
         // clipping is off, one streaming pass suffices and the tape is non-persistent.
+        //
+        // The eager step clips twice: the network by MaxGradNorm over its layer-owned tensors, then Adam/AdamW's
+        // own Step by the optimizer's MaxGradientNorm over every gradient. Streaming used to read only the first,
+        // so a network whose clip is 0 trained unclipped here and clipped to 1.0 eagerly - whenever the gradient
+        // norm crossed 1.0, which on a randomly initialised model is a matter of the draw.
         double maxGradNorm = MaxGradNormValue;
-        bool clip = maxGradNorm > 0.0;
+        var clippingOptimizer = resolvedOptimizer as Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>;
+        double optimizerClipNorm = clippingOptimizer?.TapeStepGradientClipNorm ?? 0.0;
+        // NaN is the optimizer's "I clip by value" answer: a per-element clamp, which streams fine gradient by
+        // gradient, so it is applied just before each update rather than refused as the compiled plan must.
+        double optimizerClipValue = double.IsNaN(optimizerClipNorm)
+            ? clippingOptimizer?.TapeStepGradientClipValue ?? 0.0
+            : 0.0;
+        if (double.IsNaN(optimizerClipNorm)) optimizerClipNorm = 0.0;
+        bool clip = maxGradNorm > 0.0 || optimizerClipNorm > 0.0;
         // #1662 lever #1 (§5c): opt-in fast-clip turns the clipped case into a SINGLE streaming
         // pass by clipping with an EMA of the previous step's global grad-norm (NFNet-style
         // adaptive clipping) instead of the exact current-step norm. Only the exact path needs
@@ -10914,6 +10943,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     if (grad is null || grad.Length == 0) return;
                     RetainStreamingGradient(source, grad);
                     if (regularization is not null) grad = RegularizeGradient(regularization, source, grad);
+                    ClampStreamingGradientByValue(grad, optimizerClipValue);
                     // Streaming optimizer writes this source's weights in place (#1624 OOM-retry gate).
                     MarkTrainMutationStarted();
                     streamingOptimizer.Apply(source, grad);
@@ -10932,31 +10962,49 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 CollectLayerOwnedTrainableTensorsForClipping(sources),
                 Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
 
-            // Pass 1 — accumulate the global L2 norm over the clip set, streaming so
-            // nothing is retained. (Each gradient is released right after we read it.)
+            // Pass 1 — accumulate the global L2 norms, streaming so nothing is retained. (Each gradient
+            // is released right after we read it.) The clip set feeds the network clip; every gradient
+            // feeds the optimizer's clip, which in the eager Step runs over all of them.
             double totalNormSq = 0.0;
+            double outsideClipSetNormSq = 0.0;
             tape.ComputeGradientsStreaming(lossTensor, sources,
                 (source, grad) =>
                 {
                     if (grad is not null && grad.Length > 0) RetainStreamingGradient(source, grad);
-                    if (grad is null || grad.Length == 0 || !clipSet.Contains(source)) return;
+                    if (grad is null || grad.Length == 0) return;
+                    bool inClipSet = clipSet.Contains(source);
+                    if (!inClipSet && optimizerClipNorm <= 0.0) return;
                     if (regularization is not null) grad = RegularizeGradient(regularization, source, grad);
                     var span = grad.Data.Span;
                     int len = grad.Length;
+                    double normSq = 0.0;
                     for (int i = 0; i < len; i++)
                     {
                         double v = NumOps.ToDouble(span[i]);
-                        totalNormSq += v * v;
+                        normSq += v * v;
                     }
+                    if (inClipSet) totalNormSq += normSq;
+                    else outsideClipSetNormSq += normSq;
                 });
 
             // Match ApplyGradientClipping exactly: only scale down when the norm
             // exceeds the cap; the +1e-6 mirrors PyTorch's clip_grad_norm_ denominator.
             double totalNorm = Math.Sqrt(totalNormSq);
-            bool scaleDown = totalNormSq > 0.0 && totalNorm > maxGradNorm;
-            T scale = scaleDown
-                ? NumOps.FromDouble(maxGradNorm / (totalNorm + 1e-6))
-                : NumOps.One;
+            double networkScale = maxGradNorm > 0.0 && totalNormSq > 0.0 && totalNorm > maxGradNorm
+                ? maxGradNorm / (totalNorm + 1e-6)
+                : 1.0;
+            // Then the optimizer's own clip, over the network-clipped gradients, as its Step sees them:
+            // scale by maxNorm / globalNorm, with no epsilon (ApplyGlobalNormGradientClipping).
+            double optimizerScale = 1.0;
+            if (optimizerClipNorm > 0.0)
+            {
+                double clippedNorm = Math.Sqrt(networkScale * networkScale * totalNormSq + outsideClipSetNormSq);
+                if (clippedNorm > optimizerClipNorm && !double.IsNaN(clippedNorm) && !double.IsInfinity(clippedNorm))
+                    optimizerScale = optimizerClipNorm / clippedNorm;
+            }
+            bool scaleDown = networkScale != 1.0 || optimizerScale != 1.0;
+            T scale = NumOps.FromDouble(networkScale * optimizerScale);
+            T outsideClipSetScale = NumOps.FromDouble(optimizerScale);
 
             // Pass 2 — re-run the streaming backward and fold the clip scale into each
             // clip-set gradient before the optimizer epilogue (extras pass through
@@ -10968,13 +11016,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     if (grad is null || grad.Length == 0) return;
                     RetainStreamingGradient(source, grad);
                     if (regularization is not null) grad = RegularizeGradient(regularization, source, grad);
-                    if (scaleDown && clipSet.Contains(source))
+                    if (scaleDown)
                     {
+                        // Extras skip the network clip, as in the eager path, but not the optimizer's.
+                        T sourceScale = clipSet.Contains(source) ? scale : outsideClipSetScale;
                         var span = grad.Data.Span;
                         int len = grad.Length;
                         for (int i = 0; i < len; i++)
-                            span[i] = NumOps.Multiply(span[i], scale);
+                            span[i] = NumOps.Multiply(span[i], sourceScale);
                     }
+                    ClampStreamingGradientByValue(grad, optimizerClipValue);
                     // Streaming optimizer writes this source's weights in place (#1624 OOM-retry gate).
                     MarkTrainMutationStarted();
                     streamingOptimizer.Apply(source, grad);
@@ -10991,11 +11042,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 CollectLayerOwnedTrainableTensorsForClipping(sources),
                 Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
 
+            // One estimated norm drives one scale, so the two clips collapse to the tighter bound (two successive
+            // global-norm clips over the same set equal one at the smaller bound). Like the EMA itself this is an
+            // approximation: the optimizer's clip also covers the extras, which this single scale leaves alone.
+            double fastClipBound = maxGradNorm > 0.0 && optimizerClipNorm > 0.0
+                ? Math.Min(maxGradNorm, optimizerClipNorm)
+                : Math.Max(maxGradNorm, optimizerClipNorm);
             double emaNorm = _fastClipEmaNorm;            // < 0 until seeded
             bool haveEma = emaNorm >= 0.0;
-            bool scaleDown = haveEma && emaNorm > maxGradNorm;
+            bool scaleDown = haveEma && emaNorm > fastClipBound;
             T scale = scaleDown
-                ? NumOps.FromDouble(maxGradNorm / (emaNorm + 1e-6))
+                ? NumOps.FromDouble(fastClipBound / (emaNorm + 1e-6))
                 : NumOps.One;
 
             double curNormSq = 0.0;
@@ -11016,6 +11073,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                             if (scaleDown) span[i] = NumOps.Multiply(span[i], scale);
                         }
                     }
+                    ClampStreamingGradientByValue(grad, optimizerClipValue);
                     // Streaming optimizer writes this source's weights in place (#1624 OOM-retry gate).
                     MarkTrainMutationStarted();
                     streamingOptimizer.Apply(source, grad);
