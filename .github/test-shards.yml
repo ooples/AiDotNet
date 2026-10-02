@@ -1613,6 +1613,8 @@ shard:
       Category!=GPU&Category!=Stress&Category!=Sweep&(
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.BatchNormalizationSingleImageTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.BatchNormalizationLayoutAndRecalibrationTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.T5RelativeBiasAttentionBehaviourTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.TokenObjectivesTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.FusedOptimizerScheduleAndClipParityTests.|
       FullyQualifiedName~AiDotNet.Tests.ActiveLearning.ActiveLearningStrategyTests.|
       FullyQualifiedName~AiDotNet.Tests.DiagnosticTest.|
