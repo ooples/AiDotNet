@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Engines.Autodiff;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -358,43 +359,25 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         int batchSize = realImages.Shape[0];
 
         // ----- Train Discriminator -----
-
-        // Concatenate noise with conditions for generator input
+        // Mirza and Osindero 2014, eq. 2: D ascends log D(x|y) + log(1 - D(G(z|y)|y)), in one step on
+        // one tape. It used to take two separate Discriminator.Train calls, real then fake, each
+        // regressing onto 0/1 labels with the discriminator network's own configured loss and optimizer.
         Tensor<T> generatorInput = ConcatenateTensors(noise, conditions);
-
-        // Generate fake images conditioned on the labels
         Tensor<T> fakeImages = PredictBatched(Generator, generatorInput);
 
-        // Create labels
-        Tensor<T> realLabels = CreateLabelTensor(batchSize, NumOps.One);
-        Tensor<T> fakeLabels = CreateLabelTensor(batchSize, NumOps.Zero);
-
-        // Train discriminator on real images with conditions
-        Tensor<T> realImagesWithConditions = ConcatenateImageAndCondition(realImages, conditions);
-        T realLoss = TrainDiscriminatorOnBatch(realImagesWithConditions, realLabels);
-
-        // Train discriminator on fake images with conditions
-        Tensor<T> fakeImagesWithConditions = ConcatenateImageAndCondition(fakeImages, conditions);
-        T fakeLoss = TrainDiscriminatorOnBatch(fakeImagesWithConditions, fakeLabels);
-
-        // Total discriminator loss
-        T discriminatorLoss = NumOps.Add(realLoss, fakeLoss);
-        discriminatorLoss = NumOps.Divide(discriminatorLoss, NumOps.FromDouble(2.0));
+        T discriminatorLoss;
+        using (var discriminatorTape = new GradientTape<T>())
+        {
+            var realScores = Discriminator.ForwardForTraining(ConcatenateImageAndCondition(realImages, conditions));
+            var fakeScores = Discriminator.ForwardForTraining(ConcatenateImageAndCondition(fakeImages, conditions));
+            var discriminatorObjective = Engine.TensorAdd(
+                Discriminator.BinaryCrossEntropyOnTape(realScores, targetIsReal: true),
+                Discriminator.BinaryCrossEntropyOnTape(fakeScores, targetIsReal: false));
+            discriminatorLoss = StepOnTape(discriminatorTape, discriminatorObjective, Discriminator, DiscriminatorOptimizer);
+        }
 
         // ----- Train Generator -----
-
-        // Generate new fake images
-        Tensor<T> newGeneratorInput = ConcatenateTensors(noise, conditions);
-        Tensor<T> newFakeImages = PredictBatched(Generator, newGeneratorInput);
-
-        // For generator training, we want discriminator to think fake images are real
-        Tensor<T> allRealLabels = CreateLabelTensor(batchSize, NumOps.One);
-
-        // Concatenate with conditions
-        Tensor<T> newFakeImagesWithConditions = ConcatenateImageAndCondition(newFakeImages, conditions);
-
-        // Train generator
-        T generatorLoss = TrainGeneratorOnBatch(newGeneratorInput);
+        T generatorLoss = TrainGeneratorOnBatch(ConcatenateTensors(noise, conditions));
 
         // Track losses
         _generatorLosses.Add(generatorLoss);
@@ -404,31 +387,6 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         }
 
         return (discriminatorLoss, generatorLoss);
-    }
-
-    /// <summary>
-    /// Trains the discriminator on a batch of images. Delegates to the
-    /// discriminator's tape-backed <c>Train</c> path so the optimizer
-    /// actually sees a real backward pass — the previous implementation
-    /// computed <c>outputGradients</c> but never propagated them, leaving
-    /// <see cref="NeuralNetworkBase{T}.GetParameterGradients"/> at
-    /// initialization-time zeros and silently no-opping every
-    /// <see cref="UpdateDiscriminatorWithOptimizer"/> call (#1224 Cluster
-    /// F: ConditionalGAN.Training_ShouldChangeParameters and
-    /// GradientFlow_ShouldBeNonZeroAndFinite both reported "no parameters
-    /// changed after training" because the discriminator weights never
-    /// moved). Loss is recomputed post-update for monitoring.
-    /// </summary>
-    private T TrainDiscriminatorOnBatch(Tensor<T> images, Tensor<T> labels)
-    {
-        var trainableDisc = (NeuralNetworkBase<T>)Discriminator;
-        trainableDisc.Train(images, labels);
-
-        // Recompute loss after the update for the returned monitoring
-        // value. The previous loss (from before the update) would also
-        // work, but post-update reflects the actual training-step delta.
-        var predictions = PredictBatched(Discriminator, images);
-        return CalculateBinaryLoss(predictions, labels);
     }
 
     /// <summary>
@@ -453,114 +411,6 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
             var discScore = Discriminator.ForwardFrozenOnTape(withConditions);
             return Discriminator.BinaryCrossEntropyOnTape(discScore, targetIsReal: true);
         }, GeneratorOptimizer);  // the configured generator optimizer; omitting it silently used the generator network's own default
-    }
-
-    /// <summary>
-    /// Updates generator parameters using the configured optimizer.
-    /// </summary>
-    private void UpdateGeneratorWithOptimizer()
-    {
-        var parameters = Generator.GetParameters();
-        var gradients = Generator.GetParameterGradients();
-
-        // Gradient clipping using vectorized operations
-        var gradientNorm = gradients.L2Norm();
-        var clipThreshold = NumOps.FromDouble(5.0);
-
-        if (NumOps.GreaterThan(gradientNorm, clipThreshold))
-        {
-            var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            gradients = Engine.Multiply(gradients, scaleFactor);
-        }
-
-        var updatedParameters = GeneratorOptimizer.UpdateParameters(parameters, gradients);
-        Generator.UpdateParameters(updatedParameters);
-    }
-
-    /// <summary>
-    /// Updates discriminator parameters using the configured optimizer.
-    /// </summary>
-    private void UpdateDiscriminatorWithOptimizer()
-    {
-        var parameters = Discriminator.GetParameters();
-        var gradients = Discriminator.GetParameterGradients();
-
-        // Gradient clipping using vectorized operations
-        var gradientNorm = gradients.L2Norm();
-        var clipThreshold = NumOps.FromDouble(5.0);
-
-        if (NumOps.GreaterThan(gradientNorm, clipThreshold))
-        {
-            var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            gradients = Engine.Multiply(gradients, scaleFactor);
-        }
-
-        var updatedParameters = DiscriminatorOptimizer.UpdateParameters(parameters, gradients);
-        Discriminator.UpdateParameters(updatedParameters);
-    }
-
-    /// <summary>
-    /// Calculates binary cross-entropy loss with logits (numerically stable).
-    /// </summary>
-    /// <remarks>
-    /// Uses the numerically stable formula: max(z,0) - z*t + log(1 + exp(-|z|))
-    /// where z is the logit (pre-sigmoid prediction) and t is the target.
-    /// This avoids numerical instability from computing log of values near 0 or 1.
-    /// </remarks>
-    private T CalculateBinaryLoss(Tensor<T> predictions, Tensor<T> targets)
-    {
-        int batchSize = predictions.Shape[0];
-        T totalLoss = NumOps.Zero;
-
-        for (int i = 0; i < batchSize; i++)
-        {
-            T logit = predictions[i, 0];
-            T target = targets[i, 0];
-
-            // BCE with logits: max(z,0) - z*t + log(1 + exp(-|z|))
-            T maxLogitZero = NumOps.GreaterThan(logit, NumOps.Zero) ? logit : NumOps.Zero;
-            T absLogit = NumOps.GreaterThanOrEquals(logit, NumOps.Zero) ? logit : NumOps.Negate(logit);
-            T expNegAbsLogit = NumOps.Exp(NumOps.Negate(absLogit));
-            T logOnePlusExp = NumOps.Log(NumOps.Add(NumOps.One, expNegAbsLogit));
-
-            T loss = NumOps.Add(
-                NumOps.Subtract(maxLogitZero, NumOps.Multiply(logit, target)),
-                logOnePlusExp);
-
-            totalLoss = NumOps.Add(totalLoss, loss);
-        }
-
-        return NumOps.Divide(totalLoss, NumOps.FromDouble(batchSize));
-    }
-
-    /// <summary>
-    /// Calculates gradients for binary cross-entropy loss with logits.
-    /// </summary>
-    /// <remarks>
-    /// The gradient of BCE with logits with respect to the logit z is:
-    /// dL/dz = sigmoid(z) - target = 1/(1+exp(-z)) - target
-    /// This is consistent with the logits-based loss formula.
-    /// </remarks>
-    private Tensor<T> CalculateBinaryGradients(Tensor<T> predictions, Tensor<T> targets)
-    {
-        // === Vectorized BCE gradients using IEngine (Phase B: US-GPU-015) ===
-        // Gradient of BCE with logits: dL/dz = sigmoid(z) - target
-        var sigmoid = Engine.Sigmoid(predictions);
-        return Engine.TensorSubtract(sigmoid, targets);
-    }
-
-    /// <summary>
-    /// Creates a label tensor filled with a specified value using vectorized fill.
-    /// </summary>
-    private Tensor<T> CreateLabelTensor(int batchSize, T value)
-    {
-        var shape = new int[] { batchSize, 1 };
-        var tensor = new Tensor<T>(shape);
-
-        // Use vectorized fill operation
-        Engine.TensorFill(tensor, value);
-
-        return tensor;
     }
 
     /// <summary>

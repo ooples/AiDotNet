@@ -240,6 +240,64 @@ public class GanAdversarialStepTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task ConditionalGAN_DiscriminatorStep_IsTheMinimaxBinaryCrossEntropy()
+    {
+        await Task.Yield();
+        // Mirza and Osindero 2014, eq. 2: the discriminator's loss is -log D(x|y) - log(1 - D(G(z|y)|y)),
+        // taken in ONE step. It used to be two Discriminator.Train calls, real then fake, each with the
+        // discriminator network's own configured loss, so the reported loss and the update were neither.
+        using var cgan = new ConditionalGAN<double>(
+            new NeuralNetworkArchitecture<double>(
+                InputType.OneDimensional, NeuralNetworkTaskType.Generative, NetworkComplexity.Simple,
+                inputSize: 32, outputSize: 64),
+            new NeuralNetworkArchitecture<double>(
+                InputType.OneDimensional, NeuralNetworkTaskType.BinaryClassification, NetworkComplexity.Simple,
+                inputSize: 64, outputSize: 1),
+            numConditionClasses: 10,
+            InputType.OneDimensional);
+        var real = Random(4, 64, 81);
+        var conditions = OneHot(4, 10, 5);
+        var noise = Random(4, 22, 82);
+        Snapshot(cgan.Generator);
+        Snapshot(cgan.Discriminator);
+
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var generator = (NeuralNetworkBase<double>)cgan.Generator;
+        var discriminator = (NeuralNetworkBase<double>)cgan.Discriminator;
+        generator.SetTrainingMode(true);
+        discriminator.SetTrainingMode(true);
+        var fake = generator.Predict(engine.TensorConcatenate(new[] { noise, conditions }, axis: 1));
+        var realScores = discriminator.Predict(engine.TensorConcatenate(new[] { real, conditions }, axis: 1));
+        var fakeScores = discriminator.Predict(engine.TensorConcatenate(new[] { fake, conditions }, axis: 1));
+
+        bool probabilities = discriminator.FinalLayerEmitsProbabilities();
+        double Bce(Tensor<double> scores, bool targetIsReal)
+        {
+            double sum = 0;
+            for (int i = 0; i < scores.Length; i++)
+            {
+                double s = scores[i];
+                if (probabilities)
+                {
+                    double p = Math.Min(Math.Max(s, 1e-7), 1 - 1e-7);
+                    sum += -Math.Log(targetIsReal ? p : 1 - p);
+                }
+                else
+                {
+                    double x = targetIsReal ? -s : s;
+                    sum += Math.Max(x, 0) + Math.Log(1 + Math.Exp(-Math.Abs(x)));
+                }
+            }
+            return sum / scores.Length;
+        }
+
+        double expected = Bce(realScores, targetIsReal: true) + Bce(fakeScores, targetIsReal: false);
+        var (discriminatorLoss, _) = cgan.TrainStep(real, conditions, noise);
+
+        Assert.Equal(expected, discriminatorLoss, 9);
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task CycleGAN_TrainStep_TrainsBothGeneratorsAndBothDiscriminators()
     {
         await Task.Yield();
