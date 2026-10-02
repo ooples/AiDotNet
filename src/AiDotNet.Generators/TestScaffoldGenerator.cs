@@ -2140,7 +2140,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // decoder). Even at CI-smoke reduced scale the 50+200-iteration MoreData probe grazes the
         // 120 s gate (GOTOCR2 timed out solo), so the universal smoke-cap trims it — the DocumentNN /
         // VisionLanguage family branches emit no iteration overrides, so this fires exactly once.
-        "GOTOCR2", "Surya", "MPLUGDocOwl", "MPLUGDocOwl15", "MPLUGDocOwl2", "TextMonkey", "UReader", "DocPedia", "Nougat",
+        "Surya", "MPLUGDocOwl", "MPLUGDocOwl15", "MPLUGDocOwl2", "TextMonkey", "UReader", "DocPedia", "Nougat",
+        // GOT-OCR2 (rebuilt on SAM ViTDet + Qwen, its own fixture) keeps the smoke cap: it timed out solo.
+        "GOTOCR2",
         // ViLBERT (Lu et al. 2019): paper-scale dual-stream co-attention VLM (VisionDim=1024, 12+12+6
         // transformer blocks). Also in Fp32TestClassNames (<float>); the VisionLanguage family branch
         // emits no iteration overrides, so this universal smoke-cap fires exactly once — trimming the
@@ -11955,12 +11957,29 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "tokenizer: null, " +
                     "options: new AiDotNet.Document.Options.NougatOptions { ImageSize = 128, PatchSize = 16, MaxSequenceLength = 32, HiddenDim = 128, NumEncoderLayers = 2, NumDecoderLayers = 2, NumHeads = 4, VocabSize = 64 }" + ")";
             }
-            else if ((model.ClassName is "GOTOCR2" or "Surya" or "MPLUGDocOwl" or "MPLUGDocOwl15"
+            else if (model.ClassName == "GOTOCR2" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.VisionLanguage.Document.", System.StringComparison.Ordinal))
+            {
+                // GOT-OCR2 (Wei et al. 2024): SAM ViTDet-B (windowed + global blocks, decomposed relative positions,
+                // conv neck) -> two stride-2 convs -> a Qwen decoder whose ChatML prompt holds one <imgpad> slot per
+                // image token. The IDENTICAL architecture at CI-smoke size: a 128 px page, patch 16 (an 8x8 grid, 4x4
+                // windows, every 2nd block global) and 4 image tokens. The special ids sit just below the image tokens.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
+                    "inputHeight: 128, inputWidth: 128, inputDepth: 3, outputSize: 64), " +
+                    "new AiDotNet.VisionLanguage.Document.GOTOCR2Options { ImageSize = 128, PatchSize = 16, VisionDim = 16, " +
+                    "NumVisionLayers = 2, NumHeads = 2, VisionMlpDim = 32, WindowSize = 4, GlobalAttentionEvery = 2, NeckChannels = 8, " +
+                    "DecoderDim = 16, NumDecoderLayers = 1, DecoderHeads = 2, DecoderKeyValueHeads = 1, DecoderFeedForwardDim = 32, " +
+                    "VocabSize = 64, EndOfTextTokenId = 58, ImStartTokenId = 59, ImEndTokenId = 60, MaxSequenceLength = 160, " +
+                    "MaxGenerationLength = 4, DropoutRate = 0.0 })";
+            }
+            else if ((model.ClassName is "Surya" or "MPLUGDocOwl" or "MPLUGDocOwl15"
                           or "MPLUGDocOwl2" or "TextMonkey" or "UReader" or "DocPedia")
                      && typeName.StartsWith(
                          "AiDotNet.VisionLanguage.Document.", System.StringComparison.Ordinal))
             {
-                // Document OCR models (GOT-OCR2, Surya, mPLUG-DocOwl family, TextMonkey, UReader,
+                // Document OCR models (Surya, mPLUG-DocOwl family, TextMonkey, UReader,
                 // DocPedia) built from CreateDefaultDocumentOCRLayers: a ViT/Swin vision encoder ->
                 // projection -> decoder. After restoring the paper's RESIDUAL transformer encoder
                 // blocks they are correct, but the paper-scale 12+(6/12)-layer / 768-dim stack overruns

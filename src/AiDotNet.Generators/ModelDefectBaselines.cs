@@ -453,7 +453,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.Video.Inpainting.STTN<T>",
             "AiDotNet.Video.Prediction.Mcnet<T>",
             "AiDotNet.VisionLanguage.Document.DocPedia<T>",
-            "AiDotNet.VisionLanguage.Document.GOTOCR2<T>",
             "AiDotNet.VisionLanguage.Document.MPLUGDocOwl<T>",
             "AiDotNet.VisionLanguage.Document.MPLUGDocOwl15<T>",
             "AiDotNet.VisionLanguage.Document.MPLUGDocOwl2<T>",
