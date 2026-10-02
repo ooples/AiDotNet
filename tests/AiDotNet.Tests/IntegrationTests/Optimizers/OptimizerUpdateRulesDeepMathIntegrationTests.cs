@@ -470,8 +470,8 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task AMSGrad_Step1_HandCalculated()
     {
-        // AMSGrad step 1: same as Adam for first step
-        // since vHat = max(vHat, v) and vHat starts at 0
+        // AMSGrad step 1 under the paper default: vHat = max(vHat, v) with vHat starting at 0, and no bias
+        // correction (so, unlike Adam, step 1 is not scaled up by 1/(1 - beta^t))
         var options = new AMSGradOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
             InitialLearningRate = 0.001,
@@ -489,16 +489,15 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
 
         var result = optimizer.UpdateParameters(parameters, gradient);
 
-        // Step 1: m = 0.1*g, v = 0.001*g^2, vHat = max(0, v) = v
-        // mHat = m / (1-0.9) = g, and the running max is bias-corrected like Adam's v (PyTorch amsgrad=True):
-        // vHatCorrected = vHat / (1-0.999) = g^2. So step 1 is exactly Adam's step, about lr in magnitude.
-        // (Leaving vHat uncorrected made this step 0.0316, i.e. ~32x the learning rate.)
-        double m0 = 0.1 * 0.1;
-        double v0 = 0.001 * 0.01;
-        double mHat0 = m0 / (1 - 0.9);
-        double vHatCorrected0 = v0 / (1 - 0.999);
-        double update0 = 0.001 * mHat0 / (Math.Sqrt(vHatCorrected0) + 1e-8);
-        double expected0 = 1.0 - update0;
+            // Step 1 with the default BiasCorrection = Paper: Reddi, Kale and Kumar (2018), "On the Convergence of
+            // Adam and Beyond", Algorithm 2, which applies no bias correction to either moment:
+            //   m = 0.1*g, v = 0.001*g^2, vHat = max(0, v) = v, update = lr * m / (sqrt(vHat) + eps)
+            // (This test previously expected m / (1 - beta1) with an uncorrected v: a hybrid that matches neither
+            // the paper nor PyTorch's amsgrad=True. AMSGradBiasCorrectionTests pins both published variants.)
+            double m0 = 0.1 * 0.1;
+            double v0 = 0.001 * 0.01;
+            double update0 = 0.001 * m0 / (Math.Sqrt(v0) + 1e-8);
+            double expected0 = 1.0 - update0;
 
         Assert.Equal(expected0, result[0], RelaxedTol);
     }

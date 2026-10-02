@@ -287,6 +287,9 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         T biasCorrectionMNext = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t + 1));
         T biasCorrectionV = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t));
         T nesterovFactor = NumOps.Divide(oneMinusBeta1, biasCorrectionM);
+        // Dozat (2016), Algorithm 8: the look-ahead momentum term is corrected for step t+1, the gradient term
+        // for step t. Correcting both at t (the previous form here) disagreed with the fused kernel.
+        T momentumBiasCorrection = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t + 1));
 
         // Update biased first moment estimate: m = beta1 * m + (1 - beta1) * gradient
         var beta1TimesM = (Vector<T>)Engine.Multiply(_m!, beta1);
@@ -384,6 +387,9 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         T biasCorrectionMNext = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t + 1));
         T biasCorrectionV = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t));
         T nesterovFactor = NumOps.Divide(oneMinusBeta1, biasCorrectionM);
+        // Dozat (2016), Algorithm 8: the look-ahead momentum term is corrected for step t+1, the gradient term
+        // for step t. Correcting both at t (the previous form here) disagreed with the fused kernel.
+        T momentumBiasCorrection = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t + 1));
 
         // Update biased first moment estimate: m = beta1 * m + (1 - beta1) * gradient
         // ONE FUSED IN-PLACE PASS -- same rewrite as Adam/AdamW/Adagrad/Lion, same reason.
@@ -458,6 +464,7 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         T biasCorrectionMNext = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _tapeStep + 1));
         T biasCorrectionV = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _tapeStep));
         T nesterovFactor = NumOps.Divide(oneMinusBeta1, biasCorrectionM);
+        T momentumBiasCorrection = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _tapeStep + 1));
 
         // GPU-resident step (AIDOTNET_GPU_ADAM=1); gated off, CPU fallback per-param when not GPU-resident.
         bool gpuAdam = typeof(T) == typeof(float)

@@ -694,7 +694,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             var disableGpu = Environment.GetEnvironmentVariable("AIDOTNET_DISABLE_GPU");
             if (!string.IsNullOrEmpty(disableGpu))
             {
-                AiDotNetEngine.ResetToCpu();
+                UseCpuEngine();
                 return;
             }
 
@@ -714,13 +714,13 @@ public partial class AiModelBuilder<T, TInput, TOutput>
 
         if (_gpuAccelerationConfig.UsageLevel == AiDotNet.Engines.GpuUsageLevel.AlwaysCpu)
         {
-            AiDotNetEngine.ResetToCpu();
+            UseCpuEngine();
             return;
         }
 
         if (_gpuAccelerationConfig.DeviceType == AiDotNet.Engines.GpuDeviceType.CPU)
         {
-            AiDotNetEngine.ResetToCpu();
+            UseCpuEngine();
             return;
         }
 
@@ -738,7 +738,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         {
             case AiDotNet.Engines.GpuUsageLevel.AlwaysCpu:
                 // Force CPU-only execution (useful for debugging, testing, or CPU-only servers)
-                AiDotNetEngine.ResetToCpu();
+                UseCpuEngine();
                 break;
 
             case AiDotNet.Engines.GpuUsageLevel.Default:
@@ -758,7 +758,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     // GPU initialization failed - fall back to CPU
                     Console.WriteLine($"[AiDotNet] GPU initialization failed: {ex.Message}");
                     Console.WriteLine("[AiDotNet] Falling back to CPU execution");
-                    AiDotNetEngine.ResetToCpu();
+                    UseCpuEngine();
                 }
                 break;
 
@@ -784,7 +784,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
                     // GPU initialization failed in Conservative mode - fall back to CPU silently
                     Console.WriteLine($"[AiDotNet] GPU initialization failed in Conservative mode: {ex.Message}");
                     Console.WriteLine("[AiDotNet] Falling back to CPU execution");
-                    AiDotNetEngine.ResetToCpu();
+                    UseCpuEngine();
                 }
                 break;
 
@@ -1930,5 +1930,20 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         };
 
         return (quantizedModel, info);
+    }
+
+    /// <summary>
+    /// Puts the process on the CPU engine, replacing <see cref="AiDotNetEngine.Current"/> only when it is not one already.
+    /// </summary>
+    /// <remarks>
+    /// The engine is process-wide and every model reads it on each operation. <see cref="AiDotNetEngine.ResetToCpu"/> installs a
+    /// new <see cref="CpuEngine"/> even when the process already runs on one, and swapping engines under a model that is
+    /// training on another thread loses that step's update (measured: 3 of 20 FTTransformer steps moved under half of the
+    /// network while another thread kept resetting the engine). Every BuildAsync on a CPU configuration did that swap.
+    /// </remarks>
+    private static void UseCpuEngine()
+    {
+        if (AiDotNetEngine.Current.GetType() == typeof(CpuEngine)) return;
+        AiDotNetEngine.ResetToCpu();
     }
 }

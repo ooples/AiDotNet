@@ -70,7 +70,9 @@ public class FusedKernelParityTests
         "Adagrad" => new AdagradOptimizer<float, Tensor<float>, Tensor<float>>(null, new AdagradOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }),
         "Lion" => new LionOptimizer<float, Tensor<float>, Tensor<float>>(null, new LionOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-3 }),
         "AdaDelta" => new AdaDeltaOptimizer<float, Tensor<float>, Tensor<float>>(null, new AdaDeltaOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1.0 }),
-        "AMSGrad" => new AMSGradOptimizer<float, Tensor<float>, Tensor<float>>(null, new AMSGradOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }),
+        // The fused kernel is PyTorch's amsgrad=True. The default (Reddi et al. 2018, no bias correction) declines the fused
+        // path until the plan carries AmsgradExactBeta1/2 (AiDotNet.Tensors #1079); AMSGradBiasCorrectionTests pins it.
+        "AMSGrad" => new AMSGradOptimizer<float, Tensor<float>, Tensor<float>>(null, new AMSGradOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2, BiasCorrection = AiDotNet.Enums.AMSGradBiasCorrection.PyTorch }),
         "AdamW" => new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(null, new AdamWOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }),
         "RAdam" => new RAdamOptimizer<float, Tensor<float>, Tensor<float>>(null, new RAdamOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }),
         "Rprop" => new RpropOptimizer<float, Tensor<float>, Tensor<float>>(null, new RpropOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }),

@@ -23,6 +23,8 @@ namespace AiDotNet.Tests.UnitTests.Diffusion;
 /// so there is no shared mutable gradient state between the eager and checkpointed runs — the comparison
 /// isolates the checkpoint mechanism itself, not cross-call gradient accumulation on reused tensors.
 /// </remarks>
+// Sets AiDotNetEngine.Current, a process-wide static: run apart from every other test class.
+[Collection("EngineCurrentGlobalState")]
 public class CheckpointGradientEquivalenceTests : System.IDisposable
 {
     // Pin CPU for this gradient-correctness suite — a [ModuleInitializer] can flip

@@ -7,8 +7,8 @@ namespace AiDotNet.Optimizers;
 
 /// <summary>
 /// Sparse scatter helper for Nadam — Adam with Nesterov-style look-ahead.
-/// The corrected first-moment is <c>mHat = β1·m_new / bc1(t+1) + (1-β1)·g / bc1(t), the dense NadamOptimizer correction</c>;
-/// otherwise the math matches Adam.
+/// The corrected first-moment is Dozat (2016) Algorithm 8, matching the dense and fused paths:
+/// <c>mHat = β1·m_new / (1-β1^(t+1)) + (1-β1)·g / (1-β1^t)</c>; otherwise the math matches Adam.
 /// </summary>
 internal static partial class SparseEmbeddingOptimizerHelpers
 {
@@ -80,7 +80,7 @@ internal static partial class SparseEmbeddingOptimizerHelpers
                     T vNew = ops.Add(ops.Multiply(b2T, v[paramBase + c]), ops.Multiply(omB2, ops.Multiply(g, g)));
                     m[paramBase + c] = mNew;
                     v[paramBase + c] = vNew;
-                    // Nesterov-corrected, as the dense path: β1·mNew / bc1(t+1) + (1-β1)·g / bc1(t).
+                    // Nesterov look-ahead (Dozat 2016, Alg. 8): mHat = β1·mNew / bc1Next + (1-β1)·g / bc1.
                     T mHat = ops.Add(ops.Divide(ops.Multiply(b1T, mNew), bc1NextT), ops.Divide(ops.Multiply(omB1, g), bc1T));
                     T vHat = ops.Divide(vNew, bc2T);
                     T denom = ops.Add(ops.Sqrt(vHat), epsT);

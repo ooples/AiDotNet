@@ -359,17 +359,7 @@
 Bumped 0.130.3 to 0.132.1 for AiDotNet.Tensors #1035 (non-causal FlashAttention with more
          queries than keys, which RectangularAttention needs). 0.132.1 depends on AiDotNet.Evolution,
          so it can only land once the in-repo engine is gone. It also replaces the process-global
-         GradientTape.ReleaseStreamingActivations flag with the per-tape StreamingGraphRetention option.
-
-         Bumped to 0.133.1 (managed and natives together) for AiDotNet.Tensors #1051's
-         ImportOptimizerState/ExportOptimizerState, which the fused-plan checkpoint restore uses, and
-         #1054's FTRL/ASGD fused-kernel fixes the parity tests pin.
-
-         0.133.2 for AiDotNet.Tensors #1068: a compiled BatchNorm's running-statistics update used the previous step's
-         batch statistics (GraFPrintPaperFidelityTests.CompiledTraining_RebuildsKnnForEachInput).
-
-         0.134.0 for AiDotNet.Tensors #1075's LrSchedule.External: a fused plan follows a per-epoch schedule at the rate
-         the host scheduler holds, and a checkpoint restores it as an external schedule the optimizer keeps driving. -->
+         GradientTape.ReleaseStreamingActivations flag with the per-tape StreamingGraphRetention option. -->
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.134.0" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.134.0" />
     <PackageVersion Include="AiDotNet.Tensors" Version="0.134.0" />

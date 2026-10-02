@@ -14146,6 +14146,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         _baseTrainOptimizerLearningRate = null;
     }
 
+
     /// <summary>
     /// Clears momentum and other optimizer history while preserving the configured optimizer.
     /// Deterministic conformance probes use this when replaying independent trajectories from
