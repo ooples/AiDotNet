@@ -732,7 +732,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>.DefaultRandomSeedOverride = 1234;
         AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<float>.DefaultRandomSeedOverride = 1234;
         if (AiDotNet.Tensors.Engines.AiDotNetEngine.Current is not AiDotNet.Tensors.Engines.CpuEngine)
-            AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+            AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
         // Invalidate the fused-training plan cache between tests. The plan
         // bakes optimizer m/v state inside the compiled object; without
         // invalidation, a test that runs after another test in the same

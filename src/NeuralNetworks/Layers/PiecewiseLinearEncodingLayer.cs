@@ -8,29 +8,29 @@ using AiDotNet.Helpers;
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
-/// Piecewise Linear Encoding for numerical features in tabular models like TabM.
+/// Piecewise linear encoding (PLE) of numerical features, from Gorishniy, Rubachev and Babenko, "On Embeddings for
+/// Numerical Features in Tabular Deep Learning" (NeurIPS 2022).
 /// </summary>
 /// <remarks>
 /// <para>
-/// Piecewise linear encoding transforms numerical features into a richer representation
-/// by computing activations based on learned bin boundaries. Each feature is encoded
-/// as a combination of linear pieces, allowing the model to learn non-linear relationships.
+/// Each feature x is split into T bins by edges b_0 &lt; b_1 &lt; ... &lt; b_T, and becomes the T values
+/// e_t = clamp((x - b_{t-1}) / (b_t - b_{t-1})): 0 below the bin, 1 above it, linear inside. The first bin is not
+/// clamped below and the last is not clamped above, exactly as the paper defines it, so a value outside the edges
+/// still moves the encoding. The output is [batch, features * T].
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> Think of this like creating "bins" for each number:
-/// - A feature value of 25 might activate "20-30" bin strongly
-/// - It might partially activate neighboring bins too
-/// - This gives the model more ways to understand numerical values
-///
-/// It's similar to how histograms work, but with soft (differentiable) boundaries.
+/// The paper builds the edges from quantiles of the training data and keeps them fixed; call
+/// <see cref="FitBoundaries"/> with the training features to do the same. Until then the edges are evenly spaced
+/// over [-2, 2], which suits standardized inputs. The edges are persisted state, not trainable parameters.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> Think of this like creating "bins" for each number. A value fully passes every bin below
+/// it (1), sits partway through its own bin, and has not reached the bins above it (0), so nearby values get nearby
+/// encodings while the model can still treat different ranges differently.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-// Rank 2 only, and that comes from ForwardTraced rather than from the base constructor. The base is
-// handed [numFeatures] -> [numFeatures * numBins], but the forward reads `int batchSize = input.Shape[0]`
-// and indexes `input[b * _numFeatures + f]`, so the tensor it actually consumes is [batch, features].
-// A rank-1 input would be interpreted as numFeatures separate batches of one element - not a case this
-// layer handles - so no rank-1 layout is declared.
+// Rank 2 only: the forward consumes [batch, features].
 [TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
@@ -39,38 +39,22 @@ public partial class PiecewiseLinearEncodingLayer<T> : LayerBase<T>, IShapeContr
     private readonly int _numFeatures;
     private readonly int _numBins;
 
-    // Learnable bin boundaries for each feature
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T> _binBoundaries;
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T> _binBoundaryGradients;
-
-    // Cached values for backward pass
-    [Scratch]
-    private Tensor<T>? _inputCache;
-    [Scratch]
-    private Tensor<T>? _outputCache;
+    /// <summary>The bin edges, [numFeatures, numBins + 1], strictly increasing per feature.</summary>
+    [Buffer(Name = "bin_edges", Role = PersistentTensorRole.Constant)]
+    private readonly Tensor<T> _binEdges;
 
     /// <summary>
     /// Gets the output dimension (numFeatures * numBins).
     /// </summary>
     public int OutputDimension => _numFeatures * _numBins;
 
+    /// <summary>The number of bins each feature is split into.</summary>
+    public int NumBins => _numBins;
+
     /// <inheritdoc />
     /// <remarks>
-    /// <para>
-    /// Hand-written rather than generated because the feature axis is REPLACED, not carried: the encoding
-    /// widens every scalar feature into <c>_numBins</c> activations. Taken straight from
-    /// <c>ForwardTraced</c>, which allocates
-    /// <c>TensorAllocator.Rent&lt;T&gt;([batchSize, _numFeatures * _numBins])</c>.
-    /// </para>
-    /// <para>
-    /// <c>Fixed</c> rather than <c>Scaled(Features, _numBins, 1)</c> on purpose. The output width does not
-    /// depend on the incoming feature count at all - the layer writes exactly
-    /// <c>_numFeatures * _numBins</c> values per row using its OWN <c>_numFeatures</c>, so a mismatched
-    /// input would be silently mis-encoded rather than produce a proportionally sized output. Fixing the
-    /// size to <see cref="OutputDimension"/> reports what the layer actually emits.
-    /// </para>
+    /// The feature axis is replaced, not carried: every scalar feature widens into <c>_numBins</c> values, and the
+    /// layer uses its own <c>_numFeatures</c>, so the width is <see cref="OutputDimension"/> whatever arrives.
     /// </remarks>
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
     {
@@ -84,13 +68,14 @@ public partial class PiecewiseLinearEncodingLayer<T> : LayerBase<T>, IShapeContr
     }
 
     /// <inheritdoc/>
-    public override bool SupportsTraining => true;
+    /// <remarks>The encoding has no trainable parameters; gradients pass through it to its input.</remarks>
+    public override bool SupportsTraining => false;
 
     /// <summary>
-    /// Initializes piecewise linear encoding.
+    /// Initializes piecewise linear encoding with evenly spaced edges over [-2, 2].
     /// </summary>
     /// <param name="numFeatures">Number of input features.</param>
-    /// <param name="numBins">Number of bins per feature.</param>
+    /// <param name="numBins">Number of bins per feature (T in the paper).</param>
     public PiecewiseLinearEncodingLayer(int numFeatures, int numBins = 16)
         : base([numFeatures], [numFeatures * numBins])
     {
@@ -101,112 +86,113 @@ public partial class PiecewiseLinearEncodingLayer<T> : LayerBase<T>, IShapeContr
 
         _numFeatures = numFeatures;
         _numBins = numBins;
-
-        // Initialize bin boundaries (numBins - 1 boundaries per feature)
-        _binBoundaries = new Tensor<T>([numFeatures, numBins - 1]);
-        _binBoundaryGradients = new Tensor<T>([numFeatures, numBins - 1]);
-
-        InitializeBoundaries();
-    }
-
-    private void InitializeBoundaries()
-    {
-        // Initialize boundaries as evenly spaced quantiles
-        for (int f = 0; f < _numFeatures; f++)
+        _binEdges = new Tensor<T>([numFeatures, numBins + 1]);
+        for (int f = 0; f < numFeatures; f++)
         {
-            for (int b = 0; b < _numBins - 1; b++)
+            for (int t = 0; t <= numBins; t++)
             {
-                // Spread boundaries from -2 to 2 (assuming standardized input)
-                double boundary = -2.0 + 4.0 * (b + 1) / _numBins;
-                _binBoundaries[f * (_numBins - 1) + b] = NumOps.FromDouble(boundary);
+                _binEdges[f * (numBins + 1) + t] = NumOps.FromDouble(-2.0 + 4.0 * t / numBins);
             }
         }
     }
 
     /// <summary>
-    /// Encodes numerical features using piecewise linear representation.
+    /// Sets each feature's edges to the quantiles of <paramref name="features"/> at 0, 1/T, ..., 1, as the paper does.
     /// </summary>
-    /// <param name="input">Input features with shape [batchSize, numFeatures].</param>
-    /// <returns>Encoded features with shape [batchSize, numFeatures * numBins].</returns>
+    /// <param name="features">Training features, [samples, numFeatures].</param>
+    /// <remarks>
+    /// Repeated quantiles (a feature with few distinct values) would make a bin of zero width; such an edge is moved
+    /// just past the previous one so every bin keeps a positive width.
+    /// </remarks>
+    public void FitBoundaries(Tensor<T> features)
+    {
+        if (features is null) throw new ArgumentNullException(nameof(features));
+        if (features.Rank != 2 || features.Shape[1] != _numFeatures)
+            throw new ArgumentException($"Expected [samples, {_numFeatures}] features.", nameof(features));
+        int samples = features.Shape[0];
+        if (samples < 1) throw new ArgumentException("Need at least one sample.", nameof(features));
+
+        var column = new double[samples];
+        for (int f = 0; f < _numFeatures; f++)
+        {
+            for (int s = 0; s < samples; s++)
+            {
+                double value = NumOps.ToDouble(features[s * _numFeatures + f]);
+                if (double.IsNaN(value) || double.IsInfinity(value))
+                    throw new ArgumentException($"Feature {f} has a non-finite value at sample {s}.", nameof(features));
+                column[s] = value;
+            }
+            Array.Sort(column);
+
+            double previous = double.NegativeInfinity;
+            for (int t = 0; t <= _numBins; t++)
+            {
+                // Linearly interpolated quantile at t / T.
+                double position = (double)t / _numBins * (samples - 1);
+                int lower = (int)Math.Floor(position);
+                int upper = Math.Min(lower + 1, samples - 1);
+                double edge = column[lower] + (column[upper] - column[lower]) * (position - lower);
+                if (edge <= previous)
+                    edge = previous + Math.Max(Math.Abs(previous), 1.0) * 1e-6;
+                _binEdges[f * (_numBins + 1) + t] = NumOps.FromDouble(edge);
+                previous = edge;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Encodes [batch, numFeatures] into [batch, numFeatures * numBins].
+    /// </summary>
+    /// <remarks>
+    /// Built from engine ops, so a gradient tape records it: the derivative 1 / (b_t - b_{t-1}) reaches the input
+    /// wherever the clamp is not active. (It used to be a scalar loop writing into a rented tensor, which no tape
+    /// saw, computing a symmetric "triangle" that is not the paper's encoding.)
+    /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _inputCache = input;
+        if (input.Rank != 2 || input.Shape[1] != _numFeatures)
+            throw new ArgumentException($"Expected [batch, {_numFeatures}] features.", nameof(input));
+        int batch = input.Shape[0];
+        int bins = _numBins;
+        var shape = new[] { batch, _numFeatures, bins };
 
-        int batchSize = input.Shape[0];
-        var output = TensorAllocator.Rent<T>([batchSize, _numFeatures * _numBins]);
-
-        for (int b = 0; b < batchSize; b++)
+        // Per-bin constants: lower edge, width, and the clamp bounds (no lower clamp on the first bin, no upper clamp
+        // on the last). None of them needs a gradient.
+        var lowerEdge = new Tensor<T>([1, _numFeatures, bins]);
+        var width = new Tensor<T>([1, _numFeatures, bins]);
+        var floor = new Tensor<T>([1, _numFeatures, bins]);
+        var ceiling = new Tensor<T>([1, _numFeatures, bins]);
+        for (int f = 0; f < _numFeatures; f++)
         {
-            for (int f = 0; f < _numFeatures; f++)
+            for (int t = 0; t < bins; t++)
             {
-                var value = input[b * _numFeatures + f];
-                EncodeFeature(value, f, output, b);
+                int i = f * bins + t;
+                var lo = _binEdges[f * (bins + 1) + t];
+                lowerEdge[i] = lo;
+                width[i] = NumOps.Subtract(_binEdges[f * (bins + 1) + t + 1], lo);
+                floor[i] = t == 0 ? NumOps.FromDouble(double.NegativeInfinity) : NumOps.Zero;
+                ceiling[i] = t == bins - 1 ? NumOps.FromDouble(double.PositiveInfinity) : NumOps.One;
             }
         }
 
-        _outputCache = output;
-        return output;
-    }
-
-    private void EncodeFeature(T value, int featureIdx, Tensor<T> output, int batchIdx)
-    {
-        int outputOffset = batchIdx * _numFeatures * _numBins + featureIdx * _numBins;
-        int boundaryOffset = featureIdx * (_numBins - 1);
-
-        // First bin: value - boundary[0] (clamped to [0, 1])
-        var firstBoundary = _binBoundaries[boundaryOffset];
-        var firstActivation = NumOps.Subtract(value, firstBoundary);
-        firstActivation = ClampToUnitInterval(firstActivation);
-        output[outputOffset] = firstActivation;
-
-        // Middle bins: min(value - boundary[i-1], boundary[i] - value) (clamped)
-        for (int bin = 1; bin < _numBins - 1; bin++)
-        {
-            var lowerBound = _binBoundaries[boundaryOffset + bin - 1];
-            var upperBound = _binBoundaries[boundaryOffset + bin];
-
-            var lowerDiff = NumOps.Subtract(value, lowerBound);
-            var upperDiff = NumOps.Subtract(upperBound, value);
-            var activation = Min(lowerDiff, upperDiff);
-            activation = ClampToUnitInterval(activation);
-            output[outputOffset + bin] = activation;
-        }
-
-        // Last bin: boundary[last] - value (clamped to [0, 1])
-        var lastBoundary = _binBoundaries[boundaryOffset + _numBins - 2];
-        var lastActivation = NumOps.Subtract(lastBoundary, value);
-        lastActivation = ClampToUnitInterval(lastActivation);
-        output[outputOffset + _numBins - 1] = lastActivation;
-    }
-
-    private T ClampToUnitInterval(T value)
-    {
-        if (NumOps.Compare(value, NumOps.Zero) < 0)
-            return NumOps.Zero;
-        if (NumOps.Compare(value, NumOps.One) > 0)
-            return NumOps.One;
-        return value;
-    }
-
-    private T Min(T a, T b)
-    {
-        return NumOps.Compare(a, b) < 0 ? a : b;
+        var x = Engine.TensorBroadcastTo(Engine.Reshape(input, new[] { batch, _numFeatures, 1 }), shape);
+        var raw = Engine.TensorDivide(
+            Engine.TensorSubtract(x, Engine.TensorBroadcastTo(lowerEdge, shape)),
+            Engine.TensorBroadcastTo(width, shape));
+        var encoded = Engine.TensorClampTensor(raw,
+            Engine.TensorBroadcastTo(floor, shape),
+            Engine.TensorBroadcastTo(ceiling, shape));
+        return Engine.Reshape(encoded, new[] { batch, _numFeatures * bins });
     }
 
     /// <inheritdoc/>
     public override void UpdateParameters(T learningRate)
     {
-        Engine.TensorSubtractInPlace(_binBoundaries,
-            Engine.TensorMultiplyScalar(_binBoundaryGradients, learningRate));
+        // No trainable parameters: the edges are fixed once fitted, as in the paper.
     }
 
     /// <inheritdoc/>
     public override void ResetState()
     {
-        _inputCache = null;
-        _outputCache = null;
-
-        Engine.TensorFill(_binBoundaryGradients, NumOps.Zero);
     }
-
 }

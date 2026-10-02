@@ -23,19 +23,77 @@ using AiDotNet.TestImpact.TypeImpact;
 //   TypeImpact --repo <root> --bin <dir> [--bin <dir>...] --project <csproj>=<assembly> [...]
 //              --changes <git diff --name-status output> --shards <shard-manifest.json>
 //              --out <plan.json> [--max-classes <n>]
+//   TypeImpact --inventory --repo <root> --bin <dir> [...] --project <csproj>=<assembly> [...]
+//              --shards <shard-manifest.json> --out <inventory.json> [--excluded-category <name>...]
+//              (exit 1 when a test class is selected by no shard; see ShardInventory.cs)
+//   Generator changes: --base-bin <merge-base build dir> [...] [--base-repo <its checkout>]
+//              --generator-root src/AiDotNet.Generators/ --generator-tests <namespace prefix of its tests>
 
+// Marks a const line whose declaration could not be read (a file with one stays unmappable).
+const string UnreadableConst = "<unreadable const>";
 var options = Options.Parse(args);
 var clock = Stopwatch.StartNew();
 var index = AssemblyIndex.Load(options.Bins, options.Repo);
 Console.WriteLine($"indexed {index.Nodes.Count} types in {index.AssemblyNames.Count} assemblies in {clock.Elapsed.TotalSeconds:F1}s");
+if (options.Inventory)
+{
+    return ShardInventory.Run(index, options);
+}
 
 var unresolved = new List<JsonObject>();
 var ignored = new List<string>();
 var changed = new HashSet<TypeNode>();
 var perFile = new JsonArray();
 var constLines = options.Diff.Length == 0 ? null : FilesEditingConstLines(options.Diff);
-foreach (var (status, path) in ReadChanges(options.Changes))
+var changes = ReadChanges(options.Changes).ToList();
+var generatorSources = new JsonArray();
+bool generatorChanged = false;
+int generatedChanges = 0;
+int generatedCompared = 0;
+if (options.BaseBins.Count > 0)
 {
+    // A generator reaches runtime only through what it emits, so with the merge base's build at hand its change is
+    // the set of generated documents whose content differs, each mapped like any other changed source.
+    var head = index.GeneratedDocuments();
+    var baseline = AssemblyIndex.LoadGeneratedDocuments(options.BaseBins, options.BaseRepo);
+    foreach (var name in head.Keys.Union(baseline.Keys, StringComparer.Ordinal).OrderBy(n => n, StringComparer.Ordinal))
+    {
+        var now = head.GetValueOrDefault(name) ?? [];
+        var before = baseline.GetValueOrDefault(name) ?? [];
+        if (now.Count > 0 && !baseline.ContainsKey(name) || before.Count > 0 && !head.ContainsKey(name))
+        {
+            unresolved.Add(new JsonObject { ["path"] = $"generated output of {name}", ["reason"] = "only one of the base and head builds has this assembly, so its generated output cannot be compared" });
+            continue;
+        }
+
+        generatedCompared += now.Count;
+        foreach (var key in now.Keys.Union(before.Keys, StringComparer.Ordinal).OrderBy(k => k, StringComparer.Ordinal))
+        {
+            char status = !before.TryGetValue(key, out var oldHash) ? 'A' : !now.TryGetValue(key, out var newHash) ? 'D' : oldHash == newHash ? ' ' : 'M';
+            if (status != ' ')
+            {
+                changes.Add((status, key));
+                generatedChanges++;
+            }
+        }
+    }
+}
+
+foreach (var (status, path) in changes)
+{
+    bool generated = path.StartsWith("generated/", StringComparison.Ordinal);
+    if (options.BaseBins.Count > 0 && options.GeneratorRoot.Length > 0 && path.StartsWith(options.GeneratorRoot, StringComparison.Ordinal))
+    {
+        // The generated-output diff above already carries this edit. A generator source that a test project also
+        // compiles (a linked file) is still mapped below as that project's own type.
+        generatorChanged = true;
+        if (status == 'D' || index.TypesInDocument(path) is not { Count: > 0 })
+        {
+            generatorSources.Add(path);
+            continue;
+        }
+    }
+
     if (IsDocumentation(path))
     {
         ignored.Add(path);
@@ -54,6 +112,12 @@ foreach (var (status, path) in ReadChanges(options.Changes))
         continue;
     }
 
+    if (status == 'D' && generated)
+    {
+        unresolved.Add(new JsonObject { ["path"] = path, ["reason"] = "a generator stopped emitting this output: what depended on it cannot be read from the new assemblies" });
+        continue;
+    }
+
     if (status == 'D')
     {
         // The new assemblies cannot show who depended on it: callers may now bind to another
@@ -69,13 +133,25 @@ foreach (var (status, path) in ReadChanges(options.Changes))
         continue;
     }
 
-    // Consumers inline a const's value and keep no reference to its type, so an edited const line
-    // in a type that exposes one cannot be followed. Without the diff, any such file is unmappable.
+    // Consumers inline a const's value and keep no reference to its type, so the type graph cannot follow an edited
+    // const line. They do name it in source, though: every file that mentions an edited const's name is treated as
+    // changed with it. Without the diff, when a const line's name cannot be read, or for a generated document (it has
+    // no line diff, so a visible const in it is never known to be unchanged), the file stays unmappable.
     if (types.Any(t => t.DeclaresVisibleConstant) &&
-        (constLines is null || constLines.Contains(path)))
+        (generated || constLines is null || constLines.ContainsKey(path)))
     {
-        unresolved.Add(new JsonObject { ["path"] = path, ["reason"] = "edits a non-private const: consumers inline its value and hold no reference to it" });
-        continue;
+        var names = constLines?.GetValueOrDefault(path);
+        var consumers = names is null || names.Count == 0 ? null : FilesNaming(options.Repo, names);
+        if (consumers is null)
+        {
+            unresolved.Add(new JsonObject { ["path"] = path, ["reason"] = "edits a non-private const: consumers inline its value and hold no reference to it" });
+            continue;
+        }
+
+        foreach (var consumer in consumers)
+        {
+            if (index.TypesInDocument(consumer) is { } consumerTypes) changed.UnionWith(consumerTypes);
+        }
     }
 
     changed.UnionWith(types);
@@ -130,6 +206,12 @@ var enumerating = ReverseClosure(index.Nodes.Where(n => n.Enumerates && testAsse
 // types they enumerate.
 bool anySource = changed.Any(n => !index.TestAssemblies.Contains(n.Assembly));
 var selectedNodes = new HashSet<TypeNode>(affected.Where(n => n.TestClasses.Count > 0));
+// A generator's own tests drive it directly (a generator driver over sample sources), which no reference from the
+// generated output reaches.
+if (generatorChanged && options.GeneratorTests.Length > 0)
+{
+    selectedNodes.UnionWith(index.Nodes.Where(n => n.TestClasses.Any(c => c.VsTestName.StartsWith(options.GeneratorTests, StringComparison.Ordinal))));
+}
 if (anySource)
 {
     selectedNodes.UnionWith(enumerating);
@@ -191,6 +273,9 @@ var result = new JsonObject
     ["ignored"] = new JsonArray(ignored.Select(p => (JsonNode)p).ToArray()),
     ["changedFiles"] = perFile,
     ["changedTypes"] = changed.Count,
+    ["generatedDocumentsCompared"] = generatedCompared,
+    ["generatedChanges"] = generatedChanges,
+    ["generatorSources"] = generatorSources,
     ["reachableTypes"] = affected.Count,
     ["dispatchTables"] = new JsonArray(dispatchTables.Select(n => (JsonNode)n.Key).OrderBy(k => (string)k!, StringComparer.Ordinal).ToArray()),
     ["totalTestClasses"] = allClasses.Count,
@@ -231,10 +316,14 @@ static HashSet<TypeNode> ReverseClosure(IEnumerable<TypeNode> roots, HashSet<Typ
 }
 
 // Files whose added or removed lines in a unified diff mention `const`.
-static HashSet<string> FilesEditingConstLines(string diffFile)
+// Per file with an edited line that mentions const: the const names declared on those lines. A line whose declaration
+// cannot be read poisons its file's set, which keeps the file unmappable.
+static Dictionary<string, HashSet<string>> FilesEditingConstLines(string diffFile)
 {
-    var result = new HashSet<string>(StringComparer.Ordinal);
+    var result = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
     var constWord = new System.Text.RegularExpressions.Regex(@"\bconst\b");
+    // "const <type> A = ..., B = ...": every declarator's name.
+    var declarators = new System.Text.RegularExpressions.Regex(@"\bconst\b[^=;]*?\b(\w+)\s*=|,\s*(\w+)\s*=");
     string? current = null;
     foreach (var line in File.ReadLines(diffFile))
     {
@@ -253,11 +342,54 @@ static HashSet<string> FilesEditingConstLines(string diffFile)
 
         if (current is not null && line.Length > 0 && line[0] is '+' or '-' && constWord.IsMatch(line))
         {
-            result.Add(current);
+            if (!result.TryGetValue(current, out var names))
+            {
+                result[current] = names = new HashSet<string>(StringComparer.Ordinal);
+            }
+
+            var found = declarators.Matches(line)
+                .Select(m => m.Groups[1].Success ? m.Groups[1].Value : m.Groups[2].Value)
+                .Where(n => n.Length > 0)
+                .ToList();
+            if (found.Count == 0)
+            {
+                names.Add(UnreadableConst);
+            }
+            else
+            {
+                names.UnionWith(found);
+            }
         }
     }
 
     return result;
+}
+
+// The repository C# files that name any of these identifiers as a whole word (git grep over the checkout). Null when the
+// search fails, a name could not be read, or so many files match that the selection would not be selective anyway.
+static List<string>? FilesNaming(string repo, IReadOnlyCollection<string> names)
+{
+    if (names.Contains(UnreadableConst)) return null;
+    var psi = new System.Diagnostics.ProcessStartInfo("git") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+    psi.ArgumentList.Add("-C"); psi.ArgumentList.Add(repo);
+    psi.ArgumentList.Add("grep"); psi.ArgumentList.Add("--untracked"); psi.ArgumentList.Add("-l"); psi.ArgumentList.Add("-w"); psi.ArgumentList.Add("-F");
+    foreach (var name in names) { psi.ArgumentList.Add("-e"); psi.ArgumentList.Add(name); }
+    psi.ArgumentList.Add("--"); psi.ArgumentList.Add("*.cs");
+    try
+    {
+        using var process = System.Diagnostics.Process.Start(psi);
+        if (process is null) return null;
+        var files = process.StandardOutput.ReadToEnd()
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        process.WaitForExit();
+        // git grep: 0 = found, 1 = nothing found, anything else = the search failed.
+        if (process.ExitCode is not (0 or 1)) return null;
+        return files.Count > 2000 ? null : files.Select(f => f.Replace('\\', '/')).ToList();
+    }
+    catch (System.ComponentModel.Win32Exception)
+    {
+        return null;
+    }
 }
 
 static IEnumerable<(char Status, string Path)> ReadChanges(string file)
@@ -288,21 +420,7 @@ static bool IsDocumentation(string path)
         || path.StartsWith("docs/", StringComparison.Ordinal);
 }
 
-static string Escape(string value)
-{
-    var builder = new System.Text.StringBuilder(value.Length);
-    foreach (char c in value)
-    {
-        if (c is '(' or ')' or '&' or '|' or '=' or '!' or '~' or '\\')
-        {
-            builder.Append('\\');
-        }
-
-        builder.Append(c);
-    }
-
-    return builder.ToString();
-}
+static string Escape(string value) => VsTestFilter.Escape(value);
 
 internal sealed class Options
 {
@@ -319,6 +437,12 @@ internal sealed class Options
     public int CatalogThreshold { get; private set; } = 250;
     public int CatalogMaxEntryPoints { get; private set; } = 10;
     public List<string> Unmappable { get; } = [];
+    public bool Inventory { get; private set; }
+    public List<string> BaseBins { get; } = [];
+    public string BaseRepo { get; private set; } = string.Empty;
+    public string GeneratorRoot { get; private set; } = string.Empty;
+    public string GeneratorTests { get; private set; } = string.Empty;
+    public List<string> ExcludedCategories { get; } = [];
 
     public static Options Parse(string[] args)
     {
@@ -344,14 +468,25 @@ internal sealed class Options
                 case "--catalog-threshold": options.CatalogThreshold = int.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
                 case "--catalog-max-entry-points": options.CatalogMaxEntryPoints = int.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
                 case "--dispatch-threshold": options.DispatchThreshold = int.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
+                case "--inventory": options.Inventory = true; break;
+                case "--base-bin": options.BaseBins.Add(Path.GetFullPath(Next())); break;
+                case "--base-repo": options.BaseRepo = Path.GetFullPath(Next()); break;
+                case "--generator-root": options.GeneratorRoot = Next().Replace('\\', '/'); break;
+                case "--generator-tests": options.GeneratorTests = Next(); break;
+                case "--excluded-category": options.ExcludedCategories.Add(Next()); break;
                 case "--max-classes": options.MaxClasses = int.Parse(Next(), System.Globalization.CultureInfo.InvariantCulture); break;
                 default: throw new ArgumentException($"unknown argument {args[i]}");
             }
         }
 
-        if (options.Bins.Count == 0 || options.Changes.Length == 0 || options.Shards.Length == 0)
+        if (options.Bins.Count == 0 || options.Shards.Length == 0 || (!options.Inventory && options.Changes.Length == 0))
         {
-            throw new ArgumentException("--bin, --changes and --shards are required");
+            throw new ArgumentException("--bin and --shards are required, and --changes unless --inventory");
+        }
+
+        if (options.BaseRepo.Length == 0)
+        {
+            options.BaseRepo = options.Repo;
         }
 
         return options;

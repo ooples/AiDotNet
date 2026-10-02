@@ -39,12 +39,14 @@ public sealed class GeneratedHeavyFixtureContractTests
         namespace AiDotNet.Video.Motion
         {
             public abstract class OpticalFlowBase<T> : AiDotNet.NeuralNetworks.NeuralNetworkBase<T> { }
+            public class MemFlowOptions { public int NumFeatures { get; set; } public int NumLayers { get; set; } }
             [AiDotNet.Attributes.ModelDomain(0)]
             public class MemFlow<T> : OpticalFlowBase<T>
             {
                 public MemFlow() { }
+                // The real constructor since 25b4df50ba: bounded sizes travel in MemFlowOptions.
                 public MemFlow(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T> architecture,
-                    int numFeatures = 64, int numLayers = 8) { }
+                    MemFlowOptions? options = null) { }
             }
             [AiDotNet.Attributes.ModelDomain(0)]
             public class PlainFlow<T> : OpticalFlowBase<T>
@@ -79,8 +81,10 @@ public sealed class GeneratedHeavyFixtureContractTests
         ClassDeclarationSyntax fixture = GenerateFixture("MemFlowTests");
         ObjectCreationExpressionSyntax creation = ModelConstructor(fixture, "MemFlow");
 
-        AssertNamedInteger(creation, "numFeatures", 8);
-        AssertNamedInteger(creation, "numLayers", 2);
+        // MemFlow takes its bounded sizes through MemFlowOptions (the public constructor since 25b4df50ba), so the
+        // fixture's 8 features / 2 layers are asserted on that initializer rather than as named constructor arguments.
+        AssertAssignedInteger(creation, "NumFeatures", 8);
+        AssertAssignedInteger(creation, "NumLayers", 2);
         ObjectCreationExpressionSyntax architecture = Assert.Single(creation.DescendantNodes()
             .OfType<ObjectCreationExpressionSyntax>(),
             node => node.Type.ToString().Contains("NeuralNetworkArchitecture"));

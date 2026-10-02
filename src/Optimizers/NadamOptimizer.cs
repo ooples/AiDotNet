@@ -1,4 +1,4 @@
-﻿using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using System.Collections.Concurrent;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -473,11 +473,12 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                 if (!_tapeM.TryGetValue(param, out var mSp)) { mSp = new Tensor<T>(param._shape); _tapeM[param] = mSp; }
                 if (!_tapeV2.TryGetValue(param, out var vSp)) { vSp = new Tensor<T>(param._shape); _tapeV2[param] = vSp; }
                 double bc1 = 1.0 - Math.Pow(_options.Beta1, _tapeStep);
+                double bc1Next = 1.0 - Math.Pow(_options.Beta1, _tapeStep + 1);
                 double bc2 = 1.0 - Math.Pow(_options.Beta2, _tapeStep);
                 if (SparseEmbeddingOptimizerHelpers.TryApplyNadamSparse(
                         param, mSp, vSp,
                         NumOps.ToDouble(CurrentLearningRate),
-                        _options.Beta1, _options.Beta2, bc1, bc2,
+                        _options.Beta1, _options.Beta2, bc1, bc1Next, bc2,
                         _options.Epsilon, weightDecay: 0.0))
                 {
                     continue;

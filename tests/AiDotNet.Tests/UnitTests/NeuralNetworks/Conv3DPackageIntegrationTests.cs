@@ -9,6 +9,8 @@ using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 
+// Sets AiDotNetEngine.Current, a process-wide static: run apart from every other test class.
+[Collection("EngineCurrentGlobalState")]
 public sealed class Conv3DPackageIntegrationTests : IDisposable
 {
     private readonly IEngine _priorEngine = AiDotNetEngine.Current;

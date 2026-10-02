@@ -83,7 +83,7 @@ public class CTCLossTapeTests
             AiDotNet.Tensors.Helpers.BlasProvider.SetDeterministicMode(true);
             NeuralNetworkArchitecture<float>.DefaultRandomSeedOverride = 1234;
             if (AiDotNet.Tensors.Engines.AiDotNetEngine.Current is not AiDotNet.Tensors.Engines.CpuEngine)
-                AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+                AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
             AiDotNet.Training.CompiledTapeTrainingStep<float>.Invalidate();
             WeightRegistry.Reset();
         }

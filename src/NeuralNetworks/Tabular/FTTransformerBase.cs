@@ -269,22 +269,14 @@ public abstract class FTTransformerBase<T> : IParameterSource<T>
         // Step 3: Apply final layer normalization
         var normalized = FinalLayerNorm.Forward(hidden);
 
-        // Step 4: Extract [CLS] token representation (position 0)
+        // Step 4: Extract the [CLS] token representation (position 0) with an engine slice, so the
+        // tape records it. The element-copy loop this replaces wrote into a fresh tensor the tape
+        // never saw: gradients stopped at the head, and the tokenizer, encoder layers and final
+        // LayerNorm never trained (2 of 20 trainable tensors received a gradient).
         int batchSize = normalized.Shape[0];
-        int seqLen = normalized.Shape[1];
         int embedDim = normalized.Shape[2];
-
-        var clsOutput = new Tensor<T>([batchSize, embedDim]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < embedDim; d++)
-            {
-                // CLS is at position 0 in the sequence
-                clsOutput[b * embedDim + d] = normalized[b * seqLen * embedDim + 0 * embedDim + d];
-            }
-        }
-
-        return clsOutput;
+        var cls = Engine.TensorSlice(normalized, new[] { 0, 0, 0 }, new[] { batchSize, 1, embedDim });
+        return Engine.Reshape(cls, new[] { batchSize, embedDim });
     }
 
     /// <summary>

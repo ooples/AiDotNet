@@ -31,7 +31,7 @@ namespace AiDotNet.Tests.NeuralNetworks.Graph;
 /// CLAIMS a shape and gets it wrong fails.
 /// </para>
 /// </remarks>
-public class ModelContractConformanceTests
+public partial class ModelContractConformanceTests
 {
     private readonly ITestOutputHelper _out;
     public ModelContractConformanceTests(ITestOutputHelper output) => _out = output;
@@ -48,13 +48,7 @@ public class ModelContractConformanceTests
         // MODELS only. Layers implement IShapeContract too - 317 of them - and none has an
         // architecture constructor, so they all landed in "skipped" and buried the real skips under
         // noise. Their conformance is already covered by the layer sweep; this one is about models.
-        var models = typeof(NeuralNetworkBase<>).Assembly.GetTypes()
-            .Where(t => t.IsClass && !t.IsAbstract && t.IsGenericTypeDefinition
-                        && t.GetGenericArguments().Length == 1
-                        && t.GetInterfaces().Any(i => i.Name == "IShapeContract")
-                        && !DerivesFromLayerBase(t))
-            .OrderBy(t => t.Name, StringComparer.Ordinal)
-            .ToList();
+        var models = DiscoverModels();
 
         // Optional window over the candidate list, for running this in passes. The DEFAULTS are the
         // real configuration and are what CI runs; this only lets a developer split one long pass into
@@ -69,6 +63,14 @@ public class ModelContractConformanceTests
                 .Where(t => t.Namespace is not null
                             && t.Namespace.Contains(nsFilter, StringComparison.OrdinalIgnoreCase))
                 .ToList();
+        }
+
+        // CI selects a window from the committed table (ModelContractConformanceTests.Windows.cs), so a model
+        // keeps its window when others are added. The offset and budget below remain for local passes.
+        int window = EnvInt("ADNSHAPE_CONF_WINDOW", -1, 0);
+        if (window >= 0)
+        {
+            models = models.Where(t => ConformanceWindows.TryGetValue(t.FullName ?? t.Name, out int w) && w == window).ToList();
         }
 
         int offset = EnvInt("ADNSHAPE_CONF_OFFSET", 0, 0);
@@ -149,6 +151,16 @@ public class ModelContractConformanceTests
             $"{disagreed.Count} model contract(s) claim a shape their own Predict does not produce."
             + Environment.NewLine + string.Join(Environment.NewLine, disagreed));
     }
+
+    /// <summary>Every model type declaring a shape contract, in name order. Layers are excluded (see above).</summary>
+    internal static List<Type> DiscoverModels() =>
+        typeof(NeuralNetworkBase<>).Assembly.GetTypes()
+            .Where(t => t.IsClass && !t.IsAbstract && t.IsGenericTypeDefinition
+                        && t.GetGenericArguments().Length == 1
+                        && t.GetInterfaces().Any(i => i.Name == "IShapeContract")
+                        && !DerivesFromLayerBase(t))
+            .OrderBy(t => t.Name, StringComparer.Ordinal)
+            .ToList();
 
     private static string Join(int[]? shape) => shape is null ? "?" : string.Join(",", shape);
 

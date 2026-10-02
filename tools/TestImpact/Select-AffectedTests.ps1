@@ -27,9 +27,16 @@ param(
     # Where the built test output lives; the checkout itself unless testing against another build.
     [string] $BuildRoot = '',
     [string] $PlanFile = 'type-impact-plan.json',
-    # Job outputs are capped at 1 MB in total, and matrix and ledger_matrix carry the same shards;
-    # narrowed filters are un-narrowed, largest first, until both together fit under this.
-    [int] $MaxMatrixCharacters = 800000
+    # What actually runs after this script's post-processing (for the selection report). The plan file lists
+    # candidates for every manifest shard; this records the chosen intersection, passthrough, and any narrowing
+    # undone to fit the output limit.
+    [string] $EffectiveFile = 'type-impact-effective.json',
+    # Job outputs are capped at 1 MB in total, measured in UTF-16 (two bytes per ASCII character), and
+    # matrix and ledger_matrix carry the same shards; narrowed filters are un-narrowed, largest first,
+    # until both together fit under this. 400,000 characters is ~800 KB, which leaves room for the job's
+    # other outputs. The former 800,000 counted characters as bytes: #2272's plan passed it and still
+    # failed the job with "Job outputs exceed 1,048,576 bytes".
+    [int] $MaxMatrixCharacters = 400000
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -38,17 +45,61 @@ function Write-Output-Value([string] $Name, [string] $Value) {
     "$Name=$Value" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 }
 
+function Write-Effective([string] $Mode, [string] $Why, $Shards) {
+    # Report-only and never fatal: the matrix outputs above are what the workflow consumes.
+    try {
+        $rows = @(foreach ($shard in @($Shards)) {
+            $narrowed = [bool] ($shard.PSObject.Properties['narrowed'] -and $shard.narrowed)
+            [pscustomobject]@{
+                name = [string] $shard.name
+                narrowed = $narrowed
+                classes = $(if ($narrowed -and $shard.PSObject.Properties['narrowedClasses']) { [int] $shard.narrowedClasses } else { $null })
+            }
+        })
+        ConvertTo-Json -InputObject ([pscustomobject]@{ schemaVersion = 1; mode = $Mode; reason = $Why; shards = $rows }) -Depth 4 |
+            Set-Content -LiteralPath (Join-Path $Repository $EffectiveFile) -Encoding utf8
+    }
+    catch { Write-Host "::warning::effective test-level selection not recorded: $($_.Exception.Message)" }
+}
+
 function Write-Passthrough([string] $Why) {
     # Passing through is a success. A native command this script tolerated (TypeImpact, yq) leaves its exit code in
     # $LASTEXITCODE, and the Actions pwsh wrapper ends the step with `exit $LASTEXITCODE`, so without this reset
     # the step failed after deliberately falling back.
     $global:LASTEXITCODE = 0
     Write-Host "test-level selection not applied: $Why - keeping the shard selection as chosen"
-    Write-Output-Value 'matrix' $env:SELECTED_MATRIX
-    Write-Output-Value 'ledger_matrix' $env:SELECTED_LEDGER_MATRIX
-    Write-Output-Value 'skipped' $env:SELECTED_SKIPPED
+    # Publish nothing for the selection itself: every consumer reads `needs.build.outputs.X || needs.select-shards
+    # .outputs.X`, so an empty value IS the passthrough. Re-publishing select-shards' matrices here added their full
+    # size to this job's outputs, which a large selection pushes past GitHub's 1,048,576-byte (UTF-16) job cap.
+    Write-Output-Value 'matrix' ''
+    Write-Output-Value 'ledger_matrix' ''
+    Write-Output-Value 'skipped' ''
     Write-Output-Value 'impact_mode' 'passthrough'
+    $passed = @(try { @($env:SELECTED_MATRIX | ConvertFrom-Json) } catch { @() })
+    Write-Effective 'passthrough' $Why $passed
     "### Test-level selection`n`nNot applied: $Why." | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+}
+
+function Get-InertChangedPaths([string] $Base) {
+    # Select-Shards' path classifier, the same one the Select shards job applies. NonRuntime and BuildOnly paths
+    # cannot change what any test executes; every other category (and any failure) keeps the path.
+    $classifier = Join-Path $Repository 'tools/TestImpact/Select-Shards.ps1'
+    if (-not (Test-Path -LiteralPath $classifier)) { return @() }
+    $out = Join-Path ([IO.Path]::GetTempPath()) 'type-impact-path-classification.json'
+    try {
+        & pwsh -NoProfile -File $classifier -ClassifyOnly -BaseSha $Base -OutFile $out | Out-Host
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $out)) { return @() }
+        $result = Get-Content -LiteralPath $out -Raw | ConvertFrom-Json
+        $impacts = $result.PSObject.Properties['pathImpacts']
+        if ($null -eq $impacts -or $null -eq $impacts.Value) { return @() }
+        return @($impacts.Value.PSObject.Properties |
+            Where-Object { [string] $_.Value -cin @('NonRuntime', 'BuildOnly') } | ForEach-Object Name)
+    }
+    catch {
+        Write-Host "path classification unavailable ($($_.Exception.Message)); every changed path stays a type-impact input"
+        return @()
+    }
+    finally { $global:LASTEXITCODE = 0 }
 }
 
 if (-not $BuildRoot) { $BuildRoot = $Repository }
@@ -72,6 +123,15 @@ try {
     $changes = Join-Path ([IO.Path]::GetTempPath()) 'type-impact-changes.txt'
     $changeLines = @(& git -c core.quotepath=false diff --no-renames --name-status $parents[1] HEAD)
     if ($LASTEXITCODE -ne 0) { throw 'git diff failed' }
+    # A path the shard selector proves cannot affect a test (documentation, an unreferenced tool or test project,
+    # a .github file only GitHub reads, .editorconfig) is not a type-impact input: TypeImpact cannot map a non-C#
+    # file, so one such file used to pass the whole decision through. Classification that fails removes nothing.
+    $inert = @(Get-InertChangedPaths -Base $parents[1])
+    if ($inert.Count -gt 0) {
+        $inertSet = [Collections.Generic.HashSet[string]]::new([string[]] $inert, [StringComparer]::Ordinal)
+        $changeLines = @($changeLines | Where-Object { -not $inertSet.Contains(([string] $_).Split("`t")[-1]) })
+        Write-Host "left out $($inert.Count) path(s) that cannot affect a test: $(@($inert | Select-Object -First 5) -join ', ')"
+    }
     [IO.File]::WriteAllLines($changes, [string[]] $changeLines)
     # Line-level diff, for the const edits the type graph cannot follow.
     $diff = Join-Path ([IO.Path]::GetTempPath()) 'type-impact-changes.diff'
@@ -87,6 +147,13 @@ try {
     # Known-answer cases over a compiled fixture; a selector that fails them must not narrow anything.
     & pwsh -NoProfile -File (Join-Path $Repository 'tools/TestImpact/TypeImpact/Test-TypeImpact.ps1')
     if ($LASTEXITCODE -ne 0) { throw 'TypeImpact failed its self-test' }
+    # A generator change maps through its generated output when Build-GeneratorBase.ps1 built the merge base;
+    # without that build it stays unmappable and the coverage selection is kept.
+    $generatorArguments = @('--unmappable', 'src/AiDotNet.Generators/')
+    if ($env:TYPE_IMPACT_BASE_BIN -and (Test-Path -LiteralPath $env:TYPE_IMPACT_BASE_BIN)) {
+        $generatorArguments = @('--base-bin', $env:TYPE_IMPACT_BASE_BIN, '--base-repo', $env:TYPE_IMPACT_BASE_REPO,
+            '--generator-root', 'src/AiDotNet.Generators/', '--generator-tests', 'AiDotNet.Tests.Generators.')
+    }
     $tool = Join-Path $Repository 'tools/TestImpact/TypeImpact/TypeImpact.csproj'
     & dotnet run --project $tool -c Release --no-build -- `
         --repo $BuildRoot `
@@ -94,7 +161,7 @@ try {
         --bin (Join-Path $BuildRoot 'tests/AiDotNet.Serving.Tests/bin/Release/net10.0') `
         --project 'tests/AiDotNet.Tests/AiDotNetTests.csproj=AiDotNetTests' `
         --project 'tests/AiDotNet.Serving.Tests/AiDotNet.Serving.Tests.csproj=AiDotNet.Serving.Tests' `
-        --unmappable 'src/AiDotNet.Generators/' `
+        @generatorArguments `
         --unmappable "tools/" `
         --changes $changes --diff $diff --shards $manifest --out $PlanFile
     if ($LASTEXITCODE -ne 0) { throw "TypeImpact exited $LASTEXITCODE" }
@@ -171,6 +238,7 @@ Write-Output-Value 'matrix' $json
 Write-Output-Value 'ledger_matrix' (ConvertTo-Json -InputObject @($runnable.LedgerShards) -Depth 6 -Compress)
 Write-Output-Value 'skipped' (ConvertTo-Json -InputObject @($skipped) -Depth 3 -Compress)
 Write-Output-Value 'impact_mode' 'narrowed'
+Write-Effective 'narrowed' '' $tests
 
 $narrowedCount = @($tests | Where-Object { $_.PSObject.Properties['narrowed'] -and $_.narrowed }).Count
 $lines = @(

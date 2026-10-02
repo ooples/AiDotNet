@@ -86,6 +86,8 @@ $script:SharedInfrastructureFiles = @(
 # remaining keys are formatting and diagnostic severities. Escalating 164 shards - 34,421 tests -
 # to prove an indent rule is the single largest unjustified escalation measured on real PRs.
 $script:BuildOnlyFiles = @('.editorconfig')
+# Per tool directory: whether this workflow's build or tests reference it (Test-ToolDirectoryReferenced).
+$script:ToolReferenceCache = @{}
 $script:FullValidationPaths = @(
     '.github/test-shards.yml',
     '.github/test-shard-changes.json'
@@ -217,12 +219,93 @@ function Get-ChangedPathImpact {
     }
 
     # Unknown GitHub configuration can affect analysis, generated reports, or a required check. It
-    # is intentionally not eligible for coverage-map reduction until classified explicitly.
+    # is intentionally not eligible for coverage-map reduction until classified explicitly. The exception (R9) is a
+    # file no workflow, action, script or tool names (CODEOWNERS, issue templates, FUNDING.yml, dependabot.yml): GitHub
+    # reads those itself, and none of them can change what a test shard executes.
     if ($normalized.StartsWith('.github/', [StringComparison]::OrdinalIgnoreCase)) {
+        if (-not (Test-GitHubFileReferenced -Path $normalized)) { return [ChangedPathImpact]::NonRuntime }
         return [ChangedPathImpact]::FullValidation
     }
 
+    # A standalone tool, or a top-level tree such as api/ (an Azure Function with its own deploy workflow), that
+    # nothing in this workflow's build or tests references cannot change what any shard executes. Checked per
+    # directory against the tree; any doubt (a failed search, a root-level file, a dot-directory) keeps the old
+    # behaviour. src/ and tests/ are the product and are never eligible.
+    $top = $normalized.Split('/')[0]
+    if ($normalized.Contains('/') -and -not $top.StartsWith('.') -and $top -notin @('src', 'tests') -and
+        -not (Test-ToolDirectoryReferenced -Path $normalized)) {
+        return [ChangedPathImpact]::NonRuntime
+    }
+
     return [ChangedPathImpact]::MapCandidate
+}
+
+<#
+.SYNOPSIS
+Whether anything this workflow builds, tests or invokes references a tools/<name>/ directory.
+
+.DESCRIPTION
+Searched at HEAD in tests/, src/, the solution files, Directory.Build.* and this workflow file. Other workflows are
+left out on purpose: they have their own triggers and cannot change what a test shard here executes. A tool
+mentioned anywhere in that set keeps the old behaviour (MapCandidate, so it escalates as unmapped). A failed search
+counts as referenced: never trade safety for a narrower matrix.
+#>
+function Test-ToolDirectoryReferenced {
+    param([Parameter(Mandatory)] [string] $Path)
+    $segments = $Path.Split('/')
+    if ($segments[0] -ieq 'tools') {
+        if ($segments.Count -lt 3) { return $true }   # a file directly under tools/: no directory to scope by
+        $directory = 'tools/' + $segments[1]
+        if ($script:ToolReferenceCache.ContainsKey($directory)) { return $script:ToolReferenceCache[$directory] }
+        $pattern = 'tools[/\\]' + [regex]::Escape($segments[1]) + '([/\\]|[^A-Za-z0-9_.-]|$)'
+        $null = & git grep -q -i -E $pattern HEAD -- 'tests/' 'src/' '*.sln' '*.slnx' 'Directory.Build.props' 'Directory.Build.targets' '.github/workflows/sonarcloud.yml' 2>$null
+        # git grep: 0 = found, 1 = not found, anything else = the search itself failed.
+        $referenced = $LASTEXITCODE -ne 1
+        $script:ToolReferenceCache[$directory] = $referenced
+        return $referenced
+    }
+
+    # Any other top-level tree (api/, schemas/, ...). A file reaches a test shard through the build (an MSBuild item,
+    # a solution entry, this workflow) or by a test reading it at run time. Product .cs files are not searched: a
+    # route such as [Route("api/...")] is text, not a path, and product code does not read the checkout's layout.
+    # Tests are searched for the directory as a path, or as a Path.Combine/Path.Join argument ("samples").
+    $directory = $segments[0]
+    if ($script:ToolReferenceCache.ContainsKey($directory)) { return $script:ToolReferenceCache[$directory] }
+    $name = [regex]::Escape($directory)
+    $asPath = '(^|["''\s=;(,>]|\.\.[/\\])' + $name + '[/\\]'
+    $null = & git grep -q -i -E $asPath HEAD -- '*.csproj' '*.props' '*.targets' '*.sln' '*.slnx' '.github/workflows/sonarcloud.yml' 2>$null
+    $referenced = $LASTEXITCODE -ne 1
+    if (-not $referenced) {
+        $joined = 'Path\.(Combine|Join)\([^)]*["'']' + $name + '["'']'
+        $null = & git grep -q -i -E "($asPath)|($joined)" HEAD -- 'tests/' 2>$null
+        $referenced = $LASTEXITCODE -ne 1
+    }
+    $script:ToolReferenceCache[$directory] = $referenced
+    return $referenced
+}
+
+<#
+.SYNOPSIS
+Whether any workflow, composite action, script or tool names a .github/ file.
+
+.DESCRIPTION
+Searched at HEAD for the file name in .github/ (workflows, actions, scripts and other config) and tools/. Names
+shorter than six characters are too generic to search for and count as referenced, as does any failed search.
+#>
+function Test-GitHubFileReferenced {
+    param([Parameter(Mandatory)] [string] $Path)
+    $name = [IO.Path]::GetFileName($Path)
+    if ($name.Length -lt 6) { return $true }
+    $key = '.github:' + $name
+    if ($script:ToolReferenceCache.ContainsKey($key)) { return $script:ToolReferenceCache[$key] }
+    # Matches the name only where a path ends, so 'bug_report.yml' is not found inside 'old_bug_report.yml'.
+    $pattern = '(^|[^A-Za-z0-9_.-])' + [regex]::Escape($name) + '($|[^A-Za-z0-9_.-])'
+    # The file itself is left out: it names itself (CODEOWNERS lists /.github/CODEOWNERS), which is no reference. So is
+    # this classifier: it names such files in its comments and self-test, and reads none of them.
+    $null = & git grep -q -i -E $pattern HEAD -- '.github/' 'tools/' ":(exclude)$Path" ':(exclude)tools/TestImpact/Select-Shards.ps1' 2>$null
+    $referenced = $LASTEXITCODE -ne 1
+    $script:ToolReferenceCache[$key] = $referenced
+    return $referenced
 }
 
 <#
@@ -682,7 +765,18 @@ function Add-UnmappedShardsAsAlwaysRun {
 # windows Skip/Take a sorted type list and the parameter-count sweep takes index % 8. Adding one
 # model moves others between such shards without touching their executed lines, so their coverage
 # index is only trusted while the inventory is unchanged (see Test-AuxiliaryInventoryChange).
-$script:InventoryWindowEnvironment = @('ADNSHAPE_CONF_OFFSET', 'AIDOTNET_PARAMETER_COUNT_SHARD')
+$script:InventoryWindowEnvironment = @('ADNSHAPE_CONF_OFFSET', 'ADNSHAPE_CONF_WINDOW', 'AIDOTNET_PARAMETER_COUNT_SHARD')
+# Of those, the windows keyed by model name rather than position (see Get-AuxiliaryWindowInvalidation).
+$script:NameKeyedWindowEnvironment = @('ADNSHAPE_CONF_WINDOW', 'AIDOTNET_PARAMETER_COUNT_SHARD')
+
+function Test-NameKeyedWindow {
+    param([Parameter(Mandatory)] [object] $Shard)
+    $environment = if ($Shard -is [System.Collections.IDictionary]) { $Shard['env'] } else { $Shard.PSObject.Properties['env']?.Value }
+    if ($null -eq $environment) { return $false }
+    $names = if ($environment -is [System.Collections.IDictionary]) { @($environment.Keys) } else { @($environment.PSObject.Properties.Name) }
+    return @($names | Where-Object { [string] $_ -cin $script:NameKeyedWindowEnvironment }).Count -gt 0 -and
+        @($names | Where-Object { [string] $_ -ceq 'ADNSHAPE_CONF_OFFSET' }).Count -eq 0
+}
 
 function Test-InventoryWindow {
     param([Parameter(Mandatory)] [object] $Shard)
@@ -809,6 +903,14 @@ function Select-ImpactedShards {
     $mappedPaths = [System.Collections.Generic.List[string]]::new()
     $reasons = [System.Collections.Generic.List[string]]::new()
     $routes = [System.Collections.Generic.List[string]]::new()
+    # One record per pull-request path, written where it is decided, so the selection report shows the decision
+    # itself (category, outcome, shards, reason) instead of reconstructing it from the flat route strings.
+    $files = [System.Collections.Generic.List[object]]::new()
+    function Add-FileDecision([string] $Path, [string] $Category, [string] $Outcome, [string[]] $Shards, [string] $Why) {
+        [void] $files.Add([pscustomobject]@{
+            path = $Path; category = $Category; outcome = $Outcome; shards = @($Shards | Where-Object { $_ }); why = $Why
+        })
+    }
     # Per invocation and lazy: mapped changes pay no indexing cost, and selecting a
     # different map in the same process cannot reuse another map's directory owners.
     $directoryOwnerIndex = $null
@@ -855,6 +957,7 @@ function Select-ImpactedShards {
             if (-not $changedPathSet.Contains($currentPath)) {
                 $escalate = $true
                 [void] $reasons.Add("changed by this pull request but identical to the map's copy, so its effect has no map line numbers: $currentPath")
+                Add-FileDecision $currentPath 'MapCandidate' 'escalated' @() "identical to the map's copy, so its effect has no map line numbers"
             }
         }
     }
@@ -864,9 +967,21 @@ function Select-ImpactedShards {
             continue
         }
         $impact = Get-ChangedPathImpact -Path $path
-        if ($path -cin $ReviewedControlPaths) { continue }
+        $isCurrent = $currentPathSet.Contains(([string] $path).Replace('\', '/'))
+        if ($path -cin $ReviewedControlPaths) {
+            if ($isCurrent) { Add-FileDecision $path $impact.ToString() 'reviewed' @() 'reviewed control path; its policy shards are required instead' }
+            continue
+        }
         switch ($impact) {
-            ([ChangedPathImpact]::NonRuntime) { continue }
+            ([ChangedPathImpact]::NonRuntime) {
+                if ($isCurrent) { Add-FileDecision $path 'NonRuntime' 'skipped' @() 'cannot affect any test' }
+                continue
+            }
+            ([ChangedPathImpact]::BuildOnly) {
+                # Compiled, never routed: it can raise an analyzer to error but cannot change what a test executes.
+                if ($isCurrent) { Add-FileDecision $path 'BuildOnly' 'skipped' @() 'compiled by the build jobs; cannot change what any test executes' }
+                continue
+            }
             ([ChangedPathImpact]::SelectionControl) {
                 # A control-path edit in THIS pull request must exercise the complete matrix. The
                 # same path in the older map-to-HEAD delta was already validated when it landed and
@@ -875,12 +990,14 @@ function Select-ImpactedShards {
                 if ($currentPathSet.Contains(([string] $path).Replace('\', '/'))) {
                     $escalate = $true
                     [void] $reasons.Add("current validation-selection control change: $path")
+                    Add-FileDecision $path 'SelectionControl' 'escalated' @() 'changes the selection tooling itself, so the whole matrix validates it'
                 }
                 continue
             }
             ([ChangedPathImpact]::FullValidation) {
                 $escalate = $true
                 [void] $reasons.Add("validation infrastructure or unknown GitHub configuration: $path")
+                if ($isCurrent) { Add-FileDecision $path 'FullValidation' 'escalated' @() 'validation infrastructure or unknown GitHub configuration' }
                 continue
             }
             ([ChangedPathImpact]::MapCandidate) {
@@ -930,6 +1047,7 @@ function Select-ImpactedShards {
             Reasons           = $reasons
             Shards            = @($selected | Sort-Object)
             Routes            = @($routes)
+            Files             = @($files)
         }
     }
 
@@ -961,10 +1079,16 @@ function Select-ImpactedShards {
                         [void] $selected.Add([string] $shard)
                         [void] $routes.Add("$shard <= runs tests affected by $path ($($route.Why))")
                     }
+                    Add-FileDecision $path 'TestSource' 'routed' @($route.Shards) $route.Why
+                }
+                elseif ($route.PSObject.Properties['Unassigned'] -and $route.Unassigned) {
+                    [void] $routes.Add("(none) <= $path`: $($route.Why); the shard inventory gate fails the build until one does")
+                    Add-FileDecision $path 'TestSource' 'unassigned' @() "$($route.Why); the shard inventory gate fails the build until one does"
                 }
                 else {
                     $escalate = $true
                     [void] $reasons.Add("$($route.Why): $path")
+                    Add-FileDecision $path 'TestSource' 'escalated' @() $route.Why
                 }
                 continue
             }
@@ -981,12 +1105,14 @@ function Select-ImpactedShards {
             if ($null -eq $directoryOwners) {
                 $escalate = $true
                 [void] $reasons.Add("not executed by any mapped shard: $path")
+                Add-FileDecision $path 'MapCandidate' 'escalated' @() 'not executed by any mapped shard, and not C# source with mapped neighbours'
                 continue
             }
             foreach ($shard in @($directoryOwners.Shards)) {
                 [void] $selected.Add([string] $shard)
                 [void] $routes.Add("$shard <= executes mapped files in $($directoryOwners.Directory), beside the unmapped source $path")
             }
+            Add-FileDecision $path 'MapCandidate' 'routed' @($directoryOwners.Shards) "unmapped source; routed to the shards executing $($directoryOwners.Directory)"
             continue
         }
 
@@ -994,6 +1120,7 @@ function Select-ImpactedShards {
         if ($hunks.Count -eq 0 -or $hunks.Count % 2 -ne 0) {
             $escalate = $true
             [void] $reasons.Add("changed file has no trustworthy line hunks: $path")
+            Add-FileDecision $path 'MapCandidate' 'escalated' @() 'no trustworthy line hunks'
             continue
         }
 
@@ -1042,6 +1169,10 @@ function Select-ImpactedShards {
                 [void] $routes.Add("$shardName <= executes $path, whose changed lines $(Format-LineRanges $uncovered) no shard executes")
             }
         }
+        $fileShards = @(@($hitsByShard.Keys) + @(if ($uncovered.Count -gt 0) { @($fileOwners) }) | Sort-Object -Unique)
+        $fileWhy = "$($hitsByShard.Count) shard(s) execute its changed lines" +
+            $(if ($uncovered.Count -gt 0) { "; lines $(Format-LineRanges $uncovered) run in no shard, so every $($fileOwners.Count) shard(s) executing the file run" } else { '' })
+        Add-FileDecision $path 'MapCandidate' 'routed' $fileShards $fileWhy
     }
 
     if ($selected.Count -eq 0) {
@@ -1055,6 +1186,7 @@ function Select-ImpactedShards {
         Reasons            = $reasons
         Shards             = @($selected | Sort-Object)
         Routes             = @($routes)
+        Files              = @($files)
     }
 }
 
@@ -1817,7 +1949,9 @@ function Get-TestFileRoutes {
             $routes[$path] = [pscustomobject]@{ Routable = $false; Shards = @(); Why = 'a shard filter for this test project cannot be parsed' }
         }
         elseif ($shards.Count -eq 0) {
-            $routes[$path] = [pscustomobject]@{ Routable = $false; Shards = @(); Why = 'no shard filter selects any test this source affects' }
+            # Not an escalation: the full matrix would not run these tests either. The Build job's inventory gate
+            # (Assert-ShardInventory.ps1) fails the pull request until a shard filter selects them.
+            $routes[$path] = [pscustomobject]@{ Routable = $false; Unassigned = $true; Shards = @(); Why = 'no shard filter selects any test this source affects' }
         }
         else {
             $closure = $visited.Count - 1
@@ -2099,7 +2233,6 @@ if ($SelfTest) {
         @{ Path = 'tools/TestImpact/Unknown-Helper.ps1'; Why = 'unreviewed tooling must escalate' },
         @{ Path = 'tools/TestImpact/Receive-RequiredArtifact.ps1.backup'; Why = 'transport lookalikes must escalate' },
         @{ Path = 'src/AiDotNet.Generators/TestScaffoldGenerator.cs'; Why = 'build-time source generators must escalate' },
-        @{ Path = '.github/dependabot.yml'; Why = 'unknown GitHub configuration must escalate' },
         @{ Path = '.github/workflows/release-please.yml.backup'; Why = 'workflow lookalikes must escalate' },
         @{ Path = '.github/workflows/new-unknown.yml'; Why = 'unknown workflows must escalate' }
     )) {
@@ -2313,6 +2446,12 @@ if ($SelfTest) {
     }
     Assert-True ($r.Escalate -and ($r.Reasons -join ';') -like '*declares extension methods*') `
         'an unroutable test source did not escalate with its reason'
+    $r = Select-ImpactedShards -Map $map -Changed @{ 'tests/P/NewTests.cs' = @(1, 30) } -TestRoutes @{
+        'tests/P/NewTests.cs' = [pscustomobject]@{ Routable = $false; Unassigned = $true; Shards = @(); Why = 'no shard filter selects any test this source affects' }
+    }
+    Assert-True (-not $r.Escalate -and (@($r.Shards) -join ',') -eq 'HeavyNoCoverage' -and
+        @($r.Files | Where-Object { $_.path -eq 'tests/P/NewTests.cs' -and $_.outcome -eq 'unassigned' }).Count -eq 1) `
+        'a test source no shard selects escalated, though the full matrix would not run it either'
     $r = Select-ImpactedShards -Map $map -Changed @{ 'tests/P/FooTests.cs' = @(1, 30) }
     Assert-True $r.Escalate 'a test source with no route (no manifest) did not fail closed'
 
@@ -2437,6 +2576,63 @@ file class Private { }
         '.editorconfig is not classified BuildOnly'
     Assert-True ((Get-ChangedPathImpact -Path 'src/Nested/.editorconfig') -eq [ChangedPathImpact]::BuildOnly) `
         'a nested .editorconfig is not classified BuildOnly'
+    # tools/: a standalone tool nothing here builds, tests or invokes cannot move any shard (10 of 22 escalated PR
+    # runs in late September 2026 escalated on such a file). A referenced one keeps escalating, and TestImpact stays
+    # selection control. These read the real tree, so they fail loudly if a tool gains or loses a reference.
+    if (Test-Path -LiteralPath 'tools/CoverageReportReview') {
+        Assert-True ((Get-ChangedPathImpact -Path 'tools/CoverageReportReview/Program.cs') -eq [ChangedPathImpact]::NonRuntime) `
+            'an unreferenced tool (CoverageReportReview) is not NonRuntime'
+    }
+    if (Test-Path -LiteralPath 'tools/AiDotNet.Evolve.Cli') {
+        Assert-True ((Get-ChangedPathImpact -Path 'tools/AiDotNet.Evolve.Cli/Program.cs') -eq [ChangedPathImpact]::MapCandidate) `
+            'a tool the test project references (AiDotNet.Evolve.Cli) was downgraded'
+    }
+    Assert-True ((Get-ChangedPathImpact -Path 'tools/TestImpact/Unknown-Helper.ps1') -eq [ChangedPathImpact]::SelectionControl) `
+        'tools/TestImpact lost its selection-control classification'
+    Assert-True ((Get-ChangedPathImpact -Path 'tools/loose-file.txt') -eq [ChangedPathImpact]::MapCandidate) `
+        'a file directly under tools/ has no directory to scope by and must keep the old behaviour'
+    # Other top-level trees, by the same rule (api/ escalated PR #2275 on a package-lock.json). A route string
+    # such as [Route("api/...")] in product code is not a reference; a solution entry or a test's
+    # Path.Combine(..., "samples", ...) is. These read the real tree too.
+    if (Test-Path -LiteralPath 'api/package.json') {
+        Assert-True ((Get-ChangedPathImpact -Path 'api/package-lock.json') -eq [ChangedPathImpact]::NonRuntime) `
+            'an unreferenced top-level tree (api/) is not NonRuntime'
+    }
+    if (Test-Path -LiteralPath 'benchmarks') {
+        Assert-True ((Get-ChangedPathImpact -Path 'benchmarks/AiDotNet.Benchmarks/Program.cs') -eq [ChangedPathImpact]::MapCandidate) `
+            'a tree the solution builds (benchmarks/) was downgraded'
+    }
+    if (Test-Path -LiteralPath 'samples') {
+        Assert-True ((Get-ChangedPathImpact -Path 'samples/x/y.txt') -eq [ChangedPathImpact]::MapCandidate) `
+            'a tree a test reads through Path.Combine (samples/) was downgraded'
+    }
+    Assert-True ((Get-ChangedPathImpact -Path 'root-file.txt') -eq [ChangedPathImpact]::MapCandidate) `
+        'a root-level file has no tree to scope by and must keep the old behaviour'
+    # R9: .github/ files nothing reads are non-runtime; one a workflow invokes stays full validation.
+    if (Test-Path -LiteralPath '.github/CODEOWNERS') {
+        Assert-True ((Get-ChangedPathImpact -Path '.github/CODEOWNERS') -eq [ChangedPathImpact]::NonRuntime) `
+            'CODEOWNERS, which no workflow reads, is not NonRuntime'
+    }
+    if (Test-Path -LiteralPath '.github/dependabot.yml') {
+        Assert-True ((Get-ChangedPathImpact -Path '.github/dependabot.yml') -eq [ChangedPathImpact]::NonRuntime) `
+            'dependabot.yml, which no workflow reads, is not NonRuntime'
+    }
+    if (Test-Path -LiteralPath '.github/scripts/Invoke-Shard.ps1') {
+        Assert-True ((Get-ChangedPathImpact -Path '.github/scripts/Invoke-Shard.ps1') -eq [ChangedPathImpact]::FullValidation) `
+            'a script the test workflow invokes (Invoke-Shard.ps1) was downgraded'
+    }
+    Assert-True ((Get-ChangedPathImpact -Path '.github/a.yml') -eq [ChangedPathImpact]::FullValidation) `
+        'a short, generic .github file name must not be trusted as unreferenced'
+    # The selection report lists every changed path, so a build-only file must be recorded as a decision even
+    # beside runtime changes (it used to fall through the switch and vanish from the report).
+    $reportMap = [pscustomobject]@{ knownShards = @('Alpha'); alwaysRun = @(); files = [pscustomobject]@{
+        'src/Covered.cs' = @([pscustomobject]@{ s = 0; r = @(10, 20) }) } }
+    $withConfig = Select-ImpactedShards -Map $reportMap -Changed @{ '.editorconfig' = @(1, 2); 'src/Covered.cs' = @(12, 14) }
+    $configDecision = @($withConfig.Files | Where-Object { $_.path -eq '.editorconfig' })
+    Assert-True ($configDecision.Count -eq 1 -and $configDecision[0].category -eq 'BuildOnly' -and $configDecision[0].outcome -eq 'skipped') `
+        '.editorconfig beside a runtime change is missing from the per-file selection decisions'
+    Assert-True (@($withConfig.Files | Where-Object { $_.path -eq 'src/Covered.cs' -and $_.outcome -eq 'routed' }).Count -eq 1) `
+        'the runtime file beside .editorconfig lost its routed decision'
     # The neighbours it used to sit beside must keep escalating: they really can change compilation
     # output, not merely diagnostics.
     foreach ($shared in 'Directory.Build.props', 'Directory.Packages.props', 'global.json', 'nuget.config') {
@@ -2901,6 +3097,8 @@ if ($ClassifyOnly) {
     $requiresValidation = $true
     $reason = 'classification-failed'
     $changedFiles = @()
+    # Per path, so the Build job's test-level selection can leave out paths that cannot affect any test.
+    $pathImpacts = [ordered]@{}
     try {
         if ($PullRequestHeadSha -and $BaseSha) { throw 'pass PullRequestHeadSha or BaseSha, not both' }
         if ($PullRequestHeadSha) { $BaseSha = Resolve-PullRequestBase -PullRequestHeadSha $PullRequestHeadSha }
@@ -2928,6 +3126,10 @@ if ($ClassifyOnly) {
                 }
             ).Count -or $reviewed.Shards.Count -gt 0
             $reason = $(if ($requiresValidation) { 'runtime-or-unknown' } else { 'non-runtime-only' })
+            foreach ($path in $changedFiles) {
+                $pathImpacts[[string] $path] = if ([string] $path -cin $reviewed.Paths) { 'ReviewedControl' }
+                    else { [string] (Get-ChangedPathImpact -Path ([string] $path)) }
+            }
         }
     }
     catch {
@@ -2939,6 +3141,7 @@ if ($ClassifyOnly) {
         reason = $reason
         baseSha = [string] $BaseSha
         changedPaths = @($changedFiles)
+        pathImpacts = $pathImpacts
     }
     if ($OutFile) { $result | ConvertTo-Json -Depth 5 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8 }
     exit 0
@@ -3042,6 +3245,7 @@ try {
         $currentPaths = @($currentPaths | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
     }
     Write-Host "changed files since the map: $($changed.Count); changed by the current change: $($currentPaths.Count)"
+    $changedSinceMapCount = $changed.Count
     if ($scopeToPullRequest) {
         # The change's own ranges, carried back to the map's numbering. The map-to-HEAD ranges above
         # would also sweep in every edit the base branch made to the same files since the map.
@@ -3116,18 +3320,28 @@ try {
         . "$PSScriptRoot/AuxiliaryInventory.ps1"
         $auxiliary = @($manifest | Where-Object { Test-InventoryWindow $_ })
         $indexedAuxiliary = @($auxiliary | Where-Object { $_.name -cin $map.knownShards })
-        if ($indexedAuxiliary.Count -gt 0 -and (Test-AuxiliaryInventoryChange -MapSha $mapSha)) {
+        # Windows keyed by model name (the committed conformance table, the hashed parameter-count split) are
+        # invalidated only where a changed model identity lands. Workload sweeps keep the whole-catalog rule.
+        $windows = @($auxiliary | Where-Object { Test-NameKeyedWindow $_ })
+        $workloads = @($auxiliary | Where-Object { -not (Test-NameKeyedWindow $_) })
+        $invalidated = @()
+        if (@($indexedAuxiliary | Where-Object { $_ -cin $workloads }).Count -gt 0 -and (Test-AuxiliaryInventoryChange -MapSha $mapSha)) {
+            $invalidated += @($workloads | ForEach-Object { [pscustomobject]@{ Name = $_.name; Why = 'reflection inventory changed or could not be established' } })
+        }
+        if (@($indexedAuxiliary | Where-Object { $_ -cin $windows }).Count -gt 0) {
+            $windowCheck = Get-AuxiliaryWindowInvalidation -MapSha $mapSha -BaseSha $BaseSha -Windows $windows
+            $invalidated += @($windowCheck.Shards | ForEach-Object { [pscustomobject]@{ Name = $_; Why = $windowCheck.Reason } })
+        }
+        if ($invalidated.Count -gt 0) {
             if ($DeltaFromTree) {
-                # Imported ordinal-window results refer to the old catalog. Refuse imports
+                # Imported window results refer to the old catalog. Refuse imports
                 # rather than overwrite newly rerun results under the same window names.
                 $selection.Escalate = $true
                 $selection.Reasons = @($selection.Reasons) + @('auxiliary inventory changed; delta imports are unsafe')
             }
             else {
-                $selection.Shards = @(@($selection.Shards) + @($auxiliary.name) | Sort-Object -Unique)
-                $selection.Routes = @($selection.Routes) + @($auxiliary | ForEach-Object {
-                    "$($_.name) <= reflection inventory changed or could not be established"
-                })
+                $selection.Shards = @(@($selection.Shards) + @($invalidated.Name) | Sort-Object -Unique)
+                $selection.Routes = @($selection.Routes) + @($invalidated | ForEach-Object { "$($_.Name) <= $($_.Why)" })
             }
         }
     }
@@ -3195,6 +3409,13 @@ try {
         # every consumer that binds this to a [string[]] fail. Build the array first.
         shards            = $emittedShards
         routes            = @($selection.Routes)
+        # Report-only fields (Write-SelectionReport.ps1); the workflow's matrix decision never reads them.
+        # wouldSelect is what coverage selected even when an escalation overrides it with the full matrix.
+        wouldSelect       = @($selection.Shards)
+        files             = @(if ($selection.PSObject.Properties['Files']) { @($selection.Files) })
+        map               = [pscustomobject]@{
+            sha = $mapSha; changedSinceMap = $changedSinceMapCount; changedByThisChange = @($currentPaths).Count
+        }
     }
     if ($OutFile) { $result | ConvertTo-Json -Depth 5 -Compress | Set-Content -LiteralPath $OutFile -Encoding utf8 }
 }

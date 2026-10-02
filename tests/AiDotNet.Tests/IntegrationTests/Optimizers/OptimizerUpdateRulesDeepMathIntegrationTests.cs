@@ -470,13 +470,19 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task AMSGrad_TwoSteps_HandCalculated_PyTorchConvention()
     {
-        // PyTorch Adam(amsgrad=True): vMax = max(vMax, v); p -= lr * (m / (1-b1^t)) / (sqrt(vMax / (1-b2^t)) + eps).
+        // AMSGradBiasCorrection.PyTorch, i.e. PyTorch Adam(amsgrad=True): vMax = max(vMax, v); p -= lr * (m / (1-b1^t)) / (sqrt(vMax / (1-b2^t)) + eps).
         // Every AMSGrad kernel AiDotNet dispatches to (fused CPU, GPU, sparse) uses this; the CPU eager path used to
         // skip the (1-b2^t) term, a ~31x larger first step than the same model got on the GPU.
         const double lr = 0.001, b1 = 0.9, b2 = 0.999, eps = 1e-8;
         var optimizer = new AMSGradOptimizer<double, Matrix<double>, Vector<double>>(null!,
             new AMSGradOptimizerOptions<double, Matrix<double>, Vector<double>>
-            { InitialLearningRate = lr, Beta1 = b1, Beta2 = b2, Epsilon = eps });
+            {
+                InitialLearningRate = lr, Beta1 = b1, Beta2 = b2, Epsilon = eps,
+                // The default is the paper (Reddi et al. 2018, Algorithm 2, no bias correction); this pins the
+                // PyTorch variant, which the fused, GPU and sparse kernels compute. AMSGradBiasCorrectionTests
+                // pins the paper default.
+                BiasCorrection = AiDotNet.Enums.AMSGradBiasCorrection.PyTorch,
+            });
 
         double[] p = { 1.0, 2.0 };
         double[][] grads = { new[] { 0.1, -0.2 }, new[] { 0.01, 0.5 } };   // step 2 shrinks g[0]: vMax must hold
