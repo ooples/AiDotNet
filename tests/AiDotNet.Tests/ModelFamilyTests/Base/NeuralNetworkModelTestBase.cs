@@ -174,6 +174,14 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     protected abstract INeuralNetworkModel<T> CreateNetwork();
 
     /// <summary>
+    /// One training step on <paramref name="network"/>. Every invariant trains through here, so a family whose
+    /// models take their supervision through a richer entry point (for example text-to-speech models trained
+    /// on durations and pitch) can route the step without each invariant knowing about it.
+    /// </summary>
+    protected virtual void TrainOn(INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> target)
+        => network.Train(input, target);
+
+    /// <summary>
     /// The probe shape every invariant feeds the model, as [batch, ...per-sample].
     /// </summary>
     /// <remarks>
@@ -1290,7 +1298,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         int iterations = ResolveTrainedVersusUntrainedIterations(network, TrainingIterations * 3);
         for (int i = 0; i < iterations; i++)
-            network.Train(input, target);
+            TrainOn(network, input, target);
 
         // Measure final loss
         var finalOutput = network.Predict(input);
@@ -1437,7 +1445,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             // Wrap in try/catch since this is warmup-only — we don't care if
             // the loss / gradient signals are noisy on the first step.
             network.SetTrainingMode(true);
-            try { network.Train(input, target); }
+            try { TrainOn(network, input, target); }
             catch (System.Exception) { /* warmup-only; the actual assertion runs below */ }
         }
         network.SetTrainingMode(true);
@@ -1468,7 +1476,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);
         for (int i = 0; i < iterations; i++)
-            network.Train(input, target);
+            TrainOn(network, input, target);
 
         var postHashes = ComputeChunkHashes(network);
 
@@ -1602,7 +1610,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         PrepareForSupervisedTrainingInvariant(network, trainInput);
         int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);
         for (int i = 0; i < iterations; i++)
-            network.Train(trainInput, trainTarget);
+            TrainOn(network, trainInput, trainTarget);
 
         // Two distinct test inputs that differ in every position. Use
         // constant tensors so the post-training output difference is
@@ -1685,7 +1693,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);
         for (int i = 0; i < iterations; i++)
-            network.Train(input, target);
+            TrainOn(network, input, target);
 
         var output = network.Predict(input);
         for (int i = 0; i < output.Length; i++)
@@ -2550,7 +2558,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var trainTarget = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
         int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);
         for (int i = 0; i < iterations; i++)
-            network.Train(trainInput, trainTarget);
+            TrainOn(network, trainInput, trainTarget);
 
         // Force eval mode before capturing the trained baseline so layers
         // like Dropout / GaussianNoise / BatchNorm-with-running-stats
@@ -2625,7 +2633,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         {
             var input = CreateRandomTensor(EffectiveInputShape, rng);
             var target = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
-            network.Train(input, target);
+            TrainOn(network, input, target);
         }
         var metadata = network.GetModelMetadata();
         Assert.NotNull(metadata);
@@ -2718,7 +2726,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         double lossUntrained = MeasureLoss(network1, input, network1.Predict(input), target);
 
         for (int i = 0; i < longIters; i++)
-            network1.Train(input, target);
+            TrainOn(network1, input, target);
         double lossTrained = MeasureLoss(network1, input, network1.Predict(input), target);
 
         double lossLong = lossTrained;
@@ -2812,7 +2820,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         int iterations = ResolveConformanceTrainingIterations(network, TrainingErrorIterations);
         for (int i = 0; i < iterations; i++)
-            network.Train(input, target);
+            TrainOn(network, input, target);
 
         double trainMSE = MeasureLoss(network, input, network.Predict(input), target);
         var testInput = CreateRandomTensor(EffectiveInputShape, ModelTestHelpers.CreateSeededRandom(99));
@@ -2916,7 +2924,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         double trainBefore = MeasureLoss(fresh, input, fresh.Predict(input), target);
         double testBefore = MeasureLoss(fresh, testInput, fresh.Predict(testInput), target);
         for (int i = 0; i < iterations; i++)
-            fresh.Train(input, target);
+            TrainOn(fresh, input, target);
         double trainAfter = MeasureLoss(fresh, input, fresh.Predict(input), target);
         double testAfter = MeasureLoss(fresh, testInput, fresh.Predict(testInput), target);
         if (double.IsNaN(trainBefore) || double.IsNaN(testBefore) ||
@@ -3088,7 +3096,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         {
             WritePerformanceProgress(outputDirectory!, performanceFileName, "train-step");
             var trainTimer = System.Diagnostics.Stopwatch.StartNew();
-            network.Train(input, target);
+            TrainOn(network, input, target);
             trainTimer.Stop();
             trainStepMs = trainTimer.Elapsed.TotalMilliseconds;
             _arena.Reset();
@@ -3399,7 +3407,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             // Wrap in try/catch since this is warmup-only — we don't care if
             // the loss / gradient signals are noisy on the first step.
             network.SetTrainingMode(true);
-            try { network.Train(input, target); }
+            try { TrainOn(network, input, target); }
             catch (System.Exception) { /* warmup-only; the actual assertion runs below */ }
         }
         network.SetTrainingMode(true);
@@ -3417,7 +3425,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // value changed) so an explosion in any param is caught.
         var preHashes = ComputeChunkHashes(network);
 
-        network.Train(input, target);
+        TrainOn(network, input, target);
 
         var postHashes = ComputeChunkHashes(network);
 
@@ -3626,7 +3634,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // memory.
         double l2Before = Math.Sqrt(SumSquaredChunks(network));
 
-        network.Train(input, target);
+        TrainOn(network, input, target);
 
         double l2After = Math.Sqrt(SumSquaredChunks(network));
 
@@ -3769,7 +3777,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // common wall-clock envelope so generated fixtures with a large legal receptive field do
         // not need model-specific iteration overrides merely to respect the xUnit timeout.
         var trainingClock = System.Diagnostics.Stopwatch.StartNew();
-        network.Train(input, target);
+        TrainOn(network, input, target);
         double lossStep1 = MemorizationProbeLoss(network, input, target);
 
         // Run up to the configured number of follow-on steps. The 120-second training budget leaves
@@ -3781,7 +3789,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         while (completedFollowOnSteps < requestedFollowOnSteps
                && trainingClock.Elapsed.TotalSeconds < MemorizationTrainingBudgetSeconds)
         {
-            network.Train(input, target);
+            TrainOn(network, input, target);
             completedFollowOnSteps++;
         }
         double lossFinal = MemorizationProbeLoss(network, input, target);
@@ -6235,7 +6243,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         {
             try
             {
-                network.Train(input, targetA);
+                TrainOn(network, input, targetA);
                 parameterProbe.Restore();
                 // NaN IS NOT "CHANGED". MaxAbsParamDelta returns NaN when the vectors differ
                 // in length, and `NaN != 0.0` is TRUE -- so a length mismatch, which means the
@@ -6576,7 +6584,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                     neuralNetwork.ResetBaseTrainOptimizerState();
 
                 int steps = Math.Max(1, TargetDependenceStepCount);
-                for (int i = 0; i < steps; i++) network.Train(input, target);
+                for (int i = 0; i < steps; i++) TrainOn(network, input, target);
                 return probe.SampleCurrent();
             }
 
@@ -6820,7 +6828,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> neuralNetwork)
                     neuralNetwork.ResetBaseTrainOptimizerState();
 
-                network.Train(input, target);
+                TrainOn(network, input, target);
 
                 Vector<T> gradients;
                 try
@@ -7105,7 +7113,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // cannot take a bare Train step must be skipped rather than turned into a hard shard failure.
         try
         {
-            network.Train(input, target);
+            TrainOn(network, input, target);
         }
         catch (Exception ex)
         {
@@ -7264,7 +7272,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> neuralNetwork)
             neuralNetwork.ResetBaseTrainOptimizerState();
         int steps = Math.Max(1, stepOverride > 0 ? stepOverride : TargetDependenceStepCount);
-        for (int i = 0; i < steps; i++) network.Train(input, target);
+        for (int i = 0; i < steps; i++) TrainOn(network, input, target);
         return probe.SampleCurrent();
     }
 
