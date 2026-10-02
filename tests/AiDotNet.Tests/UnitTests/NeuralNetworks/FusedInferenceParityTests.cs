@@ -46,7 +46,7 @@ public class FusedInferenceParityTests
     [MemberData(nameof(FusedActivations))]
     public void FusedActivationKernel_MatchesScalarActivation(string name, IActivationFunction<float> activation)
     {
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
         var engine = AiDotNetEngine.Current;
 
         Assert.True(((AiDotNet.ActivationFunctions.Fused.IFusedActivation)activation)
@@ -125,7 +125,7 @@ public class FusedInferenceParityTests
     [Fact]
     public void Predict_FreshLazyNetwork_DoesNotThrow_AndIsStable()
     {
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
         const int inF = 16, batch = 4;
         var arch = new NeuralNetworkArchitecture<float>(
             inputType: InputType.OneDimensional,

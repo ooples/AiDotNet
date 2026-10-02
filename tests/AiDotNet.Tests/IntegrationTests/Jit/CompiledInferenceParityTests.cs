@@ -46,7 +46,7 @@ public class CompiledInferenceParityTests : IDisposable
 
     public CompiledInferenceParityTests()
     {
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
         _originalOptions = TensorCodecOptions.Current;
         TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
     }

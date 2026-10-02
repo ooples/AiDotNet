@@ -7,4 +7,8 @@
     <IsPackable>false</IsPackable>
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
   </PropertyGroup>
+  <ItemGroup>
+    <CompilerVisibleProperty Include="FixtureGenVariant" />
+    <ProjectReference Include="../Gen/FixtureGen.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
 </Project>

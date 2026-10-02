@@ -265,7 +265,7 @@ public class BuildAsyncResidualModeCollapseTests
         // active before this one (mirrors NeuralNetworkModelTestBase, which integration tests don't
         // inherit).
         if (AiDotNet.Tensors.Engines.AiDotNetEngine.Current is not AiDotNet.Tensors.Engines.CpuEngine)
-            AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+            AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
 
         var (arch, xTrain, yTrain) = BuildFixture();
 

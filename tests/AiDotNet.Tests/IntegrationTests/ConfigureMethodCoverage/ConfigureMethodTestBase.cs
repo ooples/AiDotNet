@@ -19,7 +19,7 @@ public sealed class ConfigureMethodTestCpuFixture
     public ConfigureMethodTestCpuFixture()
     {
         // Force CPU for the duration of all Configure* coverage tests.
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
     }
 }
 

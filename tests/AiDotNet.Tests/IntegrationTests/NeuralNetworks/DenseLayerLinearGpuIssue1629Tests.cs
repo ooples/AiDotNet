@@ -19,6 +19,8 @@ namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 /// (a) is not degenerate all-zero and (b) matches the CPU forward on identical weights/input.
 /// Skips cleanly when no GPU backend is available.
 /// </summary>
+// Sets AiDotNetEngine.Current, a process-wide static: run apart from every other test class.
+[Collection("EngineCurrentGlobalState")]
 public class DenseLayerLinearGpuIssue1629Tests
 {
     private readonly ITestOutputHelper _output;

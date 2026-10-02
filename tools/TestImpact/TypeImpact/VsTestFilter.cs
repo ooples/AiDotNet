@@ -27,6 +27,23 @@ internal abstract class VsTestFilter
         return result;
     }
 
+    /// <summary>Escapes a value so the filter language reads it literally (a class name with generic or nested punctuation).</summary>
+    public static string Escape(string value)
+    {
+        var builder = new System.Text.StringBuilder(value.Length);
+        foreach (char c in value)
+        {
+            if (c is '(' or ')' or '&' or '|' or '=' or '!' or '~' or '\\')
+            {
+                builder.Append('\\');
+            }
+
+            builder.Append(c);
+        }
+
+        return builder.ToString();
+    }
+
     private static Tri And(Tri a, Tri b) => (Tri)Math.Min((int)a, (int)b);
     private static Tri Or(Tri a, Tri b) => (Tri)Math.Max((int)a, (int)b);
     private static Tri Not(Tri a) => (Tri)(2 - (int)a);

@@ -225,7 +225,7 @@ public class ByteLMV256Issue1380Tests
         // opt-out) leaving the process on the DirectGpuTensorEngine — on GPU the Adam update path
         // zeroes parameters, which previously collapsed this V=256 training to uniform output.
         if (AiDotNet.Tensors.Engines.AiDotNetEngine.Current is not AiDotNet.Tensors.Engines.CpuEngine)
-            AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+            AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
 
         var (arch, xTrain, yTrain) = BuildFixture();
 

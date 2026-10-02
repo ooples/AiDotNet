@@ -32,7 +32,7 @@ public class DiffusionMultiInputCompiledTests : IDisposable
 
     public DiffusionMultiInputCompiledTests()
     {
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
         _originalOptions = TensorCodecOptions.Current;
     }
 
