@@ -1,0 +1,153 @@
+name: Cross-ISA Agreement (nightly)
+
+# A model is correct or not independently of which SIMD kernels computed it. This lane runs the
+# trained-versus-untrained invariant (MoreData_ShouldNotDegrade) for every network model family three
+# times, each in its own process - default, DOTNET_EnableAVX512=0 and DOTNET_EnableAVX2=0, knobs the
+# runtime reads once at startup - and fails any model whose verdict differs between them
+# (Compare-IsaVerdicts.ps1).
+#
+# It exists because such a verdict is decided by the CPU, not the model, and no single-machine run
+# can see it: RepViTSAM failed on Intel runners with AVX-512 and passed with it disabled, for months,
+# while every AMD runner passed. Perturbing weights in-process does not reproduce this (measured: 1e-6
+# and 1e-5 noise, once or every step, never flipped it); only running the real alternative kernels
+# does. A runner without AVX-512 makes the first two configurations identical, so the comparison is
+# only as wide as the hardware it lands on; the partition's summary records which CPU that was.
+#
+# Three runs of one invariant per model is nightly work, after the full matrix (03:00) and the other
+# nightly lanes (04:30-06:00). HeavyTimeout and GPU fixtures keep their own lanes.
+on:
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: cross-isa-agreement-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: 1
+  DOTNET_gcServer: 1
+  DOTNET_GCConserveMemory: 9
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - name: Comparator self-test
+        shell: pwsh
+        run: ./.github/scripts/Compare-IsaVerdicts.ps1 -SelfTest
+      - name: Build (Release, net10.0)
+        run: |
+          dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release
+          dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 -m:4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: cross-isa-build
+          path: |
+            src/bin/Release/
+            tests/AiDotNet.Tests/bin/Release/
+            tests/AiDotNet.Tests/obj/
+            !**/bin/Release/net471/
+          retention-days: 1
+
+  agreement:
+    name: Cross-ISA agreement ${{ matrix.partition }}/8
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix:
+        partition: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: '10.0.x'
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        with:
+          name: cross-isa-build
+      - name: Run the invariant under each instruction set
+        shell: pwsh
+        env:
+          PARTITION: ${{ matrix.partition }}
+          AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
+        run: |
+          ./.github/scripts/harden-xunit-runner.ps1 -RunnerJson 'tests/AiDotNet.Tests/bin/Release/net10.0/xunit.runner.json'
+          $cpu = (Get-Content /proc/cpuinfo | Select-String '^model name\s*:\s*(.+)$' | Select-Object -First 1).Matches.Groups[1].Value
+          $avx512 = [bool](Select-String -Path /proc/cpuinfo -Pattern 'avx512f' -Quiet)
+          "Runner CPU: **$cpu** (AVX-512: $avx512)" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+          $project = 'tests/AiDotNet.Tests/AiDotNetTests.csproj'
+          $invariant = 'FullyQualifiedName~.MoreData_ShouldNotDegrade&Category!=HeavyTimeout&Category!=GPU&Category!=ModelPerformanceCensus'
+          $listed = @(dotnet test $project -c Release -f net10.0 --no-build --no-restore --filter $invariant --list-tests 2>&1)
+          if ($LASTEXITCODE -ne 0) { $listed | Select-Object -Last 40; throw "test discovery exited $LASTEXITCODE" }
+          $classes = @($listed | ForEach-Object { $_ -replace '\r', '' } |
+            Where-Object { $_ -match '^\s{4}\S+\.\S+' } |
+            ForEach-Object { ($_.Trim() -split '\(')[0] } |
+            ForEach-Object { $_.Substring(0, $_.LastIndexOf('.')) } |
+            Sort-Object -Unique)
+          if ($classes.Count -eq 0) { $listed | Select-Object -Last 40; throw 'no MoreData_ShouldNotDegrade tests were discovered' }
+
+          # Stable partition by class name, independent of discovery order.
+          $sha = [System.Security.Cryptography.SHA256]::Create()
+          $mine = @($classes | Where-Object {
+            ([BitConverter]::ToUInt32($sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($_)), 0) % 8) -eq [int] $env:PARTITION
+          })
+          Write-Host "partition $($env:PARTITION): $($mine.Count) of $($classes.Count) class(es) on $cpu"
+          if ($mine.Count -eq 0) { return }
+          # What every configuration must report: the comparator checks coverage against this, so a
+          # chunk that produced nothing cannot pass as agreement.
+          New-Item -ItemType Directory -Force -Path artifacts/cross-isa | Out-Null
+          $mine | ForEach-Object { "$_.MoreData_ShouldNotDegrade" } | Set-Content -LiteralPath artifacts/expected-tests.txt -Encoding utf8
+
+          $configurations = [ordered]@{
+            'default'    = @{}
+            'avx512-off' = @{ DOTNET_EnableAVX512 = '0' }
+            'avx2-off'   = @{ DOTNET_EnableAVX2 = '0' }
+          }
+          foreach ($name in $configurations.Keys) {
+            $knobs = $configurations[$name]
+            foreach ($k in $knobs.Keys) { Set-Item "Env:$k" $knobs[$k] }
+            for ($i = 0; $i -lt $mine.Count; $i += 25) {
+              $chunk = $mine[$i..([Math]::Min($i + 24, $mine.Count - 1))]
+              $classFilter = ($chunk | ForEach-Object { "FullyQualifiedName~$_." }) -join '|'
+              # A failing test is a verdict to compare, not an error of this step; a missing TRX is.
+              & dotnet test $project -c Release -f net10.0 --no-build --no-restore `
+                --filter "($invariant)&($classFilter)" `
+                --logger "trx;LogFileName=$name-$i.trx" --results-directory "artifacts/cross-isa/$name" `
+                --blame-hang --blame-hang-timeout 10min --blame-hang-dump-type none | Out-Null
+              if (-not (Test-Path -LiteralPath "artifacts/cross-isa/$name/$name-$i.trx")) {
+                throw "configuration $name, chunk $i produced no TRX (dotnet test exited $LASTEXITCODE)"
+              }
+            }
+            foreach ($k in $knobs.Keys) { Remove-Item "Env:$k" -ErrorAction SilentlyContinue }
+          }
+
+          ./.github/scripts/Compare-IsaVerdicts.ps1 -ResultsRoot artifacts/cross-isa `
+            -ExpectedConfigurations @($configurations.Keys) -ExpectedTestsFile artifacts/expected-tests.txt `
+            -SummaryFile $env:GITHUB_STEP_SUMMARY
+          if ($LASTEXITCODE -ne 0) { throw 'a model verdict depends on the instruction set (see the summary)' }
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: cross-isa-${{ matrix.partition }}
+          path: artifacts/cross-isa/**/*.trx
+          if-no-files-found: ignore
+          retention-days: 14
