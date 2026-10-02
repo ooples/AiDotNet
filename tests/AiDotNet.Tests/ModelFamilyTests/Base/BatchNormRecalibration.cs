@@ -20,7 +20,7 @@ internal static class BatchNormRecalibration
     public static void Recalibrate<T>(object model, Action forward)
     {
         var layers = new List<BatchNormalizationLayer<T>>();
-        Collect(model, layers, new HashSet<object>(ReferenceEqualityComparer.Instance));
+        Collect(model, layers, new HashSet<object>(ObjectIdentityComparer.Instance));
         foreach (var layer in layers) layer.OverwriteRunningStatistics = true;
         try { forward(); }
         finally { foreach (var layer in layers) layer.OverwriteRunningStatistics = false; }
@@ -47,5 +47,18 @@ internal static class BatchNormRecalibration
             foreach (var field in current.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly))
                 if (!field.FieldType.IsPrimitive && !field.FieldType.IsEnum)
                     Collect(field.GetValue(node), found, seen);
+    }
+
+    /// <summary>
+    /// Identity comparison for the visited set. System.Collections.Generic.ReferenceEqualityComparer is .NET 5+
+    /// only; on net471 the name resolves to an inaccessible internal type, so this test helper carries its own.
+    /// </summary>
+    private sealed class ObjectIdentityComparer : IEqualityComparer<object>
+    {
+        internal static readonly ObjectIdentityComparer Instance = new();
+
+        public new bool Equals(object? x, object? y) => ReferenceEquals(x, y);
+
+        public int GetHashCode(object obj) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
     }
 }
