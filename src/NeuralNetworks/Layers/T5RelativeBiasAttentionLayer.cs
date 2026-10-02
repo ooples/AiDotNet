@@ -80,6 +80,7 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
     private readonly int _hiddenSize;
     private readonly int _numHeads;
     private readonly int _headDim;
+    private readonly int _innerSize;
     private readonly int _numBuckets;
     private readonly int _maxDistance;
     private readonly bool _bidirectional;
@@ -90,16 +91,16 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
     // Allocated on first use (EnsureWeightsAllocated): a conditioner now builds its whole stack at
     // construction, and eager [hidden, hidden] x 4 per layer made T5-XXL (24 x 4096^2 x 4) run out of
     // memory before any forward. The shapes are declared so ParameterCount needs no allocation.
-    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenSize, _hiddenSize")]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenSize, _innerSize")]
     private Tensor<T> _qWeights;
 
-    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenSize, _hiddenSize")]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenSize, _innerSize")]
     private Tensor<T> _kWeights;
 
-    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenSize, _hiddenSize")]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenSize, _innerSize")]
     private Tensor<T> _vWeights;
 
-    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_hiddenSize, _hiddenSize")]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Shape = "_innerSize, _hiddenSize")]
     private Tensor<T> _oWeights;
 
     /// <summary>True once Q/K/V/O hold real, initialized storage.</summary>
@@ -159,6 +160,7 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
         metadata["NumBuckets"] = _numBuckets.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["MaxDistance"] = _maxDistance.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["Bidirectional"] = _bidirectional.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["KeyValueDim"] = _headDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return metadata;
     }
 
@@ -185,7 +187,7 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
     /// <param name="bidirectional">
     /// True for encoder self-attention (queries can attend to keys at any
     /// position); false for decoder causal self-attention (queries only
-    /// attend to past keys). Affects bucket layout, not masking.
+    /// attend to past keys). It sets the bucket layout and, when false, also masks future keys.
     /// </param>
     /// <param name="seed">Optional RNG seed for deterministic initialisation.</param>
     /// <param name="sharedRelativeBiasTable">
@@ -194,6 +196,7 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
     /// uses this to wire one paper-canonical shared table through every
     /// attention layer in the stack.
     /// </param>
+    /// <param name="keyValueDim">Width of each head (T5 <c>d_kv</c>). When null, each head is <c>hiddenSize / numHeads</c>.</param>
     public T5RelativeBiasAttentionLayer(
         int hiddenSize,
         int numHeads,
@@ -202,14 +205,17 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
         bool bidirectional = true,
         int? seed = null,
         Tensor<T>? sharedRelativeBiasTable = null,
-        bool usesExternalPositionBias = false)
+        bool usesExternalPositionBias = false,
+        int? keyValueDim = null)
         : base(new[] { hiddenSize }, new[] { hiddenSize })
     {
         if (hiddenSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(hiddenSize), "hiddenSize must be positive.");
         if (numHeads <= 0)
             throw new ArgumentOutOfRangeException(nameof(numHeads), "numHeads must be positive.");
-        if (hiddenSize % numHeads != 0)
+        if (keyValueDim is { } kv && kv <= 0)
+            throw new ArgumentOutOfRangeException(nameof(keyValueDim), "keyValueDim must be positive.");
+        if (keyValueDim is null && hiddenSize % numHeads != 0)
             throw new ArgumentException(
                 $"hiddenSize ({hiddenSize}) must be divisible by numHeads ({numHeads}).",
                 nameof(numHeads));
@@ -220,13 +226,15 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
 
         _hiddenSize = hiddenSize;
         _numHeads = numHeads;
-        _headDim = hiddenSize / numHeads;
+        // T5 sizes heads independently of the model width (d_kv); without it each head is hidden / heads wide.
+        _headDim = keyValueDim ?? hiddenSize / numHeads;
+        _innerSize = numHeads * _headDim;
         _numBuckets = numBuckets;
         _maxDistance = maxDistance;
         _bidirectional = bidirectional;
         _rng = seed.HasValue
             ? Tensors.Helpers.RandomHelper.CreateSeededRandom(seed.Value)
-            : Tensors.Helpers.RandomHelper.CreateSecureRandom();
+            : LayerInitializationSeedScope.NextRandom();
 
         // Q/K/V/O projections are [hiddenSize, hiddenSize] placeholders until first use; see
         // EnsureWeightsAllocated. The bias table is small and may be shared, so it is built here.
@@ -310,21 +318,23 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
         {
             if (_projectionsAllocated) return;
 
-            if (WeightsAlreadyAllocated(_qWeights, _hiddenSize, _hiddenSize)
-                && WeightsAlreadyAllocated(_kWeights, _hiddenSize, _hiddenSize)
-                && WeightsAlreadyAllocated(_vWeights, _hiddenSize, _hiddenSize)
-                && WeightsAlreadyAllocated(_oWeights, _hiddenSize, _hiddenSize))
+            if (WeightsAlreadyAllocated(_qWeights, _hiddenSize, _innerSize)
+                && WeightsAlreadyAllocated(_kWeights, _hiddenSize, _innerSize)
+                && WeightsAlreadyAllocated(_vWeights, _hiddenSize, _innerSize)
+                && WeightsAlreadyAllocated(_oWeights, _innerSize, _hiddenSize))
             {
                 // The restore path (SetTrainableParameters) already registered them.
                 _projectionsAllocated = true;
                 return;
             }
 
-            // Xavier-initialised, drawn from the layer's RNG after the bias table.
-            _qWeights = InitProjection(_hiddenSize, _hiddenSize);
-            _kWeights = InitProjection(_hiddenSize, _hiddenSize);
-            _vWeights = InitProjection(_hiddenSize, _hiddenSize);
-            _oWeights = InitProjection(_hiddenSize, _hiddenSize);
+            // T5's initialisation (HF T5PreTrainedModel._init_weights, factor 1): q ~ N(0, (d * d_kv)^-1/2),
+            // k and v ~ N(0, d^-1/2), o ~ N(0, (heads * d_kv)^-1/2). The query's extra d_kv^-1/2 is the score scaling
+            // T5 leaves out of the forward. Drawn from the layer's RNG after the bias table.
+            _qWeights = SampleNormalTensor(new[] { _hiddenSize, _innerSize }, Math.Pow((double)_hiddenSize * _headDim, -0.5));
+            _kWeights = SampleNormalTensor(new[] { _hiddenSize, _innerSize }, Math.Pow(_hiddenSize, -0.5));
+            _vWeights = SampleNormalTensor(new[] { _hiddenSize, _innerSize }, Math.Pow(_hiddenSize, -0.5));
+            _oWeights = SampleNormalTensor(new[] { _innerSize, _hiddenSize }, Math.Pow(_innerSize, -0.5));
 
             RegisterTrainableParameter(_qWeights, PersistentTensorRole.Weights);
             RegisterTrainableParameter(_kWeights, PersistentTensorRole.Weights);
@@ -338,24 +348,6 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
         }
     }
 
-    /// <summary>
-    /// Glorot / Xavier-uniform initialisation for a [fanIn, fanOut] weight matrix.
-    /// </summary>
-    private Tensor<T> InitProjection(int fanIn, int fanOut)
-    {
-        // T5 reference (t5x) uses normal init scaled by 1/sqrt(fan_in). We use
-        // Xavier-uniform with the same effective variance so behaviour is
-        // numerically equivalent for downstream usage.
-        double limit = Math.Sqrt(6.0 / (fanIn + fanOut));
-        var t = new Tensor<T>(new[] { fanIn, fanOut });
-        var span = t.Data.Span;
-        for (int i = 0; i < span.Length; i++)
-        {
-            double u = _rng.NextDouble() * 2.0 - 1.0; // [-1, 1]
-            span[i] = NumOps.FromDouble(u * limit);
-        }
-        return t;
-    }
 
     /// <summary>
     /// Samples a normal-distributed [shape...] tensor with mean 0 and the
@@ -376,17 +368,16 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
     }
 
     /// <summary>
-    /// Performs the forward pass: project Q/K/V, scaled dot-product attention
-    /// with the T5 relative bias added pre-softmax, then output projection.
-    /// All shape operations route through Engine ops so the tape records the
-    /// graph for autodiff.
+    /// Self-attention over <c>[batch, seq, hidden]</c> or <c>[seq, hidden]</c>. Q/K/V are projected, the T5
+    /// relative bias is added to the unscaled scores, and the result goes through the output projection. A
+    /// unidirectional (decoder) layer also masks future keys. Every op is an Engine op, so the tape records
+    /// the graph.
     /// </summary>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureWeightsAllocated();
 
-        // Accept [batch, seq, hidden] or [seq, hidden]. Flatten leading
-        // dims to [batch, seq, hidden] for processing.
+        // Accept [batch, seq, hidden] or [seq, hidden]. Flatten leading dims to [batch, seq, hidden].
         int rank = input.Shape.Length;
         if (rank < 2)
             throw new ArgumentException(
@@ -407,76 +398,82 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
             ? input
             : Engine.Reshape(input, new[] { batchSize, seqLen, _hiddenSize });
 
-        // ---- 1. Project to Q, K, V ----
-        var x2D = Engine.Reshape(input3D, new[] { batchSize * seqLen, _hiddenSize });
-        var qFlat = Engine.TensorMatMul(x2D, _qWeights);
-        var kFlat = Engine.TensorMatMul(x2D, _kWeights);
-        var vFlat = Engine.TensorMatMul(x2D, _vWeights);
-
-        // Reshape to [B, S, H, D_h] then permute to [B, H, S, D_h].
-        var qReshaped = Engine.Reshape(qFlat, new[] { batchSize, seqLen, _numHeads, _headDim });
-        var kReshaped = Engine.Reshape(kFlat, new[] { batchSize, seqLen, _numHeads, _headDim });
-        var vReshaped = Engine.Reshape(vFlat, new[] { batchSize, seqLen, _numHeads, _headDim });
-        var q = Engine.TensorPermute(qReshaped, new[] { 0, 2, 1, 3 });
-        var k = Engine.TensorPermute(kReshaped, new[] { 0, 2, 1, 3 });
-        var v = Engine.TensorPermute(vReshaped, new[] { 0, 2, 1, 3 });
-
-        // ---- 2. Build the T5 relative position bias [numHeads, seqLen, seqLen] ----
-        var biasForAttn = _usesExternalPositionBias
+        var bias = _usesExternalPositionBias
             ? ExternalPositionBias(seqLen)
             : BuildT5RelativeBias(seqLen);
+        var output3D = Attend(input3D, input3D, bias, causal: !_bidirectional);
 
-        // ---- 3. Scaled dot-product attention with bias added pre-softmax ----
-        // Manual SDPA composition via tape-tracked Engine ops only.
-        // (FlashAttention<T>.Forward fills its output via scalar indexing,
-        // so the autodiff tape can't propagate gradients back to Q/K/V —
-        // using it here would silently freeze every parameter upstream of
-        // this layer, including the conditioner's EmbeddingLayer. CLIP's
-        // MultiHeadAttentionLayer hits the same trap and only uses
-        // FlashAttention on its ALiBi path; everywhere else it routes
-        // through Engine.ScaledDotProductAttention. We need bias support,
-        // which the fused engine op doesn't expose, so we compose the
-        // five steps manually — every op below is proven tape-tracked
-        // by its use in other trainable layers.)
-
-        // 3a. scores = Q · K^T over the head dimension.
-        //     k shape [B, H, S, D_h] -> permute to [B, H, D_h, S] so
-        //     MatMul produces [B, H, S, S].
-        var kT = Engine.TensorPermute(k, new[] { 0, 1, 3, 2 });
-        var scoresUnscaled = Engine.TensorMatMul(q, kT);
-
-        // 3b. Scale by 1/√head_dim. BroadcastMultiply with a singleton
-        //     scalar tensor is tape-tracked (proven via RMSNorm's γ
-        //     application); a raw TensorMultiplyScalar is not.
-        var scaleTensor = new Tensor<T>(new[] { 1 });
-        scaleTensor[0] = NumOps.FromDouble(1.0 / Math.Sqrt(_headDim));
-        var scoresScaled = Engine.TensorMultiply(scoresUnscaled, scaleTensor);
-
-        // 3c. Add T5 relative-position bias (Raffel 2020 §2.1) before softmax.
-        //     biasForAttn shape [H, S, S] broadcasts against [B, H, S, S]
-        //     via BroadcastAdd (TensorAdd requires exact shape match).
-        var scoresWithBias = Engine.TensorAdd(scoresScaled, biasForAttn);
-
-        // 3d. Row-softmax over keys (last axis). Tape-tracked.
-        var attnProbs = Engine.TensorSoftmax(scoresWithBias, axis: 3);
-
-        // 3e. context = attnProbs · V → [B, H, S, D_h].
-        var context4D = Engine.TensorMatMul(attnProbs, v);
-
-        // ---- 4. Merge heads and apply output projection ----
-        // [B, H, S, D_h] -> [B, S, H, D_h] -> [B, S, hidden]
-        var contextPerm = Engine.TensorPermute(context4D, new[] { 0, 2, 1, 3 });
-        var contextFlat = Engine.Reshape(contextPerm, new[] { batchSize * seqLen, _hiddenSize });
-        var outFlat = Engine.TensorMatMul(contextFlat, _oWeights);
-        var output3D = Engine.Reshape(outFlat, new[] { batchSize, seqLen, _hiddenSize });
-
-        // Restore original leading-dim layout.
         if (rank == 3) return output3D;
         var outShape = new int[rank];
         for (int i = 0; i < rank - 2; i++) outShape[i] = input.Shape[i];
         outShape[rank - 2] = seqLen;
         outShape[rank - 1] = _hiddenSize;
         return Engine.Reshape(output3D, outShape);
+    }
+
+    /// <summary>
+    /// Attends from <paramref name="x"/> <c>[Sq, hidden]</c> to <paramref name="memory"/> <c>[Sk, hidden]</c>,
+    /// which is the same tensor for self-attention and the encoder output for cross-attention.
+    /// <paramref name="positionBias"/> <c>[heads, Sq, Sk]</c> is a bias the caller computed (null for none).
+    /// <paramref name="causal"/> masks keys after each query.
+    /// </summary>
+    /// <remarks>
+    /// Encoder-decoders whose biases are richer than one 1-D table use this path; UDOP's summed 1-D and 2-D
+    /// layout biases are an example. The layer's own table is not consulted here.
+    /// </remarks>
+    internal Tensor<T> Forward(Tensor<T> x, Tensor<T> memory, Tensor<T>? positionBias, bool causal)
+    {
+        EnsureWeightsAllocated();
+        if (x.Rank != 2 || x.Shape[1] != _hiddenSize || memory.Rank != 2 || memory.Shape[1] != _hiddenSize)
+            throw new ArgumentException(
+                $"T5RelativeBiasAttentionLayer.Forward expects [S, {_hiddenSize}] queries and memory; got [{string.Join(", ", x.Shape.ToArray())}] and [{string.Join(", ", memory.Shape.ToArray())}].",
+                nameof(x));
+        int sq = x.Shape[0], sk = memory.Shape[0];
+        if (positionBias is not null
+            && (positionBias.Rank != 3 || positionBias.Shape[0] != _numHeads || positionBias.Shape[1] != sq || positionBias.Shape[2] != sk))
+            throw new ArgumentException($"The position bias must be [{_numHeads}, {sq}, {sk}].", nameof(positionBias));
+        var output = Attend(
+            Engine.Reshape(x, new[] { 1, sq, _hiddenSize }),
+            Engine.Reshape(memory, new[] { 1, sk, _hiddenSize }),
+            positionBias, causal);
+        return Engine.Reshape(output, new[] { sq, _hiddenSize });
+    }
+
+    /// <summary>
+    /// T5 attention core over <c>[B, Sq, hidden]</c> queries and <c>[B, Sk, hidden]</c> memory. The scores are
+    /// <c>q k^T + bias</c> with NO <c>1/sqrt(d_kv)</c>: T5 folds that factor into the query initialisation
+    /// (Raffel et al. 2020; HF <c>T5Attention</c>, <c>scaling = 1.0</c>).
+    /// </summary>
+    private Tensor<T> Attend(Tensor<T> query3D, Tensor<T> memory3D, Tensor<T>? bias, bool causal)
+    {
+        int batchSize = query3D.Shape[0], sq = query3D.Shape[1], sk = memory3D.Shape[1];
+        var queries = Engine.Reshape(query3D, new[] { batchSize * sq, _hiddenSize });
+        var keysIn = Engine.Reshape(memory3D, new[] { batchSize * sk, _hiddenSize });
+
+        // Project to [B, S, H, d_kv], then permute to [B, H, S, d_kv].
+        var q = Engine.TensorPermute(Engine.Reshape(Engine.TensorMatMul(queries, _qWeights), new[] { batchSize, sq, _numHeads, _headDim }), new[] { 0, 2, 1, 3 });
+        var k = Engine.TensorPermute(Engine.Reshape(Engine.TensorMatMul(keysIn, _kWeights), new[] { batchSize, sk, _numHeads, _headDim }), new[] { 0, 2, 1, 3 });
+        var v = Engine.TensorPermute(Engine.Reshape(Engine.TensorMatMul(keysIn, _vWeights), new[] { batchSize, sk, _numHeads, _headDim }), new[] { 0, 2, 1, 3 });
+
+        // Manual composition through tape-tracked Engine ops: FlashAttention<T>.Forward fills its output by
+        // scalar indexing, which the tape cannot differentiate, and the fused SDPA op takes no additive bias.
+        var scores = Engine.TensorMatMul(q, Engine.TensorPermute(k, new[] { 0, 1, 3, 2 }));      // [B, H, Sq, Sk]
+        if (bias is not null) scores = Engine.TensorAdd(scores, bias);
+        if (causal)
+        {
+            var mask = new Tensor<T>(new[] { _numHeads, sq, sk });
+            T blocked = NumOps.FromDouble(-1e9);
+            int shift = sk - sq; // queries are the last sq positions of the keys
+            for (int h = 0; h < _numHeads; h++)
+                for (int i = 0; i < sq; i++)
+                    for (int j = i + shift + 1; j < sk; j++) mask[h, i, j] = blocked;
+            scores = Engine.TensorAdd(scores, mask);
+        }
+        var context = Engine.TensorMatMul(Engine.TensorSoftmax(scores, axis: 3), v);              // [B, H, Sq, d_kv]
+
+        // [B, H, Sq, d_kv] -> [B, Sq, H * d_kv] -> output projection to hidden.
+        var merged = Engine.Reshape(Engine.TensorPermute(context, new[] { 0, 2, 1, 3 }), new[] { batchSize * sq, _innerSize });
+        return Engine.Reshape(Engine.TensorMatMul(merged, _oWeights), new[] { batchSize, sq, _hiddenSize });
     }
 
     /// <summary>

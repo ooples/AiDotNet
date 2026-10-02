@@ -189,10 +189,7 @@ public partial class GOTOCR2<T> : VisionLanguageModelBase<T>, IDocumentUnderstan
             return OnnxModel.Run(p);
         SetTrainingMode(false);
         using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        var generated = Generate(ImageTokens(p), prompt ?? DefaultQuery);
-        var result = new Tensor<T>(new[] { generated.Count });
-        for (int i = 0; i < generated.Count; i++) result[i] = NumOps.FromDouble(generated[i]);
-        return result;
+        return TokenTensor(Generate(ImageTokens(p), prompt ?? DefaultQuery));
     }
 
     /// <summary>Reads the page under GOT-OCR2's OCR query and returns the generated token ids.</summary>
@@ -245,8 +242,7 @@ public partial class GOTOCR2<T> : VisionLanguageModelBase<T>, IDocumentUnderstan
     {
         if (answerIds is null) throw new ArgumentNullException(nameof(answerIds));
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
-        var target = new Tensor<T>(new[] { answerIds.Count });
-        for (int i = 0; i < answerIds.Count; i++) target[i] = NumOps.FromDouble(answerIds[i]);
+        var target = TokenTensor(answerIds);
         string query = prompt ?? DefaultQuery;
         TrainWithCustomObjective(PreprocessImage(image), target, (pixels, labels) => Loss(pixels, labels, query), _optimizer);
     }
@@ -334,23 +330,9 @@ public partial class GOTOCR2<T> : VisionLanguageModelBase<T>, IDocumentUnderstan
     {
         var decoder = Decoder;
         var (ids, imageStart) = Prompt(query);
-        var generated = new List<int>();
         int limit = Math.Min(_options.MaxGenerationLength, decoder.MaxPositions - ids.Count);
-        for (int step = 0; step < limit; step++)
-        {
-            var logits = decoder.Forward(ids, imageTokens, imageStart);
-            int last = logits.Shape[0] - 1, best = 0;
-            double bestValue = double.NegativeInfinity;
-            for (int v = 0; v < _options.VocabSize; v++)
-            {
-                double value = NumOps.ToDouble(logits[last, v]);
-                if (value > bestValue) { bestValue = value; best = v; }
-            }
-            generated.Add(best);
-            if (best == _options.ImEndTokenId || best == _options.EndOfTextTokenId) break;
-            ids.Add(best);
-        }
-        return generated;
+        return GreedyDecode(context => decoder.Forward(context, imageTokens, imageStart), ids, limit,
+            (token, _) => token == _options.ImEndTokenId || token == _options.EndOfTextTokenId);
     }
 
     /// <summary>
@@ -365,19 +347,12 @@ public partial class GOTOCR2<T> : VisionLanguageModelBase<T>, IDocumentUnderstan
         {
             var (ids, imageStart) = Prompt(query);
             var logits = decoder.Forward(ids, imageTokens, imageStart);
-            var last = Engine.TensorSlice(logits, new[] { ids.Count - 1, 0 }, new[] { 1, _options.VocabSize });
-            var log = Engine.TensorLogSoftmax(last, axis: 1);
-            return Engine.TensorMultiplyScalar(Engine.ReduceSum(Engine.TensorMultiply(target, log), null), NumOps.FromDouble(-1.0));
+            return SoftTargetCrossEntropy(Engine.TensorSlice(logits, new[] { ids.Count - 1, 0 }, new[] { 1, _options.VocabSize }), target);
         }
 
-        var labels = new int[target.Length];
-        for (int i = 0; i < labels.Length; i++) labels[i] = decoder.ClampToken((int)Math.Round(NumOps.ToDouble(target.Data.Span[i])));
+        var labels = TokenIds(target, decoder.ClampToken);
         if (labels.Length == 0) throw new ArgumentException("A GOT-OCR2 target needs at least one token.", nameof(target));
-        var answerLog = Engine.TensorLogSoftmax(AnswerLogits(imageTokens, query, labels), axis: 1);
-        var entries = new int[labels.Length];
-        for (int t = 0; t < labels.Length; t++) entries[t] = (t * _options.VocabSize) + labels[t];
-        var picked = AiDotNet.ComputerVision.CvTensorOps<T>.Select(Engine.Reshape(answerLog, new[] { answerLog.Length }), entries, 0);
-        return Engine.TensorMultiplyScalar(Engine.ReduceSum(picked, null), NumOps.FromDouble(-1.0 / labels.Length));
+        return TokenCrossEntropy(AnswerLogits(imageTokens, query, labels), labels);
     }
 
     /// <summary>Next-token logits <c>[1, vocab]</c> at the end of the OCR prompt: the answer's first token.</summary>

@@ -188,9 +188,7 @@ public partial class KOSMOS1<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
     public void TrainCaption(Tensor<T> image, IReadOnlyList<int> captionIds)
     {
         if (captionIds is null) throw new ArgumentNullException(nameof(captionIds));
-        var target = new Tensor<T>(new[] { captionIds.Count });
-        for (int i = 0; i < captionIds.Count; i++) target[i] = NumOps.FromDouble(captionIds[i]);
-        Train(image, target);
+        Train(image, TokenTensor(captionIds));
     }
 
     /// <inheritdoc/>

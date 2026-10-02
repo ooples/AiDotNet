@@ -1,5 +1,6 @@
 using AiDotNet.ComputerVision;
 using AiDotNet.Interfaces;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
@@ -81,24 +82,13 @@ internal sealed class KosmosModelCore<T>
     /// </summary>
     public Tensor<T> Loss(Tensor<T> image, Tensor<T> target)
     {
-        var engine = AiDotNetEngine.Current;
         if (target.Rank == 2 && target.Shape[0] == HeaderLength && target.Shape[1] == _options.VocabSize)
-        {
-            var logProbabilities = engine.TensorLogSoftmax(Logits(image, Array.Empty<int>()), axis: 1);
-            return engine.TensorMultiplyScalar(engine.ReduceSum(engine.TensorMultiply(target, logProbabilities), null),
-                NumOps.FromDouble(-1.0 / HeaderLength));
-        }
+            return NeuralNetworkBase<T>.SoftTargetCrossEntropy(Logits(image, Array.Empty<int>()), target, 1.0 / HeaderLength);
 
-        var caption = new int[Math.Min(target.Length, _options.MaxSequenceLength)];
-        for (int i = 0; i < caption.Length; i++) caption[i] = Clamp((int)Math.Round(NumOps.ToDouble(target[i])));
+        var caption = NeuralNetworkBase<T>.TokenIds(target, Clamp, _options.MaxSequenceLength);
         if (caption.Length == 0) throw new ArgumentException("A KOSMOS caption needs at least one token.", nameof(target));
-        var logits = Logits(image, caption);
-        var log = engine.TensorLogSoftmax(logits, axis: 1);
         // The logit at position HeaderLength - 1 + t predicts caption token t.
-        var entries = new int[caption.Length];
-        for (int t = 0; t < caption.Length; t++) entries[t] = ((HeaderLength - 1 + t) * _options.VocabSize) + caption[t];
-        var picked = CvTensorOps<T>.Select(engine.Reshape(log, new[] { log.Length }), entries, 0);
-        return engine.TensorMultiplyScalar(engine.ReduceSum(picked, null), NumOps.FromDouble(-1.0 / caption.Length));
+        return NeuralNetworkBase<T>.TokenCrossEntropy(Logits(image, caption), caption, HeaderLength - 1);
     }
 
     /// <summary>Greedy decoding: appends the most likely token until EOS or <c>MaxGenerationLength</c> tokens.</summary>
@@ -107,23 +97,9 @@ internal sealed class KosmosModelCore<T>
         var embeddings = ImageEmbeddings(image);
         var ids = Header();
         ids.AddRange(prompt.Take(_options.MaxSequenceLength).Select(Clamp));
-        var generated = new List<int>();
-        for (int step = 0; step < _options.MaxGenerationLength; step++)
-        {
-            var logits = Decoder.Forward(ids.ToArray(), embeddings, 2);
-            int last = logits.Shape[0] - 1, best = 0;
-            double bestValue = double.NegativeInfinity;
-            for (int v = 0; v < _options.VocabSize; v++)
-            {
-                double value = NumOps.ToDouble(logits[last, v]);
-                if (value > bestValue) { bestValue = value; best = v; }
-            }
-            generated.Add(best);
-            if (best == _options.EosTokenId) break;
-            ids.Add(best);
-        }
-        var result = new Tensor<T>(new[] { generated.Count });
-        for (int i = 0; i < generated.Count; i++) result[i] = NumOps.FromDouble(generated[i]);
-        return result;
+        var generated = NeuralNetworkBase<T>.GreedyDecode(
+            context => Decoder.Forward(context.ToArray(), embeddings, 2), ids, _options.MaxGenerationLength,
+            (token, _) => token == _options.EosTokenId);
+        return NeuralNetworkBase<T>.TokenTensor(generated);
     }
 }

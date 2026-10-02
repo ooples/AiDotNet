@@ -215,9 +215,7 @@ public partial class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T
         SetTrainingMode(false);
         using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var generated = Generate(EncodeWithPrompt(p, task ?? _options.DefaultTask, taskInput));
-        var result = new Tensor<T>(new[] { generated.Count });
-        for (int i = 0; i < generated.Count; i++) result[i] = NumOps.FromDouble(generated[i]);
-        return result;
+        return TokenTensor(generated);
     }
 
     /// <summary>
@@ -280,8 +278,7 @@ public partial class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T
     {
         if (targetIds is null) throw new ArgumentNullException(nameof(targetIds));
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
-        var target = new Tensor<T>(new[] { targetIds.Count });
-        for (int i = 0; i < targetIds.Count; i++) target[i] = NumOps.FromDouble(targetIds[i]);
+        var target = TokenTensor(targetIds);
         var resolvedTask = task ?? _options.DefaultTask;
         TrainWithCustomObjective(PreprocessImage(image), target,
             (pixels, labels) => Loss(pixels, labels, resolvedTask, taskInput), _optimizer);
@@ -374,24 +371,9 @@ public partial class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T
     private List<int> Generate(Tensor<T> memory)
     {
         var language = Language;
-        var ids = new List<int> { BartEncoderDecoderLayer<T>.DecoderStartTokenId };
-        var generated = new List<int>();
         int limit = Math.Min(_options.MaxOutputTokens, language.MaxPositions - 1);
-        for (int step = 0; step < limit; step++)
-        {
-            var logits = language.Decode(ids, memory);
-            int last = logits.Shape[0] - 1, best = 0;
-            double bestValue = double.NegativeInfinity;
-            for (int v = 0; v < _options.VocabSize; v++)
-            {
-                double value = NumOps.ToDouble(logits[last, v]);
-                if (value > bestValue) { bestValue = value; best = v; }
-            }
-            generated.Add(best);
-            if (best == EosTokenId && step > 0) break;
-            ids.Add(best);
-        }
-        return generated;
+        return GreedyDecode(ids => language.Decode(ids, memory), new List<int> { BartEncoderDecoderLayer<T>.DecoderStartTokenId },
+            limit, (token, step) => token == EosTokenId && step > 0);
     }
 
     /// <summary>
@@ -404,22 +386,11 @@ public partial class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T
         var language = Language;
         var memory = EncodeWithPrompt(preprocessed, task, taskInput);
         if (target.Rank == 2 && target.Shape[0] == 1 && target.Shape[1] == _options.VocabSize)
-        {
-            var first = Engine.TensorLogSoftmax(language.Decode(new[] { BartEncoderDecoderLayer<T>.DecoderStartTokenId }, memory), axis: 1);
-            return Engine.TensorMultiplyScalar(Engine.ReduceSum(Engine.TensorMultiply(target, first), null), NumOps.FromDouble(-1.0));
-        }
+            return SoftTargetCrossEntropy(language.Decode(new[] { BartEncoderDecoderLayer<T>.DecoderStartTokenId }, memory), target);
 
-        var labels = new int[Math.Min(target.Length, language.MaxPositions)];
-        for (int i = 0; i < labels.Length; i++) labels[i] = language.ClampToken((int)Math.Round(NumOps.ToDouble(target.Data.Span[i])));
+        var labels = TokenIds(target, language.ClampToken, language.MaxPositions);
         if (labels.Length == 0) throw new ArgumentException("A Florence-2 target needs at least one token.", nameof(target));
-        var decoderInput = new int[labels.Length];
-        decoderInput[0] = BartEncoderDecoderLayer<T>.DecoderStartTokenId;
-        for (int t = 1; t < labels.Length; t++) decoderInput[t] = labels[t - 1];
-        var log = Engine.TensorLogSoftmax(language.Decode(decoderInput, memory), axis: 1);
-        var entries = new int[labels.Length];
-        for (int t = 0; t < labels.Length; t++) entries[t] = (t * _options.VocabSize) + labels[t];
-        var picked = AiDotNet.ComputerVision.CvTensorOps<T>.Select(Engine.Reshape(log, new[] { log.Length }), entries, 0);
-        return Engine.TensorMultiplyScalar(Engine.ReduceSum(picked, null), NumOps.FromDouble(-1.0 / labels.Length));
+        return TokenCrossEntropy(language.Decode(ShiftRight(labels, BartEncoderDecoderLayer<T>.DecoderStartTokenId), memory), labels);
     }
 
     /// <summary>

@@ -351,10 +351,7 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         SetTrainingMode(false);
         using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var memory = EncodeInputs(promptTokens ?? Array.Empty<int>(), packedTokens, PreparePage(pageImage));
-        var generated = Generate(memory, _options.MaxGenerationLength, 0.0);
-        var result = new Tensor<T>(new[] { generated.Count });
-        for (int i = 0; i < generated.Count; i++) result[i] = NumOps.FromDouble(generated[i].Token);
-        return result;
+        return TokenTensor(Generate(memory, _options.MaxGenerationLength, 0.0).Select(g => g.Token).ToList());
     }
 
     /// <summary>
@@ -367,8 +364,7 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         if (!_useNativeMode) throw new NotSupportedException("Training not supported in ONNX mode.");
         if (packedTokens is null && pageImage is null)
             throw new ArgumentException("Pass OCR tokens, a page image, or both.", nameof(packedTokens));
-        var target = new Tensor<T>(new[] { targetTokens.Count });
-        for (int i = 0; i < targetTokens.Count; i++) target[i] = NumOps.FromDouble(targetTokens[i]);
+        var target = TokenTensor(targetTokens);
         var page = PreparePage(pageImage);
         if (packedTokens is not null)
         {
@@ -397,22 +393,11 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
     {
         var transformer = Transformer;
         if (target.Rank == 2 && target.Shape[0] == 1 && target.Shape[1] == _vocabSize)
-        {
-            var logProbabilities = Engine.TensorLogSoftmax(transformer.Decode(new[] { DecoderStartTokenId }, memory), axis: 1);
-            return Engine.TensorMultiplyScalar(Engine.ReduceSum(Engine.TensorMultiply(target, logProbabilities), null), NumOps.FromDouble(-1.0));
-        }
+            return SoftTargetCrossEntropy(transformer.Decode(new[] { DecoderStartTokenId }, memory), target);
 
-        var labels = new int[target.Length];
-        for (int i = 0; i < labels.Length; i++) labels[i] = transformer.ClampToken((int)Math.Round(NumOps.ToDouble(target.Data.Span[i])));
+        var labels = TokenIds(target, transformer.ClampToken);
         if (labels.Length == 0) throw new ArgumentException("A UDOP target needs at least one token.", nameof(target));
-        var decoderInput = new int[labels.Length];
-        decoderInput[0] = DecoderStartTokenId;
-        for (int t = 1; t < labels.Length; t++) decoderInput[t] = labels[t - 1];
-        var log = Engine.TensorLogSoftmax(transformer.Decode(decoderInput, memory), axis: 1);
-        var entries = new int[labels.Length];
-        for (int t = 0; t < labels.Length; t++) entries[t] = (t * _vocabSize) + labels[t];
-        var picked = AiDotNet.ComputerVision.CvTensorOps<T>.Select(Engine.Reshape(log, new[] { log.Length }), entries, 0);
-        return Engine.TensorMultiplyScalar(Engine.ReduceSum(picked, null), NumOps.FromDouble(-1.0 / labels.Length));
+        return TokenCrossEntropy(transformer.Decode(ShiftRight(labels, DecoderStartTokenId), memory), labels);
     }
 
     /// <summary>
@@ -628,10 +613,7 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         for (int c = 0; c < scores.Length; c++)
         {
             var labels = EncodeText(AvailableCategories[c].Replace('_', ' ')).Select(transformer.ClampToken).Append(EosTokenId).ToArray();
-            var decoderInput = new int[labels.Length];
-            decoderInput[0] = DecoderStartTokenId;
-            for (int t = 1; t < labels.Length; t++) decoderInput[t] = labels[t - 1];
-            var log = Engine.TensorLogSoftmax(transformer.Decode(decoderInput, memory), axis: 1);
+            var log = Engine.TensorLogSoftmax(transformer.Decode(ShiftRight(labels, DecoderStartTokenId), memory), axis: 1);
             for (int t = 0; t < labels.Length; t++) scores[c] += NumOps.ToDouble(log[t, labels[t]]);
         }
         double best = scores.Max();

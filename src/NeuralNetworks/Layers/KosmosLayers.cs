@@ -193,8 +193,8 @@ public partial class ClipVisionTransformerLayer<T> : LayerBase<T>, IShapeContrac
 
         // Kosmos2 _init_weights: class embedding N(0, d^-0.5); position embedding N(0, 0.02).
         var random = LayerInitializationSeedScope.NextRandom();
-        _classEmbedding = Normal(new[] { 1, hidden }, Math.Pow(hidden, -0.5), random);
-        _positionEmbedding = Normal(new[] { tokens, hidden }, 0.02, random);
+        _classEmbedding = NormalTensor(new[] { 1, hidden }, Math.Pow(hidden, -0.5), random);
+        _positionEmbedding = NormalTensor(new[] { tokens, hidden }, 0.02, random);
         RegisterTrainableParameter(_classEmbedding, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_positionEmbedding, PersistentTensorRole.Weights);
 
@@ -226,17 +226,6 @@ public partial class ClipVisionTransformerLayer<T> : LayerBase<T>, IShapeContrac
             yield return _norm2[i]; yield return _fc1[i]; yield return _fc2[i];
         }
         yield return _postNorm;
-    }
-
-    private Tensor<T> Normal(int[] shape, double std, Random random)
-    {
-        var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            tensor[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * std);
-        }
-        return tensor;
     }
 
     /// <inheritdoc/>
@@ -371,12 +360,7 @@ public partial class KosmosImageResamplerLayer<T> : LayerBase<T>, IShapeContract
 
         // latent_query = nn.Parameter(torch.randn(numLatents, dim)).
         var random = LayerInitializationSeedScope.NextRandom();
-        _latents = new Tensor<T>(new[] { numLatents, dim });
-        for (int i = 0; i < _latents.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            _latents[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2));
-        }
+        _latents = NormalTensor(new[] { numLatents, dim }, 1.0, random);
         RegisterTrainableParameter(_latents, PersistentTensorRole.Weights);
 
         var identity = (IActivationFunction<T>)new IdentityActivation<T>();
@@ -551,12 +535,7 @@ public partial class MagnetoDecoderLayer<T> : LayerBase<T>, IShapeContract
 
         // Text init_std 0.02; the padding row (pad_token_id 1) of nn.Embedding is zero.
         var random = LayerInitializationSeedScope.NextRandom();
-        _embedTokens = new Tensor<T>(new[] { vocabSize, dim });
-        for (int i = 0; i < _embedTokens.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            _embedTokens[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * 0.02);
-        }
+        _embedTokens = NormalTensor(new[] { vocabSize, dim }, 0.02, random);
         if (vocabSize > 1) for (int c = 0; c < dim; c++) _embedTokens[1, c] = NumOps.Zero;
         RegisterTrainableParameter(_embedTokens, PersistentTensorRole.Weights);
 

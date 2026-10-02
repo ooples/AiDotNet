@@ -9,171 +9,6 @@ using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
-/// <summary>
-/// T5 relative-position bucketing (Raffel et al. 2020; Mesh TensorFlow <c>_relative_position_bucket</c>).
-/// </summary>
-/// <remarks>
-/// Half of the buckets hold exact small distances. The rest grow logarithmically up to <c>maxDistance</c>, and every
-/// larger distance shares the last bucket. Bidirectional bucketing gives positive and negative distances separate
-/// halves. Unidirectional (causal) bucketing maps every future position to bucket 0, which the causal mask then hides.
-/// </remarks>
-internal static class T5RelativePositionBuckets
-{
-    public static int Bucket(long relativePosition, bool bidirectional, int numBuckets, int maxDistance)
-    {
-        int bucket = 0;
-        int buckets = numBuckets;
-        long distance;
-        if (bidirectional)
-        {
-            buckets /= 2;
-            if (relativePosition > 0) bucket += buckets;
-            distance = Math.Abs(relativePosition);
-        }
-        else
-        {
-            distance = -Math.Min(relativePosition, 0);
-        }
-
-        int maxExact = buckets / 2;
-        if (distance < maxExact) return bucket + (int)distance;
-        // torch's .to(torch.long) truncates toward zero; the value is non-negative here.
-        int large = maxExact + (int)(Math.Log((double)distance / maxExact) / Math.Log((double)maxDistance / maxExact) * (buckets - maxExact));
-        return bucket + Math.Min(large, buckets - 1);
-    }
-
-    /// <summary>Looks each bucket up in a <c>[numBuckets, heads]</c> table and returns the bias as <c>[heads, Sq, Sk]</c>.</summary>
-    public static Tensor<T> Bias<T>(Tensor<T> table, int[] buckets, int queries, int keys)
-    {
-        var engine = AiDotNetEngine.Current;
-        int heads = table.Shape[1];
-        var rows = CvTensorOps<T>.Select(table, buckets, 0);                                   // [Sq*Sk, H]
-        return engine.TensorPermute(engine.Reshape(rows, new[] { queries, keys, heads }), new[] { 2, 0, 1 });
-    }
-}
-
-/// <summary>
-/// T5 multi-head attention: bias-free projections, no <c>1/sqrt(d)</c> score scaling, and an additive position bias.
-/// </summary>
-/// <remarks>
-/// T5 folds the score scaling into its initialisation: queries are drawn from N(0, (d·d_kv)^-1/2) rather than
-/// being divided at run time. The position bias is supplied by the caller. It is computed once per stack and shared
-/// by every block, as in the reference.
-/// </remarks>
-[LayerCategory(LayerCategory.Attention)]
-[LayerTask(LayerTask.SequenceModeling)]
-[LayerProperty(IsTrainable = true, ChangesShape = false, ExpectedInputRank = 2, Cost = ComputeCost.Medium, TestInputShape = "4, 8", TestConstructorArgs = "8, 2, 4")]
-[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
-[TensorLayout(TensorAxis.Time, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
-[AutoParameters]
-public partial class T5AttentionLayer<T> : LayerBase<T>, IShapeContract
-{
-    private readonly int _dim;
-    private readonly int _numHeads;
-    private readonly int _keyValueDim;
-    private readonly int _inner;
-
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
-    private Tensor<T> _query;
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
-    private Tensor<T> _key;
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
-    private Tensor<T> _value;
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
-    private Tensor<T> _output;
-
-    public override bool SupportsTraining => true;
-
-    public T5AttentionLayer([LayerState] int dim, [LayerState] int numHeads, [LayerState] int keyValueDim)
-        : base(new[] { -1, dim }, new[] { -1, dim })
-    {
-        if (dim <= 0) throw new ArgumentOutOfRangeException(nameof(dim));
-        if (numHeads <= 0) throw new ArgumentOutOfRangeException(nameof(numHeads));
-        if (keyValueDim <= 0) throw new ArgumentOutOfRangeException(nameof(keyValueDim));
-        _dim = dim;
-        _numHeads = numHeads;
-        _keyValueDim = keyValueDim;
-        _inner = numHeads * keyValueDim;
-
-        // UdopPreTrainedModel._init_weights (factor 1.0).
-        var random = LayerInitializationSeedScope.NextRandom();
-        _query = Normal(new[] { dim, _inner }, Math.Pow(dim * keyValueDim, -0.5), random);
-        _key = Normal(new[] { dim, _inner }, Math.Pow(dim, -0.5), random);
-        _value = Normal(new[] { dim, _inner }, Math.Pow(dim, -0.5), random);
-        _output = Normal(new[] { _inner, dim }, Math.Pow(_inner, -0.5), random);
-        RegisterTrainableParameter(_query, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_key, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_value, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_output, PersistentTensorRole.Weights);
-    }
-
-    public int NumHeads => _numHeads;
-
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => inputRank == 2
-        ? new[]
-        {
-            new OutputAxisContract(TensorAxis.Time, AxisRelation.Same(TensorAxis.Time)),
-            new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(_dim)),
-        }
-        : null;
-
-    protected override Tensor<T> ForwardTraced(Tensor<T> input)
-    {
-        if (input.Rank != 2 || input.Shape[1] != _dim)
-            throw new ArgumentException(
-                $"T5AttentionLayer expects features of shape [S, {_dim}]; got shape [{string.Join(", ", input.Shape.ToArray())}].", nameof(input));
-        return Forward(input, input, null, causal: false);
-    }
-
-    /// <summary>Attends from <paramref name="x"/> to <paramref name="memory"/> (the same tensor for self-attention).</summary>
-    internal Tensor<T> Forward(Tensor<T> x, Tensor<T> memory, Tensor<T>? positionBias, bool causal)
-    {
-        int sq = x.Shape[0], sk = memory.Shape[0];
-        Tensor<T> Heads(Tensor<T> projected, int s) =>
-            Engine.TensorPermute(Engine.Reshape(projected, new[] { s, _numHeads, _keyValueDim }), new[] { 1, 0, 2 });
-        var q = Heads(Engine.TensorMatMul(x, _query), sq);
-        var k = Heads(Engine.TensorMatMul(memory, _key), sk);
-        var v = Heads(Engine.TensorMatMul(memory, _value), sk);
-        var scores = Engine.TensorBatchMatMul<T>(q, Engine.TensorPermute(k, new[] { 0, 2, 1 }));   // [H, Sq, Sk]
-        if (positionBias is not null) scores = Engine.TensorAdd(scores, positionBias);
-        if (causal)
-        {
-            var mask = new Tensor<T>(new[] { _numHeads, sq, sk });
-            T blocked = NumOps.FromDouble(-1e9);
-            int shift = sk - sq;
-            for (int h = 0; h < _numHeads; h++)
-                for (int i = 0; i < sq; i++)
-                    for (int j = i + shift + 1; j < sk; j++) mask[h, i, j] = blocked;
-            scores = Engine.TensorAdd(scores, mask);
-        }
-        var context = Engine.TensorBatchMatMul<T>(Engine.TensorSoftmax(scores, 2), v);             // [H, Sq, dkv]
-        var merged = Engine.Reshape(Engine.TensorPermute(context, new[] { 1, 0, 2 }), new[] { sq, _inner });
-        return Engine.TensorMatMul(merged, _output);
-    }
-
-    private Tensor<T> Normal(int[] shape, double std, Random random)
-    {
-        var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            tensor[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * std);
-        }
-        return tensor;
-    }
-
-    internal override Dictionary<string, string> GetMetadata()
-    {
-        var metadata = base.GetMetadata();
-        metadata["Dim"] = _dim.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        metadata["NumHeads"] = _numHeads.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        metadata["KeyValueDim"] = _keyValueDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        return metadata;
-    }
-
-    public override void ResetState() { }
-}
-
 /// <summary>T5 feed-forward block (<c>DenseReluDense</c>): bias-free <c>wo(relu(wi(x)))</c>.</summary>
 [LayerCategory(LayerCategory.Dense)]
 [LayerTask(LayerTask.FeatureExtraction)]
@@ -201,8 +36,8 @@ public partial class T5FeedForwardLayer<T> : LayerBase<T>, IShapeContract
         _dim = dim;
         _ffDim = ffDim;
         var random = LayerInitializationSeedScope.NextRandom();
-        _wi = Normal(new[] { dim, ffDim }, Math.Pow(dim, -0.5), random);
-        _wo = Normal(new[] { ffDim, dim }, Math.Pow(ffDim, -0.5), random);
+        _wi = NormalTensor(new[] { dim, ffDim }, Math.Pow(dim, -0.5), random);
+        _wo = NormalTensor(new[] { ffDim, dim }, Math.Pow(ffDim, -0.5), random);
         RegisterTrainableParameter(_wi, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_wo, PersistentTensorRole.Weights);
     }
@@ -221,17 +56,6 @@ public partial class T5FeedForwardLayer<T> : LayerBase<T>, IShapeContract
             throw new ArgumentException(
                 $"T5FeedForwardLayer expects features of shape [S, {_dim}]; got shape [{string.Join(", ", input.Shape.ToArray())}].", nameof(input));
         return Engine.TensorMatMul(Engine.ReLU(Engine.TensorMatMul(input, _wi)), _wo);
-    }
-
-    private Tensor<T> Normal(int[] shape, double std, Random random)
-    {
-        var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            tensor[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * std);
-        }
-        return tensor;
     }
 
     internal override Dictionary<string, string> GetMetadata()
@@ -313,14 +137,14 @@ public partial class UdopTransformerLayer<T> : LayerBase<T>, IShapeContract
     private readonly EmbeddingLayer<T> _cellY;
 
     [SubLayerInput("_dim")] private readonly List<RMSNormalizationLayer<T>> _encoderSelfNorm = new();
-    [SubLayerInput("_dim")] private readonly List<T5AttentionLayer<T>> _encoderSelfAttention = new();
+    private readonly List<T5RelativeBiasAttentionLayer<T>> _encoderSelfAttention = new();
     [SubLayerInput("_dim")] private readonly List<RMSNormalizationLayer<T>> _encoderFeedForwardNorm = new();
     [SubLayerInput("_dim")] private readonly List<T5FeedForwardLayer<T>> _encoderFeedForward = new();
     [SubLayerInput("_dim")] private readonly RMSNormalizationLayer<T> _encoderFinalNorm;
     [SubLayerInput("_dim")] private readonly List<RMSNormalizationLayer<T>> _decoderSelfNorm = new();
-    [SubLayerInput("_dim")] private readonly List<T5AttentionLayer<T>> _decoderSelfAttention = new();
+    private readonly List<T5RelativeBiasAttentionLayer<T>> _decoderSelfAttention = new();
     [SubLayerInput("_dim")] private readonly List<RMSNormalizationLayer<T>> _decoderCrossNorm = new();
-    [SubLayerInput("_dim")] private readonly List<T5AttentionLayer<T>> _decoderCrossAttention = new();
+    private readonly List<T5RelativeBiasAttentionLayer<T>> _decoderCrossAttention = new();
     [SubLayerInput("_dim")] private readonly List<RMSNormalizationLayer<T>> _decoderFeedForwardNorm = new();
     [SubLayerInput("_dim")] private readonly List<T5FeedForwardLayer<T>> _decoderFeedForward = new();
     [SubLayerInput("_dim")] private readonly RMSNormalizationLayer<T> _decoderFinalNorm;
@@ -365,11 +189,11 @@ public partial class UdopTransformerLayer<T> : LayerBase<T>, IShapeContract
 
         // UdopPreTrainedModel._init_weights (factor 1.0): shared N(0, 1); relative biases N(0, d^-1/2).
         var random = LayerInitializationSeedScope.NextRandom();
-        _shared = Normal(new[] { vocabSize, dim }, 1.0, random);
-        _encoderBias1D = Normal(new[] { numBuckets, numHeads }, Math.Pow(dim, -0.5), random);
-        _encoderBiasHorizontal = Normal(new[] { numBuckets, numHeads }, Math.Pow(dim, -0.5), random);
-        _encoderBiasVertical = Normal(new[] { numBuckets, numHeads }, Math.Pow(dim, -0.5), random);
-        _decoderBias = Normal(new[] { numBuckets, numHeads }, Math.Pow(dim, -0.5), random);
+        _shared = NormalTensor(new[] { vocabSize, dim }, 1.0, random);
+        _encoderBias1D = NormalTensor(new[] { numBuckets, numHeads }, Math.Pow(dim, -0.5), random);
+        _encoderBiasHorizontal = NormalTensor(new[] { numBuckets, numHeads }, Math.Pow(dim, -0.5), random);
+        _encoderBiasVertical = NormalTensor(new[] { numBuckets, numHeads }, Math.Pow(dim, -0.5), random);
+        _decoderBias = NormalTensor(new[] { numBuckets, numHeads }, Math.Pow(dim, -0.5), random);
         RegisterTrainableParameter(_shared, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_encoderBias1D, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_encoderBiasHorizontal, PersistentTensorRole.Weights);
@@ -383,7 +207,7 @@ public partial class UdopTransformerLayer<T> : LayerBase<T>, IShapeContract
         for (int i = 0; i < numEncoderLayers; i++)
         {
             _encoderSelfNorm.Add(new RMSNormalizationLayer<T>(dim, epsilon));
-            _encoderSelfAttention.Add(new T5AttentionLayer<T>(dim, numHeads, keyValueDim));
+            _encoderSelfAttention.Add(Attention(dim, numHeads, keyValueDim, numBuckets, maxDistance));
             _encoderFeedForwardNorm.Add(new RMSNormalizationLayer<T>(dim, epsilon));
             _encoderFeedForward.Add(new T5FeedForwardLayer<T>(dim, ffDim));
         }
@@ -391,9 +215,9 @@ public partial class UdopTransformerLayer<T> : LayerBase<T>, IShapeContract
         for (int i = 0; i < numDecoderLayers; i++)
         {
             _decoderSelfNorm.Add(new RMSNormalizationLayer<T>(dim, epsilon));
-            _decoderSelfAttention.Add(new T5AttentionLayer<T>(dim, numHeads, keyValueDim));
+            _decoderSelfAttention.Add(Attention(dim, numHeads, keyValueDim, numBuckets, maxDistance));
             _decoderCrossNorm.Add(new RMSNormalizationLayer<T>(dim, epsilon));
-            _decoderCrossAttention.Add(new T5AttentionLayer<T>(dim, numHeads, keyValueDim));
+            _decoderCrossAttention.Add(Attention(dim, numHeads, keyValueDim, numBuckets, maxDistance));
             _decoderFeedForwardNorm.Add(new RMSNormalizationLayer<T>(dim, epsilon));
             _decoderFeedForward.Add(new T5FeedForwardLayer<T>(dim, ffDim));
         }
@@ -402,6 +226,19 @@ public partial class UdopTransformerLayer<T> : LayerBase<T>, IShapeContract
         // Registered apart from SubLayers(): the cell tables are parallel lookups on the boxes, not a stage of the chain.
         RegisterSubLayer(_cellX);
         RegisterSubLayer(_cellY);
+    }
+
+    // The repository's T5 attention, fed the bias this layer computes: UDOP sums 1-D and 2-D layout biases, which one
+    // 1-D table cannot express, so every block takes an external bias (none for cross-attention).
+    private static T5RelativeBiasAttentionLayer<T> Attention(int dim, int numHeads, int keyValueDim, int numBuckets, int maxDistance) =>
+        new(dim, numHeads, numBuckets, maxDistance, usesExternalPositionBias: true, keyValueDim: keyValueDim);
+
+    /// <summary>Looks each bucket up in a <c>[numBuckets, heads]</c> table and returns the bias as <c>[heads, Sq, Sk]</c>.</summary>
+    private Tensor<T> BucketBias(Tensor<T> table, int[] buckets, int queries, int keys)
+    {
+        int heads = table.Shape[1];
+        var rows = CvTensorOps<T>.Select(table, buckets, 0);                                   // [Sq*Sk, H]
+        return Engine.TensorPermute(Engine.Reshape(rows, new[] { queries, keys, heads }), new[] { 2, 0, 1 });
     }
 
     private IEnumerable<LayerBase<T>> SubLayers()
@@ -558,16 +395,16 @@ public partial class UdopTransformerLayer<T> : LayerBase<T>, IShapeContract
             {
                 double kx = (boxes[k][0] + boxes[k][2]) / 2.0, ky = (boxes[k][1] + boxes[k][3]) / 2.0;
                 int at = (q * s) + k;
-                order[at] = T5RelativePositionBuckets.Bucket(k - q, true, _numBuckets, _maxDistance);
-                horizontal[at] = T5RelativePositionBuckets.Bucket((long)((kx - qx) * LayoutScale), true, _numBuckets, _maxDistance2D);
-                vertical[at] = T5RelativePositionBuckets.Bucket((long)((ky - qy) * LayoutScale), true, _numBuckets, _maxDistance2D);
+                order[at] = T5RelativeBiasAttentionLayer<T>.RelativePositionBucket(k - q, true, _numBuckets, _maxDistance);
+                horizontal[at] = T5RelativeBiasAttentionLayer<T>.RelativePositionBucket((int)((kx - qx) * LayoutScale), true, _numBuckets, _maxDistance2D);
+                vertical[at] = T5RelativeBiasAttentionLayer<T>.RelativePositionBucket((int)((ky - qy) * LayoutScale), true, _numBuckets, _maxDistance2D);
             }
         }
         return Engine.TensorAdd(
-            T5RelativePositionBuckets.Bias(_encoderBias1D, order, s, s),
+            BucketBias(_encoderBias1D, order, s, s),
             Engine.TensorAdd(
-                T5RelativePositionBuckets.Bias(_encoderBiasHorizontal, horizontal, s, s),
-                T5RelativePositionBuckets.Bias(_encoderBiasVertical, vertical, s, s)));
+                BucketBias(_encoderBiasHorizontal, horizontal, s, s),
+                BucketBias(_encoderBiasVertical, vertical, s, s)));
     }
 
     /// <summary>Runs the decoder over <paramref name="decoderIds"/> and returns next-token logits <c>[T, vocab]</c>.</summary>
@@ -579,8 +416,8 @@ public partial class UdopTransformerLayer<T> : LayerBase<T>, IShapeContract
         var buckets = new int[t * t];
         for (int q = 0; q < t; q++)
             for (int k = 0; k < t; k++)
-                buckets[(q * t) + k] = T5RelativePositionBuckets.Bucket(k - q, false, _numBuckets, _maxDistance);
-        var bias = T5RelativePositionBuckets.Bias(_decoderBias, buckets, t, t);
+                buckets[(q * t) + k] = T5RelativeBiasAttentionLayer<T>.RelativePositionBucket(k - q, false, _numBuckets, _maxDistance);
+        var bias = BucketBias(_decoderBias, buckets, t, t);
         for (int i = 0; i < _numDecoderLayers; i++)
         {
             var h = _decoderSelfNorm[i].Forward(y);
@@ -590,17 +427,6 @@ public partial class UdopTransformerLayer<T> : LayerBase<T>, IShapeContract
         }
         var scaled = Engine.TensorMultiplyScalar(_decoderFinalNorm.Forward(y), NumOps.FromDouble(Math.Pow(_dim, -0.5)));
         return Engine.TensorMatMul(scaled, Engine.TensorTranspose(_shared));
-    }
-
-    private Tensor<T> Normal(int[] shape, double std, Random random)
-    {
-        var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            tensor[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * std);
-        }
-        return tensor;
     }
 
     internal override Dictionary<string, string> GetMetadata()

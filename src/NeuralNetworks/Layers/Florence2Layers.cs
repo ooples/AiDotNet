@@ -179,27 +179,10 @@ public partial class DaViTLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>Spatial-block attention of block <paramref name="block"/> over row-major tokens <c>[h*w, C]</c>.</summary>
     internal Tensor<T> WindowAttention(int block, Tensor<T> t, int h, int w, int heads)
     {
-        int c = t.Shape[1], ws = _windowSize, n = h * w, dh = c / heads;
-        int hp = ((h + ws - 1) / ws) * ws, wp = ((w + ws - 1) / ws) * ws;
-        int windowsY = hp / ws, windowsX = wp / ws, windows = windowsY * windowsX, perWindow = ws * ws;
-        // Window order is (windowY, windowX, y, x), as in the reference's view/permute. Padded positions read
-        // the appended zero row; the reference pads the normalised tokens with zeros, which attend unmasked.
-        var gather = new int[windows * perWindow];
-        var inverse = new int[n];
-        int at = 0;
-        for (int wy = 0; wy < windowsY; wy++)
-            for (int wx = 0; wx < windowsX; wx++)
-                for (int iy = 0; iy < ws; iy++)
-                    for (int ix = 0; ix < ws; ix++)
-                    {
-                        int y = (wy * ws) + iy, xx = (wx * ws) + ix;
-                        bool real = y < h && xx < w;
-                        gather[at] = real ? (y * w) + xx : n;
-                        if (real) inverse[(y * w) + xx] = at;
-                        at++;
-                    }
-        var padded = Engine.TensorConcatenate(new[] { t, new Tensor<T>(new[] { 1, c }) }, 0);
-        var windowed = CvTensorOps<T>.Select(padded, gather, 0);                                  // [W*P, C]
+        int c = t.Shape[1], ws = _windowSize, dh = c / heads, perWindow = ws * ws;
+        // Window order is (windowY, windowX, y, x), as in the reference's view/permute; see WindowPartition.
+        var (gather, inverse, windows) = WindowPartition.Indices(h, w, ws);
+        var windowed = WindowPartition.Partition(t, gather);                                      // [W*P, C]
         var qkv = Engine.Reshape(_qkv[block].Forward(windowed), new[] { windows, perWindow, 3, heads, dh });
         qkv = Engine.Reshape(Engine.TensorPermute(qkv, new[] { 2, 0, 3, 1, 4 }), new[] { 3, windows * heads, perWindow, dh });
         Tensor<T> Part(int i) => Engine.Reshape(
@@ -212,7 +195,7 @@ public partial class DaViTLayer<T> : LayerBase<T>, IShapeContract
         var context = Engine.TensorBatchMatMul<T>(Engine.TensorSoftmax(scores, 2), v);              // [W*H, P, dh]
         context = Engine.TensorPermute(Engine.Reshape(context, new[] { windows, heads, perWindow, dh }), new[] { 0, 2, 1, 3 });
         var projected = _proj[block].Forward(Engine.Reshape(context, new[] { windows * perWindow, c }));
-        return CvTensorOps<T>.Select(projected, inverse, 0);                                       // [N, C]
+        return WindowPartition.Merge(projected, inverse);                                         // [N, C]
     }
 
     /// <summary>Channel-block attention of block <paramref name="block"/> over tokens <c>[N, C]</c>.</summary>
@@ -313,12 +296,7 @@ public partial class Florence2ProjectorLayer<T> : LayerBase<T>, IShapeContract
         _maxPositions = maxPositions;
 
         var random = LayerInitializationSeedScope.NextRandom();
-        _projection = new Tensor<T>(new[] { visionDim, projectionDim });
-        for (int i = 0; i < _projection.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            _projection[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * 0.02);
-        }
+        _projection = NormalTensor(new[] { visionDim, projectionDim }, 0.02, random);
         RegisterTrainableParameter(_projection, PersistentTensorRole.Weights);
         // The reference splits the width as column = C - C/2, row = C/2.
         _columns = LayerGraphContract.FromDerivedInput(new EmbeddingLayer<T>(maxPositions, visionDim - (visionDim / 2)), "positions");
@@ -478,10 +456,10 @@ public partial class BartEncoderDecoderLayer<T> : LayerBase<T>, IShapeContract
 
         // BartPreTrainedModel._init_weights: N(0, init_std = 0.02); the padding row (id 1) starts at zero.
         var random = LayerInitializationSeedScope.NextRandom();
-        _shared = Normal(new[] { vocabSize, dim }, random);
+        _shared = NormalTensor(new[] { vocabSize, dim }, 0.02, random);
         for (int c = 0; c < dim; c++) _shared[1, c] = NumOps.Zero;
-        _encoderPositions = Normal(new[] { maxPositions + PositionOffset, dim }, random);
-        _decoderPositions = Normal(new[] { maxPositions + PositionOffset, dim }, random);
+        _encoderPositions = NormalTensor(new[] { maxPositions + PositionOffset, dim }, 0.02, random);
+        _decoderPositions = NormalTensor(new[] { maxPositions + PositionOffset, dim }, 0.02, random);
         RegisterTrainableParameter(_shared, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_encoderPositions, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_decoderPositions, PersistentTensorRole.Weights);
@@ -594,17 +572,6 @@ public partial class BartEncoderDecoderLayer<T> : LayerBase<T>, IShapeContract
 
     private Tensor<T> Positions(Tensor<T> table, int count) =>
         CvTensorOps<T>.Select(table, Enumerable.Range(PositionOffset, count).ToArray(), 0);
-
-    private Tensor<T> Normal(int[] shape, Random random)
-    {
-        var tensor = new Tensor<T>(shape);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            tensor[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * 0.02);
-        }
-        return tensor;
-    }
 
     internal override Dictionary<string, string> GetMetadata()
     {
