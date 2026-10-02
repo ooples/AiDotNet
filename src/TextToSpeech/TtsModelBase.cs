@@ -8,6 +8,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
+using AiDotNet.Validation;
 
 namespace AiDotNet.TextToSpeech;
 
@@ -181,6 +182,62 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
             >(this, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = true });
         }
         return base.GetOrCreateBaseOptimizer();
+    }
+
+    private int _encoderLayerCount;
+
+    /// <summary>
+    /// The number of leading <see cref="NeuralNetworkBase{T}.Layers"/> that form the text encoder.
+    /// </summary>
+    /// <remarks>
+    /// Synthesis runs the encoder, then the model's own step (variance adaptor, length regulator, alignment), then
+    /// the decoder. The split is recorded by <see cref="AddEncoderDecoderLayers"/> from the layers actually built.
+    /// Thirteen acoustic models used to recompute it from a per-block layer count; the factory had since changed to
+    /// one layer per block, so the computed boundary (25 for a 10-layer FastSpeech 2) ran past the end of the stack
+    /// and every call to <c>Synthesize</c> threw.
+    /// </remarks>
+    protected int EncoderLayerCount => _encoderLayerCount;
+
+    /// <summary>
+    /// Adds an encoder and a decoder to the layer stack and records where the encoder ends.
+    /// </summary>
+    protected void AddEncoderDecoderLayers(IEnumerable<ILayer<T>> encoderLayers, IEnumerable<ILayer<T>> decoderLayers)
+    {
+        Guard.NotNull(encoderLayers);
+        Guard.NotNull(decoderLayers);
+        Layers.AddRange(encoderLayers);
+        _encoderLayerCount = Layers.Count;
+        Layers.AddRange(decoderLayers);
+    }
+
+    /// <summary>
+    /// Adds caller-supplied layers, which carry no declared encoder/decoder split.
+    /// </summary>
+    /// <remarks>The first half is taken as the encoder, as before; supply the split through
+    /// <see cref="AddEncoderDecoderLayers"/> wherever it is known.</remarks>
+    protected void AddUnsplitLayers(IEnumerable<ILayer<T>> layers)
+    {
+        Guard.NotNull(layers);
+        Layers.AddRange(layers);
+        _encoderLayerCount = Layers.Count / 2;
+    }
+
+    /// <summary>Runs the encoder layers (<c>Layers[0 .. EncoderLayerCount)</c>).</summary>
+    protected Tensor<T> RunEncoder(Tensor<T> input)
+    {
+        var x = input;
+        for (int i = 0; i < _encoderLayerCount; i++)
+            x = Layers[i].Forward(x);
+        return x;
+    }
+
+    /// <summary>Runs the decoder layers (<c>Layers[EncoderLayerCount ..]</c>).</summary>
+    protected Tensor<T> RunDecoder(Tensor<T> hidden)
+    {
+        var x = hidden;
+        for (int i = _encoderLayerCount; i < Layers.Count; i++)
+            x = Layers[i].Forward(x);
+        return x;
     }
 
     /// <summary>

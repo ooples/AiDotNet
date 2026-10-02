@@ -35063,6 +35063,13 @@ public static partial class LayerHelper<T>
     /// Creates default layers for acoustic TTS models (Tacotron 2, FastSpeech 2, Grad-TTS, etc.).
     /// Architecture: Text encoder (FFT blocks) -> projection -> Mel decoder (FFT blocks).
     /// </summary>
+    /// <remarks>
+    /// The concatenation of <see cref="CreateDefaultAcousticEncoderLayers"/> and
+    /// <see cref="CreateDefaultAcousticDecoderLayers"/>. A model that runs its own step between the two (a variance
+    /// adaptor, a length regulator, an alignment search) builds them separately through
+    /// <c>TtsModelBase.AddEncoderDecoderLayers</c>, which records where the encoder ends from the layers actually
+    /// built instead of from a per-block count that has to be kept in step with this factory by hand.
+    /// </remarks>
     internal static IEnumerable<ILayer<T>> CreateDefaultAcousticModelLayers(
         int encoderDim = 256,
         int decoderDim = 80,
@@ -35072,11 +35079,23 @@ public static partial class LayerHelper<T>
         int numHeads = 2,
         double dropoutRate = 0.1,
         int vocabSize = 256)
+        => CreateDefaultAcousticEncoderLayers(encoderDim, hiddenDim, numEncoderLayers, numHeads, dropoutRate, vocabSize)
+            .Concat(CreateDefaultAcousticDecoderLayers(decoderDim, hiddenDim, numDecoderLayers, numHeads, dropoutRate));
+
+    /// <summary>
+    /// Creates the text-encoder half of an acoustic TTS model: phoneme embedding, FFT blocks, and the projection to
+    /// the hidden width the variance adaptor and decoder work in.
+    /// </summary>
+    internal static IEnumerable<ILayer<T>> CreateDefaultAcousticEncoderLayers(
+        int encoderDim = 256,
+        int hiddenDim = 256,
+        int numEncoderLayers = 4,
+        int numHeads = 2,
+        double dropoutRate = 0.1,
+        int vocabSize = 256)
     {
-        IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int encoderFfnDim = encoderDim * 4;
-        int decoderFfnDim = hiddenDim * 4;
 
         // === Phoneme Embedding (Ren et al. 2019 §3.1, FastSpeech Fig. 1) ===
         // Input is phoneme IDs [seq], embedding maps to [seq, encoderDim]. The
@@ -35092,9 +35111,7 @@ public static partial class LayerHelper<T>
         // prior flat MHA→Norm→FFN→Norm sequence had NO residual connections, so
         // each block replaced rather than refined the hidden state — washing out
         // the signal and diverging with more training (the #1380 collapse
-        // mechanism). NOTE: kept at ONE layer per block — TransformerTTS's
-        // encoder/decoder split (_encoderLayerEnd in ComputeEncoderDecoderBoundary)
-        // counts 1 block per layer now.
+        // mechanism).
         for (int i = 0; i < numEncoderLayers; i++)
         {
             yield return new TransformerEncoderBlock<T>(
@@ -35102,10 +35119,26 @@ public static partial class LayerHelper<T>
         }
 
         // === Projection (encoder dim -> hidden dim) ===
+        // Part of the encoder: the variance adaptor between the halves works at the hidden width.
         if (encoderDim != hiddenDim)
             yield return new DenseLayer<T>(hiddenDim, identityActivation);
+    }
 
-        // === Mel Decoder (FFT blocks; residual Pre-LN, as above) ===
+    /// <summary>
+    /// Creates the mel-decoder half of an acoustic TTS model: FFT blocks at the hidden width and the projection to
+    /// the mel channels.
+    /// </summary>
+    internal static IEnumerable<ILayer<T>> CreateDefaultAcousticDecoderLayers(
+        int decoderDim = 80,
+        int hiddenDim = 256,
+        int numDecoderLayers = 4,
+        int numHeads = 2,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int decoderFfnDim = hiddenDim * 4;
+
+        // === Mel Decoder (FFT blocks; residual Pre-LN, as in the encoder) ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new TransformerEncoderBlock<T>(

@@ -69,7 +69,6 @@ public partial class FastSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
     private bool _disposed;
-    private int _encoderLayerEnd;
 
     public FastSpeech(
         NeuralNetworkArchitecture<T> architecture,
@@ -137,9 +136,7 @@ public partial class FastSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
             return OnnxModel.Run(tokens);
 
         // Step 1: FFT encoder
-        var encoded = tokens;
-        for (int i = 0; i < _encoderLayerEnd; i++)
-            encoded = Layers[i].Forward(encoded);
+        var encoded = RunEncoder(tokens);
 
         // Step 2: Duration prediction via 2-layer conv + linear (learned from teacher)
         int seqLen = encoded.Length;
@@ -176,9 +173,7 @@ public partial class FastSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         }
 
         // Step 3: FFT decoder (parallel)
-        var output = expanded;
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-            output = Layers[i].Forward(output);
+        var output = RunDecoder(expanded);
 
         return output;
     }
@@ -191,32 +186,18 @@ public partial class FastSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
             return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
-            Layers.AddRange(Architecture.Layers);
-            _encoderLayerEnd = Layers.Count / 2;
+            AddUnsplitLayers(Architecture.Layers);
         }
         else
         {
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultAcousticModelLayers(
-                    _options.EncoderDim,
-                    _options.DecoderDim,
-                    _options.HiddenDim,
-                    _options.NumEncoderLayers,
-                    _options.NumDecoderLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate,
-                    _options.VocabSize
-                )
-            );
-            ComputeEncoderDecoderBoundary();
+            AddEncoderDecoderLayers(
+                LayerHelper<T>.CreateDefaultAcousticEncoderLayers(
+                    _options.EncoderDim, _options.HiddenDim, _options.NumEncoderLayers, _options.NumHeads, _options.DropoutRate, _options.VocabSize),
+                LayerHelper<T>.CreateDefaultAcousticDecoderLayers(
+                    _options.DecoderDim, _options.HiddenDim, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate));
         }
     }
 
-    private void ComputeEncoderDecoderBoundary()
-    {
-        int lpb = _options.DropoutRate > 0 ? 6 : 5;
-        _encoderLayerEnd = 1 + _options.NumEncoderLayers * lpb;
-    }
 
     protected override Tensor<T> PreprocessText(string text)
     {
@@ -283,7 +264,6 @@ public partial class FastSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         m.AdditionalInfo["Architecture"] = "FastSpeech";
         return m;
     }
-
 
 
 
