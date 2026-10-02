@@ -131,6 +131,7 @@ $script:NonRuntimeWorkflowPaths = @(
     '.github/workflows/commitlint-fix.yml',
     '.github/workflows/commitlint.yml',
     '.github/workflows/copilot-review-gate.yml',
+    '.github/workflows/cross-isa-agreement-nightly.yml',
     '.github/workflows/deploy-serving.yml',
     '.github/workflows/deploy-website.yml',
     '.github/workflows/docs-wiki.yml',
@@ -184,6 +185,9 @@ function Get-ChangedPathImpact {
     }
     if (Test-SelectionControl -Path $normalized) {
         return [ChangedPathImpact]::SelectionControl
+    }
+    if (Test-ScriptUsedOnlyByIndependentWorkflows -Path $normalized) {
+        return [ChangedPathImpact]::NonRuntime
     }
     if (Test-SharedInfrastructure -Path $normalized) {
         return [ChangedPathImpact]::FullValidation
@@ -308,6 +312,26 @@ function Test-GitHubFileReferenced {
     return $referenced
 }
 
+function Test-ScriptUsedOnlyByIndependentWorkflows {
+    param([Parameter(Mandatory)] [string] $Path)
+    # A .github/scripts file is full validation because a workflow step may run it. When every file
+    # that names it is a workflow already reviewed as independent of this validation workflow (a
+    # nightly, a deploy), no step of this workflow runs it and no shard can observe the change. Any
+    # other referrer (this workflow, an action, another script that may be dot-sourced) keeps it full.
+    # #2272 changed .github/scripts/Compare-IsaVerdicts.ps1, used only by the cross-ISA nightly, and
+    # ran all 165 shards for it.
+    if (-not $Path.StartsWith('.github/scripts/', [StringComparison]::OrdinalIgnoreCase)) { return $false }
+    $name = [IO.Path]::GetFileName($Path)
+    if ($name.Length -lt 6) { return $false }
+    $pattern = '(^|[^A-Za-z0-9_.-])' + [regex]::Escape($name) + '($|[^A-Za-z0-9_.-])'
+    $referrers = @(& git -c core.quotepath=false grep -l -i -E $pattern HEAD -- '.github/' 'tools/' ":(exclude)$Path" ':(exclude)tools/TestImpact/Select-Shards.ps1' 2>$null)
+    if ($LASTEXITCODE -gt 1 -or $referrers.Count -eq 0) { return $false }
+    foreach ($referrer in $referrers) {
+        $file = ([string] $referrer) -replace '^HEAD:', ''
+        if ($file -notin $script:NonRuntimeWorkflowPaths) { return $false }
+    }
+    return $true
+}
 <#
 .SYNOPSIS
 Fails when a directory trusted as non-runtime has started holding compilable code.
@@ -2620,7 +2644,13 @@ file class Private { }
             'dependabot.yml, which no workflow reads, is not NonRuntime'
     }
     if (Test-Path -LiteralPath '.github/scripts/Invoke-Shard.ps1') {
-        Assert-True ((Get-ChangedPathImpact -Path '.github/scripts/Invoke-Shard.ps1') -eq [ChangedPathImpact]::FullValidation) `
+        Assert-True ((Get-ChangedPathImpact -Path '.github/scripts/Compare-IsaVerdicts.ps1') -eq [ChangedPathImpact]::NonRuntime) `
+        'a script only the cross-ISA nightly runs was treated as validation infrastructure'
+    Assert-True ((Get-ChangedPathImpact -Path '.github/scripts/find-pr-new-failures.ps1') -eq [ChangedPathImpact]::FullValidation) `
+        'a script this validation workflow runs was spared'
+    Assert-True (-not (Test-ScriptUsedOnlyByIndependentWorkflows -Path '.github/scripts/no-such-script-anywhere.ps1')) `
+        'an unreferenced script was spared without review'
+    Assert-True ((Get-ChangedPathImpact -Path '.github/scripts/Invoke-Shard.ps1') -eq [ChangedPathImpact]::FullValidation) `
             'a script the test workflow invokes (Invoke-Shard.ps1) was downgraded'
     }
     Assert-True ((Get-ChangedPathImpact -Path '.github/a.yml') -eq [ChangedPathImpact]::FullValidation) `
