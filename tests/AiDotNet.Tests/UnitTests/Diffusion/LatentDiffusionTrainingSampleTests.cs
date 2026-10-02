@@ -111,4 +111,49 @@ public class LatentDiffusionTrainingSampleTests
         Assert.All(model.TrainingSampleShapes, shape =>
             Assert.Equal(new[] { 2, LatentChannelCount, LatentPixels, LatentPixels }, shape));
     }
+
+    /// <summary>
+    /// A batch of more than one trains the denoiser through the base loop.
+    /// </summary>
+    /// <remarks>
+    /// <c>DiffusionModelBase.PredictNoiseBatched</c> copied each element through host spans into a fresh tensor and
+    /// wrote the predictions back the same way, which detached them from the gradient tape: every batch larger than
+    /// one computed an all-zero gradient (measured: 0 of 23576 entries non-zero) and never moved a weight.
+    /// </remarks>
+    [Fact(Timeout = 120000)]
+    public async Task Train_OnABatchOfLatents_MovesTheDenoiser()
+    {
+        await Task.Yield();
+        var model = new RecordingStyDiff(seed: 10);
+        var latents = Random(new[] { 3, LatentChannelCount, LatentPixels, LatentPixels }, 4);
+        model.Train(latents, latents);
+
+        var before = Values(model.NoisePredictor.GetParameters());
+        model.Train(latents, latents);
+        var after = Values(model.NoisePredictor.GetParameters());
+
+        Assert.True(before.Zip(after, (a, b) => a != b).Any(changed => changed),
+            "A training step on a batch of three latents left every denoiser weight where it was.");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task PredictNoiseBatched_MatchesPerElementPredictions()
+    {
+        await Task.Yield();
+        var model = new RecordingStyDiff(seed: 11);
+        var batch = Random(new[] { 2, LatentChannelCount, LatentPixels, LatentPixels }, 5);
+        int[] timesteps = { 100, 700 };
+
+        var batched = model.PredictNoiseBatched(batch, timesteps);
+
+        int perElement = batch.Length / 2;
+        for (int b = 0; b < 2; b++)
+        {
+            var element = new Tensor<double>(new[] { 1, LatentChannelCount, LatentPixels, LatentPixels });
+            for (int j = 0; j < perElement; j++) element[j] = batch[b * perElement + j];
+            var single = model.PredictNoise(element, timesteps[b]);
+            for (int j = 0; j < perElement; j++)
+                Assert.Equal(single[j], batched[b * perElement + j], 12);
+        }
+    }
 }
