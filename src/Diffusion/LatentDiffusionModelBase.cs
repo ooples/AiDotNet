@@ -329,6 +329,38 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
         return VAE.Decode(unscaled);
     }
 
+    /// <summary>
+    /// Whether <paramref name="sample"/> is a pixel-space image this model's VAE encodes, rather than a latent.
+    /// </summary>
+    /// <remarks>
+    /// An image is <c>[B, C, H, W]</c> with the VAE's input channels and a height and width the VAE can
+    /// downsample; a latent carries <see cref="LatentChannels"/>. When the two channel counts coincide the shape
+    /// cannot tell them apart, so the sample is treated as a latent, which is what every caller passed before
+    /// training encoded images. Other ranks are never images here: an unbatched <c>[C, H, W]</c> cannot be told
+    /// apart from the <c>[B, N, 3]</c> point sets of the 3D models, and video is rank 5.
+    /// </remarks>
+    protected bool IsPixelSpaceSample(Tensor<T> sample)
+    {
+        if (sample is null || sample.Rank != 4)
+            return false;
+        int factor = System.Math.Max(1, VAE.DownsampleFactor);
+        return sample.Shape[1] == VAE.InputChannels
+               && sample.Shape[1] != LatentChannels
+               && sample.Shape[2] % factor == 0
+               && sample.Shape[3] % factor == 0;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Latent diffusion trains the denoiser on <c>z = E(x)</c>, the scaled latent of the image (Rombach et al.
+    /// 2022, arXiv 2112.10752, section 3.3), because sampling denoises a latent and then decodes it. The base
+    /// contract makes <paramref name="input"/> the clean data point; an image is encoded here with a posterior
+    /// sample of the frozen first stage, and a sample that is already a latent is used as it is. Encoding runs
+    /// before the training tape opens, so the autoencoder receives no gradient.
+    /// </remarks>
+    protected override Tensor<T> PrepareTrainingSample(Tensor<T> input, Tensor<T> expectedOutput)
+        => IsPixelSpaceSample(input) ? EncodeToLatent(input, sampleMode: true) : input;
+
     /// <inheritdoc />
     public virtual Tensor<T> GenerateFromText(
         string prompt,
