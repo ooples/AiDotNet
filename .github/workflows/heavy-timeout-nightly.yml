@@ -22,7 +22,7 @@ on:
       chunk_size:
         description: 'Test classes per test-host process. Lower bounds peak memory; higher spends less time re-discovering the assembly.'
         required: false
-        default: '6'
+        default: '1'
 
 # Don't fight the PR test workflow's concurrency group; this is its own long-running lane.
 concurrency:
@@ -129,7 +129,9 @@ jobs:
           #
           # ChunkSize is deliberately small. Past runs died within roughly 8-19 minutes of starting
           # tests, which is only a handful of these classes, so the ceiling is reached quickly.
-          $chunkSize = 6
+          # One class per process by default, so a model that fails or exhausts memory is named on its own
+          # row instead of taking five neighbours' results with it (#2087).
+          $chunkSize = 1
           if ($env:HEAVY_CHUNK_SIZE) {
             $parsedChunkSize = 0
             if (-not [int]::TryParse($env:HEAVY_CHUNK_SIZE, [ref]$parsedChunkSize) -or $parsedChunkSize -lt 1) {
@@ -143,6 +145,21 @@ jobs:
           $resultsDir  = 'artifacts/heavy-timeout'
           New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
 
+          # Cap each chunk's managed heap below the runner's RAM (#2087). Without a cap a paper-scale model
+          # grew the test host until the kernel OOM killer took the runner agent with it: GitHub reported "The
+          # runner has received a shutdown signal", the remaining log was never uploaded, and the lane failed
+          # every night without naming a model. With DOTNET_GCHeapHardLimit the runtime raises
+          # OutOfMemoryException inside the test host instead, so the test fails with a stack trace, the chunk
+          # exits non-zero and the next chunk runs. Tensor storage is managed arrays, which the limit covers.
+          $memTotalLine = Select-String -Path '/proc/meminfo' -Pattern '^MemTotal:\s+(\d+) kB' -ErrorAction SilentlyContinue
+          if ($null -eq $memTotalLine) {
+            Write-Host '::error title=No MemTotal::/proc/meminfo has no MemTotal line, so the per-chunk heap cap cannot be sized.'
+            exit 1
+          }
+          $memTotalBytes = [long]$memTotalLine.Matches[0].Groups[1].Value * 1024
+          $heapCapBytes  = [long]($memTotalBytes * 0.7)
+          $env:DOTNET_GCHeapHardLimit = '0x{0:X}' -f $heapCapBytes
+          Write-Host ("--- per-chunk managed heap cap: {0:N0} MB of {1:N0} MB ---" -f ($heapCapBytes / 1MB), ($memTotalBytes / 1MB))
           function Get-AvailableMemoryMb {
             # /proc/meminfo is the runner's own view. nproc-based estimates and GC counters both
             # report the process, and the thing being exhausted here is the machine.
