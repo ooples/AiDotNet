@@ -309,56 +309,82 @@ public partial class EAST<T> : TextDetectorBase<T>
         var norm = new double[mapHeight, mapWidth];
         var geometry = Enumerable.Range(0, channels).Select(_ => new double[mapHeight, mapWidth]).ToArray();
         foreach (var target in polygons)
-        {
-            var polygon = ToMap(target, imageWidth, imageHeight, mapWidth, mapHeight);
-            if (TextTargetGeometry.Area(polygon) < 1.0) continue;
-            var quad = polygon.Length == 4 ? polygon : TextTargetGeometry.MinAreaRectangle(polygon);
-            double shortest = Enumerable.Range(0, 4).Min(i =>
-                Math.Sqrt(Math.Pow(quad[(i + 1) % 4].X - quad[i].X, 2) + Math.Pow(quad[(i + 1) % 4].Y - quad[i].Y, 2)));
-            var shrunk = TextTargetGeometry.Offset(quad, 0.3 * shortest);
-            if (shrunk is null) continue;
-
-            var rect = TextTargetGeometry.MinAreaRectangle(quad);
-            double ex = rect[1].X - rect[0].X, ey = rect[1].Y - rect[0].Y;
-            double theta = Math.Atan2(ey, ex);
-            double width = Math.Sqrt((ex * ex) + (ey * ey));
-            double height = Math.Sqrt(Math.Pow(rect[3].X - rect[0].X, 2) + Math.Pow(rect[3].Y - rect[0].Y, 2));
-            while (theta >= Math.PI / 4) { theta -= Math.PI / 2; (width, height) = (height, width); }
-            while (theta < -Math.PI / 4) { theta += Math.PI / 2; (width, height) = (height, width); }
-            double cx = rect.Average(p => p.X), cy = rect.Average(p => p.Y);
-            double ux = Math.Cos(theta), uy = Math.Sin(theta), vx = -Math.Sin(theta), vy = Math.Cos(theta);
-            int start = 0;
-            for (int i = 1; i < 4; i++) if (quad[i].X + quad[i].Y < quad[start].X + quad[start].Y) start = i;
-
-            var (x0, y0, x1, y1) = TextTargetGeometry.Bounds(shrunk, mapWidth, mapHeight);
-            for (int py = y0; py <= y1; py++)
-                for (int px = x0; px <= x1; px++)
-                {
-                    double sx = px + 0.5, sy = py + 0.5;
-                    if (!TextTargetGeometry.Contains(shrunk, sx, sy)) continue;
-                    score[py, px] = 1.0;
-                    norm[py, px] = 1.0 / (8.0 * Math.Max(shortest, 1e-6));
-                    if (rotatedBoxes)
-                    {
-                        double pu = ((sx - cx) * ux) + ((sy - cy) * uy), pv = ((sx - cx) * vx) + ((sy - cy) * vy);
-                        geometry[0][py, px] = (height / 2) + pv; // top
-                        geometry[1][py, px] = (width / 2) - pu;  // right
-                        geometry[2][py, px] = (height / 2) - pv; // bottom
-                        geometry[3][py, px] = (width / 2) + pu;  // left
-                        geometry[4][py, px] = theta;
-                    }
-                    else
-                    {
-                        for (int v = 0; v < 4; v++)
-                        {
-                            var vertex = quad[(start + v) % 4];
-                            geometry[2 * v][py, px] = vertex.X - sx;
-                            geometry[(2 * v) + 1][py, px] = vertex.Y - sy;
-                        }
-                    }
-                }
-        }
+            WritePolygonTargets(target, imageWidth, imageHeight, mapWidth, mapHeight, rotatedBoxes, score, geometry, norm);
         return (score, geometry, norm);
+    }
+
+    /// <summary>
+    /// Writes one text polygon's score, geometry and normalisation targets into the maps: every pixel inside the
+    /// polygon shrunk by 0.3 of its shortest edge is positive (Zhou et al. 2017, EAST §3.3.1).
+    /// </summary>
+    private static void WritePolygonTargets(
+        TextPolygonTarget target, int imageWidth, int imageHeight, int mapWidth, int mapHeight, bool rotatedBoxes,
+        double[,] score, double[][,] geometry, double[,] norm)
+    {
+        var polygon = ToMap(target, imageWidth, imageHeight, mapWidth, mapHeight);
+        if (TextTargetGeometry.Area(polygon) < 1.0) return;
+        var quad = polygon.Length == 4 ? polygon : TextTargetGeometry.MinAreaRectangle(polygon);
+        double shortest = Enumerable.Range(0, 4).Min(i =>
+            Math.Sqrt(Math.Pow(quad[(i + 1) % 4].X - quad[i].X, 2) + Math.Pow(quad[(i + 1) % 4].Y - quad[i].Y, 2)));
+        var shrunk = TextTargetGeometry.Offset(quad, 0.3 * shortest);
+        if (shrunk is null) return;
+
+        var rect = TextTargetGeometry.MinAreaRectangle(quad);
+        double ex = rect[1].X - rect[0].X, ey = rect[1].Y - rect[0].Y;
+        double theta = Math.Atan2(ey, ex);
+        double width = Math.Sqrt((ex * ex) + (ey * ey));
+        double height = Math.Sqrt(Math.Pow(rect[3].X - rect[0].X, 2) + Math.Pow(rect[3].Y - rect[0].Y, 2));
+        while (theta >= Math.PI / 4) { theta -= Math.PI / 2; (width, height) = (height, width); }
+        while (theta < -Math.PI / 4) { theta += Math.PI / 2; (width, height) = (height, width); }
+        double cx = rect.Average(p => p.X), cy = rect.Average(p => p.Y);
+        int start = 0;
+        for (int i = 1; i < 4; i++) if (quad[i].X + quad[i].Y < quad[start].X + quad[start].Y) start = i;
+
+        double pixelNorm = 1.0 / (8.0 * Math.Max(shortest, 1e-6));
+        var (x0, y0, x1, y1) = TextTargetGeometry.Bounds(shrunk, mapWidth, mapHeight);
+        for (int py = y0; py <= y1; py++)
+            for (int px = x0; px <= x1; px++)
+            {
+                double sx = px + 0.5, sy = py + 0.5;
+                if (!TextTargetGeometry.Contains(shrunk, sx, sy)) continue;
+                score[py, px] = 1.0;
+                norm[py, px] = pixelNorm;
+                if (rotatedBoxes)
+                    WriteRotatedBoxGeometry(geometry, py, px, sx - cx, sy - cy, theta, width, height);
+                else
+                    WriteQuadGeometry(geometry, py, px, sx, sy, quad, start);
+            }
+    }
+
+    /// <summary>
+    /// RBOX target at one pixel: distances to the top, right, bottom and left edges of the rotated box, then its
+    /// angle. (<paramref name="dx"/>, <paramref name="dy"/>) is the pixel's offset from the box centre.
+    /// </summary>
+    private static void WriteRotatedBoxGeometry(
+        double[][,] geometry, int py, int px, double dx, double dy, double theta, double width, double height)
+    {
+        double ux = Math.Cos(theta), uy = Math.Sin(theta);
+        double pu = (dx * ux) + (dy * uy);
+        double pv = (dx * -uy) + (dy * ux);
+        geometry[0][py, px] = (height / 2) + pv; // top
+        geometry[1][py, px] = (width / 2) - pu;  // right
+        geometry[2][py, px] = (height / 2) - pv; // bottom
+        geometry[3][py, px] = (width / 2) + pu;  // left
+        geometry[4][py, px] = theta;
+    }
+
+    /// <summary>
+    /// QUAD target at one pixel: the offset to each of the four vertices, starting from the top-left one.
+    /// </summary>
+    private static void WriteQuadGeometry(
+        double[][,] geometry, int py, int px, double sx, double sy, IReadOnlyList<(double X, double Y)> quad, int start)
+    {
+        for (int v = 0; v < 4; v++)
+        {
+            var vertex = quad[(start + v) % 4];
+            geometry[2 * v][py, px] = vertex.X - sx;
+            geometry[(2 * v) + 1][py, px] = vertex.Y - sy;
+        }
     }
     private List<(double X, double Y)> DecodeGeometry(
         Tensor<T> geometry,
