@@ -261,7 +261,7 @@ public partial class MaskRCNN<T> : InstanceSegmenterBase<T>
 
         var crossEntropy = Engine.TensorSubtract(Engine.Softplus(picked), Engine.TensorMultiply(picked, targets));
         return Engine.TensorMultiplyScalar(Engine.ReduceSum(crossEntropy, null),
-            NumOps.FromDouble(1.0 / (count * side * side)));
+            NumOps.FromDouble(1.0 / ((double)count * side * side)));
     }
 
     /// <summary>
