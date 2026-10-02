@@ -1770,14 +1770,11 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             }
         }
 
-        if (!options.UseBFloat16MomentStorage)
+        if (!options.UseBFloat16MomentStorage && state.NumBlocks != expectedBlocks)
         {
-            if (state.NumBlocks != expectedBlocks)
-            {
-                throw new InvalidOperationException(
-                    $"Adam8BitOptimizer: tape-state block count {state.NumBlocks} does not match " +
-                    $"length {state.Length} and BlockSize {options.BlockSize} (expected {expectedBlocks}).");
-            }
+            throw new InvalidOperationException(
+                $"Adam8BitOptimizer: tape-state block count {state.NumBlocks} does not match " +
+                $"length {state.Length} and BlockSize {options.BlockSize} (expected {expectedBlocks}).");
         }
 
         return state;
