@@ -860,7 +860,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // (verified: System.OutOfMemoryException in the train step) and even <float> can't fit the
         // ~150M-param forward+backward + AdamW moments in the 120s gate. Genuine foundation-scale
         // compute, not a correctness bug — deferred to the nightly heavy lane.
-        "TortoiseTTS", "FastSpeech", "FastSpeech2",
+        "TortoiseTTS",
+        // FastSpeech and FastSpeech2 were listed beside TortoiseTTS and never belonged: they are not
+        // foundation-scale. Measured on net10.0 Release, each class runs its 34 invariants in under a
+        // minute (42 s and 57 s) with the slowest single test at 11 s against the 120 s gate. The tag
+        // only hid them from the PR gate, which is how #2093 (FastSpeech2 loss 9.66 -> 15.63) stayed
+        // invisible: that rise was a one-step Adam overshoot at the undeclared AdamW 1e-3 default, gone
+        // since the model trains with its paper recipe (Ren et al. 2021: 9.19 -> 4.13 after one step,
+        // 0.97 after thirty). They run in the default lane now.
         // MaskDINO: foundation-scale unified DETR detection+segmentation transformer (Li 2023, in the
         // Segmentation/Foundation namespace). The training invariants exceed the 120s per-test timeout
         // on CPU (verified: MoreData_ShouldNotDegrade times out). Genuine foundation-scale compute —
