@@ -601,6 +601,36 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     protected virtual int MoreDataLongIterations => System.Math.Max(1, TrainingIterations * 3);
 
     /// <summary>
+    /// A measured step budget for the two trained-versus-untrained invariants
+    /// (<see cref="Training_ShouldReduceLoss"/> and <see cref="MoreData_ShouldNotDegrade"/>), used
+    /// in place of the shared conformance cap. Null, the default, keeps the shared policy.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Both invariants take one sample after a fixed budget, so a model whose Adam start-up
+    /// transient outlasts the shared ten-step cap is judged mid-spike. Whether it does can hinge on
+    /// ~1e-6 numerical differences between CPU kernels, which makes the verdict hardware-dependent
+    /// rather than wrong on any one machine. Set this only with the measured trajectory that shows
+    /// where the model recovers, and set it past that point: it is an exception to the shared cap,
+    /// not a way to make a failing model pass. The nightly cross-ISA agreement lane
+    /// (<c>cross-isa-agreement-nightly.yml</c>) finds the fixtures whose verdict depends on the CPU.
+    /// </para>
+    /// </remarks>
+    protected virtual int? MeasuredTransientRecoveryBudget => null;
+
+    /// <summary>The budget for the trained-versus-untrained invariants: measured, or the shared cap.</summary>
+    private int ResolveTrainedVersusUntrainedIterations(INeuralNetworkModel<T> network, int requestedIterations)
+    {
+        if (MeasuredTransientRecoveryBudget is not int measured)
+        {
+            return ResolveConformanceTrainingIterations(network, requestedIterations);
+        }
+
+        Assert.True(measured > 0, $"{nameof(MeasuredTransientRecoveryBudget)} must be > 0; got {measured}.");
+        return measured;
+    }
+
+    /// <summary>
     /// Number of optimizer steps needed by the train-vs-test relationship invariant. This is a
     /// structural relationship check, not a convergence benchmark, so the budget stays at the
     /// smallest number of steps that measures the relationship rather than the optimizer's
@@ -1258,7 +1288,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 ? (INeuralNetworkModel<T>)network.Clone()
                 : null;
 
-        int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations * 3);
+        int iterations = ResolveTrainedVersusUntrainedIterations(network, TrainingIterations * 3);
         for (int i = 0; i < iterations; i++)
             network.Train(input, target);
 
@@ -2665,7 +2695,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var target = CreateLossCompatibleTarget(network1, ShapeCheckedOutputShape, rng1);
         target = ResolveTrainingObjectiveTarget(network1, input, target);
         PrepareForSupervisedTrainingInvariant(network1, input);
-        int longIters = ResolveConformanceTrainingIterations(network1, MoreDataLongIterations);
+        int longIters = ResolveTrainedVersusUntrainedIterations(network1, MoreDataLongIterations);
 
         Assert.True(longIters > 0,
             $"{nameof(MoreDataLongIterations)} must be > 0; got {longIters}.");
