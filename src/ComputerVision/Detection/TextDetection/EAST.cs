@@ -330,15 +330,9 @@ public partial class EAST<T> : TextDetectorBase<T>
         if (shrunk is null) return;
 
         var rect = TextTargetGeometry.MinAreaRectangle(quad);
-        double ex = rect[1].X - rect[0].X, ey = rect[1].Y - rect[0].Y;
-        double theta = Math.Atan2(ey, ex);
-        double width = Math.Sqrt((ex * ex) + (ey * ey));
-        double height = Math.Sqrt(Math.Pow(rect[3].X - rect[0].X, 2) + Math.Pow(rect[3].Y - rect[0].Y, 2));
-        while (theta >= Math.PI / 4) { theta -= Math.PI / 2; (width, height) = (height, width); }
-        while (theta < -Math.PI / 4) { theta += Math.PI / 2; (width, height) = (height, width); }
+        var (theta, width, height) = RotatedBoxFrame(rect);
         double cx = rect.Average(p => p.X), cy = rect.Average(p => p.Y);
-        int start = 0;
-        for (int i = 1; i < 4; i++) if (quad[i].X + quad[i].Y < quad[start].X + quad[start].Y) start = i;
+        int start = TopLeftVertex(quad);
 
         double pixelNorm = 1.0 / (8.0 * Math.Max(shortest, 1e-6));
         var (x0, y0, x1, y1) = TextTargetGeometry.Bounds(shrunk, mapWidth, mapHeight);
@@ -354,6 +348,34 @@ public partial class EAST<T> : TextDetectorBase<T>
                 else
                     WriteQuadGeometry(geometry, py, px, sx, sy, quad, start);
             }
+    }
+
+    /// <summary>
+    /// The rotated box's angle, width and height, with the angle folded into [-pi/4, pi/4) by swapping width and
+    /// height on each quarter turn, so every box has one canonical RBOX description.
+    /// </summary>
+    private static (double Theta, double Width, double Height) RotatedBoxFrame(IReadOnlyList<(double X, double Y)> rect)
+    {
+        double ex = rect[1].X - rect[0].X, ey = rect[1].Y - rect[0].Y;
+        double theta = Math.Atan2(ey, ex);
+        double width = Math.Sqrt((ex * ex) + (ey * ey));
+        double height = Math.Sqrt(Math.Pow(rect[3].X - rect[0].X, 2) + Math.Pow(rect[3].Y - rect[0].Y, 2));
+        while (theta >= Math.PI / 4) { theta -= Math.PI / 2; (width, height) = (height, width); }
+        while (theta < -Math.PI / 4) { theta += Math.PI / 2; (width, height) = (height, width); }
+        return (theta, width, height);
+    }
+
+    /// <summary>
+    /// Index of the vertex with the smallest x + y, the QUAD target's starting (top-left) vertex.
+    /// </summary>
+    private static int TopLeftVertex(IReadOnlyList<(double X, double Y)> quad)
+    {
+        int start = 0;
+        for (int i = 1; i < 4; i++)
+        {
+            if (quad[i].X + quad[i].Y < quad[start].X + quad[start].Y) start = i;
+        }
+        return start;
     }
 
     /// <summary>
