@@ -276,7 +276,7 @@ public class NeuralNetworkBaseResolveShapesTests
         // This is the model-agnostic shape pattern used by SALMONN and similar projection-based
         // architectures. The public input is [..., 4], but the first projection changes the
         // internal feature width to 8 before attention sees it.
-        var downstreamProjection = new FullyConnectedLayer<double>(16);
+        var downstreamProjection = new FullyConnectedLayer<double>(16, (IActivationFunction<double>)new ReLUActivation<double>());
         using var network = new NeuralNetwork<double>(
             new NeuralNetworkArchitecture<double>(
                 inputType: InputType.TwoDimensional,
@@ -286,14 +286,14 @@ public class NeuralNetworkBaseResolveShapesTests
                 outputSize: 8,
                 layers:
                 [
-                    new FullyConnectedLayer<double>(8),
+                    new FullyConnectedLayer<double>(8, (IActivationFunction<double>)new ReLUActivation<double>()),
                     new LayerNormalizationLayer<double>(),
-                    new FullyConnectedLayer<double>(8),
+                    new FullyConnectedLayer<double>(8, (IActivationFunction<double>)new ReLUActivation<double>()),
                     new LayerNormalizationLayer<double>(),
                     new MultiHeadAttentionLayer<double>(headCount: 2, headDimension: 4),
                     new LayerNormalizationLayer<double>(),
                     downstreamProjection,
-                    new FullyConnectedLayer<double>(8)
+                    new FullyConnectedLayer<double>(8, (IActivationFunction<double>)new ReLUActivation<double>())
                 ]));
 
         // The speculative architecture walk reaches attention with two invalid candidates:

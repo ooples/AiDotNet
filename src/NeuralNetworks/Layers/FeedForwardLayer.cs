@@ -1,4 +1,4 @@
-﻿using AiDotNet.Helpers;
+using AiDotNet.Helpers;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
@@ -482,7 +482,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     /// <param name="inputSize">The number of input neurons.</param>
     /// <param name="outputSize">The number of output neurons.</param>
-    /// <param name="activationFunction">The activation function to apply after the linear transformation.</param>
+    /// <param name="activationFunction">The activation function to apply after the linear transformation. Null means none (identity), as in <see cref="DenseLayer{T}"/>.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new feed-forward layer with the specified input size, output size, and
@@ -512,7 +512,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     public FeedForwardLayer([LayerState] int outputSize, IActivationFunction<T>? activationFunction = null)
-        : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new ReLUActivation<T>())
+        : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new IdentityActivation<T>())
     {
         if (outputSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(outputSize), outputSize, "Output size must be positive.");
@@ -616,7 +616,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     public FeedForwardLayer([LayerState] int outputSize, IVectorActivationFunction<T> activationFunction)
-        : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new ReLUActivation<T>())
+        : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new IdentityActivation<T>())
     {
         if (outputSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(outputSize), outputSize, "Output size must be positive.");

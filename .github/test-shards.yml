@@ -1615,6 +1615,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.BatchNormalizationLayoutAndRecalibrationTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.T5RelativeBiasAttentionBehaviourTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.TokenObjectivesTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.NullActivationMeansIdentityTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.FusedOptimizerScheduleAndClipParityTests.|
       FullyQualifiedName~AiDotNet.Tests.ActiveLearning.ActiveLearningStrategyTests.|
       FullyQualifiedName~AiDotNet.Tests.DiagnosticTest.|
