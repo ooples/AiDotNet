@@ -124,7 +124,7 @@ public partial class TrOCR<T> : OCRBase<T>
         int imageHeight = image.Shape[2];
 
         var input = PreprocessCrop(image);
-        var (text, confidence) = RecognizeText(input);
+        var (text, confidence) = RecognizePreparedText(input);
 
         var result = new OCRResult<T>
         {
@@ -143,10 +143,10 @@ public partial class TrOCR<T> : OCRBase<T>
     }
 
     /// <inheritdoc/>
-    public override (string text, T confidence) RecognizeText(Tensor<T> croppedImage)
+    protected override (string text, T confidence) RecognizePreparedText(Tensor<T> preparedCrop)
     {
         // Encode image
-        var encoderOutput = EncodeImage(croppedImage);
+        var encoderOutput = EncodeImage(preparedCrop);
 
         // Decode text autoregressively
         var (text, confidence) = DecodeText(encoderOutput);
@@ -667,11 +667,11 @@ public partial class TrOCR<T> : OCRBase<T>
 
         var labels = WithEndToken(LabelsFrom(expectedOutput));
         var targets = LabelTargets(labels);
-        RecordTrainingLoss(TensorModelTrainer<T>.Step(
-            this, input, targets, NumOps.FromDouble(TrainingLearningRate),
-            image => TeacherForcedLogits(image, labels),
-            CrossEntropy));
+        TrainWithTargets<Tensor<T>, Tensor<T>>(input, targets, image => TeacherForcedLogits(image, labels), CrossEntropy);
     }
+
+    /// <summary>The paper's optimizer (Li et al. 2021, Section 3.1): Adam at learning rate 5e-5.</summary>
+    protected override AiDotNet.Interfaces.IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateTrainingOptimizer() => PaperAdam(5e-5);
 
     /// <summary>
     /// Terminates every label row with the end token so the decoder learns where text stops.

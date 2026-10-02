@@ -148,7 +148,7 @@ public partial class CRNN<T> : OCRBase<T>
         var input = PreprocessCrop(image);
 
         // Forward pass
-        var (text, confidence) = RecognizeText(input);
+        var (text, confidence) = RecognizePreparedText(input);
 
         var result = new OCRResult<T>
         {
@@ -167,9 +167,9 @@ public partial class CRNN<T> : OCRBase<T>
     }
 
     /// <inheritdoc/>
-    public override (string text, T confidence) RecognizeText(Tensor<T> croppedImage)
+    protected override (string text, T confidence) RecognizePreparedText(Tensor<T> preparedCrop)
     {
-        var probs = ApplySoftmax(ComputeLogits(croppedImage));
+        var probs = ApplySoftmax(ComputeLogits(preparedCrop));
         string text = DecodeCTC(probs);
         T confidence = ComputeConfidence(probs, text);
         return (text, confidence);
@@ -658,10 +658,12 @@ public partial class CRNN<T> : OCRBase<T>
 
         var labels = CtcLabelsFrom(expectedOutput);
         var ctc = new CTCLoss<T>(VocabularySize, blankIndex: 0);
-        RecordTrainingLoss(TensorModelTrainer<T>.Step(
-            this, input, EncodeCtcTargets(labels), NumOps.FromDouble(TrainingLearningRate), ForwardLogits,
-            (logits, encoded) => MeanCtcLoss(ctc, logits, encoded, labels)));
+        TrainWithTargets<Tensor<T>, Tensor<T>>(input, EncodeCtcTargets(labels), ForwardLogits,
+            (logits, encoded) => MeanCtcLoss(ctc, logits, encoded, labels));
     }
+
+    /// <summary>The paper's optimizer (Shi et al. 2015, Section 3.2): ADADELTA with rho 0.9.</summary>
+    protected override AiDotNet.Interfaces.IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateTrainingOptimizer() => PaperAdadelta(rho: 0.9, epsilon: 1e-6);
 
     private Tensor<T> MeanCtcLoss(CTCLoss<T> ctc, Tensor<T> logits, Tensor<T> encodedTargets, int[][] labels)
     {

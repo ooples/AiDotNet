@@ -120,6 +120,104 @@ public partial class CRAFT<T> : TextDetectorBase<T>
     /// <summary>Reference low-text threshold on the region score (Baek et al. 2019).</summary>
     internal const double LowTextThreshold = 0.4;
 
+    /// <summary>The reference optimizer (CRAFT-pytorch training code; the paper names none): Adam at learning rate 1e-4.</summary>
+    protected override AiDotNet.Interfaces.IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateTrainingOptimizer() => PaperAdam(1e-4);
+
+    /// <summary>
+    /// CRAFT's objective (Baek et al. 2019, Eq. 1): <c>L = sum_p S_c(p) (|S_r(p) - S_r*(p)|^2 + |S_a(p) - S_a*(p)|^2)</c>,
+    /// averaged over pixels. The targets are Gaussian heatmaps from <see cref="BuildTargets"/>. The confidence
+    /// <c>S_c</c> is 1 because the targets come from annotated boxes, not from an interim model's pseudo-labels.
+    /// </summary>
+    protected override Tensor<T> TextDetectionLoss(List<Tensor<T>> outputs, TextDetectionTrainingBatch targets,
+        int imageWidth, int imageHeight)
+    {
+        var region = outputs[0];
+        var affinity = outputs[1];
+        int batch = region.Shape[0], mapHeight = region.Shape[2], mapWidth = region.Shape[3];
+        var regions = new List<double[][,]>();
+        var affinities = new List<double[][,]>();
+        for (int b = 0; b < batch; b++)
+        {
+            var (regionTarget, affinityTarget) = BuildTargets(targets[b], imageWidth, imageHeight, mapWidth, mapHeight);
+            regions.Add(new[] { regionTarget });
+            affinities.Add(new[] { affinityTarget });
+        }
+        var regionError = Engine.TensorSquare(Engine.TensorSubtract(region, MapTensor(regions)));
+        var affinityError = Engine.TensorSquare(Engine.TensorSubtract(affinity, MapTensor(affinities)));
+        return Engine.TensorMultiplyScalar(Engine.ReduceSum(Engine.TensorAdd(regionError, affinityError), null), NumOps.FromDouble(1.0 / region.Length));
+    }
+
+    /// <summary>
+    /// CRAFT's ground truth for one image (Baek et al. 2019, Section 3.1, Fig. 3), in map pixels:
+    /// <list type="bullet">
+    /// <item>Each word quad is split along its reading direction into character boxes. The number of boxes is
+    /// the transcription's non-space length, or the quad's aspect ratio when there is no transcription,
+    /// following the paper's length-based weak-supervision split.</item>
+    /// <item>The region map has a Gaussian warped into each character box.</item>
+    /// <item>The affinity map has a Gaussian in the box joining the upper and lower triangle centres of each
+    /// pair of adjacent characters, the triangles being cut by the character box's diagonals.</item>
+    /// </list>
+    /// </summary>
+    internal static (double[,] Region, double[,] Affinity) BuildTargets(IReadOnlyList<TextPolygonTarget> polygons,
+        int imageWidth, int imageHeight, int mapWidth, int mapHeight)
+    {
+        var region = new double[mapHeight, mapWidth];
+        var affinity = new double[mapHeight, mapWidth];
+        foreach (var target in polygons)
+        {
+            var polygon = ToMap(target, imageWidth, imageHeight, mapWidth, mapHeight);
+            if (TextTargetGeometry.Area(polygon) < 1.0) continue;
+            var quad = ReadingOrderQuad(polygon.Length == 4 ? polygon : TextTargetGeometry.MinAreaRectangle(polygon));
+            var (tl, tr, br, bl) = (quad[0], quad[1], quad[2], quad[3]);
+            double length = Distance(tl, tr), thickness = Distance(tl, bl);
+            int count = target.Transcription is { } text && text.Any(ch => !char.IsWhiteSpace(ch))
+                ? text.Count(ch => !char.IsWhiteSpace(ch))
+                : Math.Max(1, (int)Math.Round(length / Math.Max(thickness, 1e-6)));
+
+            (double X, double Y) Lerp((double X, double Y) a, (double X, double Y) b, double t) => (a.X + ((b.X - a.X) * t), a.Y + ((b.Y - a.Y) * t));
+            var characters = Enumerable.Range(0, count).Select(k => new[]
+            {
+                Lerp(tl, tr, (double)k / count), Lerp(tl, tr, (double)(k + 1) / count),
+                Lerp(bl, br, (double)(k + 1) / count), Lerp(bl, br, (double)k / count),
+            }).ToArray();
+            foreach (var character in characters) TextTargetGeometry.SplatGaussian(region, character);
+
+            for (int k = 0; k + 1 < characters.Length; k++)
+            {
+                var (upperA, lowerA) = TriangleCentres(characters[k]);
+                var (upperB, lowerB) = TriangleCentres(characters[k + 1]);
+                TextTargetGeometry.SplatGaussian(affinity, new[] { upperA, upperB, lowerB, lowerA });
+            }
+        }
+        return (region, affinity);
+    }
+
+    private static double Distance((double X, double Y) a, (double X, double Y) b)
+        => Math.Sqrt(((b.X - a.X) * (b.X - a.X)) + ((b.Y - a.Y) * (b.Y - a.Y)));
+
+    /// <summary>
+    /// Orders a quad clockwise on screen from its top-left corner, then rotates the order so the first edge is
+    /// the longer side, which is the reading direction for horizontal and rotated words alike.
+    /// </summary>
+    private static (double X, double Y)[] ReadingOrderQuad(IReadOnlyList<(double X, double Y)> quad)
+    {
+        var points = quad.ToArray();
+        // y grows downwards, so a clockwise-on-screen quad has positive shoelace area.
+        if (TextTargetGeometry.SignedArea(points) < 0) Array.Reverse(points);
+        int start = 0;
+        for (int i = 1; i < 4; i++) if (points[i].X + points[i].Y < points[start].X + points[start].Y) start = i;
+        if (Distance(points[start], points[(start + 1) % 4]) < Distance(points[start], points[(start + 3) % 4]))
+            start = (start + 3) % 4;
+        return Enumerable.Range(0, 4).Select(i => points[(start + i) % 4]).ToArray();
+    }
+
+    /// <summary>The centres of the triangles above and below the intersection of a character box's diagonals.</summary>
+    private static ((double X, double Y) Upper, (double X, double Y) Lower) TriangleCentres(IReadOnlyList<(double X, double Y)> box)
+    {
+        double cx = box.Average(p => p.X), cy = box.Average(p => p.Y);
+        return (((box[0].X + box[1].X + cx) / 3, (box[0].Y + box[1].Y + cy) / 3),
+                ((box[2].X + box[3].X + cx) / 3, (box[2].Y + box[3].Y + cy) / 3));
+    }
     /// <summary>Reference link threshold on the affinity score.</summary>
     internal const double LinkThreshold = 0.4;
 

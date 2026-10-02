@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.Attributes;
@@ -125,7 +125,7 @@ public partial class EAST<T> : TextDetectorBase<T>
         var score = _scoreHead.Forward(x);
         score = ApplySigmoid(score);
 
-        var geometry = _geometryHead.Forward(x);
+        var geometry = BoundGeometry(_geometryHead.Forward(x));
 
         return new List<Tensor<T>> { score, geometry };
     }
@@ -205,6 +205,161 @@ public partial class EAST<T> : TextDetectorBase<T>
         return regions;
     }
 
+    /// <summary>
+    /// The paper's RBOX geometry output (Zhou et al. 2017; reference model.py): the four edge distances are
+    /// <c>sigmoid * text_scale</c> and the angle is <c>(sigmoid - 0.5) * pi / 2</c>. Distances are in map pixels,
+    /// and the map side stands in for the 512-pixel text scale at stride 4. Without this bound the distances
+    /// could go negative, and the IoU loss is undefined there. QUAD offsets stay linear, as in the paper.
+    /// </summary>
+    private Tensor<T> BoundGeometry(Tensor<T> raw)
+    {
+        if (!_useRotatedBoxes) return raw;
+        int b = raw.Shape[0], h = raw.Shape[2], w = raw.Shape[3];
+        var distances = Engine.TensorMultiplyScalar(
+            Engine.Sigmoid(Engine.TensorSlice(raw, new[] { 0, 0, 0, 0 }, new[] { b, 4, h, w })), NumOps.FromDouble(Math.Max(h, w)));
+        var angle = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(Engine.Sigmoid(Engine.TensorSlice(raw, new[] { 0, 4, 0, 0 }, new[] { b, 1, h, w })), NumOps.FromDouble(-0.5)),
+            NumOps.FromDouble(Math.PI / 2));
+        return Engine.TensorConcatenate(new[] { distances, angle }, 1);
+    }
+
+    /// <summary>The paper's optimizer (Zhou et al. 2017, Section 4.1): Adam at learning rate 1e-3.</summary>
+    protected override AiDotNet.Interfaces.IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateTrainingOptimizer() => PaperAdam(1e-3);
+
+    /// <summary>
+    /// EAST's loss (Zhou et al. 2017, Section 3.4): <c>L = L_s + lambda_g L_g</c> with lambda_g = 1. <c>L_s</c> is
+    /// class-balanced cross-entropy on the score map. <c>L_g</c> is taken on positive pixels only: for RBOX it is
+    /// <c>-log IoU + 10 (1 - cos(theta - theta*))</c>, and for QUAD it is smooth-L1 on the vertex offsets,
+    /// normalised by 8 times the quad's shorter edge.
+    /// </summary>
+    protected override Tensor<T> TextDetectionLoss(List<Tensor<T>> outputs, TextDetectionTrainingBatch targets,
+        int imageWidth, int imageHeight)
+    {
+        var score = outputs[0];
+        var geometry = outputs[1];
+        int batch = score.Shape[0], mapHeight = score.Shape[2], mapWidth = score.Shape[3];
+        var scores = new List<double[][,]>();
+        var geometries = new List<double[][,]>();
+        var norms = new List<double[][,]>();
+        for (int b = 0; b < batch; b++)
+        {
+            var (s, geometryTarget, n) = BuildTargets(targets[b], imageWidth, imageHeight, mapWidth, mapHeight, _useRotatedBoxes);
+            scores.Add(new[] { s });
+            geometries.Add(geometryTarget);
+            norms.Add(new[] { n });
+        }
+        var y = MapTensor(scores);
+        var g = MapTensor(geometries);
+
+        // Class-balanced cross-entropy: beta = 1 - |Y*| / |Y|.
+        double positives = 0;
+        for (int i = 0; i < y.Length; i++) positives += NumOps.ToDouble(y[i]);
+        double beta = 1.0 - (positives / y.Length);
+        var p = Engine.TensorClamp(score, NumOps.FromDouble(1e-6), NumOps.FromDouble(1 - 1e-6));
+        var ones = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(y, NumOps.Zero), NumOps.One);
+        var positiveTerm = Engine.TensorMultiplyScalar(Engine.TensorMultiply(y, Engine.TensorLog(p)), NumOps.FromDouble(beta));
+        var negativeTerm = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(Engine.TensorSubtract(ones, y), Engine.TensorLog(Engine.TensorSubtract(ones, p))), NumOps.FromDouble(1 - beta));
+        var scoreLoss = Engine.TensorMultiplyScalar(Engine.ReduceSum(Engine.TensorAdd(positiveTerm, negativeTerm), null), NumOps.FromDouble(-1.0 / y.Length));
+
+        Tensor<T> Channel(Tensor<T> t, int c) => Engine.TensorSlice(t, new[] { 0, c, 0, 0 }, new[] { batch, 1, mapHeight, mapWidth });
+        Tensor<T> geometryLoss;
+        if (_useRotatedBoxes)
+        {
+            var (d0, d1, d2, d3, theta) = (Channel(geometry, 0), Channel(geometry, 1), Channel(geometry, 2), Channel(geometry, 3), Channel(geometry, 4));
+            var (t0, t1, t2, t3, thetaT) = (Channel(g, 0), Channel(g, 1), Channel(g, 2), Channel(g, 3), Channel(g, 4));
+            var predictedArea = Engine.TensorMultiply(Engine.TensorAdd(d0, d2), Engine.TensorAdd(d1, d3));
+            var targetArea = Engine.TensorMultiply(Engine.TensorAdd(t0, t2), Engine.TensorAdd(t1, t3));
+            var interWidth = Engine.TensorAdd(Engine.TensorMin(d1, t1), Engine.TensorMin(d3, t3));
+            var interHeight = Engine.TensorAdd(Engine.TensorMin(d0, t0), Engine.TensorMin(d2, t2));
+            var intersection = Engine.TensorMultiply(interWidth, interHeight);
+            var union = Engine.TensorSubtract(Engine.TensorAdd(predictedArea, targetArea), intersection);
+            var iouLoss = Engine.TensorMultiplyScalar(Engine.TensorLog(Engine.TensorDivide(
+                Engine.TensorAddScalar(intersection, NumOps.One), Engine.TensorAddScalar(union, NumOps.One))), NumOps.FromDouble(-1.0));
+            var angleLoss = Engine.TensorSubtract(ones, Engine.TensorCos(Engine.TensorSubtract(theta, thetaT)));
+            geometryLoss = WeightedMean(Engine.TensorAdd(iouLoss, Engine.TensorMultiplyScalar(angleLoss, NumOps.FromDouble(10.0))), y);
+        }
+        else
+        {
+            var difference = Engine.TensorAbs(Engine.TensorSubtract(geometry, g));
+            var clipped = Engine.TensorMin(difference, Engine.TensorAddScalar(Engine.TensorMultiplyScalar(difference, NumOps.Zero), NumOps.One));
+            var smoothL1 = Engine.TensorAdd(Engine.TensorMultiplyScalar(Engine.TensorSquare(clipped), NumOps.FromDouble(0.5)), Engine.TensorSubtract(difference, clipped));
+            var perPixel = Engine.ReduceSum(smoothL1, new[] { 1 }, keepDims: true);
+            var weighted = Engine.TensorMultiply(perPixel, MapTensor(norms));
+            geometryLoss = WeightedMean(weighted, y);
+        }
+        return Engine.TensorAdd(scoreLoss, geometryLoss);
+    }
+
+    /// <summary>
+    /// EAST's targets for one image, in map pixels:
+    /// <list type="bullet">
+    /// <item>The score map is each quad offset inwards by 0.3 times its shortest edge. The paper moves each vertex by 0.3 r_i, where r_i is its shorter adjacent edge; for a rectangle the two are the same.</item>
+    /// <item>For RBOX, a positive pixel's geometry is its distances to the top, right, bottom and left edges of
+    /// the quad's minimum-area rectangle, plus that rectangle's angle in [-pi/4, pi/4).</item>
+    /// <item>For QUAD, it is the offsets from the pixel centre to the four vertices, the first being the vertex
+    /// with the smallest x + y.</item>
+    /// </list>
+    /// </summary>
+    internal static (double[,] Score, double[][,] Geometry, double[,] Norm) BuildTargets(
+        IReadOnlyList<TextPolygonTarget> polygons, int imageWidth, int imageHeight, int mapWidth, int mapHeight, bool rotatedBoxes)
+    {
+        int channels = rotatedBoxes ? 5 : 8;
+        var score = new double[mapHeight, mapWidth];
+        var norm = new double[mapHeight, mapWidth];
+        var geometry = Enumerable.Range(0, channels).Select(_ => new double[mapHeight, mapWidth]).ToArray();
+        foreach (var target in polygons)
+        {
+            var polygon = ToMap(target, imageWidth, imageHeight, mapWidth, mapHeight);
+            if (TextTargetGeometry.Area(polygon) < 1.0) continue;
+            var quad = polygon.Length == 4 ? polygon : TextTargetGeometry.MinAreaRectangle(polygon);
+            double shortest = Enumerable.Range(0, 4).Min(i =>
+                Math.Sqrt(Math.Pow(quad[(i + 1) % 4].X - quad[i].X, 2) + Math.Pow(quad[(i + 1) % 4].Y - quad[i].Y, 2)));
+            var shrunk = TextTargetGeometry.Offset(quad, 0.3 * shortest);
+            if (shrunk is null) continue;
+
+            var rect = TextTargetGeometry.MinAreaRectangle(quad);
+            double ex = rect[1].X - rect[0].X, ey = rect[1].Y - rect[0].Y;
+            double theta = Math.Atan2(ey, ex);
+            double width = Math.Sqrt((ex * ex) + (ey * ey));
+            double height = Math.Sqrt(Math.Pow(rect[3].X - rect[0].X, 2) + Math.Pow(rect[3].Y - rect[0].Y, 2));
+            while (theta >= Math.PI / 4) { theta -= Math.PI / 2; (width, height) = (height, width); }
+            while (theta < -Math.PI / 4) { theta += Math.PI / 2; (width, height) = (height, width); }
+            double cx = rect.Average(p => p.X), cy = rect.Average(p => p.Y);
+            double ux = Math.Cos(theta), uy = Math.Sin(theta), vx = -Math.Sin(theta), vy = Math.Cos(theta);
+            int start = 0;
+            for (int i = 1; i < 4; i++) if (quad[i].X + quad[i].Y < quad[start].X + quad[start].Y) start = i;
+
+            var (x0, y0, x1, y1) = TextTargetGeometry.Bounds(shrunk, mapWidth, mapHeight);
+            for (int py = y0; py <= y1; py++)
+                for (int px = x0; px <= x1; px++)
+                {
+                    double sx = px + 0.5, sy = py + 0.5;
+                    if (!TextTargetGeometry.Contains(shrunk, sx, sy)) continue;
+                    score[py, px] = 1.0;
+                    norm[py, px] = 1.0 / (8.0 * Math.Max(shortest, 1e-6));
+                    if (rotatedBoxes)
+                    {
+                        double pu = ((sx - cx) * ux) + ((sy - cy) * uy), pv = ((sx - cx) * vx) + ((sy - cy) * vy);
+                        geometry[0][py, px] = (height / 2) + pv; // top
+                        geometry[1][py, px] = (width / 2) - pu;  // right
+                        geometry[2][py, px] = (height / 2) - pv; // bottom
+                        geometry[3][py, px] = (width / 2) + pu;  // left
+                        geometry[4][py, px] = theta;
+                    }
+                    else
+                    {
+                        for (int v = 0; v < 4; v++)
+                        {
+                            var vertex = quad[(start + v) % 4];
+                            geometry[2 * v][py, px] = vertex.X - sx;
+                            geometry[(2 * v) + 1][py, px] = vertex.Y - sy;
+                        }
+                    }
+                }
+        }
+        return (score, geometry, norm);
+    }
     private List<(double X, double Y)> DecodeGeometry(
         Tensor<T> geometry,
         int h,
