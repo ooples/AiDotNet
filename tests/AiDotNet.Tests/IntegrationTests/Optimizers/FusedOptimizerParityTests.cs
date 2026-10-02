@@ -227,7 +227,13 @@ public class FusedOptimizerParityTests
         var (adamDiff, _, _) = Divergence(Adam);
         var (diff, fusedSteps, trainDelta) = Divergence(() =>
             new AMSGradOptimizer<float, Tensor<float>, Tensor<float>>(
-                null, new AMSGradOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }));
+                // The fused kernel implements the PyTorch variant; the paper default trains eagerly by design
+                // (AMSGradBiasCorrectionTests pins both formulas and that mapping).
+                null, new AMSGradOptimizerOptions<float, Tensor<float>, Tensor<float>>
+                {
+                    InitialLearningRate = 1e-2,
+                    BiasCorrection = AiDotNet.Enums.AMSGradBiasCorrection.PyTorch,
+                }));
         AssertOptimizerParity("AMSGrad", fusedSteps, diff, trainDelta, adamDiff);
     }
 }

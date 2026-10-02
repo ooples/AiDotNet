@@ -32,7 +32,7 @@ public class CompiledPlanMemoryTests : IDisposable
     public CompiledPlanMemoryTests(ITestOutputHelper o)
     {
         _out = o;
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
         _originalOptions = TensorCodecOptions.Current;
         TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
     }

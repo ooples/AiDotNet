@@ -67,7 +67,7 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
                 Schedule = LearningRateSchedulerType.MultiStep, DecayRate = 0.1,
                 MilestoneFractions = [0.75, 0.90],
                 Source = "Tashiro et al. 2021, hyperparameters: Adam at learning rate 0.001 decayed to 0.0001 and 0.00001 at 75% and 90% of the total epochs, batch size 16, 200 epochs. The decay points are kept as the fractions the paper states rather than transcribed into the step numbers of a 200-epoch run, which would be wrong at any other length.")]
-public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
+public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObjectiveProvider<T>
 {
     #region Fields
 
@@ -413,6 +413,80 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <summary>
+    /// The stream training draws its timesteps and noise from: created once per model, seeded from
+    /// <see cref="ModelOptions.Seed"/> when one is set, secure otherwise. One stream for the model's life still draws a
+    /// fresh (t, epsilon) every step, so this does not fix training at one noise level (the concern CCDM documents for
+    /// re-seeding per call); it makes a seeded model's training reproducible. It replaced a fresh secure generator per
+    /// step, which ignored the configured seed while the sampler honoured it.
+    /// </summary>
+    private Random TrainingRandom => _trainingRandom ??= _seed.HasValue
+        ? RandomHelper.CreateSeededRandom(_seed.Value)
+        : RandomHelper.CreateSecureRandom();
+
+    private Random? _trainingRandom;
+
+    #region ITrainingObjectiveProvider
+
+    /// <summary>
+    /// CSDI learns by denoising score matching (Tashiro et al. 2021): <see cref="Train"/> minimizes the noise-prediction
+    /// error at one random diffusion step per call, and <see cref="Predict"/> runs the reverse sampler on top of it.
+    /// </summary>
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind =>
+        TrainingObjectiveKind.DiffusionDenoising;
+
+    /// <summary>The supplied target is the x_0 the denoiser learns to recover.</summary>
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget)
+        => proposedTarget;
+
+    /// <summary>
+    /// The noise-prediction loss over the shared fixed (timestep, noise) quadrature of
+    /// <see cref="TimeSeriesFoundationModelBase{T}.BuildDeterministicDenoisingBatch"/>, through the same slots and
+    /// denoiser graph the training step uses and the configured loss function. A training step reports the loss at a
+    /// single random timestep, so two of them cannot show a trend; this returns the same value for the same parameters.
+    /// Runs in inference mode under a no-gradient scope and changes nothing.
+    /// </summary>
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        if (!_useNativeMode)
+            throw new InvalidOperationException("The training objective is only defined in native mode.");
+        int targetLen = target.Length;
+        if (targetLen <= 0) return NumOps.Zero;
+
+        var sqrtAlphaBar = new Vector<T>(_numDiffusionSteps);
+        var sqrtOneMinus = new Vector<T>(_numDiffusionSteps);
+        for (int t = 0; t < _numDiffusionSteps; t++)
+        {
+            sqrtAlphaBar[t] = NumOps.Sqrt(_alphasCumprod[t]);
+            sqrtOneMinus[t] = NumOps.Sqrt(NumOps.Subtract(NumOps.One, _alphasCumprod[t]));
+        }
+
+        var (_, noise, timesteps) = BuildDeterministicDenoisingBatch(
+            target, targetLen, _numDiffusionSteps, sqrtAlphaBar, sqrtOneMinus);
+
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            double total = 0;
+            for (int row = 0; row < timesteps.Length; row++)
+            {
+                var epsilon = new Tensor<T>(target._shape);
+                for (int i = 0; i < targetLen; i++) epsilon.Data.Span[i] = noise.Data.Span[row * targetLen + i];
+                var slots = BuildCsdiSlots(input, target, timesteps[row], epsilon);
+                total += NumOps.ToDouble(LossFunction.ComputeTapeLoss(DenoiserForwardFromSlots(slots), slots[1])[0]);
+            }
+
+            return NumOps.FromDouble(total / timesteps.Length);
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
+    }
+
+    #endregion
+    /// <summary>
     /// Assembles the persistent-slot data for the MultiSlotFusedStep wire-up:
     /// samples (t, ε) host-side then packs everything the compiled forward
     /// needs as tensor slots. Slot layout:
@@ -432,12 +506,20 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>
         int targetLen = target.Length;
         if (targetLen <= 0) return null;
 
-        var rand = RandomHelper.CreateSecureRandom();
+        var rand = TrainingRandom;
         int t = rand.Next(_numDiffusionSteps);
         var noiseData = new T[targetLen];
         for (int i = 0; i < targetLen; i++) noiseData[i] = SampleStandardNormal(rand);
-        var epsilonTrue = new Tensor<T>(target._shape, new Vector<T>(noiseData));
+        return BuildCsdiSlots(input, target, t, new Tensor<T>(target._shape, new Vector<T>(noiseData)));
+    }
 
+    /// <summary>
+    /// The slot tuple at diffusion step <paramref name="t"/> with noise <paramref name="epsilonTrue"/>. The training
+    /// step (a random draw) and the declared training objective (a fixed quadrature) both build their slots here, so
+    /// they feed one denoiser graph.
+    /// </summary>
+    private IReadOnlyList<Tensor<T>> BuildCsdiSlots(Tensor<T> input, Tensor<T> target, int t, Tensor<T> epsilonTrue)
+    {
         T sqrtAlphaBar = NumOps.Sqrt(_alphasCumprod[t]);
         T sqrtOneMinus = NumOps.Sqrt(NumOps.Subtract(NumOps.One, _alphasCumprod[t]));
         T sinT = NumOps.FromDouble(Math.Sin(2.0 * Math.PI * t / Math.Max(1, _numDiffusionSteps - 1)));

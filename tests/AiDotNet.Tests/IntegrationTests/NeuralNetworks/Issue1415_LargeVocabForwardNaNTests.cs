@@ -42,7 +42,7 @@ public class Issue1415_LargeVocabForwardNaNTests
     [Fact]
     public void MultiHeadAttention_Forward_ProducesFiniteOutput_OnFiniteInput_AtPostLayerNormScale()
     {
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
         const int batchSize = 1, seqLen = 64, dModel = 128, heads = 2;
         const int trials = 200;
         int nanTrials = 0;
@@ -129,7 +129,7 @@ public class Issue1415_LargeVocabForwardNaNTests
     [Fact]
     public void Transformer_V50257_Predict_ProducesFiniteLogits_OnRandomContexts()
     {
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
         const int vocab = 50257;
 
         var arch = new TransformerArchitecture<float>(
@@ -227,7 +227,7 @@ public class Issue1415_LargeVocabForwardNaNTests
         // GC.Collect call the consumer reported as the actual trigger.
         // Expected to fail on the pre-fix code path; expected to pass after
         // the upstream allocator/state-tracking fix lands.
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
         const int vocab = 50257;
 
         var arch = new TransformerArchitecture<float>(
@@ -303,7 +303,7 @@ public class Issue1415_LargeVocabForwardNaNTests
     [Fact]
     public void Transformer_V50257_DirectTrain_PredictProducesFiniteLogits()
     {
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
         const int vocab = 50257;
 
         var arch = new TransformerArchitecture<float>(

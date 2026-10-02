@@ -1086,8 +1086,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // ITrainingObjectiveProvider, so that measurement is taken over a FIXED (timestep,
             // noise) quadrature - the quantity the optimizer descends - and not the sampler's
             // forecast, whose reverse chain magnifies the bias a partially trained denoiser still
-            // carries. The strict-decrease threshold is unchanged. CSDI trains the same way and is
-            // a candidate for the same entry if its stochastic probe ever reverses.
+            // carries. The strict-decrease threshold is unchanged. CSDI trains the same way, and its
+            // stochastic probe reversed on PR #2277 (GetLastLoss 1.512 -> 1.549 over 20 steps:
+            // two single-timestep draws), so it now declares its objective and takes the entry.
             // The 200-step count is measured under that objective, not assumed: at the emitted 20
             // steps CCDM reads 0.996003 -> 1.006925, which is Adam's warm-up rather than a
             // training defect, and at 200 the models pass 3 runs of 3. TimeDiff predicts x_0
@@ -1100,6 +1101,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 "CCDM",
                 new WarmupIterationOverride(memorization: 200, deterministicMemorizationLoss: true)
+            },
+            {
+                "CSDI",
+                new WarmupIterationOverride(deterministicMemorizationLoss: true)
             },
             {
                 "TimeDiff",
@@ -16462,6 +16467,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // above warm-up noise yet far below a genuinely diverging loop
             // (which spirals to NaN / 1e6+ within two steps).
             sb.AppendLine("    protected override double TrainingLossReductionTolerance => 0.5;");
+        }
+
+        // RepViTSAM's ten-step AdamW start-up transient: MEASURED per-step loss on one training
+        // sample (untrained 41.39). AMD runners fall smoothly (step 10: 0.24). Intel runners ran an
+        // Intel-only table sigmoid, accurate to 2e-6 but numerically different, and Adam amplified
+        // that into 73 -> 353 -> 2847 (step 6) -> 122 (step 10) -> 33.0 (step 14, first below
+        // untrained) -> 0.26 (step 30). Ten steps judged it mid-spike on one vendor and after
+        // recovery on the other. Twenty clears the slowest measured recovery with margin; the
+        // invariant itself (trained must beat untrained) is unchanged. Emitted after the family
+        // chain so no family branch can shadow it.
+        if (model.ClassName == "RepViTSAM")
+        {
+            sb.AppendLine("    protected override int? MeasuredTransientRecoveryBudget => 20;");
         }
 
         // Cutie is categorized by its video-segmentation family before the model-specific

@@ -39,7 +39,7 @@ public sealed class LayerInvariantCoverageTests
     /// <summary>
     /// Layer types with no <see cref="LayerTestBase{T}"/> subclass. Ratchet this DOWN as layers are wired in.
     /// </summary>
-    private const int MaxUncoveredLayers = 121;
+    private const int MaxUncoveredLayers = 119;
 
     [Fact]
     [Trait("category", "integration-configure-method")]

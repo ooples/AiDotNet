@@ -13997,9 +13997,22 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     internal virtual void SetBaseTrainOptimizer(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
     {
+        // Interface-typed, so != is reference identity; ReferenceEquals would box a struct implementation and never match.
+        bool replaced = _baseTrainOptimizer != optimizer;
         _baseTrainOptimizer = optimizer;
         _baseTrainOptimizerExplicitlyConfigured = optimizer is not null;
         _baseTrainOptimizerLearningRate = null;
+
+        // A different optimizer is a new trajectory the caller asked for, so the fused plan built for the old one
+        // (its moments live inside the plan) must go, exactly as ResetBaseTrainOptimizerState does. Leaving it
+        // committed made the next step refuse outright: the plan could not engage with the new optimizer, and the
+        // committed-plan guard forbids the eager fallback, so Train threw after any mid-run optimizer swap.
+        if (replaced)
+        {
+            Training.CompiledTapeTrainingStep<T>.Invalidate(this);
+            _fusedTrainingCommitted = false;
+            _fusedPersistenceVerified = false;
+        }
     }
 
     /// <summary>

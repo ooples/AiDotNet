@@ -7,14 +7,14 @@ namespace AiDotNet.Optimizers;
 
 /// <summary>
 /// Sparse scatter helper for Nadam — Adam with Nesterov-style look-ahead.
-/// The corrected first-moment is <c>mHat = (β1·m_new + (1-β1)·g) / bc1</c>;
-/// otherwise the math matches Adam.
+/// The corrected first-moment is Dozat (2016) Algorithm 8, matching the dense and fused paths:
+/// <c>mHat = β1·m_new / (1-β1^(t+1)) + (1-β1)·g / (1-β1^t)</c>; otherwise the math matches Adam.
 /// </summary>
 internal static partial class SparseEmbeddingOptimizerHelpers
 {
     internal static bool TryApplyNadamSparse<T>(
         Tensor<T> param, Tensor<T> m, Tensor<T> v,
-        double lr, double b1, double b2, double bc1, double bc2, double eps, double weightDecay)
+        double lr, double b1, double b2, double bc1, double bc1Next, double bc2, double eps, double weightDecay)
     {
         if (param is null) throw new ArgumentNullException(nameof(param));
         if (m is null) throw new ArgumentNullException(nameof(m));
@@ -40,14 +40,14 @@ internal static partial class SparseEmbeddingOptimizerHelpers
         if (typeof(T) == typeof(double))
         {
             ApplyNadamSparseDouble(param, m, v, sparseList, embeddingDim,
-                lr, b1, b2, oneMinusB1, oneMinusB2, bc1, bc2, eps, weightDecay);
+                lr, b1, b2, oneMinusB1, oneMinusB2, bc1, bc1Next, bc2, eps, weightDecay);
             return true;
         }
         if (typeof(T) == typeof(float))
         {
             ApplyNadamSparseFloat(param, m, v, sparseList, embeddingDim,
                 (float)lr, (float)b1, (float)b2, (float)oneMinusB1, (float)oneMinusB2,
-                (float)bc1, (float)bc2, (float)eps, (float)weightDecay);
+                (float)bc1, (float)bc1Next, (float)bc2, (float)eps, (float)weightDecay);
             return true;
         }
 
@@ -55,7 +55,7 @@ internal static partial class SparseEmbeddingOptimizerHelpers
         T lrT = ops.FromDouble(lr);
         T b1T = ops.FromDouble(b1), b2T = ops.FromDouble(b2);
         T omB1 = ops.FromDouble(oneMinusB1), omB2 = ops.FromDouble(oneMinusB2);
-        T bc1T = ops.FromDouble(bc1), bc2T = ops.FromDouble(bc2);
+        T bc1T = ops.FromDouble(bc1), bc1NextT = ops.FromDouble(bc1Next), bc2T = ops.FromDouble(bc2);
         T epsT = ops.FromDouble(eps), wdT = ops.FromDouble(weightDecay);
         bool hasWd = weightDecay > 0.0;
 
@@ -80,8 +80,8 @@ internal static partial class SparseEmbeddingOptimizerHelpers
                     T vNew = ops.Add(ops.Multiply(b2T, v[paramBase + c]), ops.Multiply(omB2, ops.Multiply(g, g)));
                     m[paramBase + c] = mNew;
                     v[paramBase + c] = vNew;
-                    // Nesterov-corrected: mHat = (β1·mNew + (1-β1)·g) / bc1.
-                    T mHat = ops.Divide(ops.Add(ops.Multiply(b1T, mNew), ops.Multiply(omB1, g)), bc1T);
+                    // Nesterov look-ahead (Dozat 2016, Alg. 8): mHat = β1·mNew / bc1Next + (1-β1)·g / bc1.
+                    T mHat = ops.Add(ops.Divide(ops.Multiply(b1T, mNew), bc1NextT), ops.Divide(ops.Multiply(omB1, g), bc1T));
                     T vHat = ops.Divide(vNew, bc2T);
                     T denom = ops.Add(ops.Sqrt(vHat), epsT);
                     param[paramBase + c] = ops.Subtract(theta, ops.Divide(ops.Multiply(lrT, mHat), denom));
@@ -95,7 +95,7 @@ internal static partial class SparseEmbeddingOptimizerHelpers
         Tensor<T> param, Tensor<T> m, Tensor<T> v,
         IReadOnlyList<SparseEmbeddingGradient<T>> sparseList, int embeddingDim,
         double lr, double b1, double b2, double oneMinusB1, double oneMinusB2,
-        double bc1, double bc2, double eps, double weightDecay)
+        double bc1, double bc1Next, double bc2, double eps, double weightDecay)
     {
         var paramSpan = ((Tensor<double>)(object)param).Data.Span;
         var mSpan = ((Tensor<double>)(object)m).Data.Span;
@@ -124,7 +124,7 @@ internal static partial class SparseEmbeddingOptimizerHelpers
                     double vNew = b2 * vSpan[paramBase + c] + oneMinusB2 * g * g;
                     mSpan[paramBase + c] = mNew;
                     vSpan[paramBase + c] = vNew;
-                    double mHat = (b1 * mNew + oneMinusB1 * g) / bc1;
+                    double mHat = b1 * mNew / bc1Next + oneMinusB1 * g / bc1;
                     double vHat = vNew / bc2;
                     paramSpan[paramBase + c] = theta - lr * mHat / (Math.Sqrt(vHat) + eps);
                 }
@@ -136,7 +136,7 @@ internal static partial class SparseEmbeddingOptimizerHelpers
         Tensor<T> param, Tensor<T> m, Tensor<T> v,
         IReadOnlyList<SparseEmbeddingGradient<T>> sparseList, int embeddingDim,
         float lr, float b1, float b2, float oneMinusB1, float oneMinusB2,
-        float bc1, float bc2, float eps, float weightDecay)
+        float bc1, float bc1Next, float bc2, float eps, float weightDecay)
     {
         var paramSpan = ((Tensor<float>)(object)param).Data.Span;
         var mSpan = ((Tensor<float>)(object)m).Data.Span;
@@ -165,7 +165,7 @@ internal static partial class SparseEmbeddingOptimizerHelpers
                     float vNew = b2 * vSpan[paramBase + c] + oneMinusB2 * g * g;
                     mSpan[paramBase + c] = mNew;
                     vSpan[paramBase + c] = vNew;
-                    float mHat = (b1 * mNew + oneMinusB1 * g) / bc1;
+                    float mHat = b1 * mNew / bc1Next + oneMinusB1 * g / bc1;
                     float vHat = vNew / bc2;
                     paramSpan[paramBase + c] = theta - lr * mHat / ((float)Math.Sqrt(vHat) + eps);
                 }

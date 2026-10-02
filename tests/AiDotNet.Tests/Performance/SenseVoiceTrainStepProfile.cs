@@ -51,7 +51,7 @@ public class SenseVoiceTrainStepProfile
     {
         // Timeout requires an async test; yielding makes this legal without changing the work below.
         await Task.Yield();
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
 
         // SenseVoice-Small paper-faithful defaults (Du et al. 2024)
         var arch = new NeuralNetworkArchitecture<float>(

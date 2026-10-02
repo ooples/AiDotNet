@@ -30,7 +30,7 @@ public class AcceleratedInferenceTests : IDisposable
 
     public AcceleratedInferenceTests()
     {
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
         _originalOptions = TensorCodecOptions.Current;
         TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
         // Compiled inference is opt-in (default off — the AiDotNet.Tensors compiled/eager executors share

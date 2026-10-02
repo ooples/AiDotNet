@@ -23,6 +23,8 @@ namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 /// same linear/None output-head class as #1629. This trains the exact repro on real GPU hardware and
 /// asserts inference is non-zero and tracks the target. Skips when no GPU backend is available.
 /// </summary>
+// Sets AiDotNetEngine.Current, a process-wide static: run apart from every other test class.
+[Collection("EngineCurrentGlobalState")]
 public class FeedForwardGpuZeroPredictIssue1422Tests
 {
     private const int ReproSeed = 1422;

@@ -568,6 +568,25 @@ jobs:
         shell: pwsh
         run: ./.github/scripts/check-shard-coverage.ps1
 
+      # The same guarantee for every test class, hand-written ones included: 269 of them matched no shard
+      # filter and never ran on any matrix until the Unassigned shards took them in. Fails the build when a
+      # class is selected by no shard, and prints the filter clause that assigns it.
+      - name: Verify every test class is covered by a shard
+        shell: pwsh
+        run: ./tools/TestImpact/Assert-ShardInventory.ps1
+
+      # Only on a pull request that changes a source generator: build the merge base, so the step below can map the
+      # generator change through the generated output that differs between the two builds instead of running the
+      # full matrix. Any failure exports nothing and the change stays unmappable, the behaviour before.
+      - name: Build the merge base for a generator change
+        shell: pwsh
+        timeout-minutes: 45
+        continue-on-error: true
+        env:
+          REQUIRES_SHARDS: ${{ needs.select-shards.outputs.requires_shards }}
+          COLLECT_COVERAGE_EVERYWHERE: ${{ inputs.collect_coverage_everywhere }}
+        run: ./tools/TestImpact/Build-GeneratorBase.ps1
+
       # Test-level selection: which test classes can this change reach? Read from the assemblies this
       # job just built, so it sees generated tests too. It only narrows select-shards' decision, and
       # passes it through whenever it cannot map every changed file (Select-AffectedTests.ps1).
@@ -589,8 +608,19 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         with:
           name: type-impact-plan
-          path: type-impact-plan.json
+          path: |
+            type-impact-plan.json
+            type-impact-effective.json
           retention-days: 7
+
+      # Which test classes each selected shard runs, and why the type-level plan could not narrow when it did
+      # not. Appends to this job's summary; report-only.
+      - name: Report test-level selection
+        if: always() && hashFiles('type-impact-plan.json') != ''
+        # Report-only: the script exits nonzero when it cannot write the report, which must not fail Build.
+        continue-on-error: true
+        shell: pwsh
+        run: ./tools/TestImpact/Write-SelectionReport.ps1 -TypeImpactPlanFile type-impact-plan.json -EffectiveFile type-impact-effective.json
 
   # Everything the shards do NOT need, built concurrently with them instead of ahead of
   # them: the net471 compatibility compile, net8.0, and the pack that requires all three.
@@ -894,6 +924,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'CI impact workflow contract failed' }
           ./tools/TestImpact/Test-SelectAffectedTestsPassthrough.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Test-level selection pass-through proof failed' }
+          ./tools/TestImpact/Test-SelectAffectedTestsInertPaths.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Test-level selection inert-path proof failed' }
           ./tools/TestImpact/Test-TestImpactEndToEnd.ps1
           if ($LASTEXITCODE -ne 0) { throw 'Test-impact end-to-end proof failed' }
           ./tools/TestImpact/Test-CiGateModes.ps1
@@ -976,6 +1008,9 @@ jobs:
           Write-Host "shard list: $($all.Count) shard(s)"
 
           $escalate = $true
+          # Why the workflow overrode or bypassed the selector, for the selection report. Empty means the selector's own
+          # decision stands; selection.json existing (or not) cannot tell those apart, so every override sets it.
+          $decisionReason = ''
           $requiresValidation = $true
           # Defaults to true so every path that does not explicitly prove a change is build-only
           # still runs the shard matrix. Only the selector may lower it.
@@ -1034,11 +1069,13 @@ jobs:
             }
             catch {
               Write-Host "::warning::certified map provenance is invalid ($($_.Exception.Message)) - running the full matrix"
+              $decisionReason = 'the certified map provenance was invalid'
             }
           }
 
           if (-not $selectorTrusted) {
             Write-Host '::error::the impact tooling failed its own self-test - running the full matrix.'
+            $decisionReason = 'the impact tooling failed its own self-test'
             $deltaPartial = $false
           }
           elseif ($deltaPartial) {
@@ -1046,9 +1083,11 @@ jobs:
             $unknown = @(@($partialShards) + @($importShards) | Where-Object { -not $knownNames.Contains($_) })
             if ($unknown.Count -gt 0) {
               Write-Host "::warning::delta plan names shard(s) absent from test-shards.yml: $($unknown -join ', ') - running the full matrix"
+              $decisionReason = 'the post-merge delta plan named shard(s) absent from test-shards.yml'
               $deltaPartial = $false
             }
             else {
+              $decisionReason = 'post-merge delta reuse: shards come from the delta plan, so the selector did not run'
               $escalate = $false
               $requiresValidation = $true
               $requiresShards = $true
@@ -1075,6 +1114,7 @@ jobs:
             }
             catch {
               Write-Host "::warning::path classification unavailable ($($_.Exception.Message)) - runtime validation remains required"
+              $decisionReason = 'path classification was unavailable, so runtime validation stays required'
             }
 
             if (-not $pathRequiresValidation) {
@@ -1125,6 +1165,7 @@ jobs:
               }
               catch {
                 Write-Host "::warning::shard selection output unavailable or invalid ($($_.Exception.Message)) - running the full matrix"
+                $decisionReason = 'the selector output was unavailable or invalid'
                 $escalate = $true
                 $requiresValidation = $true
                 $requiresShards = $true
@@ -1133,6 +1174,7 @@ jobs:
             }
             else {
               Write-Host '::warning::no certified shard map - running the full matrix'
+              $decisionReason = 'no certified shard map was available'
             }
           }
 
@@ -1156,6 +1198,7 @@ jobs:
             if ($matrixShards.Count -ne $wanted.Count) {
               $missing = $wanted | Where-Object { $n = $_; -not ($all | Where-Object { $_.name -eq $n }) }
               Write-Host "::warning::selected shard(s) absent from test-shards.yml: $($missing -join ', ') - running the full matrix"
+              $decisionReason = 'the selector chose shard(s) absent from test-shards.yml'
               $matrixShards = $all
               $escalate = $true
             }
@@ -1183,6 +1226,7 @@ jobs:
           # that unexpectedly becomes empty still fails safe to the complete matrix.
           if ($requiresValidation -and $matrixShards.Count -eq 0) {
             Write-Host '::warning::shard selection produced an empty matrix - running the full matrix'
+            $decisionReason = 'shard selection produced an empty matrix'
             $matrixShards = $all
             $escalate = $true
           }
@@ -1193,6 +1237,7 @@ jobs:
             -RequiresValidation $requiresValidation -Escalated $escalate -ImportedNames $ledgerImports
           if ($runnable.Escalated -and -not $escalate) {
             Write-Host '::warning::no ordinary ledger-producing shard was selected; full validation is required for reuse evidence'
+            $decisionReason = 'no ordinary ledger-producing shard was selected; full validation is required for reuse evidence'
           }
           $matrixShards = @($runnable.Shards)
           $ledgerShards = @($runnable.LedgerShards)
@@ -1242,10 +1287,30 @@ jobs:
           "requires_shards=$($requiresShards.ToString().ToLowerInvariant())" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
 
-          $summary = if ($escalate) { "Running the full matrix ($($all.Count) shards)." }
-                     elseif (-not $requiresValidation) { 'Non-runtime-only change; no model or test jobs required.' }
-                     else { "Selected **$($matrixShards.Count)** of $($all.Count) shards from coverage." }
-          "### Shard selection`n`n$summary" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          if (-not $requiresValidation) {
+            "### Shard selection`n`nNon-runtime-only change; no model or test jobs required." |
+              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+          else {
+            # The full decision, not just the verdict: what forced the full matrix, what coverage alone would have
+            # selected, every changed file's category and shards, and every selected shard's reasons. Report-only:
+            # it reads the decision files and cannot change the matrix, so a failure here only warns.
+            try {
+              & ./tools/TestImpact/Write-SelectionReport.ps1 -SelfTest | Out-Null
+              if ($LASTEXITCODE -ne 0) { throw 'its self-test failed' }
+              $finalCount = if ($escalate) { $all.Count } else { @($matrixShards).Count }
+              & ./tools/TestImpact/Write-SelectionReport.ps1 -SelectionFile selection.json -TotalShards $all.Count `
+                  -FinalShardCount $finalCount -FinalEscalated:$escalate -WorkflowReason $decisionReason `
+                  -ReportFile selection-report.json
+              if ($LASTEXITCODE -ne 0) { throw "the report script exited $LASTEXITCODE" }
+            }
+            catch {
+              Write-Host "::warning::selection report not written: $($_.Exception.Message)"
+              $verdict = if ($escalate) { "Running the full matrix ($($all.Count) shards)." }
+                         else { "Selected **$(@($matrixShards).Count)** of $($all.Count) shards." }
+              "### Shard selection`n`n$verdict" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            }
+          }
 
           $carried = @()
           $runWithoutInstrumentation = @()
@@ -1364,6 +1429,22 @@ jobs:
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "coverage_run_without_instrumentation=$(ConvertTo-Json -InputObject @($runWithoutInstrumentation) -Depth 3 -Compress)" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      # The selection's full record (selection.json plus the rendered report), for the replay tooling and for
+      # anyone asking why a run selected what it did. Report-only; never gates anything.
+      - name: Upload shard selection report
+        if: always()
+        # Report-only: a transient artifact-service failure must not fail Select shards and block the matrix.
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        with:
+          name: shard-selection-report
+          path: |
+            selection.json
+            selection-report.json
+          if-no-files-found: ignore
+          retention-days: 14
+          overwrite: true
 
       - name: Upload carried digests
         if: ${{ inputs.collect_coverage_everywhere }}

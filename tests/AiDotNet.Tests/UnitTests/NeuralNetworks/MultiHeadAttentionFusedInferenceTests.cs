@@ -46,7 +46,7 @@ public class MultiHeadAttentionFusedInferenceTests
     [InlineData(128)]
     public void FusedInference_MatchesDecomposed_SelfAttention(int batch)
     {
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
 
         var layer = new MultiHeadAttentionLayer<float>(
             HeadCount, HeadDim, (IActivationFunction<float>)new IdentityActivation<float>());
@@ -89,7 +89,7 @@ public class MultiHeadAttentionFusedInferenceTests
     [Fact]
     public void FusedInference_Preserves2DRank_AndMatchesDecomposed()
     {
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
 
         var layer = new MultiHeadAttentionLayer<float>(
             HeadCount, HeadDim, (IActivationFunction<float>)new IdentityActivation<float>());
@@ -123,7 +123,7 @@ public class MultiHeadAttentionFusedInferenceTests
     [InlineData(128)]
     public void Transformer_Predict_FusedAttention_ShapeAndDeterminism(int batch)
     {
-        AiDotNetEngine.ResetToCpu();
+        AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
 
         var arch = new TransformerArchitecture<float>(
             inputType: InputType.OneDimensional,
