@@ -1608,7 +1608,7 @@ shard:
   - name: Unassigned - 02
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
-    # 135 classes, about 344 s of test time measured locally.
+    # 139 classes, about 344 s of test time measured locally (before 4 small classes were added).
     filter: >-
       Category!=GPU&Category!=Stress&Category!=Sweep&(
       FullyQualifiedName~AiDotNet.Tests.ActiveLearning.ActiveLearningStrategyTests.|
@@ -1652,6 +1652,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.DenseLayerInvariantTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.DenseLayerWithReLUInvariantTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.FlattenLayerInvariantTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.InteractingLayerInvariantTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.LayerInvariantCoverageTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.LayerNormalizationInvariantTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.RMSNormalizationInvariantTests.|
@@ -1695,10 +1696,13 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.LayerInputDomainTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.ALiBiPositionalBiasLayerTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.BiasFreeLinearLayerTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.BidirectionalRecurrentRegressionTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.GatedDeltaProductTapeRegressionTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.GroupedQueryAttentionGradientTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.GroupedQueryAttentionLayerTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.PANNsPoolingLayerTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.PiecewiseLinearEncodingLayerInvariantTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.PiecewiseLinearEncodingLayerTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.RotaryPositionalEncodingLayerTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.ExtendedLSTMLayerTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.GatedDeltaNetLayerTests.|
