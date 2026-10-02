@@ -131,6 +131,7 @@ $script:NonRuntimeWorkflowPaths = @(
     '.github/workflows/commitlint-fix.yml',
     '.github/workflows/commitlint.yml',
     '.github/workflows/copilot-review-gate.yml',
+    '.github/workflows/cross-isa-agreement-nightly.yml',
     '.github/workflows/deploy-serving.yml',
     '.github/workflows/deploy-website.yml',
     '.github/workflows/docs-wiki.yml',
@@ -184,6 +185,9 @@ function Get-ChangedPathImpact {
     }
     if (Test-SelectionControl -Path $normalized) {
         return [ChangedPathImpact]::SelectionControl
+    }
+    if (Test-ScriptUsedOnlyByIndependentWorkflows -Path $normalized) {
+        return [ChangedPathImpact]::NonRuntime
     }
     if (Test-SharedInfrastructure -Path $normalized) {
         return [ChangedPathImpact]::FullValidation
@@ -308,6 +312,26 @@ function Test-GitHubFileReferenced {
     return $referenced
 }
 
+function Test-ScriptUsedOnlyByIndependentWorkflows {
+    param([Parameter(Mandatory)] [string] $Path)
+    # A .github/scripts file is full validation because a workflow step may run it. When every file
+    # that names it is a workflow already reviewed as independent of this validation workflow (a
+    # nightly, a deploy), no step of this workflow runs it and no shard can observe the change. Any
+    # other referrer (this workflow, an action, another script that may be dot-sourced) keeps it full.
+    # #2272 changed .github/scripts/Compare-IsaVerdicts.ps1, used only by the cross-ISA nightly, and
+    # ran all 165 shards for it.
+    if (-not $Path.StartsWith('.github/scripts/', [StringComparison]::OrdinalIgnoreCase)) { return $false }
+    $name = [IO.Path]::GetFileName($Path)
+    if ($name.Length -lt 6) { return $false }
+    $pattern = '(^|[^A-Za-z0-9_.-])' + [regex]::Escape($name) + '($|[^A-Za-z0-9_.-])'
+    $referrers = @(& git -c core.quotepath=false grep -l -i -E $pattern HEAD -- '.github/' 'tools/' ":(exclude)$Path" ':(exclude)tools/TestImpact/Select-Shards.ps1' 2>$null)
+    if ($LASTEXITCODE -gt 1 -or $referrers.Count -eq 0) { return $false }
+    foreach ($referrer in $referrers) {
+        $file = ([string] $referrer) -replace '^HEAD:', ''
+        if ($file -notin $script:NonRuntimeWorkflowPaths) { return $false }
+    }
+    return $true
+}
 <#
 .SYNOPSIS
 Fails when a directory trusted as non-runtime has started holding compilable code.
@@ -1984,31 +2008,33 @@ function Find-GitReferrers {
     return @($output | ForEach-Object { ([string] $_) -replace '^HEAD:', '' })
 }
 
-function Test-ReviewedGeneratedDependencyInputs {
-    param([Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $Entries)
-    if ($Entries.Count -eq 0) { return $false }
-    $bytes = [Text.Encoding]::UTF8.GetBytes(($Entries -join "`n"))
-    $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
-    return $digest -ceq '94E8E69A0BEC88675F29D574F3995708276B937D054AB444DFBC5DBF03BEBC37'
+function Test-GeneratedDependencyInputPath {
+    param([Parameter(Mandatory)] [string] $Path)
+    # The inputs that decide which bases and collections build-time generated test classes use: the
+    # generators themselves and every project/build file that configures them.
+    return $Path -match '^(src/AiDotNet\.Generators/|(.*/)?global\.json$)' -or
+        $Path -match '\.(csproj|props|targets)$'
 }
 
 function Test-ReviewedGeneratedDependencies {
+    param([Parameter(Mandatory)] [AllowEmptyCollection()] [string[]] $ChangedPaths)
     # Reviewed emitter contract, NOT an exemption for a particular base/collection:
     # TestScaffoldGenerator's GetBaseClassName and algorithm switch return literal
     # base names; remaining emitters spell their base/collection dependencies directly.
-    # Find-GitBuildTimeReferences therefore detects every generated dependency for
-    # this exact generator/build-input revision. Other generators augment existing
-    # declarations, not independent xUnit descendants. Never assume this stays true
-    # after generator or analyzer/project configuration changes: fail closed then.
-    $generatorTree = & git rev-parse HEAD:src/AiDotNet.Generators 2>$null
-    if ($LASTEXITCODE -ne 0) { return $false }
-    $entries = @("generator-tree:$generatorTree") + @(& git -c core.quotepath=false ls-tree -r HEAD | Where-Object {
-        $_ -match '\t(src/AiDotNet.Generators/|.*\.(csproj|props|targets)$|global\.json$)'
-    })
-    if ($LASTEXITCODE -ne 0) { return $false }
-    return Test-ReviewedGeneratedDependencyInputs -Entries $entries
+    # Find-GitBuildTimeReferences therefore detects every generated dependency for the
+    # generator revision this change builds with. Other generators augment existing
+    # declarations, not independent xUnit descendants.
+    #
+    # Fail closed when THIS change edits a generator or build input, because then the
+    # contract above is exactly what may no longer hold. It used to pin a SHA-256 of every
+    # generator and project file instead; master's next package bump changed that digest,
+    # so from the day it merged the contract was "unknown" for every pull request and each
+    # edit to a collection definition or abstract test base ran the full matrix (#2243).
+    foreach ($path in $ChangedPaths) {
+        if (Test-GeneratedDependencyInputPath -Path $path) { return $false }
+    }
+    return $true
 }
-
 function Test-CSharpCollectionConsumer {
     param([Parameter(Mandatory)] [AllowEmptyString()] [string] $Text,
         [Parameter(Mandatory)] [string[]] $Names)
@@ -2618,7 +2644,13 @@ file class Private { }
             'dependabot.yml, which no workflow reads, is not NonRuntime'
     }
     if (Test-Path -LiteralPath '.github/scripts/Invoke-Shard.ps1') {
-        Assert-True ((Get-ChangedPathImpact -Path '.github/scripts/Invoke-Shard.ps1') -eq [ChangedPathImpact]::FullValidation) `
+        Assert-True ((Get-ChangedPathImpact -Path '.github/scripts/Compare-IsaVerdicts.ps1') -eq [ChangedPathImpact]::NonRuntime) `
+        'a script only the cross-ISA nightly runs was treated as validation infrastructure'
+    Assert-True ((Get-ChangedPathImpact -Path '.github/scripts/find-pr-new-failures.ps1') -eq [ChangedPathImpact]::FullValidation) `
+        'a script this validation workflow runs was spared'
+    Assert-True (-not (Test-ScriptUsedOnlyByIndependentWorkflows -Path '.github/scripts/no-such-script-anywhere.ps1')) `
+        'an unreferenced script was spared without review'
+    Assert-True ((Get-ChangedPathImpact -Path '.github/scripts/Invoke-Shard.ps1') -eq [ChangedPathImpact]::FullValidation) `
             'a script the test workflow invokes (Invoke-Shard.ps1) was downgraded'
     }
     Assert-True ((Get-ChangedPathImpact -Path '.github/a.yml') -eq [ChangedPathImpact]::FullValidation) `
@@ -2782,8 +2814,12 @@ class Current { }
     Assert-True (Test-CSharpCollectionConsumer -Text '[Collection("Sha" + "red")] class T { }' -Names @('Shared')) 'computed collection name was excluded'
     Assert-True (Test-CSharpCollectionConsumer -Text 'using Alias = Xunit.CollectionAttribute; [Alias("Shared")] class T { }' -Names @('Shared')) 'aliased collection consumer was excluded'
     Assert-True (-not (Test-CSharpCollectionConsumer -Text '// [Collection("Shared")]' -Names @('Shared'))) 'comment was treated as a collection consumer'
-    Assert-True (-not (Test-ReviewedGeneratedDependencyInputs -Entries @())) 'empty generator evidence was accepted'
-    Assert-True (-not (Test-ReviewedGeneratedDependencyInputs -Entries @('changed generator'))) 'changed generator evidence was accepted'
+    Assert-True (Test-ReviewedGeneratedDependencies -ChangedPaths @()) 'an empty change was treated as a generator change'
+    Assert-True (Test-ReviewedGeneratedDependencies -ChangedPaths @('src/Models/Model.cs', 'tests/P/Alpha/AlphaTests.cs', 'docs/README.md')) 'a change outside the generator inputs was treated as one'
+    foreach ($inputPath in @('src/AiDotNet.Generators/TestScaffoldGenerator.cs', 'Directory.Packages.props', 'Directory.Build.targets',
+            'tests/AiDotNet.Tests/AiDotNetTests.csproj', 'global.json', 'src/sub/global.json')) {
+        Assert-True (-not (Test-ReviewedGeneratedDependencies -ChangedPaths @('src/Models/Model.cs', $inputPath))) "a change to $inputPath kept the generated-dependency contract"
+    }
     $emitter = ConvertTo-CodeOnlyCSharp -Text '// FakeBase appears only in a comment
 var source = "class Test : RealBase { } // string contents survive"; /* AnotherFakeBase */' -PreserveStrings
     Assert-True ($emitter -notmatch 'FakeBase' -and $emitter -match 'RealBase' -and $emitter -match 'string contents survive') 'generator comment filtering removed emitted dependencies or retained comments'
@@ -3298,7 +3334,7 @@ try {
             -FindReferrers { param($names, $directory) Find-GitReferrers -Names $names -Directory $directory } `
             -FindBuildTimeReferences { param($names) Find-GitBuildTimeReferences -Names $names } `
             -FindCollectionReferrers { param($names, $directory) Find-GitCollectionReferrers -Names $names -Directory $directory } `
-            -GeneratedDependenciesKnown (Test-ReviewedGeneratedDependencies) `
+            -GeneratedDependenciesKnown (Test-ReviewedGeneratedDependencies -ChangedPaths $currentPaths) `
             -GeneratedDependencyProjects @('tests/AiDotNet.Tests/')
     }
 
