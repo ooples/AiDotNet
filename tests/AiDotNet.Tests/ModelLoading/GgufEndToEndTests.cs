@@ -18,6 +18,8 @@ namespace AiDotNet.Tests.ModelLoading
     /// run a forward pass. Exercises metadata→config, GGUF→Hugging Face name remapping, tie-detection, and a
     /// non-llama-named (qwen2) architecture.
     /// </summary>
+    // Sets AiDotNetEngine.Current, a process-wide static: run apart from every other test class.
+    [Collection("EngineCurrentGlobalState")]
     public class GgufEndToEndTests
     {
         /// <summary>
@@ -134,7 +136,7 @@ namespace AiDotNet.Tests.ModelLoading
             }
             finally
             {
-                AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+                AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
             }
         }
 
@@ -192,7 +194,7 @@ namespace AiDotNet.Tests.ModelLoading
             }
             finally
             {
-                AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+                AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
                 gpuEngine.Dispose();
             }
         }
@@ -234,7 +236,7 @@ namespace AiDotNet.Tests.ModelLoading
                 return;
             }
 
-            AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+            AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
             var (model, _) = PretrainedLoader<float>.LoadGgufWithTokenizer(path);
             var net = (NeuralNetwork<float>)model;
 
@@ -268,7 +270,7 @@ namespace AiDotNet.Tests.ModelLoading
                     xg = mat;
                 }
             }
-            finally { AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu(); }
+            finally { AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu(); }
 
             var cpuOuts = new System.Collections.Generic.List<float[]>();
             {
@@ -329,7 +331,7 @@ namespace AiDotNet.Tests.ModelLoading
                 return;
             }
 
-            AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+            AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
             var (model, _) = PretrainedLoader<float>.LoadGgufWithTokenizer(path);
             var net = (NeuralNetwork<float>)model;
             var ids = new[] { 504, 3575, 282, 4649, 314 };
@@ -370,7 +372,7 @@ namespace AiDotNet.Tests.ModelLoading
 
             AiDotNet.Tensors.Engines.AiDotNetEngine.Current = gpuEngine;
             System.Collections.Generic.List<(string Name, float[] Data)> gpu;
-            try { gpu = RunSubOps(); } finally { AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu(); }
+            try { gpu = RunSubOps(); } finally { AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu(); }
             var cpu = RunSubOps();
 
             var report = new StringBuilder();
@@ -428,7 +430,7 @@ namespace AiDotNet.Tests.ModelLoading
                 }
                 else
                 {
-                    AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+                    AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
                 }
                 try
                 {
@@ -460,7 +462,7 @@ namespace AiDotNet.Tests.ModelLoading
                 }
                 finally
                 {
-                    AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+                    AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu();
                     gpuEngine?.Dispose();
                 }
             }
@@ -475,7 +477,7 @@ namespace AiDotNet.Tests.ModelLoading
                     gpuEngine = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine();
                     AiDotNet.Tensors.Engines.AiDotNetEngine.Current = gpuEngine;
                 }
-                else { AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu(); }
+                else { AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu(); }
                 try
                 {
                     var (m, _) = PretrainedLoader<float>.LoadGgufWithTokenizer(path);
@@ -496,7 +498,7 @@ namespace AiDotNet.Tests.ModelLoading
                     int aWrap = Arg(wrap.Forward(new Tensor<float>(inp.Contiguous().AsSpan().ToArray(), inp.Shape.ToArray())));
                     return (aModel, aWrap);
                 }
-                finally { AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu(); gpuEngine?.Dispose(); }
+                finally { AiDotNet.Tests.TestInfrastructure.TestEngines.EnsureCpu(); gpuEngine?.Dispose(); }
             }
 
             var cpuDirect = RunDirect(false);

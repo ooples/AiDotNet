@@ -144,7 +144,8 @@ namespace Probe
         var tested = Assert.IsType<InitializerExpressionSyntax>(names.Initializer).Expressions
             .Select(expression => ((LiteralExpressionSyntax)expression).Token.ValueText)
             .ToArray();
-        // The report lists models by fully-qualified name (#2091), so the sibling is named exactly.
+        // Fully qualified: the report has named models by FullyQualifiedName since aaa175c7be (#2091). Still exact:
+        // the numbered variant SAM2 is the only tested model, and its shorter sibling SAM is not.
         Assert.Equal(new[] { "global::Probe.SAM2" }, tested);
     }
 

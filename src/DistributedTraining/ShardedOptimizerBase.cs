@@ -490,7 +490,7 @@ public abstract partial class ShardedOptimizerBase<T, TInput, TOutput> : ISharde
         // the follow-up AllReduce/ReduceScatter sees the just-produced gradient
         // values instead of the uninitialized bytes GC.AllocateUninitializedArray
         // left in place (see AiDotNet.Tensors PR #604 FinishGpuOp).
-        AiDotNet.Tensors.Helpers.DeferredArrayMaterializer.TryMaterialize(array);
+        AiDotNet.Tensors.Helpers.HostSync.TryMaterialize(array);
         // Drop the GPU cache entry so the next op that touches this array
         // re-uploads from CPU (which now holds the post-reduce shard). Without
         // this the GPU engine's persistent-weight cache would keep serving the
@@ -537,7 +537,7 @@ public abstract partial class ShardedOptimizerBase<T, TInput, TOutput> : ISharde
         // values, THEN invalidate the GPU cache so the next forward
         // re-uploads (the point of CpuOffloadParams is that params live on
         // CPU between steps; the GPU sees them only during the next forward).
-        AiDotNet.Tensors.Helpers.DeferredArrayMaterializer.TryMaterialize(array);
+        AiDotNet.Tensors.Helpers.HostSync.TryMaterialize(array);
         gpu.InvalidateWeightCache(array);
     }
 

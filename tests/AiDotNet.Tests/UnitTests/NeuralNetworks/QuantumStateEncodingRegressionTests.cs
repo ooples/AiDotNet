@@ -35,6 +35,8 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 /// directly as the amplitudes, so <c>sum |psi_i|^2 == 1</c>.
 /// </para>
 /// </remarks>
+// Sets AiDotNetEngine.Current, a process-wide static: run apart from every other test class.
+[Collection("EngineCurrentGlobalState")]
 public class QuantumStateEncodingRegressionTests
 {
     private static Tensor<float> Input(Func<int, float> f, int n = 128)
@@ -245,10 +247,16 @@ public class QuantumStateEncodingRegressionTests
     /// </summary>
     private static bool PreservesSubnormalsInArithmetic(IDirectGpuBackend backend)
     {
+        // Measured through arithmetic, as the name says: a comparison (the max below) passes a subnormal through
+        // even on a device that flushes it to zero in arithmetic, and the layer's prescaling divides by the row's
+        // maximum magnitude. Probing with the max alone reported "preserves" on such a device, and the test then
+        // demanded the CPU's value for a row the device had legitimately flushed.
         using var source = backend.AllocateBuffer(RowWidth);
         backend.Fill(source, float.Epsilon, RowWidth);
+        using var scaled = backend.AllocateBuffer(RowWidth);
+        backend.Scale(source, scaled, 1.0f, RowWidth);
         using var reduced = backend.AllocateBuffer(1);
-        backend.MaxAxis(source, reduced, 1, RowWidth);
+        backend.MaxAxis(scaled, reduced, 1, RowWidth);
         var host = new float[1];
         backend.DownloadBuffer(reduced, host);
         return host[0] > 0f;

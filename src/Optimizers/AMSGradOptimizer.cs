@@ -122,6 +122,9 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     {
         config = default;
         if (_options.UseAdaptiveLearningRate) return false;
+        // The fused kernel implements PyTorch's bias-corrected AMSGrad only. The paper variant (the default) trains
+        // on the eager path, so fused and eager never run different formulas for the same option.
+        if (_options.BiasCorrection != AMSGradBiasCorrection.PyTorch) return false;
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.AMSGrad,
@@ -139,6 +142,31 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// preparing the optimizer for a new optimization run.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The learning rate and epsilon to hand a PyTorch (bias-corrected) AMSGrad kernel so it computes the configured
+    /// variant. For the paper, lr·bc1/sqrt(bc2) and eps/sqrt(bc2) turn lr·(m/bc1)/(sqrt(vMax/bc2)+eps) into
+    /// lr·m/(sqrt(vMax)+eps) exactly, with bc1 = 1-beta1^t and bc2 = 1-beta2^t.
+    /// </summary>
+    private (float LearningRate, float Epsilon) KernelLearningRateAndEpsilon(double learningRate, int step)
+    {
+        if (_options.BiasCorrection == AMSGradBiasCorrection.PyTorch)
+        {
+            return ((float)learningRate, (float)_options.Epsilon);
+        }
+
+        double bc1 = 1 - Math.Pow(_options.Beta1, step);
+        double sqrtBc2 = Math.Sqrt(1 - Math.Pow(_options.Beta2, step));
+        return ((float)(learningRate * bc1 / sqrtBc2), (float)(_options.Epsilon / sqrtBc2));
+    }
+
+    /// <summary>The first-moment bias correction for step <paramref name="step"/>: 1 - beta1^t, or 1 for the paper.</summary>
+    private double FirstMomentCorrection(int step)
+        => _options.BiasCorrection == AMSGradBiasCorrection.PyTorch ? 1 - Math.Pow(_options.Beta1, step) : 1.0;
+
+    /// <summary>The correction applied to the running max of the second moment: 1 - beta2^t, or 1 for the paper.</summary>
+    private double SecondMomentCorrection(int step)
+        => _options.BiasCorrection == AMSGradBiasCorrection.PyTorch ? 1 - Math.Pow(_options.Beta2, step) : 1.0;
+
     protected override void InitializeAdaptiveParameters()
     {
         base.InitializeAdaptiveParameters();
@@ -301,7 +329,8 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
         T oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
         T epsilon = NumOps.FromDouble(_options.Epsilon);
-        T biasCorrectionFactor = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t));
+        T biasCorrection1 = NumOps.FromDouble(FirstMomentCorrection(_t));
+        T biasCorrection2 = NumOps.FromDouble(SecondMomentCorrection(_t));
 
         // Update all three state vectors in place and write the result directly. This retains
         // AMSGrad's raw-second-moment maximum while eliminating the former vector-op chain.
@@ -331,8 +360,8 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
             T vHat = NumOps.GreaterThan(vHatSpan[i], v) ? vHatSpan[i] : v;
             vHatSpan[i] = vHat;
 
-            T mHat = NumOps.Divide(m, biasCorrectionFactor);
-            T denominator = NumOps.Add(NumOps.Sqrt(vHat), epsilon);
+            T mHat = NumOps.Divide(m, biasCorrection1);
+            T denominator = NumOps.Add(NumOps.Sqrt(NumOps.Divide(vHat, biasCorrection2)), epsilon);
             T update = NumOps.Divide(NumOps.Multiply(mHat, learningRate), denominator);
             outSpan[i] = NumOps.Subtract(pSpan[i], update);
         }
@@ -358,7 +387,8 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
         T oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
         T epsilon = NumOps.FromDouble(_options.Epsilon);
-        T biasCorrection1 = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _tapeStep));
+        T biasCorrection1 = NumOps.FromDouble(FirstMomentCorrection(_tapeStep));
+        T biasCorrection2 = NumOps.FromDouble(SecondMomentCorrection(_tapeStep));
 
         // GPU-resident step (AIDOTNET_GPU_ADAM=1); gated off, CPU fallback per-param when not GPU-resident.
         bool gpuAdam = typeof(T) == typeof(float)
@@ -375,8 +405,8 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
                 if (!_tapeM.TryGetValue(param, out var mSp)) { mSp = new Tensor<T>(param._shape); _tapeM[param] = mSp; }
                 if (!_tapeV.TryGetValue(param, out var vSp)) { vSp = new Tensor<T>(param._shape); _tapeV[param] = vSp; }
                 if (!_tapeVHat.TryGetValue(param, out var vHatSp)) { vHatSp = new Tensor<T>(param._shape); _tapeVHat[param] = vHatSp; }
-                double bc1 = 1.0 - Math.Pow(_options.Beta1, _tapeStep);
-                double bc2 = 1.0 - Math.Pow(_options.Beta2, _tapeStep);
+                double bc1 = FirstMomentCorrection(_tapeStep);
+                double bc2 = SecondMomentCorrection(_tapeStep);
                 if (SparseEmbeddingOptimizerHelpers.TryApplyAmsgradSparse(
                         param, mSp, vSp, vHatSp,
                         NumOps.ToDouble(CurrentLearningRate),
@@ -394,9 +424,12 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
             if (!_tapeV.TryGetValue(param, out var v)) { v = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) v.AsWritableSpan().Clear(); _tapeV[param] = v; }
             if (!_tapeVHat.TryGetValue(param, out var vHat)) { vHat = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) vHat.AsWritableSpan().Clear(); _tapeVHat[param] = vHat; }
 
+            // The GPU kernel is PyTorch's bias-corrected AMSGrad; KernelLearningRateAndEpsilon makes it compute the
+            // configured variant exactly.
+            var (kernelLr, kernelEps) = KernelLearningRateAndEpsilon(NumOps.ToDouble(CurrentLearningRate), _tapeStep);
             if (gpuAdam && param.Length == grad.Length
                 && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAmsgradStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)m, (Tensor<float>)(object)v, (Tensor<float>)(object)vHat,
-                    (float)NumOps.ToDouble(CurrentLearningRate), (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon, 0f, _tapeStep))
+                    kernelLr, (float)_options.Beta1, (float)_options.Beta2, kernelEps, 0f, _tapeStep))
                 continue;
 
             // m = beta1 * m + (1 - beta1) * grad
@@ -411,8 +444,8 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
             // mHat = m / (1 - beta1^t)
             var mHat = Engine.TensorDivideScalar(m, biasCorrection1);
 
-            // update = lr * mHat / (sqrt(vHat) + epsilon)
-            var denom = Engine.TensorAddScalar(Engine.TensorSqrt(vHat), epsilon);
+            // update = lr * mHat / (sqrt(vHat / bc2) + epsilon); bc1 = bc2 = 1 for the paper variant.
+            var denom = Engine.TensorAddScalar(Engine.TensorSqrt(Engine.TensorDivideScalar(vHat, biasCorrection2)), epsilon);
             var update = Engine.TensorMultiplyScalar(Engine.TensorDivide(mHat, denom), CurrentLearningRate);
             Engine.TensorSubtractInPlace(param, update);
         }
@@ -457,7 +490,7 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
 
         // === Vectorized Reverse AMSGrad Update using IEngine (Phase B: US-GPU-015) ===
         // Recalculate bias-corrected first moment: mHat = m / (1 - beta1^t)
-        T biasCorrection1 = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t));
+        T biasCorrection1 = NumOps.FromDouble(FirstMomentCorrection(_t));
         var biasCorrection1Vec = Vector<T>.CreateDefault(_m.Length, biasCorrection1);
         var mHat = (Vector<T>)Engine.Divide(_m, biasCorrection1Vec);
 
@@ -465,7 +498,8 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         var currentLrVec = Vector<T>.CreateDefault(_m.Length, CurrentLearningRate);
         var lrTimesMHat = (Vector<T>)Engine.Multiply(currentLrVec, mHat);
 
-        var vHatSqrt = (Vector<T>)Engine.Sqrt(_vHat);
+        var biasCorrection2Vec = Vector<T>.CreateDefault(_vHat.Length, NumOps.FromDouble(SecondMomentCorrection(_t)));
+        var vHatSqrt = (Vector<T>)Engine.Sqrt((Vector<T>)Engine.Divide(_vHat, biasCorrection2Vec));
         var epsilonVec = Vector<T>.CreateDefault(_vHat.Length, NumOps.FromDouble(_options.Epsilon));
         var denominator = (Vector<T>)Engine.Add(vHatSqrt, epsilonVec);
 
@@ -495,18 +529,26 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
             InitializeGpuState(parameterCount, backend);
         }
 
+        if (_gpuM is not { } gpuM || _gpuV is not { } gpuV || _gpuVMax is not { } gpuVMax)
+        {
+            throw new InvalidOperationException("AMSGrad GPU state was not allocated.");
+        }
+
         _t++;
 
+        // backend.AmsgradUpdate is PyTorch's bias-corrected kernel; the rescaled lr and epsilon make it compute the
+        // configured variant exactly (KernelLearningRateAndEpsilon).
+        var (kernelLr, kernelEps) = KernelLearningRateAndEpsilon(NumOps.ToDouble(CurrentLearningRate), _t);
         backend.AmsgradUpdate(
             parameters,
             gradients,
-            _gpuM!,
-            _gpuV!,
-            _gpuVMax!,
-            (float)NumOps.ToDouble(CurrentLearningRate),
+            gpuM,
+            gpuV,
+            gpuVMax,
+            kernelLr,
             (float)_options.Beta1,
             (float)_options.Beta2,
-            (float)_options.Epsilon,
+            kernelEps,
             0.0f, // AMSGrad doesn't use weight decay in standard formulation
             _t,
             parameterCount);

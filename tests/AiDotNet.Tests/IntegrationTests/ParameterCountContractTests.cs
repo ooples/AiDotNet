@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -88,13 +88,39 @@ public class ParameterCountContractTests
     /// Coverage is unchanged: every model is still measured, and no assertion is relaxed.
     /// </para>
     /// <para>
-    /// Slicing is round-robin (<c>index % ShardCount</c>) rather than contiguous because cost is
-    /// heavily clustered by name — the LLaVA, CogVideo and Emu families sit together in discovery
+    /// Slicing is by a stable hash of the type name (<see cref="ShardOf"/>) rather than contiguous because
+    /// cost is heavily clustered by name — the LLaVA, CogVideo and Emu families sit together in discovery
     /// order, and contiguous blocks would hand one shard nearly all of the expensive models while
-    /// the rest finished in seconds.
+    /// the rest finished in seconds. It replaced round-robin (<c>index % ShardCount</c>), which spread
+    /// cost as well but moved every later model to another shard whenever one model was added, so a
+    /// coverage map measured before the addition no longer described any shard.
     /// </para>
     /// </remarks>
     public const int ShardCount = 8;
+
+    /// <summary>
+    /// The shard a model belongs to: FNV-1a over its full name, modulo <see cref="ShardCount"/>. Stable across
+    /// processes and runtimes (string.GetHashCode is randomized per process), and independent of every
+    /// other model.
+    /// </summary>
+    internal static int ShardOf(Type modelType)
+    {
+        // The open definition's name (Ns.Model`1): a closed type's FullName embeds the runtime's assembly version.
+        var definition = modelType.IsGenericType ? modelType.GetGenericTypeDefinition() : modelType;
+        return ShardOf(definition.FullName ?? definition.Name);
+    }
+
+    /// <summary><see cref="ShardOf(Type)"/> by full name; Get-StableParameterCountShard in tools/TestImpact must agree.</summary>
+    internal static int ShardOf(string fullName)
+    {
+        uint hash = 2166136261;
+        foreach (char c in fullName)
+        {
+            hash = (hash ^ c) * 16777619;
+        }
+
+        return (int)(hash % ShardCount);
+    }
 
     /// <summary>
     /// Optional local/CI selector for running one shard in an isolated test-host process.
@@ -165,7 +191,7 @@ public class ParameterCountContractTests
         using var _logHandle = log;
 
         var allModelTypes = GetConstructableModelTypes().ToArray();
-        var modelTypes = allModelTypes.Where((_, i) => i % ShardCount == shardIndex).ToArray();
+        var modelTypes = allModelTypes.Where(t => ShardOf(t) == shardIndex).ToArray();
         _output.WriteLine($"Shard {shardIndex} of {ShardCount}: {modelTypes.Length} of " +
                           $"{allModelTypes.Length} constructable models.");
 
@@ -321,7 +347,7 @@ public class ParameterCountContractTests
         }
     }
 
-    private static IEnumerable<Type> GetConstructableModelTypes()
+    internal static IEnumerable<Type> GetConstructableModelTypes()
     {
         var assembly = typeof(AiDotNet.Models.ModelMetadata<>).Assembly;
         var open = assembly.GetTypes()

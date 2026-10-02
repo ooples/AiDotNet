@@ -46,6 +46,8 @@ namespace AiDotNet.Tests.StressTests;
 /// Run locally with: dotnet test --filter "Category=GPU"
 /// </remarks>
 [Trait("Category", "GPU")]
+// Sets AiDotNetEngine.Current, a process-wide static: run apart from every other test class.
+[Collection("EngineCurrentGlobalState")]
 public class GpuStressTests
 {
     private const int LongRunIterations = 10_000;
