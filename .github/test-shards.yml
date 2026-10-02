@@ -1598,6 +1598,7 @@ shard:
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.TransformerProductionScaleConvergenceIssue1221Tests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.TransformerTrainConvergenceTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.FusedOptimizerParityTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.FusedOptimizerScheduleAndClipParityTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.OptimizerVectorUpdateStateSafetyTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Training.TrainerTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Training.TrainingRecipeIntegrationTests.|
