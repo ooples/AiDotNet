@@ -235,6 +235,8 @@ public class InstanceSegmentationIntegrationTests
         }
 
         Assert.Equal(4, proposals.Shape[1]);
+        Assert.True(proposals.Shape[0] > 0, "The RPN produced no proposals, so the bounds checks below would be vacuous.");
+        Assert.True(proposals.Shape[0] <= 1000, $"{proposals.Shape[0]} proposals exceed the requested 1000.");
         for (int p = 0; p < proposals.Shape[0]; p++)
         {
             Assert.InRange(proposals[p, 0], 0, proposals[p, 2]);
@@ -242,6 +244,16 @@ public class InstanceSegmentationIntegrationTests
             Assert.InRange(proposals[p, 2], proposals[p, 0], imageSize);
             Assert.InRange(proposals[p, 3], proposals[p, 1], imageSize);
         }
+
+        // The cap keeps the highest-scoring proposals: with a cap below the uncapped count, the result
+        // is exactly the first rows of the uncapped ranking.
+        int cap = Math.Max(1, proposals.Shape[0] / 2);
+        Assert.True(cap < proposals.Shape[0], "Need more than one proposal to exercise the cap.");
+        var (_, capped, _, _) = model.ProposeRegions(Rand(1, 3, imageSize, imageSize), cap);
+        Assert.Equal(new[] { cap, 4 }, capped.Shape.ToArray());
+        for (int p = 0; p < cap; p++)
+            for (int k = 0; k < 4; k++)
+                Assert.Equal(proposals[p, k], capped[p, k]);
     }
 
     [Fact(Timeout = 120000)]
