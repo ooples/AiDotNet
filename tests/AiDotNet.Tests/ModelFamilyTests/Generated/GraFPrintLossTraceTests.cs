@@ -32,8 +32,12 @@ public class GraFPrintLossTraceTests : EmbeddingModelTestBase<float>
             EncoderEmbeddingDim = 16,
             ProjectionExpansion = 2,
             DropoutRate = 0.0,
-            LearningRate = 3e-4,
-            MinimumLearningRate = 3e-6,
+            // The paper's schedule (Adam, 8e-5 cosine-annealed to 7e-7), the GraFPrintOptions defaults. At 3e-4
+            // the 10-step conformance runs were chaotic (training loss 1.40, 2.11, 0.40, 1.24): the dynamic k-NN
+            // graph and batch-4 BatchNorm statistics turned ULP-level differences into opposite verdicts, so
+            // the same weights passed eager and failed compiled on Linux. At 8e-5 both paths agree step for step.
+            LearningRate = 8e-5,
+            MinimumLearningRate = 7e-7,
             LRSchedulerTMax = 100,
         });
     }
