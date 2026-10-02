@@ -5010,6 +5010,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// stays eligible to fail the guard, whose worst case is a fallback to the eager tape, not a silent no-op.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// The single global-norm bound equivalent to clipping at <paramref name="first"/> and then at
+    /// <paramref name="second"/>, where 0 (or less) means that clip is off. Returns 0 when both are off.
+    /// </summary>
+    internal static double SmallerPositiveGradNorm(double first, double second)
+    {
+        if (first <= 0.0) return second > 0.0 ? second : 0.0;
+        if (second <= 0.0) return first;
+        return Math.Min(first, second);
+    }
     private static bool FusedStepCouldHaveMovedParameters(
         AiDotNet.Optimizers.Fused.FusedOptimizerConfig config,
         double learningRate,
@@ -12634,6 +12644,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         double wd = fusedCfg.WeightDecay;
         var lrSched = fusedCfg.Schedule;
         bool useBf16Moments = fusedCfg.UseBf16Moments;
+        // The eager path clips twice: the model's MaxGradNorm in TrainWithTape, then the optimizer's own global-norm
+        // clip inside its Step. Two successive global-norm clips equal one clip at the smaller bound, so the compiled
+        // plan gets that one. Passing only the model's bound let the fused step skip the optimizer's clip: a different
+        // training whenever a gradient sits near Adam's epsilon.
+        double fusedMaxGradNorm = SmallerPositiveGradNorm(MaxGradNormValue, fusedCfg.MaxGradientNorm);
 
         // Use the existing recursive trainable-layer collector instead of the
         // top-level-only scan — composite layers with trainable children (e.g.,
@@ -12797,7 +12812,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 epsilon: eps,
                 weightDecay: wd,
                 out lossValue,
-                maxGradNorm: MaxGradNormValue,
+                maxGradNorm: fusedMaxGradNorm,
                 lrSchedule: lrSched,
                 useBf16Moments: useBf16Moments,
                 // Lets the compiled FP16-activation path (AIDOTNET_FP16_ACTIVATIONS=1) cover
