@@ -73,7 +73,7 @@ public partial class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>,
     /// <inheritdoc />
     /// <remarks>
     /// Traced from output construction: PredictCore returns ForwardNative, whose last step is
-    /// <c>_classifierLayer.Forward(...)</c> - the final layer of the shared ECAPA-TDNN factory,
+    /// the language head of <see cref="EcapaTdnnLanguageClassifier{T}"/> - the final layer of the network,
     /// sized by <c>numLanguages: _languageIdToCode.Count</c>. A class count, not an embedding size:
     /// EmbeddingDimension is the pooling width one layer earlier.
     /// </remarks>
@@ -91,18 +91,8 @@ public partial class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>,
     private readonly ILossFunction<T> _lossFunction;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
-    // ECAPA-TDNN architecture components
-    private readonly List<ILayer<T>> _tdnnLayers = [];
-    private readonly List<ILayer<T>> _seBlocks = [];
-    private readonly List<ILayer<T>> _resBlocks = [];
-    private DenseLayer<T>? _poolingLayer;
-    private DenseLayer<T>? _classifierLayer;
-    private BatchNormalizationLayer<T>? _finalBatchNorm;
-
-    // Cached values for proper gradient flow in MFA
-    private readonly List<int> _blockOutputLengths = [];
-    [Scratch]
-    private Tensor<T>? _lastTdnnOutput;
+    // The ECAPA-TDNN network: the convolutional encoder and the language head.
+    private EcapaTdnnLanguageClassifier<T>? _network;
 
     // Language mapping
     private readonly Dictionary<int, string> _languageIdToCode;
@@ -237,48 +227,11 @@ public partial class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>,
 
     private void InitializeNativeLayers()
     {
-        // Build the default ECAPA-TDNN stack from the shared factory - the one VoxLingua107Identifier
-        // also uses - and partition the flat list back into the typed roles the forward needs. This
-        // used to build a second, private copy of the stack by hand, so the forward ran on layers
-        // Layers never held and Train's optimizer step reached none of them.
-        var built = LayerHelper<T>.CreateDefaultECAPATDNNLanguageIdentifierLayers(
-            Architecture,
-            numMels: _options.NumMels,
-            tdnnChannels: _options.TdnnChannels,
-            embeddingDimension: _options.EmbeddingDimension,
-            numLanguages: _languageIdToCode.Count,
-            dilations: _options.Dilations).ToList();
-
-        int index = 0;
-
-        // Initial TDNN: DenseLayer + BatchNormalizationLayer.
-        _tdnnLayers.Add(built[index++]);
-        _tdnnLayers.Add(built[index++]);
-
-        // One SE-Res2 block per dilation: six residual-path layers, then two squeeze-excitation
-        // layers. The forward indexes residual layers 6-per-block and SE layers 2-per-block.
-        foreach (int _ in _options.Dilations)
-        {
-            for (int i = 0; i < 6; i++)
-            {
-                _resBlocks.Add(built[index++]);
-            }
-
-            _seBlocks.Add(built[index++]);
-            _seBlocks.Add(built[index++]);
-        }
-
-        // Attentive-statistics-pooling projection, final BatchNorm, classifier head.
-        _poolingLayer = (DenseLayer<T>)built[index++];
-        _finalBatchNorm = (BatchNormalizationLayer<T>)built[index++];
-        _classifierLayer = (DenseLayer<T>)built[index++];
-
-        if (index != built.Count)
-        {
-            throw new InvalidOperationException(
-                $"The ECAPA-TDNN factory produced {built.Count} layers but the role partition consumed " +
-                $"{index}; the factory layout and this partition have drifted apart.");
-        }
+        // One network, shared with VoxLingua107Identifier: real 1-D convolutions over time, the
+        // paper's SE-Res2Blocks, MFA and attentive statistics pooling, then the language head. Its
+        // layers are published through Layers, so training, serialization and clone walk the same
+        // instances the forward runs.
+        _network = new EcapaTdnnLanguageClassifier<T>(_options, _languageIdToCode.Count);
     }
 
     #endregion
@@ -483,6 +436,33 @@ public partial class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>,
 
     #region NeuralNetworkBase Abstract Methods
 
+    private bool _lazyShapesProbed;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The base walk feeds the architecture's input shape through Layers as if they were one
+    /// sequential chain. ECAPA-TDNN is not: it reshapes features to [B, F, T], splits channels for
+    /// Res2Net, concatenates block outputs for MFA and pools over time, so that walk would size the
+    /// first convolution from the fixture's width rather than the feature width. Resolve through the
+    /// real topology instead, with a short synthetic clip run through the real preprocessing.
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_lazyShapesProbed || IsOnnxMode || _network is null) return;
+        _lazyShapesProbed = true;
+
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            _ = ForwardNative(PreprocessAudio(new Tensor<T>(new[] { _options.FftSize + 8 * _options.HopLength })));
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
+    }
+
     /// <inheritdoc/>
     protected override void InitializeLayers()
     {
@@ -504,7 +484,10 @@ public partial class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>,
         // needs their block roles; parameters, gradients, the optimizer, serialization and clone need
         // the same instances.
         InitializeNativeLayers();
-        Layers.AddRange(GetAllLayers());
+        if (_network is not null)
+        {
+            Layers.AddRange(_network.Layers);
+        }
     }
 
     /// <inheritdoc/>
@@ -549,88 +532,15 @@ public partial class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>,
             return customOutput;
         }
 
-        var output = features;
-
-        // TDNN layers
-        foreach (var layer in _tdnnLayers)
+        // The default ECAPA-TDNN topology: convolutions, Res2Net splits, squeeze-excitation, MFA and
+        // attentive statistics pooling, all wired by the shared network.
+        if (_network is null)
         {
-            output = layer.Forward(output);
+            throw new InvalidOperationException("The ECAPA-TDNN network has not been initialized.");
         }
 
-        // Cache TDNN output for backward pass
-        _lastTdnnOutput = output;
-
-        // Collect outputs for MFA
-        var blockOutputs = new List<Tensor<T>>();
-        _blockOutputLengths.Clear();
-
-        // SE-Res2Net blocks
-        int blockIdx = 0;
-        foreach (int _ in _options.Dilations)
-        {
-            var residual = output;
-
-            // Process through res block layers (6 per block)
-            for (int i = 0; i < 6 && blockIdx * 6 + i < _resBlocks.Count; i++)
-            {
-                output = _resBlocks[blockIdx * 6 + i].Forward(output);
-            }
-
-            // SE attention (2 layers per block)
-            var seOutput = output;
-            int seIdx = blockIdx * 2;
-            if (seIdx < _seBlocks.Count)
-            {
-                // Global pooling (mean)
-                var pooled = GlobalAveragePooling(output);
-                var attention = _seBlocks[seIdx].Forward(pooled);
-                if (seIdx + 1 < _seBlocks.Count)
-                {
-                    attention = _seBlocks[seIdx + 1].Forward(attention);
-                }
-                // Apply attention
-                output = ApplyChannelAttention(output, attention);
-            }
-
-            // Residual connection
-            output = AddTensors(output, residual);
-            blockOutputs.Add(output);
-            _blockOutputLengths.Add(output.Length);
-            blockIdx++;
-        }
-
-        // Multi-layer feature aggregation (concatenate all block outputs)
-        output = ConcatenateTensors(blockOutputs);
-
-        // Attentive statistics pooling
-        if (_poolingLayer is not null)
-        {
-            output = AttentiveStatisticsPooling(output);
-            output = _poolingLayer.Forward(output);
-        }
-
-        // Final batch norm and classifier
-        if (_finalBatchNorm is not null)
-        {
-            output = _finalBatchNorm.Forward(output);
-        }
-
-        if (_classifierLayer is not null)
-        {
-            output = _classifierLayer.Forward(output);
-        }
-
-        return output;
-    }
-
-    private IEnumerable<ILayer<T>> GetAllLayers()
-    {
-        foreach (var layer in _tdnnLayers) yield return layer;
-        foreach (var layer in _resBlocks) yield return layer;
-        foreach (var layer in _seBlocks) yield return layer;
-        if (_poolingLayer is not null) yield return _poolingLayer;
-        if (_finalBatchNorm is not null) yield return _finalBatchNorm;
-        if (_classifierLayer is not null) yield return _classifierLayer;
+        _network.BindTo(Layers);
+        return _network.Forward(features);
     }
 
     private T[] Softmax(T[] logits)
@@ -640,64 +550,6 @@ public partial class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>,
         double sumExp = expValues.Sum();
 
         return expValues.Select(x => _numOps.FromDouble(x / sumExp)).ToArray();
-    }
-
-    // GlobalAveragePooling, ApplyChannelAttention and AttentiveStatisticsPooling are engine ops, the
-    // same bodies VoxLingua107Identifier runs on this identical ECAPA-TDNN forward. They were NumOps
-    // scalar loops writing into fresh tensors, which the gradient tape cannot see through: the SE gate
-    // and everything upstream of statistics pooling received no gradient.
-    private Tensor<T> GlobalAveragePooling(Tensor<T> input)
-    {
-        // ECAPA activations are time-major [time, channels].
-        if (input.Rank <= 1)
-            return input;
-
-        int[] timeAxes = new int[input.Rank - 1];
-        for (int axis = 0; axis < timeAxes.Length; axis++)
-            timeAxes[axis] = axis;
-        return Engine.ReduceMean(input, timeAxes, keepDims: false);
-    }
-
-    private Tensor<T> ApplyChannelAttention(Tensor<T> input, Tensor<T> attention)
-    {
-        if (input.Rank <= 1)
-            return Engine.TensorMultiply(input, attention);
-
-        var broadcastShape = new int[input.Rank];
-        for (int axis = 0; axis < broadcastShape.Length; axis++)
-            broadcastShape[axis] = 1;
-        broadcastShape[broadcastShape.Length - 1] = attention.Length;
-        var channelGate = Engine.Reshape(attention, broadcastShape);
-        return Engine.TensorMultiply(input, channelGate);
-    }
-
-    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
-    {
-        return Engine.TensorAdd(a, b);
-    }
-
-    private Tensor<T> ConcatenateTensors(List<Tensor<T>> tensors)
-    {
-        return Engine.TensorConcatenate(tensors.ToArray(), axis: 0);
-    }
-
-    private Tensor<T> AttentiveStatisticsPooling(Tensor<T> input)
-    {
-        if (input.Rank <= 1)
-            return Engine.TensorConcatenate([input, input], axis: 0);
-
-        int[] timeAxes = new int[input.Rank - 1];
-        for (int axis = 0; axis < timeAxes.Length; axis++)
-            timeAxes[axis] = axis;
-
-        var meanKeepDims = Engine.ReduceMean(input, timeAxes, keepDims: true);
-        var centered = Engine.TensorSubtract(input, meanKeepDims);
-        var variance = Engine.ReduceMean(
-            Engine.TensorMultiply(centered, centered), timeAxes, keepDims: false);
-        var std = Engine.TensorSqrt(
-            Engine.TensorAddScalar(variance, NumericalStabilityHelper.GetEpsilon<T>()));
-        var mean = Engine.ReduceMean(input, timeAxes, keepDims: false);
-        return Engine.TensorConcatenate([mean, std], axis: 0);
     }
 
     private IReadOnlyList<LanguageSegment<T>> MergeConsecutiveSegments(List<LanguageSegment<T>> segments)

@@ -156,10 +156,40 @@ public class ECAPATDNNOptions : LanguageIdentifierOptions
     public bool UseChannelAttention { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets the dilation factors for TDNN layers.
+    /// Gets or sets the dilation of each ECAPA-TDNN stage.
     /// </summary>
-    /// <value>Default is [1, 2, 3, 4, 1].</value>
+    /// <value>Default is [1, 2, 3, 4, 1], the paper's: the frame-level TDNN block, three
+    /// SE-Res2Blocks at dilations 2, 3 and 4, and the multi-layer feature aggregation convolution.</value>
+    /// <remarks>
+    /// The first entry is the frame-level TDNN block, the last is the MFA convolution, and every entry
+    /// between them adds one SE-Res2Block. <see cref="KernelSizes"/> must have the same length.
+    /// </remarks>
     public int[] Dilations { get; set; } = [1, 2, 3, 4, 1];
+
+    /// <summary>
+    /// Gets or sets the kernel width of each ECAPA-TDNN stage, aligned with <see cref="Dilations"/>.
+    /// </summary>
+    /// <value>Default is [5, 3, 3, 3, 1] (Desplanques et al. 2020, Figure 2). An SE-Res2Block's entry
+    /// is the kernel of its dilated Res2Net convolutions.</value>
+    public int[] KernelSizes { get; set; } = [5, 3, 3, 3, 1];
+
+    /// <summary>
+    /// Gets or sets the Res2Net scale: the number of channel splits in each SE-Res2Block.
+    /// </summary>
+    /// <value>Default is 8, the paper's. <see cref="TdnnChannels"/> must be divisible by it.</value>
+    public int Res2NetScale { get; set; } = 8;
+
+    /// <summary>
+    /// Gets or sets the squeeze-excitation bottleneck width.
+    /// </summary>
+    /// <value>Default is 128, the paper's.</value>
+    public int SeChannels { get; set; } = 128;
+
+    /// <summary>
+    /// Gets or sets the bottleneck width of the attentive statistics pooling.
+    /// </summary>
+    /// <value>Default is 128, the paper's.</value>
+    public int AttentionChannels { get; set; } = 128;
 }
 
 /// <summary>
@@ -196,6 +226,31 @@ public class Wav2Vec2LidOptions : LanguageIdentifierOptions
     /// </summary>
     /// <value>Default is 512, the paper's feature-encoder channel count.</value>
     public int FeatureEncoderDim { get; set; } = 512;
+
+    /// <summary>
+    /// Gets or sets the kernel width of each feature-encoder convolution over the raw waveform.
+    /// </summary>
+    /// <value>Default is [10, 3, 3, 3, 3, 2, 2] (Baevski et al. 2020, Section 4.2).</value>
+    public int[] FeatureEncoderKernels { get; set; } = [10, 3, 3, 3, 3, 2, 2];
+
+    /// <summary>
+    /// Gets or sets the stride of each feature-encoder convolution, aligned with
+    /// <see cref="FeatureEncoderKernels"/>.
+    /// </summary>
+    /// <value>Default is [5, 2, 2, 2, 2, 2, 2]: a total stride of 320 samples, about 20 ms at 16 kHz.</value>
+    public int[] FeatureEncoderStrides { get; set; } = [5, 2, 2, 2, 2, 2, 2];
+
+    /// <summary>
+    /// Gets or sets the kernel width of the convolutional relative positional embedding.
+    /// </summary>
+    /// <value>Default is 128, the paper's.</value>
+    public int PositionalConvKernel { get; set; } = 128;
+
+    /// <summary>
+    /// Gets or sets the group count of the convolutional relative positional embedding.
+    /// </summary>
+    /// <value>Default is 16, the paper's. <see cref="HiddenSize"/> must be divisible by it.</value>
+    public int PositionalConvGroups { get; set; } = 16;
 
     /// <summary>
     /// Gets or sets the feature projection dropout rate.

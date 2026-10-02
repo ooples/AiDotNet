@@ -5810,48 +5810,28 @@ public static partial class LayerHelper<T>
         int tdnnChannels = 1024,
         int embeddingDimension = 192,
         int numLanguages = 20,
-        int[]? dilations = null)
+        int[]? dilations = null,
+        int[]? kernelSizes = null,
+        int res2NetScale = 8,
+        int seChannels = 128,
+        int attentionChannels = 128)
     {
-        dilations ??= [1, 2, 3, 4, 1];
-        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
-        IActivationFunction<T> sigmoidActivation = new SigmoidActivation<T>();
-
-        int inputDim = numMels * 3; // MFCC + delta + delta-delta
-
-        // Initial TDNN layer
-        yield return new DenseLayer<T>(tdnnChannels, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
-
-        // SE-Res2Net blocks for each dilation
-        foreach (int dilation in dilations)
-        {
-            // 1x1 reduction
-            yield return new DenseLayer<T>(tdnnChannels / 4, reluActivation);
-            yield return new BatchNormalizationLayer<T>();
-
-            // Dilated conv (simulated)
-            yield return new DenseLayer<T>(tdnnChannels / 4, reluActivation);
-            yield return new BatchNormalizationLayer<T>();
-
-            // 1x1 expansion
-            yield return new DenseLayer<T>(tdnnChannels, reluActivation);
-            yield return new BatchNormalizationLayer<T>();
-
-            // Squeeze-Excitation block
-            int seReduction = 8;
-            yield return new DenseLayer<T>(tdnnChannels / seReduction, reluActivation);
-            yield return new DenseLayer<T>(tdnnChannels, sigmoidActivation);
-        }
-
-        // Attentive Statistics Pooling projection
-        int mfaOutputDim = tdnnChannels * dilations.Length;
-        yield return new DenseLayer<T>(embeddingDimension * 2);
-
-        // Final batch normalization
-        yield return new BatchNormalizationLayer<T>();
-
-        // Classification layer
-        yield return new DenseLayer<T>(numLanguages);
+        // Real 1-D convolutions over time (Desplanques et al. 2020): the frame-level TDNN block, one
+        // SE-Res2Block per inner dilation, the MFA convolution, attentive statistics pooling and the
+        // embedding, then the language head. The layer list is exactly what the models publish; the
+        // residual, Res2Net, squeeze-excitation and pooling wiring lives in EcapaTdnnBackbone.
+        // numMels is the feature width, which the first convolution reads from its input.
+        _ = numMels;
+        var classifier = new AiDotNet.Audio.LanguageIdentification.EcapaTdnnLanguageClassifier<T>(
+            tdnnChannels,
+            kernelSizes ?? [5, 3, 3, 3, 1],
+            dilations ?? [1, 2, 3, 4, 1],
+            res2NetScale,
+            seChannels,
+            attentionChannels,
+            embeddingDimension,
+            numLanguages);
+        return classifier.Layers;
     }
 
     /// <summary>
@@ -5873,13 +5853,33 @@ public static partial class LayerHelper<T>
     /// <param name="featureEncoderDim">Width of each feature-encoder stage (default: 512).</param>
     /// <param name="featureProjectionDropout">Dropout after the feature projection; defaults to
     /// <paramref name="dropoutRate"/> when not given.</param>
+    /// <param name="featureEncoderKernels">Kernel width of each feature-encoder convolution
+    /// (default: 10, 3, 3, 3, 3, 2, 2).</param>
+    /// <param name="featureEncoderStrides">Stride of each feature-encoder convolution
+    /// (default: 5, 2, 2, 2, 2, 2, 2).</param>
+    /// <param name="positionalConvKernel">Kernel width of the convolutional positional embedding (default: 128).</param>
+    /// <param name="positionalConvGroups">Group count of the convolutional positional embedding (default: 16).</param>
     /// <returns>A collection of layers forming a Wav2Vec2 language identifier.</returns>
     /// <remarks>
     /// <para>
-    /// Wav2Vec2-LID uses Meta's self-supervised speech representation model:
-    /// - 7-layer CNN feature encoder processing raw waveform
-    /// - Transformer encoder for contextual representations
-    /// - Classification head for language prediction
+    /// The Wav2Vec 2.0 BASE encoder (Baevski et al. 2020, arXiv:2006.11477) with a language head:
+    /// </para>
+    /// <list type="number">
+    /// <item>Feature encoder: one 1-D convolution per stage over the raw waveform (no padding), with
+    /// GELU. Stage 0 is a linear convolution, a per-channel GroupNorm and a GELU; the others fuse the
+    /// GELU into the convolution.</item>
+    /// <item>Feature projection: LayerNorm over the encoder channels, a linear layer to
+    /// <paramref name="hiddenSize"/>, and dropout when its rate is non-zero.</item>
+    /// <item>Convolutional relative positional embedding: a grouped convolution with GELU, added to
+    /// the projected frames; then the encoder LayerNorm and dropout when the rate is non-zero.</item>
+    /// <item>Per transformer block (post-LN): multi-head self-attention, LayerNorm, the GELU
+    /// feed-forward pair, LayerNorm, and dropout when the rate is non-zero.</item>
+    /// <item>Head: a tanh projection of the time-averaged frames and the per-language logits.</item>
+    /// </list>
+    /// <para>
+    /// The residual additions, the layout changes between [B, C, T] and [B, T, C], and the positional
+    /// embedding's trimmed frame are wired by Wav2Vec2LanguageIdentifier's forward, which partitions
+    /// this list in exactly this order.
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultWav2Vec2LanguageIdentifierLayers(
@@ -5891,40 +5891,66 @@ public static partial class LayerHelper<T>
         int numLanguages = 20,
         double dropoutRate = 0.1,
         int featureEncoderDim = 512,
-        double? featureProjectionDropout = null)
+        double? featureProjectionDropout = null,
+        int[]? featureEncoderKernels = null,
+        int[]? featureEncoderStrides = null,
+        int positionalConvKernel = 128,
+        int positionalConvGroups = 16)
     {
-        IActivationFunction<T> geluActivation = new GELUActivation<T>();
-        IActivationFunction<T> tanhActivation = new TanhActivation<T>();
+        int[] kernels = featureEncoderKernels ?? [10, 3, 3, 3, 3, 2, 2];
+        int[] strides = featureEncoderStrides ?? [5, 2, 2, 2, 2, 2, 2];
+        if (kernels.Length != Wav2Vec2FeatureEncoderStages || strides.Length != Wav2Vec2FeatureEncoderStages)
+            throw new ArgumentException(
+                $"The feature encoder has {Wav2Vec2FeatureEncoderStages} stages; got {kernels.Length} kernels and {strides.Length} strides.");
+        if (numAttentionHeads <= 0 || hiddenSize % numAttentionHeads != 0)
+            throw new ArgumentException(
+                $"hiddenSize ({hiddenSize}) must be divisible by numAttentionHeads ({numAttentionHeads}).",
+                nameof(numAttentionHeads));
+        if (positionalConvGroups <= 0 || hiddenSize % positionalConvGroups != 0)
+            throw new ArgumentException(
+                $"hiddenSize ({hiddenSize}) must be divisible by positionalConvGroups ({positionalConvGroups}).",
+                nameof(positionalConvGroups));
 
-        // Feature encoder. The paper's stages are 1-D convolutions over the raw waveform (kernels
-        // 10,3,3,3,3,2,2; strides 5,2,2,2,2,2,2; 512 channels). These are Dense stand-ins of the same
-        // width, which do not yet model the kernels or the strides.
-        for (int i = 0; i < Wav2Vec2FeatureEncoderStages; i++)
+        IActivationFunction<T> gelu = new GELUActivation<T>();
+        IActivationFunction<T> identity = new IdentityActivation<T>();
+
+        // Feature encoder. Stage 0: linear conv, GroupNorm with one group per channel, GELU.
+        yield return new Conv1DLayer<T>(featureEncoderDim, kernels[0], stride: strides[0], padding: 0, activation: identity);
+        yield return new GroupNormalizationLayer<T>(featureEncoderDim, featureEncoderDim);
+        yield return new ActivationLayer<T>(gelu);
+        for (int i = 1; i < Wav2Vec2FeatureEncoderStages; i++)
         {
-            yield return new DenseLayer<T>(featureEncoderDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>();
+            yield return new Conv1DLayer<T>(featureEncoderDim, kernels[i], stride: strides[i], padding: 0, activation: gelu);
         }
 
         // Feature projection. Its dropout falls back to the hidden rate when none is given.
         double projectionDropout = featureProjectionDropout ?? dropoutRate;
-        yield return new DenseLayer<T>(hiddenSize, geluActivation);
+        yield return new LayerNormalizationLayer<T>();
+        yield return new DenseLayer<T>(hiddenSize, identity);
         if (projectionDropout > 0)
         {
             yield return new DropoutLayer<T>(projectionDropout);
         }
 
-        // Transformer encoder layers
+        // Convolutional relative positional embedding, then the encoder LayerNorm.
+        yield return new Conv1DLayer<T>(
+            hiddenSize, positionalConvKernel, padding: positionalConvKernel / 2, activation: gelu,
+            groups: positionalConvGroups);
+        yield return new LayerNormalizationLayer<T>();
+        if (dropoutRate > 0)
+        {
+            yield return new DropoutLayer<T>(dropoutRate);
+        }
+
+        // Post-LN transformer blocks.
         for (int i = 0; i < numLayers; i++)
         {
-            // Self-attention (simplified as dense)
-            yield return new DenseLayer<T>(hiddenSize);
+            yield return new MultiHeadAttentionLayer<T>(
+                numAttentionHeads, hiddenSize / numAttentionHeads, activationFunction: identity);
             yield return new LayerNormalizationLayer<T>();
-
-            // Feed-forward
-            yield return new DenseLayer<T>(intermediateSize, geluActivation);
-            yield return new DenseLayer<T>(hiddenSize);
+            yield return new DenseLayer<T>(intermediateSize, gelu);
+            yield return new DenseLayer<T>(hiddenSize, identity);
             yield return new LayerNormalizationLayer<T>();
-
             if (dropoutRate > 0)
             {
                 yield return new DropoutLayer<T>(dropoutRate);
@@ -5932,7 +5958,7 @@ public static partial class LayerHelper<T>
         }
 
         // Classification head
-        yield return new DenseLayer<T>(hiddenSize, tanhActivation);
+        yield return new DenseLayer<T>(hiddenSize, (IActivationFunction<T>)new TanhActivation<T>());
         yield return new DenseLayer<T>(numLanguages);
     }
 
@@ -20394,7 +20420,7 @@ public static partial class LayerHelper<T>
     /// <param name="numBlocks">Number of SE-Res2Net blocks (default: 3).</param>
     /// <param name="poolingDim">Attentive statistics pooling dimension (default: 1536).</param>
     /// <param name="seBottleneckDim">Squeeze-Excitation bottleneck dimension (default: 128).</param>
-    /// <param name="dropoutRate">Dropout rate (default: 0.0).</param>
+    /// <param name="dropoutRate">Ignored: ECAPA-TDNN applies no dropout. Kept for source compatibility.</param>
     /// <returns>A collection of layers for ECAPA-TDNN speaker embedding.</returns>
     /// <remarks>
     /// <para>
@@ -20417,42 +20443,28 @@ public static partial class LayerHelper<T>
         int seBottleneckDim = 128,
         double dropoutRate = 0.0)
     {
-        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-
-        // Initial TDNN layer: mel features -> channels
-        yield return new DenseLayer<T>(channels, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
-
-        // SE-Res2Net TDNN blocks with increasing dilation
-        for (int i = 0; i < numBlocks; i++)
+        // Real 1-D convolutions over time, through the encoder ECAPATDNNSpeaker runs. The paper's
+        // stage lists: the frame-level TDNN block (kernel 5), numBlocks SE-Res2Blocks at kernel 3 and
+        // dilations 2, 3, 4, ..., and the 1x1 MFA convolution at poolingDim channels.
+        _ = numMels;
+        _ = dropoutRate;
+        if (numBlocks <= 0) throw new ArgumentOutOfRangeException(nameof(numBlocks));
+        var stageChannels = new int[numBlocks + 2];
+        var kernelSizes = new int[numBlocks + 2];
+        var dilations = new int[numBlocks + 2];
+        for (int i = 0; i <= numBlocks; i++)
         {
-            // Bottleneck down
-            yield return new DenseLayer<T>(channels, reluActivation);
-            yield return new BatchNormalizationLayer<T>();
-
-            // Res2Net-style multi-scale processing (simplified as dense layers)
-            yield return new DenseLayer<T>(channels, reluActivation);
-            yield return new BatchNormalizationLayer<T>();
-
-            // SE block: squeeze -> excite
-            yield return new DenseLayer<T>(seBottleneckDim, reluActivation);
-            yield return new DenseLayer<T>(channels, (IActivationFunction<T>)new SigmoidActivation<T>());
-
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
+            stageChannels[i] = channels;
+            kernelSizes[i] = i == 0 ? 5 : 3;
+            dilations[i] = i == 0 ? 1 : i + 1;
         }
+        stageChannels[numBlocks + 1] = poolingDim;
+        kernelSizes[numBlocks + 1] = 1;
+        dilations[numBlocks + 1] = 1;
 
-        // Multi-layer feature aggregation (MFA): concat all block outputs
-        yield return new DenseLayer<T>(poolingDim, reluActivation);
-        yield return new BatchNormalizationLayer<T>();
-
-        // Attentive statistics pooling (simplified)
-        yield return new DenseLayer<T>(poolingDim, (IActivationFunction<T>)new TanhActivation<T>());
-        yield return new DenseLayer<T>(poolingDim, identityActivation);
-
-        // Final embedding projection
-        yield return new DenseLayer<T>(embeddingDim, identityActivation);
-        yield return new BatchNormalizationLayer<T>();
+        return new AiDotNet.Audio.EcapaTdnnBackbone<T>(
+            stageChannels, kernelSizes, dilations, res2NetScale: 8, seBottleneckDim, attentionChannels: 128,
+            embeddingDim).Layers;
     }
 
     /// <summary>

@@ -8,6 +8,7 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -79,12 +80,22 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
     private readonly ILossFunction<T> _lossFunction;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
-    // Feature encoder (CNN layers)
-    private readonly List<ILayer<T>> _featureEncoder = [];
-    private readonly List<ILayer<T>> _featureProjection = [];
+    // Every layer of the default topology, in the factory's order.
+    private readonly List<ILayer<T>> _defaultLayers = [];
 
-    // Transformer encoder
-    private readonly List<ILayer<T>> _transformerLayers = [];
+    // Feature encoder: stage 0's conv, GroupNorm and GELU, then the later stages' convs.
+    private readonly List<ILayer<T>> _featureEncoder = [];
+
+    // Feature projection and the convolutional positional embedding.
+    private LayerNormalizationLayer<T>? _projectionNorm;
+    private DenseLayer<T>? _projection;
+    private DropoutLayer<T>? _projectionDropout;
+    private Conv1DLayer<T>? _positionalConv;
+    private LayerNormalizationLayer<T>? _encoderNorm;
+    private DropoutLayer<T>? _encoderDropout;
+
+    // Transformer encoder: views over Layers, rebuilt by PartitionDefaultLayers.
+    private readonly List<EncoderBlock> _blocks = [];
 
     // Classification head
     private DenseLayer<T>? _poolingProjection;
@@ -198,10 +209,8 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
     private void InitializeNativeLayers()
     {
         // Build the default stack from the shared factory and partition it back into the roles the
-        // forward needs. This used to build a second, private copy by hand, so the forward ran on
-        // layers Layers never held and Train's optimizer step reached none of them. The partition
-        // mirrors the factory's layout exactly, including the dropout layers it omits when a rate
-        // is zero, and fails loudly if the two ever drift apart.
+        // forward needs, in the factory's documented order. The partition fails loudly if the two
+        // ever drift apart, and Layers publishes exactly these instances.
         var built = LayerHelper<T>.CreateDefaultWav2Vec2LanguageIdentifierLayers(
             Architecture,
             hiddenSize: _options.HiddenSize,
@@ -211,34 +220,70 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
             numLanguages: _languageIdToCode.Count,
             dropoutRate: _options.HiddenDropout,
             featureEncoderDim: _options.FeatureEncoderDim,
-            featureProjectionDropout: _options.FeatureProjectionDropout).ToList();
+            featureProjectionDropout: _options.FeatureProjectionDropout,
+            featureEncoderKernels: _options.FeatureEncoderKernels,
+            featureEncoderStrides: _options.FeatureEncoderStrides,
+            positionalConvKernel: _options.PositionalConvKernel,
+            positionalConvGroups: _options.PositionalConvGroups).ToList();
+        _defaultLayers.AddRange(built);
+        PartitionDefaultLayers(built);
+    }
 
+    /// <summary>
+    /// Assigns every role from <paramref name="built"/>, in the factory's documented order. Run at
+    /// construction and again whenever a deserialize or eager clone has replaced the layer instances,
+    /// since the transformer blocks are views this model holds, not layer-typed members it rebinds.
+    /// </summary>
+    private void PartitionDefaultLayers(IReadOnlyList<ILayer<T>> built)
+    {
+        _featureEncoder.Clear();
+        _blocks.Clear();
+        _projectionDropout = null;
+        _encoderDropout = null;
         int index = 0;
-
-        // Feature encoder: a DenseLayer + LayerNormalizationLayer pair per stage.
-        for (int i = 0; i < LayerHelper<T>.Wav2Vec2FeatureEncoderStages * 2; i++)
+        TLayer Next<TLayer>() where TLayer : class, ILayer<T>
         {
-            _featureEncoder.Add(built[index++]);
+            if (index >= built.Count || built[index] is not TLayer typed)
+            {
+                throw new InvalidOperationException(
+                    $"The Wav2Vec2 factory layout and this partition have drifted apart at layer {index}: " +
+                    $"expected {typeof(TLayer).Name}, found {(index < built.Count ? built[index].GetType().Name : "the end")}.");
+            }
+
+            index++;
+            return typed;
         }
 
-        // Feature projection, plus its dropout only when that rate is non-zero.
-        _featureProjection.Add(built[index++]);
-        if (_options.FeatureProjectionDropout > 0)
+        // Feature encoder: stage 0's conv, GroupNorm and GELU, then one GELU conv per later stage.
+        _featureEncoder.Add(Next<Conv1DLayer<T>>());
+        _featureEncoder.Add(Next<GroupNormalizationLayer<T>>());
+        _featureEncoder.Add(Next<ActivationLayer<T>>());
+        for (int i = 1; i < LayerHelper<T>.Wav2Vec2FeatureEncoderStages; i++)
         {
-            _featureProjection.Add(built[index++]);
+            _featureEncoder.Add(Next<Conv1DLayer<T>>());
         }
 
-        // Transformer blocks: attention stand-in + norm, feed-forward pair + norm, and a dropout when
-        // the hidden rate is non-zero.
-        int perBlock = _options.HiddenDropout > 0 ? 6 : 5;
-        for (int i = 0; i < _options.NumLayers * perBlock; i++)
+        _projectionNorm = Next<LayerNormalizationLayer<T>>();
+        _projection = Next<DenseLayer<T>>();
+        if (_options.FeatureProjectionDropout > 0) _projectionDropout = Next<DropoutLayer<T>>();
+
+        _positionalConv = Next<Conv1DLayer<T>>();
+        _encoderNorm = Next<LayerNormalizationLayer<T>>();
+        if (_options.HiddenDropout > 0) _encoderDropout = Next<DropoutLayer<T>>();
+
+        for (int i = 0; i < _options.NumLayers; i++)
         {
-            _transformerLayers.Add(built[index++]);
+            _blocks.Add(new EncoderBlock(
+                Next<MultiHeadAttentionLayer<T>>(),
+                Next<LayerNormalizationLayer<T>>(),
+                Next<DenseLayer<T>>(),
+                Next<DenseLayer<T>>(),
+                Next<LayerNormalizationLayer<T>>(),
+                _options.HiddenDropout > 0 ? Next<DropoutLayer<T>>() : null));
         }
 
-        // Classification head: tanh pooling projection, then the per-language logits.
-        _poolingProjection = (DenseLayer<T>)built[index++];
-        _classifierLayer = (DenseLayer<T>)built[index++];
+        _poolingProjection = Next<DenseLayer<T>>();
+        _classifierLayer = Next<DenseLayer<T>>();
 
         if (index != built.Count)
         {
@@ -471,6 +516,38 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
 
     #region NeuralNetworkBase Abstract Methods
 
+    private bool _lazyShapesProbed;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The base walk feeds the architecture's input shape through Layers as one sequential chain, so
+    /// the first convolution would resolve its input channels from the fixture's [1, 64, 32] shape
+    /// instead of the single waveform channel the real forward feeds it. Resolve through the real
+    /// topology with the shortest waveform that leaves one frame after every strided stage.
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_lazyShapesProbed || IsOnnxMode || _featureEncoder.Count == 0) return;
+        _lazyShapesProbed = true;
+
+        int samples = 1;
+        for (int i = _options.FeatureEncoderKernels.Length - 1; i >= 0; i--)
+        {
+            samples = (samples - 1) * _options.FeatureEncoderStrides[i] + _options.FeatureEncoderKernels[i];
+        }
+
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            _ = ForwardNative(new Tensor<T>(new[] { samples }));
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
+    }
+
     /// <inheritdoc/>
     protected override void InitializeLayers()
     {
@@ -492,7 +569,7 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
         // needs their block roles; parameters, gradients, the optimizer, serialization and clone need
         // the same instances.
         InitializeNativeLayers();
-        Layers.AddRange(GetAllLayers());
+        Layers.AddRange(_defaultLayers);
     }
 
     /// <inheritdoc/>
@@ -537,65 +614,136 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
             return customOutput;
         }
 
-        var output = input;
-
-        // Feature encoder
-        foreach (var layer in _featureEncoder)
+        // A deserialize or eager clone replaces some or all of Layers; every role view must follow.
+        if (!DefaultLayersMatch())
         {
-            output = layer.Forward(output);
+            _defaultLayers.Clear();
+            _defaultLayers.AddRange(Layers);
+            PartitionDefaultLayers(_defaultLayers);
         }
 
-        // Feature projection
-        foreach (var layer in _featureProjection)
+        bool unbatched = input.Shape.Length != 2;
+        int batch = unbatched ? 1 : input.Shape[0];
+        int samples = unbatched ? input.Length : input.Shape[1];
+
+        // Feature encoder over the raw waveform [B, 1, L]. Stage 0's GroupNorm (one group per
+        // channel) is a 4-D layer, so its [B, C, T] input is viewed as [B, C, 1, T].
+        var x = Engine.Reshape(input, new[] { batch, 1, samples });
+        x = _featureEncoder[0].Forward(x);
+        int channels = x.Shape[1], frames = x.Shape[2];
+        x = Engine.Reshape(_featureEncoder[1].Forward(Engine.Reshape(x, new[] { batch, channels, 1, frames })),
+            new[] { batch, channels, frames });
+        for (int i = 2; i < _featureEncoder.Count; i++)
         {
-            output = layer.Forward(output);
+            x = _featureEncoder[i].Forward(x);
         }
 
-        // Transformer layers
-        foreach (var layer in _transformerLayers)
+        // Feature projection on time-major frames [B, T, C].
+        frames = x.Shape[2];
+        x = RequireLayer(_projectionNorm).Forward(Engine.TensorPermute(x, new[] { 0, 2, 1 }));
+        int hidden = _options.HiddenSize;
+        x = Engine.Reshape(
+            RequireLayer(_projection).Forward(Engine.Reshape(x, new[] { batch * frames, x.Shape[2] })),
+            new[] { batch, frames, hidden });
+        if (_projectionDropout is not null) x = _projectionDropout.Forward(x);
+
+        // Convolutional relative positional embedding. The even kernel with kernel/2 padding yields
+        // one extra frame, which the paper's SamePad drops; the embedding is added to the frames.
+        var positional = RequireLayer(_positionalConv).Forward(Engine.TensorPermute(x, new[] { 0, 2, 1 }));
+        positional = Engine.TensorNarrow(positional, dim: 2, start: 0, length: frames);
+        x = Engine.TensorAdd(x, Engine.TensorPermute(positional, new[] { 0, 2, 1 }));
+        x = RequireLayer(_encoderNorm).Forward(x);
+        if (_encoderDropout is not null) x = _encoderDropout.Forward(x);
+
+        // Post-LN transformer blocks: x = LN(x + Attn(x)); x = LN(x + FFN(x)).
+        foreach (var block in _blocks)
         {
-            output = layer.Forward(output);
+            x = block.Forward(Engine, x);
         }
 
-        // Mean pooling across time
-        output = MeanPooling(output);
-
-        // Classification head
-        if (_poolingProjection is not null)
-        {
-            output = _poolingProjection.Forward(output);
-        }
-
-        if (_classifierLayer is not null)
-        {
-            output = _classifierLayer.Forward(output);
-        }
-
-        return output;
+        // Mean over time, the tanh projection and the per-language logits.
+        var pooled = Engine.ReduceMean(x, new[] { 1 }, keepDims: false);
+        var logits = RequireLayer(_classifierLayer).Forward(RequireLayer(_poolingProjection).Forward(pooled));
+        return unbatched ? Engine.Reshape(logits, new[] { logits.Shape[logits.Shape.Length - 1] }) : logits;
     }
 
-    private IEnumerable<ILayer<T>> GetAllLayers()
+    /// <summary>
+    /// Whether every role view still points at the instance Layers holds at its position. The views
+    /// themselves are compared, not a saved copy of the list: the generated alias rebinding updates
+    /// layer-typed members and layer lists after a clone, but not the EncoderBlock views.
+    /// </summary>
+    private bool DefaultLayersMatch()
+    {
+        int index = 0;
+        foreach (var layer in RoleLayersInFactoryOrder())
+        {
+            if (index >= Layers.Count || !ReferenceEquals(Layers[index], layer)) return false;
+            index++;
+        }
+
+        return index == Layers.Count;
+    }
+
+    private IEnumerable<ILayer<T>> RoleLayersInFactoryOrder()
     {
         foreach (var layer in _featureEncoder) yield return layer;
-        foreach (var layer in _featureProjection) yield return layer;
-        foreach (var layer in _transformerLayers) yield return layer;
+        if (_projectionNorm is not null) yield return _projectionNorm;
+        if (_projection is not null) yield return _projection;
+        if (_projectionDropout is not null) yield return _projectionDropout;
+        if (_positionalConv is not null) yield return _positionalConv;
+        if (_encoderNorm is not null) yield return _encoderNorm;
+        if (_encoderDropout is not null) yield return _encoderDropout;
+        foreach (var block in _blocks)
+        {
+            yield return block.Attention;
+            yield return block.AttentionNorm;
+            yield return block.FeedForwardUp;
+            yield return block.FeedForwardDown;
+            yield return block.FeedForwardNorm;
+            if (block.Dropout is not null) yield return block.Dropout;
+        }
+
         if (_poolingProjection is not null) yield return _poolingProjection;
         if (_classifierLayer is not null) yield return _classifierLayer;
     }
 
-    private Tensor<T> MeanPooling(Tensor<T> input)
+    private static TLayer RequireLayer<TLayer>(TLayer? layer) where TLayer : class        => layer ?? throw new InvalidOperationException("The Wav2Vec2 network has not been initialized.");
+
+    /// <summary>One post-LN Wav2Vec2 transformer block.</summary>
+    private sealed class EncoderBlock
     {
-        int hiddenSize = _options.HiddenSize;
-        if (input.Length == 0 || hiddenSize <= 0)
+        public EncoderBlock(
+            MultiHeadAttentionLayer<T> attention, LayerNormalizationLayer<T> attentionNorm,
+            DenseLayer<T> feedForwardUp, DenseLayer<T> feedForwardDown, LayerNormalizationLayer<T> feedForwardNorm,
+            DropoutLayer<T>? dropout)
         {
-            return new Tensor<T>(new T[Math.Max(hiddenSize, 1)], [Math.Max(hiddenSize, 1)]);
+            Attention = attention;
+            AttentionNorm = attentionNorm;
+            FeedForwardUp = feedForwardUp;
+            FeedForwardDown = feedForwardDown;
+            FeedForwardNorm = feedForwardNorm;
+            Dropout = dropout;
         }
 
-        // The mean over time of HiddenSize-wide frames, as an engine reduction. This was a NumOps
-        // scalar loop into a fresh tensor, which the gradient tape cannot see through: the feature
-        // encoder, projection and transformer upstream of it received no gradient at all.
-        var frames = Engine.Reshape(input, new[] { input.Length / hiddenSize, hiddenSize });
-        return Engine.ReduceMean(frames, new[] { 0 }, keepDims: false);
+        public MultiHeadAttentionLayer<T> Attention { get; }
+        public LayerNormalizationLayer<T> AttentionNorm { get; }
+        public DenseLayer<T> FeedForwardUp { get; }
+        public DenseLayer<T> FeedForwardDown { get; }
+        public LayerNormalizationLayer<T> FeedForwardNorm { get; }
+        public DropoutLayer<T>? Dropout { get; }
+
+        public Tensor<T> Forward(IEngine engine, Tensor<T> x)
+        {
+            var attended = Attention.Forward(x);
+            if (Dropout is not null) attended = Dropout.Forward(attended);
+            x = AttentionNorm.Forward(engine.TensorAdd(x, attended));
+
+            int batch = x.Shape[0], frames = x.Shape[1], width = x.Shape[2];
+            var fed = FeedForwardDown.Forward(FeedForwardUp.Forward(engine.Reshape(x, new[] { batch * frames, width })));
+            fed = engine.Reshape(fed, new[] { batch, frames, width });
+            if (Dropout is not null) fed = Dropout.Forward(fed);
+            return FeedForwardNorm.Forward(engine.TensorAdd(x, fed));
+        }
     }
 
     private T[] Softmax(T[] logits)
