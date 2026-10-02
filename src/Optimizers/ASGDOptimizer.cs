@@ -113,9 +113,9 @@ public partial class ASGDOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.ASGD,
-            (float)GetCurrentLearningRate(),
+            GetCurrentLearningRate(),
             0f, 0f, 0f,
-            (float)_options.WeightDecay, schedule)
+            _options.WeightDecay, schedule)
         {
             Extras = new Tensors.Engines.Compilation.FusedOptimizerExtras
             {

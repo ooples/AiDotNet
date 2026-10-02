@@ -57,7 +57,7 @@ public partial class GradientDescentOptimizer<T, TInput, TOutput> : GradientBase
 
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.SGD,
-            (float)GetCurrentLearningRate(),
+            GetCurrentLearningRate(),
             0f, 0f, 0f, 0f, schedule);
         return true;
     }

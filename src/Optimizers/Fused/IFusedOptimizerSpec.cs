@@ -17,11 +17,11 @@ namespace AiDotNet.Optimizers.Fused;
 /// <param name="Schedule">Optional fused-side LR schedule, or null for constant LR.</param>
 internal readonly record struct FusedOptimizerConfig(
     OptimizerType Type,
-    float LearningRate,
-    float Beta1,
-    float Beta2,
-    float Epsilon,
-    float WeightDecay,
+    double LearningRate,
+    double Beta1,
+    double Beta2,
+    double Epsilon,
+    double WeightDecay,
     LrSchedule? Schedule)
 {
     /// <summary>

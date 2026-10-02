@@ -97,7 +97,7 @@ public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : Grad
         {
             config = new Fused.FusedOptimizerConfig(
                 Tensors.Engines.Compilation.OptimizerType.SGD,
-                (float)lr,
+                lr,
                 0f, 0f, 0f, 0f, schedule);
             return true;
         }

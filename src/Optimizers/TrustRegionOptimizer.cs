@@ -65,7 +65,7 @@ public partial class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOpt
 
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.TrustRegion,
-            (float)GetCurrentLearningRate(),
+            GetCurrentLearningRate(),
             0f, 0f, 0f, 0f, schedule)
         {
             Extras = new Tensors.Engines.Compilation.FusedOptimizerExtras

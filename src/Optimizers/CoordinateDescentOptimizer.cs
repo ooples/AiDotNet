@@ -65,8 +65,8 @@ public partial class CoordinateDescentOptimizer<T, TInput, TOutput> : GradientBa
         // path actually uses keeps that true if the base class's notion of "current" ever drifts.
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.SGDMomentum,
-            (float)_options.InitialLearningRate,
-            (float)_options.InitialMomentum,   // Beta1 carries the momentum coefficient
+            _options.InitialLearningRate,
+            _options.InitialMomentum,   // Beta1 carries the momentum coefficient
             0f, 0f, 0f, schedule);
         return true;
     }

@@ -41,8 +41,8 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.Nadam,
-            (float)GetCurrentLearningRate(),
-            (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
+            GetCurrentLearningRate(),
+            _options.Beta1, _options.Beta2, _options.Epsilon,
             0f, schedule);
         return true;
     }

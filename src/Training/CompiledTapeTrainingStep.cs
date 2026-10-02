@@ -104,7 +104,7 @@ public static class CompiledTapeTrainingStep<T>
         internal Tensor<T>? persistentInput;
         internal Tensor<T>? persistentTarget;
         internal object? configuredPlan;
-        internal (int OptType, float Lr, float B1, float B2, float Eps, float Wd)? configuredOptimizerConfig;
+        internal (int OptType, double Lr, double B1, double B2, double Eps, double Wd)? configuredOptimizerConfig;
         internal long fusedStepCount;
         // The configured plan's optimizer step (1-based after its first Step), counted from configuration; -1 when it
         // is unknown (an imported checkpoint set it, or the last fused step ran a different plan).
@@ -329,7 +329,7 @@ public static class CompiledTapeTrainingStep<T>
     /// reset m/v buffers and silently corrupt training, so on drift we
     /// also return <c>false</c>.
     /// </summary>
-    private static (int OptType, float Lr, float B1, float B2, float Eps, float Wd)? _configuredOptimizerConfig { get => CurrentState.configuredOptimizerConfig; set => CurrentState.configuredOptimizerConfig = value; }
+    private static (int OptType, double Lr, double B1, double B2, double Eps, double Wd)? _configuredOptimizerConfig { get => CurrentState.configuredOptimizerConfig; set => CurrentState.configuredOptimizerConfig = value; }
 
     /// <summary>
     /// Counter of successful fused-step executions on this thread. Exposed
@@ -845,11 +845,11 @@ public static class CompiledTapeTrainingStep<T>
         Func<Tensor<T>, Tensor<T>> forward,
         Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss,
         AiDotNet.Tensors.Engines.Compilation.OptimizerType optimizerType,
-        float learningRate,
-        float beta1,
-        float beta2,
-        float epsilon,
-        float weightDecay,
+        double learningRate,
+        double beta1,
+        double beta2,
+        double epsilon,
+        double weightDecay,
         out T lossValue,
         double maxGradNorm = 0.0,
         AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule = null,
@@ -904,11 +904,11 @@ public static class CompiledTapeTrainingStep<T>
         Func<Tensor<T>, Tensor<T>> forward,
         Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss,
         AiDotNet.Tensors.Engines.Compilation.OptimizerType optimizerType,
-        float learningRate,
-        float beta1,
-        float beta2,
-        float epsilon,
-        float weightDecay,
+        double learningRate,
+        double beta1,
+        double beta2,
+        double epsilon,
+        double weightDecay,
         out T lossValue,
         double maxGradNorm = 0.0,
         AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule = null,
@@ -1628,7 +1628,7 @@ public static class CompiledTapeTrainingStep<T>
         System.Collections.Generic.IReadOnlyList<Tensor<float>> parameters,
         Tensor<float> input,
         Tensor<float> target,
-        float learningRate,
+        double learningRate,
         Func<Tensor<float>, Tensor<float>> forwardF,
         Func<Tensor<float>, Tensor<float>, Tensor<float>> lossF,
         int[] key)
@@ -1665,7 +1665,8 @@ public static class CompiledTapeTrainingStep<T>
         // one scaler (dynamic loss scale + skip-on-overflow handled inside Step) — matching the
         // Adam/generic paths above, which already pass _mpScaler.
         _mpScaler ??= MixedPrecisionReflection.CreateGradScaler(1024f);
-        return MixedPrecisionReflection.StepSgd(plan, parameters, learningRate, _mpScaler);
+        // The mixed-precision plan is an FP32 master copy updated in float, so the rate narrows here and only here.
+        return MixedPrecisionReflection.StepSgd(plan, parameters, (float)learningRate, _mpScaler);
     }
 
     /// <summary>

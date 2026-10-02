@@ -1,4 +1,4 @@
-﻿using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using System.Collections.Concurrent;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -47,8 +47,8 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.AdaDelta,
-            (float)GetCurrentLearningRate(),
-            0f, (float)_options.Rho, (float)_options.Epsilon, 0f, schedule);
+            GetCurrentLearningRate(),
+            0f, _options.Rho, _options.Epsilon, 0f, schedule);
         return true;
     }
 

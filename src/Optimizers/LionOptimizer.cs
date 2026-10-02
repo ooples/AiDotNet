@@ -1,4 +1,4 @@
-﻿using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using System.Collections.Concurrent;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -48,8 +48,8 @@ public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.Lion,
-            (float)GetCurrentLearningRate(),
-            (float)_options.Beta1, (float)_options.Beta2, 0f, (float)_options.WeightDecay, schedule);
+            GetCurrentLearningRate(),
+            _options.Beta1, _options.Beta2, 0f, _options.WeightDecay, schedule);
         return true;
     }
 

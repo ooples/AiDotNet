@@ -82,7 +82,7 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
 
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.FTRL,
-            (float)_options.Alpha,
+            _options.Alpha,
             0f, 0f, 0f, 0f, schedule)
         {
             Extras = new Tensors.Engines.Compilation.FusedOptimizerExtras

@@ -120,7 +120,7 @@ public partial class StochasticGradientDescentOptimizer<T, TInput, TOutput> : Gr
 
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.SGD,
-            (float)GetCurrentLearningRate(),
+            GetCurrentLearningRate(),
             0f, 0f, 0f, 0f, schedule);
         return true;
     }

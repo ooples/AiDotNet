@@ -745,7 +745,7 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
             var denoiserLayers = BuildDenoiserLayerList();
             var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(denoiserLayers).ToArray();
             AiDotNet.Tensors.Engines.Compilation.OptimizerType mfsOptType = default;
-            float mfsLr = 0f, mfsB1 = 0f, mfsB2 = 0f, mfsEps = 0f, mfsWd = 0f;
+            double mfsLr = 0, mfsB1 = 0, mfsB2 = 0, mfsEps = 0, mfsWd = 0;
             bool fusedEligible = false;
             if (trainableParams.Length > 0)
             {

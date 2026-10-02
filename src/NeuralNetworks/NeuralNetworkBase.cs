@@ -5012,7 +5012,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     private static bool FusedStepCouldHaveMovedParameters(
         AiDotNet.Optimizers.Fused.FusedOptimizerConfig config,
-        float learningRate,
+        double learningRate,
         AiDotNet.Tensors.Engines.Compilation.LrSchedule? schedule,
         bool gradientsObserved,
         bool anyGradientNonZero,
@@ -12627,11 +12627,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             return EmitFusedMissAndFallback($"optimizer {resolvedOptimizer.GetType().Name} not compatible with fused kernel");
 
         var fusedType = fusedCfg.Type;
-        float lr = fusedCfg.LearningRate;
-        float b1 = fusedCfg.Beta1;
-        float b2 = fusedCfg.Beta2;
-        float eps = fusedCfg.Epsilon;
-        float wd = fusedCfg.WeightDecay;
+        double lr = fusedCfg.LearningRate;
+        double b1 = fusedCfg.Beta1;
+        double b2 = fusedCfg.Beta2;
+        double eps = fusedCfg.Epsilon;
+        double wd = fusedCfg.WeightDecay;
         var lrSched = fusedCfg.Schedule;
         bool useBf16Moments = fusedCfg.UseBf16Moments;
 
@@ -13216,11 +13216,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     internal static bool TryMapToFusedOptimizerConfig(
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
         out AiDotNet.Tensors.Engines.Compilation.OptimizerType optimizerType,
-        out float learningRate,
-        out float beta1,
-        out float beta2,
-        out float epsilon,
-        out float weightDecay,
+        out double learningRate,
+        out double beta1,
+        out double beta2,
+        out double epsilon,
+        out double weightDecay,
         out AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule,
         out bool useBf16Moments)
     {

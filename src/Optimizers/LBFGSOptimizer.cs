@@ -65,7 +65,7 @@ public partial class LBFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
 
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.LBFGS,
-            (float)GetCurrentLearningRate(),
+            GetCurrentLearningRate(),
             0f, 0f, 0f, 0f, schedule)
         {
             Extras = new Tensors.Engines.Compilation.FusedOptimizerExtras

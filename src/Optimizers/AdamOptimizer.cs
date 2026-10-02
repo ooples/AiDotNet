@@ -158,8 +158,8 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             _options.UseAMSGrad
                 ? Tensors.Engines.Compilation.OptimizerType.AMSGrad
                 : Tensors.Engines.Compilation.OptimizerType.Adam,
-            (float)GetCurrentLearningRate(),
-            (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
+            GetCurrentLearningRate(),
+            _options.Beta1, _options.Beta2, _options.Epsilon,
             0f, schedule);
         return true;
     }

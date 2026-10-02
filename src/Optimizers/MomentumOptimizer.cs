@@ -57,8 +57,8 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
 
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.SGDMomentum,
-            (float)GetCurrentLearningRate(),
-            (float)Convert.ToDouble(CurrentMomentum),   // Beta1 carries the momentum coefficient
+            GetCurrentLearningRate(),
+            Convert.ToDouble(CurrentMomentum),   // Beta1 carries the momentum coefficient
             0f, 0f, 0f, schedule);
         return true;
     }
