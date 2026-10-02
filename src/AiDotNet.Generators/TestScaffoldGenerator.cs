@@ -4332,6 +4332,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
          : className == "MiniGPT4" ? 28
          // KOSMOS-1/2: a CLIP ViT with patch 14; 28 px is the smallest image with a 2x2 patch grid.
          : className is "KOSMOS1" or "KOSMOS2" ? 28
+         // Florence-2: DaViT has a total stride of 32; 64 px is the smallest image with a 2x2 grid.
+         : className == "Florence2" ? 64
          // SAM, SAM21, SlimSAM, MaskAdapter and Mask2Former are deliberately NOT in this list.
          // Their constructor overrides pin 112 (SAM, SAM21) and 128 (the other three), and this arm
          // shadows the IsPatchVisionModel branch below, so listing them here fed a 32px fixture to a
@@ -5146,8 +5148,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// shape-mismatch this contract prevents.
     /// </summary>
     private static bool IsTokenConsumingVisionLanguageModel(string className)
-        => className is "GPT4Point" or "Helix" or "Octo" or "ViLT" or "Florence2"
+        => className is "GPT4Point" or "Helix" or "Octo" or "ViLT"
             // KOSMOS-1/2 are NOT here: their rebuilt CLIP ViT reads raw [3, H, W] images (Huang et al. 2023; Peng et al. 2023).
+            // Florence-2 is not here either: its rebuilt DaViT encoder reads raw [3, H, W] images (Xiao et al. 2024).
             // Encoder-decoder VLM family (AiDotNet.VisionLanguage.Generative.*) built from
             // CreateDefaultEncoderDecoderVLMLayers: a ViT encoder (LayerNormalization + vision
             // MultiHeadAttention(VisionDim) blocks) -> projection -> autoregressive decoder. Like
@@ -5220,7 +5223,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // reduced VisionDim. Paper default (1024) with DecoderDim=4096 / 24+32 layers
             // OOMs on construction.
             "LEOVL" or "PointLLM" or "SceneLLM" or "ThreeDLLM" or "ThreeDGraphLLM" => 128,
-            "Florence2" => 32,
             _ => 768, // SigLIP2, ViLT
         };
 
@@ -5616,17 +5618,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "Florence2" && model.TypeParameterCount == 1)
             {
-                // Florence-2's native layer stack consumes post-patch image tokens. Keep the
-                // encoder/decoder topology and public options, but bound dimensions/vocabulary
-                // for generated clone tests; production defaults remain paper-scale.
+                // Florence-2 (Xiao et al. 2024) is DaViT + a BART encoder-decoder. Build the IDENTICAL architecture
+                // (four DaViT stages of spatial-window and channel-group attention, the image projector, and a tied
+                // BART seq2seq) at CI-smoke width/depth/vocab on a 64 px page (a 2x2 stride-32 grid, 5 image tokens).
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Embedding, " +
-                    "inputSize: 32, outputSize: 32), " +
-                    "new AiDotNet.VisionLanguage.Encoders.Florence2Options { ImageSize = 32, PatchSize = 8, " +
-                    "EmbeddingDim = 32, NumLayers = 1, NumHeads = 4, NumDecoderLayers = 1, " +
-                    "DecoderEmbeddingDim = 32, NumDecoderHeads = 4, VocabSize = 64, MaxOutputTokens = 16, " +
-                    "UseDaViT = false, LearningRate = 1e-5 })";
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 64), " +
+                    "new AiDotNet.VisionLanguage.Encoders.Florence2Options { ImageSize = 64, VisionBaseDim = 8, VisionBaseHeads = 1, " +
+                    "VisionThirdStageDepth = 1, WindowSize = 2, FfnMultiplier = 2, EmbeddingDim = 16, TextDim = 16, NumLayers = 1, " +
+                    "NumDecoderLayers = 1, NumHeads = 2, TextFeedForwardDim = 32, VocabSize = 64, MaxTextPositions = 64, " +
+                    "NumLocationBins = 16, MaxOutputTokens = 8, DropoutRate = 0.0, LearningRate = 1e-4 })";
             }
             else if (model.ClassName == "WhisperModel" && model.TypeParameterCount == 1)
             {
