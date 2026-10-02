@@ -192,6 +192,59 @@ public class InstanceSegmentationIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task MaskRCNN_RpnLaysAnchorsOnEveryPyramidLevelAtItsOwnStride()
+    {
+        // Regression for #2172: the RPN read only P2 (stride 4) but laid its anchors out at stride 16,
+        // so every anchor centre sat at 4x its true position, and P3-P6 never proposed anything.
+        var options = new InstanceSegmentationOptions<double>
+        {
+            Architecture = InstanceSegmentationArchitecture.MaskRCNN,
+            InputSize = new[] { 64, 64 }
+        };
+        var model = new MaskRCNN<double>(options);
+        const int imageSize = 64;
+
+        var (fpnFeatures, proposals, anchors, levelAnchorCounts) = model.ProposeRegions(Rand(1, 3, imageSize, imageSize), 1000);
+
+        int[] strides = { 4, 8, 16, 32, 64 };
+        int[] anchorSizes = { 32, 64, 128, 256, 512 };
+        Assert.Equal(imageSize / 4, fpnFeatures[0].Shape[2]);
+        Assert.Equal(strides.Length, levelAnchorCounts.Length);
+        Assert.Equal(anchors.Count, levelAnchorCounts.Sum());
+
+        int start = 0;
+        for (int level = 0; level < strides.Length; level++)
+        {
+            int stride = strides[level];
+            int cells = imageSize / stride;
+            Assert.Equal(cells * cells * 3, levelAnchorCounts[level]);
+
+            for (int i = start; i < start + levelAnchorCounts[level]; i++)
+            {
+                var a = anchors[i];
+                double cx = (a.X1 + a.X2) / 2 / stride - 0.5;
+                double cy = (a.Y1 + a.Y2) / 2 / stride - 0.5;
+                Assert.InRange(cx, 0, cells - 1);
+                Assert.InRange(cy, 0, cells - 1);
+                Assert.Equal(Math.Round(cx), cx, 9);
+                Assert.Equal(Math.Round(cy), cy, 9);
+                Assert.Equal(anchorSizes[level], Math.Sqrt((a.X2 - a.X1) * (a.Y2 - a.Y1)), 6);
+            }
+
+            start += levelAnchorCounts[level];
+        }
+
+        Assert.Equal(4, proposals.Shape[1]);
+        for (int p = 0; p < proposals.Shape[0]; p++)
+        {
+            Assert.InRange(proposals[p, 0], 0, proposals[p, 2]);
+            Assert.InRange(proposals[p, 1], 0, proposals[p, 3]);
+            Assert.InRange(proposals[p, 2], proposals[p, 0], imageSize);
+            Assert.InRange(proposals[p, 3], proposals[p, 1], imageSize);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task MaskRCNN_Segment_ReturnsResult()
     {
         var options = new InstanceSegmentationOptions<double>

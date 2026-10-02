@@ -43,6 +43,7 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
     private readonly ResNet<T> _backbone;
     private readonly FPN<T> _fpn;
     private readonly RPN<T> _rpn;
+    private readonly RoIAlign<T> _roiAlign;
     private readonly Dense<T> _boxHead;
     private readonly Dense<T> _classHead;
     private readonly MaskHead<T> _maskHead;
@@ -64,8 +65,12 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
         // Feature Pyramid Network
         _fpn = new FPN<T>(new[] { 256, 512, 1024, 2048 }, 256);
 
-        // Region Proposal Network
-        _rpn = new RPN<T>(256, 9); // 256 channels, 9 anchors per location
+        // Region Proposal Network: a shared head with the standard 256-wide 3x3 conv, run on P2-P6
+        // with one anchor size per level (32-512) and 3 aspect ratios per location (Lin et al. 2017).
+        _rpn = new RPN<T>(256, 256);
+
+        // RoIAlign (He et al. 2017): 7x7 bins, 2x2 bilinear samples per bin
+        _roiAlign = new RoIAlign<T>(_roiPoolSize, samplingRatio: 2);
 
         // Box head (2 FC layers)
         int roiFeatureDim = 256 * _roiPoolSize * _roiPoolSize;
@@ -86,27 +91,23 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
         int imageHeight = image.Shape[2];
         int imageWidth = image.Shape[3];
 
-        // Extract backbone features
-        var backboneFeatures = _backbone.ExtractFeatures(image);
+        var (fpnFeatures, proposalBoxes, _, _) = ProposeRegions(image, Options.MaxDetections);
+        int numProposals = proposalBoxes.Shape[0];
 
-        // Apply FPN
-        var fpnFeatures = _fpn.Forward(backboneFeatures);
+        // Each RoI is pooled from the pyramid level matching its size, at that level's stride.
+        var pooled = numProposals == 0
+            ? null
+            : FpnRoIPooler<T>.Pool(_roiAlign, fpnFeatures, _backbone.Strides, proposalBoxes);
 
-        // Generate proposals with RPN
-        var p3Features = fpnFeatures[0]; // Use P3 level for RPN
-        var (objectness, bboxDeltas, anchors) = _rpn.Forward(p3Features);
-
-        // Decode proposals
-        var proposals = DecodeProposals(objectness, bboxDeltas, anchors, imageHeight, imageWidth);
-
-        // RoI pooling and classification
+        // RoI classification and mask prediction
         var instances = new List<InstanceMask<T>>();
 
-        foreach (var proposal in proposals.Take(Options.MaxDetections))
+        for (int p = 0; p < numProposals; p++)
         {
-            // Select appropriate FPN level based on proposal size (standard FPN assignment)
-            var (fpnLevel, stride) = SelectFPNLevel(proposal, fpnFeatures.Count);
-            var roiFeatures = RoIAlign(fpnFeatures[fpnLevel], proposal, _roiPoolSize, _roiPoolSize, stride);
+            var proposal = new BoundingBox<T>(
+                proposalBoxes[p, 0], proposalBoxes[p, 1], proposalBoxes[p, 2], proposalBoxes[p, 3],
+                BoundingBoxFormat.XYXY);
+            var roiFeatures = CvTensorOps<T>.Select(pooled!, new[] { p }, 0);
 
             // Flatten for FC layers
             var flattened = Flatten(roiFeatures);
@@ -157,190 +158,49 @@ public class MaskRCNN<T> : InstanceSegmenterBase<T>
         };
     }
 
-    private List<BoundingBox<T>> DecodeProposals(
-        Tensor<T> objectness, Tensor<T> bboxDeltas, List<BoundingBox<T>> anchors,
-        int imageHeight, int imageWidth)
-    {
-        var proposals = new List<(BoundingBox<T> box, double score)>();
-
-        int numAnchors = anchors.Count;
-
-        // RPN.Forward returns objectness as [B, N, 2] and bboxDeltas as [B, N, 4]
-        // where N = H * W * numAnchorsPerLocation
-        int totalPositions = objectness.Rank == 3 ? objectness.Shape[1] : objectness.Rank == 2 ? objectness.Shape[0] : objectness.Length / 2;
-
-        for (int i = 0; i < numAnchors && i < totalPositions; i++)
-        {
-            // Objectness is [B, N, 2]: index 1 = foreground score
-            double score = objectness.Rank == 3
-                ? NumOps.ToDouble(objectness[0, i, 1])
-                : NumOps.ToDouble(objectness[i * 2 + 1]); // Flat [bg, fg, bg, fg, ...] layout
-
-            if (score > 0.3) // Pre-NMS threshold
-            {
-                var anchor = anchors[i % anchors.Count];
-
-                // Apply deltas
-                double anchorX = (NumOps.ToDouble(anchor.X1) + NumOps.ToDouble(anchor.X2)) / 2;
-                double anchorY = (NumOps.ToDouble(anchor.Y1) + NumOps.ToDouble(anchor.Y2)) / 2;
-                double anchorW = NumOps.ToDouble(anchor.X2) - NumOps.ToDouble(anchor.X1);
-                double anchorH = NumOps.ToDouble(anchor.Y2) - NumOps.ToDouble(anchor.Y1);
-
-                // Decode using standard box encoding
-                // bboxDeltas is [B, N, 4]
-                double dx = 0, dy = 0, dw = 0, dh = 0;
-                if (bboxDeltas.Rank == 3 && i < bboxDeltas.Shape[1])
-                {
-                    dx = NumOps.ToDouble(bboxDeltas[0, i, 0]);
-                    dy = NumOps.ToDouble(bboxDeltas[0, i, 1]);
-                    dw = NumOps.ToDouble(bboxDeltas[0, i, 2]);
-                    dh = NumOps.ToDouble(bboxDeltas[0, i, 3]);
-                }
-                else
-                {
-                    int idx = i * 4;
-                    if (idx + 3 < bboxDeltas.Length)
-                    {
-                        dx = NumOps.ToDouble(bboxDeltas[idx]);
-                        dy = NumOps.ToDouble(bboxDeltas[idx + 1]);
-                        dw = NumOps.ToDouble(bboxDeltas[idx + 2]);
-                        dh = NumOps.ToDouble(bboxDeltas[idx + 3]);
-                    }
-                }
-
-                double predX = anchorX + dx * anchorW;
-                double predY = anchorY + dy * anchorH;
-                double predW = anchorW * Math.Exp(MathHelper.Clamp(dw, -4, 4));
-                double predH = anchorH * Math.Exp(MathHelper.Clamp(dh, -4, 4));
-
-                // Convert to corner format and clip
-                double x1 = MathHelper.Clamp(predX - predW / 2, 0, imageWidth);
-                double y1 = MathHelper.Clamp(predY - predH / 2, 0, imageHeight);
-                double x2 = MathHelper.Clamp(predX + predW / 2, 0, imageWidth);
-                double y2 = MathHelper.Clamp(predY + predH / 2, 0, imageHeight);
-
-                if (x2 > x1 && y2 > y1)
-                {
-                    var box = new BoundingBox<T>(
-                        NumOps.FromDouble(x1), NumOps.FromDouble(y1),
-                        NumOps.FromDouble(x2), NumOps.FromDouble(y2),
-                        BoundingBoxFormat.XYXY);
-
-                    proposals.Add((box, score));
-                }
-            }
-        }
-
-        // Sort by score and take top proposals
-        return proposals.OrderByDescending(p => p.score)
-            .Take(1000)
-            .Select(p => p.box)
-            .ToList();
-    }
-
-    private Tensor<T> RoIAlign(Tensor<T> features, BoundingBox<T> box, int outputH, int outputW, double stride = 8.0)
-    {
-        int batch = 1;
-        int channels = features.Shape[1];
-        int featureH = features.Shape[2];
-        int featureW = features.Shape[3];
-
-        var output = new Tensor<T>(new[] { batch, channels, outputH, outputW });
-
-        // Map box to feature space using the provided stride (P3=8, P4=16, P5=32)
-        double x1 = NumOps.ToDouble(box.X1) / stride;
-        double y1 = NumOps.ToDouble(box.Y1) / stride;
-        double x2 = NumOps.ToDouble(box.X2) / stride;
-        double y2 = NumOps.ToDouble(box.Y2) / stride;
-
-        // Guard against zero or negative box dimensions
-        double boxH = y2 - y1;
-        double boxW = x2 - x1;
-        if (boxH <= 0 || boxW <= 0)
-        {
-            // Return zero-filled tensor for degenerate boxes
-            return output;
-        }
-
-        double binH = boxH / outputH;
-        double binW = boxW / outputW;
-
-        for (int c = 0; c < channels; c++)
-        {
-            for (int oh = 0; oh < outputH; oh++)
-            {
-                for (int ow = 0; ow < outputW; ow++)
-                {
-                    // Sample 4 points in each bin
-                    double sumVal = 0;
-                    int numSamples = 0;
-
-                    for (int sy = 0; sy < 2; sy++)
-                    {
-                        for (int sx = 0; sx < 2; sx++)
-                        {
-                            double sampY = y1 + (oh + 0.25 + 0.5 * sy) * binH;
-                            double sampX = x1 + (ow + 0.25 + 0.5 * sx) * binW;
-
-                            if (sampY >= 0 && sampY < featureH && sampX >= 0 && sampX < featureW)
-                            {
-                                // Bilinear interpolation
-                                int fy0 = (int)Math.Floor(sampY);
-                                int fx0 = (int)Math.Floor(sampX);
-                                int fy1 = Math.Min(fy0 + 1, featureH - 1);
-                                int fx1 = Math.Min(fx0 + 1, featureW - 1);
-
-                                double wy1 = sampY - fy0;
-                                double wy0 = 1 - wy1;
-                                double wx1 = sampX - fx0;
-                                double wx0 = 1 - wx1;
-
-                                double v00 = NumOps.ToDouble(features[0, c, fy0, fx0]);
-                                double v01 = NumOps.ToDouble(features[0, c, fy0, fx1]);
-                                double v10 = NumOps.ToDouble(features[0, c, fy1, fx0]);
-                                double v11 = NumOps.ToDouble(features[0, c, fy1, fx1]);
-
-                                sumVal += wy0 * (wx0 * v00 + wx1 * v01) + wy1 * (wx0 * v10 + wx1 * v11);
-                                numSamples++;
-                            }
-                        }
-                    }
-
-                    output[0, c, oh, ow] = NumOps.FromDouble(numSamples > 0 ? sumVal / numSamples : 0);
-                }
-            }
-        }
-
-        return output;
-    }
-
     /// <summary>
-    /// Selects the appropriate FPN level and stride based on proposal size.
-    /// Uses the standard FPN level assignment formula: k = floor(k0 + log2(sqrt(area) / 224))
+    /// Runs the backbone, FPN and RPN, returning the pyramid features and the highest-scoring proposals.
     /// </summary>
-    private (int level, double stride) SelectFPNLevel(BoundingBox<T> proposal, int numLevels)
+    /// <param name="image">Input image [1, 3, H, W].</param>
+    /// <param name="maxProposals">Maximum number of proposals to return, best first.</param>
+    /// <returns>
+    /// The FPN levels P2-P5, proposal boxes [N, 4] in input pixels (XYXY), every RPN anchor in level
+    /// order P2-P6, and the number of anchors on each level.
+    /// </returns>
+    internal (List<Tensor<T>> fpnFeatures, Tensor<T> proposalBoxes, List<BoundingBox<T>> anchors, int[] levelAnchorCounts)
+        ProposeRegions(Tensor<T> image, int maxProposals)
     {
-        double w = NumOps.ToDouble(proposal.X2) - NumOps.ToDouble(proposal.X1);
-        double h = NumOps.ToDouble(proposal.Y2) - NumOps.ToDouble(proposal.Y1);
-        double area = Math.Max(1, w * h);
+        int imageHeight = image.Shape[2];
+        int imageWidth = image.Shape[3];
 
-        // Standard FPN assignment: k0=4 corresponds to P4 (stride=16) for 224x224 proposals
-        // k = floor(4 + log2(sqrt(area) / 224))
-        const int k0 = 4;
-        const double canonicalSize = 224.0;
-        double k = k0 + MathHelper.Log2(Math.Sqrt(area) / canonicalSize);
-        int level = (int)Math.Floor(k);
+        // Extract backbone features
+        var backboneFeatures = _backbone.ExtractFeatures(image);
 
-        // Clamp to valid FPN levels (P3=0, P4=1, P5=2, P6=3, etc.)
-        // Map from P-levels to array indices: P3->0, P4->1, P5->2
-        int fpnLevel = MathHelper.Clamp(level - 3, 0, numLevels - 1);
+        // Apply FPN
+        var fpnFeatures = _fpn.Forward(backboneFeatures);
 
-        // Strides for each FPN level: P3=8, P4=16, P5=32, P6=64
-        double[] strides = { 8.0, 16.0, 32.0, 64.0 };
-        double stride = strides[Math.Min(fpnLevel, strides.Length - 1)];
+        // The shared RPN head runs on every level P2-P5 plus P6 (P5 subsampled by 2), each level's
+        // anchors laid out at its own stride; proposals are the top 1000 per level after NMS, best
+        // 1000 overall (Mask R-CNN on FPN; detectron2, torchvision).
+        var rpnLevels = new List<Tensor<T>>(fpnFeatures) { CvTensorOps<T>.MaxPoolPadded(fpnFeatures[^1], 1, 2, 0) };
+        var (objectness, bboxDeltas, anchors, levelAnchorCounts) = _rpn.ForwardLevels(rpnLevels);
+        var proposalSets = _rpn.GenerateProposals(
+            objectness, bboxDeltas, anchors,
+            imageHeight, imageWidth,
+            preNmsTopK: 1000,
+            postNmsTopK: 1000,
+            nmsThreshold: 0.7,
+            levelAnchorCounts: levelAnchorCounts);
 
-        return (fpnLevel, stride);
+        var proposalBoxes = proposalSets.Count == 0 ? new Tensor<T>(new[] { 0, 4 }) : proposalSets[0].boxes;
+        if (proposalBoxes.Shape[0] > maxProposals)
+        {
+            proposalBoxes = CvTensorOps<T>.Select(proposalBoxes, Enumerable.Range(0, maxProposals).ToArray(), 0);
+        }
+
+        return (fpnFeatures, proposalBoxes, anchors, levelAnchorCounts);
     }
+
 
     private Tensor<T> Flatten(Tensor<T> input)
     {
