@@ -143,7 +143,18 @@ public sealed class TwoStageDetectionLoss<T>
     /// <param name="random">The source of the sampling draws.</param>
     public Tensor<T> ComputeStageLoss(Tensor<T> classLogits, Tensor<T> boxDeltas, Tensor<T> proposals,
         IReadOnlyList<double[]> gold, IReadOnlyList<int> goldClasses, int stage, Random random)
+        => ComputeStageLoss(classLogits, boxDeltas, proposals, gold, goldClasses, stage, random, out _);
+
+    /// <summary>
+    /// The same stage loss, also reporting the sampled foreground RoIs and the object each matched,
+    /// so a branch trained only on positives (Mask R-CNN's mask head) uses exactly this sample.
+    /// </summary>
+    /// <param name="foreground">Each sampled foreground RoI as (proposal row, matched object index).</param>
+    internal Tensor<T> ComputeStageLoss(Tensor<T> classLogits, Tensor<T> boxDeltas, Tensor<T> proposals,
+        IReadOnlyList<double[]> gold, IReadOnlyList<int> goldClasses, int stage, Random random,
+        out IReadOnlyList<(int Row, int Gold)> foreground)
     {
+        foreground = Array.Empty<(int Row, int Gold)>();
         if (classLogits is null) throw new ArgumentNullException(nameof(classLogits));
         if (boxDeltas is null) throw new ArgumentNullException(nameof(boxDeltas));
         if (proposals is null) throw new ArgumentNullException(nameof(proposals));
@@ -185,35 +196,36 @@ public sealed class TwoStageDetectionLoss<T>
         }
 
         double threshold = _options.StageForegroundIoU[stage];
-        var foreground = Sample(Enumerable.Range(0, count).Where(r => gold.Count > 0 && bestIoU[r] >= threshold).ToList(),
+        var foregroundRows = Sample(Enumerable.Range(0, count).Where(r => gold.Count > 0 && bestIoU[r] >= threshold).ToList(),
             (int)(_options.RoiBatchSizePerImage * _options.RoiForegroundFraction), random);
+        foreground = foregroundRows.Select(r => (r, match[r])).ToArray();
         var background = Sample(Enumerable.Range(0, count)
                 .Where(r => (gold.Count == 0 || bestIoU[r] < threshold) && bestIoU[r] >= _options.RoiBackgroundIoULow).ToList(),
-            _options.RoiBatchSizePerImage - foreground.Count, random);
-        int sampled = foreground.Count + background.Count;
+            _options.RoiBatchSizePerImage - foregroundRows.Count, random);
+        int sampled = foregroundRows.Count + background.Count;
         if (sampled == 0)
             return engine.TensorAdd(ZeroConnected(classLogits), ZeroConnected(boxDeltas));
 
-        var rows = foreground.Concat(background).ToArray();
-        var classes = foreground.Select(r => goldClasses[match[r]] + 1).Concat(background.Select(_ => 0)).ToArray();
+        var rows = foregroundRows.Concat(background).ToArray();
+        var classes = foregroundRows.Select(r => goldClasses[match[r]] + 1).Concat(background.Select(_ => 0)).ToArray();
         var classification = engine.TensorMultiplyScalar(CrossEntropySum(classLogits, rows, classes, width),
             NumOps.FromDouble(1.0 / sampled));
         Tensor<T> loss = classification;
-        if (foreground.Count > 0)
+        if (foregroundRows.Count > 0)
         {
-            var deltaIndices = new int[foreground.Count * 4];
-            var targets = new T[foreground.Count * 4];
-            for (int i = 0; i < foreground.Count; i++)
+            var deltaIndices = new int[foregroundRows.Count * 4];
+            var targets = new T[foregroundRows.Count * 4];
+            for (int i = 0; i < foregroundRows.Count; i++)
             {
-                int r = foreground[i];
+                int r = foregroundRows[i];
                 int column = (goldClasses[match[r]] + 1) * 4;
                 for (int k = 0; k < 4; k++) deltaIndices[i * 4 + k] = r * width * 4 + column + k;
                 WriteDeltas(targets, i * 4, boxes[r], gold[match[r]]);
             }
             var flat = engine.Reshape(boxDeltas, new[] { boxDeltas.Length });
-            var predicted = engine.Reshape(CvTensorOps<T>.Select(flat, deltaIndices, 0), new[] { foreground.Count, 4 });
+            var predicted = engine.Reshape(CvTensorOps<T>.Select(flat, deltaIndices, 0), new[] { foregroundRows.Count, 4 });
             var regression = engine.TensorMultiplyScalar(
-                SmoothL1Sum(predicted, new Tensor<T>(targets, new[] { foreground.Count, 4 })),
+                SmoothL1Sum(predicted, new Tensor<T>(targets, new[] { foregroundRows.Count, 4 })),
                 NumOps.FromDouble(_options.RoiRegressionWeight / sampled));
             loss = engine.TensorAdd(loss, regression);
         }
