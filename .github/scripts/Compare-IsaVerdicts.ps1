@@ -34,6 +34,19 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# A test reported more than once in one configuration (a retry, or a second results file) keeps its most severe
+# outcome: anything incomplete (Error, Timeout, Aborted, ...) over Failed, Failed over Passed, Passed over NotExecuted.
+# Incomplete must win in both orders: Error then Passed would otherwise read as agreement, and Failed then Error would
+# hide that the run never finished.
+function Get-OutcomeSeverity([string] $Outcome) {
+    switch ($Outcome) {
+        'NotExecuted' { return 0 }
+        'Passed' { return 1 }
+        'Failed' { return 2 }
+        default { return 3 }
+    }
+}
+
 function Read-Verdicts([string] $Root, [string[]] $Configurations) {
     $verdicts = @{}
     $configurationsWithResults = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
@@ -47,9 +60,11 @@ function Read-Verdicts([string] $Root, [string[]] $Configurations) {
                 $outcome = [string] $result.GetAttribute('outcome')
                 [void] $configurationsWithResults.Add($configuration)
                 if (-not $verdicts.ContainsKey($name)) { $verdicts[$name] = @{} }
-                # A retried test can appear twice; a failure anywhere in a configuration is its verdict there.
+                # A retried test can appear twice; the most severe outcome is its verdict there (Get-OutcomeSeverity).
                 $previous = $verdicts[$name][$configuration]
-                if ($previous -ne 'Failed') { $verdicts[$name][$configuration] = $outcome }
+                if ($null -eq $previous -or (Get-OutcomeSeverity $outcome) -gt (Get-OutcomeSeverity $previous)) {
+                    $verdicts[$name][$configuration] = $outcome
+                }
             }
         }
     }
@@ -88,13 +103,13 @@ function Compare-Verdicts([object] $Read, [string[]] $Configurations, [string[]]
 
 if ($SelfTest) {
     $root = Join-Path ([IO.Path]::GetTempPath()) "isa-verdicts-selftest-$([Guid]::NewGuid().ToString('N'))"
-    function Write-Trx([string] $Base, [string] $Configuration, [hashtable] $Outcomes) {
+    function Write-Trx([string] $Base, [string] $Configuration, [hashtable] $Outcomes, [string] $File = 'r.trx') {
         $dir = Join-Path $Base $Configuration
         New-Item -ItemType Directory -Force -Path $dir | Out-Null
         $results = ($Outcomes.GetEnumerator() | ForEach-Object {
             "<UnitTestResult testName=`"$($_.Key)`" outcome=`"$($_.Value)`" />"
         }) -join "`n"
-        Set-Content -LiteralPath (Join-Path $dir 'r.trx') -Encoding utf8 -Value "<TestRun><Results>$results</Results></TestRun>"
+        Set-Content -LiteralPath (Join-Path $dir $File) -Encoding utf8 -Value "<TestRun><Results>$results</Results></TestRun>"
     }
     $configs = @('default', 'avx512-off', 'avx2-off')
     $failures = [Collections.Generic.List[string]]::new()
@@ -119,8 +134,16 @@ if ($SelfTest) {
         Check 'missing configuration' (Compare-Verdicts (Read-Verdicts $b $configs) $configs @()) `
             @() @('(configuration avx512-off)', 'A.Agrees')
 
+        # A test reported twice in one configuration: an incomplete outcome must survive in either order.
+        $c = Join-Path $root 'c'
+        foreach ($config in $configs) { Write-Trx $c $config @{ 'H.ErrorThenPass' = 'Passed'; 'I.FailThenError' = 'Failed'; 'J.RetriedPass' = 'Passed' } }
+        Write-Trx $c 'default' @{ 'H.ErrorThenPass' = 'Error'; 'I.FailThenError' = 'Failed'; 'J.RetriedPass' = 'Passed' } 'a-first.trx'
+        Write-Trx $c 'default' @{ 'H.ErrorThenPass' = 'Passed'; 'I.FailThenError' = 'Error'; 'J.RetriedPass' = 'Passed' } 'z-second.trx'
+        Check 'repeated results' (Compare-Verdicts (Read-Verdicts $c $configs) $configs @()) `
+            @() @('H.ErrorThenPass', 'I.FailThenError')
+
         if ($failures.Count -gt 0) { $failures | ForEach-Object { Write-Host "FAIL: $_" }; exit 1 }
-        Write-Host 'Compare-IsaVerdicts self-test passed (flip, missing result, partial skip, execution error, never-run test and missing configuration are all caught; agreement and a skip everywhere are not).'
+        Write-Host 'Compare-IsaVerdicts self-test passed (flip, missing result, partial skip, execution error, never-run test, missing configuration and an incomplete repeat in either order are all caught; agreement and a skip everywhere are not).'
         exit 0
     }
     finally {
