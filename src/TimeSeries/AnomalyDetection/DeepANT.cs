@@ -107,13 +107,13 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
 
     private void InitializeModel()
     {
-        var random = RandomHelper.CreateSeededRandom(42);
+        var random = RandomHelper.CreateSeededRandom(SeedOr(42));
         int numChannels = 32;
 
         // Initialize convolutional layers (fixed random features)
         _convLayers.Clear();
-        _convLayers.Add(new ConvLayerTensor<T>(numChannels, 3, seed: 42));
-        _convLayers.Add(new ConvLayerTensor<T>(numChannels, 3, seed: 1042));
+        _convLayers.Add(new ConvLayerTensor<T>(numChannels, 3, seed: SeedOr(42)));
+        _convLayers.Add(new ConvLayerTensor<T>(numChannels, 3, seed: SeedOr(1042)));
 
         // Initialize fully connected output layer with Xavier initialization
         double stddev = Math.Sqrt(2.0 / numChannels);

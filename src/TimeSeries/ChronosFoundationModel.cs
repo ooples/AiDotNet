@@ -136,7 +136,7 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         _options = options;
         Options = _options;
         _numOps = MathHelper.GetNumericOperations<T>();
-        _random = RandomHelper.CreateSeededRandom(42);
+        _random = RandomHelper.CreateSeededRandom(SeedOr(42));
 
         ValidateOptions(options);
 
@@ -201,7 +201,7 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
             _transformerLayers.Add(new ChronosTransformerLayerTensor<T>(
                 _options.EmbeddingDim,
                 _options.NumHeads,
-                seed: 42 + i * 1000
+                seed: SeedOr(42) + i * 1000
             ));
         }
 

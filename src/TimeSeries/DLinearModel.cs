@@ -43,7 +43,7 @@ public partial class DLinearModel<T> : TimeSeriesModelBase<T>
     {
         _options = options;
         Options = _options;
-        _random = RandomHelper.CreateSeededRandom(42);
+        _random = RandomHelper.CreateSeededRandom(SeedOr(42));
 
         _l = Math.Max(2, _options.LookbackWindow);
         int k = Math.Max(1, Math.Min(_options.MovingAverageKernel, _l));
