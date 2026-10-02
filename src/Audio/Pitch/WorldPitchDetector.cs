@@ -418,8 +418,9 @@ public class WorldPitchDetector<T> : PitchDetectorBase<T>
         var (lpRe, lpIm) = ForwardFft(lowPassFilter);
 
         // Convolution in the frequency domain. WORLD writes the conjugate-side copy into the same array as it
-        // goes, so the last two iterations overwrite bins N/2-1 and N/2 that the inverse transform reads; the
-        // sequence is kept exactly to reproduce WORLD's (and PyWorld's) output.
+        // goes, so its last two iterations overwrite bins N/2-1 and N/2, which the inverse transform reads. The
+        // sequence is kept as WORLD has it; its effect is below the 1e-6 test tolerance because the Nuttall
+        // low-pass spectrum is effectively zero that close to Nyquist (verified by removing it: still matches).
         double tmp = ySpecRe[0] * lpRe[0] - ySpecIm[0] * lpIm[0];
         lpIm[0] = ySpecRe[0] * lpIm[0] + ySpecIm[0] * lpRe[0];
         lpRe[0] = tmp;
