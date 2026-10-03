@@ -26,7 +26,7 @@ public class GlowTTSPaperTests
 
     private static GlowTTS<double> CreateModel() => new(
         new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
-            inputSize: 8, outputSize: MelBins),
+            inputSize: 8, outputSize: MelBins) { RandomSeed = 11 },
         new GlowTTSOptions
         {
             EncoderDim = 16, HiddenDim = 16, NumHeads = 2, NumEncoderLayers = 1, FilterChannels = 32, PrenetDropout = 0.0,

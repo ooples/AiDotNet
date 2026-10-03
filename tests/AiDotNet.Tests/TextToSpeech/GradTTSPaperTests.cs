@@ -26,7 +26,7 @@ public class GradTTSPaperTests
 
     private static GradTTS<double> CreateModel(int steps = 3) => new(
         new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
-            inputSize: 8, outputSize: MelBins),
+            inputSize: 8, outputSize: MelBins) { RandomSeed = 11 },
         new GradTTSOptions
         {
             EncoderDim = 16, HiddenDim = 16, NumHeads = 2, NumEncoderLayers = 1, FilterChannels = 32, PrenetDropout = 0.0,

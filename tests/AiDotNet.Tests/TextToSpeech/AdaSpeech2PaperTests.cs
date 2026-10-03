@@ -28,7 +28,7 @@ public class AdaSpeech2PaperTests
 
     private static AdaSpeech2<double> CreateModel() => new(
         new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
-            inputSize: 8, outputSize: MelBins),
+            inputSize: 8, outputSize: MelBins) { RandomSeed = 11 },
         new AdaSpeech2Options
         {
             EncoderDim = 16, HiddenDim = 16, MelChannels = MelBins, NumHeads = 2, NumEncoderLayers = 1,

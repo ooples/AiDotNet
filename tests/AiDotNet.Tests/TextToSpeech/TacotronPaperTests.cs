@@ -34,7 +34,7 @@ public class TacotronPaperTests
 
     private static Tacotron<double> CreateModel() => new(
         new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
-            inputSize: 8, outputSize: MelBins),
+            inputSize: 8, outputSize: MelBins) { RandomSeed = 11 },
         SmallOptions());
 
     private static Tensor<double> Tokens(int count)

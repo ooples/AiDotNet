@@ -26,7 +26,7 @@ public class TransformerTTSPaperTests
 
     private static TransformerTTS<double> CreateModel() => new(
         new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
-            inputSize: 8, outputSize: MelBins),
+            inputSize: 8, outputSize: MelBins) { RandomSeed = 11 },
         new TransformerTTSOptions
         {
             EncoderDim = 16, HiddenDim = 16, NumHeads = 2, NumEncoderLayers = 1, NumDecoderLayers = 1, FeedForwardDim = 32,
