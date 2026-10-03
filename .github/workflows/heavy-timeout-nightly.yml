@@ -226,17 +226,33 @@ jobs:
 
           # Set only now, so discovery above is never constrained by the cap.
           $env:DOTNET_GCHeapHardLimit = '0x{0:X}' -f $heapCapBytes
+          # A WALL-CLOCK CAP PER CHUNK, and a budget for the slice (#2087). Most classes take about ten minutes, but a
+          # few run for hours (one slice finished no class at all in 350 minutes), and the job timeout then cancelled
+          # the slice with no summary. Each chunk now runs under `timeout`, with --blame-hang naming a test that stops
+          # progressing, and a chunk that would not finish inside the job budget is reported as not run, so every slice
+          # ends with a row for every class.
+          $chunkCapMinutes = 20
+          $budgetMinutes   = 320
+          $laneStarted     = Get-Date
           foreach ($chunk in $chunks) {
             $index++
             $label   = 'chunk{0:d3}' -f $index
             $filter  = 'Category=HeavyTimeout&(' + (($chunk | ForEach-Object { "FullyQualifiedName~$_" }) -join '|') + ')'
             $names   = ($chunk | ForEach-Object { $_.Substring($_.LastIndexOf('.') + 1) }) -join ', '
+            if (((Get-Date) - $laneStarted).TotalMinutes + $chunkCapMinutes -gt $budgetMinutes) {
+              $rows += [pscustomobject]@{ Label = $label; Names = $names; Exit = 'not run (budget)'; Seconds = 0; MemPre = -1; MemPost = -1 }
+              $failed++
+              Write-Host "$label -> not run: the slice's $budgetMinutes-minute budget is spent"
+              continue
+            }
             $memPre  = Get-AvailableMemoryMb
             $started = Get-Date
 
             Write-Host "::group::$label ($($chunk.Count)): $names  -- MemAvailable ${memPre} MB before"
 
-            dotnet test $testProject -c Release --framework net10.0 --no-build --no-restore `
+            timeout --kill-after=60s "$($chunkCapMinutes)m" `
+              dotnet test $testProject -c Release --framework net10.0 --no-build --no-restore `
+              --blame-hang --blame-hang-timeout 10m `
               --filter $filter `
               --logger "trx;LogFileName=$label.trx" `
               --logger 'console;verbosity=normal' `
@@ -247,6 +263,7 @@ jobs:
             $duration = [int]((Get-Date) - $started).TotalSeconds
             Write-Host '::endgroup::'
 
+            if ($exit -eq 124 -or $exit -eq 137) { $exit = "timeout after $($chunkCapMinutes) min" }
             if ($exit -ne 0) { $failed++ }
             $rows += [pscustomobject]@{
               Label = $label; Names = $names; Exit = $exit
