@@ -15,4 +15,13 @@ public enum TtsSupervision
 
     /// <summary>A reference recording of the target speaker or style.</summary>
     SpeakerReference = 2,
+
+    /// <summary>The speaker's index in a multi-speaker model's speaker table.</summary>
+    SpeakerId = 4,
+
+    /// <summary>
+    /// The recording itself (or its linear spectrogram), beyond the mel spectrogram: Tacotron's post-processing
+    /// network predicts the linear-frequency spectrogram (Wang et al. 2017, §3.4).
+    /// </summary>
+    Recording = 8,
 }

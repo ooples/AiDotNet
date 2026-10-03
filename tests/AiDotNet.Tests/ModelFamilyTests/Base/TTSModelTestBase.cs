@@ -22,6 +22,31 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </remarks>
 public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
 {
+    /// <summary>Creates the model under test.</summary>
+    protected abstract INeuralNetworkModel<T> CreateTtsNetwork();
+
+    /// <summary>
+    /// Creates the model and, when its paper synthesizes in a given voice (AdaSpeech reads a speaker and a reference
+    /// recording, Chen et al. 2021 §3), gives it one: speaker 0 and a smooth reference mel spectrogram. Every
+    /// inherited invariant then exercises the model's real inference path instead of a voice-less refusal.
+    /// </summary>
+    protected sealed override INeuralNetworkModel<T> CreateNetwork()
+    {
+        var network = CreateTtsNetwork();
+        if (network is AiDotNet.TextToSpeech.TtsModelBase<T> tts
+            && tts.SynthesisVoiceRequirement != AiDotNet.TextToSpeech.TtsSupervision.None)
+        {
+            int melChannels = tts.MelChannels;
+            var reference = new Tensor<T>(new[] { 12, melChannels });
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            for (int f = 0; f < 12; f++)
+                for (int c = 0; c < melChannels; c++)
+                    reference[f, c] = ops.FromDouble(Math.Sin(0.37 * f + 0.21 * c));
+            tts.Voice = new AiDotNet.TextToSpeech.TtsVoice<T> { SpeakerId = 0, Reference = reference };
+        }
+        return network;
+    }
+
     /// <summary>
     /// Trains a model whose paper needs supervision a token/mel pair does not carry (FastSpeech 2's forced-alignment
     /// durations) through its typed entry point, with synthetic supervision consistent with the fixture's target:
@@ -33,7 +58,7 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
         if (network is AiDotNet.TextToSpeech.TtsModelBase<T> tts
             && tts.TrainingSupervision != AiDotNet.TextToSpeech.TtsSupervision.None)
         {
-            tts.Train(SyntheticSupervision(input, target));
+            tts.Train(SyntheticSupervision(input, target, tts));
             return;
         }
         base.TrainOn(network, input, target);
@@ -48,11 +73,12 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
     {
         if (network is AiDotNet.TextToSpeech.TtsModelBase<T> tts
             && tts.TrainingSupervision != AiDotNet.TextToSpeech.TtsSupervision.None)
-            return ConvertToDouble(tts.EvaluateTrainingObjective(SyntheticSupervision(input, target)));
+            return ConvertToDouble(tts.EvaluateTrainingObjective(SyntheticSupervision(input, target, tts)));
         return base.MeasureLoss(network, input, output, target);
     }
 
-    private static AiDotNet.TextToSpeech.TtsTrainingSample<T> SyntheticSupervision(Tensor<T> tokens, Tensor<T> target)
+    private static AiDotNet.TextToSpeech.TtsTrainingSample<T> SyntheticSupervision(Tensor<T> tokens, Tensor<T> target,
+        AiDotNet.TextToSpeech.TtsModelBase<T>? network = null)
     {
         int frames = target.Rank >= 2 ? target.Shape[target.Rank - 2] : target.Length;
         int channels = target.Rank >= 2 ? target.Shape[target.Rank - 1] : 1;
@@ -64,6 +90,21 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
 
         var pitch = new double[frames];
         var energy = new double[frames];
+        // A log-magnitude linear spectrogram for models whose post-net predicts one (Tacotron): smooth in frequency,
+        // following the target's frame-to-frame changes through its mean.
+        AiDotNet.Tensors.LinearAlgebra.Tensor<T>? linear = null;
+        if (network is not null && (network.TrainingSupervision & AiDotNet.TextToSpeech.TtsSupervision.Recording) != 0)
+        {
+            int bins = network.LinearSpectrogramBins;
+            linear = new AiDotNet.Tensors.LinearAlgebra.Tensor<T>(new[] { frames, bins });
+            var linOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            for (int f = 0; f < frames; f++)
+            {
+                double level = 0;
+                for (int c = 0; c < channels; c++) level += linOps.ToDouble(mel[f, c]) / channels;
+                for (int k = 0; k < bins; k++) linear[f, k] = linOps.FromDouble(level - 2.0 * k / bins);
+            }
+        }
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         for (int f = 0; f < frames; f++)
         {
@@ -84,6 +125,8 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
             Durations = durations,
             Pitch = pitch,
             Energy = energy,
+            SpeakerId = 0,
+            LinearSpectrogram = linear,
         };
     }
 

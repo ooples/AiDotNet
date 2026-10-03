@@ -6,8 +6,10 @@ namespace AiDotNet.TextToSpeech;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public sealed class AcousticTargets<T>
 {
-    internal AcousticTargets(Tensor<T> mel, int melFrames, double[]? pitch, double[]? energy)
+    internal AcousticTargets(Tensor<T> mel, int melFrames, double[]? pitch, double[]? energy,
+        Tensor<T>? linearSpectrogram = null)
     {
+        LinearSpectrogram = linearSpectrogram;
         Mel = mel;
         MelFrames = melFrames;
         Pitch = pitch;
@@ -15,6 +17,10 @@ public sealed class AcousticTargets<T>
     }
 
     /// <summary>Target mel spectrogram, <c>[frames, melChannels]</c>.</summary>
+    /// <summary>The log-magnitude linear spectrogram, <c>[frames, fftSize / 2 + 1]</c>, when the sample carries it or
+    /// its recording.</summary>
+    public Tensor<T>? LinearSpectrogram { get; }
+
     public Tensor<T> Mel { get; }
 
     /// <summary>Number of mel frames.</summary>

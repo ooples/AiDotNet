@@ -28,6 +28,12 @@ public sealed class TtsTrainingSample<T>
     /// <summary>Target mel spectrogram, <c>[frames, melChannels]</c>. Derived from <see cref="Audio"/> when absent.</summary>
     public Tensor<T>? Mel { get; init; }
 
+    /// <summary>
+    /// Target log-magnitude linear spectrogram, <c>[frames, fftSize / 2 + 1]</c>, <c>ln(max(clip, |STFT|))</c>.
+    /// Derived from <see cref="Audio"/> when absent.
+    /// </summary>
+    public Tensor<T>? LinearSpectrogram { get; init; }
+
     /// <summary>Frames per token from a forced alignment; the values sum to the number of mel frames.</summary>
     public int[]? Durations { get; init; }
 

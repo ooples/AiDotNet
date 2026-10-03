@@ -344,7 +344,49 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
             throw new ArgumentException(
                 $"{GetType().Name} trains on per-token durations from a forced alignment; set {nameof(sample.Durations)}.",
                 nameof(sample));
+        if ((RequiredSupervision & TtsSupervision.SpeakerId) != 0 && sample.SpeakerId is null)
+            throw new ArgumentException(
+                $"{GetType().Name} trains a speaker table; set {nameof(sample.SpeakerId)}.", nameof(sample));
+        if ((RequiredSupervision & TtsSupervision.Recording) != 0 && sample.Audio is null && sample.LinearSpectrogram is null)
+            throw new ArgumentException(
+                $"{GetType().Name} trains on the recording's linear spectrogram; set {nameof(sample.Audio)} or {nameof(sample.LinearSpectrogram)}.",
+                nameof(sample));
+        if ((RequiredSupervision & TtsSupervision.SpeakerReference) != 0 && sample.SpeakerReference is null)
+            throw new ArgumentException(
+                $"{GetType().Name} trains on a reference recording of the speaker; set {nameof(sample.SpeakerReference)}.",
+                nameof(sample));
         return TrainOnSample(sample);
+    }
+
+    /// <summary>
+    /// The voice synthesis and prediction use, for models whose paper defines inference relative to a speaker or a
+    /// reference recording (see <see cref="SynthesisVoiceRequirement"/>).
+    /// </summary>
+    public TtsVoice<T>? Voice { get; set; }
+
+    /// <summary>
+    /// What <see cref="Voice"/> must carry for this model to synthesize: <see cref="TtsSupervision.SpeakerId"/>,
+    /// <see cref="TtsSupervision.SpeakerReference"/>, or <see cref="TtsSupervision.None"/> for a model that
+    /// synthesizes from text alone.
+    /// </summary>
+    protected virtual TtsSupervision RequiredVoice => TtsSupervision.None;
+
+    /// <summary>What a voice must carry for this model to synthesize; <see cref="TtsSupervision.None"/> when text
+    /// alone determines the output.</summary>
+    public TtsSupervision SynthesisVoiceRequirement => RequiredVoice;
+
+    /// <summary>
+    /// Returns <see cref="Voice"/>, or throws naming what is missing when the model's paper needs a voice to
+    /// synthesize and none (or an incomplete one) is set.
+    /// </summary>
+    protected TtsVoice<T> RequireVoice()
+    {
+        var voice = Voice ?? throw new InvalidOperationException(
+            $"{GetType().Name} synthesizes in a given voice ({RequiredVoice}); set {nameof(Voice)} first.");
+        if ((RequiredVoice & TtsSupervision.SpeakerReference) != 0 && voice.Reference is null)
+            throw new InvalidOperationException(
+                $"{GetType().Name} reads a reference recording of the speaker; set {nameof(TtsVoice<T>.Reference)} on {nameof(Voice)}.");
+        return voice;
     }
 
     /// <summary>
@@ -392,9 +434,9 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     protected AcousticTargets<T> DeriveAcousticTargets(TtsTrainingSample<T> sample)
     {
         Guard.NotNull(sample);
-        var spectrogram = new TacotronSpectrogram(SampleRate, TargetFftSize, HopSize, TargetFftSize, MelChannels);
+        var spectrogram = new TacotronSpectrogram(SampleRate, TargetFftSize, HopSize, TargetWindowSize, MelChannels);
         double[]? audio = sample.Audio is null ? null : ToDoubles(sample.Audio);
-        double[,]? magnitude = audio is null ? null : spectrogram.Magnitude(audio);
+        double[,]? magnitude = audio is null ? null : spectrogram.Magnitude(PreEmphasize(audio));
 
         Tensor<T> mel;
         if (sample.Mel is not null)
@@ -420,9 +462,41 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
         if (energy is null && magnitude is not null)
             energy = spectrogram.Energy(magnitude);
 
+        Tensor<T>? linear = sample.LinearSpectrogram;
+        if (linear is null && magnitude is not null)
+        {
+            int rows = magnitude.GetLength(0), bins = magnitude.GetLength(1);
+            linear = new Tensor<T>(new[] { rows, bins });
+            for (int f = 0; f < rows; f++)
+                for (int k = 0; k < bins; k++)
+                    linear[f, k] = NumOps.FromDouble(Math.Log(Math.Max(spectrogram.ClipValue, magnitude[f, k])));
+        }
+
         return new AcousticTargets<T>(mel, frames,
             pitch is null ? null : AlignToFrames(pitch, frames),
-            energy is null ? null : AlignToFrames(energy, frames));
+            energy is null ? null : AlignToFrames(energy, frames),
+            linear);
+    }
+
+    /// <summary>Analysis window length, in samples, of the spectrograms the targets are computed with.</summary>
+    protected virtual int TargetWindowSize => TargetFftSize;
+
+    /// <summary>Pre-emphasis coefficient applied to the recording before its spectrograms (Tacotron: 0.97); 0 for none.
+    /// Pitch is estimated from the recording as recorded.</summary>
+    protected virtual double PreEmphasis => 0.0;
+
+    /// <summary>Bins of the linear spectrogram target, <c>fftSize / 2 + 1</c>.</summary>
+    public int LinearSpectrogramBins => TargetFftSize / 2 + 1;
+
+    private double[] PreEmphasize(double[] audio)
+    {
+        double k = PreEmphasis;
+        if (k == 0.0)
+            return audio;
+        var y = new double[audio.Length];
+        if (audio.Length > 0) y[0] = audio[0];
+        for (int n = 1; n < audio.Length; n++) y[n] = audio[n] - k * audio[n - 1];
+        return y;
     }
 
     /// <summary>FFT and window size used to derive targets from a recording (Tacotron 2: 1024).</summary>

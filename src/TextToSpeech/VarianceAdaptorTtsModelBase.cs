@@ -69,15 +69,66 @@ public abstract class VarianceAdaptorTtsModelBase<T> : TtsModelBase<T>
     }
 
     /// <inheritdoc />
+    /// <remarks>An unconditioned model runs its layers front to back (the adaptor uses its own predictions). A model
+    /// with acoustic conditioning runs the encoder, adds its inference-time conditions, and runs the adaptor and the
+    /// conditioned decoder.</remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
         SetTrainingMode(false);
-        var x = input;
-        foreach (var layer in Layers)
-            x = layer.Forward(x);
+        if (!HasAcousticConditioning)
+        {
+            var x = input;
+            foreach (var layer in Layers)
+                x = layer.Forward(x);
+            return x;
+        }
+
+        var conditioned = ConditionForInference(RunEncoder(input));
+        var adapted = VarianceAdaptor.Forward(conditioned.Hidden);
+        return RunDecoderLayers(adapted, conditioned.DecoderCondition);
+    }
+
+    /// <summary>
+    /// Whether the model adds acoustic conditions to the phoneme hidden sequence and conditions its decoder
+    /// (AdaSpeech), which <see cref="ConditionForTraining"/> and <see cref="ConditionForInference"/> supply.
+    /// </summary>
+    protected virtual bool HasAcousticConditioning => false;
+
+    /// <summary>
+    /// Adds the training-time acoustic conditions to the phoneme hidden sequence, from the utterance's own recording.
+    /// </summary>
+    /// <param name="hidden">Phoneme encoder output.</param>
+    /// <param name="sample">The utterance.</param>
+    /// <param name="mel">Its target mel spectrogram, <c>[frames, melChannels]</c>.</param>
+    /// <param name="durations">Frames per phoneme.</param>
+    /// <returns>The conditioned hidden sequence, the decoder's condition, and any auxiliary loss the paper adds.</returns>
+    protected virtual AcousticConditioning<T> ConditionForTraining(
+        Tensor<T> hidden, TtsTrainingSample<T> sample, Tensor<T> mel, int[] durations)
+        => new(hidden, null, null);
+
+    /// <summary>Adds the inference-time acoustic conditions (from <see cref="TtsModelBase{T}.Voice"/> and the
+    /// model's own predictors) to the phoneme hidden sequence.</summary>
+    protected virtual AcousticConditioning<T> ConditionForInference(Tensor<T> hidden) => new(hidden, null, null);
+
+    /// <summary>
+    /// Runs the decoder layers after the adaptor, passing <paramref name="condition"/> to every layer that takes a
+    /// second input (conditional layer normalization).
+    /// </summary>
+    protected Tensor<T> RunDecoderLayers(Tensor<T> expanded, Tensor<T>? condition)
+    {
+        var x = expanded;
+        for (int i = EncoderLayerCount + 1; i < Layers.Count; i++)
+        {
+            var layer = Layers[i];
+            if (layer is LayerBase<T> { RequiresMultipleInputs: true } conditioned)
+                x = conditioned.Forward(x, condition ?? throw new InvalidOperationException(
+                    $"Decoder layer {i} ({layer.GetType().Name}) is conditioned, but no condition was supplied."));
+            else
+                x = layer.Forward(x);
+        }
         return x;
     }
 
@@ -158,11 +209,13 @@ public abstract class VarianceAdaptorTtsModelBase<T> : TtsModelBase<T>
 
         Tensor<T> Objective(Tensor<T> tokens, Tensor<T> mel)
         {
-            var hidden = RunEncoder(tokens);
-            var adapted = VarianceAdaptor.Adapt(hidden, adaptorTargets);
-            var predictedMel = RunLayers(adapted.Expanded, EncoderLayerCount + 1, Layers.Count);
+            var conditioned = ConditionForTraining(RunEncoder(tokens), sample, mel, durations);
+            var adapted = VarianceAdaptor.Adapt(conditioned.Hidden, adaptorTargets);
+            var predictedMel = RunDecoderLayers(adapted.Expanded, conditioned.DecoderCondition);
 
             var loss = UsesL1MelLoss ? MeanAbsoluteError(predictedMel, mel) : MeanSquaredError(predictedMel, mel);
+            if (conditioned.AuxiliaryLoss is not null)
+                loss = Engine.TensorAdd(loss, conditioned.AuxiliaryLoss);
             loss = Engine.TensorAdd(loss, MeanSquaredError(adapted.LogDuration, logDurationTarget));
             if (adapted.PitchSpectrogram is not null && adapted.PitchStatistics is not null)
             {
@@ -184,13 +237,15 @@ public abstract class VarianceAdaptorTtsModelBase<T> : TtsModelBase<T>
         return t;
     }
 
-    private Tensor<T> MeanAbsoluteError(Tensor<T> prediction, Tensor<T> target)
+    /// <summary>Mean absolute error over every element.</summary>
+    protected Tensor<T> MeanAbsoluteError(Tensor<T> prediction, Tensor<T> target)
     {
         var diff = Engine.TensorAbs(Engine.TensorSubtract(prediction, Engine.Reshape(target, prediction._shape)));
         return Engine.ReduceMean(diff, Enumerable.Range(0, diff.Rank).ToArray(), keepDims: false);
     }
 
-    private Tensor<T> MeanSquaredError(Tensor<T> prediction, Tensor<T> target)
+    /// <summary>Mean squared error over every element.</summary>
+    protected Tensor<T> MeanSquaredError(Tensor<T> prediction, Tensor<T> target)
     {
         var diff = Engine.TensorSubtract(prediction, Engine.Reshape(target, prediction._shape));
         var sq = Engine.TensorMultiply(diff, diff);

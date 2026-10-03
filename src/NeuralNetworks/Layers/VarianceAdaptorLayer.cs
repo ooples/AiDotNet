@@ -246,8 +246,35 @@ public partial class VarianceAdaptorLayer<T> : LayerBase<T>, IShapeContract
             throw new ArgumentException($"Got {durations.Length} durations for {tokenCount} tokens.", nameof(targets));
 
         var frames = LengthRegulate(phonemes, durations);
-        int frameCount = frames.Shape[0];
+        var (adapted, pitchSpectrogram, pitchStatistics, energy) = AddVariance(frames, targets?.Pitch, targets?.Energy);
 
+        int frameCount = adapted.Shape[0];
+        var expanded = batched ? Engine.Reshape(adapted, new[] { 1, frameCount, _hiddenSize }) : adapted;
+        return new VarianceAdaptation<T>(expanded, logDuration, durations, pitchSpectrogram, pitchStatistics, energy);
+    }
+
+    /// <summary>
+    /// Adds the pitch and energy embeddings to a frame-level hidden sequence, from the given frame pitch and energy,
+    /// or from the adaptor's predictions where those are null.
+    /// </summary>
+    /// <param name="frames">Frame-level hidden sequence, <c>[frames, hidden]</c>.</param>
+    /// <param name="pitch">F0 per frame in Hz (0 unvoiced), or null to use the prediction.</param>
+    /// <param name="energy">Energy per frame, or null to use the prediction.</param>
+    /// <remarks>The second half of <see cref="Adapt"/>, for a hidden sequence that is already frame-level: AdaSpeech 2
+    /// reconstructs untranscribed speech from a mel encoder's frame sequence through the same variance information
+    /// and decoder (Yan et al. 2021, §2.3).</remarks>
+    public Tensor<T> AddFrameVariance(Tensor<T> frames, double[]? pitch, double[]? energy)
+    {
+        if (frames is null) throw new ArgumentNullException(nameof(frames));
+        if (frames.Rank != 2 || frames.Shape[1] != _hiddenSize)
+            throw new ArgumentException($"Expected frames [frames, {_hiddenSize}], got [{string.Join(", ", frames.Shape)}].", nameof(frames));
+        return AddVariance(frames, pitch, energy).Frames;
+    }
+
+    private (Tensor<T> Frames, Tensor<T>? PitchSpectrogram, Tensor<T>? PitchStatistics, Tensor<T>? Energy) AddVariance(
+        Tensor<T> frames, double[]? pitchTarget, double[]? energyTarget)
+    {
+        int frameCount = frames.Shape[0];
         Tensor<T>? pitchSpectrogram = null, pitchStatistics = null;
         if (_pitchPredictor is not null && _pitchStatistics is not null && _pitchEmbedding is not null)
         {
@@ -255,9 +282,9 @@ public partial class VarianceAdaptorLayer<T> : LayerBase<T>, IShapeContract
             var pooled = Engine.ReduceMean(pitchHidden, new[] { 0 }, keepDims: true); // [1, filter]
             pitchStatistics = Engine.Reshape(_pitchStatistics.Forward(pooled), new[] { 2 });
 
-            double[] f0 = targets?.Pitch ?? PredictedF0(pitchSpectrogram, pitchStatistics);
+            double[] f0 = pitchTarget ?? PredictedF0(pitchSpectrogram, pitchStatistics);
             if (f0.Length != frameCount)
-                throw new ArgumentException($"Got {f0.Length} pitch values for {frameCount} frames.", nameof(targets));
+                throw new ArgumentException($"Got {f0.Length} pitch values for {frameCount} frames.", nameof(pitchTarget));
             frames = Engine.TensorAdd(frames, _pitchEmbedding.Forward(Bucketize(f0, _pitchBoundaries)));
         }
 
@@ -265,14 +292,13 @@ public partial class VarianceAdaptorLayer<T> : LayerBase<T>, IShapeContract
         if (_energyPredictor is not null && _energyEmbedding is not null)
         {
             energy = Engine.Reshape(_energyPredictor.Forward(frames), new[] { frameCount });
-            double[] energyValues = targets?.Energy ?? ToDoubles(energy);
+            double[] energyValues = energyTarget ?? ToDoubles(energy);
             if (energyValues.Length != frameCount)
-                throw new ArgumentException($"Got {energyValues.Length} energy values for {frameCount} frames.", nameof(targets));
+                throw new ArgumentException($"Got {energyValues.Length} energy values for {frameCount} frames.", nameof(energyTarget));
             frames = Engine.TensorAdd(frames, _energyEmbedding.Forward(Bucketize(energyValues, _energyBoundaries)));
         }
 
-        var expanded = batched ? Engine.Reshape(frames, new[] { 1, frameCount, _hiddenSize }) : frames;
-        return new VarianceAdaptation<T>(expanded, logDuration, durations, pitchSpectrogram, pitchStatistics, energy);
+        return (frames, pitchSpectrogram, pitchStatistics, energy);
     }
 
     /// <summary>
