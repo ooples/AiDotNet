@@ -49,6 +49,10 @@ public class MIAVSROptions : NeuralNetworkOptions
         MaskLossWeight = other.MaskLossWeight;
         GumbelTemperature = other.GumbelTemperature;
         ReconstructionChannels = other.ReconstructionChannels;
+        FineTuneFlowEstimator = other.FineTuneFlowEstimator;
+        FlowFreezeSteps = other.FlowFreezeSteps;
+        FlowLearningRateScale = other.FlowLearningRateScale;
+        FlowLossWeight = other.FlowLossWeight;
 #pragma warning disable CS0618 // Retained only so existing configurations keep round-tripping.
         NumResBlocks = other.NumResBlocks;
         InterMaskRatio = other.InterMaskRatio;
@@ -105,6 +109,35 @@ public class MIAVSROptions : NeuralNetworkOptions
     /// <summary>Gets or sets the channel width of the pixel-shuffle reconstruction head.</summary>
     /// <value>Default is 64, BasicVSR++'s upsampler width, which MIA-VSR's reconstruction follows.</value>
     public int ReconstructionChannels { get; set; } = 64;
+
+    /// <summary>
+    /// Gets or sets whether a supplied pretrained SPyNet is fine-tuned during training.
+    /// </summary>
+    /// <value>Defaults to false: the pretrained estimator stays frozen, as in PSRT and MIA-VSR.</value>
+    /// <remarks>
+    /// When true, the estimator follows the BasicVSR / BasicVSR++ schedule: frozen for <see cref="FlowFreezeSteps"/>
+    /// training steps, then trained by the photometric flow loss at <see cref="FlowLearningRateScale"/> times the
+    /// model's rate. Without a supplied estimator this has no effect: MIA-VSR builds a fresh SPyNet and trains it
+    /// from the first step.
+    /// </remarks>
+    public bool FineTuneFlowEstimator { get; set; }
+
+    /// <summary>Gets or sets how many training steps a fine-tuned pretrained SPyNet stays frozen.</summary>
+    /// <value>Defaults to 5000, BasicVSR++'s flow warm-up.</value>
+    public int FlowFreezeSteps { get; set; } = 5000;
+
+    /// <summary>Gets or sets SPyNet's learning rate as a fraction of the model's while fine-tuning.</summary>
+    /// <value>Defaults to 0.125, BasicVSR++'s 1/8 for the flow network.</value>
+    public double FlowLearningRateScale { get; set; } = 0.125;
+
+    /// <summary>Gets or sets λ_flow, the weight of the photometric flow loss whenever SPyNet trains.</summary>
+    /// <value>Defaults to 0.1.</value>
+    /// <remarks>
+    /// Patch alignment moves windows by whole pixels, so no gradient reaches the flow estimator through it. While
+    /// SPyNet trains, the objective adds λ_flow · mean |warp(neighbour, flow) − frame| over the frame pairs it
+    /// aligns. Neither MIA-VSR nor PSRT states this weight; 0.1 keeps the super-resolution loss dominant.
+    /// </remarks>
+    public double FlowLossWeight { get; set; } = 0.1;
 
     /// <summary>Not used: MIA-VSR has no residual convolution blocks.</summary>
     [Obsolete("MIA-VSR is built from inter-and-intra-frame attention blocks; use BlocksPerBranch and NumPropagationBranches. This value is ignored.")]

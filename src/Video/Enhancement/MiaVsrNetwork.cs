@@ -33,8 +33,9 @@ namespace AiDotNet.Video.Enhancement;
 /// low-resolution frames, and each window of a neighbouring frame is moved by its mean motion vector,
 /// rounded to whole pixels, with no interpolation. The second-order neighbour composes two such moves:
 /// the second is measured where the first one landed. The moves are discrete, so no gradient reaches
-/// the flow estimator, which is a fixed, pretrained component as in PSRT; the flow is therefore computed
-/// outside the gradient tape.
+/// the flow estimator through them. A pretrained SPyNet stays frozen as in PSRT, its flow computed outside
+/// the gradient tape; when SPyNet trains (built from scratch, or a pretrained one opted into BasicVSR++-style
+/// fine-tuning), each flow is estimated on the tape and a photometric warp loss trains it.
 /// </para>
 /// <para>
 /// <b>Adaptive masked processing.</b> A 1x1 projection of |LN(X^t) − LN(X^{t-1})|, the same block's
@@ -67,9 +68,11 @@ internal sealed class MiaVsrNetwork<T>
 
     // Roles over _layers, assigned by Build.
     private ConvolutionalLayer<T> _shallow;
-    // The pretrained flow estimator, outside the layer graph: the optimizer never sees it, so it stays
-    // frozen, and it runs only under NoGradScope. Null means no motion estimate (windows align in place).
-    private readonly SpyNetLayer<T>? _flow;
+    // The SPyNet flow estimator for PSRT patch alignment: the caller's pretrained one, or a fresh one trained
+    // from scratch. It is the last layer of the graph, so it is serialized and cloned with the network; the
+    // owning model sets its learning-rate scale (0 while frozen) and whether the photometric loss trains it.
+    private SpyNetLayer<T> _flow;
+    private readonly SpyNetLayer<T>? _flowSource;
     private readonly List<AttentionBlock[]> _branchBlocks = new();
     private readonly List<ConvolutionalLayer<T>> _branchConvs = new();
     private readonly List<(ConvolutionalLayer<T> Conv, PixelShuffleLayer<T> Shuffle)> _upsample = new();
@@ -91,10 +94,17 @@ internal sealed class MiaVsrNetwork<T>
         if (options.ScaleFactor <= 0 || (options.ScaleFactor & (options.ScaleFactor - 1)) != 0)
             throw new ArgumentOutOfRangeException(nameof(options), $"ScaleFactor must be a positive power of two; got {options.ScaleFactor}.");
         if (options.ReconstructionChannels <= 0) throw new ArgumentOutOfRangeException(nameof(options), "ReconstructionChannels must be positive.");
-        if (double.IsNaN(options.GumbelTemperature) || options.GumbelTemperature <= 0) throw new ArgumentOutOfRangeException(nameof(options), "GumbelTemperature must be positive.");
+        // An infinite temperature scales every score to zero: all soft masks 0.5, all hard masks off.
+        if (double.IsNaN(options.GumbelTemperature) || double.IsInfinity(options.GumbelTemperature) || options.GumbelTemperature <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "GumbelTemperature must be finite and positive.");
         // Zero disables the sparsity term; anything negative or non-finite would silently drop or invert it.
         if (double.IsNaN(options.MaskLossWeight) || double.IsInfinity(options.MaskLossWeight) || options.MaskLossWeight < 0)
             throw new ArgumentOutOfRangeException(nameof(options), "MaskLossWeight must be finite and non-negative.");
+        if (options.FlowFreezeSteps < 0) throw new ArgumentOutOfRangeException(nameof(options), "FlowFreezeSteps must be non-negative.");
+        if (double.IsNaN(options.FlowLearningRateScale) || double.IsInfinity(options.FlowLearningRateScale) || options.FlowLearningRateScale <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "FlowLearningRateScale must be finite and positive.");
+        if (double.IsNaN(options.FlowLossWeight) || double.IsInfinity(options.FlowLossWeight) || options.FlowLossWeight < 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "FlowLossWeight must be finite and non-negative.");
 
         _inputChannels = inputChannels;
         _channels = options.NumFeatures;
@@ -104,7 +114,7 @@ internal sealed class MiaVsrNetwork<T>
         _branches = options.NumPropagationBranches;
         _blocksPerBranch = options.BlocksPerBranch;
         _scale = options.ScaleFactor;
-        _flow = flowEstimator;
+        _flowSource = flowEstimator;
         _reconChannels = options.ReconstructionChannels;
         _temperature = options.GumbelTemperature;
         _relativeIndex = BuildRelativeIndex(_window);
@@ -122,7 +132,16 @@ internal sealed class MiaVsrNetwork<T>
     internal bool DenseInference { get; set; }
 
     /// <summary>The smallest frame side the flow estimator accepts; smaller frames are padded for it.</summary>
-    public int MinimumFlowSize => _flow is null ? 1 : 1 << (_flow.NumLevels - 1);
+    public int MinimumFlowSize => 1 << (_flow.NumLevels - 1);
+
+    /// <summary>The SPyNet flow estimator the alignment uses; the last entry of <see cref="Layers"/>.</summary>
+    internal SpyNetLayer<T> FlowEstimator => _flow;
+
+    /// <summary>
+    /// When true, the training forward estimates flow on the tape and reports the photometric flow loss, so the
+    /// objective trains SPyNet; when false, flow is estimated under NoGradScope and SPyNet receives no gradient.
+    /// </summary>
+    internal bool TrainFlowEstimator { get; set; }
 
     /// <summary>
     /// Points every role at the model's current layers, position for position, after a deserialize or
@@ -144,6 +163,7 @@ internal sealed class MiaVsrNetwork<T>
 
         // Rebinding replaces every role at once; a layer of the wrong type part-way through must leave the
         // network exactly as it was, not half-bound.
+        var flowBefore = _flow;
         var previous = (Layers: _layers.ToList(), Blocks: _branchBlocks.ToList(), Convs: _branchConvs.ToList(),
             Upsample: _upsample.ToList(), Shallow: _shallow, Hr: _hrConv, Last: _lastConv);
         _bindSource = layers;
@@ -160,6 +180,7 @@ internal sealed class MiaVsrNetwork<T>
             _shallow = previous.Shallow;
             _hrConv = previous.Hr;
             _lastConv = previous.Last;
+            _flow = flowBefore;
             throw;
         }
         finally
@@ -175,7 +196,9 @@ internal sealed class MiaVsrNetwork<T>
     /// <param name="training">True for the training forward: Gumbel-sampled masks, dense computation.</param>
     /// <param name="random">The noise source for the training-time Gumbel samples.</param>
     /// <param name="maskLoss">In training, the mean of every soft keep-mask as a tape scalar; otherwise null.</param>
-    public Tensor<T> Forward(Tensor<T> input, bool training, Random random, out Tensor<T>? maskLoss)
+    /// <param name="flowLoss">When <see cref="TrainFlowEstimator"/> is set in training, the mean photometric error of
+    /// the estimated flows as a tape scalar; otherwise null.</param>
+    public Tensor<T> Forward(Tensor<T> input, bool training, Random random, out Tensor<T>? maskLoss, out Tensor<T>? flowLoss)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
         if (random is null) throw new ArgumentNullException(nameof(random));
@@ -204,7 +227,8 @@ internal sealed class MiaVsrNetwork<T>
             shallow[t] = ToTokens(engine, _shallow.Forward(lowRes[t]));
         }
 
-        var alignment = new PatchAlignment(engine, _flow, lowRes, geometry, MinimumFlowSize, _channels);
+        var alignment = new PatchAlignment(engine, _flow, lowRes, geometry, MinimumFlowSize, _channels,
+            trackFlowLoss: training && TrainFlowEstimator);
         var context = new ForwardContext(training, random, _temperature, DenseInference);
         var current = shallow;
         for (int m = 0; m < _branches; m++)
@@ -226,6 +250,7 @@ internal sealed class MiaVsrNetwork<T>
         }
 
         maskLoss = context.MaskLoss(engine);
+        flowLoss = alignment.FlowLoss();
         var result = frames == 1 ? hr[0] : engine.TensorConcatenate(hr, axis: 1);
         return singleFrame
             ? engine.Reshape(result, new[] { batch, channels, height * _scale, width * _scale })
@@ -335,7 +360,7 @@ internal sealed class MiaVsrNetwork<T>
     }
 
     [System.Diagnostics.CodeAnalysis.MemberNotNull(
-        nameof(_shallow), nameof(_hrConv), nameof(_lastConv))]
+        nameof(_shallow), nameof(_hrConv), nameof(_lastConv), nameof(_flow))]
     private void Build()
     {
         _layers.Clear();
@@ -378,6 +403,7 @@ internal sealed class MiaVsrNetwork<T>
 
         _hrConv = Add(new ConvolutionalLayer<T>(_reconChannels, 3, 1, 1));
         _lastConv = Add(new ConvolutionalLayer<T>(_inputChannels, 3, 1, 1));
+        _flow = Add(_flowSource ?? new SpyNetLayer<T>());
     }
 
     private TLayer Add<TLayer>(TLayer layer) where TLayer : class, ILayer<T>
@@ -484,7 +510,8 @@ internal sealed class MiaVsrNetwork<T>
 
     /// <summary>
     /// PSRT patch alignment: per-window whole-pixel motion between frames, from SPyNet flow computed
-    /// once per frame pair outside the gradient tape.
+    /// once per frame pair. The alignment itself is discrete, so no gradient reaches SPyNet through it; when
+    /// SPyNet trains, each flow is estimated on the tape and scored photometrically instead.
     /// </summary>
     private sealed class PatchAlignment
     {
@@ -495,17 +522,32 @@ internal sealed class MiaVsrNetwork<T>
         private readonly int _minimumFlowSize;
         private readonly int _channels;
         private readonly Dictionary<(int From, int To), (double[] Dx, double[] Dy)> _fields = new();
+        private readonly bool _trackFlowLoss;
+        private readonly List<Tensor<T>> _flowLosses = new();
         private Tensor<T>? _zeros;
 
         public PatchAlignment(IEngine engine, SpyNetLayer<T>? flow, Tensor<T>[] frames, WindowGeometry geometry,
-            int minimumFlowSize, int channels)
+            int minimumFlowSize, int channels, bool trackFlowLoss)
         {
+            _trackFlowLoss = trackFlowLoss;
             _engine = engine;
             _flow = flow;
             _frames = frames;
             _geometry = geometry;
             _minimumFlowSize = minimumFlowSize;
             _channels = channels;
+        }
+
+        /// <summary>
+        /// The mean photometric error over every flow this alignment estimated on the tape, or null when SPyNet
+        /// is not training or no pair was aligned.
+        /// </summary>
+        public Tensor<T>? FlowLoss()
+        {
+            if (!_trackFlowLoss || _flowLosses.Count == 0) return null;
+            var total = _flowLosses[0];
+            for (int i = 1; i < _flowLosses.Count; i++) total = _engine.TensorAdd(total, _flowLosses[i]);
+            return _engine.TensorMultiplyScalar(total, MathHelper.GetNumericOperations<T>().FromDouble(1.0 / _flowLosses.Count));
         }
 
         /// <summary>
@@ -576,11 +618,24 @@ internal sealed class MiaVsrNetwork<T>
             int flowH = Math.Max(g.Height, _minimumFlowSize), flowW = Math.Max(g.Width, _minimumFlowSize);
             var numOps = MathHelper.GetNumericOperations<T>();
             var estimator = _flow ?? throw new InvalidOperationException("No flow estimator is configured.");
+            // Flow(from, to) gives, for each pixel of `from`, its displacement into `to`.
+            var fromFrame = Fit(_frames[from], flowH, flowW, numOps.Zero);
+            var toFrame = Fit(_frames[to], flowH, flowW, numOps.Zero);
             Tensor<T> flow;
-            using (new NoGradScope<T>())
+            if (_trackFlowLoss)
             {
-                // Flow(from, to) gives, for each pixel of `from`, its displacement into `to`.
-                flow = estimator.EstimateFlow(Fit(_frames[from], flowH, flowW, numOps.Zero), Fit(_frames[to], flowH, flowW, numOps.Zero));
+                // Warping `to` back by the flow should reproduce `from`; the L1 error is the self-supervised
+                // photometric loss that trains SPyNet (as BasicVSR and PSRT fine-tune theirs).
+                flow = estimator.EstimateFlow(fromFrame, toFrame);
+                var error = _engine.TensorAbs(_engine.TensorSubtract(estimator.WarpByFlow(toFrame, flow), fromFrame));
+                _flowLosses.Add(_engine.ReduceMean(error, new[] { 0, 1, 2, 3 }, false));
+            }
+            else
+            {
+                using (new NoGradScope<T>())
+                {
+                    flow = estimator.EstimateFlow(fromFrame, toFrame);
+                }
             }
 
             var dx = new double[g.Tokens];

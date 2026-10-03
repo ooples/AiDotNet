@@ -750,6 +750,15 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
     /// <param name="flow">Optical flow [batch, 2, height, width] or [2, height, width] (dx, dy in pixels)</param>
     /// <param name="hasBatch">Whether tensors have batch dimension</param>
     /// <returns>Tuple of (warped image, sampling grid)</returns>
+    /// <summary>
+    /// Warps <paramref name="image"/> by <paramref name="flow"/> on the tape, so a photometric loss on the result
+    /// reaches the flow and, through it, this estimator's weights.
+    /// </summary>
+    /// <param name="image">The image to warp, [batch, channels, height, width].</param>
+    /// <param name="flow">The flow, [batch, 2, height, width] (dx, dy in pixels).</param>
+    /// <returns>The warped image.</returns>
+    internal Tensor<T> WarpByFlow(Tensor<T> image, Tensor<T> flow) => WarpImageWithGrid(image, flow, hasBatch: true).warped;
+
     private (Tensor<T> warped, Tensor<T> grid) WarpImageWithGrid(Tensor<T> image, Tensor<T> flow, bool hasBatch)
     {
         int batch = hasBatch ? image.Shape[0] : 1;

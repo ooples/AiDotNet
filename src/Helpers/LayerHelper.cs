@@ -8761,7 +8761,8 @@ public static partial class LayerHelper<T>
     /// <param name="blocksPerBranch">The inter-and-intra-frame attention blocks per branch.</param>
     /// <param name="scaleFactor">The upscaling factor; a power of two.</param>
     /// <param name="reconstructionChannels">The width of the pixel-shuffle reconstruction head.</param>
-    /// <returns>The layers MIA-VSR binds by position; SPyNet is a separate collaborator and is not included.</returns>
+    /// <param name="flowEstimator">A pretrained SPyNet to place in the flow slot; a fresh one when null.</param>
+    /// <returns>The layers MIA-VSR binds by position, ending with the SPyNet flow estimator.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> MIA-VSR upscales a video clip. It turns each frame into feature tokens,
@@ -8785,7 +8786,8 @@ public static partial class LayerHelper<T>
         int numPropagationBranches = 4,
         int blocksPerBranch = 6,
         int scaleFactor = 4,
-        int reconstructionChannels = 64)
+        int reconstructionChannels = 64,
+        SpyNetLayer<T>? flowEstimator = null)
     {
         if (architecture is null) throw new ArgumentNullException(nameof(architecture));
         var options = new AiDotNet.Video.Options.MIAVSROptions
@@ -8803,9 +8805,9 @@ public static partial class LayerHelper<T>
 
         // Shallow feature conv; per branch, each attention block's norm, Q/K/V, relative bias,
         // projection, mask norm and score, and feed-forward pair, then the branch conv; the
-        // pixel-shuffle stages; the HR conv; and the output conv. MiaVsrNetwork.Build defines the
-        // order, so this list cannot drift from the layout the model binds.
-        foreach (var layer in new AiDotNet.Video.Enhancement.MiaVsrNetwork<T>(options, channels, flowEstimator: null).Layers)
+        // pixel-shuffle stages; the HR conv; the output conv; and the SPyNet flow estimator.
+        // MiaVsrNetwork.Build defines the order, so this list cannot drift from the layout the model binds.
+        foreach (var layer in new AiDotNet.Video.Enhancement.MiaVsrNetwork<T>(options, channels, flowEstimator).Layers)
         {
             yield return layer;
         }

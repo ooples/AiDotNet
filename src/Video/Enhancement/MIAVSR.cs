@@ -121,8 +121,9 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
     /// <param name="architecture">The network architecture; InputDepth is the frame channel count.</param>
     /// <param name="options">The model options; the defaults are the paper's.</param>
     /// <param name="optimizer">The training optimizer; the paper's Adam when null.</param>
-    /// <param name="flowEstimator">A pretrained SPyNet for PSRT patch alignment, used frozen. Without one,
-    /// neighbouring frames are attended in place (zero motion) rather than aligned by an untrained estimate.</param>
+    /// <param name="flowEstimator">A pretrained SPyNet for PSRT patch alignment. It stays frozen unless
+    /// <see cref="MIAVSROptions.FineTuneFlowEstimator"/> is set. Without one, MIA-VSR builds a fresh SPyNet and
+    /// trains it from the first step with the photometric flow loss.</param>
     public MIAVSR(NeuralNetworkArchitecture<T> architecture, MIAVSROptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         SpyNetLayer<T>? flowEstimator = null)
@@ -174,7 +175,7 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
             ? Architecture.Layers
             : LayerHelper<T>.CreateDefaultMIAVSRLayers(Architecture, _options.NumFeatures, _options.WindowSize,
                 _options.NumHeads, _options.FeedForwardRatio, _options.NumPropagationBranches,
-                _options.BlocksPerBranch, _options.ScaleFactor, _options.ReconstructionChannels).ToList();
+                _options.BlocksPerBranch, _options.ScaleFactor, _options.ReconstructionChannels, _flowEstimator).ToList();
         int channels = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
         _network = new MiaVsrNetwork<T>(_options, channels, _flowEstimator);
         _network.BindTo(layers);
@@ -196,7 +197,10 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => ForwardNative(input, training: true);
 
     /// <inheritdoc />
-    /// <remarks>The mask-sparsity term of the paper's objective, L = L_sr + λ·L_mask (Sec. 3.3).</remarks>
+    /// <remarks>
+    /// The mask-sparsity term of the paper's objective, L = L_sr + λ·L_mask (Sec. 3.3), plus λ_flow·L_flow, the
+    /// photometric term that trains SPyNet whenever it trains (see <see cref="MIAVSROptions.FlowLossWeight"/>).
+    /// </remarks>
     protected override Tensor<T>? ConsumeAuxiliaryTapeLoss()
     {
         var term = _pendingMaskLoss;
@@ -251,11 +255,67 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
     {
         var network = _network ?? throw new InvalidOperationException("MIA-VSR has no native network in ONNX mode.");
         network.BindTo(Layers);
-        var result = network.Forward(input, training, _random, out var maskLoss);
-        _pendingMaskLoss = training && maskLoss is not null && _options.MaskLossWeight > 0
-            ? Engine.TensorMultiplyScalar(maskLoss, NumOps.FromDouble(_options.MaskLossWeight))
+        // The options stay mutable after construction, so the weights are checked where training reads them.
+        double maskWeight = RequireNonNegativeFinite(_options.MaskLossWeight, nameof(MIAVSROptions.MaskLossWeight));
+        double flowWeight = RequireNonNegativeFinite(_options.FlowLossWeight, nameof(MIAVSROptions.FlowLossWeight));
+
+        double flowRateScale = 0.0;
+        bool trainFlow = training && FlowTrainsThisStep(out flowRateScale);
+        network.TrainFlowEstimator = trainFlow;
+        // A frozen estimator runs under NoGradScope, so it has no gradient and the optimizer leaves it alone;
+        // a training one steps at its own fraction of the model's rate.
+        if (trainFlow) network.FlowEstimator.LearningRateScale = flowRateScale;
+
+        var result = network.Forward(input, training, _random, out var maskLoss, out var flowLoss);
+        var maskTerm = training && maskLoss is not null && maskWeight > 0
+            ? Engine.TensorMultiplyScalar(maskLoss, NumOps.FromDouble(maskWeight))
             : null;
+        var flowTerm = trainFlow && flowLoss is not null && flowWeight > 0
+            ? Engine.TensorMultiplyScalar(flowLoss, NumOps.FromDouble(flowWeight))
+            : null;
+        _pendingMaskLoss = maskTerm is not null && flowTerm is not null
+            ? Engine.TensorAdd(maskTerm, flowTerm)
+            : maskTerm ?? flowTerm;
+
         return result;
+    }
+
+    // Optimizer steps taken through Train; drives the fine-tuning freeze. Counted per step rather than per
+    // training forward, because one step can run the forward more than once.
+    private int _flowTrainingSteps;
+
+    /// <summary>
+    /// Whether SPyNet trains in this step, and at what fraction of the model's learning rate: from the first step
+    /// at the full rate when MIA-VSR built it, after the freeze at the fine-tuning rate for an opted-in pretrained
+    /// one, and never for a frozen pretrained one.
+    /// </summary>
+    private bool FlowTrainsThisStep(out double rateScale)
+    {
+        if (_flowEstimator is null)
+        {
+            rateScale = 1.0;
+            return true;
+        }
+
+        if (_options.FineTuneFlowEstimator && _flowTrainingSteps >= _options.FlowFreezeSteps)
+        {
+            double scale = _options.FlowLearningRateScale;
+            if (double.IsNaN(scale) || double.IsInfinity(scale) || scale <= 0)
+                throw new InvalidOperationException("FlowLearningRateScale must be finite and positive.");
+            rateScale = scale;
+            return true;
+        }
+
+        rateScale = 0.0;
+        return false;
+    }
+
+    private static double RequireNonNegativeFinite(double value, string name)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value) || value < 0)
+            throw new InvalidOperationException(
+                $"{name} must be finite and non-negative; it is {value.ToString(System.Globalization.CultureInfo.InvariantCulture)}.");
+        return value;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -265,6 +325,7 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
         try
         {
             TrainWithTape(input, expected, _optimizer);
+            _flowTrainingSteps++;
         }
         finally
         {

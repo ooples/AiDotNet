@@ -100,21 +100,23 @@ public class MIAVSRMaskedAttentionTests
     [Fact]
     public void PretrainedFlowEstimator_IsUsedFrozen()
     {
-        // The flow estimator aligns windows but must never train: PSRT's patch moves are discrete, so it
-        // receives no gradient, and it sits outside the model's parameters so no optimizer touches it.
+        // A supplied pretrained estimator aligns windows but stays frozen by default, as in PSRT: its flow is
+        // computed outside the tape, so it receives no gradient. It is the model's flow layer, so it is
+        // serialized and cloned with the model (and can be opted into fine-tuning).
         var flow = new SpyNetLayer<double>(numLevels: 3);
         var model = CreateModel(flow: flow);
         var clip = CreateClip(9);
         model.Predict(clip);
         var before = flow.GetParameters().ToArray();
         Assert.NotEmpty(before);
-        int modelParameters = model.GetParameters().Length;
+
 
         var target = new Tensor<double>(new[] { 1, Frames, Channels, Side * 2, Side * 2 });
         model.Train(clip, target);
 
         Assert.Equal(before, flow.GetParameters().ToArray());
-        Assert.Equal(modelParameters, CreateModel().GetParameters().Length);
+        Assert.Same(flow, (model.Network ?? throw new InvalidOperationException("No native network.")).FlowEstimator);
+        Assert.Contains(flow, model.Layers);
         var output = model.Predict(clip);
         for (int i = 0; i < output.Length; i++) Assert.False(double.IsNaN(output[i]) || double.IsInfinity(output[i]));
     }
@@ -173,5 +175,81 @@ public class MIAVSRMaskedAttentionTests
                 inputFrames: Frames, inputDepth: Channels, inputHeight: Side, inputWidth: Side, outputSize: 4,
                 layers: mismatched),
             new MIAVSROptions { NumFeatures = 8, NumHeads = 2, WindowSize = 4, BlocksPerBranch = 1, ScaleFactor = 2 }));
+    }
+
+    private static MIAVSROptions FlowOptions(bool fineTune = false, int freezeSteps = 5000) => new()
+    {
+        NumFeatures = 8, NumHeads = 2, WindowSize = 4, FeedForwardRatio = 2,
+        NumPropagationBranches = 4, BlocksPerBranch = 1, ScaleFactor = 2,
+        ReconstructionChannels = 8, Seed = 1234, FineTuneFlowEstimator = fineTune, FlowFreezeSteps = freezeSteps
+    };
+
+    private static MIAVSR<double> CreateModel(MIAVSROptions options, SpyNetLayer<double>? flow) => new(
+        new NeuralNetworkArchitecture<double>(
+            inputType: InputType.FourDimensional, taskType: NeuralNetworkTaskType.Regression,
+            inputFrames: Frames, inputDepth: Channels, inputHeight: Side, inputWidth: Side, outputSize: 4),
+        options, flowEstimator: flow);
+
+    private static Tensor<double> HighResTarget(int seed)
+    {
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
+        var target = new Tensor<double>(new[] { 1, Frames, Channels, Side * 2, Side * 2 });
+        for (int i = 0; i < target.Length; i++) target[i] = rng.NextDouble();
+        return target;
+    }
+
+    private static double[] FlowWeights(MIAVSR<double> model)
+        => (model.Network ?? throw new InvalidOperationException("No native network.")).FlowEstimator.GetParameters().ToArray();
+
+    [Fact]
+    public void PretrainedFlow_StaysFrozenByDefault()
+    {
+        var model = CreateModel(FlowOptions(), new SpyNetLayer<double>());
+        model.Train(CreateClip(21), HighResTarget(22));
+        var before = FlowWeights(model);
+
+        model.Train(CreateClip(23), HighResTarget(24));
+
+        Assert.Equal(before, FlowWeights(model));
+    }
+
+    [Fact]
+    public void BuiltFlow_TrainsFromTheFirstStep()
+    {
+        var model = CreateModel(FlowOptions(), flow: null);
+        model.Train(CreateClip(31), HighResTarget(32));
+        var before = FlowWeights(model);
+
+        model.Train(CreateClip(33), HighResTarget(34));
+
+        var after = FlowWeights(model);
+        Assert.All(after, w => Assert.False(double.IsNaN(w) || double.IsInfinity(w)));
+        Assert.True(before.Zip(after, (a, b) => a != b).Any(changed => changed),
+            "The SPyNet MIA-VSR built for itself did not train: no photometric gradient reached it.");
+    }
+
+    [Fact]
+    public void FineTunedFlow_IsFrozenForTheWarmUp_ThenTrains()
+    {
+        var model = CreateModel(FlowOptions(fineTune: true, freezeSteps: 2), new SpyNetLayer<double>());
+        model.Train(CreateClip(41), HighResTarget(42));
+        var afterFirst = FlowWeights(model);
+
+        model.Train(CreateClip(43), HighResTarget(44));
+        Assert.Equal(afterFirst, FlowWeights(model));
+
+        model.Train(CreateClip(45), HighResTarget(46));
+        Assert.True(afterFirst.Zip(FlowWeights(model), (a, b) => a != b).Any(changed => changed),
+            "After the freeze, the opted-in SPyNet did not fine-tune.");
+    }
+
+    [Fact]
+    public void MaskLossWeight_ChangedAfterConstruction_IsRefusedWhenTraining()
+    {
+        var options = FlowOptions();
+        var model = CreateModel(options, new SpyNetLayer<double>());
+        options.MaskLossWeight = double.NaN;
+
+        Assert.Throws<InvalidOperationException>(() => model.Train(CreateClip(51), HighResTarget(52)));
     }
 }
