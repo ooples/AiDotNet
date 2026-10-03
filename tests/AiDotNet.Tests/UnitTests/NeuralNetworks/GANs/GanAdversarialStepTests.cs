@@ -319,13 +319,16 @@ public class GanAdversarialStepTests
             InputType.OneDimensional);
         var generator = (NeuralNetworkBase<double>)cgan.Generator;
         var discriminator = (NeuralNetworkBase<double>)cgan.Discriminator;
-        generator.SetTrainingMode(false);
+        // Different starting modes, so each network's saved mode is checked on its own.
+        generator.SetTrainingMode(true);
         discriminator.SetTrainingMode(false);
 
-        // The batch sizes agree, so the guard passes; the 7-wide conditions fail inside the step.
-        Assert.ThrowsAny<Exception>(() => cgan.TrainStep(Random(4, 64, 91), OneHot(4, 7, 2), Random(4, 22, 92)));
+        // The batch sizes agree, so the guard passes; the 7-wide conditions make a 29-wide generator
+        // input, which the generator rejects as a shape mismatch inside the step, after both modes were switched on.
+        Assert.Throws<AiDotNet.Exceptions.TensorShapeMismatchException>(
+            () => cgan.TrainStep(Random(4, 64, 91), OneHot(4, 7, 2), Random(4, 22, 92)));
 
-        Assert.False(generator.IsTrainingMode, "the generator was left in training mode by a step that threw");
+        Assert.True(generator.IsTrainingMode, "the generator's prior training mode was not restored");
         Assert.False(discriminator.IsTrainingMode, "the discriminator was left in training mode by a step that threw");
     }
 
