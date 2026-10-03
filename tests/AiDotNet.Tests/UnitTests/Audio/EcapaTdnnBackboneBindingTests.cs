@@ -4,6 +4,7 @@ using System.Linq;
 using AiDotNet.Audio;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Audio;
@@ -41,12 +42,18 @@ public class EcapaTdnnBackboneBindingTests
         var backbone = CreateBackbone();
         var original = backbone.Layers.ToList();
         var replacement = CreateBackbone().Layers.ToList();
-        int convolution = replacement.FindIndex(layer => layer is Conv1DLayer<double>);
-        replacement[convolution] = new Conv1DLayer<double>(16, 5);
+        // The last convolution fails after every earlier role has already been rebound, so this checks
+        // that those roles are rolled back too, not just the published list.
+        int convolution = replacement.FindLastIndex(layer => layer is Conv1DLayer<double>);
+        replacement[convolution] = new Conv1DLayer<double>(16, 1);
+        var input = new Tensor<double>(new[] { 1, 8, 16 });
+        for (int i = 0; i < input.Length; i++) input[i] = Math.Sin(0.37 * i);
+        var expected = backbone.Forward(input).ToArray();
 
         var error = Assert.Throws<InvalidOperationException>(() => backbone.BindTo(replacement));
 
         Assert.Contains("OutputChannels", error.Message);
         Assert.True(original.SequenceEqual(backbone.Layers));
+        Assert.Equal(expected, backbone.Forward(input).ToArray());
     }
 }
