@@ -15421,7 +15421,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // net decrease; 15 float steps stay well under the 180 s timeout.
                     // CosyVoice2 at its declared learning rate (1e-4, now wired) descends 1.49 -> 1.19 -> 1.15 ->
                     // 0.47 over 20 memorization steps; its 2-step probe landed on a first-step uptick (1.81 -> 1.92).
-                    sb.AppendLine(model.ClassName is "HuBERTSER" or "SpikingFullSubNet" or "ContextNet" or "Paraformer" or "RoomImpulseResponse" or "ParaformerLarge" or "CosyVoice2"
+                    // MatchaTTS shows the same hump once its mel projection emits raw log-mel (a FullyConnectedLayer
+                    // given a null activation stopped meaning ReLU): step 1 = 1.514577 rising to step 2 = 1.691885.
+                    sb.AppendLine(model.ClassName is "HuBERTSER" or "SpikingFullSubNet" or "ContextNet" or "Paraformer" or "RoomImpulseResponse" or "ParaformerLarge" or "CosyVoice2" or "MatchaTTS"
                         ? "    protected override int MemorizationTaskIterations => 15;"
                         : "    protected override int MemorizationTaskIterations => 2;");
                     sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
