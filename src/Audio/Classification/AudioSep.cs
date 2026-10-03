@@ -90,7 +90,7 @@ public partial class AudioSep<T> : AudioClassifierBase<T>, IAudioEventDetector<T
 
     /// <summary>Creates an AudioSep model for ONNX inference mode.</summary>
     public AudioSep(NeuralNetworkArchitecture<T> architecture, string modelPath, AudioSepOptions? options = null)
-        : base(architecture)
+        : base(architecture, new AiDotNet.LossFunctions.BinaryCrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new AudioSepOptions();
         _useNativeMode = false;
@@ -111,7 +111,7 @@ public partial class AudioSep<T> : AudioClassifierBase<T>, IAudioEventDetector<T
     /// <summary>Creates an AudioSep model for native training mode.</summary>
     public AudioSep(NeuralNetworkArchitecture<T> architecture, AudioSepOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture)
+        : base(architecture, new AiDotNet.LossFunctions.BinaryCrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new AudioSepOptions();
         _useNativeMode = true;
@@ -283,7 +283,11 @@ public partial class AudioSep<T> : AudioClassifierBase<T>, IAudioEventDetector<T
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var current = input; foreach (var layer in Layers) current = layer.Forward(current); return current;
+        // Per-class logits, then a per-class sigmoid: sound event detection is multi-label, so inference returns
+        // each event's presence probability, which Detect compares with Options.Threshold. Training runs on the raw
+        // logits with BCE-with-logits (the train-on-logits, predict-with-sigmoid pattern of AudioEventDetector).
+        var current = input; foreach (var layer in Layers) current = layer.Forward(current);
+        return Engine.Sigmoid(current);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
