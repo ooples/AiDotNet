@@ -20479,7 +20479,7 @@ public static partial class LayerHelper<T>
         // stage lists: the frame-level TDNN block (kernel 5), numBlocks SE-Res2Blocks at kernel 3 and
         // dilations 2, 3, 4, ..., and the 1x1 MFA convolution at poolingDim channels.
         if (numMels <= 0) throw new ArgumentOutOfRangeException(nameof(numMels));
-        if (dropoutRate != 0.0)
+        if (Math.Abs(dropoutRate) > 0.0 || double.IsNaN(dropoutRate))
             throw new ArgumentException(
                 "ECAPA-TDNN applies no dropout (Desplanques et al. 2020); dropoutRate must be 0.", nameof(dropoutRate));
         if (numBlocks <= 0) throw new ArgumentOutOfRangeException(nameof(numBlocks));
