@@ -50,7 +50,7 @@ public class OfflineAgentContinuousActionTests
                 if (++step % 4 == 0)
                 {
                     float loss = agent.Train();
-                    Assert.True(float.IsFinite(loss), $"training loss at step {step} was {loss}");
+                    Assert.True(!float.IsNaN(loss) && !float.IsInfinity(loss), $"training loss at step {step} was {loss}");
                 }
 
                 state = next;
@@ -65,7 +65,7 @@ public class OfflineAgentContinuousActionTests
     {
         Assert.Equal(3, action.Length);
         foreach (float v in action.ToArray())
-            Assert.True(float.IsFinite(v), $"{what} contained {v}: [{string.Join(", ", action.ToArray())}]");
+            Assert.True(!float.IsNaN(v) && !float.IsInfinity(v), $"{what} contained {v}: [{string.Join(", ", action.ToArray())}]");
     }
 
     [Fact(Timeout = 300000)]

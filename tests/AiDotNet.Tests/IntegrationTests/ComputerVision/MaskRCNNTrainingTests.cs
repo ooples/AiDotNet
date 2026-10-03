@@ -108,7 +108,7 @@ public class MaskRCNNTrainingTests
 
         model.TrainInstances(Image(), Square());
 
-        Assert.True(double.IsFinite(model.GetLastLoss()), $"loss was {model.GetLastLoss()}");
+        Assert.True(!double.IsNaN(model.GetLastLoss()) && !double.IsInfinity(model.GetLastLoss()), $"loss was {model.GetLastLoss()}");
         Assert.True(model.GetLastLoss() > 0);
         foreach (var branch in branches)
         {
@@ -133,7 +133,7 @@ public class MaskRCNNTrainingTests
             losses.Add(model.GetLastLoss());
         }
 
-        Assert.All(losses, l => Assert.True(double.IsFinite(l)));
+        Assert.All(losses, l => Assert.True(!double.IsNaN(l) && !double.IsInfinity(l)));
         Assert.True(losses.Skip(5).Average() < losses.Take(3).Average(),
             $"loss did not fall: {string.Join(", ", losses.Select(l => l.ToString("G4")))}");
     }
