@@ -1151,18 +1151,33 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     }
 
     /// <summary>
-    /// The causal mask <c>[1, 1, queries, keys]</c>: query <c>i</c> attends to key <c>j</c> when
+    /// The causal mask <c>[batch, heads, queries, keys]</c>: query <c>i</c> attends to key <c>j</c> when
     /// <c>j ≤ i + (keys − queries)</c>, so the last query sees every key (the alignment of an incremental decode step).
     /// </summary>
-    private static Tensor<bool> CausalMask(int queries, int keys)
+    /// <remarks>Built at the full shape because a compiled (graph-mode) attention accepts only that shape, and cached per
+    /// shape so a repeated forward does not rebuild it.</remarks>
+    private Tensor<bool> CausalMask(int batch, int heads, int queries, int keys)
     {
-        var mask = new Tensor<bool>(new[] { 1, 1, queries, keys });
+        var cached = _causalMask;
+        if (cached is not null && cached.Shape[0] == batch && cached.Shape[1] == heads
+            && cached.Shape[2] == queries && cached.Shape[3] == keys)
+            return cached;
+        var data = new bool[batch * heads * queries * keys];
         int offset = keys - queries;
-        for (int i = 0; i < queries; i++)
-            for (int j = 0; j < keys && j <= i + offset; j++)
-                mask[0, 0, i, j] = true;
+        for (int plane = 0; plane < batch * heads; plane++)
+            for (int i = 0; i < queries; i++)
+            {
+                int row = (plane * queries + i) * keys;
+                for (int j = 0; j < keys && j <= i + offset; j++)
+                    data[row + j] = true;
+            }
+        var mask = new Tensor<bool>(data, new[] { batch, heads, queries, keys });
+        _causalMask = mask;
         return mask;
     }
+
+    [Scratch]
+    private Tensor<bool>? _causalMask;
 
     private int[] _originalQueryShape = [];
     private int[] _originalKeyShape = [];
@@ -1550,7 +1565,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             // and inference alike.
             context_4D = Engine.ScaledDotProductAttention(
                 queries, keys, values,
-                mask: UseCausalMask ? CausalMask(attentionSeqLengthQ, attentionSeqLengthKV) : null,
+                mask: UseCausalMask ? CausalMask(queries.Shape[0], queries.Shape[1], attentionSeqLengthQ, attentionSeqLengthKV) : null,
                 scale: 1.0 / Math.Sqrt(attentionHeadDimension),
                 out attentionWeights4D);
         }
@@ -1683,17 +1698,30 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // 1. Reshape input to 3D for processing
         var input3D = gpuEngine.ReshapeGpu(input, new[] { batchSize, seqLength, embeddingDimension });
 
+        // Cross-attention: keys come from inputs[1] and values from inputs[2] (default: the keys' source), as in
+        // ForwardTracedMany. This path used to project keys and values from the query input regardless, so every
+        // GPU cross-attention silently computed self-attention.
+        var keySource = inputs.Length > 1 ? inputs[1] : input;
+        var valueSource = inputs.Length > 2 ? inputs[2] : keySource;
+        int keyLength = keySource._shape[^2];
+        if (valueSource._shape[^2] != keyLength)
+            throw new ArgumentException("Keys and values must have the same sequence length.", nameof(inputs));
+        var key3D = ReferenceEquals(keySource, input)
+            ? input3D
+            : gpuEngine.ReshapeGpu(keySource, new[] { batchSize, keyLength, embeddingDimension });
+        var value3D = ReferenceEquals(valueSource, keySource)
+            ? key3D
+            : gpuEngine.ReshapeGpu(valueSource, new[] { batchSize, keyLength, embeddingDimension });
+
         // 2. Project to Q, K, V using batched matrix multiplication
-        // Input: [batch, seq, embedding], Weights: [embedding, embedding]
-        // Output: [batch, seq, embedding]
         var queries = gpuEngine.BatchedMatMulGpu(input3D, _queryWeights);
-        var keys = gpuEngine.BatchedMatMulGpu(input3D, _keyWeights);
-        var values = gpuEngine.BatchedMatMulGpu(input3D, _valueWeights);
+        var keys = gpuEngine.BatchedMatMulGpu(key3D, _keyWeights);
+        var values = gpuEngine.BatchedMatMulGpu(value3D, _valueWeights);
 
         // 3. Reshape to [batch, seq, heads, headDim]
         var qReshaped = gpuEngine.ReshapeGpu(queries, new[] { batchSize, seqLength, _headCount, _headDimension });
-        var kReshaped = gpuEngine.ReshapeGpu(keys, new[] { batchSize, seqLength, _headCount, _headDimension });
-        var vReshaped = gpuEngine.ReshapeGpu(values, new[] { batchSize, seqLength, _headCount, _headDimension });
+        var kReshaped = gpuEngine.ReshapeGpu(keys, new[] { batchSize, keyLength, _headCount, _headDimension });
+        var vReshaped = gpuEngine.ReshapeGpu(values, new[] { batchSize, keyLength, _headCount, _headDimension });
 
         // 4. Transpose to [batch, heads, seq, headDim] for attention
         var qPermuted = gpuEngine.PermuteGpu(qReshaped, new[] { 0, 2, 1, 3 });
@@ -1710,12 +1738,12 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         {
             // Training mode: get attention weights for backward pass
             attentionOutput = gpuEngine.ScaledDotProductAttentionGpu(
-                qPermuted, kPermuted, vPermuted, scale, out attentionWeightsGpu);
+                qPermuted, kPermuted, vPermuted, scale, out attentionWeightsGpu, isCausal: UseCausalMask);
         }
         else
         {
             // Inference mode: no need for attention weights
-            attentionOutput = gpuEngine.ScaledDotProductAttentionGpu(qPermuted, kPermuted, vPermuted, scale);
+            attentionOutput = gpuEngine.ScaledDotProductAttentionGpu(qPermuted, kPermuted, vPermuted, scale, isCausal: UseCausalMask);
         }
 
         // 6. Transpose back to [batch, seq, heads, headDim]
