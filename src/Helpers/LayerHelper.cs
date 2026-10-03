@@ -5849,13 +5849,13 @@ public static partial class LayerHelper<T>
     /// The feature-encoder kernels to build, validated: the paper's 10, 3, 3, 3, 3, 2, 2 when none are
     /// given. The model's shape probe and the factory both resolve through this, so they cannot differ.
     /// </summary>
-    public static int[] Wav2Vec2EncoderKernels(int[]? kernels)
+    internal static int[] Wav2Vec2EncoderKernels(int[]? kernels)
         => ValidateWav2Vec2Stages(kernels ?? [10, 3, 3, 3, 3, 2, 2], nameof(kernels));
 
     /// <summary>
     /// The feature-encoder strides to build, validated: the paper's 5, 2, 2, 2, 2, 2, 2 when none are given.
     /// </summary>
-    public static int[] Wav2Vec2EncoderStrides(int[]? strides)
+    internal static int[] Wav2Vec2EncoderStrides(int[]? strides)
         => ValidateWav2Vec2Stages(strides ?? [5, 2, 2, 2, 2, 2, 2], nameof(strides));
 
     private static int[] ValidateWav2Vec2Stages(int[] values, string name)
@@ -8748,6 +8748,68 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(512, new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
+    /// <summary>
+    /// Creates the MIA-VSR layers in the exact order its network binds them (Zhou et al., "Video
+    /// Super-Resolution Transformer with Masked Inter&amp;Intra-Frame Attention", CVPR 2024).
+    /// </summary>
+    /// <param name="architecture">The network architecture; InputDepth is the frame channel count (3 when unset).</param>
+    /// <param name="numFeatures">The token width C.</param>
+    /// <param name="windowSize">The attention window side.</param>
+    /// <param name="numHeads">The attention heads; must divide <paramref name="numFeatures"/>.</param>
+    /// <param name="feedForwardRatio">The feed-forward expansion ratio.</param>
+    /// <param name="numPropagationBranches">The alternating backward/forward propagation branches.</param>
+    /// <param name="blocksPerBranch">The inter-and-intra-frame attention blocks per branch.</param>
+    /// <param name="scaleFactor">The upscaling factor; a power of two.</param>
+    /// <param name="reconstructionChannels">The width of the pixel-shuffle reconstruction head.</param>
+    /// <returns>The layers MIA-VSR binds by position; SPyNet is a separate collaborator and is not included.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> MIA-VSR upscales a video clip. It turns each frame into feature tokens,
+    /// passes them through four propagation branches that attend to the neighbouring frames, and
+    /// skips the positions a learned mask marks as redundant. A pixel-shuffle head then enlarges the
+    /// result.
+    /// </para>
+    /// <para>
+    /// The model's forward is not a sequential chain. It splits frames, aligns neighbours and windows
+    /// the tokens, and it binds each layer below to its role by position. A caller that supplies its
+    /// own architecture layers must therefore supply this list, or one with the same types in the same
+    /// order.
+    /// </para>
+    /// </remarks>
+    public static IEnumerable<ILayer<T>> CreateDefaultMIAVSRLayers(
+        NeuralNetworkArchitecture<T> architecture,
+        int numFeatures = 120,
+        int windowSize = 8,
+        int numHeads = 6,
+        int feedForwardRatio = 2,
+        int numPropagationBranches = 4,
+        int blocksPerBranch = 6,
+        int scaleFactor = 4,
+        int reconstructionChannels = 64)
+    {
+        if (architecture is null) throw new ArgumentNullException(nameof(architecture));
+        var options = new AiDotNet.Video.Options.MIAVSROptions
+        {
+            NumFeatures = numFeatures,
+            WindowSize = windowSize,
+            NumHeads = numHeads,
+            FeedForwardRatio = feedForwardRatio,
+            NumPropagationBranches = numPropagationBranches,
+            BlocksPerBranch = blocksPerBranch,
+            ScaleFactor = scaleFactor,
+            ReconstructionChannels = reconstructionChannels
+        };
+        int channels = architecture.InputDepth > 0 ? architecture.InputDepth : 3;
+
+        // Shallow feature conv; per branch, each attention block's norm, Q/K/V, relative bias,
+        // projection, mask norm and score, and feed-forward pair, then the branch conv; the
+        // pixel-shuffle stages; the HR conv; and the output conv. MiaVsrNetwork.Build defines the
+        // order, so this list cannot drift from the layout the model binds.
+        foreach (var layer in new AiDotNet.Video.Enhancement.MiaVsrNetwork<T>(options, channels, flowEstimator: null).Layers)
+        {
+            yield return layer;
+        }
+    }
     /// <summary>
     /// Creates layers for a VRT (Video Restoration Transformer) model.
     /// </summary>
