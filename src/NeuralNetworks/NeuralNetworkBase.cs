@@ -13213,6 +13213,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             T lossValue = lossTensor[0];
             LastLoss = lossValue;
 
+            // Global gradient-norm clipping at MaxGradNorm, over the same layer-owned set and in the same order as
+            // TrainWithTape and the gradient-accumulation step. This path used to skip it, so a model trained through
+            // its own objective (FastSpeech 2, AlignTTS, AdaSpeech) took unclipped steps that every other entry point
+            // would have clipped.
+            double maxGradNorm = MaxGradNormValue;
+            if (maxGradNorm > 0.0 && grads.Count > 0)
+            {
+                ApplyGradientClipping(grads, maxGradNorm, CollectLayerOwnedTrainableTensorsForClipping(trainableParams));
+                PublishParameterGradients(grads);
+            }
+
             Tensor<T> RecomputeObjective(Tensor<T> currentInput, Tensor<T> currentExpected)
             {
                 EnsureLayerRandomSeedsWired();

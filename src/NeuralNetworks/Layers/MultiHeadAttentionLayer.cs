@@ -1150,6 +1150,20 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         throw new ArgumentException("MultiHeadAttentionLayer supports 1, 2, or 3 inputs.");
     }
 
+    /// <summary>
+    /// The causal mask <c>[1, 1, queries, keys]</c>: query <c>i</c> attends to key <c>j</c> when
+    /// <c>j ≤ i + (keys − queries)</c>, so the last query sees every key (the alignment of an incremental decode step).
+    /// </summary>
+    private static Tensor<bool> CausalMask(int queries, int keys)
+    {
+        var mask = new Tensor<bool>(new[] { 1, 1, queries, keys });
+        int offset = keys - queries;
+        for (int i = 0; i < queries; i++)
+            for (int j = 0; j < keys && j <= i + offset; j++)
+                mask[0, 0, i, j] = true;
+        return mask;
+    }
+
     private int[] _originalQueryShape = [];
     private int[] _originalKeyShape = [];
     private int[] _originalValueShape = [];
@@ -1524,15 +1538,19 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             var vContig = values.Contiguous();
             var flashConfig = FlashAttentionConfig.Default;
             flashConfig.ReturnAttentionWeights = false; // no O(seq²) materialization
+            flashConfig.UseCausalMask = UseCausalMask;
             var (flashOutput, _) = FlashAttention<T>.Forward(qContig, kContig, vContig, flashConfig);
             context_4D = flashOutput;
             attentionWeights4D = Tensor<T>.Empty();
         }
         else
         {
+            // UseCausalMask used to reach only the ALiBi branch above: this branch and the float fast path passed no
+            // mask, so a decoder that set it (nine LayerHelper factories do) attended to future positions in training
+            // and inference alike.
             context_4D = Engine.ScaledDotProductAttention(
                 queries, keys, values,
-                mask: null,
+                mask: UseCausalMask ? CausalMask(attentionSeqLengthQ, attentionSeqLengthKV) : null,
                 scale: 1.0 / Math.Sqrt(attentionHeadDimension),
                 out attentionWeights4D);
         }
