@@ -24,7 +24,7 @@ internal sealed class EcapaTdnnLanguageClassifier<T>
     /// <param name="numLanguages">Number of output logits.</param>
     public EcapaTdnnLanguageClassifier(ECAPATDNNOptions options, int numLanguages)
         : this(
-            options.TdnnChannels,
+            (options ?? throw new ArgumentNullException(nameof(options))).TdnnChannels,
             options.KernelSizes,
             options.Dilations,
             options.Res2NetScale,

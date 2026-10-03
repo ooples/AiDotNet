@@ -140,12 +140,29 @@ internal sealed class EcapaTdnnBackbone<T>
 
         if (same) return;
 
+        // A graph that fails part-way (wrong type or channel contract) must leave the encoder exactly as
+        // it was, not half-bound.
+        var previous = (Layers: _layers.ToList(), Blocks: _blocks.ToList(), Frame: _frameBlock, Mfa: _mfaBlock,
+            AttentionTdnn: _attentionTdnn, AttentionScore: _attentionScore, PoolingNorm: _poolingNorm,
+            Embedding: _embedding);
         _bindSource = layers;
         try
         {
             _layers.Clear();
             _blocks.Clear();
             Build();
+        }
+        catch
+        {
+            _layers.Clear(); _layers.AddRange(previous.Layers);
+            _blocks.Clear(); _blocks.AddRange(previous.Blocks);
+            _frameBlock = previous.Frame;
+            _mfaBlock = previous.Mfa;
+            _attentionTdnn = previous.AttentionTdnn;
+            _attentionScore = previous.AttentionScore;
+            _poolingNorm = previous.PoolingNorm;
+            _embedding = previous.Embedding;
+            throw;
         }
         finally
         {
@@ -284,12 +301,36 @@ internal sealed class EcapaTdnnBackbone<T>
                     $"{typeof(TLayer).Name}, found {(index < _bindSource.Count ? _bindSource[index].GetType().Name : "the end")}.");
             }
 
+            if (existing is Conv1DLayer<T> boundConvolution && layer is Conv1DLayer<T> layoutConvolution)
+            {
+                // The Res2Net splits, residual additions and pooling statistics depend on each
+                // convolution's width and geometry, so a stale convolution is refused here rather than
+                // failing, or silently mixing widths, inside a later forward.
+                var expected = layoutConvolution.GetMetadata();
+                var found = boundConvolution.GetMetadata();
+                foreach (var key in ConvolutionContractKeys)
+                {
+                    expected.TryGetValue(key, out var want);
+                    found.TryGetValue(key, out var got);
+                    if (!string.Equals(want, got, StringComparison.Ordinal))
+                    {
+                        throw new InvalidOperationException(
+                            $"The layer graph does not match the ECAPA-TDNN layout at position {index}: the " +
+                            $"Conv1DLayer's {key} is {got ?? "unset"}, but the layout needs {want ?? "unset"}.");
+                    }
+                }
+            }
+
             layer = existing;
         }
 
         _layers.Add(layer);
         return layer;
     }
+
+    // The convolution settings a bound layer must share with the one the layout builds.
+    private static readonly string[] ConvolutionContractKeys =
+        { "OutputChannels", "KernelSize", "Dilation", "Stride", "Padding", "Groups" };
 
     private TdnnBlock AddTdnn(int outputChannels, int kernelSize, int dilation)
         => new(
