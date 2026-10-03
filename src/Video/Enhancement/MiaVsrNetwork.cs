@@ -92,6 +92,9 @@ internal sealed class MiaVsrNetwork<T>
             throw new ArgumentOutOfRangeException(nameof(options), $"ScaleFactor must be a positive power of two; got {options.ScaleFactor}.");
         if (options.ReconstructionChannels <= 0) throw new ArgumentOutOfRangeException(nameof(options), "ReconstructionChannels must be positive.");
         if (double.IsNaN(options.GumbelTemperature) || options.GumbelTemperature <= 0) throw new ArgumentOutOfRangeException(nameof(options), "GumbelTemperature must be positive.");
+        // Zero disables the sparsity term; anything negative or non-finite would silently drop or invert it.
+        if (double.IsNaN(options.MaskLossWeight) || double.IsInfinity(options.MaskLossWeight) || options.MaskLossWeight < 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "MaskLossWeight must be finite and non-negative.");
 
         _inputChannels = inputChannels;
         _channels = options.NumFeatures;

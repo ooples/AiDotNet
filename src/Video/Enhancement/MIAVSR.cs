@@ -164,18 +164,21 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            return;
-        }
 
         // The paper topology: shallow features, SPyNet patch alignment, four propagation branches of
         // inter-and-intra-frame attention blocks, and the pixel-shuffle head. Layers publishes exactly
         // the instances the forward runs, so training, serialization and clone walk the same weights.
+        // Caller-supplied layers are bound to the same roles by position; the forward is not a
+        // sequential chain, so a list that does not match the layout is refused here.
+        var layers = Architecture.Layers is not null && Architecture.Layers.Count > 0
+            ? Architecture.Layers
+            : LayerHelper<T>.CreateDefaultMIAVSRLayers(Architecture, _options.NumFeatures, _options.WindowSize,
+                _options.NumHeads, _options.FeedForwardRatio, _options.NumPropagationBranches,
+                _options.BlocksPerBranch, _options.ScaleFactor, _options.ReconstructionChannels).ToList();
         int channels = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
         _network = new MiaVsrNetwork<T>(_options, channels, _flowEstimator);
-        Layers.AddRange(_network.Layers);
+        _network.BindTo(layers);
+        Layers.AddRange(layers);
     }
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
@@ -220,14 +223,7 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
     /// </remarks>
     protected override void ResolveLazyLayerShapes()
     {
-        if (IsOnnxMode) return;
-        if (_network is null)
-        {
-            // A caller-supplied stack is an ordinary sequential chain, which the base walk resolves.
-            base.ResolveLazyLayerShapes();
-            return;
-        }
-
+        if (IsOnnxMode || _network is null) return;
         if (_lazyShapesProbed || _lazyShapesProbing) return;
         _lazyShapesProbing = true;
 
@@ -253,16 +249,9 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
 
     private Tensor<T> ForwardNative(Tensor<T> input, bool training)
     {
-        if (_network is null)
-        {
-            // A caller-supplied architecture is an ordinary layer chain.
-            var output = input;
-            foreach (var layer in Layers) output = layer.Forward(output);
-            return output;
-        }
-
-        _network.BindTo(Layers);
-        var result = _network.Forward(input, training, _random, out var maskLoss);
+        var network = _network ?? throw new InvalidOperationException("MIA-VSR has no native network in ONNX mode.");
+        network.BindTo(Layers);
+        var result = network.Forward(input, training, _random, out var maskLoss);
         _pendingMaskLoss = training && maskLoss is not null && _options.MaskLossWeight > 0
             ? Engine.TensorMultiplyScalar(maskLoss, NumOps.FromDouble(_options.MaskLossWeight))
             : null;
@@ -308,6 +297,14 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
         m.AdditionalInfo["NumHeads"] = _options.NumHeads.ToString();
         m.AdditionalInfo["MaskLossWeight"] = _options.MaskLossWeight.ToString(System.Globalization.CultureInfo.InvariantCulture);
         m.AdditionalInfo["ScaleFactor"] = _options.ScaleFactor.ToString();
+        int channels = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+        m.AdditionalInfo["ModelType"] = nameof(MIAVSR<T>);
+        m.AdditionalInfo["ParameterCount"] = (_useNativeMode ? ParameterCount : 0).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        m.AdditionalInfo["Architecture"] =
+            $"{_options.NumPropagationBranches}x{_options.BlocksPerBranch} inter-and-intra-frame attention blocks, " +
+            $"C={_options.NumFeatures}, window={_options.WindowSize}, heads={_options.NumHeads}";
+        m.AdditionalInfo["InputShape"] = $"[B, T, {channels}, H, W]";
+        m.AdditionalInfo["OutputShape"] = $"[B, T, {channels}, H*{_options.ScaleFactor}, W*{_options.ScaleFactor}]";
         return m;
     }
 

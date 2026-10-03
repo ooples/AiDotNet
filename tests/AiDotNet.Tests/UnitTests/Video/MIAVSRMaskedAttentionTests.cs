@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using AiDotNet.Enums;
+using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -123,4 +124,54 @@ public class MIAVSRMaskedAttentionTests
             .Where(layer => layer.GetOutputShape().LastOrDefault() == 1)
             .SelectMany(layer => Enumerable.Range(0, layer.GetParameters().Length).Select(i => layer.GetParameters()[i]))
             .ToArray();
+
+    [Theory]
+    [InlineData(-1e-4)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void InvalidMaskLossWeight_IsRejectedAtConstruction(double weight)
+        => Assert.Throws<ArgumentOutOfRangeException>(() => CreateModel(maskLossWeight: weight));
+
+    [Fact]
+    public void SuppliedLayers_AreBoundToThePaperRoles_NotRunAsAChain()
+    {
+        var bare = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.FourDimensional, taskType: NeuralNetworkTaskType.Regression,
+            inputFrames: Frames, inputDepth: Channels, inputHeight: Side, inputWidth: Side, outputSize: 4);
+        var supplied = LayerHelper<double>.CreateDefaultMIAVSRLayers(bare, numFeatures: 8, windowSize: 4,
+            numHeads: 2, feedForwardRatio: 2, numPropagationBranches: 4, blocksPerBranch: 1, scaleFactor: 2,
+            reconstructionChannels: 8).ToList();
+        var model = new MIAVSR<double>(
+            new NeuralNetworkArchitecture<double>(
+                inputType: InputType.FourDimensional, taskType: NeuralNetworkTaskType.Regression,
+                inputFrames: Frames, inputDepth: Channels, inputHeight: Side, inputWidth: Side, outputSize: 4,
+                layers: supplied),
+            new MIAVSROptions
+            {
+                NumFeatures = 8, NumHeads = 2, WindowSize = 4, FeedForwardRatio = 2,
+                NumPropagationBranches = 4, BlocksPerBranch = 1, ScaleFactor = 2,
+                ReconstructionChannels = 8, Seed = 1234
+            });
+
+        // The model runs the caller's instances in the paper's roles: the clip is upscaled, which a plain
+        // sequential walk over the same layers could not do.
+        Assert.True(supplied.SequenceEqual(model.Layers));
+        var output = model.Predict(CreateClip(5));
+        Assert.Equal(new[] { 1, Frames, Channels, Side * 2, Side * 2 }, output.Shape.ToArray());
+    }
+
+    [Fact]
+    public void SuppliedLayers_ThatDoNotMatchTheLayout_AreRefused()
+    {
+        var mismatched = new System.Collections.Generic.List<AiDotNet.Interfaces.ILayer<double>>
+        {
+            new DenseLayer<double>(4, (AiDotNet.Interfaces.IActivationFunction<double>)new AiDotNet.ActivationFunctions.IdentityActivation<double>())
+        };
+        Assert.Throws<InvalidOperationException>(() => new MIAVSR<double>(
+            new NeuralNetworkArchitecture<double>(
+                inputType: InputType.FourDimensional, taskType: NeuralNetworkTaskType.Regression,
+                inputFrames: Frames, inputDepth: Channels, inputHeight: Side, inputWidth: Side, outputSize: 4,
+                layers: mismatched),
+            new MIAVSROptions { NumFeatures = 8, NumHeads = 2, WindowSize = 4, BlocksPerBranch = 1, ScaleFactor = 2 }));
+    }
 }
