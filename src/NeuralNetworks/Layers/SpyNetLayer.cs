@@ -100,6 +100,9 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
     #region Fields
 
     private readonly int _numLevels;
+
+    /// <summary>The number of pyramid levels; inputs must be at least 2^(levels-1) pixels on each side.</summary>
+    public int NumLevels => _numLevels;
     // Non-readonly: lazy ctor leaves these = -1 until OnFirstForward.
     private int _inputChannels;
     private int _inputHeight;
