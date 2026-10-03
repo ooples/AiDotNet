@@ -39,7 +39,7 @@ namespace AiDotNet.MetaLearning.Models;
     Authors = "Yiluan Guo, Ngai-Man Cheung")]
 [ComponentType(ComponentType.MetaLearner)]
 [PipelineStage(PipelineStage.Training)]
-public partial class AWGIMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
+internal partial class AWGIMModel<T, TInput, TOutput> : IModel<TInput, TOutput, ModelMetadata<T>>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 

@@ -162,7 +162,7 @@ public class AWGIMOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     public int LearningRateDecaySteps { get; set; } = 15000;
 
     /// <summary>Gets or sets the staircase learning-rate decay factor.</summary>
-    /// <value>Default 0.2, the authors'.</value>
+    /// <value>Default 0.2, the authors'. Must lie in (0, 1]; a factor above 1 would grow the rate.</value>
     public double LearningRateDecayRate { get; set; } = 0.2;
 
     #endregion
@@ -185,7 +185,7 @@ public class AWGIMOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
             && ContextReconstructionWeight >= 0
             && QueryReconstructionWeight >= 0
             && WeightDecay >= 0
-            && LearningRateDecayRate > 0
+            && LearningRateDecayRate > 0 && LearningRateDecayRate <= 1
             && (GradientClipThreshold is null || GradientClipThreshold > 0)
             && (GradientNormClipThreshold is null || GradientNormClipThreshold > 0);
     }
