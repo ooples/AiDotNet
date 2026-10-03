@@ -377,7 +377,7 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         }
 
         // ----- Train Generator -----
-        T generatorLoss = TrainGeneratorOnBatch(ConcatenateTensors(noise, conditions));
+        T generatorLoss = TrainGeneratorOnBatch(generatorInput);
 
         // Track losses
         _generatorLosses.Add(generatorLoss);

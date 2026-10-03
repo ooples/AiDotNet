@@ -735,7 +735,7 @@ jobs:
             echo "## \`$FAILED_JOB\` failed: the rest of this run was cancelled"
             echo
             echo "Every check in this run that shows as **cancelled** was stopped on purpose after \`$FAILED_JOB\` failed."
-            echo "They are not independent failures. The only failure to fix is \`$FAILED_JOB\`: open it from [this run]($RUN_URL)."
+            echo "Cancelled checks are not independent failures. Start by fixing \`$FAILED_JOB\`, then review any other job that completed with failure: [this run]($RUN_URL)."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Cancel remaining jobs
@@ -764,7 +764,7 @@ jobs:
             echo "## \`$FAILED_JOB\` failed: the rest of this run was cancelled"
             echo
             echo "Every check in this run that shows as **cancelled** was stopped on purpose after \`$FAILED_JOB\` failed."
-            echo "They are not independent failures. The only failure to fix is \`$FAILED_JOB\`: open it from [this run]($RUN_URL)."
+            echo "Cancelled checks are not independent failures. Start by fixing \`$FAILED_JOB\`, then review any other job that completed with failure: [this run]($RUN_URL)."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Cancel remaining jobs

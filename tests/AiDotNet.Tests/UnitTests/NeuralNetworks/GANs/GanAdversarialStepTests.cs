@@ -266,9 +266,16 @@ public class GanAdversarialStepTests
         var discriminator = (NeuralNetworkBase<double>)cgan.Discriminator;
         generator.SetTrainingMode(true);
         discriminator.SetTrainingMode(true);
-        var fake = generator.Predict(engine.TensorConcatenate(new[] { noise, conditions }, axis: 1));
-        var realScores = discriminator.Predict(engine.TensorConcatenate(new[] { real, conditions }, axis: 1));
-        var fakeScores = discriminator.Predict(engine.TensorConcatenate(new[] { fake, conditions }, axis: 1));
+        // The oracle follows TrainStep's own paths: the generator per sample (ConditionalGAN.PredictBatched slices
+        // a [B, N] batch and stacks the rows) and the discriminator through ForwardForTraining, the forward it
+        // scores with. Predict would run the inference forward, which differs once a layer behaves differently in
+        // training (dropout, batch normalization).
+        var generatorInput = engine.TensorConcatenate(new[] { noise, conditions }, axis: 1);
+        var fakeRows = new Tensor<double>[generatorInput.Shape[0]];
+        for (int b = 0; b < fakeRows.Length; b++) fakeRows[b] = generator.Predict(generatorInput.GetSlice(b));
+        var fake = Tensor<double>.Stack(fakeRows);
+        var realScores = discriminator.ForwardForTraining(engine.TensorConcatenate(new[] { real, conditions }, axis: 1));
+        var fakeScores = discriminator.ForwardForTraining(engine.TensorConcatenate(new[] { fake, conditions }, axis: 1));
 
         bool probabilities = discriminator.FinalLayerEmitsProbabilities();
         double Bce(Tensor<double> scores, bool targetIsReal)

@@ -119,6 +119,22 @@ public class MaskRCNNTrainingTests
         }
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task TrainInstances_RejectsAClassBeyondTheModelAtTheEntryPoint()
+    {
+        await Task.Yield();
+        // A class at or past NumClasses is reported where the caller hands the targets in, naming targets. The lower
+        // bound needs no check here: DetectionTrainingTarget's only constructor rejects a negative class.
+        const int classId = 2;
+        var model = new MaskRCNN<double>(Options());
+        var mask = new Tensor<double>(new[] { ImageSize, ImageSize });
+        var box = DetectionTrainingTarget<double>.FromPixelXywh(classId, 16, 16, 24, 24, ImageSize, ImageSize);
+
+        var ex = Assert.Throws<ArgumentException>(() =>
+            model.TrainInstances(Image(), new List<InstanceSegmentationTrainingTarget<double>> { new(box, mask) }));
+        Assert.Equal("targets", ex.ParamName);
+    }
+
     [Fact(Timeout = 900000)]
     public async Task TrainInstances_LowersTheLossOnARepeatedExample()
     {
