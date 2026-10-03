@@ -121,7 +121,7 @@ public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     /// (3) U-Net denoiser iteratively refines noise x_T toward clean mel x_0,
     /// (4) Reverse SDE: x_{t-dt} = x_t + (beta(t)/2)(mu - x_t)dt + sqrt(beta(t))dW.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var tokens = PreprocessText(text);

@@ -98,7 +98,7 @@ public partial class MARS5TTS<T> : TtsModelBase<T>, ICodecTts<T>
     public int CodecFrameRate => _options.CodecFrameRate;
 
     /// <summary>Synthesizes speech. MARS5: text + reference -> shallow AR (coarse tokens) -> deep NAR (fine tokens) -> EnCodec decoder.</summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

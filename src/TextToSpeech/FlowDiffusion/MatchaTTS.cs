@@ -114,7 +114,7 @@ public partial class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// (3) OT-CFM decoder: optimal-transport conditional flow matching generates mel in few steps,
     /// (4) HiFi-GAN vocoder: mel → waveform.
     /// Achieves near-real-time synthesis with only 2-4 ODE steps.
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

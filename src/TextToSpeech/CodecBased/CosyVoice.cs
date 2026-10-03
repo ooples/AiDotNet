@@ -135,7 +135,7 @@ public partial class CosyVoice<T> : TtsModelBase<T>, ICodecTts<T>
     /// then a flow matching decoder generates mel-spectrogram features, and finally a vocoder
     /// converts those features into an audible waveform.</para>
     /// </remarks>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

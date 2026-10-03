@@ -122,7 +122,7 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// Synthesizes speech from text.
     /// Per Ye et al. (2023): Consistency model maps any noise level directly to clean mel in one step.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

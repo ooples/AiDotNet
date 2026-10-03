@@ -121,7 +121,7 @@ public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     /// (4) Inverse normalizing flow transforms latent z ~ N(mu, sigma) to mel-spectrogram.
     /// At inference: duration predictor provides alignment, flow runs in reverse with temperature scaling.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var tokens = PreprocessText(text);

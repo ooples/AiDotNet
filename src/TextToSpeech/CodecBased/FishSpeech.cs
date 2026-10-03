@@ -105,7 +105,7 @@ public partial class FishSpeech<T> : TtsModelBase<T>, ICodecTts<T>
     public int CodecFrameRate => _options.CodecFrameRate;
 
     /// <summary>Synthesizes speech. Fish Speech: text -> dual-AR transformer (semantic AR + acoustic GroupFSQ) -> FireflyGAN decoder.</summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

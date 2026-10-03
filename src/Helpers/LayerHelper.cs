@@ -35150,6 +35150,74 @@ public static partial class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates the FastSpeech phoneme encoder: phoneme embedding, sinusoidal positional encoding, and feed-forward
+    /// Transformer (FFT) blocks (Ren et al. 2019 §3.1; FastSpeech 2, Ren et al. 2021 App. A).
+    /// </summary>
+    /// <remarks>
+    /// FastSpeech 2's configuration is vocabulary 76 phonemes (LJSpeech), 4 FFT blocks of hidden 256 with 2 heads,
+    /// a convolutional FFN of 1024 filters with kernel sizes 9 and 1, and dropout 0.1. When the encoder width differs
+    /// from the hidden width the variance adaptor and decoder work in, a linear projection closes the encoder.
+    /// </remarks>
+    internal static IEnumerable<ILayer<T>> CreateDefaultFastSpeechEncoderLayers(
+        int vocabSize = 256,
+        int encoderDim = 256,
+        int hiddenDim = 256,
+        int numLayers = 4,
+        int numHeads = 2,
+        int filterSize = 1024,
+        int firstKernelSize = 9,
+        int secondKernelSize = 1,
+        double dropoutRate = 0.1,
+        int maxSequenceLength = 1000)
+    {
+        yield return new EmbeddingLayer<T>(vocabSize, encoderDim);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, encoderDim);
+        for (int i = 0; i < numLayers; i++)
+            yield return new FeedForwardTransformerBlock<T>(encoderDim, numHeads, filterSize, firstKernelSize, secondKernelSize, dropoutRate);
+        if (encoderDim != hiddenDim)
+            yield return new DenseLayer<T>(hiddenDim, new IdentityActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
+    /// Creates FastSpeech 2's variance adaptor and mel decoder: the adaptor (duration, pitch, energy), sinusoidal
+    /// positional encoding of the expanded sequence, FFT blocks, and the linear projection to mel channels
+    /// (Ren et al. 2021 §2.2-2.3, App. A).
+    /// </summary>
+    /// <remarks>The adaptor is the first layer returned, so a model built with
+    /// <c>TtsModelBase.AddEncoderDecoderLayers</c> finds it at <c>Layers[EncoderLayerCount]</c>.</remarks>
+    internal static IEnumerable<ILayer<T>> CreateDefaultFastSpeech2DecoderLayers(
+        int hiddenDim = 256,
+        int melChannels = 80,
+        int numLayers = 4,
+        int numHeads = 2,
+        int filterSize = 1024,
+        int firstKernelSize = 9,
+        int secondKernelSize = 1,
+        double dropoutRate = 0.1,
+        int maxMelLength = 1000,
+        int variancePredictorFilterSize = 256,
+        int variancePredictorKernelSize = 3,
+        double variancePredictorDropout = 0.5,
+        int pitchBins = 256,
+        double pitchMinHz = 71.0,
+        double pitchMaxHz = 800.0,
+        int energyBins = 256,
+        int stftSize = 1024,
+        bool usePitch = true,
+        bool useEnergy = true)
+    {
+        // Energy bins span every value the STFT frame energy can take for audio in [-1, 1].
+        yield return new VarianceAdaptorLayer<T>(hiddenDim, variancePredictorFilterSize, variancePredictorKernelSize,
+            variancePredictorDropout, pitchBins, pitchMinHz, pitchMaxHz, energyBins,
+            energyMin: 0.0, energyMax: VarianceAdaptorLayer<T>.MaxStftEnergy(stftSize),
+            usePitch: usePitch, useEnergy: useEnergy);
+        yield return new PositionalEncodingLayer<T>(maxMelLength, hiddenDim);
+        for (int i = 0; i < numLayers; i++)
+            yield return new FeedForwardTransformerBlock<T>(hiddenDim, numHeads, filterSize, firstKernelSize, secondKernelSize, dropoutRate);
+        yield return new DenseLayer<T>(melChannels, new IdentityActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
     /// Creates default layers for GAN-based neural vocoders (HiFi-GAN, MelGAN, BigVGAN, etc.).
     /// Architecture: Mel input -> upsampling blocks -> residual blocks -> waveform output.
     /// </summary>

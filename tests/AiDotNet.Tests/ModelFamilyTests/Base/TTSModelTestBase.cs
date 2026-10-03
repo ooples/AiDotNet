@@ -22,6 +22,71 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// </remarks>
 public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
 {
+    /// <summary>
+    /// Trains a model whose paper needs supervision a token/mel pair does not carry (FastSpeech 2's forced-alignment
+    /// durations) through its typed entry point, with synthetic supervision consistent with the fixture's target:
+    /// durations spread evenly so they sum to the target's frame count, a smooth pitch contour in the speaking range,
+    /// and the frame energy of the target spectrogram.
+    /// </summary>
+    protected override void TrainOn(INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> target)
+    {
+        if (network is AiDotNet.TextToSpeech.TtsModelBase<T> tts
+            && tts.TrainingSupervision != AiDotNet.TextToSpeech.TtsSupervision.None)
+        {
+            tts.Train(SyntheticSupervision(input, target));
+            return;
+        }
+        base.TrainOn(network, input, target);
+    }
+
+    /// <summary>
+    /// Measures a model trained through its typed entry point on the objective it was trained on, with the same
+    /// synthetic supervision <see cref="TrainOn"/> gives it. Its prediction length follows its own predicted durations,
+    /// so comparing a prediction with a fixed-length target would measure nothing.
+    /// </summary>
+    protected override double MeasureLoss(INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> output, Tensor<T> target)
+    {
+        if (network is AiDotNet.TextToSpeech.TtsModelBase<T> tts
+            && tts.TrainingSupervision != AiDotNet.TextToSpeech.TtsSupervision.None)
+            return ConvertToDouble(tts.EvaluateTrainingObjective(SyntheticSupervision(input, target)));
+        return base.MeasureLoss(network, input, output, target);
+    }
+
+    private static AiDotNet.TextToSpeech.TtsTrainingSample<T> SyntheticSupervision(Tensor<T> tokens, Tensor<T> target)
+    {
+        int frames = target.Rank >= 2 ? target.Shape[target.Rank - 2] : target.Length;
+        int channels = target.Rank >= 2 ? target.Shape[target.Rank - 1] : 1;
+        var mel = new Tensor<T>(new[] { frames, channels }, target.ToVector());
+        int tokenCount = tokens.Length;
+
+        var durations = new int[tokenCount];
+        for (int i = 0; i < tokenCount; i++) durations[i] = frames / tokenCount + (i < frames % tokenCount ? 1 : 0);
+
+        var pitch = new double[frames];
+        var energy = new double[frames];
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        for (int f = 0; f < frames; f++)
+        {
+            pitch[f] = 150.0 + 50.0 * Math.Sin(2 * Math.PI * f / Math.Max(1, frames));
+            double sum = 0;
+            for (int c = 0; c < channels; c++)
+            {
+                double magnitude = Math.Exp(Math.Min(5.0, ops.ToDouble(mel[f, c])));
+                sum += magnitude * magnitude;
+            }
+            energy[f] = Math.Min(Math.Sqrt(sum), 600.0);
+        }
+
+        return new AiDotNet.TextToSpeech.TtsTrainingSample<T>
+        {
+            Tokens = tokens.Rank == 1 ? tokens : new Tensor<T>(new[] { tokenCount }, tokens.ToVector()),
+            Mel = mel,
+            Durations = durations,
+            Pitch = pitch,
+            Energy = energy,
+        };
+    }
+
     // =====================================================
     // TTS INVARIANT: Different Text → Different Audio
     // Different text inputs must produce different mel/audio output.

@@ -140,7 +140,7 @@ public partial class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// each language's phonetic rules are followed correctly, while the language ID embedding helps
     /// the model adjust its pronunciation and prosody for each language segment.</para>
     /// </remarks>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

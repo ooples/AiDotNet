@@ -102,7 +102,7 @@ public partial class CosyVoice2<T> : TtsModelBase<T>, ICodecTts<T>
     public int CodecFrameRate => _options.CodecFrameRate;
 
     /// <summary>Synthesizes speech. CosyVoice 2: text -> LLM -> FSQ semantic tokens -> chunk-aware causal flow matching -> vocoder.</summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

@@ -91,7 +91,7 @@ public partial class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
     public int CodecFrameRate => _options.CodecFrameRate;
 
     /// <summary>Synthesizes speech. ChatTTS: text with prosody tags -> DVAE encoder -> GPT AR -> flow matching refiner -> vocoder.</summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

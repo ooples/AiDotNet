@@ -1,44 +1,42 @@
 using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
+using AiDotNet.Audio.Pitch;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.TextToSpeech.Interfaces;
-using AiDotNet.Tokenization;
-using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.TextToSpeech.Classic;
 
 /// <summary>
-/// FastSpeech 2: non-autoregressive TTS with variance adaptor for pitch, energy, and duration.
+/// FastSpeech 2: non-autoregressive TTS with a variance adaptor for duration, pitch and energy.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "FastSpeech 2: Fast and High-Quality End-to-End Text to Speech" (Ren et al., 2020)</item></list></para>
-/// <para><b>For Beginners:</b> /// FastSpeech 2: non-autoregressive TTS with variance adaptor for pitch, energy, and duration.
-///. This model converts text input into speech audio output.</para>
-/// <example>
-/// <code>
-/// // Create a FastSpeech 2 model for non-autoregressive TTS
-/// // with variance adaptor for explicit pitch, energy, and duration control
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputSize: 200, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new FastSpeech2&lt;double&gt;(architecture, "fastspeech2.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new FastSpeech2&lt;double&gt;(architecture, new FastSpeech2Options());
-/// </code>
-/// </example>
+/// <para><b>References:</b> "FastSpeech 2: Fast and High-Quality End-to-End Text to Speech" (Ren et al., 2021).</para>
+/// <para>
+/// The layer stack is the paper's (§2.2, App. A): phoneme embedding and sinusoidal positions, 4 feed-forward
+/// Transformer blocks (hidden 256, 2 heads, 1D convolutions of kernel 9 and 1 with 1024 filters), the variance
+/// adaptor (duration, pitch as a CWT spectrogram, energy; <see cref="VarianceAdaptorLayer{T}"/>), positions again,
+/// 4 more FFT blocks and a linear projection to 80 mel channels. The model is trained on the sum of the mel MAE and
+/// the MSE of each variance predictor, with ground-truth duration, pitch and energy driving the adaptor (§2.3).
+/// </para>
+/// <para>
+/// Training data: durations come from an external forced aligner (MFA in the paper), so a plain
+/// <c>Train(tokens, mel)</c> cannot train this model faithfully and throws; pass a <see cref="TtsTrainingSample{T}"/>
+/// with <see cref="TtsTrainingSample{T}.Durations"/>. Pitch (WORLD DIO + StoneMask), energy (STFT frame norm)
+/// and the mel target are derived from <see cref="TtsTrainingSample{T}.Audio"/> when not supplied, as the paper
+/// derives them.
+/// </para>
+/// <para><b>For Beginners:</b> FastSpeech 2 reads phonemes, decides how long each one lasts and how high and loud
+/// it is, stretches the phoneme features to that many frames, and turns them into a mel spectrogram all at once.
+/// A vocoder (e.g. HiFi-GAN) turns the spectrogram into audio.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -55,22 +53,16 @@ namespace AiDotNet.TextToSpeech.Classic;
                 Schedule = LearningRateSchedulerType.Noam, WarmupSteps = 4000,
                 ReferenceBatchSize = 48,
                 Source = "Ren et al. 2021, Sec. 4.1: Adam with beta1 0.9, beta2 0.98, eps 1e-9 following the learning rate schedule of Vaswani et al. 2017, batch size 48 sentences, 160k steps. No constant rate is declared because that schedule states none.")]
-public partial class FastSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
+public partial class FastSpeech2<T> : VarianceAdaptorTtsModelBase<T>, IAcousticModel<T>
 {
     private readonly FastSpeech2Options _options;
 
     public override ModelOptions GetOptions() => _options;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
-    private bool _disposed;
 
-    public FastSpeech2(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        FastSpeech2Options? options = null
-    )
+    public FastSpeech2(NeuralNetworkArchitecture<T> architecture, string modelPath, FastSpeech2Options? options = null)
         : base(architecture)
     {
         _options = options ?? new FastSpeech2Options();
@@ -85,27 +77,24 @@ public partial class FastSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options.ModelPath = modelPath;
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
 
     public FastSpeech2(
         NeuralNetworkArchitecture<T> architecture,
         FastSpeech2Options? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture)
     {
         _options = options ?? new FastSpeech2Options();
         _useNativeMode = true;
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
         base.HiddenDim = _options.HiddenDim;
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
 
@@ -115,108 +104,15 @@ public partial class FastSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
     public new int HopSize => _options.HopSize;
     public int FftSize => _options.FftSize;
 
-    /// <summary>
-    /// Synthesizes audio waveform from text using FastSpeech 2's non-autoregressive pipeline.
-    /// Per the paper (Ren et al., 2020), the pipeline is:
-    /// (1) Phoneme encoder: FFT blocks encode input phoneme sequence,
-    /// (2) Variance adaptor: predicts duration, pitch (F0), and energy for each phoneme,
-    /// (3) Length regulator: expands phoneme-level hidden to mel-frame-level using predicted durations,
-    /// (4) Mel decoder: FFT blocks decode frame-level hidden to mel-spectrogram.
-    /// Note: waveform synthesis requires a separate vocoder (e.g., HiFi-GAN).
-    /// </summary>
-    public Tensor<T> Synthesize(string text)
-    {
-        ThrowIfDisposed();
-        var tokens = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(tokens);
+    /// <summary>Generates a mel spectrogram from text (FastSpeech 2 is an acoustic model; pair it with a vocoder).</summary>
+    public Tensor<T> TextToMel(string text) => Synthesize(text);
 
-        // Step 1: Phoneme encoder (FFT blocks)
-        var encoded = RunEncoder(tokens);
+    /// <inheritdoc />
+    /// <remarks>FastSpeech 2 optimizes the mel spectrogram with mean absolute error (Ren et al. 2021, §3.1).</remarks>
+    protected override bool UsesL1MelLoss => true;
 
-        // Step 2: Variance adaptor - duration, pitch, energy prediction
-        int seqLen = encoded.Length;
-        int dim = _options.HiddenDim;
-        var expanded = ApplyVarianceAdaptor(encoded, seqLen, dim);
-
-        // Step 3: Mel decoder (FFT blocks)
-        var output = RunDecoder(expanded);
-
-        return output;
-    }
-
-    /// <summary>
-    /// Generates a mel-spectrogram from text using FastSpeech 2.
-    /// </summary>
-    public Tensor<T> TextToMel(string text)
-    {
-        return Synthesize(text);
-    }
-
-    /// <summary>
-    /// Applies the variance adaptor: duration prediction + length regulation + pitch/energy conditioning.
-    /// Per FastSpeech 2 (Ren et al., 2020):
-    /// (1) Duration predictor: 2-layer 1D conv + linear, predicts log-duration per phoneme,
-    /// (2) Length regulator: repeats each phoneme hidden state by its predicted duration,
-    /// (3) Pitch predictor: 2-layer 1D conv, predicts continuous F0 per frame, quantized to embedding,
-    /// (4) Energy predictor: same architecture, predicts frame-level energy, quantized to embedding.
-    /// </summary>
-    private Tensor<T> ApplyVarianceAdaptor(Tensor<T> encoded, int seqLen, int dim)
-    {
-        // Duration prediction: predict how many mel frames each phoneme spans
-        var durations = new int[seqLen];
-        int totalFrames = 0;
-        for (int i = 0; i < seqLen; i++)
-        {
-            // Simple duration prediction from hidden state magnitude
-            double hiddenMag = 0;
-            int samples = Math.Min(8, encoded.Length);
-            for (int s = 0; s < samples; s++)
-            {
-                int idx = (i * samples + s) % encoded.Length;
-                hiddenMag += Math.Abs(NumOps.ToDouble(encoded[idx]));
-            }
-            hiddenMag /= samples;
-
-            // Log-duration prediction (FastSpeech 2 predicts log-duration)
-            double logDur = Math.Log(1.0 + hiddenMag * 3.0);
-            int dur = Math.Max(1, (int)Math.Round(Math.Exp(logDur)));
-            dur = Math.Min(dur, 20); // cap at 20 frames per phoneme
-            durations[i] = dur;
-            totalFrames += dur;
-        }
-
-        // Length regulation: expand phoneme-level to frame-level
-        int expandedLen = Math.Min(totalFrames, _options.MaxMelLength);
-        var expanded = new Tensor<T>([expandedLen]);
-        int frameIdx = 0;
-        for (int i = 0; i < seqLen && frameIdx < expandedLen; i++)
-        {
-            double baseVal = NumOps.ToDouble(encoded[i % encoded.Length]);
-            for (int d = 0; d < durations[i] && frameIdx < expandedLen; d++)
-            {
-                // Pitch conditioning: sinusoidal F0 embedding
-                double pitchEmb = 0;
-                if (_options.UsePitchPredictor)
-                {
-                    double f0 = 100.0 + baseVal * 200.0; // predicted F0 in Hz
-                    pitchEmb = Math.Sin(2.0 * Math.PI * f0 * frameIdx / _options.SampleRate) * 0.1;
-                }
-
-                // Energy conditioning: scalar energy embedding
-                double energyEmb = 0;
-                if (_options.UseEnergyPredictor)
-                {
-                    energyEmb = Math.Abs(baseVal) * 0.05;
-                }
-
-                expanded[frameIdx] = NumOps.FromDouble(baseVal + pitchEmb + energyEmb);
-                frameIdx++;
-            }
-        }
-
-        return expanded;
-    }
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
     protected override void InitializeLayers()
     {
@@ -225,64 +121,30 @@ public partial class FastSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             AddUnsplitLayers(Architecture.Layers);
+            return;
         }
-        else
-        {
-            AddEncoderDecoderLayers(
-                LayerHelper<T>.CreateDefaultAcousticEncoderLayers(
-                    _options.EncoderDim, _options.HiddenDim, _options.NumEncoderLayers, _options.NumHeads, _options.DropoutRate, _options.VocabSize),
-                LayerHelper<T>.CreateDefaultAcousticDecoderLayers(
-                    _options.DecoderDim, _options.HiddenDim, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate));
-        }
-    }
 
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        if (_tokenizer is null)
-            throw new InvalidOperationException("Tokenizer not initialized.");
-        var encoding = _tokenizer.Encode(text);
-        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxTextLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
+        AddEncoderDecoderLayers(
+            LayerHelper<T>.CreateDefaultFastSpeechEncoderLayers(
+                _options.VocabSize, _options.EncoderDim, _options.HiddenDim, _options.NumEncoderLayers, _options.NumHeads,
+                _options.FftFilterSize, _options.FftKernelSizes[0], _options.FftKernelSizes[1], _options.DropoutRate,
+                _options.MaxTextLength),
+            LayerHelper<T>.CreateDefaultFastSpeech2DecoderLayers(
+                _options.HiddenDim, _options.MelChannels, _options.NumDecoderLayers, _options.NumHeads,
+                _options.FftFilterSize, _options.FftKernelSizes[0], _options.FftKernelSizes[1], _options.DropoutRate,
+                _options.MaxMelLength, _options.VariancePredictorFilterSize, _options.VariancePredictorKernelSize,
+                _options.VariancePredictorDropout, _options.NumPitchBins, _options.PitchMinHz, _options.PitchMaxHz,
+                _options.NumEnergyBins, _options.FftSize, _options.UsePitchPredictor, _options.UseEnergyPredictor));
     }
 
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <inheritdoc />
+    /// <inheritdoc/>
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -297,22 +159,5 @@ public partial class FastSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
         m.AdditionalInfo["SampleRate"] = _options.SampleRate.ToString();
         m.AdditionalInfo["MelChannels"] = _options.MelChannels.ToString();
         return m;
-    }
-
-
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(FastSpeech2<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
     }
 }

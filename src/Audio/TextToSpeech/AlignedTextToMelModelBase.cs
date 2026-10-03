@@ -312,40 +312,16 @@ public abstract partial class AlignedTextToMelModelBase<T> : AudioNeuralNetworkB
         var result = new int[batch][];
         for (int row = 0; row < batch; row++)
         {
-            var previous = new double[tokens];
-            var current = new double[tokens];
-            var advance = new bool[checked(tokens * frames)];
-            for (int token = 0; token < tokens; token++) previous[token] = double.NegativeInfinity;
-            for (int frame = 0; frame < frames; frame++)
-            {
-                for (int token = 0; token < tokens; token++) current[token] = double.NegativeInfinity;
-                int first = Math.Max(0, tokens - frames + frame);
-                int last = Math.Min(tokens - 1, frame);
-                for (int token = first; token <= last; token++)
+            var rowScores = new double[tokens, frames];
+            for (int token = 0; token < tokens; token++)
+                for (int frame = 0; frame < frames; frame++)
                 {
                     double score = NumOps.ToDouble(values[(row * tokens + token) * frames + frame]);
                     if (double.IsNaN(score) || double.IsInfinity(score))
                         throw new ArgumentException("Active mel targets and prior alignment scores must be finite.", nameof(targets));
-                    double stay = previous[token];
-                    double step = token > 0 ? previous[token - 1] : double.NegativeInfinity;
-                    bool moves = step > stay;
-                    current[token] = score + (frame == 0 && token == 0 ? 0 : moves ? step : stay);
-                    advance[frame * tokens + token] = moves;
+                    rowScores[token, frame] = score;
                 }
-                var swap = previous;
-                previous = current;
-                current = swap;
-            }
-            var durations = new int[tokens];
-            int activeToken = tokens - 1;
-            for (int frame = frames - 1; frame >= 0; frame--)
-            {
-                durations[activeToken]++;
-                if (advance[frame * tokens + activeToken]) activeToken--;
-            }
-            if (activeToken != 0 || durations.Any(duration => duration <= 0))
-                throw new InvalidOperationException("Monotonic alignment failed to cover every active token.");
-            result[row] = durations;
+            result[row] = AiDotNet.TextToSpeech.MonotonicAlignment.MaximumPath(rowScores);
         }
         return result;
     }

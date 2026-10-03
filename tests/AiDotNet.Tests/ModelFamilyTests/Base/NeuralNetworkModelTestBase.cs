@@ -4225,7 +4225,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// Measures the model-declared paper objective when the learner is not ordinary
     /// supervised prediction; otherwise preserves the existing configured-loss oracle.
     /// </summary>
-    protected double MeasureLoss(
+    protected virtual double MeasureLoss(
         INeuralNetworkModel<T> network,
         Tensor<T> input,
         Tensor<T> output,

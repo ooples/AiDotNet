@@ -9,8 +9,6 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.TextToSpeech.Interfaces;
-using AiDotNet.Tokenization;
-using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.TextToSpeech.Classic;
 
@@ -30,7 +28,7 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///     inputSize: 200, outputSize: 80);
 ///
 /// // ONNX inference mode with pre-trained model
 /// var model = new FastSpeech&lt;double&gt;(architecture, "fastspeech.onnx");
@@ -52,23 +50,22 @@ namespace AiDotNet.TextToSpeech.Classic;
     Authors = "Ren et al."
 )]
 [PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-9,
-                Schedule = LearningRateSchedulerType.Noam,
+                Schedule = LearningRateSchedulerType.Noam, WarmupSteps = 4000,
+                ReferenceBatchSize = 64,
                 Provenance = RecipeProvenance.DerivedFromCitedWork,
-                Source = "Ren et al. 2019, Sec. 4.2: Adam with beta1 0.9, beta2 0.98 and epsilon 1e-9, "
+                Source = "Ren et al. 2019, Sec. 4.3: Adam with beta1 0.9, beta2 0.98 and epsilon 1e-9, "
                         + "following the learning rate schedule of its reference [25], Vaswani et al. "
-                        + "2017 -- the inverse-square-root schedule with warmup declared here as Noam. "
-                        + "The paper restates neither the peak rate nor the warmup length, so the "
-                        + "provenance records that the schedule comes from the cited work.")]
-public partial class FastSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
+                        + "2017 -- the inverse-square-root schedule, whose warmup is 4000 steps (Vaswani "
+                        + "Sec. 5.3). The paper restates neither the peak rate nor the warmup length, so "
+                        + "the provenance records that both come from the cited work. Batch 64 (Table 5).")]
+public partial class FastSpeech<T> : VarianceAdaptorTtsModelBase<T>, IAcousticModel<T>
 {
     private readonly FastSpeechOptions _options;
 
     public override ModelOptions GetOptions() => _options;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
-    private bool _disposed;
 
     public FastSpeech(
         NeuralNetworkArchitecture<T> architecture,
@@ -89,7 +86,6 @@ public partial class FastSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options.ModelPath = modelPath;
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
 
@@ -109,7 +105,6 @@ public partial class FastSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
         base.HiddenDim = _options.HiddenDim;
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
 
@@ -119,67 +114,21 @@ public partial class FastSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     public new int HopSize => _options.HopSize;
     public int FftSize => _options.FftSize;
 
-    /// <summary>
-    /// Synthesizes mel-spectrogram using FastSpeech's parallel generation pipeline.
-    /// Per the paper (Ren et al., 2019):
-    /// (1) FFT encoder blocks encode phoneme sequence,
-    /// (2) Duration predictor (2-layer 1D conv + linear) predicts phoneme durations,
-    /// (3) Length regulator expands phoneme hidden to mel-frame length,
-    /// (4) FFT decoder blocks generate mel-spectrogram in parallel (non-autoregressive).
-    /// Duration predictor is trained via knowledge distillation from autoregressive teacher.
-    /// </summary>
-    public Tensor<T> Synthesize(string text)
-    {
-        ThrowIfDisposed();
-        var tokens = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(tokens);
-
-        // Step 1: FFT encoder
-        var encoded = RunEncoder(tokens);
-
-        // Step 2: Duration prediction via 2-layer conv + linear (learned from teacher)
-        int seqLen = encoded.Length;
-        int totalFrames = 0;
-        var durations = new int[seqLen];
-        for (int i = 0; i < seqLen; i++)
-        {
-            double val = Math.Abs(NumOps.ToDouble(encoded[i % encoded.Length]));
-            // Conv layer 1: local context from neighboring phonemes
-            double prev =
-                i > 0 ? Math.Abs(NumOps.ToDouble(encoded[(i - 1) % encoded.Length])) : val;
-            double next =
-                i < seqLen - 1 ? Math.Abs(NumOps.ToDouble(encoded[(i + 1) % encoded.Length])) : val;
-            double conv1 = Math.Max(0, prev * 0.2 + val * 0.6 + next * 0.2); // ReLU
-            // Conv layer 2 + linear projection to log-duration
-            double logDur = Math.Log(1.0 + conv1 * _options.DurationScale);
-            int dur = Math.Max(1, (int)Math.Round(Math.Exp(logDur)));
-            dur = Math.Min(dur, _options.MaxDuration);
-            durations[i] = dur;
-            totalFrames += dur;
-        }
-
-        int expandedLen = Math.Min(totalFrames, _options.MaxMelLength);
-        var expanded = new Tensor<T>([expandedLen]);
-        int frameIdx = 0;
-        for (int i = 0; i < seqLen && frameIdx < expandedLen; i++)
-        {
-            double baseVal = NumOps.ToDouble(encoded[i % encoded.Length]);
-            for (int d = 0; d < durations[i] && frameIdx < expandedLen; d++)
-            {
-                expanded[frameIdx] = NumOps.FromDouble(baseVal);
-                frameIdx++;
-            }
-        }
-
-        // Step 3: FFT decoder (parallel)
-        var output = RunDecoder(expanded);
-
-        return output;
-    }
-
+    /// <summary>Generates a mel spectrogram from text (FastSpeech is an acoustic model; pair it with a vocoder).</summary>
     public Tensor<T> TextToMel(string text) => Synthesize(text);
 
+    /// <inheritdoc />
+    /// <remarks>The paper states only the duration loss; the mel spectrogram is scored with squared error, as in its
+    /// reference implementations (FastSpeech 2 is where mean absolute error is specified).</remarks>
+    protected override bool UsesL1MelLoss => false;
+
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+
+    /// <summary>
+    /// Builds the paper's layer stack (Ren et al. 2019, §3, §4.2): phoneme embedding and positions, 6 FFT blocks, the
+    /// duration predictor with the length regulator, positions, 6 FFT blocks, and the linear projection to mel.
+    /// </summary>
     protected override void InitializeLayers()
     {
         if (!_useNativeMode)
@@ -187,64 +136,24 @@ public partial class FastSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             AddUnsplitLayers(Architecture.Layers);
+            return;
         }
-        else
-        {
-            AddEncoderDecoderLayers(
-                LayerHelper<T>.CreateDefaultAcousticEncoderLayers(
-                    _options.EncoderDim, _options.HiddenDim, _options.NumEncoderLayers, _options.NumHeads, _options.DropoutRate, _options.VocabSize),
-                LayerHelper<T>.CreateDefaultAcousticDecoderLayers(
-                    _options.DecoderDim, _options.HiddenDim, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate));
-        }
-    }
 
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        if (_tokenizer is null)
-            throw new InvalidOperationException("Tokenizer not initialized.");
-        var enc = _tokenizer.Encode(text);
-        int sl = Math.Min(enc.TokenIds.Count, _options.MaxTextLength);
-        var t = new Tensor<T>([sl]);
-        for (int i = 0; i < sl; i++)
-            t[i] = NumOps.FromDouble(enc.TokenIds[i]);
-        return t;
+        AddEncoderDecoderLayers(
+            LayerHelper<T>.CreateDefaultFastSpeechEncoderLayers(
+                _options.VocabSize, _options.EncoderDim, _options.HiddenDim, _options.NumEncoderLayers, _options.NumHeads,
+                _options.FftFilterSize, _options.FftKernelSizes[0], _options.FftKernelSizes[1], _options.DropoutRate,
+                _options.MaxTextLength),
+            // FastSpeech's length regulator is FastSpeech 2's variance adaptor without the pitch and energy branches.
+            LayerHelper<T>.CreateDefaultFastSpeech2DecoderLayers(
+                _options.HiddenDim, _options.MelChannels, _options.NumDecoderLayers, _options.NumHeads,
+                _options.FftFilterSize, _options.FftKernelSizes[0], _options.FftKernelSizes[1], _options.DropoutRate,
+                _options.MaxMelLength, _options.DurationPredictorFilterSize, _options.DurationPredictorKernelSize,
+                _options.DurationPredictorDropout, usePitch: false, useEnergy: false));
+        VarianceAdaptor.DurationScale = _options.DurationScale;
     }
 
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        // Force eval mode so Dropout (DropoutRate=0.1 default) doesn't fire
-        // fresh randomness on every Predict call — required for the
-        // SpeakerConsistency invariant. PyTorch / TF idiom: inference disables
-        // training-mode randomization regardless of caller's prior state.
-        bool prev = IsTrainingMode;
-        SetTrainingMode(false);
-        try
-        {
-            var c = input;
-            foreach (var l in Layers)
-                c = l.Forward(c);
-            return c;
-        }
-        finally
-        {
-            SetTrainingMode(prev);
-        }
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
-    }
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
@@ -263,22 +172,5 @@ public partial class FastSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         };
         m.AdditionalInfo["Architecture"] = "FastSpeech";
         return m;
-    }
-
-
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(FastSpeech<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
     }
 }

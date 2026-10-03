@@ -90,7 +90,7 @@ public partial class GoogleCloudTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     public int NumFlowSteps => _options.NumFlowSteps;
 
     /// <summary>Synthesizes speech using a local WaveNet-style neural pipeline.</summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

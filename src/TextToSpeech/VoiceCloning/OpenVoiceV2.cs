@@ -100,7 +100,7 @@ public partial class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
     /// Synthesizes speech from text.
     /// Per MyShell (2024): VITS-based base TTS + enhanced tone color converter for instant cloning.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

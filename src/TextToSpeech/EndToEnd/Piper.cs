@@ -112,7 +112,7 @@ public partial class Piper<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// (5) HiFi-GAN decoder with reduced channel count.
     /// Supports 30+ languages with quality levels: x_low, low, medium, high.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

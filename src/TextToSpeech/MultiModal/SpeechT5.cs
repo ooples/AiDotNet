@@ -114,7 +114,7 @@ public partial class SpeechT5<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// Synthesizes speech from text.
     /// Per Ao et al. (2022): Shared encoder-decoder for ASR/TTS/voice-conversion with task-specific pre/post-nets.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

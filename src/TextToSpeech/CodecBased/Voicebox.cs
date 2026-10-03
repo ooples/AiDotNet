@@ -134,7 +134,7 @@ public partial class Voicebox<T> : TtsModelBase<T>, ICodecTts<T>
     /// flow matching instead of autoregressive generation, it can produce all parts of the speech in
     /// parallel, making it efficient for long utterances.</para>
     /// </remarks>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

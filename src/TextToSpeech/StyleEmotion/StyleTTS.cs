@@ -110,7 +110,7 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// (2) Text encoder: processes input phonemes,
     /// (3) Acoustic decoder: style-conditioned mel generation,
     /// (4) HiFi-GAN decoder: mel → waveform.
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

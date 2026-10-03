@@ -122,7 +122,7 @@ public partial class TransformerTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     /// (3) Linear projection to mel channels + stop token prediction,
     /// (4) Post-net: 5-layer conv for residual refinement.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var tokens = PreprocessText(text);

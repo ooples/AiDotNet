@@ -134,7 +134,7 @@ public partial class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
     /// data uses automatically generated voice descriptions (synthetic annotations) to scale up
     /// without expensive manual labeling.</para>
     /// </remarks>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

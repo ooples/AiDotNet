@@ -93,7 +93,7 @@ public partial class AzureNeuralTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     public int NumFlowSteps => _options.NumFlowSteps;
 
     /// <summary>Synthesizes speech using a local neural synthesis pipeline.</summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

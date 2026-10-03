@@ -69,7 +69,7 @@ public partial class Bark<T> : BarkModel<T>, ICodecTts<T>
     int ICodecTts<T>.CodecFrameRate => CodecFrameRate;
 
     /// <summary>Synthesizes a 24 kHz waveform from text using all four Bark stages.</summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
         => SynthesizeDetailed(text).Audio;
 
     /// <summary>Synthesizes text and returns semantic, coarse, fine, audio, and timing outputs.</summary>

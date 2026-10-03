@@ -107,7 +107,7 @@ public partial class YourTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// (4) VITS backbone (flow + HiFi-GAN decoder) conditioned on speaker + language.
     /// Achieves zero-shot multi-speaker TTS across 16+ languages.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

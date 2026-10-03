@@ -119,7 +119,7 @@ public partial class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// Synthesizes speech from text.
     /// Per Jiang et al. (2023): Content/prosody/timbre decomposition for zero-shot TTS.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

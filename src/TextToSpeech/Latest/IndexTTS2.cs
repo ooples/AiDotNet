@@ -108,7 +108,7 @@ public partial class IndexTTS2<T> : TtsModelBase<T>, ICodecTts<T>
     /// Synthesizes speech from text.
     /// Per Bilibili (2026): RVQGAN codec with GPT backbone. Duration/emotion control is handled by the ONNX model weights when loaded.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

@@ -138,7 +138,7 @@ public partial class VALLEX<T> : TtsModelBase<T>, ICodecTts<T>
     /// It does this by separating the "what to say" (language-specific text encoding) from "how to sound"
     /// (speaker characteristics from the prompt).</para>
     /// </remarks>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

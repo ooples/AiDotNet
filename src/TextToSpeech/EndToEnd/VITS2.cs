@@ -106,7 +106,7 @@ public partial class VITS2<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// (3) Speaker-conditional normalizing flow: speaker embedding conditions flow transformations,
     /// (4) Monotonic alignment search with learned prior.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

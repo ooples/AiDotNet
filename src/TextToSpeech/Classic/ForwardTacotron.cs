@@ -121,7 +121,7 @@ public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     /// (3) Gaussian upsampling expands phoneme-level to frame-level (smoother than repeat),
     /// (4) LSTM decoder generates mel frames non-autoregressively.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var tokens = PreprocessText(text);

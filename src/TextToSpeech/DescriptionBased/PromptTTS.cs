@@ -104,7 +104,7 @@ public partial class PromptTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// (4) Mel decoder: generates mel spectrogram from style-conditioned features.
     /// Enables zero-shot style control via text descriptions like "a young female speaking quickly with excitement".
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

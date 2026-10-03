@@ -126,7 +126,7 @@ public partial class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// Architecture: text prompt + emotion label → BERT encoder → duration/pitch/energy prediction
     /// → FastSpeech 2-style acoustic model → HiFi-GAN vocoder.
     /// Supports emotion control via text prompts like "happy", "sad", "angry".
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

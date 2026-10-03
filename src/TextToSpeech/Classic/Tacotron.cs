@@ -145,7 +145,7 @@ public partial class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
     /// audio features step-by-step. The "attention" mechanism learns which parts of the text
     /// correspond to which parts of the audio, enabling natural-sounding speech.</para>
     /// </remarks>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var tokens = PreprocessText(text);

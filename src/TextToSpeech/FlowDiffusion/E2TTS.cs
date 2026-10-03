@@ -108,7 +108,7 @@ public partial class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
     public int CodecFrameRate => _options.CodecFrameRate;
 
     /// <summary>Synthesizes speech. E2 TTS: character-level text -> masked mel prediction via flow matching -> vocoder.</summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         if (string.IsNullOrEmpty(text))

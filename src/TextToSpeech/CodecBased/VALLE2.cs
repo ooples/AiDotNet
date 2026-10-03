@@ -103,7 +103,7 @@ public partial class VALLE2<T> : TtsModelBase<T>, ICodecTts<T>
     /// Synthesizes speech from text.
     /// Per Chen et al. (2024): AR with Repetition Aware Sampling + grouped NAR codebook prediction.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

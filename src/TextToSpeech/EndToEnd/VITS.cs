@@ -152,7 +152,7 @@ public partial class VITS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// neural vocoder to convert that latent representation directly into an audio waveform.
     /// All of this happens in parallel (not one sample at a time), making VITS fast at inference.</para>
     /// </remarks>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

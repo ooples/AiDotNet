@@ -93,7 +93,7 @@ public partial class NVIDIARivaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// Synthesizes speech from text.
     /// NVIDIA Riva: FastPitch acoustic model + HiFi-GAN vocoder, GPU-optimized.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

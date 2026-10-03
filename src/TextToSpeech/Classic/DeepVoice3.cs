@@ -122,7 +122,7 @@ public partial class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
     /// (4) Converter: separate conv network refines mel to linear spectrogram.
     /// Multi-speaker: speaker embedding added to encoder, decoder, and converter inputs.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var tokens = PreprocessText(text);

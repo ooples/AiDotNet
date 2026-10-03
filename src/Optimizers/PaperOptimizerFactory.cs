@@ -60,12 +60,18 @@ internal static class PaperOptimizerFactory
     /// <returns>
     /// <c>null</c> when there is no applicable declaration, so callers keep their existing default.
     /// </returns>
+    /// <param name="model">The model whose declarations are read.</param>
+    /// <param name="component">The declared component, for models that train parts separately.</param>
+    /// <param name="warmupStepsOverride">A warmup the model's own options configure, applied to the recipe.</param>
+    /// <param name="phase">The training phase whose declaration applies (a paper can state one optimizer for
+    /// pre-training and another for fine-tuning, as AlignTTS and AdaSpeech do).</param>
     internal static IGradientBasedOptimizer<T, TInput, TOutput>? CreateFor<T, TInput, TOutput>(
-        IFullModel<T, TInput, TOutput> model, string component = "", int warmupStepsOverride = 0)
+        IFullModel<T, TInput, TOutput> model, string component = "", int warmupStepsOverride = 0,
+        TrainingPhase phase = TrainingPhase.PreTraining)
     {
         if (model is null) return null;
 
-        var recipe = Find(model, component);
+        var recipe = Find(model, component, phase);
         // A model whose own options configure a warmup (S4Options.WarmupSteps) applies it to its paper
         // recipe here, so the declared optimizer and the model's configuration agree rather than the
         // configured warmup reaching only the fallback optimizer.

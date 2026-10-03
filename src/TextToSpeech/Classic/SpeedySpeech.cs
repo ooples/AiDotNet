@@ -135,7 +135,7 @@ public partial class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     /// (4) Convolutional residual decoder generates mel in parallel.
     /// Key difference from FastSpeech: simpler conv architecture, no self-attention, 4x smaller model.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var tokens = PreprocessText(text);

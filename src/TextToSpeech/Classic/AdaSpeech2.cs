@@ -121,7 +121,7 @@ public partial class AdaSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
     /// (3) Adaptation: conditional LN parameters fine-tuned using untranscribed speech via mel2ph,
     /// (4) Inference uses standard text-to-mel pipeline with adapted parameters.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var tokens = PreprocessText(text);

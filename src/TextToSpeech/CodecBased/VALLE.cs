@@ -134,7 +134,7 @@ public partial class VALLE<T> : TtsModelBase<T>, ICodecTts<T>
     /// then fills in all the fine audio details simultaneously, and finally converts everything
     /// into an audio waveform using the EnCodec decoder.</para>
     /// </remarks>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

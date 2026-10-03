@@ -6,11 +6,12 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.TextToSpeech.Interfaces;
-using AiDotNet.Tokenization;
-using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.TextToSpeech.Classic;
 
@@ -29,7 +30,7 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///     inputSize: 200, outputSize: 80);
 ///
 /// // ONNX inference mode with pre-trained model
 /// var model = new AlignTTS&lt;double&gt;(architecture, "aligntts.onnx");
@@ -65,21 +66,23 @@ namespace AiDotNet.TextToSpeech.Classic;
                 Phase = TrainingPhase.FineTuning,
                 Source = "Zeng et al. 2020, Sec. 4.1: fine-tuning the whole model uses a fixed learning "
                         + "rate of 1e-4 over 80K steps.")]
-public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
+public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingObjectiveProvider<T>
 {
     private readonly AlignTTSOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _fineTuningOptimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
+    // Separate networks the paper trains alongside the feed-forward Transformer (§2.2, §2.3). They are not part of
+    // the sequential layer stack; registering them in ComponentLayers gives them training, counting, serialization
+    // and cloning.
+    private readonly List<LayerBase<T>> _durationPredictor = new();
+    private readonly List<LayerBase<T>> _mixDensityNetwork = new();
+
     public override ModelOptions GetOptions() => _options;
 
-    public AlignTTS(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        AlignTTSOptions? options = null
-    )
+    public AlignTTS(NeuralNetworkArchitecture<T> architecture, string modelPath, AlignTTSOptions? options = null)
         : base(architecture)
     {
         _options = options ?? new AlignTTSOptions();
@@ -94,42 +97,28 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options.ModelPath = modelPath;
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
 
     public AlignTTS(
         NeuralNetworkArchitecture<T> architecture,
         AlignTTSOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture)
     {
         _options = options ?? new AlignTTSOptions();
         _useNativeMode = true;
-        // AlignTTS (Zeng et al., 2020, arXiv:2003.01950 §4) trains with Adam,
-        // beta1 = 0.9, beta2 = 0.98, epsilon = 1e-9, at a fixed learning rate of 1e-4 -- which is
-        // already the TtsModelOptions default this reads.
-        //
-        // Built with no options at all before this, so it silently ran as AdamW at its own
-        // 1e-3 default with beta2 = 0.999, epsilon = 1e-8 and a decoupled weight decay of
-        // 0.01 that no paper here specifies. Ten times the intended rate is enough to blow
-        // the first step into a region training cannot recover from.
-        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
-            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-                {
-                    InitialLearningRate = _options.LearningRate,
-                    Beta1 = 0.9,
-                    Beta2 = 0.98,
-                    Epsilon = 1e-9
-                }));
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
         base.HiddenDim = _options.HiddenDim;
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _fineTuningOptimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, phase: AiDotNet.Attributes.TrainingPhase.FineTuning)
+            ?? _optimizer;
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
@@ -139,53 +128,20 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     public int FftSize => _options.FftSize;
 
     /// <summary>
-    /// Synthesizes mel-spectrogram using AlignTTS's alignment-free pipeline.
-    /// Per the paper (Zeng et al., 2020):
-    /// (1) Feed-forward transformer encoder processes text,
-    /// (2) Mix density network (MDN) computes soft alignment between text and mel,
-    /// (3) Duration extraction from MDN alignment via Viterbi decoding,
-    /// (4) Feed-forward transformer decoder generates mel non-autoregressively.
+    /// The paper's training phase that <c>Train</c> runs (Zeng et al. 2020, §3.2.2). Training starts with
+    /// <see cref="AlignTTSTrainingPhase.Alignment"/>; advance through the phases in order.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
-    {
-        ThrowIfDisposed();
-        var tokens = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(tokens);
+    public AlignTTSTrainingPhase CurrentPhase { get; set; } = AlignTTSTrainingPhase.Alignment;
 
-        var encoded = RunEncoder(tokens);
-
-        // MDN-based duration extraction
-        int seqLen = encoded.Length;
-        int totalFrames = 0;
-        var durations = new int[seqLen];
-        for (int i = 0; i < seqLen; i++)
-        {
-            double val = Math.Abs(NumOps.ToDouble(encoded[i % encoded.Length]));
-            int dur = Math.Max(1, (int)Math.Round(1.0 + val * 3.5));
-            dur = Math.Min(dur, 15);
-            durations[i] = dur;
-            totalFrames += dur;
-        }
-
-        int expandedLen = Math.Min(totalFrames, _options.MaxMelLength);
-        var expanded = new Tensor<T>([expandedLen]);
-        int frameIdx = 0;
-        for (int i = 0; i < seqLen && frameIdx < expandedLen; i++)
-        {
-            for (int d = 0; d < durations[i] && frameIdx < expandedLen; d++)
-            {
-                expanded[frameIdx] = encoded[i % encoded.Length];
-                frameIdx++;
-            }
-        }
-
-        var output = RunDecoder(expanded);
-        return output;
-    }
-
+    /// <summary>Generates a mel spectrogram from text (AlignTTS is an acoustic model; pair it with a vocoder).</summary>
     public Tensor<T> TextToMel(string text) => Synthesize(text);
 
+    /// <summary>
+    /// Builds the feed-forward Transformer (character embedding and positions, character-side FFT blocks; positions,
+    /// mel-side FFT blocks and the linear projection), the separate duration predictor (character embedding,
+    /// FFT blocks, linear) and the mix density network (stacked linear + LayerNorm + ReLU + dropout, then a linear
+    /// layer giving each character's Gaussian mean and log-variance over the mel channels).
+    /// </summary>
     protected override void InitializeLayers()
     {
         if (!_useNativeMode)
@@ -193,65 +149,223 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             AddUnsplitLayers(Architecture.Layers);
+            return;
         }
-        else
+
+        int k = _options.FftKernelSize;
+        AddEncoderDecoderLayers(
+            LayerHelper<T>.CreateDefaultFastSpeechEncoderLayers(
+                _options.VocabSize, _options.EncoderDim, _options.HiddenDim, _options.NumEncoderLayers, _options.NumHeads,
+                _options.FftFilterSize, k, k, _options.DropoutRate, _options.MaxTextLength),
+            AlignTTSDecoderLayers(k));
+
+        _durationPredictor.Add(new EmbeddingLayer<T>(_options.VocabSize, _options.DurationPredictorDim));
+        _durationPredictor.Add(new PositionalEncodingLayer<T>(_options.MaxTextLength, _options.DurationPredictorDim));
+        for (int i = 0; i < _options.DurationPredictorLayers; i++)
+            _durationPredictor.Add(new FeedForwardTransformerBlock<T>(_options.DurationPredictorDim, _options.NumHeads,
+                _options.DurationPredictorDim, k, k, _options.DropoutRate));
+        _durationPredictor.Add(new DenseLayer<T>(1, new IdentityActivation<T>() as IActivationFunction<T>));
+
+        for (int i = 0; i < _options.MixDensityHiddenLayers; i++)
         {
-            AddEncoderDecoderLayers(
-                LayerHelper<T>.CreateDefaultAcousticEncoderLayers(
-                    _options.EncoderDim, _options.HiddenDim, _options.NumEncoderLayers, _options.NumHeads, _options.DropoutRate, _options.VocabSize),
-                LayerHelper<T>.CreateDefaultAcousticDecoderLayers(
-                    _options.DecoderDim, _options.HiddenDim, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate));
+            _mixDensityNetwork.Add(new DenseLayer<T>(_options.MixDensityHiddenSize, new IdentityActivation<T>() as IActivationFunction<T>));
+            _mixDensityNetwork.Add(new LayerNormalizationLayer<T>(_options.MixDensityHiddenSize));
+            _mixDensityNetwork.Add(new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>));
+            if (_options.DropoutRate > 0) _mixDensityNetwork.Add(new DropoutLayer<T>(_options.DropoutRate));
         }
+        _mixDensityNetwork.Add(new DenseLayer<T>(2 * _options.MelChannels, new IdentityActivation<T>() as IActivationFunction<T>));
+
+        ComponentLayers.AddRange(_durationPredictor);
+        ComponentLayers.AddRange(_mixDensityNetwork);
     }
 
-
-    protected override Tensor<T> PreprocessText(string text)
+    private IEnumerable<ILayer<T>> AlignTTSDecoderLayers(int kernel)
     {
-        if (_tokenizer is null)
-            throw new InvalidOperationException("Tokenizer not initialized.");
-        var enc = _tokenizer.Encode(text);
-        int sl = Math.Min(enc.TokenIds.Count, _options.MaxTextLength);
-        var t = new Tensor<T>([sl]);
-        for (int i = 0; i < sl; i++)
-            t[i] = NumOps.FromDouble(enc.TokenIds[i]);
-        return t;
+        yield return new PositionalEncodingLayer<T>(_options.MaxMelLength, _options.HiddenDim);
+        for (int i = 0; i < _options.NumDecoderLayers; i++)
+            yield return new FeedForwardTransformerBlock<T>(_options.HiddenDim, _options.NumHeads, _options.FftFilterSize,
+                kernel, kernel, _options.DropoutRate);
+        yield return new DenseLayer<T>(_options.MelChannels, new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
+    /// <summary>
+    /// Inference (§3.3): the character-side blocks encode the text, the duration predictor sets each character's
+    /// length, the length regulator expands, and the mel-side blocks produce the spectrogram.
+    /// </summary>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
         SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+        var hidden = RunEncoder(input);
+        var durations = PredictDurations(input);
+        return RunDecoder(LengthRegulator.Expand(hidden, durations));
     }
 
+    private int[] PredictDurations(Tensor<T> tokens)
+    {
+        var logDuration = RunDurationPredictor(tokens);
+        var durations = new int[logDuration.Length];
+        int total = 0;
+        for (int i = 0; i < durations.Length; i++)
+        {
+            durations[i] = (int)Math.Max(0, Math.Round(Math.Exp(NumOps.ToDouble(logDuration[i])) - 1.0));
+            total += durations[i];
+        }
+        if (total == 0)
+            for (int i = 0; i < durations.Length; i++) durations[i] = 1;
+        return durations;
+    }
+
+    private Tensor<T> RunDurationPredictor(Tensor<T> tokens)
+    {
+        var x = tokens;
+        foreach (var layer in _durationPredictor) x = layer.Forward(x);
+        return Engine.Reshape(x, new[] { tokens.Length });
+    }
+
+    /// <summary>log N(y_t | μ_s, diag σ²_s) for every character s and frame t, <c>[characters, frames]</c>.</summary>
+    private Tensor<T> GaussianLogLikelihood(Tensor<T> characterHidden, Tensor<T> mel)
+    {
+        var x = characterHidden;
+        foreach (var layer in _mixDensityNetwork) x = layer.Forward(x);
+        int characters = characterHidden.Shape[0], channels = _options.MelChannels, frames = mel.Shape[0];
+        var mean = Engine.TensorSlice(x, new[] { 0, 0 }, new[] { characters, channels });
+        var logVariance = Engine.TensorSlice(x, new[] { 0, channels }, new[] { characters, channels });
+
+        // Σ_d [log 2π + logσ²_d + (y_d - μ_d)² / σ²_d] for every (character, frame) pair, via
+        // (y-μ)²/σ² = y²/σ² - 2yμ/σ² + μ²/σ², each term a matrix product over the channels.
+        var precision = Engine.TensorExp(Engine.TensorNegate(logVariance));                  // [S, D]
+        var melT = Engine.TensorTranspose(mel);                                               // [D, F]
+        var melSq = Engine.TensorMultiply(melT, melT);
+        var quadratic = Engine.TensorMatMul(precision, melSq);                               // [S, F]
+        var cross = Engine.TensorMatMul(Engine.TensorMultiply(precision, mean), melT);       // [S, F]
+        var constant = Engine.ReduceSum(Engine.TensorAdd(logVariance, Engine.TensorMultiply(precision, Engine.TensorMultiply(mean, mean))),
+            new[] { 1 }, keepDims: true);                                                      // [S, 1]
+        var sum = Engine.TensorAdd(Engine.TensorSubtract(quadratic, Engine.TensorMultiplyScalar(cross, NumOps.FromDouble(2))),
+            Engine.TensorTile(constant, new[] { 1, frames }));
+        var log2pi = NumOps.FromDouble(channels * Math.Log(2 * Math.PI));
+        return Engine.TensorMultiplyScalar(Engine.TensorAddScalar(sum, log2pi), NumOps.FromDouble(-0.5));
+    }
+
+    private int[] ViterbiDurations(Tensor<T> logLikelihood)
+    {
+        int characters = logLikelihood.Shape[0], frames = logLikelihood.Shape[1];
+        var scores = new double[characters, frames];
+        for (int s = 0; s < characters; s++)
+            for (int t = 0; t < frames; t++) scores[s, t] = NumOps.ToDouble(logLikelihood[s, t]);
+        return MonotonicAlignment.MaximumPath(scores);
+    }
+
+    /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
+        ThrowIfDisposed();
         if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        var optimizer = CurrentPhase is AlignTTSTrainingPhase.JointFineTuning or AlignTTSTrainingPhase.DurationPredictor
+            ? _fineTuningOptimizer
+            : _optimizer;
+        TrainWithCustomObjective(input, expected, PhaseObjective, optimizer);
+    }
+
+    /// <summary>
+    /// The current phase's objective (§3.2.2): (1) the alignment loss on the character-side blocks and MDN;
+    /// (2) the mel MSE on the mel side with Viterbi durations from the MDN; (3) both, durations recomputed each
+    /// step; (4) the log-duration MSE of the duration predictor against the MDN's durations.
+    /// </summary>
+    private Tensor<T> PhaseObjective(Tensor<T> tokens, Tensor<T> mel)
+    {
+        var melFrames = mel.Rank == 3 ? Engine.Reshape(mel, new[] { mel.Shape[1], mel.Shape[2] }) : mel;
+        int frames = melFrames.Shape[0];
+        var hidden = RunEncoder(tokens);
+        var characterHidden = hidden.Rank == 3 ? Engine.Reshape(hidden, new[] { hidden.Shape[1], hidden.Shape[2] }) : hidden;
+
+        Tensor<T> AlignmentLoss(Tensor<T> logLikelihood)
+            => Engine.TensorMultiplyScalar(MonotonicAlignment.LogLikelihood(logLikelihood), NumOps.FromDouble(-1.0 / frames));
+
+        switch (CurrentPhase)
+        {
+            case AlignTTSTrainingPhase.Alignment:
+                return AlignmentLoss(GaussianLogLikelihood(characterHidden, melFrames));
+
+            case AlignTTSTrainingPhase.Decoder:
+            {
+                int[] durations;
+                using (new NoGradScope<T>())
+                    durations = ViterbiDurations(GaussianLogLikelihood(characterHidden, melFrames));
+                var expanded = LengthRegulator.Expand(characterHidden, durations);
+                return MeanSquaredError(RunDecoder(expanded), melFrames);
+            }
+
+            case AlignTTSTrainingPhase.JointFineTuning:
+            {
+                var logLikelihood = GaussianLogLikelihood(characterHidden, melFrames);
+                int[] durations;
+                using (new NoGradScope<T>())
+                    durations = ViterbiDurations(logLikelihood);
+                var expanded = LengthRegulator.Expand(characterHidden, durations);
+                return Engine.TensorAdd(MeanSquaredError(RunDecoder(expanded), melFrames), AlignmentLoss(logLikelihood));
+            }
+
+            default:
+            {
+                int[] durations;
+                using (new NoGradScope<T>())
+                    durations = ViterbiDurations(GaussianLogLikelihood(characterHidden, melFrames));
+                var target = new Tensor<T>(new[] { durations.Length });
+                for (int i = 0; i < durations.Length; i++) target[i] = NumOps.FromDouble(Math.Log(durations[i] + 1.0));
+                return MeanSquaredError(RunDurationPredictor(tokens), target);
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Each phase updates only the parameters the paper trains in it (§3.2.2).</remarks>
+    protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(IReadOnlyList<Tensor<T>> parameters)
+    {
+        var encoder = Training.TapeTrainingStep<T>.CollectParameters(Layers.Take(EncoderLayerCount).ToList(), -1);
+        var decoder = Training.TapeTrainingStep<T>.CollectParameters(Layers.Skip(EncoderLayerCount).ToList(), -1);
+        var duration = Training.TapeTrainingStep<T>.CollectParameters(_durationPredictor.Cast<ILayer<T>>().ToList(), -1);
+        var mdn = Training.TapeTrainingStep<T>.CollectParameters(_mixDensityNetwork.Cast<ILayer<T>>().ToList(), -1);
+        IEnumerable<Tensor<T>> selected = CurrentPhase switch
+        {
+            AlignTTSTrainingPhase.Alignment => encoder.Concat(mdn),
+            AlignTTSTrainingPhase.Decoder => decoder,
+            AlignTTSTrainingPhase.JointFineTuning => encoder.Concat(decoder).Concat(mdn),
+            _ => duration,
+        };
+        var keep = new HashSet<Tensor<T>>(selected, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        return parameters.Where(keep.Contains).ToList();
+    }
+
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
+
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
+
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
         try
         {
-            // Pass the configured optimizer. The constructor resolves _optimizer from the
-            // caller's argument (falling back to AdamW), but this call site used the
-            // no-optimizer TrainWithTape overload, whose `optimizer` parameter then defaulted
-            // to null and silently trained on the base engine's fallback instead — so both the
-            // AdamW default AND any user-supplied optimizer were discarded. That is what drove
-            // the memorization probe divergence measured on the A-C shard: step 1 loss
-            // 20.729160 rising to step 2 loss 101.557045, a ~5x blow-up rather than a warm-up
-            // transient.
-            TrainWithTape(input, expected, _optimizer);
+            using var _ = new NoGradScope<T>();
+            return PhaseObjective(input, target)[0];
         }
         finally
         {
-            SetTrainingMode(false);
+            SetTrainingMode(wasTraining);
         }
+    }
+
+    private Tensor<T> MeanSquaredError(Tensor<T> prediction, Tensor<T> target)
+    {
+        var diff = Engine.TensorSubtract(prediction, Engine.Reshape(target, prediction._shape));
+        var sq = Engine.TensorMultiply(diff, diff);
+        return Engine.ReduceMean(sq, Enumerable.Range(0, sq.Rank).ToArray(), keepDims: false);
     }
 
     /// <inheritdoc />
@@ -259,6 +373,7 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -273,9 +388,6 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         return m;
     }
 
-
-
-
     private void ThrowIfDisposed()
     {
         if (_disposed)
@@ -289,4 +401,20 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         _disposed = true;
         base.Dispose(disposing);
     }
+}
+
+/// <summary>The training phases of AlignTTS (Zeng et al. 2020, §3.2.2), run in order.</summary>
+public enum AlignTTSTrainingPhase
+{
+    /// <summary>Train the mix density network and the character-side blocks with the alignment loss.</summary>
+    Alignment = 1,
+
+    /// <summary>Freeze the character side; train the mel side on mel MSE with the MDN's Viterbi durations.</summary>
+    Decoder = 2,
+
+    /// <summary>Fine-tune the feed-forward Transformer and the MDN together, durations recomputed every step.</summary>
+    JointFineTuning = 3,
+
+    /// <summary>Train the duration predictor on the final MDN durations (log-domain MSE).</summary>
+    DurationPredictor = 4,
 }

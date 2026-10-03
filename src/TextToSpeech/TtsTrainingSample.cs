@@ -40,6 +40,9 @@ public sealed class TtsTrainingSample<T>
     /// <summary>Reference audio or embedding for the target speaker or style.</summary>
     public Tensor<T>? SpeakerReference { get; init; }
 
+    /// <summary>Index of the speaker in a multi-speaker model's speaker table.</summary>
+    public int? SpeakerId { get; init; }
+
     /// <summary>Discrete codec tokens of the recording, <c>[frames, codebooks]</c>.</summary>
     public Tensor<T>? CodecTokens { get; init; }
 }

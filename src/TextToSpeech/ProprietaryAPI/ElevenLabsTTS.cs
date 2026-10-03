@@ -90,7 +90,7 @@ public partial class ElevenLabsTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     public int NumFlowSteps => _options.NumFlowSteps;
 
     /// <summary>Synthesizes speech using ElevenLabs's API-compatible local inference pipeline.</summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

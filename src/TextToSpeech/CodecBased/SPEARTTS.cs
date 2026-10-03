@@ -142,7 +142,7 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
     /// first understanding what to say (semantic tokens), then how it should sound (acoustic tokens),
     /// and finally creating the actual audio waveform.</para>
     /// </remarks>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

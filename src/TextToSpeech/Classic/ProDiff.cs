@@ -125,7 +125,7 @@ public partial class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
     /// (3) Each distillation halves steps while maintaining quality via parameterized diffusion,
     /// (4) Generator-guided diffusion prevents quality degradation at low step counts.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var tokens = PreprocessText(text);

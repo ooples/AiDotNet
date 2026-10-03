@@ -109,7 +109,7 @@ public partial class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// Per the paper (Ju et al., 2024):
     /// FACodec factorizes speech into prosody, content, acoustic detail, and timbre subspaces.
     /// Separate diffusion models operate on each disentangled subspace for fine control.
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

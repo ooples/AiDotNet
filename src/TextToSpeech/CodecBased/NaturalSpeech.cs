@@ -111,7 +111,7 @@ public partial class NaturalSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// Per the paper (Tan et al., 2022):
     /// Adds large-scale pre-training, phoneme pre-training, differentiable duration modeling,
     /// and bidirectional prior/posterior modules to VITS for human-parity quality.
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

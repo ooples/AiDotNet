@@ -109,7 +109,7 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
     public int CodecFrameRate => _options.CodecFrameRate;
 
     /// <summary>Synthesizes speech. MaskGCT: text -> semantic tokens via AR -> acoustic tokens via masked parallel prediction -> vocoder.</summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

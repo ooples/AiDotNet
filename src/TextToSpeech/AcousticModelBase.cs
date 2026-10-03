@@ -24,7 +24,7 @@ public abstract class AcousticModelBase<T> : TtsModelBase<T>, IAcousticModel<T>
     public abstract Tensor<T> TextToMel(string text);
 
     /// <inheritdoc />
-    public abstract Tensor<T> Synthesize(string text);
+    public abstract override Tensor<T> Synthesize(string text);
 
     /// <summary>Gets the number of mel frequency channels.</summary>
     int IAcousticModel<T>.MelChannels => MelChannels;

@@ -6149,9 +6149,35 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 8, outputSize: 16), " +
-                    "new AiDotNet.TextToSpeech.Classic.FastSpeechOptions { EncoderDim = 32, DecoderDim = 16, " +
+                    "new AiDotNet.TextToSpeech.Classic.FastSpeechOptions { EncoderDim = 32, MelChannels = 16, " +
                     "HiddenDim = 32, NumEncoderLayers = 1, NumDecoderLayers = 1, NumHeads = 2, " +
-                    "DurationPredictorFilterSize = 32, MaxDuration = 4 })";
+                    "FftFilterSize = 64, DurationPredictorFilterSize = 32 })";
+            }
+            else if (model.ClassName == "FastSpeech2" && model.TypeParameterCount == 1)
+            {
+                // FastSpeech 2 trains on its paper objective (mel MAE + duration, pitch-CWT and energy MSE through the
+                // variance adaptor). At the paper's 256-wide, 1024-filter scale one target-dependence repeat took
+                // 134 s against a 60 s budget; keep the topology at a bounded fixture scale.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 8, outputSize: 16), " +
+                    "new AiDotNet.TextToSpeech.Classic.FastSpeech2Options { EncoderDim = 32, HiddenDim = 32, MelChannels = 16, " +
+                    "NumEncoderLayers = 1, NumDecoderLayers = 1, NumHeads = 2, FftFilterSize = 64, " +
+                    "VariancePredictorFilterSize = 32 })";
+            }
+            else if (model.ClassName == "AlignTTS" && model.TypeParameterCount == 1)
+            {
+                // AlignTTS's paper configuration is 768-wide with 12 FFT blocks; keep its topology (character-side
+                // blocks, mix density network, length regulator, mel-side blocks, separate duration predictor) at a
+                // bounded fixture scale.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 8, outputSize: 16), " +
+                    "new AiDotNet.TextToSpeech.Classic.AlignTTSOptions { EncoderDim = 32, HiddenDim = 32, MelChannels = 16, " +
+                    "NumEncoderLayers = 1, NumDecoderLayers = 1, NumHeads = 2, FftFilterSize = 64, " +
+                    "DurationPredictorDim = 16, DurationPredictorLayers = 1, MixDensityHiddenSize = 32 })";
             }
             else if (model.ClassName == "EagleLanguageModel" && model.TypeParameterCount == 1)
             {

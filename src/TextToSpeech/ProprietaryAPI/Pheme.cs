@@ -93,7 +93,7 @@ public partial class Pheme<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// Synthesizes speech from text.
     /// Per PolyAI (2024): Turn-taking-aware conversational TTS with natural prosody.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

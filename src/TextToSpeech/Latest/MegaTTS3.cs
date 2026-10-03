@@ -106,7 +106,7 @@ public partial class MegaTTS3<T> : TtsModelBase<T>, ICodecTts<T>
     public int CodecFrameRate => _options.CodecFrameRate;
 
     /// <summary>Synthesizes speech. MegaTTS 3: text -> latent LM -> sparse DiT diffusion -> codec latent -> WavVAE decoder -> waveform.</summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

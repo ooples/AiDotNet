@@ -124,7 +124,7 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     /// (3) Duration predictor + length regulation,
     /// (4) Lightweight decoder + normalizing flow post-net for detail refinement.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var tokens = PreprocessText(text);

@@ -131,7 +131,7 @@ public partial class CosyVoice3<T> : TtsModelBase<T>, ICodecTts<T>
     /// capability means it can mimic a speaker's voice from just a short audio sample,
     /// without needing to be specifically trained on that voice.</para>
     /// </remarks>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

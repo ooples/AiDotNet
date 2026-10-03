@@ -105,7 +105,7 @@ public partial class VoiceFlow<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// Per the paper (Guo et al., 2024):
     /// Rectified flows learn straighter ODE paths (vs curved CFM),
     /// enabling fewer integration steps (1-2 vs 4-10) for same quality.
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

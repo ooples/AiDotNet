@@ -136,7 +136,7 @@ public partial class AdaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     /// (3) FastSpeech 2-style encoder + variance adaptor + decoder with adapted normalization.
     /// Fine-tuning: only conditional LN parameters are updated (2 params per layer).
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var tokens = PreprocessText(text);
