@@ -91,7 +91,7 @@ internal sealed class MiaVsrNetwork<T>
         if (options.ScaleFactor <= 0 || (options.ScaleFactor & (options.ScaleFactor - 1)) != 0)
             throw new ArgumentOutOfRangeException(nameof(options), $"ScaleFactor must be a positive power of two; got {options.ScaleFactor}.");
         if (options.ReconstructionChannels <= 0) throw new ArgumentOutOfRangeException(nameof(options), "ReconstructionChannels must be positive.");
-        if (!(options.GumbelTemperature > 0)) throw new ArgumentOutOfRangeException(nameof(options), "GumbelTemperature must be positive.");
+        if (double.IsNaN(options.GumbelTemperature) || options.GumbelTemperature <= 0) throw new ArgumentOutOfRangeException(nameof(options), "GumbelTemperature must be positive.");
 
         _inputChannels = inputChannels;
         _channels = options.NumFeatures;
@@ -182,7 +182,6 @@ internal sealed class MiaVsrNetwork<T>
                 $"MIA-VSR expects a clip [B, T, C, H, W] or a frame [B, C, H, W]; got rank {input.Shape.Length}.", nameof(input));
 
         var engine = AiDotNetEngine.Current;
-        var numOps = MathHelper.GetNumericOperations<T>();
         var clip = singleFrame
             ? engine.Reshape(input, new[] { input.Shape[0], 1, input.Shape[1], input.Shape[2], input.Shape[3] })
             : input;
@@ -194,16 +193,7 @@ internal sealed class MiaVsrNetwork<T>
         // Frames are zero-padded to whole windows; the output is cropped back.
         int paddedH = (height + _window - 1) / _window * _window;
         int paddedW = (width + _window - 1) / _window * _window;
-        var lowRes = new Tensor<T>[frames];
-        for (int t = 0; t < frames; t++)
-        {
-            var frame = engine.Reshape(engine.TensorNarrow(clip, dim: 1, start: t, length: 1),
-                new[] { batch, channels, height, width });
-            lowRes[t] = paddedH == height && paddedW == width
-                ? frame
-                : engine.Pad(frame, 0, paddedH - height, 0, paddedW - width, numOps.Zero);
-        }
-
+        var lowRes = PadFrames(engine, clip, paddedH, paddedW);
         var geometry = new WindowGeometry(batch, paddedH, paddedW, _window);
         var shallow = new Tensor<T>[frames];
         for (int t = 0; t < frames; t++)
@@ -213,53 +203,16 @@ internal sealed class MiaVsrNetwork<T>
 
         var alignment = new PatchAlignment(engine, _flow, lowRes, geometry, MinimumFlowSize, _channels);
         var context = new ForwardContext(training, random, _temperature, DenseInference);
-
         var current = shallow;
         for (int m = 0; m < _branches; m++)
         {
-            bool backward = m % 2 == 0;
-            int step = backward ? 1 : -1;
-            var states = new BlockState[_blocksPerBranch];
-            for (int n = 0; n < states.Length; n++) states[n] = new BlockState();
-
-            var outputs = new Tensor<T>?[frames];
-            for (int k = 0; k < frames; k++)
-            {
-                int t = backward ? frames - 1 - k : k;
-                var first = alignment.Neighbour(outputs, t, step, order: 1);
-                var second = alignment.Neighbour(outputs, t, step, order: 2);
-
-                var x = current[t];
-                for (int n = 0; n < _blocksPerBranch; n++)
-                {
-                    x = _branchBlocks[m][n].Forward(engine, x, first, second, _relativeIndex, geometry, states[n], context);
-                }
-
-                outputs[t] = engine.TensorAdd(current[t], ToTokens(engine, _branchConvs[m].Forward(ToImage(engine, x, geometry))));
-            }
-
-            var completed = new Tensor<T>[frames];
-            for (int t = 0; t < frames; t++)
-            {
-                completed[t] = outputs[t] ?? throw new InvalidOperationException($"Branch {m} produced no output for frame {t}.");
-            }
-
-            current = completed;
+            current = Propagate(engine, m, current, alignment, geometry, context);
         }
 
-        var leaky = numOps.FromDouble(0.1);
         var hr = new Tensor<T>[frames];
         for (int t = 0; t < frames; t++)
         {
-            var feature = ToImage(engine, engine.TensorAdd(current[t], shallow[t]), geometry);
-            foreach (var (conv, shuffle) in _upsample)
-            {
-                feature = engine.LeakyReLU(shuffle.Forward(conv.Forward(feature)), leaky);
-            }
-
-            feature = engine.LeakyReLU(_hrConv.Forward(feature), leaky);
-            var residual = engine.Interpolate(lowRes[t], new[] { paddedH * _scale, paddedW * _scale }, InterpolateMode.Bilinear);
-            var frame = engine.TensorAdd(_lastConv.Forward(feature), residual);
+            var frame = Reconstruct(engine, engine.TensorAdd(current[t], shallow[t]), lowRes[t], geometry);
             if (paddedH != height || paddedW != width)
             {
                 frame = engine.TensorNarrow(engine.TensorNarrow(frame, dim: 2, start: 0, length: height * _scale),
@@ -274,6 +227,78 @@ internal sealed class MiaVsrNetwork<T>
         return singleFrame
             ? engine.Reshape(result, new[] { batch, channels, height * _scale, width * _scale })
             : result;
+    }
+
+    /// <summary>Splits a clip into frames, zero-padded to whole windows: <c>[B, C, H', W']</c> each.</summary>
+    private static Tensor<T>[] PadFrames(IEngine engine, Tensor<T> clip, int paddedH, int paddedW)
+    {
+        int batch = clip.Shape[0], frames = clip.Shape[1], channels = clip.Shape[2];
+        int height = clip.Shape[3], width = clip.Shape[4];
+        var zero = MathHelper.GetNumericOperations<T>().Zero;
+        var lowRes = new Tensor<T>[frames];
+        for (int t = 0; t < frames; t++)
+        {
+            var frame = engine.Reshape(engine.TensorNarrow(clip, dim: 1, start: t, length: 1),
+                new[] { batch, channels, height, width });
+            lowRes[t] = paddedH == height && paddedW == width
+                ? frame
+                : engine.Pad(frame, 0, paddedH - height, 0, paddedW - width, zero);
+        }
+
+        return lowRes;
+    }
+
+    /// <summary>
+    /// One feature propagation module: branch <paramref name="branch"/> refines every frame in its
+    /// direction (even branches backward, odd forward) from its own outputs at the two frames it has
+    /// already processed, as a residual group of attention blocks closed by a 3x3 convolution.
+    /// </summary>
+    private Tensor<T>[] Propagate(IEngine engine, int branch, Tensor<T>[] inputs, PatchAlignment alignment,
+        WindowGeometry geometry, ForwardContext context)
+    {
+        int frames = inputs.Length;
+        bool backward = branch % 2 == 0;
+        int step = backward ? 1 : -1;
+        var states = new BlockState[_blocksPerBranch];
+        for (int n = 0; n < states.Length; n++) states[n] = new BlockState();
+
+        var outputs = new Tensor<T>?[frames];
+        var completed = new Tensor<T>[frames];
+        for (int k = 0; k < frames; k++)
+        {
+            int t = backward ? frames - 1 - k : k;
+            var first = alignment.Neighbour(outputs, t, step, order: 1);
+            var second = alignment.Neighbour(outputs, t, step, order: 2);
+
+            var x = inputs[t];
+            for (int n = 0; n < _blocksPerBranch; n++)
+            {
+                x = _branchBlocks[branch][n].Forward(engine, x, first, second, _relativeIndex, geometry, states[n], context);
+            }
+
+            completed[t] = engine.TensorAdd(inputs[t], ToTokens(engine, _branchConvs[branch].Forward(ToImage(engine, x, geometry))));
+            outputs[t] = completed[t];
+        }
+
+        return completed;
+    }
+
+    /// <summary>
+    /// The reconstruction head on one frame's propagated features: pixel-shuffle upsampling with
+    /// LeakyReLU(0.1), a 3x3 convolution to the output channels, plus the bilinearly upsampled input.
+    /// </summary>
+    private Tensor<T> Reconstruct(IEngine engine, Tensor<T> tokens, Tensor<T> lowRes, WindowGeometry geometry)
+    {
+        var leaky = MathHelper.GetNumericOperations<T>().FromDouble(0.1);
+        var feature = ToImage(engine, tokens, geometry);
+        foreach (var (conv, shuffle) in _upsample)
+        {
+            feature = engine.LeakyReLU(shuffle.Forward(conv.Forward(feature)), leaky);
+        }
+
+        feature = engine.LeakyReLU(_hrConv.Forward(feature), leaky);
+        var residual = engine.Interpolate(lowRes, new[] { geometry.Height * _scale, geometry.Width * _scale }, InterpolateMode.Bilinear);
+        return engine.TensorAdd(_lastConv.Forward(feature), residual);
     }
 
     private static Tensor<T> BuildRelativeIndex(int window)
@@ -665,6 +690,10 @@ internal sealed class MiaVsrNetwork<T>
             _ffnDown = ffnDown;
         }
 
+        /// <summary>
+        /// Runs the block on one frame: inter-and-intra-frame attention and the FFN, each followed by the keep-mask
+        /// blend with this block's previous-frame result once a previous frame exists.
+        /// </summary>
         /// <param name="engine">The engine.</param>
         /// <param name="x">The block input, row-major tokens <c>[B·H·W, C]</c>.</param>
         /// <param name="first">The aligned t-1 neighbour, window-ordered <c>[B·H·W, C]</c>.</param>
