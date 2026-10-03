@@ -446,10 +446,55 @@ internal partial class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerpri
                 "NT-Xent requires at least two paired samples so each anchor has negatives.",
                 nameof(firstView));
 
-        var z1 = Predict(first);
-        var z2 = Predict(second);
-        var loss = _contrastiveLoss.ComputeLoss(z1, z2);
-        return loss[0];
+        // The objective TrainContrastive minimizes: ONE forward over the combined [2B, ...] batch, BatchNorm
+        // normalizing with that batch's statistics. Two separate Predict calls measured a different quantity -
+        // each view alone, under the running statistics - which trail the weights after a short run, so the value
+        // could rise while the trained objective fell. Every other layer stays in eval, so the value is
+        // deterministic, and the running statistics are restored, so measuring changes nothing.
+        int pairBatch = first.Shape[0];
+        var combined = Engine.TensorConcatenate(new[] { first, second }, axis: 0);
+        var batchNorms = BatchNormalizationLayersOf(Layers).ToList();
+        var savedStatistics = batchNorms
+            .Select(bn => (Mean: bn.GetRunningMean().Clone(), Variance: bn.GetRunningVariance().Clone()))
+            .ToList();
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            foreach (var batchNorm in batchNorms) batchNorm.SetTrainingMode(true);
+            Tensor<T> embeddings;
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+                embeddings = ForwardForTraining(combined);
+            while (embeddings.Rank > 2 && embeddings.Shape[embeddings.Rank - 1] == 1)
+                embeddings = Engine.Reshape(embeddings, embeddings.Shape.ToArray().Take(embeddings.Rank - 1).ToArray());
+            var z1 = Engine.TensorGather(embeddings, new Tensor<int>(Enumerable.Range(0, pairBatch).ToArray(), [pairBatch]), axis: 0);
+            var z2 = Engine.TensorGather(embeddings, new Tensor<int>(Enumerable.Range(pairBatch, pairBatch).ToArray(), [pairBatch]), axis: 0);
+            return _contrastiveLoss.ComputeLoss(z1, z2)[0];
+        }
+        finally
+        {
+            for (int i = 0; i < batchNorms.Count; i++)
+            {
+                savedStatistics[i].Mean.AsSpan().CopyTo(batchNorms[i].GetRunningMean().AsWritableSpan());
+                savedStatistics[i].Variance.AsSpan().CopyTo(batchNorms[i].GetRunningVariance().AsWritableSpan());
+                batchNorms[i].GetRunningMean().IncrementVersion();
+                batchNorms[i].GetRunningVariance().IncrementVersion();
+                batchNorms[i].SetTrainingMode(false);
+            }
+            SetTrainingMode(wasTraining);
+        }
+    }
+
+    private static IEnumerable<AiDotNet.NeuralNetworks.Layers.BatchNormalizationLayer<T>> BatchNormalizationLayersOf(
+        IEnumerable<ILayer<T>> layers)
+    {
+        foreach (var layer in layers)
+        {
+            if (layer is AiDotNet.NeuralNetworks.Layers.BatchNormalizationLayer<T> batchNorm) yield return batchNorm;
+            var subLayers = layer.GetSubLayers();
+            if (subLayers is null) continue;
+            foreach (var nested in BatchNormalizationLayersOf(subLayers)) yield return nested;
+        }
     }
 
     private Tensor<T> PromoteSingleSpectrogram(Tensor<T> input)

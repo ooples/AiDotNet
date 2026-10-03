@@ -348,6 +348,18 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     }
 
     /// <summary>
+    /// When true, every forward normalizes with this batch's statistics and REPLACES the running statistics with them
+    /// instead of folding them in with the momentum - regardless of the layer's training mode.
+    /// </summary>
+    /// <remarks>
+    /// This is PyTorch's <c>torch.optim.swa_utils.update_bn</c> for a single batch: it re-estimates the statistics
+    /// that inference uses for the CURRENT weights. After a short run the momentum average still carries statistics of
+    /// earlier weights, so an eval-mode comparison of weights (the training-behaviour invariants) needs statistics
+    /// that match them.
+    /// </remarks>
+    internal bool OverwriteRunningStatistics { get; set; }
+
+    /// <summary>
     /// Gets the running variance of the batch normalization layer.
     /// </summary>
     /// <returns>The running variance tensor used during inference.</returns>
@@ -785,7 +797,17 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         // behaviour, so nothing changes for any existing caller.
         bool channelsFirstDeclared = Layout == BatchNormDataLayout.ChannelsFirst;
 
-        if (!channelsFirstDeclared && input.Rank >= 3 && featureSize > 0 && input.Shape[^1] == featureSize)
+        // A rank-4+ activation whose axis 1 already equals the feature count is the canonical NCHW conv layout,
+        // so the channels-last flatten must not fire just because its trailing axis also happens to match:
+        // GraFPrint's [1, 32, 32, 32] and FastSAM's [1, 8, 8, 8] (W == C) were normalized across WIDTH, with
+        // gamma indexed by column. Rank 3 is genuinely ambiguous ([B, T, F] vs [C, H, W]) and keeps the
+        // trailing-axis rule, with the declared Layout as the override.
+        // An explicit ChannelsLast declaration wins over the heuristic: when both axis 1 and the trailing axis
+        // equal featureSize, the declared layout is the only thing that says which one the features are on.
+        bool channelsLastDeclared = Layout == BatchNormDataLayout.ChannelsLast;
+        bool canonicalChannelsFirst = !channelsLastDeclared && input.Rank >= 4 && input.Shape[1] == featureSize;
+        if (!channelsFirstDeclared && !canonicalChannelsFirst && input.Rank >= 3 && featureSize > 0
+            && input.Shape[^1] == featureSize)
         {
             preFlattenShape = input._shape;
             int leadingBatch = 1;
@@ -804,19 +826,35 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
         _lastInput = tapeActive ? null : input;
 
-        // A single-sample batch (batch size 1) has zero batch variance, so the
-        // training-mode normalization (x - mean)/sqrt(var + eps) collapses every
-        // feature to 0 → the output is a constant (≈ beta) that is INDEPENDENT of
-        // the input and of upstream parameters. Its gradient is therefore zero,
-        // which silently detaches the autodiff tape and stops the entire model
-        // from learning (surfaced by GradientFlow_ShouldBeNonZeroAndFinite on every
-        // BatchNorm model trained one sample at a time). Batch statistics are
-        // undefined for a single sample, so fall back to the affine
-        // running-statistics path — identical to inference — which is
-        // differentiable end-to-end and lets gradients reach the input and the
-        // affine parameters. Real training uses batch > 1 and is unaffected.
-        int effectiveBatchSize = input.Rank > 0 ? input.Shape[0] : 1;
-        if (IsTrainingMode && effectiveBatchSize > 1)
+        // Batch statistics are taken over every value a feature has in this batch: the batch
+        // axis AND, for convolutional (channels-first) inputs, every spatial position. That is
+        // the paper's definition for convolutional layers (Ioffe & Szegedy 2015, section 3.2:
+        // the effective mini-batch is m' = m*p*q) and what PyTorch's BatchNorm1d/2d/3d compute.
+        // A [1, C, H, W] activation therefore has H*W values per channel and is normalized
+        // like any other batch.
+        //
+        // The gate used to be the batch axis alone (input.Shape[0] > 1). Every convolutional
+        // model trained one sample at a time -- all of the model-family tests, and anyone
+        // fine-tuning on single images -- took the fallback below, normalized with running
+        // statistics that the fallback never updates, and so trained with every BatchNorm frozen
+        // at mean 0 / variance 1: an UNNORMALIZED network. RepViTSAM (26 residual blocks, 50+
+        // BatchNorms) grew activations ~150x through its encoder that way, moved its output 7x
+        // on one Adam step, and whether it then converged depended on floating-point summation
+        // order: it failed deterministically on Intel runners and passed on AMD ones. The GPU
+        // path (ForwardGpu) already normalized with batch statistics; CPU and GPU disagreed.
+        //
+        // Exactly ONE value per feature has zero batch variance: the normalization collapses the
+        // feature to a constant (beta) that is independent of the input, and its gradient is zero
+        // (PyTorch refuses to train there: "Expected more than 1 value per channel"). Only that
+        // case falls back to the running-statistics path -- identical to inference, and
+        // differentiable end-to-end.
+        int valuesPerFeature = featureSize > 0 && input.Length % featureSize == 0
+            ? input.Length / featureSize
+            : (input.Rank > 0 ? input.Shape[0] : 1);
+        // Recalibration (OverwriteRunningStatistics) takes the batch-statistics branch whatever the layer's mode, so
+        // a caller that forces evaluation mode mid-forward (several PredictCore overrides do) cannot silently turn a
+        // recalibration pass into an ordinary inference pass over stale statistics.
+        if ((IsTrainingMode || OverwriteRunningStatistics) && valuesPerFeature > 1)
         {
             // Training: Use Engine.BatchNorm to compute batch stats and normalize
             // This is fully GPU accelerated
@@ -870,11 +908,13 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             // as differentiable state and corrupted when the training tape is released.
             using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
-                T oneMinusMomentum = NumOps.Subtract(NumOps.One, _momentum);
-                Engine.TensorMultiplyScalarInPlace(_runningMean, _momentum);
+                // Recalibration (see OverwriteRunningStatistics) replaces the statistics outright: momentum 0.
+                T momentum = OverwriteRunningStatistics ? NumOps.Zero : _momentum;
+                T oneMinusMomentum = NumOps.Subtract(NumOps.One, momentum);
+                Engine.TensorMultiplyScalarInPlace(_runningMean, momentum);
                 var scaledBatchMean = Engine.TensorMultiplyScalar(batchMean, oneMinusMomentum);
                 Engine.TensorAddInPlace(_runningMean, scaledBatchMean);
-                Engine.TensorMultiplyScalarInPlace(_runningVariance, _momentum);
+                Engine.TensorMultiplyScalarInPlace(_runningVariance, momentum);
                 var scaledBatchVar = Engine.TensorMultiplyScalar(batchVariance, oneMinusMomentum);
                 Engine.TensorAddInPlace(_runningVariance, scaledBatchVar);
             }
@@ -897,8 +937,8 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         }
         else if (IsTrainingMode)
         {
-            // #639: batch=1 TRAINING fallback. Batch variance is undefined for a single
-            // sample, so we normalize with the running statistics (same VALUE as inference)
+            // #639: one-value-per-feature TRAINING fallback (see valuesPerFeature above). Batch
+            // variance is undefined, so we normalize with the running statistics (same VALUE as inference)
             // — but route it through the single differentiable BatchNormAffine engine op
             // instead of the manual sqrt/divide/subtract/broadcast decomposition. Two wins:
             //   1. Op-count: the compiled-plan replay records ONE op per BN layer instead of
