@@ -148,12 +148,23 @@ public class VolumeRenderingGradientTests
     [Fact]
     public void NeRF_PhotometricTraining_LowersTheLoss()
     {
+        // Judged on ONE fixed ray batch: comparing the losses of successive random batches would pass on
+        // batch-to-batch noise alone, even if no weight ever moved.
         var nerf = SmallNeRF();
         var loader = ImageTrainingDataLoaders.FromViews(Views(), seed: 5);
-        float first = nerf.TrainOnImageBatch(loader, raysPerBatch: 16, optimizerOptions: null);
-        float last = first;
-        for (int step = 0; step < 60; step++) last = nerf.TrainOnImageBatch(loader, raysPerBatch: 16, optimizerOptions: null);
-        Assert.True(last < first, $"Sixty photometric steps did not lower the loss ({first} -> {last}).");
+        var (_, fixedBatch) = loader.IterateBatches(32).First();
+        float Loss()
+        {
+            var rendered = nerf.RenderRays(fixedBatch.RayOrigins, fixedBatch.RayDirections, 4, 1f, 3f);
+            double sum = 0;
+            for (int i = 0; i < rendered.Length; i++) sum += Math.Pow(rendered[i] - fixedBatch.TargetColors[i], 2);
+            return (float)(sum / rendered.Length);
+        }
+
+        float before = Loss();
+        for (int step = 0; step < 60; step++) nerf.TrainOnImageBatch(loader, raysPerBatch: 16, optimizerOptions: null);
+        float after = Loss();
+        Assert.True(after < before, $"Sixty photometric steps did not lower the loss on a fixed batch ({before} -> {after}).");
     }
 
     [Fact]
