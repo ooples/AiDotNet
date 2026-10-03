@@ -116,4 +116,15 @@ public class TimeSeriesSeedTests
 
         Assert.True(differs, "every N-BEATS block started from the same weights");
     }
+    [Fact]
+    public void CopiedOptions_KeepTheSeed()
+    {
+        // CreateInstance clones a model's options through these copy constructors. They copied their own fields
+        // but not the inherited Seed, so a clone of a seeded DeepANT initialised from SeedOr(42) instead.
+        Assert.Equal(7, new AiDotNet.TimeSeries.AnomalyDetection.DeepANTOptions<double>(
+            new AiDotNet.TimeSeries.AnomalyDetection.DeepANTOptions<double> { Seed = 7 }).Seed);
+        Assert.Equal(7, new AiDotNet.TimeSeries.AnomalyDetection.LSTMVAEOptions<double>(
+            new AiDotNet.TimeSeries.AnomalyDetection.LSTMVAEOptions<double> { Seed = 7 }).Seed);
+        Assert.Equal(7, new ChronosOptions<double>(new ChronosOptions<double> { Seed = 7 }).Seed);
+    }
 }

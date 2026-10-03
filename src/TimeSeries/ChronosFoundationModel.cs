@@ -1015,6 +1015,7 @@ public class ChronosOptions<T> : TimeSeriesRegressionOptions<T>
     public ChronosOptions() { }
 
     public ChronosOptions(ChronosOptions<T> other)
+        : base(other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
         ContextLength = other.ContextLength;

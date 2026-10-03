@@ -475,6 +475,7 @@ public class DeepANTOptions<T> : TimeSeriesRegressionOptions<T>
     public DeepANTOptions() { }
 
     public DeepANTOptions(DeepANTOptions<T> other)
+        : base(other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
         // Copy DeepANT-specific properties

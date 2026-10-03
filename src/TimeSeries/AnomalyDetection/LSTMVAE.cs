@@ -424,6 +424,7 @@ public class LSTMVAEOptions<T> : TimeSeriesRegressionOptions<T>
     public LSTMVAEOptions() { }
 
     public LSTMVAEOptions(LSTMVAEOptions<T> other)
+        : base(other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
         WindowSize = other.WindowSize;
