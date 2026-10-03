@@ -27,6 +27,7 @@ public class TransformerEncoderBlockUnbatchedTests
         var fromUnbatched = block.Forward(unbatched);
         var fromBatched = block.Forward(batched);
 
+        Assert.Equal(new[] { 1, 5, 16 }, fromBatched.Shape.ToArray());
         Assert.Equal(new[] { 5, 16 }, fromUnbatched.Shape.ToArray());
         for (int i = 0; i < fromUnbatched.Length; i++)
             Assert.Equal(fromBatched[i], fromUnbatched[i], 12);

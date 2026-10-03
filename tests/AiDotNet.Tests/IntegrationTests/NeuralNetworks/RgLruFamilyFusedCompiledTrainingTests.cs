@@ -90,6 +90,8 @@ public sealed class RgLruFamilyFusedCompiledTrainingTests
 
             Assert.Equal(eagerDelta.Length, compiledDelta.Length);
             Assert.Contains(eagerDelta, value => value != 0.0);
+            Assert.All(eagerDelta, value => Assert.True(IsFinite(value), "an eager recurrence update is not finite"));
+            Assert.All(compiledDelta, value => Assert.True(IsFinite(value), "a compiled recurrence update is not finite"));
             double scale = eagerDelta.Max(Math.Abs);
             for (int i = 0; i < eagerDelta.Length; i++)
                 Assert.True(Math.Abs(compiledDelta[i] - eagerDelta[i]) <= 1e-6 * scale,

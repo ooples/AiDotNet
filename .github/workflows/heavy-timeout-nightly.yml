@@ -252,7 +252,7 @@ jobs:
 
             timeout --kill-after=60s "$($chunkCapMinutes)m" `
               dotnet test $testProject -c Release --framework net10.0 --no-build --no-restore `
-              --blame-hang --blame-hang-timeout 10m `
+              --blame-hang --blame-hang-timeout 10m --blame-hang-dump-type none `
               --filter $filter `
               --logger "trx;LogFileName=$label.trx" `
               --logger 'console;verbosity=normal' `
@@ -263,7 +263,10 @@ jobs:
             $duration = [int]((Get-Date) - $started).TotalSeconds
             Write-Host '::endgroup::'
 
-            if ($exit -eq 124 -or $exit -eq 137) { $exit = "timeout after $($chunkCapMinutes) min" }
+            # 124 is timeout's own exit after it stopped the chunk at the cap; 137 is a SIGKILL from any source (the
+            # kill-after escalation, or the kernel OOM killer), so it is reported as such rather than as a timeout.
+            if ($exit -eq 124) { $exit = "timeout after $($chunkCapMinutes) min" }
+            elseif ($exit -eq 137) { $exit = 'SIGKILL (timeout escalation or OOM)' }
             if ($exit -ne 0) { $failed++ }
             $rows += [pscustomobject]@{
               Label = $label; Names = $names; Exit = $exit

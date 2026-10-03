@@ -56,6 +56,9 @@ public class ModelInputMeetsFirstLayerTests
     /// </remarks>
     private static readonly TimeSpan ConstructionTimeout = TimeSpan.FromSeconds(10);
 
+    /// <summary>How long a timed-out construction may run on before the sweep abandons it.</summary>
+    private static readonly TimeSpan ConstructionDrain = TimeSpan.FromSeconds(120);
+
     /// <summary>Above this, a model is named in the report as a contributor to the sweep's wall clock.</summary>
     private static readonly TimeSpan SlowModelThreshold = TimeSpan.FromSeconds(1);
 
@@ -363,9 +366,15 @@ public class ModelInputMeetsFirstLayerTests
             // Task.Wait does not cancel the construction, so it keeps running and allocating. Waiting for it and
             // disposing what it built keeps a slow constructor from piling its model on top of the next ones; left
             // running, they stacked until the test host exceeded the 16 GB runner and took it down (Unassigned - 01).
-            try { task.Wait(); } catch (AggregateException) { }
-            (built as IDisposable)?.Dispose();
-            failure = $"construction exceeded {ConstructionTimeout.TotalSeconds:0}s";
+            // The drain is bounded: a constructor that deadlocks must not hang the whole sweep. Only a construction
+            // that finished inside the drain is read and disposed; one that did not is reported, never read, since
+            // `built` is written by the other thread and only a completed wait orders that write before this read.
+            bool drained;
+            try { drained = task.Wait(ConstructionDrain); } catch (AggregateException) { drained = true; }
+            if (drained) (built as IDisposable)?.Dispose();
+            failure = drained
+                ? $"construction exceeded {ConstructionTimeout.TotalSeconds:0}s"
+                : $"construction exceeded {ConstructionTimeout.TotalSeconds:0}s and did not finish within a further {ConstructionDrain.TotalSeconds:0}s, so it was abandoned undisposed";
             return false;
         }
 
