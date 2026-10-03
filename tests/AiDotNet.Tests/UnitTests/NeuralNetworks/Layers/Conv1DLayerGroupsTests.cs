@@ -1,7 +1,11 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -23,7 +27,7 @@ public class Conv1DLayerGroupsTests
         var layer = new Conv1DLayer<double>(
             InChannels, OutChannels, Kernel, Dilation, Stride, Padding,
             (IActivationFunction<double>)new IdentityActivation<double>(), groups: Groups);
-        var rng = new Random(7);
+        var rng = RandomHelper.CreateSeededRandom(7);
         var parameters = new double[OutChannels * (InChannels / Groups) * Kernel + OutChannels];
         for (int i = 0; i < parameters.Length; i++) parameters[i] = rng.NextDouble() - 0.5;
         Assert.Equal(parameters.Length, layer.ParameterCount);
@@ -82,7 +86,7 @@ public class Conv1DLayerGroupsTests
     {
         var layer = new Conv1DLayer<double>(InChannels, OutChannels, kernelSize: Kernel, groups: Groups);
         var input = new Tensor<double>(new[] { 1, InChannels, Length });
-        var rng = new Random(11);
+        var rng = RandomHelper.CreateSeededRandom(11);
         for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
         var expected = layer.Forward(input);
 
@@ -91,6 +95,40 @@ public class Conv1DLayerGroupsTests
 
         Assert.Equal(layer.ParameterCount, clone.ParameterCount);
         for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], actual[i], 12);
+    }
+
+    [Fact]
+    public void Deserialize_RestoresGroupsFromMetadata_ForALazyLayer()
+    {
+        // The lazy constructor carries no [LayerState] for groups, so a saved model can only recover
+        // them from the "Groups" metadata entry that serialization writes and DeserializationHelper reads.
+        int blockedCount = OutChannels * (InChannels / Groups) * Kernel + OutChannels;
+        var unresolved = new Conv1DLayer<double>(OutChannels, Kernel, groups: Groups);
+        var rebuiltLazy = Rebuild(unresolved);
+        rebuiltLazy.Forward(new Tensor<double>(new[] { 1, InChannels, Length }));
+        Assert.Equal(blockedCount, rebuiltLazy.ParameterCount);
+
+        // A resolved layer round-trips its weights too, and must compute the same grouped convolution.
+        var layer = new Conv1DLayer<double>(OutChannels, Kernel, groups: Groups);
+        var input = new Tensor<double>(new[] { 1, InChannels, Length });
+        var rng = RandomHelper.CreateSeededRandom(13);
+        for (int i = 0; i < input.Length; i++) input[i] = rng.NextDouble();
+        var expected = layer.Forward(input);
+
+        var restored = Rebuild(layer);
+        restored.SetParameters(layer.GetParameters());
+        var actual = restored.Forward(input);
+
+        Assert.Equal(blockedCount, restored.ParameterCount);
+        for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], actual[i], 12);
+    }
+
+    private static ILayer<double> Rebuild(Conv1DLayer<double> source)
+    {
+        var metadata = source.GetMetadata().ToDictionary(entry => entry.Key, entry => (object)entry.Value);
+        Assert.Equal(Groups.ToString(), metadata["Groups"]);
+        return DeserializationHelper.CreateLayerFromType<double>(
+            source.GetType().Name, source.GetInputShape(), source.GetOutputShape(), metadata);
     }
 
     [Theory]
