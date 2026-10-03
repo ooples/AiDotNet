@@ -182,6 +182,9 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
     private int _trainingStep;
 
     // Hash tables for multiresolution encoding
+    // Instant-NGP's main parameters (one table per resolution level); declared trainable so every training
+    // path steps them and serialization, cloning and ParameterCount include them.
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Dictionary<int, Tensor<T>> _hashTables;
 
     private readonly List<DenseLayer<T>> _densityLayers = [];
@@ -717,7 +720,27 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
         var normalizedPositions = NormalizePositionsToUnit(positions);
 
         // Use vectorized Engine implementation for CPU/GPU acceleration
-        return Engine.MultiresolutionHashEncoding(normalizedPositions, hashTablesArray, resolutions, _featuresPerLevel);
+        var features = Engine.MultiresolutionHashEncoding(normalizedPositions, hashTablesArray, resolutions, _featuresPerLevel);
+
+        // The engine op is not tape-recorded, so without this no loss gradient reaches the tables, which
+        // are Instant-NGP's main parameters (Müller et al. 2022, Sec. 3). Route the feature gradient to
+        // every level's table; the positions are sample points, not parameters.
+        int featuresPerLevel = _featuresPerLevel;
+        AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.RecordIfActive(
+            "InstantNGPHashEncoding",
+            features,
+            hashTablesArray,
+            (gradOutput, inputs, _, _, engine, grads) =>
+            {
+                var tableGradients = engine.MultiresolutionHashEncodingBackward(
+                    normalizedPositions, inputs, resolutions, featuresPerLevel, gradOutput);
+                for (int level = 0; level < inputs.Length; level++)
+                {
+                    AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.AccumulateGrad(
+                        grads, inputs[level], tableGradients[level], engine);
+                }
+            });
+        return features;
     }
 
     /// <summary>
@@ -1597,7 +1620,6 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     public override ModelMetadata<T> GetModelMetadata()
     {
-        int hashParameterCount = _numLevels * _hashTableSize * _featuresPerLevel;
 
         return new ModelMetadata<T>
         {
@@ -1627,7 +1649,7 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
                 { "SceneBoundsMin", new[] { _sceneMin[0], _sceneMin[1], _sceneMin[2] } },
                 { "SceneBoundsMax", new[] { _sceneMax[0], _sceneMax[1], _sceneMax[2] } },
                 { "LayerCount", Layers.Count },
-                { "TotalParameters", ParameterCount + hashParameterCount }
+                { "TotalParameters", ParameterCount }
             },
             // License-safe metadata bytes — see NeRF.GetModelMetadata for the
             // same rationale. Fixes #1826.

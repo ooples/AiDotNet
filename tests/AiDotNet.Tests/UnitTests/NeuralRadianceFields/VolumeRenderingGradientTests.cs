@@ -141,6 +141,9 @@ public class VolumeRenderingGradientTests
         nerf.TrainOnImageBatch(loader, raysPerBatch: 8, optimizerOptions: null);
 
         var after = nerf.GetParameters().ToArray();
+        // NaN != NaN, so a corrupted step would otherwise count as "moved".
+        Assert.All(after, w => Assert.True(!float.IsNaN(w) && !float.IsInfinity(w),
+            "A photometric step produced a non-finite NeRF weight."));
         Assert.True(before.Zip(after, (a, b) => a != b).Any(changed => changed),
             "A photometric training step left every NeRF weight unchanged: no gradient reached the field.");
     }
@@ -178,7 +181,15 @@ public class VolumeRenderingGradientTests
         ngp.TrainOnImageBatch(loader, raysPerBatch: 8, optimizerOptions: null);
 
         var after = ngp.GetParameters().ToArray();
+        Assert.All(after, w => Assert.True(!float.IsNaN(w) && !float.IsInfinity(w),
+            "A photometric step produced a non-finite InstantNGP weight."));
         Assert.True(before.Zip(after, (a, b) => a != b).Any(changed => changed),
             "A photometric training step left every InstantNGP weight unchanged: no gradient reached the field.");
+
+        // The hash tables are Instant-NGP's main parameters and follow the layer weights in the vector.
+        int layerParameters = checked((int)ngp.Layers.Sum(layer => layer.ParameterCount));
+        Assert.True(after.Length > layerParameters, "InstantNGP's hash tables are missing from its parameters.");
+        Assert.True(before.Skip(layerParameters).Zip(after.Skip(layerParameters), (a, b) => a != b).Any(changed => changed),
+            "A photometric training step left every hash-table entry unchanged: no gradient reached the encoding.");
     }
 }
