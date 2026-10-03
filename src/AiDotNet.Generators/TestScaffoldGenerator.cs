@@ -873,21 +873,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // 120s on CPU (verified from the Generated N-P shard). Genuine foundation-scale compute — nightly
         // heavy lane, matching its MaskDINO sibling.
         "OMGSeg",
-        // MIAVSR: video super-resolution. Its default stack (CreateDefaultVideoSuperResolutionLayers)
-        // is a 30 residual-block CNN with 4x pixel-shuffle upsampling, run over a multi-frame video
-        // clip — genuine heavy conv compute (NOT an O(n^2)-attention pathology: the factory is
-        // conv-only), so a 10-iteration Training_ShouldReduceLoss exceeds the 120s per-test budget on
-        // CPU (verified: it, MoreData and Metadata all time out at 120000ms). Same class as the
-        // already-tagged video models (MGLDVSR / InternVideo2) — runs in the nightly heavy
-        // lane. (A separate fidelity follow-up tracks wiring the paper's masked inter/intra-frame
-        // attention, which the default factory does not yet build.)
-        "MIAVSR",
-        // DOVE (Video/Enhancement, VideoSuperResolutionBase): the same heavy VSR class as MIAVSR /
+        // DOVE (Video/Enhancement, VideoSuperResolutionBase): the same heavy VSR class as
         // MGLDVSR — a deep residual conv super-resolution stack run over a multi-frame clip, so its
         // Training_ShouldReduceLoss / LossStrictlyDecreases / MoreData all time out at 120/180s on CPU
         // (verified from the Generated A-F shard). Genuine heavy conv compute, not a fixable pathology,
         // so the whole DOVETests class runs in the nightly heavy lane at full scale like its VSR
-        // siblings (MIAVSR / MGLDVSR), keeping it off the default per-test-timeout gate.
+        // siblings (MGLDVSR), keeping it off the default per-test-timeout gate.
         "DOVE",
     };
 
@@ -12582,6 +12573,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumFeatures = 8, NumResBlocks = 1, ScaleFactor = 2, " +
                     "NumFrames = 2, LearningRate = 2e-4, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "MIAVSR" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
+            {
+                // MIA-VSR (Zhou et al., CVPR 2024) keeps its whole paper topology at smoke width: all
+                // four propagation branches, the inter-and-intra-frame attention with relative bias,
+                // the adaptive masks (Gumbel in training, sparse at inference), SPyNet patch alignment
+                // and the pixel-shuffle head. Three frames, so the second-order neighbour and the
+                // masks (which start on a branch's second frame) are both exercised. Window 4 on 8x8
+                // frames gives four windows; a 3-level SPyNet needs frames of at least 4 pixels.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 3, inputDepth: 3, inputHeight: 8, inputWidth: 8, " +
+                    "outputSize: 4), " +
+                    "new AiDotNet.Video.Options.MIAVSROptions { " +
+                    "NumFeatures = 8, NumHeads = 2, WindowSize = 4, FeedForwardRatio = 2, " +
+                    "NumPropagationBranches = 4, BlocksPerBranch = 1, ScaleFactor = 2, " +
+                    "FlowPyramidLevels = 3, ReconstructionChannels = 8, Seed = 1234 })";
+            }
             else if (model.ClassName == "DOVE" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
             {
@@ -13481,6 +13491,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // full strength.
             sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 16, 16 };");
+        }
+        else if (model.ClassName == "MIAVSR")
+        {
+            // One clip of three RGB frames at 8x8, upscaled 2x; see the constructor pin above.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 3, 3, 8, 8 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 3, 3, 16, 16 };");
         }
         else if (model.ClassName == "SeedVR")
         {

@@ -5,24 +5,20 @@ using AiDotNet.Onnx;
 namespace AiDotNet.Video.Options;
 
 /// <summary>
-/// Configuration options for the MIA-VSR masked inter and intra-frame attention model.
+/// Configuration options for MIA-VSR, the masked inter- and intra-frame attention video
+/// super-resolution transformer (Zhou et al., CVPR 2024).
 /// </summary>
 /// <remarks>
 /// <para>
-/// MIA-VSR (Zhou et al., CVPR 2024) uses masked attention for efficient video SR:
-/// - Masked inter-frame attention: temporal attention across frames with sparse masking,
-///   attending only to the most relevant spatial locations in neighboring frames
-/// - Masked intra-frame attention: spatial attention within each frame with local window
-///   masking for computational efficiency
-/// - Progressive masking: the masking ratio decreases through layers, from coarse to fine
-/// - Built on BasicVSR++ backbone with attention replacing deformable convolution
+/// The defaults are the paper's: 120 channels, 8x8 windows, 6 heads, an FFN ratio of 2, four
+/// propagation branches (backward, forward, backward, forward) of six inter-and-intra-frame attention
+/// blocks each, and a mask-sparsity weight of 5e-4 with a Gumbel-softmax temperature of 2/3.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> MIA-VSR makes video super-resolution faster by being selective
-/// about what it pays attention to. Instead of looking at every pixel in every frame
-/// (which is slow), it uses "masks" to focus only on the most important parts. It looks
-/// between frames (inter) to track moving objects and within frames (intra) to enhance
-/// spatial details.
+/// <b>For Beginners:</b> MIA-VSR upscales a video one frame at a time while looking back at the frames
+/// it has already enhanced. Each attention block learns a mask that says which positions changed since
+/// the previous frame; positions that did not change reuse last frame's result instead of being
+/// recomputed, which is where the method saves its compute.
 /// </para>
 /// </remarks>
 public class MIAVSROptions : NeuralNetworkOptions
@@ -40,18 +36,25 @@ public class MIAVSROptions : NeuralNetworkOptions
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public MIAVSROptions(MIAVSROptions other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
     {
-        if (other == null)
-            throw new ArgumentNullException(nameof(other));
-
         Variant = other.Variant;
         NumFeatures = other.NumFeatures;
-        NumResBlocks = other.NumResBlocks;
         ScaleFactor = other.ScaleFactor;
         WindowSize = other.WindowSize;
         NumHeads = other.NumHeads;
+        FeedForwardRatio = other.FeedForwardRatio;
+        NumPropagationBranches = other.NumPropagationBranches;
+        BlocksPerBranch = other.BlocksPerBranch;
+        MaskLossWeight = other.MaskLossWeight;
+        GumbelTemperature = other.GumbelTemperature;
+        FlowPyramidLevels = other.FlowPyramidLevels;
+        ReconstructionChannels = other.ReconstructionChannels;
+#pragma warning disable CS0618 // Retained only so existing configurations keep round-tripping.
+        NumResBlocks = other.NumResBlocks;
         InterMaskRatio = other.InterMaskRatio;
         IntraMaskRatio = other.IntraMaskRatio;
+#pragma warning restore CS0618
         ModelPath = other.ModelPath;
         OnnxOptions = other.OnnxOptions;
         LearningRate = other.LearningRate;
@@ -63,27 +66,60 @@ public class MIAVSROptions : NeuralNetworkOptions
     /// <summary>Gets or sets the model variant.</summary>
     public VideoModelVariant Variant { get; set; } = VideoModelVariant.Base;
 
-    /// <summary>Gets or sets the number of feature channels.</summary>
-    public int NumFeatures { get; set; } = 64;
+    /// <summary>Gets or sets the feature width C of every attention block.</summary>
+    /// <value>Default is 120, the paper's. Must be divisible by <see cref="NumHeads"/>.</value>
+    public int NumFeatures { get; set; } = 120;
 
-    /// <summary>Gets or sets the number of residual blocks in each propagation branch.</summary>
-    public int NumResBlocks { get; set; } = 30;
-
-    /// <summary>Gets or sets the spatial upscaling factor.</summary>
+    /// <summary>Gets or sets the spatial upscaling factor (a power of two).</summary>
+    /// <value>Default is 4, the factor every reported result uses.</value>
     public int ScaleFactor { get; set; } = 4;
 
-    /// <summary>Gets or sets the window size for masked intra-frame attention.</summary>
-    /// <remarks>Spatial attention is computed within non-overlapping windows of this size.</remarks>
+    /// <summary>Gets or sets the side of the square attention window.</summary>
+    /// <value>Default is 8 (8x8 windows), the paper's. Frames are zero-padded to a multiple of it.</value>
     public int WindowSize { get; set; } = 8;
 
-    /// <summary>Gets or sets the number of attention heads for inter/intra-frame attention.</summary>
-    public int NumHeads { get; set; } = 8;
+    /// <summary>Gets or sets the number of attention heads.</summary>
+    /// <value>Default is 6, the paper's (head width 120 / 6 = 20).</value>
+    public int NumHeads { get; set; } = 6;
 
-    /// <summary>Gets or sets the masking ratio for inter-frame attention (0.0-1.0).</summary>
-    /// <remarks>Higher values mask more locations, reducing computation but potentially missing details.</remarks>
+    /// <summary>Gets or sets the FFN hidden width as a multiple of <see cref="NumFeatures"/>.</summary>
+    /// <value>Default is 2: the paper's unmasked linear cost of 12·HWC² leaves 2r = 4 for the FFN.</value>
+    public int FeedForwardRatio { get; set; } = 2;
+
+    /// <summary>Gets or sets the number of feature propagation modules (branches).</summary>
+    /// <value>Default is 4, BasicVSR++'s second-order grid: backward, forward, backward, forward.</value>
+    public int NumPropagationBranches { get; set; } = 4;
+
+    /// <summary>Gets or sets the number of inter-and-intra-frame attention blocks per branch.</summary>
+    /// <value>Default is 6, the paper's skip-connection interval [6, 6, 6, 6].</value>
+    public int BlocksPerBranch { get; set; } = 6;
+
+    /// <summary>Gets or sets λ, the weight of the mask-sparsity loss added to the training objective.</summary>
+    /// <value>Default is 5e-4, the setting the paper highlights (Table 1).</value>
+    public double MaskLossWeight { get; set; } = 5e-4;
+
+    /// <summary>Gets or sets τ, the temperature of the training-time Gumbel-softmax mask.</summary>
+    /// <value>Default is 2/3, the paper's.</value>
+    public double GumbelTemperature { get; set; } = 2.0 / 3.0;
+
+    /// <summary>Gets or sets the number of pyramid levels of the SPyNet flow estimator used for patch alignment.</summary>
+    /// <value>Default is 5. Frames must be at least 2^(levels-1) pixels on each side.</value>
+    public int FlowPyramidLevels { get; set; } = 5;
+
+    /// <summary>Gets or sets the channel width of the pixel-shuffle reconstruction head.</summary>
+    /// <value>Default is 64, BasicVSR++'s upsampler width, which MIA-VSR's reconstruction follows.</value>
+    public int ReconstructionChannels { get; set; } = 64;
+
+    /// <summary>Not used: MIA-VSR has no residual convolution blocks.</summary>
+    [Obsolete("MIA-VSR is built from inter-and-intra-frame attention blocks; use BlocksPerBranch and NumPropagationBranches. This value is ignored.")]
+    public int NumResBlocks { get; set; } = 30;
+
+    /// <summary>Not used: MIA-VSR learns its masks; there is no fixed masking ratio.</summary>
+    [Obsolete("MIA-VSR's masks are predicted per position and trained with MaskLossWeight; this value is ignored.")]
     public double InterMaskRatio { get; set; } = 0.5;
 
-    /// <summary>Gets or sets the masking ratio for intra-frame attention (0.0-1.0).</summary>
+    /// <summary>Not used: MIA-VSR learns its masks; there is no fixed masking ratio.</summary>
+    [Obsolete("MIA-VSR's masks are predicted per position and trained with MaskLossWeight; this value is ignored.")]
     public double IntraMaskRatio { get; set; } = 0.25;
 
     #endregion
@@ -104,6 +140,7 @@ public class MIAVSROptions : NeuralNetworkOptions
     public double LearningRate { get; set; } = 2e-4;
 
     /// <summary>Gets or sets the dropout rate.</summary>
+    /// <remarks>MIA-VSR applies no dropout; the default 0 keeps it off.</remarks>
     public double DropoutRate { get; set; } = 0.0;
 
     #endregion

@@ -3,9 +3,11 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Video.Options;
 
@@ -17,16 +19,16 @@ namespace AiDotNet.Video.Enhancement;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// MIA-VSR (Zhou et al., CVPR 2024) uses masked attention for efficient temporal modeling:
-/// - Masked inter-frame attention: temporal attention across frames with sparse masking,
-///   attending only to the most relevant spatial locations in neighboring frames rather
-///   than all positions, reducing quadratic complexity
-/// - Masked intra-frame attention: spatial attention within each frame with local window
-///   masking that progressively decreases through layers (coarse to fine)
-/// - BasicVSR++ backbone: bidirectional recurrent propagation with masked attention
-///   replacing deformable alignment for improved quality and efficiency
-/// - Progressive masking schedule: early layers use aggressive masking for speed,
-///   later layers use less masking for quality
+/// MIA-VSR (Zhou et al., CVPR 2024) is a recurrent video super-resolution transformer:
+/// - Bidirectional second-order propagation (BasicVSR++'s grid): four branches, backward, forward,
+///   backward, forward, each refining every frame from the two frames it already enhanced
+/// - Inter-and-intra-frame attention: queries from the current frame attend, inside 8x8 windows,
+///   to keys and values from the current frame and the two previous enhanced frames, aligned by
+///   SPyNet patch alignment (PSRT)
+/// - Adaptive masked processing: each block predicts which positions changed since the previous
+///   frame and reuses last frame's result for the rest, trained with a Gumbel-softmax mask and a
+///   sparsity loss, and run sparsely at inference
+/// - Pixel-shuffle reconstruction plus a bilinear residual
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> MIA-VSR makes video super-resolution faster by being selective.
@@ -71,11 +73,23 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
 {
     #region Fields
 
+    // The reconstruction loss of the paper, sqrt(||I_hat - I||^2 + eps^2) with eps = 1e-3 (Sec. 3.3).
+    private const double CharbonnierEpsilon = 1e-3;
+
     private readonly MIAVSROptions _options;
     public override ModelOptions GetOptions() => _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
+
+    // The paper network; null in ONNX mode or when the caller supplied its own layers.
+    private MiaVsrNetwork<T>? _network;
+
+    // Gumbel noise for the training-time masks, seeded from the options when a seed is given.
+    private readonly Random _random;
+
+    // λ·L_mask from the latest training forward, consumed once by the objective.
+    private Tensor<T>? _pendingMaskLoss;
 
     #endregion
 
@@ -83,11 +97,12 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
 
     /// <summary>Creates a MIA-VSR model in ONNX inference mode.</summary>
     public MIAVSR(NeuralNetworkArchitecture<T> architecture, string modelPath, MIAVSROptions? options = null)
-        : base(architecture)
+        : base(architecture, new CharbonnierLoss<T>(CharbonnierEpsilon))
     {
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         _options = options ?? new MIAVSROptions();
+        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
         _useNativeMode = false;
         ScaleFactor = _options.ScaleFactor;
         _options.ModelPath = modelPath;
@@ -98,9 +113,10 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
     /// <summary>Creates a MIA-VSR model in native training mode.</summary>
     public MIAVSR(NeuralNetworkArchitecture<T> architecture, MIAVSROptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture)
+        : base(architecture, new CharbonnierLoss<T>(CharbonnierEpsilon))
     {
         _options = options ?? new MIAVSROptions();
+        _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
         _useNativeMode = true;
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that
@@ -123,7 +139,7 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
     {
         ThrowIfDisposed();
         var preprocessed = PreprocessFrames(lowResFrames);
-        var output = IsOnnxMode ? RunOnnxInference(preprocessed) : Forward(preprocessed);
+        var output = IsOnnxMode ? RunOnnxInference(preprocessed) : ForwardNative(preprocessed, training: false);
         return PostprocessOutput(output);
     }
 
@@ -137,25 +153,102 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
+            return;
         }
-        else
-        {
-            int ch = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
-            int h = Architecture.InputHeight > 0 ? Architecture.InputHeight : 64;
-            int w = Architecture.InputWidth > 0 ? Architecture.InputWidth : 64;
-            Layers.AddRange(LayerHelper<T>.CreateDefaultVideoSuperResolutionLayers(
-                inputChannels: ch, inputHeight: h, inputWidth: w,
-                numFeatures: _options.NumFeatures,
-                numResBlocks: _options.NumResBlocks,
-                scaleFactor: _options.ScaleFactor));
-        }
+
+        // The paper topology: shallow features, SPyNet patch alignment, four propagation branches of
+        // inter-and-intra-frame attention blocks, and the pixel-shuffle head. Layers publishes exactly
+        // the instances the forward runs, so training, serialization and clone walk the same weights.
+        int channels = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+        _network = new MiaVsrNetwork<T>(_options, channels);
+        Layers.AddRange(_network.Layers);
     }
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode) return RunOnnxInference(input);
-        return Forward(input);
+        return ForwardNative(input, training: false);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The training forward samples Gumbel keep-masks and records their mean, which
+    /// <see cref="ConsumeAuxiliaryTapeLoss"/> hands to the objective as λ·L_mask.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => ForwardNative(input, training: true);
+
+    /// <inheritdoc />
+    /// <remarks>The mask-sparsity term of the paper's objective, L = L_sr + λ·L_mask (Sec. 3.3).</remarks>
+    protected override Tensor<T>? ConsumeAuxiliaryTapeLoss()
+    {
+        var term = _pendingMaskLoss;
+        _pendingMaskLoss = null;
+        return term;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// MIA-VSR's graph is dynamic: it recurs over frames, samples fresh Gumbel noise every step and
+    /// keeps or drops positions by a data-dependent mask. A traced and replayed graph would freeze one
+    /// step's masks and noise, so training runs on the eager tape.
+    /// </remarks>
+    protected override bool SupportsFusedCompiledTraining => false;
+
+    private bool _lazyShapesProbed;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The base walk feeds the architecture's shape through Layers as one sequential chain, which this
+    /// network is not: frames are split, flow is estimated per pair, and tokens are windowed. Resolve
+    /// through the real forward on a two-frame clip at the smallest size the flow estimator accepts.
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (IsOnnxMode) return;
+        if (_network is null)
+        {
+            // A caller-supplied stack is an ordinary sequential chain, which the base walk resolves.
+            base.ResolveLazyLayerShapes();
+            return;
+        }
+
+        if (_lazyShapesProbed) return;
+        _lazyShapesProbed = true;
+
+        int channels = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
+        int side = Math.Max(_options.WindowSize, _network.MinimumFlowSize);
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            _ = ForwardNative(new Tensor<T>(new[] { 1, 2, channels, side, side }), training: false);
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
+    }
+
+    /// <summary>The paper network, for tests that inspect its inference modes; null in ONNX mode.</summary>
+    internal MiaVsrNetwork<T>? Network => _network;
+
+    private Tensor<T> ForwardNative(Tensor<T> input, bool training)
+    {
+        if (_network is null)
+        {
+            // A caller-supplied architecture is an ordinary layer chain.
+            var output = input;
+            foreach (var layer in Layers) output = layer.Forward(output);
+            return output;
+        }
+
+        _network.BindTo(Layers);
+        var result = _network.Forward(input, training, _random, out var maskLoss);
+        _pendingMaskLoss = training && maskLoss is not null && _options.MaskLossWeight > 0
+            ? Engine.TensorMultiplyScalar(maskLoss, NumOps.FromDouble(_options.MaskLossWeight))
+            : null;
+        return result;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
@@ -187,14 +280,15 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
         {
             Name = _useNativeMode ? "MIAVSR-Native" : "MIAVSR-ONNX",
             Description = $"MIA-VSR {_options.Variant} masked inter/intra-frame attention VSR (Zhou et al., CVPR 2024)",
-            Complexity = _options.NumResBlocks
+            Complexity = _options.NumPropagationBranches * _options.BlocksPerBranch
         };
         m.AdditionalInfo["Variant"] = _options.Variant.ToString();
         m.AdditionalInfo["NumFeatures"] = _options.NumFeatures.ToString();
-        m.AdditionalInfo["NumResBlocks"] = _options.NumResBlocks.ToString();
+        m.AdditionalInfo["NumPropagationBranches"] = _options.NumPropagationBranches.ToString();
+        m.AdditionalInfo["BlocksPerBranch"] = _options.BlocksPerBranch.ToString();
         m.AdditionalInfo["WindowSize"] = _options.WindowSize.ToString();
         m.AdditionalInfo["NumHeads"] = _options.NumHeads.ToString();
-        m.AdditionalInfo["InterMaskRatio"] = _options.InterMaskRatio.ToString();
+        m.AdditionalInfo["MaskLossWeight"] = _options.MaskLossWeight.ToString(System.Globalization.CultureInfo.InvariantCulture);
         m.AdditionalInfo["ScaleFactor"] = _options.ScaleFactor.ToString();
         return m;
     }
