@@ -55,10 +55,14 @@ public partial class CbhgLayer<T> : LayerBase<T>, IShapeContract
     private readonly BatchNormalizationLayer<T> _projection1Norm;
     private readonly Conv1DLayer<T> _projection2;
     private readonly BatchNormalizationLayer<T> _projection2Norm;
+    [SubLayerInput("_inputChannels")]
     private readonly DenseLayer<T>? _highwayInput;
     [SubLayerInput("_highwayWidth")]
     private readonly List<HighwayLayer<T>> _highways = new();
+    // GRU input sizes resolve lazily; declaring them lets a restored layer size its weights before any forward.
+    [SubLayerInput("1, 1, _highwayWidth")]
     private readonly GRULayer<T> _forwardGru;
+    [SubLayerInput("1, 1, _highwayWidth")]
     private readonly GRULayer<T> _backwardGru;
 
     /// <inheritdoc />

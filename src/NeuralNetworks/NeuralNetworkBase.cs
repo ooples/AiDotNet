@@ -5085,6 +5085,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     protected virtual IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(
         IReadOnlyList<Tensor<T>> parameters) => parameters;
 
+    /// <summary>
+    /// Parameter groups whose gradients a custom-objective training step clips to <c>MaxGradNorm</c> separately, or
+    /// null to clip the layer-owned parameters as one group.
+    /// </summary>
+    /// <remarks>Some papers clip parts of a model independently — Grad-TTS clips its encoder's and its decoder's
+    /// gradients to norm 1 each. Each group's norm is computed over that group alone and only its gradients are scaled.</remarks>
+    protected virtual IReadOnlyList<IReadOnlyList<Tensor<T>>>? GradientClippingGroups(IReadOnlyList<Tensor<T>> trainableParameters)
+        => null;
+
     private bool? _hasCustomTrainableParameterSelection;
 
     private bool HasCustomTrainableParameterSelection()
@@ -13220,7 +13229,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             double maxGradNorm = MaxGradNormValue;
             if (maxGradNorm > 0.0 && grads.Count > 0)
             {
-                ApplyGradientClipping(grads, maxGradNorm, CollectLayerOwnedTrainableTensorsForClipping(trainableParams));
+                var groups = GradientClippingGroups(trainableParams);
+                if (groups is null)
+                {
+                    ApplyGradientClipping(grads, maxGradNorm, CollectLayerOwnedTrainableTensorsForClipping(trainableParams));
+                }
+                else
+                {
+                    foreach (var group in groups)
+                        ApplyGradientClipping(grads, maxGradNorm, group);
+                }
                 PublishParameterGradients(grads);
             }
 

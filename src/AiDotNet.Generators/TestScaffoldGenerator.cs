@@ -5978,7 +5978,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "HiddenDim = 8, NumResBlocks = 2, NumDiffusionSteps = 2 }, " +
                     $"optimizer: {conservativeSmokeAdamWOptimizer})";
             }
-            else if ((model.ClassName is "DiTToTTS" or "DiffWave" or "ForwardTacotron" or "FreGrad" or "GradTTS" or "PortaSpeech")
+            else if ((model.ClassName is "DiTToTTS" or "DiffWave" or "ForwardTacotron" or "FreGrad" or "PortaSpeech")
                      && model.TypeParameterCount == 1)
             {
                 // These generated TTS regression fixtures use two deliberately tiny
@@ -6167,6 +6167,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.TextToSpeech.Classic.FastSpeech2Options { EncoderDim = 32, HiddenDim = 32, MelChannels = 16, " +
                     "NumEncoderLayers = 1, NumDecoderLayers = 1, NumHeads = 2, FftFilterSize = 64, " +
                     "VariancePredictorFilterSize = 32 })";
+            }
+            else if (model.ClassName == "GradTTS" && model.TypeParameterCount == 1)
+            {
+                // Grad-TTS's paper model is the 192-wide Glow-TTS encoder and a 64/128/256-channel U-Net over 172-frame
+                // segments; keep that topology narrow, with 12-frame segments and three reverse steps.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 8, outputSize: 16), " +
+                    "new AiDotNet.TextToSpeech.Classic.GradTTSOptions { EncoderDim = 32, HiddenDim = 32, NumHeads = 2, " +
+                    "NumEncoderLayers = 1, FilterChannels = 64, DurationPredictorFilterChannels = 32, DecoderDim = 8, " +
+                    "MelChannels = 16, SegmentFrames = 12, NumDiffusionSteps = 3 })";
             }
             else if (model.ClassName == "GlowTTS" && model.TypeParameterCount == 1)
             {
@@ -14797,7 +14809,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
                     // Bounded fixtures configure 16 mel bins; the generated target matches the model's own width.
                     bool sixteenBins = model.ClassName is "FastSpeech" or "AdaSpeech" or "AdaSpeech2" or "SpeedySpeech"
-                        or "Tacotron" or "TransformerTTS" or "GlowTTS";
+                        or "Tacotron" or "TransformerTTS" or "GlowTTS" or "GradTTS";
                     sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 8, {(sixteenBins ? 16 : 80)} }};");
                 }
                 sb.AppendLine();
@@ -20397,6 +20409,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "DeepVoice3" => true,
             "ForwardTacotron" => true,
             "GlowTTS" => true,
+            "GradTTS" => true,
             // Codec / flow-matching TTS (E2 TTS, etc.) use CreateDefaultCodecLMLayers.
             "E2TTS" => true,
             // Mega-TTS 2 consumes text/prosody tokens and predicts acoustic mel frames.
