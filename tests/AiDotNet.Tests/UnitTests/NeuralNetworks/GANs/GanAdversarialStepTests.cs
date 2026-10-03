@@ -305,6 +305,31 @@ public class GanAdversarialStepTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task ConditionalGAN_TrainStep_RestoresBothNetworksModesWhenItThrows()
+    {
+        await Task.Yield();
+        using var cgan = new ConditionalGAN<double>(
+            new NeuralNetworkArchitecture<double>(
+                InputType.OneDimensional, NeuralNetworkTaskType.Generative, NetworkComplexity.Simple,
+                inputSize: 32, outputSize: 64),
+            new NeuralNetworkArchitecture<double>(
+                InputType.OneDimensional, NeuralNetworkTaskType.BinaryClassification, NetworkComplexity.Simple,
+                inputSize: 64, outputSize: 1),
+            numConditionClasses: 10,
+            InputType.OneDimensional);
+        var generator = (NeuralNetworkBase<double>)cgan.Generator;
+        var discriminator = (NeuralNetworkBase<double>)cgan.Discriminator;
+        generator.SetTrainingMode(false);
+        discriminator.SetTrainingMode(false);
+
+        // The batch sizes agree, so the guard passes; the 7-wide conditions fail inside the step.
+        Assert.ThrowsAny<Exception>(() => cgan.TrainStep(Random(4, 64, 91), OneHot(4, 7, 2), Random(4, 22, 92)));
+
+        Assert.False(generator.IsTrainingMode, "the generator was left in training mode by a step that threw");
+        Assert.False(discriminator.IsTrainingMode, "the discriminator was left in training mode by a step that threw");
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task CycleGAN_TrainStep_TrainsBothGeneratorsAndBothDiscriminators()
     {
         await Task.Yield();

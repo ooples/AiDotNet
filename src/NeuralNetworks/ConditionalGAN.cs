@@ -353,40 +353,49 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
             throw new ArgumentException(
                 $"Batch sizes must match: realImages={realImages.Shape[0]}, conditions={conditions.Shape[0]}, noise={noise.Shape[0]}.");
 
+        // Restore both networks' modes even if a step throws: a failed step used to leave the
+        // discriminator in training mode for every later scoring call.
+        bool generatorWasTraining = Generator.IsTrainingMode;
+        bool discriminatorWasTraining = Discriminator.IsTrainingMode;
         Generator.SetTrainingMode(true);
         Discriminator.SetTrainingMode(true);
-
-        int batchSize = realImages.Shape[0];
-
-        // ----- Train Discriminator -----
-        // Mirza and Osindero 2014, eq. 2: D ascends log D(x|y) + log(1 - D(G(z|y)|y)), in one step on
-        // one tape. It used to take two separate Discriminator.Train calls, real then fake, each
-        // regressing onto 0/1 labels with the discriminator network's own configured loss and optimizer.
-        Tensor<T> generatorInput = ConcatenateTensors(noise, conditions);
-        Tensor<T> fakeImages = PredictBatched(Generator, generatorInput);
-
-        T discriminatorLoss;
-        using (var discriminatorTape = new GradientTape<T>())
+        try
         {
-            var realScores = Discriminator.ForwardForTraining(ConcatenateImageAndCondition(realImages, conditions));
-            var fakeScores = Discriminator.ForwardForTraining(ConcatenateImageAndCondition(fakeImages, conditions));
-            var discriminatorObjective = Engine.TensorAdd(
-                Discriminator.BinaryCrossEntropyOnTape(realScores, targetIsReal: true),
-                Discriminator.BinaryCrossEntropyOnTape(fakeScores, targetIsReal: false));
-            discriminatorLoss = StepOnTape(discriminatorTape, discriminatorObjective, Discriminator, DiscriminatorOptimizer);
+            // ----- Train Discriminator -----
+            // Mirza and Osindero 2014, eq. 2: D ascends log D(x|y) + log(1 - D(G(z|y)|y)), in one step on
+            // one tape. It used to take two separate Discriminator.Train calls, real then fake, each
+            // regressing onto 0/1 labels with the discriminator network's own configured loss and optimizer.
+            Tensor<T> generatorInput = ConcatenateTensors(noise, conditions);
+            Tensor<T> fakeImages = PredictBatched(Generator, generatorInput);
+
+            T discriminatorLoss;
+            using (var discriminatorTape = new GradientTape<T>())
+            {
+                var realScores = Discriminator.ForwardForTraining(ConcatenateImageAndCondition(realImages, conditions));
+                var fakeScores = Discriminator.ForwardForTraining(ConcatenateImageAndCondition(fakeImages, conditions));
+                var discriminatorObjective = Engine.TensorAdd(
+                    Discriminator.BinaryCrossEntropyOnTape(realScores, targetIsReal: true),
+                    Discriminator.BinaryCrossEntropyOnTape(fakeScores, targetIsReal: false));
+                discriminatorLoss = StepOnTape(discriminatorTape, discriminatorObjective, Discriminator, DiscriminatorOptimizer);
+            }
+
+            // ----- Train Generator -----
+            T generatorLoss = TrainGeneratorOnBatch(generatorInput);
+
+            // Track losses
+            _generatorLosses.Add(generatorLoss);
+            if (_generatorLosses.Count > 100)
+            {
+                _generatorLosses.RemoveAt(0);
+            }
+
+            return (discriminatorLoss, generatorLoss);
         }
-
-        // ----- Train Generator -----
-        T generatorLoss = TrainGeneratorOnBatch(generatorInput);
-
-        // Track losses
-        _generatorLosses.Add(generatorLoss);
-        if (_generatorLosses.Count > 100)
+        finally
         {
-            _generatorLosses.RemoveAt(0);
+            Generator.SetTrainingMode(generatorWasTraining);
+            Discriminator.SetTrainingMode(discriminatorWasTraining);
         }
-
-        return (discriminatorLoss, generatorLoss);
     }
 
     /// <summary>
