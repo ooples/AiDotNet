@@ -715,7 +715,7 @@ jobs:
   # until GitHub has finalized the corresponding build as `failure`; they then stop the remaining
   # expensive matrix while preserving the useful red build check in the PR UI.
   cancel-after-build-failure:
-    name: Cancel remaining work after Build failure
+    name: "Build failed: the rest of this run is cancelled, not failing"
     runs-on: ubuntu-latest
     timeout-minutes: 2
     needs: build
@@ -723,13 +723,28 @@ jobs:
     permissions:
       actions: write
     steps:
+      # A cancelled job renders like a failed one in the PR checks list, so without this a reader
+      # sees dozens of red checks and no cause (#2131). Say which job failed, at the top of the run.
+      - name: Explain the cancellation
+        env:
+          FAILED_JOB: Build
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          echo "::error title=$FAILED_JOB failed; remaining jobs cancelled::The '$FAILED_JOB' job failed, so every job still queued or running in this run was cancelled on purpose. Those cancelled checks are not independent failures; fix '$FAILED_JOB' first."
+          {
+            echo "## \`$FAILED_JOB\` failed: the rest of this run was cancelled"
+            echo
+            echo "Every check in this run that shows as **cancelled** was stopped on purpose after \`$FAILED_JOB\` failed."
+            echo "Cancelled checks are not independent failures. Start by fixing \`$FAILED_JOB\`, then review any other job that completed with failure: [this run]($RUN_URL)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Cancel remaining jobs
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh run cancel ${{ github.run_id }} --repo ${{ github.repository }}
 
   cancel-after-compat-build-failure:
-    name: Cancel remaining work after compatibility-build failure
+    name: "Build (compat frameworks + pack) failed: the rest of this run is cancelled, not failing"
     runs-on: ubuntu-latest
     timeout-minutes: 2
     needs: build-compat
@@ -737,6 +752,21 @@ jobs:
     permissions:
       actions: write
     steps:
+      # A cancelled job renders like a failed one in the PR checks list, so without this a reader
+      # sees dozens of red checks and no cause (#2131). Say which job failed, at the top of the run.
+      - name: Explain the cancellation
+        env:
+          FAILED_JOB: Build (compat frameworks + pack)
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          echo "::error title=$FAILED_JOB failed; remaining jobs cancelled::The '$FAILED_JOB' job failed, so every job still queued or running in this run was cancelled on purpose. Those cancelled checks are not independent failures; fix '$FAILED_JOB' first."
+          {
+            echo "## \`$FAILED_JOB\` failed: the rest of this run was cancelled"
+            echo
+            echo "Every check in this run that shows as **cancelled** was stopped on purpose after \`$FAILED_JOB\` failed."
+            echo "Cancelled checks are not independent failures. Start by fixing \`$FAILED_JOB\`, then review any other job that completed with failure: [this run]($RUN_URL)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Cancel remaining jobs
         env:
           GH_TOKEN: ${{ github.token }}
