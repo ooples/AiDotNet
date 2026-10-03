@@ -48,7 +48,7 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2019,
     Authors = "Li et al."
 )]
-public partial class TransformerTTS<T> : TtsModelBase<T>, IAcousticModel<T>
+public partial class TransformerTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingObjectiveProvider<T>
 {
     private readonly TransformerTTSOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
@@ -294,6 +294,30 @@ public partial class TransformerTTS<T> : TtsModelBase<T>, IAcousticModel<T>
         {
             using var _ = new NoGradScope<T>();
             return Objective(sample.Tokens, mel)[0];
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
+    }
+
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
+
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
+
+    /// <remarks>Synthesis stops at the predicted stop token, so a prediction need not match a target frame for frame; the
+    /// teacher-forced objective is what training lowers.</remarks>
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        ThrowIfDisposed();
+        var mel = target.Rank == 3 ? Engine.Reshape(target, new[] { target.Shape[1], target.Shape[2] }) : target;
+        var tokens = input.Rank == 2 && input.Shape[0] == 1 ? Engine.Reshape(input, new[] { input.Shape[1] }) : input;
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            using var _ = new NoGradScope<T>();
+            return Objective(tokens, mel)[0];
         }
         finally
         {

@@ -5978,7 +5978,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "HiddenDim = 8, NumResBlocks = 2, NumDiffusionSteps = 2 }, " +
                     $"optimizer: {conservativeSmokeAdamWOptimizer})";
             }
-            else if ((model.ClassName is "DiTToTTS" or "DiffWave" or "ForwardTacotron" or "FreGrad" or "GradTTS" or "GlowTTS" or "PortaSpeech")
+            else if ((model.ClassName is "DiTToTTS" or "DiffWave" or "ForwardTacotron" or "FreGrad" or "GradTTS" or "PortaSpeech")
                      && model.TypeParameterCount == 1)
             {
                 // These generated TTS regression fixtures use two deliberately tiny
@@ -6167,6 +6167,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.TextToSpeech.Classic.FastSpeech2Options { EncoderDim = 32, HiddenDim = 32, MelChannels = 16, " +
                     "NumEncoderLayers = 1, NumDecoderLayers = 1, NumHeads = 2, FftFilterSize = 64, " +
                     "VariancePredictorFilterSize = 32 })";
+            }
+            else if (model.ClassName == "GlowTTS" && model.TypeParameterCount == 1)
+            {
+                // Glow-TTS's paper model is a 192-wide, 6-layer relative-position encoder and 12 flow blocks of 4-layer
+                // coupling networks; keep that topology (pre-net, encoder, MAS, ActNorm, grouped 1x1 conv, coupling)
+                // with one encoder layer and two flow blocks.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 8, outputSize: 16), " +
+                    "new AiDotNet.TextToSpeech.Classic.GlowTTSOptions { EncoderDim = 32, HiddenDim = 32, NumHeads = 2, " +
+                    "NumEncoderLayers = 1, FilterChannels = 64, DurationPredictorFilterChannels = 32, NumFlowBlocks = 2, " +
+                    "DecoderHiddenChannels = 32, CouplingLayers = 2, MelChannels = 16 })";
             }
             else if (model.ClassName == "TransformerTTS" && model.TypeParameterCount == 1)
             {
@@ -14782,7 +14795,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 else
                 {
                     sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
-                    sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 8, {(model.ClassName == "FastSpeech" ? 16 : 80)} }};");
+                    // Bounded fixtures configure 16 mel bins; the generated target matches the model's own width.
+                    bool sixteenBins = model.ClassName is "FastSpeech" or "AdaSpeech" or "AdaSpeech2" or "SpeedySpeech"
+                        or "Tacotron" or "TransformerTTS" or "GlowTTS";
+                    sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 8, {(sixteenBins ? 16 : 80)} }};");
                 }
                 sb.AppendLine();
                 sb.AppendLine("    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<double> CreateRandomTargetTensor(int[] shape, System.Random rng)");
@@ -14836,7 +14852,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine($"    protected override int TrainingIterations => {ttsSmokeIterations};");
                     sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
                     sb.AppendLine($"    protected override int MoreDataLongIterations => {ttsSmokeIterations};");
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "E2TTS" ? 15 : naturalSpeechWarmup ? 12 : 2)};");
+                    // AdaSpeech trains at the paper's constant 1e-4 (no schedule is stated), which lowers the deterministic
+                    // objective about 0.7 % per step on the fixture (61.59 -> 61.15): two steps cannot reach the 1 %
+                    // threshold, four do. The threshold is unchanged.
+                    int memorizationSteps = model.ClassName == "E2TTS" ? 15 : naturalSpeechWarmup ? 12
+                        : model.ClassName is "AdaSpeech" or "AdaSpeech2" ? 4 : 2;
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {memorizationSteps};");
                     if (naturalSpeechWarmup)
                     {
                         // NaturalSpeech's TRAINING forward is stochastic (DropoutRate = 0.1), so
@@ -20370,6 +20391,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "AdaSpeech" => true,
             "AdaSpeech2" => true,
             "AlignTTS" => true,
+            "SpeedySpeech" => true,
+            "Tacotron" => true,
+            "TransformerTTS" => true,
             "DeepVoice3" => true,
             "ForwardTacotron" => true,
             "GlowTTS" => true,
