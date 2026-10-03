@@ -248,14 +248,10 @@ public partial class ECAPATDNNSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVe
             return;
         }
 
-        // The pooled statistics are twice the MFA width, so PoolingDim and the last Channels entry
-        // describe one value; disagreeing values would describe two different models.
-        int mfaWidth = _options.Channels[_options.Channels.Length - 1];
-        if (_options.PoolingDim != mfaWidth)
-        {
-            throw new ArgumentException(
-                $"PoolingDim ({_options.PoolingDim}) must equal the MFA width, the last Channels entry ({mfaWidth}).");
-        }
+        // Channels holds one width per stage, the MFA convolution last; the backbone validates the
+        // rest of the stage lists against it.
+        if (_options.Channels is null || _options.Channels.Length == 0)
+            throw new ArgumentException("ECAPATDNNSpeakerOptions.Channels must list at least one stage width.");
 
         // Real 1-D convolutions over time with the paper's SE-Res2Blocks, MFA and attentive
         // statistics pooling. Its layers are published through Layers, so training, serialization and
@@ -286,7 +282,15 @@ public partial class ECAPATDNNSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVe
     /// </remarks>
     protected override void ResolveLazyLayerShapes()
     {
-        if (_lazyShapesProbed || !_useNativeMode || _backbone is null) return;
+        if (!_useNativeMode) return;
+        if (_backbone is null)
+        {
+            // A caller-supplied stack is an ordinary sequential chain, which the base walk resolves.
+            base.ResolveLazyLayerShapes();
+            return;
+        }
+
+        if (_lazyShapesProbed) return;
         _lazyShapesProbed = true;
 
         bool wasTraining = IsTrainingMode;

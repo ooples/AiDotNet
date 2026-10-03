@@ -527,13 +527,23 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
     /// </remarks>
     protected override void ResolveLazyLayerShapes()
     {
-        if (_lazyShapesProbed || IsOnnxMode || _featureEncoder.Count == 0) return;
+        if (IsOnnxMode) return;
+        if (_featureEncoder.Count == 0)
+        {
+            // A caller-supplied stack is an ordinary sequential chain, which the base walk resolves.
+            base.ResolveLazyLayerShapes();
+            return;
+        }
+
+        if (_lazyShapesProbed) return;
         _lazyShapesProbed = true;
 
         int samples = 1;
-        for (int i = _options.FeatureEncoderKernels.Length - 1; i >= 0; i--)
+        int[] kernels = LayerHelper<T>.Wav2Vec2EncoderKernels(_options.FeatureEncoderKernels);
+        int[] strides = LayerHelper<T>.Wav2Vec2EncoderStrides(_options.FeatureEncoderStrides);
+        for (int i = kernels.Length - 1; i >= 0; i--)
         {
-            samples = (samples - 1) * _options.FeatureEncoderStrides[i] + _options.FeatureEncoderKernels[i];
+            samples = (samples - 1) * strides[i] + kernels[i];
         }
 
         bool wasTraining = IsTrainingMode;
@@ -707,7 +717,8 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
         if (_classifierLayer is not null) yield return _classifierLayer;
     }
 
-    private static TLayer RequireLayer<TLayer>(TLayer? layer) where TLayer : class        => layer ?? throw new InvalidOperationException("The Wav2Vec2 network has not been initialized.");
+    private static TLayer RequireLayer<TLayer>(TLayer? layer) where TLayer : class
+        => layer ?? throw new InvalidOperationException("The Wav2Vec2 network has not been initialized.");
 
     /// <summary>One post-LN Wav2Vec2 transformer block.</summary>
     private sealed class EncoderBlock

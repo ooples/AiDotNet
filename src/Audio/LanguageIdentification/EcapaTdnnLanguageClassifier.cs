@@ -69,6 +69,16 @@ internal sealed class EcapaTdnnLanguageClassifier<T>
         _layers = new List<ILayer<T>>(_backbone.Layers) { _embeddingNorm, _classifier };
     }
 
+    /// <summary>
+    /// Frames, beyond the first analysis window, in the clip that resolves the network's lazy shapes:
+    /// enough for every convolution's kernel and the attentive pooling to see more than one frame.
+    /// </summary>
+    internal const int ProbeExtraFrames = 8;
+
+    /// <summary>The shortest raw clip whose MFCC features exercise the whole network.</summary>
+    internal static Tensor<T> CreateProbeClip(LanguageIdentifierOptions options)
+        => new Tensor<T>(new[] { options.FftSize + ProbeExtraFrames * options.HopLength });
+
     /// <summary>Every layer of the network, in a fixed order, for the owning model to publish.</summary>
     public IReadOnlyList<ILayer<T>> Layers => _layers;
 

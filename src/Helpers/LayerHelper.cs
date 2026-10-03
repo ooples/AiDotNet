@@ -5821,7 +5821,7 @@ public static partial class LayerHelper<T>
         // embedding, then the language head. The layer list is exactly what the models publish; the
         // residual, Res2Net, squeeze-excitation and pooling wiring lives in EcapaTdnnBackbone.
         // numMels is the feature width, which the first convolution reads from its input.
-        _ = numMels;
+        if (numMels <= 0) throw new ArgumentOutOfRangeException(nameof(numMels));
         var classifier = new AiDotNet.Audio.LanguageIdentification.EcapaTdnnLanguageClassifier<T>(
             tdnnChannels,
             kernelSizes ?? [5, 3, 3, 3, 1],
@@ -5831,7 +5831,12 @@ public static partial class LayerHelper<T>
             attentionChannels,
             embeddingDimension,
             numLanguages);
-        return classifier.Layers;
+
+        // TDNN block, SE-Res2Blocks, MFA, attentive statistics pooling, embedding, then the language head.
+        foreach (var layer in classifier.Layers)
+        {
+            yield return layer;
+        }
     }
 
     /// <summary>
@@ -5839,6 +5844,33 @@ public static partial class LayerHelper<T>
     /// paper). Wav2Vec2LanguageIdentifier partitions the factory's output by it.
     /// </summary>
     public const int Wav2Vec2FeatureEncoderStages = 7;
+
+    /// <summary>
+    /// The feature-encoder kernels to build, validated: the paper's 10, 3, 3, 3, 3, 2, 2 when none are
+    /// given. The model's shape probe and the factory both resolve through this, so they cannot differ.
+    /// </summary>
+    public static int[] Wav2Vec2EncoderKernels(int[]? kernels)
+        => ValidateWav2Vec2Stages(kernels ?? [10, 3, 3, 3, 3, 2, 2], nameof(kernels));
+
+    /// <summary>
+    /// The feature-encoder strides to build, validated: the paper's 5, 2, 2, 2, 2, 2, 2 when none are given.
+    /// </summary>
+    public static int[] Wav2Vec2EncoderStrides(int[]? strides)
+        => ValidateWav2Vec2Stages(strides ?? [5, 2, 2, 2, 2, 2, 2], nameof(strides));
+
+    private static int[] ValidateWav2Vec2Stages(int[] values, string name)
+    {
+        if (values.Length != Wav2Vec2FeatureEncoderStages)
+            throw new ArgumentException(
+                $"The feature encoder has {Wav2Vec2FeatureEncoderStages} stages; got {values.Length} {name}.", name);
+        for (int i = 0; i < values.Length; i++)
+        {
+            if (values[i] <= 0)
+                throw new ArgumentOutOfRangeException(name, $"Feature-encoder stage {i} needs a positive value; got {values[i]}.");
+        }
+
+        return values;
+    }
 
     /// <summary>
     /// Creates default Wav2Vec2 layers for spoken language identification.
@@ -5897,11 +5929,9 @@ public static partial class LayerHelper<T>
         int positionalConvKernel = 128,
         int positionalConvGroups = 16)
     {
-        int[] kernels = featureEncoderKernels ?? [10, 3, 3, 3, 3, 2, 2];
-        int[] strides = featureEncoderStrides ?? [5, 2, 2, 2, 2, 2, 2];
-        if (kernels.Length != Wav2Vec2FeatureEncoderStages || strides.Length != Wav2Vec2FeatureEncoderStages)
-            throw new ArgumentException(
-                $"The feature encoder has {Wav2Vec2FeatureEncoderStages} stages; got {kernels.Length} kernels and {strides.Length} strides.");
+        int[] kernels = Wav2Vec2EncoderKernels(featureEncoderKernels);
+        int[] strides = Wav2Vec2EncoderStrides(featureEncoderStrides);
+        if (positionalConvKernel <= 0) throw new ArgumentOutOfRangeException(nameof(positionalConvKernel));
         if (numAttentionHeads <= 0 || hiddenSize % numAttentionHeads != 0)
             throw new ArgumentException(
                 $"hiddenSize ({hiddenSize}) must be divisible by numAttentionHeads ({numAttentionHeads}).",
@@ -20441,13 +20471,17 @@ public static partial class LayerHelper<T>
         int numBlocks = 3,
         int poolingDim = 1536,
         int seBottleneckDim = 128,
-        double dropoutRate = 0.0)
+        double dropoutRate = 0.0,
+        int res2NetScale = 8,
+        int attentionChannels = 128)
     {
         // Real 1-D convolutions over time, through the encoder ECAPATDNNSpeaker runs. The paper's
         // stage lists: the frame-level TDNN block (kernel 5), numBlocks SE-Res2Blocks at kernel 3 and
         // dilations 2, 3, 4, ..., and the 1x1 MFA convolution at poolingDim channels.
-        _ = numMels;
-        _ = dropoutRate;
+        if (numMels <= 0) throw new ArgumentOutOfRangeException(nameof(numMels));
+        if (dropoutRate != 0.0)
+            throw new ArgumentException(
+                "ECAPA-TDNN applies no dropout (Desplanques et al. 2020); dropoutRate must be 0.", nameof(dropoutRate));
         if (numBlocks <= 0) throw new ArgumentOutOfRangeException(nameof(numBlocks));
         var stageChannels = new int[numBlocks + 2];
         var kernelSizes = new int[numBlocks + 2];
@@ -20462,9 +20496,14 @@ public static partial class LayerHelper<T>
         kernelSizes[numBlocks + 1] = 1;
         dilations[numBlocks + 1] = 1;
 
-        return new AiDotNet.Audio.EcapaTdnnBackbone<T>(
-            stageChannels, kernelSizes, dilations, res2NetScale: 8, seBottleneckDim, attentionChannels: 128,
-            embeddingDim).Layers;
+        var backbone = new AiDotNet.Audio.EcapaTdnnBackbone<T>(
+            stageChannels, kernelSizes, dilations, res2NetScale, seBottleneckDim, attentionChannels, embeddingDim);
+
+        // TDNN block, SE-Res2Blocks, MFA, attentive statistics pooling and the embedding, in that order.
+        foreach (var layer in backbone.Layers)
+        {
+            yield return layer;
+        }
     }
 
     /// <summary>

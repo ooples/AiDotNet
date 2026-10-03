@@ -106,9 +106,26 @@ public class ECAPATDNNSpeakerOptions : ModelOptions
     public int EmbeddingDim { get; set; } = 192;
 
     /// <summary>
-    /// Gets or sets the pooling dimension before the final embedding projection.
+    /// The width the attentive statistics pooling reads: the MFA convolution's, the last entry of
+    /// <see cref="Channels"/> (1536 in the paper).
     /// </summary>
-    public int PoolingDim { get; set; } = 1536;
+    /// <remarks>
+    /// An alias for that entry, not a separate setting: the two are the same quantity, so storing both
+    /// would only let them disagree. Setting it replaces the last <see cref="Channels"/> entry.
+    /// </remarks>
+    public int PoolingDim
+    {
+        get => Channels is { Length: > 0 } ? Channels[Channels.Length - 1] : 0;
+        set
+        {
+            if (value <= 0) throw new ArgumentOutOfRangeException(nameof(value), "PoolingDim must be positive.");
+            if (Channels is not { Length: > 0 })
+                throw new InvalidOperationException("Set Channels before PoolingDim; PoolingDim is its last entry.");
+            var widths = (int[])Channels.Clone();
+            widths[widths.Length - 1] = value;
+            Channels = widths;
+        }
+    }
 
     #endregion
 

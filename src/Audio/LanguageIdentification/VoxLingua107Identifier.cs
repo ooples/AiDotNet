@@ -504,14 +504,22 @@ public partial class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILan
     /// </remarks>
     protected override void ResolveLazyLayerShapes()
     {
-        if (_lazyShapesProbed || IsOnnxMode || _network is null) return;
+        if (IsOnnxMode) return;
+        if (_network is null)
+        {
+            // A caller-supplied stack is an ordinary sequential chain, which the base walk resolves.
+            base.ResolveLazyLayerShapes();
+            return;
+        }
+
+        if (_lazyShapesProbed) return;
         _lazyShapesProbed = true;
 
         bool wasTraining = IsTrainingMode;
         if (wasTraining) SetTrainingMode(false);
         try
         {
-            _ = ForwardNative(PreprocessAudio(new Tensor<T>(new[] { _options.FftSize + 8 * _options.HopLength })));
+            _ = ForwardNative(PreprocessAudio(EcapaTdnnLanguageClassifier<T>.CreateProbeClip(_options)));
         }
         finally
         {
