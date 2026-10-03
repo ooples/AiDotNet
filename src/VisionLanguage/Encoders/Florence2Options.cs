@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 namespace AiDotNet.VisionLanguage.Encoders;
 
 /// <summary>
@@ -24,6 +25,10 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// </list>
 /// </para>
 /// </remarks>
+// The BART encoder-decoder splits TextDim across NumHeads; DaViT splits each stage's width across its heads,
+// and both double per stage, so the base pair decides every stage.
+[DimensionDivisibility(nameof(TextDim), nameof(NumHeads))]
+[DimensionDivisibility(nameof(VisionBaseDim), nameof(VisionBaseHeads))]
 public class Florence2Options : VisionEncoderOptions
 {
     /// <summary>Creates Florence-2-base options.</summary>

@@ -52,21 +52,54 @@ public class RBFLayerInitializationTests
     }
 
     [Fact]
-    public void No_unit_starts_saturated_over_many_initializations()
+    public void Every_placed_unit_answers_its_own_row_and_a_width_scaled_offset()
     {
-        // Every unit must answer some input in the span of the centres with a value float can represent, so two
-        // different inputs give different outputs. The old Uniform(0, 1) widths fail this within a few dozen draws.
+        // Gaussian saturation depends on epsilon·d², so this checks activations, not epsilon. After placement on a batch
+        // with one row per centre, unit i sits on row i: it must answer that row with exp(0) = 1 and an input one width
+        // away along one axis with exp(-epsilon·w²) = exp(-1/2), and the two must differ. A saturated unit answers both
+        // with 0. Repeated over many random batches, since a saturating width used to depend on the draw.
+        const int dims = 8, centers = 6;
         for (int trial = 0; trial < 200; trial++)
         {
-            var layer = new RBFLayer<double>(8, 6);
-            foreach (var w in Widths(layer))
+            var layer = new RBFLayer<double>(dims, centers);
+            var batch = Batch(centers, dims, 1000 + trial);
+            var atCentres = layer.Forward(batch);
+            var widths = Widths(layer);
+            for (int unit = 0; unit < centers; unit++)
             {
-                double epsilon = 1.0 / (2.0 * w * w);
-                Assert.True(epsilon < 88.0, $"trial {trial}: width {w} gives epsilon {epsilon}, which underflows exp in float");
+                var shifted = new Tensor<double>(new[] { 1, dims });
+                for (int d = 0; d < dims; d++) shifted[d] = batch[unit * dims + d];
+                shifted[0] += widths[unit];
+                double onCentre = atCentres[unit * centers + unit];
+                double offCentre = layer.Forward(shifted)[unit];
+                Assert.Equal(1.0, onCentre, 9);
+                Assert.Equal(Math.Exp(-0.5), offCentre, 9);
+                Assert.NotEqual(onCentre, offCentre);
             }
         }
     }
 
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void A_non_finite_first_batch_is_refused_and_placement_waits_for_a_finite_one(double bad)
+    {
+        const int dims = 4, centers = 3;
+        var layer = new RBFLayer<double>(dims, centers);
+        var before = layer.GetParameters().ToArray();
+        var poisoned = Batch(6, dims, 11);
+        poisoned[5] = bad;
+
+        Assert.Throws<ArgumentException>(() => layer.Forward(poisoned));
+        Assert.Equal(before, layer.GetParameters().ToArray());
+
+        var finite = Batch(6, dims, 12);
+        layer.Forward(finite);
+        var c = Centers(layer, dims);
+        for (int i = 0; i < centers; i++)
+        for (int d = 0; d < dims; d++)
+            Assert.Equal(finite[(i * 6 / centers) * dims + d], c[i * dims + d], 15);
+    }
     [Fact]
     public void The_uniform_option_keeps_the_original_draw()
     {

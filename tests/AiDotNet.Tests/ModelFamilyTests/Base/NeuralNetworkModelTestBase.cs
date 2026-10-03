@@ -3770,12 +3770,15 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     private double MemorizationProbeLoss(
         INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> target)
     {
-        // A denoising-diffusion learner draws a fresh (timestep, noise) per step by design - DDPM
-        // training is a Monte Carlo estimate of an expectation over noise levels - so GetLastLoss() is
-        // one draw of a random objective, and comparing step 1 with step N compares two draws. CCDM
-        // failed this probe in a full shard (1.2016 -> 1.1975 over 200 steps) and passed it rerun
-        // alone. Such models already declare a deterministic quadrature of the same objective; judge
-        // the probe on that, without running the reverse sampler Predict would add for nothing.
+        // A denoising-diffusion learner is judged on its declared objective - a deterministic
+        // quadrature over (timestep, noise) - and nothing else. GetLastLoss() is one random draw of that
+        // objective, and the recalibrated-Predict path below is worse for these models: recalibrating
+        // BatchNorm through Predict runs the reverse sampler, so the statistics come from sampler rows at
+        // the last reverse step and the quadrature over EVERY step is then scored under them. CCDM (whose
+        // score network batch-normalizes) failed this probe that way in a full shard (1.2016 -> 1.1975
+        // over 200 steps) after recalibration was introduced, and passed it rerun alone. Measuring the
+        // objective directly in evaluation mode is what the probe did before recalibration existed, minus
+        // a reverse-sampler run whose output the objective never reads.
         if (network is ITrainingObjectiveProvider<T> { TrainingObjectiveKind: TrainingObjectiveKind.DiffusionDenoising } diffusion)
             return MeasureDeclaredTrainingObjective(network, diffusion, input, target);
         if (!MemorizationTaskUsesDeterministicEvalLoss)

@@ -64,11 +64,30 @@ public class ModelStateGenerator : IIncrementalGenerator
     {
         var candidates = context.SyntaxProvider.CreateSyntaxProvider(
                 predicate: static (node, _) => node is ClassDeclarationSyntax { BaseList: not null },
-                transform: static (ctx, _) =>
-                    ctx.SemanticModel.GetDeclaredSymbol((ClassDeclarationSyntax)ctx.Node) as INamedTypeSymbol)
+                transform: static (ctx, ct) => OwningDeclaration(ctx, ct))
             .Where(static symbol => symbol is not null);
 
         context.RegisterSourceOutput(candidates, static (spc, symbol) => Emit(spc, symbol));
+    }
+
+    /// <summary>
+    /// The declared type, from exactly one of its partial declarations: the first that carries a
+    /// base list. A type whose partial declarations each name a base or an interface (CSDI's
+    /// objective lives in its own file) was otherwise emitted once per declaration, and the second
+    /// AddSource of the same hint name failed the whole generator.
+    /// </summary>
+    private static INamedTypeSymbol? OwningDeclaration(GeneratorSyntaxContext ctx, System.Threading.CancellationToken ct)
+    {
+        if (ctx.SemanticModel.GetDeclaredSymbol((ClassDeclarationSyntax)ctx.Node, ct) is not INamedTypeSymbol symbol)
+            return null;
+
+        foreach (var reference in symbol.DeclaringSyntaxReferences)
+        {
+            if (reference.GetSyntax(ct) is ClassDeclarationSyntax { BaseList: not null } owner)
+                return owner == ctx.Node ? symbol : null;
+        }
+
+        return null;
     }
 
     private static void Emit(SourceProductionContext spc, INamedTypeSymbol? type)
