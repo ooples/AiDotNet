@@ -18,7 +18,7 @@ public class MIAVSRMaskedAttentionTests
 {
     private const int Frames = 3, Channels = 3, Side = 8;
 
-    private static MIAVSR<double> CreateModel(double maskLossWeight = 5e-4) => new(
+    private static MIAVSR<double> CreateModel(double maskLossWeight = 5e-4, SpyNetLayer<double>? flow = null) => new(
         new NeuralNetworkArchitecture<double>(
             inputType: InputType.FourDimensional,
             taskType: NeuralNetworkTaskType.Regression,
@@ -28,8 +28,8 @@ public class MIAVSRMaskedAttentionTests
         {
             NumFeatures = 8, NumHeads = 2, WindowSize = 4, FeedForwardRatio = 2,
             NumPropagationBranches = 4, BlocksPerBranch = 1, ScaleFactor = 2,
-            FlowPyramidLevels = 3, ReconstructionChannels = 8, MaskLossWeight = maskLossWeight, Seed = 1234
-        });
+            ReconstructionChannels = 8, MaskLossWeight = maskLossWeight, Seed = 1234
+        }, flowEstimator: flow);
 
     private static Tensor<double> CreateClip(int seed)
     {
@@ -80,6 +80,9 @@ public class MIAVSRMaskedAttentionTests
 
         withLoss.Predict(clip);
         withoutLoss.Predict(clip);
+        // Initialization seeds come from the architecture, not these options; give both models the same
+        // starting weights explicitly so lambda is the only difference.
+        withoutLoss.SetParameters(withLoss.GetParameters());
         var before = MaskScorerWeights(withLoss);
         Assert.NotEmpty(before);
         Assert.Equal(before, MaskScorerWeights(withoutLoss));
@@ -91,6 +94,28 @@ public class MIAVSRMaskedAttentionTests
         var deltaWithout = MaskScorerWeights(withoutLoss).Zip(before, (a, b) => a - b).ToArray();
         double difference = deltaWith.Zip(deltaWithout, (a, b) => Math.Abs(a - b)).Max();
         Assert.True(difference > 1e-9, $"The mask-sparsity loss did not change the mask scorers' update (max difference {difference}).");
+    }
+
+    [Fact]
+    public void PretrainedFlowEstimator_IsUsedFrozen()
+    {
+        // The flow estimator aligns windows but must never train: PSRT's patch moves are discrete, so it
+        // receives no gradient, and it sits outside the model's parameters so no optimizer touches it.
+        var flow = new SpyNetLayer<double>(numLevels: 3);
+        var model = CreateModel(flow: flow);
+        var clip = CreateClip(9);
+        model.Predict(clip);
+        var before = flow.GetParameters().ToArray();
+        Assert.NotEmpty(before);
+        int modelParameters = model.GetParameters().Length;
+
+        var target = new Tensor<double>(new[] { 1, Frames, Channels, Side * 2, Side * 2 });
+        model.Train(clip, target);
+
+        Assert.Equal(before, flow.GetParameters().ToArray());
+        Assert.Equal(modelParameters, CreateModel().GetParameters().Length);
+        var output = model.Predict(clip);
+        for (int i = 0; i < output.Length; i++) Assert.False(double.IsNaN(output[i]) || double.IsInfinity(output[i]));
     }
 
     private static double[] MaskScorerWeights(MIAVSR<double> model)

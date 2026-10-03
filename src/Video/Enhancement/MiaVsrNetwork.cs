@@ -58,7 +58,6 @@ internal sealed class MiaVsrNetwork<T>
     private readonly int _branches;
     private readonly int _blocksPerBranch;
     private readonly int _scale;
-    private readonly int _flowLevels;
     private readonly int _reconChannels;
     private readonly double _temperature;
     private readonly Tensor<T> _relativeIndex;
@@ -68,14 +67,16 @@ internal sealed class MiaVsrNetwork<T>
 
     // Roles over _layers, assigned by Build.
     private ConvolutionalLayer<T> _shallow;
-    private SpyNetLayer<T> _flow;
+    // The pretrained flow estimator, outside the layer graph: the optimizer never sees it, so it stays
+    // frozen, and it runs only under NoGradScope. Null means no motion estimate (windows align in place).
+    private readonly SpyNetLayer<T>? _flow;
     private readonly List<AttentionBlock[]> _branchBlocks = new();
     private readonly List<ConvolutionalLayer<T>> _branchConvs = new();
     private readonly List<(ConvolutionalLayer<T> Conv, PixelShuffleLayer<T> Shuffle)> _upsample = new();
     private ConvolutionalLayer<T> _hrConv;
     private ConvolutionalLayer<T> _lastConv;
 
-    public MiaVsrNetwork(MIAVSROptions options, int inputChannels)
+    public MiaVsrNetwork(MIAVSROptions options, int inputChannels, SpyNetLayer<T>? flowEstimator)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));
         if (inputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(inputChannels));
@@ -89,7 +90,6 @@ internal sealed class MiaVsrNetwork<T>
         if (options.BlocksPerBranch <= 0) throw new ArgumentOutOfRangeException(nameof(options), "BlocksPerBranch must be positive.");
         if (options.ScaleFactor <= 0 || (options.ScaleFactor & (options.ScaleFactor - 1)) != 0)
             throw new ArgumentOutOfRangeException(nameof(options), $"ScaleFactor must be a positive power of two; got {options.ScaleFactor}.");
-        if (options.FlowPyramidLevels <= 0) throw new ArgumentOutOfRangeException(nameof(options), "FlowPyramidLevels must be positive.");
         if (options.ReconstructionChannels <= 0) throw new ArgumentOutOfRangeException(nameof(options), "ReconstructionChannels must be positive.");
         if (!(options.GumbelTemperature > 0)) throw new ArgumentOutOfRangeException(nameof(options), "GumbelTemperature must be positive.");
 
@@ -101,7 +101,7 @@ internal sealed class MiaVsrNetwork<T>
         _branches = options.NumPropagationBranches;
         _blocksPerBranch = options.BlocksPerBranch;
         _scale = options.ScaleFactor;
-        _flowLevels = options.FlowPyramidLevels;
+        _flow = flowEstimator;
         _reconChannels = options.ReconstructionChannels;
         _temperature = options.GumbelTemperature;
         _relativeIndex = BuildRelativeIndex(_window);
@@ -119,7 +119,7 @@ internal sealed class MiaVsrNetwork<T>
     internal bool DenseInference { get; set; }
 
     /// <summary>The smallest frame side the flow estimator accepts; smaller frames are padded for it.</summary>
-    public int MinimumFlowSize => 1 << (_flowLevels - 1);
+    public int MinimumFlowSize => _flow is null ? 1 : 1 << (_flow.NumLevels - 1);
 
     /// <summary>
     /// Points every role at the model's current layers, position for position, after a deserialize or
@@ -135,20 +135,34 @@ internal sealed class MiaVsrNetwork<T>
         }
 
         if (same) return;
+        if (layers.Count != _layers.Count)
+            throw new InvalidOperationException(
+                $"The layer graph has {layers.Count} layers but the MIA-VSR layout has {_layers.Count}.");
 
+        // Rebinding replaces every role at once; a layer of the wrong type part-way through must leave the
+        // network exactly as it was, not half-bound.
+        var previous = (Layers: _layers.ToList(), Blocks: _branchBlocks.ToList(), Convs: _branchConvs.ToList(),
+            Upsample: _upsample.ToList(), Shallow: _shallow, Hr: _hrConv, Last: _lastConv);
         _bindSource = layers;
         try
         {
             Build();
         }
+        catch
+        {
+            _layers.Clear(); _layers.AddRange(previous.Layers);
+            _branchBlocks.Clear(); _branchBlocks.AddRange(previous.Blocks);
+            _branchConvs.Clear(); _branchConvs.AddRange(previous.Convs);
+            _upsample.Clear(); _upsample.AddRange(previous.Upsample);
+            _shallow = previous.Shallow;
+            _hrConv = previous.Hr;
+            _lastConv = previous.Last;
+            throw;
+        }
         finally
         {
             _bindSource = null;
         }
-
-        if (_layers.Count != layers.Count)
-            throw new InvalidOperationException(
-                $"The layer graph has {layers.Count} layers but the MIA-VSR layout has {_layers.Count}.");
     }
 
     /// <summary>
@@ -293,7 +307,7 @@ internal sealed class MiaVsrNetwork<T>
     }
 
     [System.Diagnostics.CodeAnalysis.MemberNotNull(
-        nameof(_shallow), nameof(_flow), nameof(_hrConv), nameof(_lastConv))]
+        nameof(_shallow), nameof(_hrConv), nameof(_lastConv))]
     private void Build()
     {
         _layers.Clear();
@@ -303,7 +317,6 @@ internal sealed class MiaVsrNetwork<T>
 
         IActivationFunction<T> identity = new IdentityActivation<T>();
         _shallow = Add(new ConvolutionalLayer<T>(_channels, 3, 1, 1));
-        _flow = Add(new SpyNetLayer<T>(numLevels: _flowLevels));
 
         int span = 2 * _window - 1;
         for (int m = 0; m < _branches; m++)
@@ -448,7 +461,7 @@ internal sealed class MiaVsrNetwork<T>
     private sealed class PatchAlignment
     {
         private readonly IEngine _engine;
-        private readonly SpyNetLayer<T> _flow;
+        private readonly SpyNetLayer<T>? _flow;
         private readonly Tensor<T>[] _frames;
         private readonly WindowGeometry _geometry;
         private readonly int _minimumFlowSize;
@@ -456,7 +469,7 @@ internal sealed class MiaVsrNetwork<T>
         private readonly Dictionary<(int From, int To), (double[] Dx, double[] Dy)> _fields = new();
         private Tensor<T>? _zeros;
 
-        public PatchAlignment(IEngine engine, SpyNetLayer<T> flow, Tensor<T>[] frames, WindowGeometry geometry,
+        public PatchAlignment(IEngine engine, SpyNetLayer<T>? flow, Tensor<T>[] frames, WindowGeometry geometry,
             int minimumFlowSize, int channels)
         {
             _engine = engine;
@@ -484,7 +497,7 @@ internal sealed class MiaVsrNetwork<T>
             var offsetY = new int[windows];
             var offsetX = new int[windows];
             int via = t;
-            for (int hop = 1; hop <= order; hop++)
+            for (int hop = 1; _flow is not null && hop <= order; hop++)
             {
                 int next = t + hop * step;
                 var (dx, dy) = Field(via, next);
@@ -534,11 +547,12 @@ internal sealed class MiaVsrNetwork<T>
             var g = _geometry;
             int flowH = Math.Max(g.Height, _minimumFlowSize), flowW = Math.Max(g.Width, _minimumFlowSize);
             var numOps = MathHelper.GetNumericOperations<T>();
+            var estimator = _flow ?? throw new InvalidOperationException("No flow estimator is configured.");
             Tensor<T> flow;
             using (new NoGradScope<T>())
             {
                 // Flow(from, to) gives, for each pixel of `from`, its displacement into `to`.
-                flow = _flow.EstimateFlow(Fit(_frames[from], flowH, flowW, numOps.Zero), Fit(_frames[to], flowH, flowW, numOps.Zero));
+                flow = estimator.EstimateFlow(Fit(_frames[from], flowH, flowW, numOps.Zero), Fit(_frames[to], flowH, flowW, numOps.Zero));
             }
 
             var dx = new double[g.Tokens];

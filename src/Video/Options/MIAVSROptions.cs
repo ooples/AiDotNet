@@ -48,7 +48,6 @@ public class MIAVSROptions : NeuralNetworkOptions
         BlocksPerBranch = other.BlocksPerBranch;
         MaskLossWeight = other.MaskLossWeight;
         GumbelTemperature = other.GumbelTemperature;
-        FlowPyramidLevels = other.FlowPyramidLevels;
         ReconstructionChannels = other.ReconstructionChannels;
 #pragma warning disable CS0618 // Retained only so existing configurations keep round-tripping.
         NumResBlocks = other.NumResBlocks;
@@ -102,9 +101,6 @@ public class MIAVSROptions : NeuralNetworkOptions
     /// <value>Default is 2/3, the paper's.</value>
     public double GumbelTemperature { get; set; } = 2.0 / 3.0;
 
-    /// <summary>Gets or sets the number of pyramid levels of the SPyNet flow estimator used for patch alignment.</summary>
-    /// <value>Default is 5. Frames must be at least 2^(levels-1) pixels on each side.</value>
-    public int FlowPyramidLevels { get; set; } = 5;
 
     /// <summary>Gets or sets the channel width of the pixel-shuffle reconstruction head.</summary>
     /// <value>Default is 64, BasicVSR++'s upsampler width, which MIA-VSR's reconstruction follows.</value>

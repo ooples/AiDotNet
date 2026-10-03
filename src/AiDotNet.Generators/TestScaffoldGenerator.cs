@@ -12579,9 +12579,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // MIA-VSR (Zhou et al., CVPR 2024) keeps its whole paper topology at smoke width: all
                 // four propagation branches, the inter-and-intra-frame attention with relative bias,
                 // the adaptive masks (Gumbel in training, sparse at inference), SPyNet patch alignment
-                // and the pixel-shuffle head. Three frames, so the second-order neighbour and the
+                // and the pixel-shuffle head (patch alignment without a pretrained SPyNet: zero motion; the flow path has its own unit test). Three frames, so the second-order neighbour and the
                 // masks (which start on a branch's second frame) are both exercised. Window 4 on 8x8
-                // frames gives four windows; a 3-level SPyNet needs frames of at least 4 pixels.
+                // frames gives four windows.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
@@ -12590,7 +12590,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.Video.Options.MIAVSROptions { " +
                     "NumFeatures = 8, NumHeads = 2, WindowSize = 4, FeedForwardRatio = 2, " +
                     "NumPropagationBranches = 4, BlocksPerBranch = 1, ScaleFactor = 2, " +
-                    "FlowPyramidLevels = 3, ReconstructionChannels = 8, Seed = 1234 })";
+                    "ReconstructionChannels = 8, Seed = 1234 })";
             }
             else if (model.ClassName == "DOVE" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))

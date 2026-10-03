@@ -5,6 +5,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Helpers;
@@ -85,6 +86,12 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
     // The paper network; null in ONNX mode or when the caller supplied its own layers.
     private MiaVsrNetwork<T>? _network;
 
+    // The pretrained, frozen flow estimator for patch alignment; null aligns with zero motion. The caller
+    // owns its weights: they are not this model's parameters, so they are never counted, optimized or
+    // restored here.
+    [AiDotNet.Attributes.ExternalState]
+    private readonly SpyNetLayer<T>? _flowEstimator;
+
     // Gumbel noise for the training-time masks, seeded from the options when a seed is given.
     private readonly Random _random;
 
@@ -111,13 +118,20 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
     }
 
     /// <summary>Creates a MIA-VSR model in native training mode.</summary>
+    /// <param name="architecture">The network architecture; InputDepth is the frame channel count.</param>
+    /// <param name="options">The model options; the defaults are the paper's.</param>
+    /// <param name="optimizer">The training optimizer; the paper's Adam when null.</param>
+    /// <param name="flowEstimator">A pretrained SPyNet for PSRT patch alignment, used frozen. Without one,
+    /// neighbouring frames are attended in place (zero motion) rather than aligned by an untrained estimate.</param>
     public MIAVSR(NeuralNetworkArchitecture<T> architecture, MIAVSROptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        SpyNetLayer<T>? flowEstimator = null)
         : base(architecture, new CharbonnierLoss<T>(CharbonnierEpsilon))
     {
         _options = options ?? new MIAVSROptions();
         _random = _options.Seed.HasValue ? RandomHelper.CreateSeededRandom(_options.Seed.Value) : RandomHelper.CreateSecureRandom();
         _useNativeMode = true;
+        _flowEstimator = flowEstimator;
         // The rate this model publishes on its own options. Built bare, the optimizer
         // would use its own default instead and LearningRate would be configuration that
         // nothing reads — the defect that diverged MusicFlamingo's training.
@@ -160,7 +174,7 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
         // inter-and-intra-frame attention blocks, and the pixel-shuffle head. Layers publishes exactly
         // the instances the forward runs, so training, serialization and clone walk the same weights.
         int channels = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
-        _network = new MiaVsrNetwork<T>(_options, channels);
+        _network = new MiaVsrNetwork<T>(_options, channels, _flowEstimator);
         Layers.AddRange(_network.Layers);
     }
 
@@ -196,6 +210,7 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
     protected override bool SupportsFusedCompiledTraining => false;
 
     private bool _lazyShapesProbed;
+    private bool _lazyShapesProbing;
 
     /// <inheritdoc />
     /// <remarks>
@@ -213,8 +228,8 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
             return;
         }
 
-        if (_lazyShapesProbed) return;
-        _lazyShapesProbed = true;
+        if (_lazyShapesProbed || _lazyShapesProbing) return;
+        _lazyShapesProbing = true;
 
         int channels = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
         int side = Math.Max(_options.WindowSize, _network.MinimumFlowSize);
@@ -223,9 +238,12 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
         try
         {
             _ = ForwardNative(new Tensor<T>(new[] { 1, 2, channels, side, side }), training: false);
+            // Only a probe that completed has resolved the shapes; a failed one is retried next time.
+            _lazyShapesProbed = true;
         }
         finally
         {
+            _lazyShapesProbing = false;
             if (wasTraining) SetTrainingMode(true);
         }
     }
