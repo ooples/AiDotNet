@@ -84,8 +84,8 @@ public partial class AWGIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
     private Vector<T> _weights;
 
     // AdamW state for the generator weights and the feature encoder.
-    private Vector<T> _weightMoment1;
-    private Vector<T> _weightMoment2;
+    private readonly Vector<T> _weightMoment1;
+    private readonly Vector<T> _weightMoment2;
     private Vector<T>? _bodyMoment1;
     private Vector<T>? _bodyMoment2;
     private int _updates;
