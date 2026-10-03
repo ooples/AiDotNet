@@ -1087,6 +1087,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 "TimeDiff",
                 new WarmupIterationOverride(memorization: 200, deterministicMemorizationLoss: true)
             },
+            // TOTO (arXiv 2407.07874) trains with dropout, so GetLastLoss() is one draw per step. On PR #2269
+            // its 20-step probe read 1.086666 -> 1.077703. A local replay of the same fixture measured the
+            // training draws wandering 1.12, 0.72, 0.89, 0.97, 1.13 ... 0.70 while the evaluation loss at
+            // the same parameters fell every step, 0.875 -> 0.456. Judge it on that, as OpenVoiceV2 is.
+            {
+                "TOTO",
+                new WarmupIterationOverride(deterministicMemorizationLoss: true)
+            },
+            // TimeMAE (arXiv 2303.00320) is a 6+2-layer transformer trained with Adam and no warm-up, as the
+            // reference trains it. Its first updates overshoot before descending: on a fixed fixture the
+            // evaluation loss measured 2.52 -> 1.89 -> 2.19 -> 2.59 -> 2.84 -> 2.81 -> 2.31 -> 1.99 -> 1.75. On
+            // PR #2269 the 1-vs-2-step MoreData probe sampled that hump (2.4497 against an untrained 1.7548).
+            // 5-vs-15 clears it, as for BSVD and ABINet; the 0.5 tolerance is unchanged.
+            {
+                "TimeMAE",
+                new WarmupIterationOverride(moreDataShort: 5, moreDataLong: 15)
+            },
         };
 
     /// <summary>
@@ -15423,7 +15440,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // 0.47 over 20 memorization steps; its 2-step probe landed on a first-step uptick (1.81 -> 1.92).
                     // MatchaTTS shows the same hump once its mel projection emits raw log-mel (a FullyConnectedLayer
                     // given a null activation stopped meaning ReLU): step 1 = 1.514577 rising to step 2 = 1.691885.
-                    sb.AppendLine(model.ClassName is "HuBERTSER" or "SpikingFullSubNet" or "ContextNet" or "Paraformer" or "RoomImpulseResponse" or "ParaformerLarge" or "CosyVoice2" or "MatchaTTS"
+                    // DemucsNoise likewise, once its waveform output stopped passing through ReLU: at its paper Adam
+                    // 3e-4 the first update is a sign step of every one of its 3.4M weights (|dtheta| = 3e-4 sqrt(n)), so
+                    // the loss goes 1.68 -> 3.10 -> 0.69 -> 0.24 -> 0.16 -> 0.12 -> 0.04 and a 2-step probe sees only the hump.
+                    sb.AppendLine(model.ClassName is "HuBERTSER" or "SpikingFullSubNet" or "ContextNet" or "Paraformer" or "RoomImpulseResponse" or "ParaformerLarge" or "CosyVoice2" or "MatchaTTS" or "DemucsNoise"
                         ? "    protected override int MemorizationTaskIterations => 15;"
                         : "    protected override int MemorizationTaskIterations => 2;");
                     sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
