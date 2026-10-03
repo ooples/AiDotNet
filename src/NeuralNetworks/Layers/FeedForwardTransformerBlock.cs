@@ -24,6 +24,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// </list>
 /// <para>Input and output are <c>[batch, time, hidden]</c>; the convolutions run on the transposed
 /// <c>[batch, hidden, time]</c> view with "same" padding, so the time axis keeps its length.</para>
+/// <para>With a non-zero <c>conditionSize</c> both normalizations are <see cref="ConditionalLayerNormalizationLayer{T}"/>,
+/// whose scale and bias come from a conditioning vector passed as a second input — AdaSpeech's mel decoder
+/// (Chen et al. 2021, §2.2), which conditions every decoder layer normalization on the speaker embedding.</para>
 /// <para><b>For Beginners:</b> Attention lets every phoneme (or mel frame) look at every other one; the small
 /// convolution then mixes each position with its immediate neighbours, which suits speech, where neighbouring
 /// sounds blend into each other.</para>
@@ -47,14 +50,18 @@ public partial class FeedForwardTransformerBlock<T> : LayerBase<T>, IShapeContra
 
     [SubLayerInput("1, _hiddenSize")]
     private readonly MultiHeadAttentionLayer<T> _attention;
+    private readonly int _conditionSize;
+
     [SubLayerInput("_hiddenSize")]
-    private readonly LayerNormalizationLayer<T> _attentionNorm;
+    private readonly LayerNormalizationLayer<T>? _attentionNorm;
+    private readonly ConditionalLayerNormalizationLayer<T>? _attentionConditionalNorm;
     [SubLayerInput("1, _hiddenSize, 1")]
     private readonly Conv1DLayer<T> _conv1;
     [SubLayerInput("1, _filterSize, 1")]
     private readonly Conv1DLayer<T> _conv2;
     [SubLayerInput("_hiddenSize")]
-    private readonly LayerNormalizationLayer<T> _convNorm;
+    private readonly LayerNormalizationLayer<T>? _convNorm;
+    private readonly ConditionalLayerNormalizationLayer<T>? _convConditionalNorm;
     private readonly DropoutLayer<T>? _attentionDropout;
     private readonly DropoutLayer<T>? _convDropout;
 
@@ -69,13 +76,16 @@ public partial class FeedForwardTransformerBlock<T> : LayerBase<T>, IShapeContra
     /// <param name="firstKernelSize">Kernel of the first convolution (9 in FastSpeech 2).</param>
     /// <param name="secondKernelSize">Kernel of the second convolution (1 in FastSpeech 2).</param>
     /// <param name="dropoutRate">Dropout after each sublayer, before the residual add (0.1 in FastSpeech 2).</param>
+    /// <param name="conditionSize">Width of a conditioning vector for conditional layer normalization; 0 (the
+    /// default) uses ordinary layer normalization and a single input.</param>
     public FeedForwardTransformerBlock(
         [LayerState] int hiddenSize,
         [LayerState] int numHeads,
         [LayerState] int filterSize,
         [LayerState] int firstKernelSize = 9,
         [LayerState] int secondKernelSize = 1,
-        [LayerState] double dropoutRate = 0.0)
+        [LayerState] double dropoutRate = 0.0,
+        [LayerState] int conditionSize = 0)
         : base(new[] { hiddenSize }, new[] { hiddenSize })
     {
         if (hiddenSize <= 0) throw new ArgumentOutOfRangeException(nameof(hiddenSize));
@@ -88,6 +98,7 @@ public partial class FeedForwardTransformerBlock<T> : LayerBase<T>, IShapeContra
         if (hiddenSize % numHeads != 0)
             throw new ArgumentException($"Hidden size ({hiddenSize}) must be divisible by the number of heads ({numHeads}).", nameof(hiddenSize));
         if (dropoutRate < 0 || dropoutRate >= 1) throw new ArgumentOutOfRangeException(nameof(dropoutRate));
+        if (conditionSize < 0) throw new ArgumentOutOfRangeException(nameof(conditionSize));
 
         _hiddenSize = hiddenSize;
         _numHeads = numHeads;
@@ -95,13 +106,20 @@ public partial class FeedForwardTransformerBlock<T> : LayerBase<T>, IShapeContra
         _firstKernelSize = firstKernelSize;
         _secondKernelSize = secondKernelSize;
         _dropoutRate = dropoutRate;
+        _conditionSize = conditionSize;
 
         _attention = new MultiHeadAttentionLayer<T>(numHeads, hiddenSize / numHeads, activationFunction: new IdentityActivation<T>());
-        _attentionNorm = new LayerNormalizationLayer<T>(hiddenSize);
+        if (conditionSize > 0)
+            _attentionConditionalNorm = new ConditionalLayerNormalizationLayer<T>(hiddenSize, conditionSize);
+        else
+            _attentionNorm = new LayerNormalizationLayer<T>(hiddenSize);
         _conv1 = new Conv1DLayer<T>(inputChannels: hiddenSize, outputChannels: filterSize, kernelSize: firstKernelSize,
             activation: new ReLUActivation<T>());
         _conv2 = new Conv1DLayer<T>(inputChannels: filterSize, outputChannels: hiddenSize, kernelSize: secondKernelSize);
-        _convNorm = new LayerNormalizationLayer<T>(hiddenSize);
+        if (conditionSize > 0)
+            _convConditionalNorm = new ConditionalLayerNormalizationLayer<T>(hiddenSize, conditionSize);
+        else
+            _convNorm = new LayerNormalizationLayer<T>(hiddenSize);
         if (dropoutRate > 0)
         {
             _attentionDropout = new DropoutLayer<T>(dropoutRate);
@@ -109,10 +127,10 @@ public partial class FeedForwardTransformerBlock<T> : LayerBase<T>, IShapeContra
         }
 
         RegisterSubLayer(_attention);
-        RegisterSubLayer(_attentionNorm);
+        RegisterSubLayer(_attentionNorm ?? (LayerBase<T>)_attentionConditionalNorm!);
         RegisterSubLayer(_conv1);
         RegisterSubLayer(_conv2);
-        RegisterSubLayer(_convNorm);
+        RegisterSubLayer(_convNorm ?? (LayerBase<T>)_convConditionalNorm!);
         if (_attentionDropout is not null) RegisterSubLayer(_attentionDropout);
         if (_convDropout is not null) RegisterSubLayer(_convDropout);
     }
@@ -129,25 +147,66 @@ public partial class FeedForwardTransformerBlock<T> : LayerBase<T>, IShapeContra
     public int SecondKernelSize => _secondKernelSize;
     /// <summary>Dropout probability.</summary>
     public double DropoutRate => _dropoutRate;
+    /// <summary>Width of the conditioning vector; 0 when the block uses ordinary layer normalization.</summary>
+    public int ConditionSize => _conditionSize;
+
+    /// <inheritdoc/>
+    public override bool RequiresMultipleInputs => _conditionSize > 0;
+
+    /// <summary>Runs the block with its layer normalizations conditioned on <paramref name="condition"/>.</summary>
+    public Tensor<T> Forward(Tensor<T> input, Tensor<T> condition) => Forward(new[] { input, condition });
 
     /// <inheritdoc/>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
+    {
+        if (_conditionSize > 0)
+            throw new InvalidOperationException(
+                "This block uses conditional layer normalization; call Forward(input, condition).");
+        return Run(input, null);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> ForwardTracedMany(params Tensor<T>[] inputs)
+    {
+        if (inputs is null || inputs.Length == 0)
+            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
+        if (inputs.Length == 1)
+            return ForwardTraced(inputs[0]);
+        if (_conditionSize == 0 || inputs.Length != 2)
+            throw new ArgumentException(
+                "Expected the features and a conditioning vector, and a block built with a condition size.", nameof(inputs));
+        return Run(inputs[0], inputs[1]);
+    }
+
+    private Tensor<T> Run(Tensor<T> input, Tensor<T>? condition)
     {
         bool unbatched = input.Rank == 2;
         var x = unbatched ? Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1] }) : input;
 
         var attended = _attention.Forward(x);
         if (_attentionDropout is not null) attended = _attentionDropout.Forward(attended);
-        var y = _attentionNorm.Forward(Engine.TensorAdd(x, attended));
+        var y = Normalize(_attentionNorm, _attentionConditionalNorm, Engine.TensorAdd(x, attended), condition);
 
         // [B, T, H] -> [B, H, T] for the convolutions, then back.
         var channelsFirst = Engine.TensorPermute(y, new[] { 0, 2, 1 }).Contiguous();
         var hidden = _conv1.Forward(channelsFirst);
         var convOut = Engine.TensorPermute(_conv2.Forward(hidden), new[] { 0, 2, 1 }).Contiguous();
         if (_convDropout is not null) convOut = _convDropout.Forward(convOut);
-        var z = _convNorm.Forward(Engine.TensorAdd(y, convOut));
+        var z = Normalize(_convNorm, _convConditionalNorm, Engine.TensorAdd(y, convOut), condition);
 
         return unbatched ? Engine.Reshape(z, input._shape) : z;
+    }
+
+    private Tensor<T> Normalize(LayerNormalizationLayer<T>? norm, ConditionalLayerNormalizationLayer<T>? conditionalNorm,
+        Tensor<T> x, Tensor<T>? condition)
+    {
+        if (conditionalNorm is null)
+            return norm!.Forward(x);
+        int batch = x.Shape[0];
+        if (condition is null || condition.Length != batch * _conditionSize)
+            throw new ArgumentException(
+                $"Expected one condition of width {_conditionSize} per batch row ({batch}).", nameof(condition));
+        return conditionalNorm.Forward(x, Engine.Reshape(condition, new[] { batch, _conditionSize }));
     }
 
     /// <inheritdoc/>
@@ -169,6 +228,7 @@ public partial class FeedForwardTransformerBlock<T> : LayerBase<T>, IShapeContra
         metadata["FirstKernelSize"] = _firstKernelSize.ToString(inv);
         metadata["SecondKernelSize"] = _secondKernelSize.ToString(inv);
         metadata["DropoutRate"] = _dropoutRate.ToString(inv);
+        metadata["ConditionSize"] = _conditionSize.ToString(inv);
         return metadata;
     }
 }

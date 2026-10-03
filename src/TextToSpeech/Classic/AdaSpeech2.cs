@@ -1,43 +1,49 @@
-using AiDotNet.LearningRateSchedulers;
-using AiDotNet.Enums;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
-using AiDotNet.Optimizers;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.TextToSpeech.Interfaces;
-using AiDotNet.Tokenization;
-using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.TextToSpeech.Classic;
 
 /// <summary>
-/// AdaSpeech 2: adaptive TTS that leverages untranscribed speech via mel-to-phoneme pipeline.
+/// AdaSpeech 2: adaptive TTS that adapts to a new voice from untranscribed speech, through a mel-spectrogram encoder
+/// aligned to the phoneme encoder's output space.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "AdaSpeech 2: Adaptive Text to Speech with Untranscribed Data" (Yan et al., 2021)</item></list></para>
-/// <para><b>For Beginners:</b> AdaSpeech 2 is an adaptive text-to-speech model that converts text input into speech audio output.</para>
-/// <example>
-/// <code>
-/// // Create an AdaSpeech 2 model for adaptive TTS using untranscribed speech data
-/// // with mel-to-phoneme pipeline for semi-supervised adaptation
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new AdaSpeech2&lt;double&gt;(architecture, "adaspeech2.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new AdaSpeech2&lt;double&gt;(architecture, new AdaSpeech2Options());
-/// </code>
-/// </example>
+/// <para><b>References:</b> "AdaSpeech 2: Adaptive Text to Speech with Untranscribed Data" (Yan et al., ICASSP 2021).</para>
+/// <para>
+/// The TTS pipeline is AdaSpeech's (§2.1, <see cref="AdaSpeech{T}"/>): phoneme encoder, acoustic condition modeling,
+/// variance adaptor and a mel decoder with conditional layer normalization. AdaSpeech 2 adds a mel-spectrogram encoder
+/// of 4 feed-forward Transformer blocks ("considering the symmetry of the system") and a four-step pipeline (§2, Fig. 2),
+/// selected with <see cref="CurrentStep"/>:
+/// </para>
+/// <list type="number">
+/// <item><b>Source model training</b>: AdaSpeech training on transcribed multi-speaker data
+/// (<see cref="AdaSpeech{T}.CurrentPhase"/> selects AdaSpeech's own phases).</item>
+/// <item><b>Mel encoder aligning</b> (§2.2): the source model is frozen and only the mel encoder trains, with an L2 loss
+/// between its output and the phoneme encoder's hidden sequence expanded by the phoneme durations.</item>
+/// <item><b>Untranscribed speech adaptation</b> (§2.3): speech is reconstructed through the mel encoder and the mel
+/// decoder (<see cref="TrainUntranscribed(Tensor{T}, int, double[], double[])"/>), adapting only the parameters of the
+/// conditional layer normalizations (with the speaker embedding, as AdaSpeech adapts).</item>
+/// <item><b>Inference</b> (§2.4): the unadapted phoneme encoder with the adapted decoder — the ordinary synthesis path.</item>
+/// </list>
+/// <para>
+/// The paper does not say how the mel encoder reads 80-bin frames into its 256-wide blocks; a linear projection and the
+/// sinusoidal positions of the phoneme encoder's input do it. In reconstruction the speaker embedding, the utterance-level
+/// vector and the frame pitch and energy embeddings are added as in synthesis; the phoneme-level vectors are not, since
+/// untranscribed speech has no phoneme alignment to average frames over.
+/// </para>
+/// <para><b>For Beginners:</b> AdaSpeech 2 can learn a new voice from recordings that have no transcript: it learns to
+/// read a spectrogram into the same internal representation it reads text into, then practises reproducing the new
+/// speaker's recordings.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -50,203 +56,235 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2021,
     Authors = "Yan et al."
 )]
-[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-9,
-                Source = "Yan et al. 2021, Sec. 3: the Adam optimizer with beta1 0.9, beta2 0.98 and "
-                        + "epsilon 1e-9. The paper states no learning rate in its training description, "
-                        + "so none is declared.")]
-public partial class AdaSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
+// [PaperOptimizer] is inherited from AdaSpeech: Yan et al. 2021, Sec. 3.1 state the same Adam (beta1 0.9, beta2 0.98,
+// epsilon 1e-9) and, like AdaSpeech, no learning rate. A second declaration would be a duplicate recipe (AIDN103).
+public partial class AdaSpeech2<T> : AdaSpeech<T>
 {
-    private readonly AdaSpeech2Options _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer;
-    private bool _useNativeMode;
-    private bool _disposed;
+    private readonly List<LayerBase<T>> _melEncoder = new();
 
-    public override ModelOptions GetOptions() => _options;
+    /// <summary>Loads an ONNX AdaSpeech 2.</summary>
+    public AdaSpeech2(NeuralNetworkArchitecture<T> architecture, string modelPath, AdaSpeech2Options? options = null)
+        : base(architecture, modelPath, options ?? new AdaSpeech2Options()) { }
 
-    public AdaSpeech2(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        AdaSpeech2Options? options = null
-    )
-        : base(architecture)
-    {
-        _options = options ?? new AdaSpeech2Options();
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
-        InitializeLayers();
-    }
-
+    /// <summary>Creates a trainable AdaSpeech 2.</summary>
     public AdaSpeech2(
         NeuralNetworkArchitecture<T> architecture,
         AdaSpeech2Options? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
-    {
-        _options = options ?? new AdaSpeech2Options();
-        _useNativeMode = true;
-        _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
-        InitializeLayers();
-    }
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture, options ?? new AdaSpeech2Options(), optimizer) { }
 
-    int ITtsModel<T>.SampleRate => _options.SampleRate;
-    public int MaxTextLength => _options.MaxTextLength;
-    public new int MelChannels => _options.MelChannels;
-    public new int HopSize => _options.HopSize;
-    public int FftSize => _options.FftSize;
+    /// <summary>The step of the adaptation pipeline (§2, Fig. 2) that training runs.</summary>
+    public AdaSpeech2TrainingStep CurrentStep { get; set; } = AdaSpeech2TrainingStep.SourceModel;
 
-    /// <summary>
-    /// Synthesizes mel-spectrogram using AdaSpeech 2's mel-to-phoneme adaptation pipeline.
-    /// Per the paper (Yan et al., 2021):
-    /// (1) Standard text encoder + variance adaptor + decoder (same as AdaSpeech),
-    /// (2) Mel-to-phoneme encoder: reverse maps mel-spectrogram to pseudo phonemes,
-    /// (3) Adaptation: conditional LN parameters fine-tuned using untranscribed speech via mel2ph,
-    /// (4) Inference uses standard text-to-mel pipeline with adapted parameters.
-    /// </summary>
-    public override Tensor<T> Synthesize(string text)
-    {
-        ThrowIfDisposed();
-        var tokens = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(tokens);
+    /// <summary>The mel-spectrogram encoder's layers: input projection, positions, FFT blocks.</summary>
+    internal IReadOnlyList<LayerBase<T>> MelEncoderLayers => _melEncoder;
 
-        var encoded = RunEncoder(tokens);
-
-        int seqLen = encoded.Length;
-        int totalFrames = 0;
-        var durations = new int[seqLen];
-        for (int i = 0; i < seqLen; i++)
-        {
-            double val = Math.Abs(NumOps.ToDouble(encoded[i % encoded.Length]));
-            int dur = Math.Max(1, (int)Math.Round(1.0 + val * 3.0));
-            durations[i] = Math.Min(dur, 15);
-            totalFrames += durations[i];
-        }
-
-        int melLen = Math.Min(totalFrames, _options.MaxMelLength);
-        var expanded = new Tensor<T>([melLen]);
-        int fi = 0;
-        for (int i = 0; i < seqLen && fi < melLen; i++)
-        {
-            for (int d = 0; d < durations[i] && fi < melLen; d++)
-            {
-                expanded[fi] = encoded[i % encoded.Length];
-                fi++;
-            }
-        }
-
-        var output = RunDecoder(expanded);
-        return output;
-    }
-
-    public Tensor<T> TextToMel(string text) => Synthesize(text);
+    private protected override object TrainingPhaseKey =>
+        CurrentStep == AdaSpeech2TrainingStep.SourceModel ? base.TrainingPhaseKey : CurrentStep;
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode)
+        base.InitializeLayers();
+        if (!HasAcousticConditioning)
             return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            AddUnsplitLayers(Architecture.Layers);
-        }
-        else
-        {
-            AddEncoderDecoderLayers(
-                LayerHelper<T>.CreateDefaultAcousticEncoderLayers(
-                    _options.EncoderDim, _options.HiddenDim, _options.NumEncoderLayers, _options.NumHeads, _options.DropoutRate, _options.VocabSize),
-                LayerHelper<T>.CreateDefaultAcousticDecoderLayers(
-                    _options.DecoderDim, _options.HiddenDim, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate));
-        }
+        var options = (AdaSpeech2Options)AdaOptions;
+        int hidden = options.HiddenDim;
+        _melEncoder.Add(new DenseLayer<T>(hidden, new IdentityActivation<T>() as IActivationFunction<T>));
+        _melEncoder.Add(new PositionalEncodingLayer<T>(options.MaxMelLength, hidden));
+        for (int i = 0; i < options.NumMelEncoderLayers; i++)
+            _melEncoder.Add(new FeedForwardTransformerBlock<T>(hidden, options.NumHeads, options.FftFilterSize,
+                options.FftKernelSizes[0], options.FftKernelSizes[1], options.DropoutRate));
+        ComponentLayers.AddRange(_melEncoder);
     }
 
-
-    protected override Tensor<T> PreprocessText(string text)
+    private Tensor<T> RunMelEncoder(Tensor<T> mel)
     {
-        if (_tokenizer is null)
-            throw new InvalidOperationException("Tokenizer not initialized.");
-        var enc = _tokenizer.Encode(text);
-        int sl = Math.Min(enc.TokenIds.Count, _options.MaxTextLength);
-        var t = new Tensor<T>([sl]);
-        for (int i = 0; i < sl; i++)
-            t[i] = NumOps.FromDouble(enc.TokenIds[i]);
-        return t;
+        var x = mel;
+        foreach (var layer in _melEncoder)
+            x = layer.Forward(x);
+        return x;
     }
 
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
+    /// <inheritdoc />
+    protected override T TrainOnSample(TtsTrainingSample<T> sample)
     {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        return base.PredictCore(input);
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
+        switch (CurrentStep)
         {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
+            case AdaSpeech2TrainingStep.SourceModel:
+                return base.TrainOnSample(sample);
+            case AdaSpeech2TrainingStep.MelEncoderAligning:
+            {
+                var (mel, objective) = AligningObjective(sample);
+                return TrainWithCustomObjective(sample.Tokens, mel, objective, TrainingOptimizer);
+            }
+            default:
+                throw new InvalidOperationException(
+                    $"Untranscribed adaptation trains on speech alone; call {nameof(TrainUntranscribed)}.");
         }
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
+    public override T EvaluateTrainingObjective(TtsTrainingSample<T> sample)
+    {
+        if (CurrentStep != AdaSpeech2TrainingStep.MelEncoderAligning)
+            return base.EvaluateTrainingObjective(sample);
+        var (mel, objective) = AligningObjective(sample);
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            return objective(sample.Tokens, mel)[0];
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
+    }
+
+    /// <summary>
+    /// Mel encoder aligning (§2.2): the L2 distance between the mel encoder's output and the phoneme encoder's hidden
+    /// sequence expanded by the durations. The source model is frozen, so the phoneme side carries no gradient.
+    /// </summary>
+    private (Tensor<T> Mel, Func<Tensor<T>, Tensor<T>, Tensor<T>> Objective) AligningObjective(TtsTrainingSample<T> sample)
+    {
+        Guard.NotNull(sample);
+        var durations = sample.Durations ?? throw new ArgumentException(
+            $"Mel encoder aligning expands the phoneme hidden sequence by its durations; set {nameof(sample.Durations)}.",
+            nameof(sample));
+        var mel = DeriveAcousticTargets(sample).Mel;
+        if (durations.Sum() != mel.Shape[0])
+            throw new ArgumentException(
+                $"The durations sum to {durations.Sum()} frames but the mel spectrogram has {mel.Shape[0]}.", nameof(sample));
+
+        Tensor<T> Objective(Tensor<T> tokens, Tensor<T> target)
+        {
+            Tensor<T> expanded;
+            using (new NoGradScope<T>())
+            {
+                var phonemeHidden = RunEncoder(tokens);
+                expanded = LengthRegulator.Expand(phonemeHidden, durations);
+            }
+            var label = new Tensor<T>(expanded._shape, expanded.ToVector());
+            return MeanSquaredError(RunMelEncoder(target), label);
+        }
+
+        return (mel, Objective);
+    }
+
+    /// <summary>
+    /// One untranscribed-speech adaptation step (§2.3): reconstructs <paramref name="mel"/> through the mel encoder and
+    /// the mel decoder and updates only the conditional layer normalizations and the speaker embedding.
+    /// </summary>
+    /// <param name="mel">The target speaker's speech as a mel spectrogram, <c>[frames, melChannels]</c>.</param>
+    /// <param name="speakerId">The speaker's row in the speaker embedding table.</param>
+    /// <param name="pitch">F0 per frame (Hz, 0 unvoiced); required when the model predicts pitch.</param>
+    /// <param name="energy">Energy per frame; required when the model predicts energy.</param>
+    /// <returns>The reconstruction loss of the step.</returns>
+    public T TrainUntranscribed(Tensor<T> mel, int speakerId, double[]? pitch = null, double[]? energy = null)
+    {
+        Guard.NotNull(mel);
+        if (IsOnnxMode)
+            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (CurrentStep != AdaSpeech2TrainingStep.UntranscribedAdaptation)
+            throw new InvalidOperationException(
+                $"Set {nameof(CurrentStep)} to {AdaSpeech2TrainingStep.UntranscribedAdaptation} before adapting on untranscribed speech.");
+        return TrainWithCustomObjective(mel, mel, ReconstructionObjective(mel, speakerId, pitch, energy), TrainingOptimizer);
+    }
+
+    /// <summary>One untranscribed-speech adaptation step on a recording, deriving its mel spectrogram, WORLD pitch and
+    /// frame energy as the source model's training does.</summary>
+    public T TrainUntranscribed(Tensor<T> audio, int speakerId)
+    {
+        Guard.NotNull(audio);
+        var targets = DeriveAcousticTargets(new TtsTrainingSample<T> { Tokens = new Tensor<T>(new[] { 0 }), Audio = audio });
+        return TrainUntranscribed(targets.Mel, speakerId, targets.Pitch, targets.Energy);
+    }
+
+    /// <summary>The untranscribed reconstruction loss on <paramref name="mel"/>, without updating the model.</summary>
+    public T EvaluateUntranscribed(Tensor<T> mel, int speakerId, double[]? pitch = null, double[]? energy = null)
+    {
+        Guard.NotNull(mel);
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            using var _ = new NoGradScope<T>();
+            return ReconstructionObjective(mel, speakerId, pitch, energy)(mel, mel)[0];
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
+    }
+
+    private Func<Tensor<T>, Tensor<T>, Tensor<T>> ReconstructionObjective(
+        Tensor<T> mel, int speakerId, double[]? pitch, double[]? energy)
+    {
+        if (mel.Rank != 2 || mel.Shape[1] != AdaOptions.MelChannels)
+            throw new ArgumentException(
+                $"Expected a mel spectrogram [frames, {AdaOptions.MelChannels}], got [{string.Join(", ", mel.Shape)}].", nameof(mel));
+        if (VarianceAdaptor.UsePitch && pitch is null)
+            throw new ArgumentException("The model embeds frame pitch; supply it, or the recording.", nameof(pitch));
+        if (VarianceAdaptor.UseEnergy && energy is null)
+            throw new ArgumentException("The model embeds frame energy; supply it, or the recording.", nameof(energy));
+
+        return (input, target) =>
+        {
+            var speaker = SpeakerEmbedding(speakerId);
+            var frames = RunMelEncoder(input);
+            frames = Engine.TensorAdd(frames, Expand(speaker, frames));
+            frames = Engine.TensorAdd(frames, Expand(UtteranceEncoder.Forward(input), frames));
+            frames = VarianceAdaptor.AddFrameVariance(frames, pitch, energy);
+            return MeanAbsoluteError(RunDecoderLayers(frames, speaker), target);
+        };
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Source model training trains what AdaSpeech's phase trains, never the mel encoder; aligning trains only
+    /// the mel encoder; untranscribed adaptation only the conditional layer normalizations and the speaker embedding.</remarks>
+    protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(IReadOnlyList<Tensor<T>> parameters)
+    {
+        if (!HasAcousticConditioning)
+            return parameters;
+        var melEncoder = new HashSet<Tensor<T>>(
+            Training.TapeTrainingStep<T>.CollectParameters(_melEncoder.Cast<ILayer<T>>().ToList(), -1),
+            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        switch (CurrentStep)
+        {
+            case AdaSpeech2TrainingStep.SourceModel:
+                return base.SelectTrainableParametersForTraining(parameters).Where(p => !melEncoder.Contains(p)).ToList();
+            case AdaSpeech2TrainingStep.MelEncoderAligning:
+                return parameters.Where(melEncoder.Contains).ToList();
+            default:
+            {
+                var adaptive = new HashSet<Tensor<T>>(
+                    Training.TapeTrainingStep<T>.CollectParameters(AdaptationLayers(), -1),
+                    Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                return parameters.Where(adaptive.Contains).ToList();
+            }
+        }
+    }
+
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T>
-        {
-            Name = _useNativeMode ? "AdaSpeech2-Native" : "AdaSpeech2-ONNX",
-            Description = "AdaSpeech 2: Adaptive TTS with Untranscribed Data (Yan et al., 2021)",
-            FeatureCount = _options.HiddenDim,
-            Complexity = _options.NumEncoderLayers + _options.NumDecoderLayers,
-        };
+        var m = base.GetModelMetadata();
+        m.Name = m.Name.Replace("AdaSpeech", "AdaSpeech2");
+        m.Description = "AdaSpeech 2: Adaptive Text to Speech with Untranscribed Data (Yan et al., 2021)";
         m.AdditionalInfo["Architecture"] = "AdaSpeech2";
         return m;
     }
+}
 
+/// <summary>The steps of AdaSpeech 2's adaptation pipeline (Yan et al. 2021, §2, Fig. 2) that train the model.</summary>
+public enum AdaSpeech2TrainingStep
+{
+    /// <summary>Source model training: AdaSpeech training on transcribed data.</summary>
+    SourceModel = 1,
 
+    /// <summary>Mel encoder aligning: only the mel encoder trains, toward the expanded phoneme hidden sequence.</summary>
+    MelEncoderAligning = 2,
 
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(AdaSpeech2<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
-    }
+    /// <summary>Untranscribed speech adaptation: reconstruction through the mel encoder and decoder, adapting only the
+    /// conditional layer normalizations and the speaker embedding.</summary>
+    UntranscribedAdaptation = 3,
 }

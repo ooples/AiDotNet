@@ -35218,6 +35218,48 @@ public static partial class LayerHelper<T>
     }
 
     /// <summary>
+    /// Creates AdaSpeech's variance adaptor and mel decoder: FastSpeech 2's adaptor and positional encoding, FFT blocks
+    /// whose layer normalizations are conditioned on the speaker embedding, a final conditional layer normalization,
+    /// and the linear projection to mel channels (Chen et al. 2021 §2.2: <c>C = 2L + 1</c> conditional layer
+    /// normalizations for <c>L</c> decoder layers).
+    /// </summary>
+    /// <remarks>The adaptor is the first layer returned, so a model built with
+    /// <c>TtsModelBase.AddEncoderDecoderLayers</c> finds it at <c>Layers[EncoderLayerCount]</c>.</remarks>
+    internal static IEnumerable<ILayer<T>> CreateDefaultAdaSpeechDecoderLayers(
+        int hiddenDim,
+        int speakerEmbeddingDim,
+        int melChannels,
+        int numLayers,
+        int numHeads,
+        int filterSize,
+        int firstKernelSize,
+        int secondKernelSize,
+        double dropoutRate,
+        int maxMelLength,
+        int variancePredictorFilterSize,
+        int variancePredictorKernelSize,
+        double variancePredictorDropout,
+        int pitchBins,
+        double pitchMinHz,
+        double pitchMaxHz,
+        int energyBins,
+        int stftSize,
+        bool usePitch,
+        bool useEnergy)
+    {
+        yield return new VarianceAdaptorLayer<T>(hiddenDim, variancePredictorFilterSize, variancePredictorKernelSize,
+            variancePredictorDropout, pitchBins, pitchMinHz, pitchMaxHz, energyBins,
+            energyMin: 0.0, energyMax: VarianceAdaptorLayer<T>.MaxStftEnergy(stftSize),
+            usePitch: usePitch, useEnergy: useEnergy);
+        yield return new PositionalEncodingLayer<T>(maxMelLength, hiddenDim);
+        for (int i = 0; i < numLayers; i++)
+            yield return new FeedForwardTransformerBlock<T>(hiddenDim, numHeads, filterSize, firstKernelSize, secondKernelSize,
+                dropoutRate, conditionSize: speakerEmbeddingDim);
+        yield return new ConditionalLayerNormalizationLayer<T>(hiddenDim, speakerEmbeddingDim);
+        yield return new DenseLayer<T>(melChannels, new IdentityActivation<T>() as IActivationFunction<T>);
+    }
+
+    /// <summary>
     /// Creates default layers for GAN-based neural vocoders (HiFi-GAN, MelGAN, BigVGAN, etc.).
     /// Architecture: Mel input -> upsampling blocks -> residual blocks -> waveform output.
     /// </summary>
