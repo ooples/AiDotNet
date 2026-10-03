@@ -6168,6 +6168,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumEncoderLayers = 1, NumDecoderLayers = 1, NumHeads = 2, FftFilterSize = 64, " +
                     "VariancePredictorFilterSize = 32 })";
             }
+            else if (model.ClassName == "DeepVoice3" && model.TypeParameterCount == 1)
+            {
+                // Deep Voice 3's paper model runs at 48 kHz with a 4096-point FFT (2049 linear bins) and decodes up to
+                // 200 steps autoregressively; keep the topology (gated conv encoder, causal decoder with attention blocks,
+                // converter) narrow, with a 64-point FFT and six decoder steps.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 8, outputSize: 16), " +
+                    "new AiDotNet.TextToSpeech.Classic.DeepVoice3Options { SampleRate = 16000, HopSize = 200, FftSize = 64, " +
+                    "WindowSize = 64, MelChannels = 16, EmbeddingDim = 16, EncoderChannels = 8, NumEncoderLayers = 2, " +
+                    "DecoderPrenetSizes = new[] { 8, 16 }, NumDecoderLayers = 2, AttentionDim = 8, NumConverterLayers = 1, " +
+                    "ConverterChannels = 16, MaxDecoderSteps = 6, MinDecoderSteps = 2 })";
+            }
             else if (model.ClassName == "GradTTS" && model.TypeParameterCount == 1)
             {
                 // Grad-TTS's paper model is the 192-wide Glow-TTS encoder and a 64/128/256-channel U-Net over 172-frame
@@ -14809,7 +14823,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
                     // Bounded fixtures configure 16 mel bins; the generated target matches the model's own width.
                     bool sixteenBins = model.ClassName is "FastSpeech" or "AdaSpeech" or "AdaSpeech2" or "SpeedySpeech"
-                        or "Tacotron" or "TransformerTTS" or "GlowTTS" or "GradTTS";
+                        or "Tacotron" or "TransformerTTS" or "GlowTTS" or "GradTTS" or "DeepVoice3";
                     sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 8, {(sixteenBins ? 16 : 80)} }};");
                 }
                 sb.AppendLine();

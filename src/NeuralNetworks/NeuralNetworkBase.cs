@@ -5094,6 +5094,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     protected virtual IReadOnlyList<IReadOnlyList<Tensor<T>>>? GradientClippingGroups(IReadOnlyList<Tensor<T>> trainableParameters)
         => null;
 
+    /// <summary>
+    /// A bound applied to every gradient component after the norm clip in a custom-objective training step, or 0 for
+    /// none. Deep Voice 3 states both a maximum gradient norm (100) and a gradient clipping value (5).
+    /// </summary>
+    protected virtual double GradientValueClip => 0.0;
+
     private bool? _hasCustomTrainableParameterSelection;
 
     private bool HasCustomTrainableParameterSelection()
@@ -13238,6 +13244,22 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 {
                     foreach (var group in groups)
                         ApplyGradientClipping(grads, maxGradNorm, group);
+                }
+                PublishParameterGradients(grads);
+            }
+            double clipValue = GradientValueClip;
+            if (clipValue > 0.0 && grads.Count > 0)
+            {
+                T lower = NumOps.FromDouble(-clipValue), upper = NumOps.FromDouble(clipValue);
+                foreach (var g in grads.Values)
+                {
+                    if (g is null || g.Length == 0) continue;
+                    var span = g.Data.Span;
+                    for (int i = 0; i < span.Length; i++)
+                    {
+                        if (NumOps.LessThan(span[i], lower)) span[i] = lower;
+                        else if (NumOps.GreaterThan(span[i], upper)) span[i] = upper;
+                    }
                 }
                 PublishParameterGradients(grads);
             }

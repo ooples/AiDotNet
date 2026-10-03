@@ -34,6 +34,7 @@ public partial class WeightNormConv1DLayer<T> : LayerBase<T>, IShapeContract
     private readonly int _kernelSize;
     private readonly int _dilation;
     private readonly int _padding;
+    private readonly double _initStandardDeviation;
 
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _direction;
@@ -51,12 +52,16 @@ public partial class WeightNormConv1DLayer<T> : LayerBase<T>, IShapeContract
     /// <param name="kernelSize">Kernel width.</param>
     /// <param name="dilation">Dilation.</param>
     /// <param name="padding">Zero padding on each side.</param>
+    /// <param name="initStandardDeviation">When positive, the direction is drawn from N(0, σ²) and the bias starts at
+    /// zero (the convolutional sequence-to-sequence initialization of Gehring et al. 2017, which Deep Voice 3 uses);
+    /// otherwise PyTorch's default uniform initialization.</param>
     public WeightNormConv1DLayer(
         [LayerState] int inChannels,
         [LayerState] int outChannels,
         [LayerState] int kernelSize,
         [LayerState] int dilation,
-        [LayerState] int padding)
+        [LayerState] int padding,
+        [LayerState] double initStandardDeviation = 0.0)
         : base(new[] { inChannels }, new[] { outChannels })
     {
         if (inChannels <= 0) throw new ArgumentOutOfRangeException(nameof(inChannels));
@@ -69,6 +74,7 @@ public partial class WeightNormConv1DLayer<T> : LayerBase<T>, IShapeContract
         _kernelSize = kernelSize;
         _dilation = dilation;
         _padding = padding;
+        _initStandardDeviation = initStandardDeviation;
 
         // PyTorch's Conv1d default: U(-1/sqrt(fan_in), 1/sqrt(fan_in)) for kernel and bias.
         int fanIn = inChannels * kernelSize;
@@ -77,9 +83,20 @@ public partial class WeightNormConv1DLayer<T> : LayerBase<T>, IShapeContract
             ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value)
             : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
         _direction = new Tensor<T>(new[] { outChannels, inChannels, 1, kernelSize });
-        for (int i = 0; i < _direction.Length; i++) _direction[i] = NumOps.FromDouble((2 * random.NextDouble() - 1) * bound);
         _bias = new Tensor<T>(new[] { outChannels });
-        for (int i = 0; i < outChannels; i++) _bias[i] = NumOps.FromDouble((2 * random.NextDouble() - 1) * bound);
+        if (initStandardDeviation > 0)
+        {
+            for (int i = 0; i < _direction.Length; i++)
+            {
+                double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
+                _direction[i] = NumOps.FromDouble(initStandardDeviation * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
+            }
+        }
+        else
+        {
+            for (int i = 0; i < _direction.Length; i++) _direction[i] = NumOps.FromDouble((2 * random.NextDouble() - 1) * bound);
+            for (int i = 0; i < outChannels; i++) _bias[i] = NumOps.FromDouble((2 * random.NextDouble() - 1) * bound);
+        }
         _length = new Tensor<T>(new[] { outChannels });
         int per = inChannels * kernelSize;
         for (int o = 0; o < outChannels; o++)
@@ -170,6 +187,7 @@ public partial class WeightNormConv1DLayer<T> : LayerBase<T>, IShapeContract
         metadata["KernelSize"] = _kernelSize.ToString(inv);
         metadata["Dilation"] = _dilation.ToString(inv);
         metadata["Padding"] = _padding.ToString(inv);
+        metadata["InitStandardDeviation"] = _initStandardDeviation.ToString("R", inv);
         return metadata;
     }
 }
