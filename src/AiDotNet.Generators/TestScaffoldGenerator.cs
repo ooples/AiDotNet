@@ -6094,8 +6094,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             {
                 // A multi-class classifier, so the harness builds one-hot targets for its
                 // cross-entropy head (a Regression task type would hand it continuous ones).
-                // Four languages, so outputSize 4 is the head the list sizes. All five SE-Res2 blocks
-                // stay; only widths are bounded (16 TDNN channels, 16 mel coefficients, embedding 8).
+                // Four languages, so outputSize 4 is the head the list sizes. All five stages (TDNN, three SE-Res2Blocks, MFA)
+                // stay; only widths are bounded (16 TDNN channels with Res2Net scale 8, 16 mel coefficients, embedding 8).
                 constructorExpr = $"new {typeName}<double>(" +
                     "new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
@@ -6130,7 +6130,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.Audio.Speaker.ECAPATDNNSpeakerOptions { NumMels = 32, " +
                     "Channels = new[] { 16, 16, 16, 16, 32 }, KernelSizes = new[] { 5, 3, 3, 3, 1 }, " +
                     "Dilations = new[] { 1, 2, 3, 4, 1 }, Res2NetScale = 4, SEBottleneckDim = 8, " +
-                    "EmbeddingDim = 16, PoolingDim = 32, DropoutRate = 0.0 })";
+                    "EmbeddingDim = 16, PoolingDim = 32, AttentionChannels = 8 })";
             }
             else if (model.ClassName == "FastSpeech" && model.TypeParameterCount == 1)
             {
@@ -15341,6 +15341,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         : "    protected override int MemorizationTaskIterations => 2;");
                     sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
                 }
+            }
+
+            // ECAPATDNNSpeaker takes time-major [B, frames, mels] features: the mel axis is its first
+            // convolution's channel count, fixed by the weights, so the variable length is axis 1.
+            if (model.ClassName == "ECAPATDNNSpeaker")
+            {
+                sb.AppendLine("    protected override int VariableLengthAxis => 1;");
             }
         }
         else if (family == TestFamily.GraphNN)

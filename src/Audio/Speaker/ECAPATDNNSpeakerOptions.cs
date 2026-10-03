@@ -84,6 +84,12 @@ public class ECAPATDNNSpeakerOptions : ModelOptions
     /// </summary>
     public int SEBottleneckDim { get; set; } = 128;
 
+    /// <summary>
+    /// Gets or sets the bottleneck width of the attentive statistics pooling.
+    /// </summary>
+    /// <value>Default is 128, the paper's.</value>
+    public int AttentionChannels { get; set; } = 128;
+
     #endregion
 
     #region Embedding
@@ -100,9 +106,26 @@ public class ECAPATDNNSpeakerOptions : ModelOptions
     public int EmbeddingDim { get; set; } = 192;
 
     /// <summary>
-    /// Gets or sets the pooling dimension before the final embedding projection.
+    /// The width the attentive statistics pooling reads: the MFA convolution's, the last entry of
+    /// <see cref="Channels"/> (1536 in the paper).
     /// </summary>
-    public int PoolingDim { get; set; } = 1536;
+    /// <remarks>
+    /// An alias for that entry, not a separate setting: the two are the same quantity, so storing both
+    /// would only let them disagree. Setting it replaces the last <see cref="Channels"/> entry.
+    /// </remarks>
+    public int PoolingDim
+    {
+        get => Channels is { Length: > 0 } ? Channels[Channels.Length - 1] : 0;
+        set
+        {
+            if (value <= 0) throw new ArgumentOutOfRangeException(nameof(value), "PoolingDim must be positive.");
+            if (Channels is not { Length: > 0 })
+                throw new InvalidOperationException("Set Channels before PoolingDim; PoolingDim is its last entry.");
+            var widths = (int[])Channels.Clone();
+            widths[widths.Length - 1] = value;
+            Channels = widths;
+        }
+    }
 
     #endregion
 
@@ -147,8 +170,13 @@ public class ECAPATDNNSpeakerOptions : ModelOptions
     public double WeightDecay { get; set; } = 2e-5;
 
     /// <summary>
-    /// Gets or sets the dropout rate.
+    /// Not used: ECAPA-TDNN (Desplanques et al. 2020) applies no dropout anywhere in the network.
     /// </summary>
+    /// <remarks>
+    /// The previous Dense stand-in inserted a dropout layer after each block, which is not part of
+    /// the paper's architecture. The value is kept only so existing configurations still compile.
+    /// </remarks>
+    [Obsolete("ECAPA-TDNN applies no dropout; this value is ignored and will be removed.")]
     public double DropoutRate { get; set; } = 0.0;
 
     #endregion
