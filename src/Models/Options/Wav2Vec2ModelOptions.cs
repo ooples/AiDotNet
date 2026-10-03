@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Audio.SpeechRecognition;
 
 namespace AiDotNet.Models.Options;
@@ -5,6 +6,7 @@ namespace AiDotNet.Models.Options;
 /// <summary>
 /// Configuration options for Wav2Vec2 speech recognition models.
 /// </summary>
+[DimensionDivisibility(nameof(HiddenDim), nameof(NumHeads))]
 public class Wav2Vec2ModelOptions : AudioNeuralNetworkOptions
 {
     /// <summary>

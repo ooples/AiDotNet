@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
@@ -12,6 +13,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// They are used as backbones for downstream VLMs, classification, detection, and segmentation tasks.
 /// </para>
 /// </remarks>
+[DimensionDivisibility(nameof(EmbeddingDim), nameof(NumHeads))]
 public class VisionEncoderOptions : ModelOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>

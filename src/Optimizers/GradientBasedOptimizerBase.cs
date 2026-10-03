@@ -320,11 +320,13 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <see cref="Fused.IFusedOptimizerSpec"/> implementations. Shared so the
     /// per-optimizer specs don't each repeat the mapping.
     /// <para>
-    /// Returns <c>false</c> only for an UNKNOWN scheduler type (so a configured
-    /// schedule is never silently dropped — the caller falls back to eager). A
-    /// null scheduler or a constant scheduler yields <c>true</c> with
-    /// <paramref name="schedule"/> = null (constant LR; the spec's
-    /// <c>GetCurrentLearningRate</c> supplies the rate). The supported set mirrors
+    /// Returns <c>false</c> for a per-batch scheduler of an UNKNOWN type and for
+    /// <see cref="SchedulerStepMode.WarmupThenEpoch"/> (so a configured schedule is
+    /// never silently dropped — the caller falls back to eager). A null scheduler or
+    /// a constant scheduler yields <c>true</c> with <paramref name="schedule"/> = null
+    /// (constant LR; the spec's <c>GetCurrentLearningRate</c> supplies the rate). A
+    /// per-epoch scheduler of any type yields an
+    /// <see cref="Fused.OptimizerTrackingLrSchedule"/>. The per-batch set mirrors
     /// the fused kernel's implemented schedule shapes; new shapes are added here
     /// alongside their kernel support.
     /// </para>
@@ -332,11 +334,25 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     protected bool TryGetFusedLrSchedule(out Tensors.Engines.Compilation.LrSchedule? schedule)
     {
         schedule = null;
+        if (_learningRateScheduler is null or LearningRateSchedulers.ConstantLRScheduler)
+            return true;
+
+        // Every shape below advances once per optimizer step, which is only the eager cadence when the
+        // scheduler steps per batch. A per-epoch scheduler holds its rate for the whole epoch, so the plan
+        // reads the optimizer's current rate instead; OnEpochEnd moves it exactly as it moves the eager one.
+        // WarmupThenEpoch switches cadence mid-run on a per-batch warmup the fused path never advances
+        // (it does not call OnBatchEnd), so it stays eager.
+        switch (_schedulerStepMode)
+        {
+            case SchedulerStepMode.StepPerEpoch:
+                schedule = new Fused.OptimizerTrackingLrSchedule(GetCurrentLearningRate);
+                return true;
+            case SchedulerStepMode.WarmupThenEpoch:
+                return false;
+        }
+
         switch (_learningRateScheduler)
         {
-            case null:
-            case LearningRateSchedulers.ConstantLRScheduler:
-                return true;
             case LearningRateSchedulers.CosineAnnealingLRScheduler cosine:
                 // Denominator reconciliation: eager CosineAnnealing uses
                 // cos(π·(N-1)/tMax) on batch N, but the fused CosineLr uses
