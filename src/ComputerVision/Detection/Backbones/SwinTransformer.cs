@@ -55,11 +55,7 @@ public partial class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbo
     /// Creates a new Swin Transformer backbone.
     /// </summary>
     public SwinTransformer(SwinTransformerOptions? options = null)
-        : base(NeuralNetworkArchitecture<T>.CreateDynamicSpatial(
-                inputType: InputType.ThreeDimensional,
-                taskType: NeuralNetworkTaskType.ImageClassification,
-                channels: (options ??= new SwinTransformerOptions()).InChannels,
-                outputSize: 1),
+        : base(DetectionBackboneArchitecture<T>.Create((options ??= new SwinTransformerOptions()).InChannels),
               new MeanSquaredErrorLoss<T>())
     {
         _variant = options.Variant;
@@ -536,7 +532,8 @@ internal class SwinTransformerBlock<T>
 
     private void InitializeRelativePositionBias()
     {
-        var random = RandomHelper.CreateSeededRandom(42);
+        // Drawn from the model's initialization scope (#2201). A fixed seed of 42 here ignored the configured seed and gave every same-shape tensor identical values.
+        var random = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextRandom();
         for (int i = 0; i < _relativePositionBiasTable.Length; i++)
         {
             double value = random.NextGaussian(0, 0.02);

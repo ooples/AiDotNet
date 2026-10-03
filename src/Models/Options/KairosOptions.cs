@@ -59,6 +59,8 @@ public class KairosOptions<T> : TimeSeriesRegressionOptions<T>
         IntermediateSize = other.IntermediateSize;
         DropoutRate = other.DropoutRate;
         ModelSize = other.ModelSize;
+        LearningRate = other.LearningRate;
+        WarmupSteps = other.WarmupSteps;
     }
 
     /// <summary>
@@ -134,6 +136,29 @@ public class KairosOptions<T> : TimeSeriesRegressionOptions<T>
     /// <para><b>For Beginners:</b> Regularization to prevent overfitting. Set to 0 to disable.</para>
     /// </remarks>
     public double DropoutRate { get; set; } = 0.1;
+    /// <summary>
+    /// Gets or sets the peak Adam learning rate used when no optimizer is supplied.
+    /// </summary>
+    /// <value>Defaults to 1e-3.</value>
+    /// <remarks>
+    /// The Kairos paper names no optimizer or learning rate (see the model's PaperOptimizer record), so this
+    /// is the library's Adam default, not a value from the paper.
+    /// </remarks>
+    public double LearningRate { get; set; } = 1e-3;
+
+    /// <summary>
+    /// Gets or sets how many optimizer steps the learning rate ramps linearly up to <see cref="LearningRate"/>.
+    /// </summary>
+    /// <value>Defaults to 3,000: 1% of the paper's 300,000 pretraining steps.</value>
+    /// <remarks>
+    /// <para>
+    /// A convention, not the paper's: linear warmup is the standard start for transformer pretraining
+    /// (Vaswani et al. 2017), and the paper states none. Without it the first Adam step moves every one of the
+    /// default model's ~40M parameters by the full rate at once, which raised the loss (1.4165 to 2.2952 on the
+    /// conformance fixture) where a smaller step lowers it. Set 0 to train at the peak rate from the first step.
+    /// </para>
+    /// </remarks>
+    public int WarmupSteps { get; set; } = 3000;
 
     /// <summary>
     /// Gets or sets the model size variant.

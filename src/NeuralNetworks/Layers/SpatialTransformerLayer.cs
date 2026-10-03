@@ -577,7 +577,7 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     {
         // Vectorized initialization using Engine operations
         int totalElements = tensor.Length;
-        var randomTensor = Tensor<T>.CreateRandom(totalElements, 1); // [0, 1]
+        var randomTensor = Tensor<T>.CreateRandom(Random, totalElements, 1); // [0, 1]
         var half = NumOps.FromDouble(0.5);
 
         // Create tensor filled with 0.5 for subtraction

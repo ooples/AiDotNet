@@ -78,8 +78,7 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
     #region Fields
 
     private bool _useNativeMode;
-    private readonly InferenceSession? _onnxEncoderSession;
-    private readonly InferenceSession? _onnxDecoderSession;
+
     private string? _onnxEncoderModelPath;
     private string? _onnxDecoderModelPath;
     private readonly ITokenizer _tokenizer;
@@ -96,32 +95,18 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
     private int _decoderHeads;
     private int _numDecoderLayers;
 
-    // Native mode layers - Encoder (Swin Transformer style)
-    private readonly List<ILayer<T>> _patchEmbeddingLayers = [];
-    private readonly List<ILayer<T>> _encoderLayers = [];
-
-    // Native mode layers - Decoder (BART style)
-    private readonly List<ILayer<T>> _decoderEmbeddingLayers = [];
-    private readonly List<ILayer<T>> _decoderLayers = [];
-    private readonly List<ILayer<T>> _outputLayers = [];
+    // Native mode: the Swin encoder and the BART decoder as ONE encoder-decoder layer, the composite
+    // Nougat and Pix2Struct already use. Training, Predict and generation therefore all run the real
+    // image -> encoder -> cross-attending decoder graph. The previous layer-group lists ran the decoder
+    // without the encoder memory, so every generation ignored the image, and the flat training chain
+    // fed Swin features into the decoder's token embedding.
+    private VisionEncoderDecoderLayer<T>? _encoderDecoder;
 
     // Image dimensions (donut-base: 2560×1920)
     private int ImageHeight { get; set; }
     private int ImageWidth { get; set; }
 
-    // Learnable tokens
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T>? _tokenEmbeddings;
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T>? _decoderPositionEmbeddings;
-
-    // Gradient storage
-    [Scratch]
-    private Tensor<T>? _decoderPositionEmbeddingsGradients;
     private bool _nativeLayersInitialized;
-    #pragma warning disable CS0414
-    private bool _decoderForwardExecuted;
-    #pragma warning restore CS0414
 
     #endregion
 
@@ -245,11 +230,12 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         ImageWidth = _options.ImageWidth;
         MaxSequenceLength = _options.MaxGenerationLength;
 
-        _onnxEncoderSession = new InferenceSession(encoderPath);
-        _onnxDecoderSession = new InferenceSession(decoderPath);
+        // Bound to the inherited encoder/decoder so IsOnnxMode and disposal see them. Raw private sessions were
+        // never read by RunOnnxInference, so every ONNX entry point failed with "No ONNX model is loaded".
+        OnnxEncoder = new OnnxModel<T>(encoderPath);
+        OnnxDecoder = new OnnxModel<T>(decoderPath);
 
         InitializeLayers();
-        InitializeEmbeddings();
     }
 
     /// <summary>
@@ -342,13 +328,16 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
             return;
         }
 
-        ResetLayerGroups();
+        Layers.Clear();
+        _encoderDecoder = null;
 
         // Check if user provided custom layers via Architecture
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
-            PopulateLayerGroups(Architecture.Layers);
+            Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
+            // Text generation needs the encoder-decoder split; a custom chain that supplies one keeps it.
+            _encoderDecoder = Layers.OfType<VisionEncoderDecoderLayer<T>>().FirstOrDefault();
             return;
         }
 
@@ -369,179 +358,15 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
             vocabSize: _vocabSize,
             maxGenerationLength: _maxGenerationLength);
 
-        PopulateLayerGroups(encoderLayers, decoderLayers);
-    }
-
-    private void ResetLayerGroups()
-    {
-        Layers.Clear();
-        _patchEmbeddingLayers.Clear();
-        _encoderLayers.Clear();
-        _decoderEmbeddingLayers.Clear();
-        _decoderLayers.Clear();
-        _outputLayers.Clear();
-    }
-
-    private void PopulateLayerGroups(IEnumerable<ILayer<T>> encoderLayers, IEnumerable<ILayer<T>> decoderLayers)
-    {
-        foreach (var layer in encoderLayers)
-        {
-            Layers.Add(layer);
-            if (layer is SwinPatchEmbeddingLayer<T>)
-            {
-                _patchEmbeddingLayers.Add(layer);
-            }
-            else
-            {
-                _encoderLayers.Add(layer);
-            }
-        }
-
-        foreach (var layer in decoderLayers)
-        {
-            Layers.Add(layer);
-            if (layer is EmbeddingLayer<T>)
-            {
-                _decoderEmbeddingLayers.Add(layer);
-            }
-            else if (layer is DenseLayer<T>)
-            {
-                _outputLayers.Add(layer);
-            }
-            else
-            {
-                _decoderLayers.Add(layer);
-            }
-        }
-    }
-
-    private void PopulateLayerGroups(IEnumerable<ILayer<T>> layers)
-    {
-        bool inDecoder = false;
-
-        foreach (var layer in layers)
-        {
-            Layers.Add(layer);
-
-            if (layer is SwinPatchEmbeddingLayer<T>)
-            {
-                _patchEmbeddingLayers.Add(layer);
-                continue;
-            }
-
-            if (layer is EmbeddingLayer<T>)
-            {
-                inDecoder = true;
-                _decoderEmbeddingLayers.Add(layer);
-                continue;
-            }
-
-            if (layer is TransformerDecoderLayer<T>)
-            {
-                inDecoder = true;
-                _decoderLayers.Add(layer);
-                continue;
-            }
-
-            if (layer is DenseLayer<T>)
-            {
-                if (inDecoder)
-                {
-                    _outputLayers.Add(layer);
-                }
-                else
-                {
-                    _encoderLayers.Add(layer);
-                }
-                continue;
-            }
-
-            if (inDecoder)
-            {
-                _decoderLayers.Add(layer);
-            }
-            else
-            {
-                _encoderLayers.Add(layer);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Re-derives the per-group mirror lists from the layers already present in
-    /// <see cref="NeuralNetworkBase{T}.Layers"/> (e.g. after deserialization, where the
-    /// base recreated every layer with its saved weights). Uses the same type-based
-    /// classification as <see cref="PopulateLayerGroups(IEnumerable{ILayer{T}})"/> but
-    /// does NOT add to <c>Layers</c> — it only re-points the mirror views at the
-    /// existing layer instances, preserving their loaded weights.
-    /// </summary>
-    private void RebuildLayerGroupsFromLayers()
-    {
-        _patchEmbeddingLayers.Clear();
-        _encoderLayers.Clear();
-        _decoderEmbeddingLayers.Clear();
-        _decoderLayers.Clear();
-        _outputLayers.Clear();
-
-        bool inDecoder = false;
-        foreach (var layer in Layers)
-        {
-            if (layer is SwinPatchEmbeddingLayer<T>)
-            {
-                _patchEmbeddingLayers.Add(layer);
-                continue;
-            }
-
-            if (layer is EmbeddingLayer<T>)
-            {
-                inDecoder = true;
-                _decoderEmbeddingLayers.Add(layer);
-                continue;
-            }
-
-            if (layer is TransformerDecoderLayer<T>)
-            {
-                inDecoder = true;
-                _decoderLayers.Add(layer);
-                continue;
-            }
-
-            if (layer is DenseLayer<T>)
-            {
-                if (inDecoder)
-                {
-                    _outputLayers.Add(layer);
-                }
-                else
-                {
-                    _encoderLayers.Add(layer);
-                }
-                continue;
-            }
-
-            if (inDecoder)
-            {
-                _decoderLayers.Add(layer);
-            }
-            else
-            {
-                _encoderLayers.Add(layer);
-            }
-        }
-    }
-
-    private void InitializeEmbeddings()
-    {
-        var random = RandomHelper.CreateSeededRandom(42);
-
-        _tokenEmbeddings = Tensor<T>.CreateDefault([_vocabSize, _decoderHiddenDim], NumOps.Zero);
-        InitializeWithSmallRandomValues(_tokenEmbeddings, random, 0.02);
-
-        _decoderPositionEmbeddings = Tensor<T>.CreateDefault([_maxGenerationLength, _decoderHiddenDim], NumOps.Zero);
-        InitializeWithSmallRandomValues(_decoderPositionEmbeddings, random, 0.02);
-
-        // Initialize gradient tensor
-        _decoderPositionEmbeddingsGradients = Tensor<T>.CreateDefault([_maxGenerationLength, _decoderHiddenDim], NumOps.Zero);
+        var decoder = decoderLayers.ToList();
+        _encoderDecoder = new VisionEncoderDecoderLayer<T>(
+            encoderLayers,
+            (EmbeddingLayer<T>)decoder[0],
+            decoder.Skip(1).Take(decoder.Count - 2),
+            decoder[decoder.Count - 1],
+            _vocabSize,
+            _maxGenerationLength);
+        Layers.Add(_encoderDecoder);
     }
 
     private void EnsureNativeInitialized()
@@ -552,20 +377,8 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         }
 
         InitializeLayers();
-        InitializeEmbeddings();
         _nativeLayersInitialized = true;
         InvalidateParameterCountCache();
-    }
-
-    private void InitializeWithSmallRandomValues(Tensor<T> tensor, Random random, double stdDev)
-    {
-        for (int i = 0; i < tensor.Data.Length; i++)
-        {
-            double u1 = 1.0 - random.NextDouble();
-            double u2 = 1.0 - random.NextDouble();
-            double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-            tensor.Data.Span[i] = NumOps.FromDouble(randStdNormal * stdDev);
-        }
     }
 
     #endregion
@@ -707,7 +520,7 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
 
     private OCRResult<T> RecognizeTextOnnx(Tensor<T> image)
     {
-        if (_onnxEncoderSession is null || _onnxDecoderSession is null)
+        if (OnnxEncoder is null || OnnxDecoder is null)
             throw new InvalidOperationException("ONNX sessions not initialized.");
 
         var preprocessed = PreprocessDocument(image);
@@ -778,7 +591,7 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
 
     private DocumentQAResult<T> AnswerQuestionOnnx(Tensor<T> image, string prompt, int maxLength)
     {
-        if (_onnxEncoderSession is null || _onnxDecoderSession is null)
+        if (OnnxEncoder is null || OnnxDecoder is null)
             throw new InvalidOperationException("ONNX sessions not initialized.");
 
         var preprocessed = PreprocessDocument(image);
@@ -913,18 +726,7 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
 
         if (_useNativeMode)
         {
-            EnsureNativeInitialized();
-            var output = preprocessed;
-
-            // Patch embedding
-            foreach (var layer in _patchEmbeddingLayers)
-                output = layer.Forward(output);
-
-            // Encoder layers
-            foreach (var layer in _encoderLayers)
-                output = layer.Forward(output);
-
-            return output;
+            return RequireEncoderDecoder().Encode(preprocessed);
         }
         else
         {
@@ -934,11 +736,32 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
 
     private Tensor<T> RunEncoderOnnx(Tensor<T> input)
     {
-        if (_onnxEncoderSession is null)
-            throw new InvalidOperationException("Encoder session not initialized.");
+        var encoder = OnnxEncoder ?? throw new InvalidOperationException("Encoder session not initialized.");
+        // The exported Swin encoder takes the page (pixel_values) and returns last_hidden_state.
+        return encoder.Run(input);
+    }
 
-        // Use OnnxModel wrapper or direct inference
-        return RunOnnxInference(input);
+    /// <summary>
+    /// One decoder step through the exported decoder: the tokens so far (input_ids, int64 per the model's metadata)
+    /// cross-attending to the encoded page (encoder_hidden_states). Returns the logits [batch, seq, vocab].
+    /// </summary>
+    private Tensor<T> DecodeStepOnnx(Tensor<T> encoderOutput, List<int> tokens)
+    {
+        var decoder = OnnxDecoder ?? throw new InvalidOperationException("Decoder session not initialized.");
+        var inputNames = decoder.Metadata.Inputs.Select(i => i.Name).ToList();
+        string idsName = inputNames.FirstOrDefault(n => n.IndexOf("input_ids", StringComparison.OrdinalIgnoreCase) >= 0)
+            ?? throw new InvalidOperationException(
+                "The Donut decoder model has no input_ids input; its inputs are: " + string.Join(", ", inputNames) + ".");
+        string encoderName = inputNames.FirstOrDefault(n => n.IndexOf("encoder_hidden_states", StringComparison.OrdinalIgnoreCase) >= 0)
+            ?? throw new InvalidOperationException(
+                "The Donut decoder model has no encoder_hidden_states input; its inputs are: " + string.Join(", ", inputNames) + ".");
+
+        var ids = new Tensor<T>([1, tokens.Count]);
+        for (int t = 0; t < tokens.Count; t++)
+            ids[0, t] = NumOps.FromDouble(tokens[t]);
+
+        var outputs = decoder.Run(new Dictionary<string, Tensor<T>> { [idsName] = ids, [encoderName] = encoderOutput });
+        return outputs.TryGetValue("logits", out var logits) ? logits : outputs.Values.First();
     }
 
     private string GenerateText(Tensor<T> encoderOutput, string prompt, int maxLength = -1)
@@ -952,14 +775,16 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         // End-of-sequence token ID (commonly 2 for many models)
         const int eosTokenId = 2;
 
-        // Simplified greedy decoding - full implementation would use beam search
+        // Donut's decoding is greedy: argmax of the last position, fed back until EOS or the length cap.
+        var encoderDecoder = RequireEncoderDecoder();
         for (int i = 0; i < maxLength && generatedTokens.Count < _maxGenerationLength; i++)
         {
-            // Get decoder input embeddings
-            var decoderInput = CreateDecoderInput(generatedTokens);
+            var decoderIds = new Tensor<T>([1, generatedTokens.Count]);
+            for (int t = 0; t < generatedTokens.Count; t++)
+                decoderIds[0, t] = NumOps.FromDouble(generatedTokens[t]);
 
-            // Run decoder
-            var decoderOutput = RunDecoder(decoderInput, encoderOutput);
+            // Cross-attends to the encoded page at every step.
+            var decoderOutput = encoderDecoder.Decode(encoderOutput, decoderIds);
 
             // Get next token (greedy - take argmax)
             int nextToken = GetNextToken(decoderOutput);
@@ -975,66 +800,26 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
 
     private string GenerateTextOnnx(Tensor<T> encoderOutput, string prompt, int maxLength = -1)
     {
-        // Similar to native but using ONNX decoder
-        return GenerateText(encoderOutput, prompt, maxLength);
-    }
+        if (maxLength < 0) maxLength = _maxGenerationLength;
 
-    private Tensor<T> CreateDecoderInput(List<int> tokens)
-    {
-        if (_tokenEmbeddings is null)
-            throw new InvalidOperationException("Token embeddings are not initialized.");
-        if (_tokenEmbeddings.Shape.Length < 2 || _tokenEmbeddings.Shape[1] != _decoderHiddenDim)
-            throw new InvalidOperationException("Token embeddings shape does not match decoder hidden dimension.");
-
-        int vocabSize = _tokenEmbeddings.Shape[0];
-        var input = new Tensor<T>([1, tokens.Count, _decoderHiddenDim]);
-
-        for (int i = 0; i < tokens.Count; i++)
+        // The same greedy loop as the native path, one exported-decoder call per step: argmax of the last position,
+        // fed back until EOS or the length cap.
+        var generatedTokens = new List<int>(_tokenizer.Encode(prompt).TokenIds);
+        const int eosTokenId = 2;
+        for (int i = 0; i < maxLength && generatedTokens.Count < _maxGenerationLength; i++)
         {
-            int tokenId = tokens[i];
-            if (tokenId < 0 || tokenId >= vocabSize)
-                throw new ArgumentOutOfRangeException(nameof(tokens), $"Token id {tokenId} is out of range for vocab size {vocabSize}.");
-
-            int sourceOffset = tokenId * _decoderHiddenDim;
-            int destinationOffset = i * _decoderHiddenDim;
-            _tokenEmbeddings.Data.Span.Slice(sourceOffset, _decoderHiddenDim).CopyTo(input.Data.Span.Slice(destinationOffset, _decoderHiddenDim));
+            int nextToken = GetNextToken(DecodeStepOnnx(encoderOutput, generatedTokens));
+            if (nextToken == eosTokenId)
+                break;
+            generatedTokens.Add(nextToken);
         }
 
-        return input;
+        return _tokenizer.Decode(generatedTokens);
     }
 
-    private Tensor<T> RunDecoder(Tensor<T> decoderInput, Tensor<T> encoderOutput)
-    {
-        var output = decoderInput;
-
-        if (_useNativeMode)
-        {
-            _decoderForwardExecuted = true;
-
-            foreach (var layer in _decoderEmbeddingLayers)
-            {
-                output = layer.Forward(output);
-            }
-
-            foreach (var layer in _decoderLayers)
-            {
-                // Decoder layers would use cross-attention with encoder output 
-                output = layer.Forward(output);
-            }
-
-            foreach (var layer in _outputLayers)
-            {
-                output = layer.Forward(output);
-            }
-        }
-        else if (_onnxDecoderSession is not null)
-        {
-            // ONNX decoder inference
-            output = RunOnnxInference(decoderInput);
-        }
-
-        return output;
-    }
+    private VisionEncoderDecoderLayer<T> RequireEncoderDecoder() => _encoderDecoder
+        ?? throw new InvalidOperationException(
+            "Donut generation requires a VisionEncoderDecoderLayer; the custom Architecture.Layers supplied none.");
 
     private int GetNextToken(Tensor<T> logits)
     {
@@ -1189,39 +974,6 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
     /// <inheritdoc/>
 
 
-    private void WriteOptionalTensor(BinaryWriter writer, Tensor<T>? tensor)
-    {
-        if (tensor is null)
-        {
-            writer.Write(false);
-            return;
-        }
-
-        writer.Write(true);
-        int rank = tensor.Shape.Length;
-        writer.Write(rank);
-        for (int i = 0; i < rank; i++) writer.Write(tensor.Shape[i]);
-        var span = tensor.Data.Span;
-        for (int i = 0; i < span.Length; i++)
-            writer.Write(NumOps.ToDouble(span[i]));
-    }
-
-    private Tensor<T>? ReadOptionalTensor(BinaryReader reader)
-    {
-        bool present = reader.ReadBoolean();
-        if (!present) return null;
-
-        int rank = reader.ReadInt32();
-        int[] shape = new int[rank];
-        for (int i = 0; i < rank; i++) shape[i] = reader.ReadInt32();
-
-        var tensor = Tensor<T>.CreateDefault(shape, NumOps.Zero);
-        var span = tensor.Data.Span;
-        for (int i = 0; i < span.Length; i++)
-            span[i] = NumOps.FromDouble(reader.ReadDouble());
-        return tensor;
-    }
-
     #endregion
 
     #region NeuralNetworkBase Implementation
@@ -1234,13 +986,18 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         if (_useNativeMode)
         {
             EnsureNativeInitialized();
-            // Encode image and generate text output
-            var encoderOutput = EncodeImage(preprocessed);
-            return encoderOutput;
+            // The layer graph: encoder, then the decoder's first step from BOS. This returned the encoder
+            // features alone before, and preprocessed the page a second time on the way.
+            return Forward(preprocessed);
         }
         else
         {
-            return RunOnnxInference(preprocessed);
+            // The native graph's contract: the encoder, then the decoder's first step from BOS. The inherited
+            // RunOnnxInference would feed the encoder output to the decoder as its only input, which the exported
+            // decoder (input_ids + encoder_hidden_states) cannot take.
+            var encoded = RunEncoderOnnx(preprocessed);
+            // The same zero-valued, one-position decoder prompt the native layer uses for this path.
+            return DecodeStepOnnx(encoded, new List<int> { 0 });
         }
     }
 
@@ -1277,40 +1034,13 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
     /// reading -- ParameterCount and GetParameters -- stays available either way.
     /// </remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
-    private void UpdateEmbeddingGradients(Tensor<T> gradient)
-    {
-        // Update decoder position embedding gradients
-        if (_decoderPositionEmbeddingsGradients is not null && gradient.Data.Length > 0)
-        {
-            int gradLen = Math.Min(gradient.Data.Length, _decoderPositionEmbeddingsGradients.Data.Length);
-            for (int i = 0; i < gradLen; i++)
-            {
-                _decoderPositionEmbeddingsGradients.Data.Span[i] = NumOps.Add(
-                    _decoderPositionEmbeddingsGradients.Data.Span[i],
-                    gradient.Data.Span[i % gradient.Data.Length]);
-            }
-        }
-    }
 
-    private Vector<T> CollectParameterGradients()
-    {
-        var gradients = new List<T>();
-        EnsureNativeInitialized();
-
-        // Collect gradients from all layers
-        foreach (var layer in Layers)
-        {
-            var layerGradients = layer.GetParameterGradients();
-            gradients.AddRange(layerGradients);
-        }
-
-        // Add embedding gradients
-        if (_decoderPositionEmbeddingsGradients is not null)
-            gradients.AddRange(_decoderPositionEmbeddingsGradients.Data.ToArray());
-
-        return new Vector<T>([.. gradients]);
-    }
-
+    /// <summary>
+    /// A native Donut builds its layers on first use (EnsureNativeInitialized), so until then its weights
+    /// are deferred rather than absent; report them the way a lazily sized layer does.
+    /// </summary>
+    public override bool HasUninitializedParameters
+        => (_useNativeMode && !_nativeLayersInitialized) || base.HasUninitializedParameters;
     #endregion
 
     #region Disposal
@@ -1318,11 +1048,7 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
     /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
-        if (disposing)
-        {
-            _onnxEncoderSession?.Dispose();
-            _onnxDecoderSession?.Dispose();
-        }
+        // The ONNX encoder and decoder are the inherited OnnxEncoder/OnnxDecoder, which the base disposes.
         base.Dispose(disposing);
     }
 

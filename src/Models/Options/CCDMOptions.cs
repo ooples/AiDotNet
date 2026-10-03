@@ -4,31 +4,29 @@ using AiDotNet.Enums;
 namespace AiDotNet.Models.Options;
 
 /// <summary>
-/// Configuration options for CCDM (Conditional Continuous Diffusion Model for Time Series).
+/// Configuration options for CCDM, the Channel-aware Contrastive Conditional Diffusion model for
+/// multivariate probabilistic time series forecasting (Li, Chen and Xiong, 2024).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// CCDM extends continuous diffusion models for conditional time series generation.
-/// It operates in continuous space (unlike discrete token-based approaches) and uses
-/// a score-matching objective for high-quality probabilistic forecasting.
+/// CCDM is a DDPM forecaster. Its denoiser embeds every variable's past window and noisy future
+/// independently (channel-independent dense modules), mixes the variables with channel-wise
+/// diffusion transformers conditioned on the diffusion step through adaptive layer norm, and is
+/// trained to predict the injected noise. An optional denoising-based InfoNCE term contrasts the
+/// true future against shuffled and rescaled ones. Defaults follow the authors' reference
+/// configuration (github.com/LSY-Cython/CCDM, <c>run_I48_O96.py</c>) unless noted.
 /// </para>
-/// <para><b>For Beginners:</b> CCDM is a diffusion-based forecasting model that:
-///
-/// <b>What is Diffusion?</b>
-/// Diffusion models work by learning to remove noise. During training, noise is
-/// progressively added to the target series. During inference, the model starts
-/// from pure noise and iteratively denoises it, conditioned on the historical
-/// context, to produce a forecast.
-///
-/// <b>Key Advantages:</b>
-/// - Produces probabilistic forecasts (uncertainty estimates) naturally
-/// - Operates in continuous space (no quantization loss)
-/// - Score-matching objective is stable to train
-///
-/// <b>Trade-offs:</b>
-/// - Slower inference than direct methods (requires multiple denoising steps)
-/// - More parameters to tune (noise schedule, diffusion steps)
+/// <para>
+/// The inherited <see cref="TimeSeriesRegressionOptions{T}.NumFeatures"/> is the number of variables
+/// (D) forecast jointly. Each variable is one token of the channel-wise diffusion transformers, so
+/// attention runs ACROSS variables; inputs are laid out [context, variables] (optionally with a
+/// leading batch) and forecasts [horizon, variables]. With one variable the attention reduces to a
+/// single token.
+/// </para>
+/// <para><b>For Beginners:</b> CCDM forecasts by starting from random noise and removing it step by
+/// step, guided by the history it is given. Because every run starts from different noise, it draws
+/// many possible futures; their median is the forecast and their spread is the uncertainty.
 /// </para>
 /// </remarks>
 public class CCDMOptions<T> : TimeSeriesRegressionOptions<T>
@@ -42,11 +40,8 @@ public class CCDMOptions<T> : TimeSeriesRegressionOptions<T>
         // which would leave anything holding a ModelOptions reference reading null.
         //
         // Defaulted so repeated predictions agree. This does not collapse the sampling: the
-        // NumSamples paths still differ from one another, so the spread stays a real estimate
-        // and the intervals the paper reports remain meaningful. It fixes only that Predict
-        // called twice on the same input returns the same answer - the sampler equivalent of
-        // seeding a generator before inference, not of switching sampling off. Set it to
-        // another value for a different sample set, or vary it per call for independent draws.
+        // NumSamples paths still differ from one another, so the spread stays a real estimate.
+        // It fixes only that Predict called twice on the same input returns the same answer.
         Seed = 1;
     }
 
@@ -58,10 +53,8 @@ public class CCDMOptions<T> : TimeSeriesRegressionOptions<T>
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
 
-        // Copy inherited TimeSeriesRegressionOptions properties
         // Seed is declared on ModelOptions rather than in this file, so a copy constructor
-        // written from the local declarations alone misses it. Losing it on a clone silently
-        // changes deterministic initialization.
+        // written from the local declarations alone misses it.
         Seed = other.Seed;
         LagOrder = other.LagOrder;
         IncludeTrend = other.IncludeTrend;
@@ -70,176 +63,208 @@ public class CCDMOptions<T> : TimeSeriesRegressionOptions<T>
         ModelType = other.ModelType;
         LossFunction = other.LossFunction;
 
-        // Copy CCDM-specific properties
         ContextLength = other.ContextLength;
         ForecastHorizon = other.ForecastHorizon;
+        NumFeatures = other.NumFeatures;
         HiddenDimension = other.HiddenDimension;
         NumLayers = other.NumLayers;
         NumHeads = other.NumHeads;
+        EmbeddingLayers = other.EmbeddingLayers;
+        MlpRatio = other.MlpRatio;
         DiffusionSteps = other.DiffusionSteps;
+        BetaSchedule = other.BetaSchedule;
+        BetaStart = other.BetaStart;
+        BetaEnd = other.BetaEnd;
         NumSamples = other.NumSamples;
         TrainingBatchSize = other.TrainingBatchSize;
         LearningRate = other.LearningRate;
         DropoutRate = other.DropoutRate;
-        BetaStart = other.BetaStart;
-        BetaEnd = other.BetaEnd;
+        AttentionDropoutRate = other.AttentionDropoutRate;
+        ContrastiveWeight = other.ContrastiveWeight;
+        ContrastiveTemperature = other.ContrastiveTemperature;
+        NumNegatives = other.NumNegatives;
     }
 
     /// <summary>
-    /// Gets or sets the number of historical time steps used as input context.
+    /// Gets or sets the number of historical time steps used as input context (L).
     /// </summary>
     /// <value>Defaults to 168 (one week of hourly data).</value>
     /// <remarks>
-    /// <para><b>For Beginners:</b> How much historical data the model sees before making predictions.
-    /// Longer context gives the model more patterns to learn from but uses more memory.</para>
+    /// <para><b>For Beginners:</b> How much history the model sees before forecasting. The paper
+    /// evaluates 48, 96, 192 and 336.</para>
     /// </remarks>
     public int ContextLength { get; set; } = 168;
 
     /// <summary>
-    /// Gets or sets the number of future time steps to forecast.
+    /// Gets or sets the number of future time steps to forecast (H).
     /// </summary>
     /// <value>Defaults to 24 (one day ahead for hourly data).</value>
     /// <remarks>
-    /// <para><b>For Beginners:</b> How far into the future the model predicts in a single pass.</para>
+    /// <para><b>For Beginners:</b> How far ahead the model predicts in one pass. The paper evaluates
+    /// 96, 168, 336 and 720.</para>
     /// </remarks>
     public int ForecastHorizon { get; set; } = 24;
 
     /// <summary>
-    /// Gets or sets the hidden dimension of the transformer layers.
+    /// Gets or sets the embedding width of the past window, the noisy future and the diffusion step
+    /// (e_hid; the transformers run at twice this width).
     /// </summary>
-    /// <value>Defaults to 128.</value>
+    /// <value>Defaults to 128, the reference configuration's width for every embedding.</value>
     /// <remarks>
-    /// <para><b>For Beginners:</b> Controls the model's capacity. Larger values can capture
-    /// more complex patterns but require more memory and compute.</para>
+    /// <para><b>For Beginners:</b> The model's capacity. The paper scales it with the horizon:
+    /// 128 for 96 steps up to 728 for 720.</para>
     /// </remarks>
     public int HiddenDimension { get; set; } = 128;
 
     /// <summary>
-    /// Gets or sets the number of transformer layers.
+    /// Gets or sets the number of channel-wise diffusion transformer blocks (n_att).
     /// </summary>
-    /// <value>Defaults to 4.</value>
+    /// <value>Defaults to 2, the depth the paper fixes for every experiment.</value>
     /// <remarks>
-    /// <para><b>For Beginners:</b> More layers allow the model to learn deeper patterns
-    /// but increase computation time and risk of overfitting on small datasets.</para>
+    /// <para><b>For Beginners:</b> How many times the variables exchange information.</para>
     /// </remarks>
-    public int NumLayers { get; set; } = 4;
+    public int NumLayers { get; set; } = 2;
 
     /// <summary>
     /// Gets or sets the number of attention heads.
     /// </summary>
     /// <value>Defaults to 8.</value>
     /// <remarks>
-    /// <para><b>For Beginners:</b> Each attention head focuses on different aspects of the
-    /// input sequence. Must divide evenly into <see cref="HiddenDimension"/>.</para>
+    /// <para><b>For Beginners:</b> Must divide twice <see cref="HiddenDimension"/>, the width the
+    /// attention runs at.</para>
     /// </remarks>
     public int NumHeads { get; set; } = 8;
 
     /// <summary>
-    /// Gets or sets the number of diffusion (denoising) steps.
+    /// Gets or sets the number of residual MLP blocks in each channel-independent dense module
+    /// (n_emb; n_enc = n_dec in the paper).
     /// </summary>
-    /// <value>Defaults to 100.</value>
+    /// <value>Defaults to 2.</value>
     /// <remarks>
-    /// <para><b>For Beginners:</b> More steps generally produce better quality forecasts
-    /// but increase inference time. Values between 50-200 are typical.</para>
+    /// <para><b>For Beginners:</b> How deep each variable's own encoder is before the variables are
+    /// mixed. The decoder uses one fewer block followed by a linear projection.</para>
     /// </remarks>
-    public int DiffusionSteps { get; set; } = 100;
+    public int EmbeddingLayers { get; set; } = 2;
 
     /// <summary>
-    /// Gets or sets the number of sample paths drawn per forecast.
+    /// Gets or sets the hidden-width multiplier of the transformer MLP.
     /// </summary>
-    /// <value>Defaults to 100.</value>
+    /// <value>Defaults to 1.0, the reference configuration's mlp_ratio.</value>
+    public double MlpRatio { get; set; } = 1.0;
+
+    /// <summary>
+    /// Gets or sets the number of diffusion steps (K).
+    /// </summary>
+    /// <value>Defaults to 50, the paper's value for a 96-step horizon.</value>
     /// <remarks>
-    /// <para><b>For Beginners:</b> A diffusion forecaster is generative: every call draws a random
-    /// path, so a single path carries the full spread of the predictive distribution rather than
-    /// its centre. Drawing several paths and reporting the per-position median gives the point
-    /// forecast, and the spread across paths gives the uncertainty.</para>
-    /// <para><b>Provenance:</b> 100 is the number of samples Tashiro et al. (CSDI, NeurIPS 2021)
-    /// draw before taking the median, and the sibling <see cref="CSDIOptions.NumSamples"/> in this
-    /// library uses the same default. Lower it to trade forecast stability for inference time.</para>
+    /// <para><b>For Beginners:</b> How many denoising steps a forecast takes. The paper uses 50 for
+    /// short horizons and up to 200 for 720 steps.</para>
+    /// </remarks>
+    public int DiffusionSteps { get; set; } = 50;
+
+    /// <summary>
+    /// Gets or sets the shape of the noise schedule.
+    /// </summary>
+    /// <value>Defaults to <see cref="AiDotNet.Enums.BetaSchedule.ScaledLinear"/>.</value>
+    /// <remarks>
+    /// <para>
+    /// The reference configuration's "quad" schedule is
+    /// <c>betas = linspace(sqrt(beta_start), sqrt(beta_end), K)^2</c>, which is exactly
+    /// <see cref="AiDotNet.Enums.BetaSchedule.ScaledLinear"/>. Linear and squared-cosine are the
+    /// reference code's other two branches.
+    /// </para>
+    /// </remarks>
+    public BetaSchedule BetaSchedule { get; set; } = BetaSchedule.ScaledLinear;
+
+    /// <summary>
+    /// Gets or sets the first beta of the noise schedule.
+    /// </summary>
+    /// <value>Defaults to 0.0001 (beta_1 in the paper).</value>
+    public double BetaStart { get; set; } = 0.0001;
+
+    /// <summary>
+    /// Gets or sets the last beta of the noise schedule.
+    /// </summary>
+    /// <value>Defaults to 0.5, the reference configuration's beta_K with the quad schedule over 50
+    /// steps.</value>
+    /// <remarks>
+    /// <para>
+    /// beta_K belongs with the schedule shape and step count. Over 50 quad-scheduled steps 0.5 drives
+    /// alphaBar_K to about 1e-5, so the forward process ends in the pure noise the sampler starts
+    /// from. The paper uses 0.2-0.5 depending on the horizon.
+    /// </para>
+    /// </remarks>
+    public double BetaEnd { get; set; } = 0.5;
+
+    /// <summary>
+    /// Gets or sets the number of sample paths drawn per forecast (S).
+    /// </summary>
+    /// <value>Defaults to 100, the paper's number of samples per test window.</value>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> The forecast is the per-position median of these paths and the
+    /// quantiles come from their spread. Lower it to trade stability for speed.</para>
     /// </remarks>
     public int NumSamples { get; set; } = 100;
 
     /// <summary>
-    /// Number of (timestep, noise) draws averaged into a single training step.
+    /// Number of (diffusion step, noise) draws averaged into a single training step.
     /// </summary>
+    /// <value>Defaults to 32.</value>
     /// <remarks>
     /// <para>
-    /// Ho et al. (2020), "Denoising Diffusion Probabilistic Models", Algorithm 1 draws one
-    /// timestep per example and averages the step over a minibatch - 128 examples in their
-    /// Section 4. A caller here supplies one example at a time, so the averaging has to happen
-    /// over the noise process instead: without it, a step's gradient (and its reported loss) is a
-    /// one-sample estimate of an expectation taken over every noise level, and successive steps
-    /// differ mostly by which timestep came up.
+    /// Ho et al. (2020) Algorithm 1 draws one step per example and averages over a minibatch. A
+    /// caller here supplies one window at a time, so the averaging happens over the noise process:
+    /// the steps are drawn antithetically (k and K-1-k in pairs) as the reference implementation's
+    /// "uniform" step distribution does.
     /// </para>
-    /// <para><b>For Beginners:</b> Diffusion training asks "given this partly noised series, what
-    /// noise was added?" at a randomly chosen noise level. Asking once gives a very jumpy answer;
-    /// asking 32 times at different levels and averaging gives a steady one. Raise this for
-    /// smoother training at proportionally more work per step, lower it to train faster.</para>
     /// </remarks>
     public int TrainingBatchSize { get; set; } = 32;
 
     /// <summary>
     /// Learning rate for the default Adam optimizer.
     /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Koa et al. (2023), "Diffusion Variational Autoencoder for Tackling Stochasticity in
-    /// Multi-Step Regression Stock Price Prediction" - the paper this model carries in its
-    /// ResearchPaper attribute - state in Section 4.1.3: "The Adam optimizer was used to optimize
-    /// the model, with an initial learning rate of 5e-4."
-    /// </para>
-    /// <para>
-    /// Without this the model fell back to
-    /// <see cref="OptimizationAlgorithmOptions{T, TInput, TOutput}.InitialLearningRate"/>&apos;s
-    /// generic 0.01, which is 20x the paper rate - at that step size the epsilon-prediction loss
-    /// rises instead of falling.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is how big a step training takes each time it learns
-    /// something. Too big and the model overshoots and gets worse; too small and it barely moves.
-    /// 5e-4 is the value this model&apos;s own paper reports.</para>
-    /// </remarks>
-    public double LearningRate { get; set; } = 5e-4;
+    /// <value>Defaults to 1e-3, the reference configuration's init_lr.</value>
+    public double LearningRate { get; set; } = 1e-3;
 
     /// <summary>
-    /// Gets or sets the dropout rate for regularization.
+    /// Gets or sets the dropout rate inside the residual MLP blocks of the dense modules.
     /// </summary>
-    /// <value>Defaults to 0.1 (10%).</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Randomly drops connections during training to prevent
-    /// overfitting. Set to 0 to disable.</para>
-    /// </remarks>
+    /// <value>Defaults to 0.1, the reference MLPResidual dropout.</value>
     public double DropoutRate { get; set; } = 0.1;
 
     /// <summary>
-    /// Gets or sets the starting beta value for the linear noise schedule.
+    /// Gets or sets the dropout rate on the attention weights.
     /// </summary>
-    /// <value>Defaults to 0.0001.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Controls how much noise is added at the first diffusion step.
-    /// A small value means very little noise initially.</para>
-    /// </remarks>
-    public double BetaStart { get; set; } = 0.0001;
+    /// <value>Defaults to 0.1, the reference configuration's attn_dropout.</value>
+    public double AttentionDropoutRate { get; set; } = 0.1;
 
     /// <summary>
-    /// Gets or sets the ending beta value for the linear noise schedule.
+    /// Gets or sets the weight lambda of the denoising-based temporal contrastive loss.
     /// </summary>
-    /// <value>Defaults to 0.1.</value>
+    /// <value>Defaults to 0 (denoising loss only), the reference configuration's default
+    /// "non-contrast" mode.</value>
     /// <remarks>
-    /// <para><b>For Beginners:</b> Controls how much noise is added at the final diffusion step.
-    /// A larger value means more aggressive noise at the end of the schedule.</para>
-    /// <para><b>Provenance:</b> beta_T belongs WITH the step count, and this model runs a LINEAR
-    /// schedule over DiffusionSteps = 100. Ho et al., "Denoising Diffusion Probabilistic Models"
-    /// (NeurIPS 2020) Section 4 pair 0.02 with T = 1000, where the cumulative product alphaBar_T
-    /// reaches ~4e-5 and x_T is indistinguishable from the pure noise the sampler starts at. Over
-    /// 100 steps that same 0.02 leaves alphaBar_T ~= 0.37, so the forward process still carries
-    /// ~61% of the signal while the sampler starts from pure noise - the two ends do not meet and
-    /// training cannot close the gap. The 100-step time-series diffusion literature uses 0.1 for
-    /// exactly this reason: Rasul et al. (TimeGrad, ICML 2021) and Kollovieh et al. (TSDiff, 2023
-    /// Appendix, "a linear scheduler with beta_1 = 0.0001 and beta_100 = 0.1"). The earlier 0.5
-    /// was borrowed from Tashiro et al. (CSDI, NeurIPS 2021), where it is the endpoint of a
-    /// QUADRATIC schedule over 50 steps; applied linearly over 100 steps it drives alphaBar_T to
-    /// ~5e-14, so the reverse process amplifies its input by ~5e6 before the denoiser has learned
-    /// anything.</para>
+    /// <para>
+    /// Paper Equation 6: L = L_denoise + lambda * L_contrast. The paper reports lambda in
+    /// {5e-5, 1e-4, 5e-4, 1e-3} depending on the dataset, and for large datasets first pre-trains
+    /// with the denoising loss alone, then fine-tunes with the contrastive term. Setting a positive
+    /// value draws <see cref="NumNegatives"/> patch-shuffled and as many rescaled negatives per
+    /// training row, which multiplies the cost of a step accordingly.
+    /// </para>
+    /// <para><b>For Beginners:</b> An extra training signal that teaches the model to tell the real
+    /// future apart from scrambled or rescaled versions of it. Off by default.</para>
     /// </remarks>
-    public double BetaEnd { get; set; } = 0.1;
+    public double ContrastiveWeight { get; set; } = 0.0;
+
+    /// <summary>
+    /// Gets or sets the InfoNCE temperature tau.
+    /// </summary>
+    /// <value>Defaults to 0.1, the paper's value.</value>
+    public double ContrastiveTemperature { get; set; } = 0.1;
+
+    /// <summary>
+    /// Gets or sets the number of negatives per augmentation (patch shuffle and magnitude scaling).
+    /// </summary>
+    /// <value>Defaults to 64, the reference configuration's n_negatives.</value>
+    public int NumNegatives { get; set; } = 64;
 }

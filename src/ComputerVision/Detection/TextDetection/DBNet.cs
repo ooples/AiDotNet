@@ -97,33 +97,6 @@ public partial class DBNet<T> : TextDetectorBase<T>
     };
 
     /// <inheritdoc/>
-    public override TextDetectionResult<T> Detect(Tensor<T> image)
-    {
-        return Detect(image, NumOps.ToDouble(Options.ConfidenceThreshold));
-    }
-
-    /// <inheritdoc/>
-    public override TextDetectionResult<T> Detect(Tensor<T> image, double confidenceThreshold)
-    {
-        var startTime = DateTime.UtcNow;
-
-        int originalHeight = image.Shape[2];
-        int originalWidth = image.Shape[3];
-
-        var input = Preprocess(image);
-        var outputs = Forward(input);
-        var textRegions = PostProcess(outputs, originalWidth, originalHeight, confidenceThreshold);
-
-        return new TextDetectionResult<T>
-        {
-            TextRegions = textRegions,
-            InferenceTime = DateTime.UtcNow - startTime,
-            ImageWidth = originalWidth,
-            ImageHeight = originalHeight
-        };
-    }
-
-    /// <inheritdoc/>
     protected override List<Tensor<T>> Forward(Tensor<T> input)
     {
         var fused = _pyramid.Forward(EnsureBackbone.ExtractFeatures(input));
@@ -137,6 +110,120 @@ public partial class DBNet<T> : TextDetectorBase<T>
         return new List<Tensor<T>> { probMap, threshMap, binaryMap };
     }
 
+    /// <summary>The training shrink ratio r of the text kernel (Liao et al. 2020, Section 3.4).</summary>
+    internal const double ShrinkRatio = 0.4;
+
+    /// <summary>The threshold map's target range, [0.3, 0.7] in the reference.</summary>
+    internal const double ThresholdMin = 0.3, ThresholdMax = 0.7;
+
+    /// <summary>The paper's optimizer (Liao et al. 2020, Section 4.2): SGD with momentum 0.9 at learning rate 0.007.</summary>
+    protected override AiDotNet.Interfaces.IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateTrainingOptimizer()
+        => PaperSgdMomentum(0.007, 0.9);
+
+    /// <summary>
+    /// DBNet's loss (Liao et al. 2020, Section 3.4; reference DBLoss):
+    /// <c>L = L_s + alpha L_b + beta L_t</c>, with alpha = 1 and beta = 10.
+    /// <list type="bullet">
+    /// <item><c>L_s</c>: BCE on the probability map against the shrunk text kernels, with 3:1 hard negative mining.</item>
+    /// <item><c>L_b</c>: dice on the approximate binary map against the same kernels.</item>
+    /// <item><c>L_t</c>: L1 on the threshold map inside each text's dilated border band.</item>
+    /// </list>
+    /// </summary>
+    protected override Tensor<T> TextDetectionLoss(List<Tensor<T>> outputs, TextDetectionTrainingBatch targets,
+        int imageWidth, int imageHeight)
+    {
+        var prob = outputs[0];
+        var thresh = outputs[1];
+        var binary = outputs[2];
+        int batch = prob.Shape[0], mapHeight = prob.Shape[2], mapWidth = prob.Shape[3];
+        var kernels = new List<double[][,]>();
+        var masks = new List<double[][,]>();
+        var borders = new List<double[][,]>();
+        var borderMasks = new List<double[][,]>();
+        for (int b = 0; b < batch; b++)
+        {
+            var (kernel, mask, border, borderMask) = BuildTargets(targets[b], imageWidth, imageHeight, mapWidth, mapHeight);
+            kernels.Add(new[] { kernel });
+            masks.Add(new[] { mask });
+            borders.Add(new[] { border });
+            borderMasks.Add(new[] { borderMask });
+        }
+        var kernelT = MapTensor(kernels);
+        var maskT = MapTensor(masks);
+        var borderT = MapTensor(borders);
+        var borderMaskT = MapTensor(borderMasks);
+
+        var bce = BinaryCrossEntropyMap(prob, kernelT);
+        var probabilityLoss = WeightedMean(bce, HardNegativeWeights(bce, kernelT, maskT, 3.0));
+        var thresholdLoss = WeightedMean(Engine.TensorAbs(Engine.TensorSubtract(thresh, borderT)), borderMaskT);
+        var binaryLoss = DiceLoss(binary, kernelT, maskT);
+        return Engine.TensorAdd(Engine.TensorAdd(probabilityLoss, binaryLoss), Engine.TensorMultiplyScalar(thresholdLoss, NumOps.FromDouble(10.0)));
+    }
+
+    /// <summary>
+    /// The reference MakeShrinkMap and MakeBorderMap for one image. The kernel is each polygon shrunk by
+    /// <c>D = A (1 - r^2) / L</c>. Polygons too small to shrink are ignored (masked out). The border target is
+    /// <c>1 - distance / D</c> inside the polygon dilated by D, mapped into [0.3, 0.7].
+    /// </summary>
+    internal static (double[,] Kernel, double[,] Mask, double[,] Border, double[,] BorderMask) BuildTargets(
+        IReadOnlyList<TextPolygonTarget> polygons, int imageWidth, int imageHeight, int mapWidth, int mapHeight)
+    {
+        var kernel = new double[mapHeight, mapWidth];
+        var mask = new double[mapHeight, mapWidth];
+        var canvas = new double[mapHeight, mapWidth];
+        var borderMask = new double[mapHeight, mapWidth];
+        for (int y = 0; y < mapHeight; y++) for (int x = 0; x < mapWidth; x++) mask[y, x] = 1.0;
+        foreach (var target in polygons)
+        {
+            var polygon = ToMap(target, imageWidth, imageHeight, mapWidth, mapHeight);
+            double distance = TextTargetGeometry.ShrinkDistance(polygon, ShrinkRatio);
+            var shrunk = TextTargetGeometry.Area(polygon) < 1.0 || distance <= 0 ? null : TextTargetGeometry.Offset(polygon, distance);
+            if (shrunk is null)
+            {
+                TextTargetGeometry.Fill(mask, polygon, 0.0);
+                continue;
+            }
+            TextTargetGeometry.Fill(kernel, shrunk, 1.0);
+            var dilated = TextTargetGeometry.Offset(polygon, -distance);
+            if (dilated is null) continue;
+            var (x0, y0, x1, y1) = TextTargetGeometry.Bounds(dilated, mapWidth, mapHeight);
+            for (int y = y0; y <= y1; y++)
+                for (int x = x0; x <= x1; x++)
+                {
+                    if (!TextTargetGeometry.Contains(dilated, x + 0.5, y + 0.5)) continue;
+                    double d = TextTargetGeometry.DistanceToBoundary(polygon, x + 0.5, y + 0.5);
+                    double value = 1.0 - Math.Min(1.0, d / distance);
+                    if (value > canvas[y, x]) canvas[y, x] = value;
+                    borderMask[y, x] = 1.0;
+                }
+        }
+        var border = new double[mapHeight, mapWidth];
+        for (int y = 0; y < mapHeight; y++)
+            for (int x = 0; x < mapWidth; x++)
+                border[y, x] = (canvas[y, x] * (ThresholdMax - ThresholdMin)) + ThresholdMin;
+        return (kernel, mask, border, borderMask);
+    }
+
+    /// <summary>
+    /// Online hard negative mining (reference BalanceCrossEntropyLoss). Every positive counts; of the
+    /// negatives, only the <c>ratio * positives</c> with the largest current loss do. The weights are constants,
+    /// so the selection itself carries no gradient.
+    /// </summary>
+    private Tensor<T> HardNegativeWeights(Tensor<T> loss, Tensor<T> kernel, Tensor<T> mask, double ratio)
+    {
+        var weights = new Tensor<T>(loss.Shape.ToArray());
+        var negatives = new List<(double Loss, int Index)>();
+        int positives = 0;
+        for (int i = 0; i < loss.Length; i++)
+        {
+            if (NumOps.ToDouble(mask[i]) < 0.5) continue;
+            if (NumOps.ToDouble(kernel[i]) > 0.5) { weights[i] = NumOps.One; positives++; }
+            else negatives.Add((NumOps.ToDouble(loss[i]), i));
+        }
+        int keep = (int)Math.Min(negatives.Count, positives * ratio);
+        foreach (var (_, index) in negatives.OrderByDescending(n => n.Loss).Take(keep)) weights[index] = NumOps.One;
+        return weights;
+    }
     /// <inheritdoc/>
     protected override List<TextRegion<T>> PostProcess(
         List<Tensor<T>> outputs,
@@ -193,13 +280,13 @@ public partial class DBNet<T> : TextDetectorBase<T>
             if (avgProb < confidenceThreshold)
                 continue;
 
-            // Scale contour to original image coordinates
-            var polygon = contour
-                .Select(p => (X: p.W * scaleX, Y: p.H * scaleY))
+            // The binary map marks the SHRUNK text kernel (training shrinks each polygon by
+            // D = A (1 - r^2) / L, Liao et al. 2020 Eq. 7), so the detection must be dilated back out:
+            // D' = A' r' / L' with r' = 1.5 (Eq. 10). Without it every box was the shrunk kernel.
+            var polygon = UnclipMinAreaRectangle(contour, UnclipRatio)
+                .Select(p => (X: Math.Min(Math.Max(p.X * scaleX, 0.0), imageWidth),
+                              Y: Math.Min(Math.Max(p.Y * scaleY, 0.0), imageHeight)))
                 .ToList();
-
-            // Simplify polygon
-            polygon = SimplifyPolygon(polygon, Options.PolygonSimplificationEpsilon * Math.Max(scaleX, scaleY));
 
             if (polygon.Count >= 4)
             {
@@ -417,6 +504,23 @@ public partial class DBNet<T> : TextDetectorBase<T>
             .ToList();
     }
 
+    /// <summary>The paper's inference dilation ratio r' (Liao et al. 2020, Section 3.5).</summary>
+    internal const double UnclipRatio = 1.5;
+
+    /// <summary>
+    /// Dilates a detected kernel back to its text region: the component's minimum-area rectangle grown by
+    /// D' = A' r' / L' on every side.
+    /// </summary>
+    /// <remarks>
+    /// This is the reference post-process (mini box, unclip, mini box again). For a rectangle the Vatti offset
+    /// by D' followed by its minimum-area rectangle is exactly the rectangle with each side moved out by D',
+    /// so no general polygon clipper is needed.
+    /// </remarks>
+    internal static List<(double X, double Y)> UnclipMinAreaRectangle(IReadOnlyList<(int H, int W)> points, double ratio)
+        => TextBoxGeometry.MinAreaRectangle(points, (width, height) =>
+            width + height > 0 ? width * height * ratio / (2 * (width + height)) : 0.0);
+
+    // Andrew's monotone chain; returns the hull counter-clockwise without the closing point.
     private List<TextRegion<T>> ApplyPolygonNMS(List<TextRegion<T>> regions, double iouThreshold)
     {
         if (regions.Count == 0)

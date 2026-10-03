@@ -93,19 +93,28 @@ public abstract class TextDetectionTestBase<T> : DetectionModelTestBase<T>
         switch (detector)
         {
             case CRAFT<T>:
-                AssertPositiveTextResult(detector.Detect(image, DetectConfidenceThreshold), 1, (0, 0, 60, 60));
+                // One 32x32 component: niter = int(sqrt(1024 * 32 / 1024) * 2) = 11, so the reference dilation
+                // grows each side by (1 + 11) / 2 = 6 cells, [-6, 37] at stride 2, clipped to the 64x64 image.
+                AssertPositiveTextResult(detector.Detect(image, DetectConfidenceThreshold), 1, (0, 0, 64, 64));
                 break;
             case DBNet<T>:
-                AssertPositiveTextResult(detector.Detect(image, DetectConfidenceThreshold), 1, (0, 0, 63, 63));
+                // The uniform head marks the whole 16x16 map as one kernel: its 15x15 minimum-area rectangle is
+                // dilated by D' = A' r' / L' = 225 * 1.5 / 60 = 5.625 cells, i.e. [-22.5, 82.5] px at stride 4,
+                // and clipped to the 64x64 image. Before the unclip existed this pinned the kernel, (0,0)-(63,63).
+                AssertPositiveTextResult(detector.Detect(image, DetectConfidenceThreshold), 1, (0, 0, 64, 64));
                 break;
             case EAST<T>:
                 // The actual RBOX head is the unique trainable five-element bias. A changed or
                 // ambiguous layout fails here instead of guessing which equal-shaped tensor to edit.
                 var geometryBias = Assert.Single(trainable,
                     chunk => chunk.Tensor.Rank == 1 && chunk.Tensor.Length == 5).Tensor;
-                var overlappingGeometry = new[] { 2.0, 3.0, 2.0, 3.0, 0.0 };
-                for (int index = 0; index < overlappingGeometry.Length; index++)
-                    geometryBias[index] = ToT(overlappingGeometry[index]);
+                // EAST bounds its RBOX head as the paper does: each distance is sigmoid(raw) * map side (8 here)
+                // and the angle is (sigmoid(raw) - 0.5) * pi / 2. The biases are the inverse of the geometry wanted.
+                double DistanceBias(double distance) => Math.Log(distance / (8.0 - distance));
+                var overlappingGeometry = new[] { 2.0, 2.9, 2.0, 2.9, 0.0 };
+                for (int index = 0; index < 4; index++)
+                    geometryBias[index] = ToT(DistanceBias(overlappingGeometry[index]));
+                geometryBias[4] = ToT(0);
                 var raw = detector.Predict(image);
                 // Public Predict flattens/concatenates every head per image: 64 score cells,
                 // followed by five geometry channels with the same 8-by-8 row-major grid.
@@ -118,11 +127,16 @@ public abstract class TextDetectionTestBase<T> : DetectionModelTestBase<T>
                         for (int index = 0; index < overlappingGeometry.Length; index++)
                             Assert.Equal(overlappingGeometry[index], ToD(raw[0, (index + 1) * 64 + cell]), 10);
                     }
-                // Sixty-four eligible cells enter real NMS (fixed IoU 0.2); overlapping boxes
-                // leave eight. Zero distances are not a valid positive geometry fixture.
-                AssertPositiveTextResult(detector.Detect(image, DetectConfidenceThreshold), 8, (-20, -12, 28, 20));
+                // Locality-aware NMS, worked by hand: each cell's box is 46.4x32 px. Walking a row, the running
+                // score-weighted merge absorbs cells 0-6: cell 6 is 28 px from the mean of cells 0-5, IoU
+                // 18.4 / 74.4 = 0.247. Cell 7 is 32 px from the mean 28 of cells 0-6, IoU 14.4 / 78.4 = 0.184, below
+                // the 0.2 threshold, so it starts its own group. (A distance of 3 put cell 7 at exactly 0.2, a tie
+                // that floating-point rounding decides either way.) Standard NMS then keeps rows 0, 3 and 6 of
+                // both the merged boxes and the singles: 6 regions, the first being row 0's merged box, x 28 +- 23.2,
+                // y 4 +- 16. Zero distances are not a valid positive fixture.
+                AssertPositiveTextResult(detector.Detect(image, DetectConfidenceThreshold), 6, (4.8, -12, 51.2, 20));
 
-                for (int index = 0; index < 4; index++) geometryBias[index] = ToT(0.25);
+                for (int index = 0; index < 4; index++) geometryBias[index] = ToT(DistanceBias(0.25));
                 geometryBias[4] = ToT(0);
                 var separated = detector.Detect(image, DetectConfidenceThreshold);
                 AssertPositiveTextResult(separated, 64, (2, 2, 6, 6));
@@ -141,6 +155,139 @@ public abstract class TextDetectionTestBase<T> : DetectionModelTestBase<T>
         // the caller raises the threshold; this is not a second randomly initialized fixture.
         Assert.Empty(detector.Detect(image, 0.75).TextRegions);
     }
+
+    /// <summary>
+    /// A batch of N images must give exactly the N results of detecting each image alone.
+    /// </summary>
+    /// <remarks>
+    /// Every text detector used to decode batch position 0 of a batched forward and return it as the
+    /// whole answer, so the other images vanished without an error. The two images differ and the check
+    /// requires them to give different results, so a decoder that reads item 0 for every item fails here
+    /// rather than passing on two identical answers.
+    /// </remarks>
+    /// <summary>Training steps the overfit test may take before it must reach <see cref="OverfitHMeanFloor"/>.</summary>
+    protected virtual int OverfitStepBudget => 60;
+
+    /// <summary>The ICDAR H-mean (IoU 0.5) that the overfit test requires after training.</summary>
+    protected virtual double OverfitHMeanFloor => 0.99;
+
+    /// <summary>
+    /// The paper objective has to fit: trained through <c>TrainTextDetections</c> on one image of two words, the
+    /// detector must come to find exactly those words. That means ICDAR H-mean 1.0 at IoU 0.5, from a start
+    /// that does not already find them. A loss with the wrong sign, targets in the wrong place or a head the
+    /// update never reaches cannot pass this. A loss that only shrinks also cannot pass, because H-mean is
+    /// measured on the decoded detections at the model's configured threshold, not on the loss.
+    /// </summary>
+    [Fact(Timeout = 300000)]
+    public async Task TrainTextDetections_OverfitsOneImage_ToFullHMean()
+    {
+        await Task.Yield();
+        using var arena = TensorArena.Create();
+        using var detector = CreatePositiveTextDetector(new TextDetectionOptions<T>
+        {
+            InputSize = new[] { 64, 64 },
+            Size = ModelSize.Nano
+        });
+        var image = new Tensor<T>(new[] { 1, 3, 64, 64 });
+        var words = new[]
+        {
+            SyntheticTextImages.Draw(image, 0, "HI", 6, 6, 3),
+            SyntheticTextImages.Draw(image, 0, "TEL", 8, 38, 3),
+        };
+        var batch = new TextDetectionTrainingBatch(new[]
+        {
+            words.Select((w, i) => TextPolygonTarget.FromBox(w.Left, w.Top, w.Right, w.Bottom, i == 0 ? "HI" : "TEL"))
+        });
+        var groundTruth = words.Select(w => TextRegion<T>.FromPolygon(new List<(T X, T Y)>
+        {
+            (ToT(w.Left), ToT(w.Top)), (ToT(w.Right), ToT(w.Top)), (ToT(w.Right), ToT(w.Bottom)), (ToT(w.Left), ToT(w.Bottom)),
+        }, ToT(1))).ToList();
+        var metrics = new TextDetectionMetrics<T>();
+        double HMean()
+        {
+            detector.SetTrainingMode(false);
+            // update_bn: eval-mode statistics for the current weights, not the momentum average of earlier ones.
+            BatchNormRecalibration.Recalibrate<T>(detector, () => detector.Predict(image));
+            var found = detector.Detect(image).TextRegions;
+            return metrics.Evaluate(new[] { found }, new[] { groundTruth }).HMean;
+        }
+
+        double initial = HMean();
+        var trajectory = new List<string> { $"0: hmean {initial:F3}" };
+        double final = initial;
+        for (int step = 1; step <= OverfitStepBudget && final < OverfitHMeanFloor; step++)
+        {
+            detector.TrainTextDetections(image, batch);
+            double loss = ToD(detector.GetLastLoss());
+            Assert.False(double.IsNaN(loss) || double.IsInfinity(loss), $"Step {step} reported a non-finite loss {loss}.");
+            if (step % 5 == 0 || step == OverfitStepBudget)
+            {
+                final = HMean();
+                trajectory.Add($"{step}: loss {loss:G4} hmean {final:F3}");
+            }
+        }
+
+        Assert.True(initial < OverfitHMeanFloor,
+            $"The untrained detector already scores H-mean {initial:F3}, so this fixture cannot show learning.");
+        Assert.True(final >= OverfitHMeanFloor,
+            $"After {OverfitStepBudget} steps H-mean is {final:F3}, below {OverfitHMeanFloor}. " + string.Join("; ", trajectory));
+    }
+    [Fact(Timeout = 120000)]
+    public async Task DetectBatch_EqualsDetectingEachImageAlone()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var detector = CreateTextDetector();
+        detector.SetTrainingMode(false);
+
+        var first = CreateRandomImage(rng);
+        var second = CreateRandomImage(rng);
+        var batchShape = first.Shape.ToArray();
+        batchShape[0] = 2;
+        var batch = new Tensor<T>(batchShape);
+        for (int i = 0; i < first.Length; i++)
+        {
+            batch[i] = first[i];
+            batch[first.Length + i] = second[i];
+        }
+
+        // Zero keeps every scored region, so the comparison sees as much decoder output as it can.
+        var aloneFirst = detector.Detect(first, 0.0);
+        var aloneSecond = detector.Detect(second, 0.0);
+        var batched = detector.DetectBatch(batch, 0.0);
+
+        Assert.Equal(2, batched.Count);
+        AssertSameRegions(aloneFirst, batched[0], "batch item 0");
+        AssertSameRegions(aloneSecond, batched[1], "batch item 1");
+        Assert.True(aloneFirst.TextRegions.Count + aloneSecond.TextRegions.Count > 0,
+            "Neither image produced a region, so this fixture cannot tell batch items apart.");
+        Assert.NotEqual(RegionSignature(aloneFirst), RegionSignature(aloneSecond));
+
+        // One result cannot describe two images, so Detect refuses a batch instead of dropping one.
+        Assert.Throws<ArgumentException>(() => detector.Detect(batch));
+    }
+
+    private static void AssertSameRegions(TextDetectionResult<T> expected, TextDetectionResult<T> actual, string label)
+    {
+        Assert.True(expected.TextRegions.Count == actual.TextRegions.Count,
+            $"{label}: {actual.TextRegions.Count} regions batched, {expected.TextRegions.Count} alone.");
+        for (int r = 0; r < expected.TextRegions.Count; r++)
+        {
+            var (el, et, er, eb) = expected.TextRegions[r].Box.ToXYXY();
+            var (al, at, ar, ab) = actual.TextRegions[r].Box.ToXYXY();
+            // A batched forward may reduce in a different order than a single one, hence a tolerance.
+            Assert.Equal(el, al, 6); Assert.Equal(et, at, 6); Assert.Equal(er, ar, 6); Assert.Equal(eb, ab, 6);
+            Assert.Equal(ToD(expected.TextRegions[r].Confidence), ToD(actual.TextRegions[r].Confidence), 6);
+        }
+    }
+
+    private static string RegionSignature(TextDetectionResult<T> result)
+        => string.Join(";", result.TextRegions.Select(region =>
+        {
+            var (left, top, right, bottom) = region.Box.ToXYXY();
+            return $"{left:F4},{top:F4},{right:F4},{bottom:F4},{ToD(region.Confidence):F6}";
+        }));
 
     internal static void AssertPositiveTextResult(TextDetectionResult<T> result, int expectedCount,
         (double Left, double Top, double Right, double Bottom) expectedFirstBox)

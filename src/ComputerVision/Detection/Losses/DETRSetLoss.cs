@@ -142,7 +142,6 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
     public Tensor<T> ComputeTapeLoss(Tensor<T> classLogits, Tensor<T> boxes, DetectionTrainingBatch<T> targets)
     {
         ValidateHeads(classLogits, boxes, targets);
-        int batch = classLogits.Shape[0];
         int queries = classLogits.Shape[1];
 
         // Materialize detached host snapshots once for discrete matching, not once per pair.
@@ -151,7 +150,41 @@ public class DETRSetLoss<T> : LossFunctionBase<T>
         var boxData = boxes.ToArray();
         ValidateFinitePredictions(logitsData, boxData);
         var assignments = Match(logitsData, boxData, targets, queries);
+        return ComputeTapeLoss(classLogits, boxes, targets, assignments, logitsData, boxData);
+    }
 
+    /// <summary>
+    /// The set loss for a FIXED assignment: target <c>j</c> of image <c>i</c> is matched to query
+    /// <c>assignments[i][j]</c>, and every other query is background. DINO's contrastive denoising uses it:
+    /// each positive denoising query is pinned to the target it was noised from, and negatives and padding
+    /// are pushed to background.
+    /// </summary>
+    public Tensor<T> ComputeTapeLoss(Tensor<T> classLogits, Tensor<T> boxes, DetectionTrainingBatch<T> targets, int[][] assignments)
+    {
+        ValidateHeads(classLogits, boxes, targets);
+        if (assignments is null) throw new ArgumentNullException(nameof(assignments));
+        int queries = classLogits.Shape[1];
+        if (assignments.Length != classLogits.Shape[0])
+            throw new ArgumentException("One assignment row per image is required.", nameof(assignments));
+        for (int image = 0; image < assignments.Length; image++)
+        {
+            if (assignments[image] is null || assignments[image].Length != targets[image].Count)
+                throw new ArgumentException($"Image {image} needs one query per target.", nameof(assignments));
+            if (assignments[image].Any(query => query < 0 || query >= queries) || assignments[image].Distinct().Count() != assignments[image].Length)
+                throw new ArgumentException($"Image {image} assigns a query out of range or twice.", nameof(assignments));
+        }
+
+        var logitsData = classLogits.ToArray();
+        var boxData = boxes.ToArray();
+        ValidateFinitePredictions(logitsData, boxData);
+        return ComputeTapeLoss(classLogits, boxes, targets, assignments, logitsData, boxData);
+    }
+
+    private Tensor<T> ComputeTapeLoss(Tensor<T> classLogits, Tensor<T> boxes, DetectionTrainingBatch<T> targets,
+        int[][] assignments, T[] logitsData, T[] boxData)
+    {
+        int batch = classLogits.Shape[0];
+        int queries = classLogits.Shape[1];
         var classification = UsesNoObjectClass
             ? SoftmaxClassification(classLogits, assignments, targets)
             : SigmoidClassification(classLogits, logitsData, boxData, assignments, targets);

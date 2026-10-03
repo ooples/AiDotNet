@@ -95,8 +95,7 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
         _regressionHead = new FullyConnectedLayer<T>(
             EmbeddingDimension,
             outputDimension,
-            // No activation for regression -- stated as Identity rather than passed as null, which
-            // FullyConnectedLayer resolves to ReLU and would clamp the head to non-negative outputs.
+            // No activation on the output; the paper's ReLU comes before the head (ActivateForHead).
             new IdentityActivation<T>());
     }
 
@@ -112,8 +111,8 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
         var clsOutput = ForwardBackbone(numericalFeatures, categoricalIndices);
         _clsOutputCache = clsOutput;
 
-        // Apply regression head
-        var predictions = _regressionHead.Forward(clsOutput);
+        // Apply regression head: Linear(ReLU(LayerNorm(CLS)))
+        var predictions = _regressionHead.Forward(ActivateForHead(clsOutput));
         _predictionsCache = predictions;
 
         return predictions;

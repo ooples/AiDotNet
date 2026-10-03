@@ -561,7 +561,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>, IShapeContract
         T half = NumOps.FromDouble(0.5);
 
         int totalElements = _weights.Length;
-        var randomTensor = Tensor<T>.CreateRandom(totalElements, 1); // [0, 1]
+        var randomTensor = Tensor<T>.CreateRandom(Random, totalElements, 1); // [0, 1]
 
         var halfTensor = new Tensor<T>([totalElements]);
         halfTensor.Fill(half);
