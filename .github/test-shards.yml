@@ -741,8 +741,9 @@ shard:
   # Detection suite this branch changed had NO signal on either side of the comparison.
   # 15 classes / ~680 tests of paper-scale detection and segmentation backbones in one
   # process is the whole problem; three shards of ~230 each fit the envelope. Gap-free and
-  # non-overlapping by class-name prefix: ComputerVision* | the eight named model suites |
-  # Segmentation*, which together are exactly the 15 classes in the namespace.
+  # non-overlapping by class-name prefix: ComputerVision* | the named model suites |
+  # Segmentation*, which together are exactly the classes in the namespace. MaskRCNNTrainingTests
+  # (instance segmentation) joined the model suites as the 16th.
   - name: Integration C - ComputerVision Detection
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -756,6 +757,7 @@ shard:
       Category!=GPU&Category!=Stress&Category!=Sweep&
       (FullyQualifiedName~IntegrationTests.ComputerVision.FoundationSegmentation|
       FullyQualifiedName~IntegrationTests.ComputerVision.InstanceSegmentation|
+      FullyQualifiedName~IntegrationTests.ComputerVision.MaskRCNNTrainingTests.|
       FullyQualifiedName~IntegrationTests.ComputerVision.OpenVocabInteractiveReferringSegmentation|
       FullyQualifiedName~IntegrationTests.ComputerVision.PanopticMambaEfficientSegmentation|
       FullyQualifiedName~IntegrationTests.ComputerVision.PointCloudMedicalSegmentation|

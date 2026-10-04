@@ -633,6 +633,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         { "InputChannels", "OutputChannels", "TopResolution" };
 
+    /// <summary>Overridable surface of <c>InstanceSegmenterTestBase</c>; its factory is two-line and never filtered.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> InstanceSegmenterTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal) { "ImageSize", "NumClasses" };
+
     /// <summary>Overridable surface of <c>VolatilityModelTestBase</c>: the default factory and the
     /// simulated-series length. Filtering keeps the generic shape members, which it does not have, out.</summary>
     private static readonly System.Collections.Generic.HashSet<string> VolatilityModelTestBaseMembers =
@@ -3467,7 +3471,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                                     || model.ExtendsTextConditioningBase
                                     || (model.HasLeadingIntConstructor
                                         && model.UsesMatrixInput && model.UsesVectorOutput)
-                                    || family.Value is TestFamily.TensorModule or TestFamily.Neck or TestFamily.MetaLearning
+                                    || family.Value is TestFamily.TensorModule or TestFamily.Neck or TestFamily.InstanceSegmentation or TestFamily.MetaLearning
                                         or TestFamily.ClassificationMetaLearning
                                     || ExplicitlyConstructedClassNames.Contains(model.ClassName)) &&
                                     IsCompatibleWithFamily(model, family.Value);
@@ -3715,6 +3719,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         bool implementsSafetyModule = false;
         bool extendsTextConditioning = false;
         bool extendsNeck = false;
+        bool extendsInstanceSegmenter = false;
         bool extendsVideoSafety = false;
         bool extendsDeepfakeDetector = false;
         bool extendsMetaLearner = false;
@@ -3906,6 +3911,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 extendsTextConditioning = true;
             else if (baseName.StartsWith("NeckBase", System.StringComparison.Ordinal))
                 extendsNeck = true;
+            else if (baseName.StartsWith("InstanceSegmenterBase", System.StringComparison.Ordinal))
+                extendsInstanceSegmenter = true;
             else if (baseName.StartsWith("VideoSafetyModuleBase", System.StringComparison.Ordinal))
                 extendsVideoSafety = true;
             else if (baseName.StartsWith("DeepfakeDetectorBase", System.StringComparison.Ordinal))
@@ -4107,6 +4114,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ImplementsSafetyModule = implementsSafetyModule,
             ExtendsTextConditioningBase = extendsTextConditioning,
             ExtendsNeckBase = extendsNeck,
+            ExtendsInstanceSegmenterBase = extendsInstanceSegmenter,
             ExtendsVideoSafetyModuleBase = extendsVideoSafety,
             ExtendsDeepfakeDetectorBase = extendsDeepfakeDetector,
             ExtendsMetaLearnerBase = extendsMetaLearner,
@@ -4773,6 +4781,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // the factory.
         if (model.ExtendsNeckBase)
             return TestFamily.Neck;
+
+        // Priority 0c2: InstanceSegmentation. InstanceSegmenterBase is a ModelBase (not INeuralNetworkModel),
+        // built from InstanceSegmentationOptions, so neither the Segmentation family (which needs a network)
+        // nor TensorModule (a width-only constructor) can build one. InstanceSegmenterTestBase owns the image
+        // size and class count and hands them to the factory.
+        if (model.ExtendsInstanceSegmenterBase)
+            return TestFamily.InstanceSegmentation;
 
         // Priority 0d2: MetaLearning (#2139). A meta-learner wraps an inner model its caller chooses, so no
         // model family can build one and all of them used to be excluded. MetaLearnerTestBase builds a small
@@ -13146,6 +13161,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // so they derive from the double convenience base rather than a <float> form.
             || baseClassName == "TensorModuleTestBase"
             || baseClassName == "NeckTestBase"
+            || baseClassName == "InstanceSegmenterTestBase"
             || baseClassName == "VideoSafetyModuleTestBase"
             || baseClassName == "DeepfakeDetectorTestBase"
             || baseClassName == "MetaLearnerTestBase"
@@ -17094,8 +17110,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // parameterized factory in place of the parameterless one. A literal size here would be a
         // second copy of a number the base already holds - the pattern behind every architecture /
         // fixture disagreement this generator has produced.
-        bool parameterizedFactory = family is TestFamily.TensorModule or TestFamily.Neck or TestFamily.MetaLearning
-            or TestFamily.ClassificationMetaLearning;
+        bool parameterizedFactory = family is TestFamily.TensorModule or TestFamily.Neck or TestFamily.InstanceSegmentation
+            or TestFamily.MetaLearning or TestFamily.ClassificationMetaLearning;
         if (family == TestFamily.TensorModule)
         {
             sb.AppendLine($"    protected override {returnTypeCode} CreateModel(int width)");
@@ -17105,6 +17121,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             sb.AppendLine($"    protected override {returnTypeCode} CreateNeck(int[] inputChannels, int outputChannels)");
             sb.AppendLine($"        => new {typeName}<double>(inputChannels, outputChannels);");
+        }
+        else if (family == TestFamily.InstanceSegmentation)
+        {
+            sb.AppendLine($"    protected override {returnTypeCode} CreateSegmenter(int imageSize, int numClasses)");
+            sb.AppendLine($"        => new {typeName}<double>(new AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmentationOptions<double> {{ InputSize = new[] {{ imageSize, imageSize }}, NumClasses = numClasses, UsePretrained = false }});");
         }
         else if (family == TestFamily.MetaLearning)
         {
@@ -17366,6 +17387,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             TestFamily.SafetyModule => SafetyModuleTestBaseMembers,
             TestFamily.TensorModule => TensorModuleTestBaseMembers,
             TestFamily.Neck => NeckTestBaseMembers,
+            TestFamily.InstanceSegmentation => InstanceSegmenterTestBaseMembers,
             TestFamily.VideoSafetyModule => VideoSafetyModuleTestBaseMembers,
             TestFamily.DeepfakeDetector => DeepfakeDetectorTestBaseMembers,
             TestFamily.MetaLearning => MetaLearnerTestBaseMembers,
@@ -17521,6 +17543,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return model.UsesTensorInput && model.HasLeadingIntConstructor;
             case TestFamily.Neck:
                 return model.ExtendsNeckBase;
+            case TestFamily.InstanceSegmentation:
+                return model.ExtendsInstanceSegmenterBase;
             case TestFamily.VideoSafetyModule:
                 return model.ExtendsVideoSafetyModuleBase;
             case TestFamily.DeepfakeDetector:
@@ -19917,6 +19941,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
         public bool ExtendsNeckBase { get; set; }
 
+        /// <summary>True for a Mask R-CNN-style instance segmenter: a ModelBase driven through Predict and Segment.</summary>
+        public bool ExtendsInstanceSegmenterBase { get; set; }
+
         /// <summary>True for a video safety module, which is judged on clips through EvaluateVideo.</summary>
         public bool ExtendsVideoSafetyModuleBase { get; set; }
 
@@ -20139,6 +20166,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         SafetyModule,
         TensorModule,
         Neck,
+        InstanceSegmentation,
         VideoSafetyModule,
         DeepfakeDetector,
         MetaLearning,
@@ -20962,6 +20990,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.SafetyModule:          return "SafetyModuleTestBase";
             case TestFamily.TensorModule:          return "TensorModuleTestBase";
             case TestFamily.Neck:                  return "NeckTestBase";
+            case TestFamily.InstanceSegmentation:  return "InstanceSegmenterTestBase";
             case TestFamily.VideoSafetyModule:     return "VideoSafetyModuleTestBase";
             case TestFamily.DeepfakeDetector:      return "DeepfakeDetectorTestBase";
             case TestFamily.MetaLearning:          return "MetaLearnerTestBase";
@@ -21017,6 +21046,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return "CreateDetector";
             case TestFamily.Neck:
                 return "CreateNeck";
+            case TestFamily.InstanceSegmentation:
+                return "CreateSegmenter";
             case TestFamily.MetaLearning:
             case TestFamily.ClassificationMetaLearning:
                 return "CreateLearner";
@@ -21075,6 +21106,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return "IFullModel<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>";
             case TestFamily.Neck:
                 return "AiDotNet.ComputerVision.Detection.Necks.NeckBase<double>";
+            case TestFamily.InstanceSegmentation:
+                return "AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase<double>";
             case TestFamily.VideoSafetyModule:
                 return "AiDotNet.Interfaces.IVideoSafetyModule<double>";
             case TestFamily.DeepfakeDetector:
