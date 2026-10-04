@@ -98,6 +98,21 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
                 Source = "Kotelnikov et al. 2023: the learning rate is drawn from LogUniform[1e-5, 1e-2] and the weight decay from {0, LogUniform[1e-6, 1e-3]} by hyperparameter search, so the paper states a space rather than a value and none is declared. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
 public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, ISyntheticTabularGenerator<T>
 {
+    // Held across Train calls. The fused plan owns the optimizer state, so a step object built per call
+    // re-traced and recompiled every call and restarted the optimizer at t = 1 (Adam ~ lr*sign(g)).
+    private AiDotNet.Training.MultiSlotFusedStep<T>? _fusedMultiSlotStep;
+
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _fusedMultiSlotStep?.Dispose();
+            _fusedMultiSlotStep = null;
+        }
+        base.Dispose(disposing);
+    }
+
     private readonly TabDDPMOptions<T> _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private ILossFunction<T> _lossFunction;
@@ -677,8 +692,8 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         // is compiled once (on the first row) and replayed per subsequent row
         // by refreshing slot data. See ooples/AiDotNet#1846.
         AiDotNet.Training.MultiSlotFusedStep<T>? multiSlotStep = null;
-        try
-        {
+        bool fusedMapped = NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(_optimizer, out var mfsCfg);
+        bool hasTrainableParameters = false;
         for (int row = startRow; row < endRow; row++)
         {
             int t = _gaussianDiffusion.SampleTimestep();
@@ -714,17 +729,16 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             // _timestepProjection stays INSIDE the compiled forward closure
             // (which _plan.Step() replays per row) so its weights participate
             // in the backward pass. See ooples/AiDotNet#1846.
-            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
-            if (trainableParams.Length > 0
-                && NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
-                    _optimizer,
-                    out var mfsOptType, out var mfsLr, out var mfsB1, out var mfsB2,
-                    out var mfsEps, out var mfsWd, out _, out _))
+            // The optimizer mapping is per batch; the has-parameters gate latches once true (a lazily built model
+            // reports none until its first forward). TryStep still reads the parameter set every step: that is how
+            // it notices a changed set and re-reads lazily created weights after its first trace.
+            if (fusedMapped
+                && (hasTrainableParameters || (hasTrainableParameters = CollectModelTrainableTensors().Count > 0)))
             {
                 var slots = BuildTabDDPMSlots(numNoisy, actualNoise, catNoisy, catClean, t);
                 if (slots is not null)
                 {
-                    multiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>();
+                    multiSlotStep = _fusedMultiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>();
                     Tensor<T> ForwardFromSlots(IReadOnlyList<Tensor<T>> s)
                     {
                         // s[0] numNoisy, s[1] actualNoise, s[2] catNoisy,
@@ -764,17 +778,19 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
                         return ComputeDiffusionLossTapeFromTensors(noisePredT, s[1], catLogitsT, s[3]);
                     }
                     if (multiSlotStep.TryStep(
-                            parameters: trainableParams,
+                            parameterProvider: CollectModelTrainableTensors,
                             zeroGradAction: null,
                             freshSlotData: slots,
                             forward: ForwardFromSlots,
                             computeLoss: ComputeLossFromSlots,
-                            optimizerType: mfsOptType,
-                            learningRate: mfsLr,
-                            beta1: mfsB1,
-                            beta2: mfsB2,
-                            epsilon: mfsEps,
-                            weightDecay: mfsWd,
+                            optimizerType: mfsCfg.Type,
+                            learningRate: mfsCfg.LearningRate,
+                            beta1: mfsCfg.Beta1,
+                            beta2: mfsCfg.Beta2,
+                            epsilon: mfsCfg.Epsilon,
+                            weightDecay: mfsCfg.WeightDecay,
+                            lrSchedule: mfsCfg.Schedule,
+                            extras: mfsCfg.Extras,
                             out T _))
                     {
                         continue;
@@ -793,11 +809,6 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             var (predictedNoise, predictedLogits) = DenoiserForwardTensors(numNoisy, catNoisy, timeEmbed2);
             var loss = ComputeDiffusionLossTape(predictedNoise, actualNoise, predictedLogits, catClean);
             BackwardAndStepOnPrecomputedLoss(tape, loss, _optimizer);
-        }
-        }
-        finally
-        {
-            multiSlotStep?.Dispose();
         }
     }
 

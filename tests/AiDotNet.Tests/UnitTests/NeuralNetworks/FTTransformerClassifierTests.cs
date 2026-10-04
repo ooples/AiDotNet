@@ -145,4 +145,36 @@ public class FTTransformerClassifierTests
             Assert.False(double.IsNaN(p[i]) || double.IsInfinity(p[i]),
                 $"Parameter[{i}] non-finite after training.");
     }
+    [Fact]
+    public void Head_EmitsUnclampedLogits_SoADeadInitialisationStillTrains()
+    {
+        // The head used to be a FullyConnectedLayer given a null activation, which that layer read as ReLU,
+        // so logits were ReLU(W h + b). Whenever an initialisation left every logit at or below zero, the
+        // head output all zeros: a uniform softmax (cross-entropy exactly ln 3) with zero gradient everywhere,
+        // so training never started. Unseeded, that happened on roughly half of runs. Gorishniy et al. (2021)
+        // §3.3 put the ReLU before the head: Linear(ReLU(LayerNorm(CLS))). Forcing the head bias to -10 puts
+        // every pre-activation logit below zero, the state the old head could not leave.
+        var model = NewModel();
+        var (x, y) = MakeSeparable(9, seed: 2);
+        _ = model.PredictProbabilities(x);
+
+        var parameters = model.GetParameters();
+        for (int i = parameters.Length - NumClasses; i < parameters.Length; i++)
+            parameters[i] = -10.0;
+        model.SetParameters(parameters);
+
+        var logits = model.Forward(x);
+        double maxLogit = double.MinValue;
+        for (int i = 0; i < logits.Length; i++) maxLogit = Math.Max(maxLogit, logits[i]);
+        Assert.True(maxLogit < 0.0,
+            $"With the head bias at -10 the logits should be negative, but the largest is {maxLogit}; the head is clamping its output.");
+
+        double firstLoss = Convert.ToDouble(model.TrainStep(x, y, learningRate: 0.05));
+        double lastLoss = firstLoss;
+        for (int step = 0; step < 30; step++)
+            lastLoss = Convert.ToDouble(model.TrainStep(x, y, learningRate: 0.05));
+
+        Assert.True(lastLoss < firstLoss - 1e-3,
+            $"Cross-entropy did not decrease from a negative-logit start (first={firstLoss:F6}, last={lastLoss:F6}).");
+    }
 }

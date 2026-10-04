@@ -155,6 +155,9 @@ public partial class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// </summary>
     public double TrustCoefficient => _options.TrustCoefficient;
 
+    /// <inheritdoc/>
+    protected override bool SupportsModelOwnStep => true;
+
     /// <summary>
     /// Performs the optimization process using the LARS algorithm.
     /// </summary>
@@ -191,6 +194,7 @@ public partial class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 _t++;
 
                 // Calculate gradient on the batch
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;   // the network's own step; see GradientBasedOptimizerBase
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
 
                 // Route through UpdateSolution (NOT UpdateSolutionWithLARS
