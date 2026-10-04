@@ -149,6 +149,27 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </para>
     /// </remarks>
     protected INumericOperations<T> NumOps => MathHelper.GetNumericOperations<T>();
+    /// <summary>
+    /// A tensor of N(0, <paramref name="std"/>^2) draws from <paramref name="random"/>, for layers whose
+    /// paper initialises a weight from a normal distribution.
+    /// </summary>
+    /// <remarks>
+    /// Box-Muller, one cosine draw per element: <c>u1 = 1 - U</c> (which keeps the log finite), then
+    /// <c>u2 = U</c>. Pass the layer's seeded stream, usually <see cref="LayerInitializationSeedScope.NextRandom"/>,
+    /// so an architecture seed reproduces the weights.
+    /// </remarks>
+    protected Tensor<T> NormalTensor(int[] shape, double std, Random random)
+    {
+        if (random is null) throw new ArgumentNullException(nameof(random));
+        var tensor = new Tensor<T>(shape);
+        var ops = NumOps;
+        for (int i = 0; i < tensor.Length; i++)
+        {
+            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
+            tensor[i] = ops.FromDouble(Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2) * std);
+        }
+        return tensor;
+    }
 
     /// <summary>
     /// Gets the thread-safe random number generator.

@@ -264,9 +264,34 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// while a negative bias would require stronger input signals to activate.
     /// </para>
     /// </remarks>
-    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "OutputShape[0]")]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "OutputShape[0]", Condition = nameof(UseBias))]
 
     private Tensor<T> _biases;
+
+    /// <summary>What the caller asked for; <see cref="UseBias"/> is the resolved answer.</summary>
+    private readonly BiasMode _biasMode;
+
+    /// <summary>
+    /// Whether this layer adds its own bias after the matrix product.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Gates <c>_biases</c> through <c>TrainableParameterAttribute.Condition</c>, exactly as
+    /// <see cref="ConvolutionalLayer{T}.UseBias"/> does. When false the bias is a zero-length placeholder
+    /// and is absent from ParameterCount, GetParameters, gradients, checkpoints and clones alike -- the
+    /// layer computes <c>x W</c>, it does not carry a bias frozen at zero. This is PyTorch's
+    /// <c>nn.Linear(bias=False)</c>, which attention projections commonly use.
+    /// </para>
+    /// <para>
+    /// <c>BiasMode.Auto</c> resolves to true here: a linear layer built on its own cannot see what
+    /// consumes its output, and <c>nn.Linear</c> defaults to <c>bias=True</c>. <c>Unspecified</c> also
+    /// reads as true, which is what a checkpoint written before this option contains.
+    /// </para>
+    /// </remarks>
+    public bool UseBias => _biasMode != BiasMode.Never;
+
+    /// <summary>The bias handed to the fused kernels: the bias tensor, or null when there is none.</summary>
+    private Tensor<T>? BiasOrNull() => UseBias ? _biases : null;
 
     /// <summary>
     /// fp16-resident copy of the weight matrix, used only when <see cref="LayerBase{T}.LowPrecisionResident"/>
@@ -539,10 +564,12 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     public DenseLayer(
         [LayerState] int outputSize,
         IActivationFunction<T>? activationFunction = null,
-        IInitializationStrategy<T>? initializationStrategy = null)
+        IInitializationStrategy<T>? initializationStrategy = null,
+        [LayerState] BiasMode biasMode = BiasMode.Auto)
         : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new IdentityActivation<T>())
     {
         _outputSize = outputSize;
+        _biasMode = biasMode;
         if (outputSize <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(outputSize), "Output size must be greater than zero.");
@@ -637,10 +664,12 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// </para>
     /// </remarks>
     public DenseLayer(int outputSize, IVectorActivationFunction<T> vectorActivation,
-        IInitializationStrategy<T>? initializationStrategy = null)
+        IInitializationStrategy<T>? initializationStrategy = null,
+        BiasMode biasMode = BiasMode.Auto)
         : base(new[] { -1 }, new[] { outputSize }, vectorActivation)
     {
         _outputSize = outputSize;
+        _biasMode = biasMode;
         if (outputSize <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(outputSize), "Output size must be greater than zero.");
@@ -741,7 +770,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             {
                 _weights = AllocateLazyWeight(wShape);
             }
-            _biases = AllocateLazyWeight(bShape);
+            _biases = UseBias ? AllocateLazyWeight(bShape) : new Tensor<T>([0]);
 
             // Initialize using strategy or default. Skip strategies that only
             // advertise the LAZY deferral contract (IsLazy): their InitializeWeights
@@ -754,7 +783,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             if (InitializationStrategy is not null && !InitializationStrategy.IsLazy)
             {
                 InitializationStrategy.InitializeWeights(_weights, inputSize, outputSize);
-                InitializationStrategy.InitializeBiases(_biases);
+                if (UseBias) InitializationStrategy.InitializeBiases(_biases);
             }
             else
             {
@@ -763,7 +792,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
 
             // Register trainable parameters with the engine for GPU persistence
             RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
-            RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+            if (UseBias) RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
 
             _isInitialized = true;
         }
@@ -828,7 +857,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
                     ? new Initialization.LeCunInitializationStrategy<T>(seededRng)
                     : new Initialization.LeCunInitializationStrategy<T>();
                 lecun.InitializeWeights(_weights, InputShape[0], OutputShape[0]);
-                lecun.InitializeBiases(_biases);
+                if (UseBias) lecun.InitializeBiases(_biases);
                 return;
             }
             case DefaultInitKind.He:
@@ -837,12 +866,12 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
                     ? new Initialization.HeInitializationStrategy<T>(seededRng)
                     : new Initialization.HeInitializationStrategy<T>();
                 heInit.InitializeWeights(_weights, InputShape[0], OutputShape[0]);
-                heInit.InitializeBiases(_biases);
+                if (UseBias) heInit.InitializeBiases(_biases);
                 return;
             }
             default:
                 InitializeLayerWeights(_weights, InputShape[0], OutputShape[0]);
-                InitializeLayerBiases(_biases);
+                if (UseBias) InitializeLayerBiases(_biases);
                 return;
         }
     }
@@ -1296,7 +1325,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             AiDotNet.Tensors.Engines.Simd.Q8BlockGemm.MatMul(inF, _weightsQ8, _weightScalesQ8, outArr, mM, kK, nN);
             var linear = (Tensor<T>)(object)new Tensor<float>(outArr, [mM, nN]);
             // Bias + activation epilogue (matches the unfused training path's math).
-            var biased = Engine.TensorAdd(linear, Engine.Reshape(_biases, [1, nN]));
+            var biased = UseBias ? Engine.TensorAdd(linear, Engine.Reshape(_biases, [1, nN])) : linear;
             result = ApplyActivation(biased);
         }
         else if (fusedActivation != FusedActivationType.None && !IsTrainingMode && !DeterministicForward)
@@ -1326,13 +1355,13 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
                 {
                     _fusedLinearScratch = new Tensor<T>([batchDim, outputSize]);
                 }
-                Engine.FusedLinearInto(_fusedLinearScratch, flattenedInput, _weights, _biases, fusedActivation);
+                Engine.FusedLinearInto(_fusedLinearScratch, flattenedInput, _weights, BiasOrNull(), fusedActivation);
                 result = _fusedLinearScratch;
             }
             else
             {
                 // Inference: use fused activation for maximum performance (no tape needed)
-                result = Engine.FusedLinear(flattenedInput, _weights, _biases, fusedActivation);
+                result = Engine.FusedLinear(flattenedInput, _weights, BiasOrNull(), fusedActivation);
             }
         }
         else
@@ -1341,7 +1370,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             // then apply activation separately. This ensures the tape records exactly one
             // FusedLinear entry per forward pass (calling FusedLinear twice corrupts tape
             // entries via RemoveLastNTapeEntries).
-            var preActivation = Engine.FusedLinear(flattenedInput, _weights, _biases, FusedActivationType.None);
+            var preActivation = Engine.FusedLinear(flattenedInput, _weights, BiasOrNull(), FusedActivationType.None);
             _lastOutput = cacheBwd ? preActivation : null;
             result = ApplyActivation(preActivation);
         }
@@ -1463,7 +1492,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
 
         // Use GPU-resident FusedLinear - NO CPU round-trip
         // Result is [batchDim, outputSize]
-        var result = gpuEngine.FusedLinearGpu(input2D, _weights, _biases, fusedActivation);
+        var result = gpuEngine.FusedLinearGpu(input2D, _weights, BiasOrNull(), fusedActivation);
 
         // Cache state for backward pass only during training - KEEP ON GPU for GPU-resident training
         if (IsTrainingMode)
@@ -1475,7 +1504,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             // For fused activations, we need pre-activation for gradient computation
             if (fusedActivation != FusedActivationType.None)
             {
-                _lastPreActivationGpu = gpuEngine.FusedLinearGpu(input2D, _weights, _biases, FusedActivationType.None);
+                _lastPreActivationGpu = gpuEngine.FusedLinearGpu(input2D, _weights, BiasOrNull(), FusedActivationType.None);
                 _lastOutputGpu = result; // Post-activation for sigmoid/tanh backward
             }
             else
@@ -1655,7 +1684,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// </remarks>
     public override void UpdateParameters(T learningRate)
     {
-        if (_weightsGradient == null || _biasesGradient == null)
+        if (_weightsGradient == null || (UseBias && _biasesGradient == null))
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         if (Engine is DirectGpuTensorEngine gpuEngine)
@@ -1669,7 +1698,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
                 _weightsVelocity.Fill(NumOps.Zero);
                 gpuEngine.RegisterPersistentTensor(_weightsVelocity, PersistentTensorRole.OptimizerState);
             }
-            if (_biasesVelocity == null)
+            if (UseBias && _biasesVelocity == null)
             {
                 _biasesVelocity = new Tensor<T>(_biases._shape);
                 _biasesVelocity.Fill(NumOps.Zero);
@@ -1678,19 +1707,23 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
 
             // Perform GPU-resident SGD update
             gpuEngine.SgdMomentumUpdateGpu(_weights, _weightsGradient, _weightsVelocity, lr, 0.0f, 0.0f);
-            gpuEngine.SgdMomentumUpdateGpu(_biases, _biasesGradient, _biasesVelocity, lr, 0.0f, 0.0f);
+            if (UseBias && _biasesGradient is not null && _biasesVelocity is not null)
+                gpuEngine.SgdMomentumUpdateGpu(_biases, _biasesGradient, _biasesVelocity, lr, 0.0f, 0.0f);
         }
         else
         {
             // In-place update to preserve tensor identity (cached references, tape tracking)
             var scaledWeightGrad = Engine.TensorMultiplyScalar(_weightsGradient, learningRate);
             Engine.TensorSubtractInPlace(_weights, scaledWeightGrad);
-            var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasesGradient, learningRate);
-            Engine.TensorSubtractInPlace(_biases, scaledBiasGrad);
+            if (UseBias && _biasesGradient is not null)
+            {
+                var scaledBiasGrad = Engine.TensorMultiplyScalar(_biasesGradient, learningRate);
+                Engine.TensorSubtractInPlace(_biases, scaledBiasGrad);
+            }
 
             // Notify engine that weights/biases have changed (for GPU cache invalidation)
             Engine.InvalidatePersistentTensor(_weights);
-            Engine.InvalidatePersistentTensor(_biases);
+            if (UseBias) Engine.InvalidatePersistentTensor(_biases);
         }
     }
 
@@ -1699,10 +1732,13 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// </summary>
     public override Vector<T> GetParameterGradients()
     {
-        if (_weightsGradient == null || _biasesGradient == null)
+        if (_weightsGradient == null || (UseBias && _biasesGradient == null))
         {
             return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
         }
+
+        if (!UseBias || _biasesGradient is null)
+            return Vector<T>.FromMemory(_weightsGradient.Data).Clone();
 
         // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
         return Vector<T>.Concatenate(
@@ -1798,7 +1834,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             // Invalidate additionally evicts the GPU cache so the next
             // re-allocated layer gets a clean slate.
             Engine.InvalidatePersistentTensor(_weights);
-            Engine.InvalidatePersistentTensor(_biases);
+            if (UseBias) Engine.InvalidatePersistentTensor(_biases);
 
             // Trainable-parameter pool returns (_weights, _biases) are now
             // handled by the auto-generated ReturnPooledParameters hook
@@ -1888,7 +1924,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         var biasFlat = new float[outputSize];
         for (int j = 0; j < outputSize; j++)
         {
-            biasFlat[j] = (float)NumOps.ToDouble(_biases[j]);
+            biasFlat[j] = UseBias ? (float)NumOps.ToDouble(_biases[j]) : 0f;
         }
 
         var weightsName = builder.AddFloatInitializer(

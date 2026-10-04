@@ -527,7 +527,7 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>, IShapeContract
         // lazy-allocated _convWeights tensor in place — replacing it
         // would discard the AllocateLazyWeight registration that the
         // ctor set up. Closes review-comment #1271.7Bo8.
-        var randomTensor = Tensor<T>.CreateRandom(rows, cols);
+        var randomTensor = Tensor<T>.CreateRandom(Random, rows, cols);
         var halfTensor = new Tensor<T>([rows, cols]);
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);

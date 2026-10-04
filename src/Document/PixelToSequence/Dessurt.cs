@@ -567,10 +567,10 @@ public partial class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
                 ?? throw new InvalidOperationException(
                     "Dessurt training requires an optimizer implementing " +
                     "IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>.");
-            // PredictCore evaluates the ImageNet-normalized document. Train on that same
-            // representation so the optimizer descends the objective users observe from
-            // Predict instead of fitting raw pixels and being evaluated on normalized ones.
-            TrainWithTape(PreprocessDocument(input), expectedOutput, gradientOptimizer);
+            // PredictCore evaluates the ImageNet-normalized document, and TrainWithTape now applies
+            // that same preparation through DocumentNeuralNetworkBase.PrepareInputForTraining, so the
+            // raw page goes in here; preprocessing it first as well would normalize it twice.
+            TrainWithTape(input, expectedOutput, gradientOptimizer);
         }
         finally
         {

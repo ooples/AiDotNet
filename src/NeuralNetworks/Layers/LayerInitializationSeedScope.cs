@@ -107,6 +107,34 @@ internal static class LayerInitializationSeedScope
     /// </remarks>
     internal static Random? CaptureScope() => _rng;
 
+    [ThreadStatic]
+    private static bool _nestedBackboneSeedOffered;
+
+    /// <summary>
+    /// Offers the armed scope to the ONE backbone the model under construction is about to build. Called by the
+    /// detector bases right after <see cref="ResetForModelConstruction"/>.
+    /// </summary>
+    /// <remarks>
+    /// A backbone draws its architecture seed before its own constructor resets the scope, so it cannot tell a
+    /// detector that is still being built from one that finished earlier on the thread: the scope stays armed after
+    /// construction, and C# offers no hook at the end of a derived constructor. A standalone backbone built later
+    /// therefore inherited a seed derived from the previous detector - reproducible although nobody asked for it.
+    /// The offer is consumed by the first backbone that takes it, so it cannot reach one built afterwards.
+    /// </remarks>
+    internal static void OfferSeedToNestedBackbone() => _nestedBackboneSeedOffered = true;
+
+    /// <summary>
+    /// The next seed when a detector under construction offered one (<see cref="OfferSeedToNestedBackbone"/>),
+    /// consuming the offer; otherwise null, so a standalone backbone seeds only from its own architecture or the
+    /// ambient fallback.
+    /// </summary>
+    internal static int? TakeNestedBackboneSeed()
+    {
+        if (!_nestedBackboneSeedOffered) return null;
+        _nestedBackboneSeedOffered = false;
+        return NextSeedOrNull();
+    }
+
     /// <summary>Restores a scope captured by <see cref="CaptureScope"/>.</summary>
     internal static void RestoreScope(Random? capturedScope) => _rng = capturedScope;
 
@@ -142,5 +170,19 @@ internal static class LayerInitializationSeedScope
             _rng = RandomHelper.CreateSeededRandom(_ambientFallbackSeed.Value);
 
         return _rng is null ? (int?)null : _rng.Next();
+    }
+
+    /// <summary>
+    /// A Random for a model component that initializes its own tensors instead of through a layer
+    /// (necks, query embeddings, relative-position tables). It draws the next seed from the active
+    /// scope, so it follows the model's configured seed exactly as layers do; with no scope and no
+    /// ambient seed it is a secure, unseeded Random, matching an unseeded layer.
+    /// </summary>
+    internal static Random NextRandom()
+    {
+        int? seed = NextSeedOrNull();
+        return seed.HasValue
+            ? RandomHelper.CreateSeededRandom(seed.Value)
+            : RandomHelper.CreateSecureRandom();
     }
 }

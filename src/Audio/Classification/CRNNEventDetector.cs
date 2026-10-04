@@ -289,7 +289,11 @@ public partial class CRNNEventDetector<T> : AudioClassifierBase<T>, IAudioEventD
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var current = input; foreach (var layer in Layers) current = layer.Forward(current); return current;
+        // Frame-level logits, then a per-class sigmoid (Cakir et al. 2017): sound event detection is multi-label,
+        // so inference returns each event's presence probability, which Detect compares with Options.Threshold.
+        // Training runs on the raw logits with BCE-with-logits, as AudioEventDetector and FDYSED do.
+        var current = input; foreach (var layer in Layers) current = layer.Forward(current);
+        return Engine.Sigmoid(current);
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)

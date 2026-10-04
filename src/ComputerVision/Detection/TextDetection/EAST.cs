@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
 using AiDotNet.Attributes;
@@ -95,33 +95,6 @@ public partial class EAST<T> : TextDetectorBase<T>
     };
 
     /// <inheritdoc/>
-    public override TextDetectionResult<T> Detect(Tensor<T> image)
-    {
-        return Detect(image, NumOps.ToDouble(Options.ConfidenceThreshold));
-    }
-
-    /// <inheritdoc/>
-    public override TextDetectionResult<T> Detect(Tensor<T> image, double confidenceThreshold)
-    {
-        var startTime = DateTime.UtcNow;
-
-        int originalHeight = image.Shape[2];
-        int originalWidth = image.Shape[3];
-
-        var input = Preprocess(image);
-        var outputs = Forward(input);
-        var textRegions = PostProcess(outputs, originalWidth, originalHeight, confidenceThreshold);
-
-        return new TextDetectionResult<T>
-        {
-            TextRegions = textRegions,
-            InferenceTime = DateTime.UtcNow - startTime,
-            ImageWidth = originalWidth,
-            ImageHeight = originalHeight
-        };
-    }
-
-    /// <inheritdoc/>
     protected override List<Tensor<T>> Forward(Tensor<T> input)
     {
         // Extract multi-scale backbone features
@@ -152,7 +125,7 @@ public partial class EAST<T> : TextDetectorBase<T>
         var score = _scoreHead.Forward(x);
         score = ApplySigmoid(score);
 
-        var geometry = _geometryHead.Forward(x);
+        var geometry = BoundGeometry(_geometryHead.Forward(x));
 
         return new List<Tensor<T>> { score, geometry };
     }
@@ -208,8 +181,17 @@ public partial class EAST<T> : TextDetectorBase<T>
             }
         }
 
-        // Apply NMS to remove overlapping detections
-        regions = ApplyTextNMS(regions, 0.2);
+        // Locality-aware NMS (Zhou et al. 2017, Algorithm 1), one of the paper's two contributions: the
+        // per-pixel geometries arrive in row-major order, neighbours in a row that overlap are merged by
+        // score-weighted averaging of their vertices, and only then does standard NMS run. Plain NMS over
+        // thousands of per-pixel boxes, as before, keeps one pixel's box instead of the row's consensus.
+        regions = ApplyTextNMS(LocalityAwareMerge(regions, 0.2), 0.2);
+
+        // The merged score is a SUM (it orders the NMS above); report the box's mean score-map value, as the
+        // reference does after LANMS, so confidences stay in [0, 1] and threshold like single-pixel scores.
+        foreach (var region in regions)
+            region.Confidence = NumOps.FromDouble(MeanScoreInside(region, score, scaleX, scaleY));
+        regions = regions.Where(r => NumOps.ToDouble(r.Confidence) >= confidenceThreshold).ToList();
 
         // Limit to max detections
         if (regions.Count > Options.MaxDetections)
@@ -223,6 +205,209 @@ public partial class EAST<T> : TextDetectorBase<T>
         return regions;
     }
 
+    /// <summary>
+    /// The paper's RBOX geometry output (Zhou et al. 2017; reference model.py): the four edge distances are
+    /// <c>sigmoid * text_scale</c> and the angle is <c>(sigmoid - 0.5) * pi / 2</c>. Distances are in map pixels,
+    /// and the map side stands in for the 512-pixel text scale at stride 4. Without this bound the distances
+    /// could go negative, and the IoU loss is undefined there. QUAD offsets stay linear, as in the paper.
+    /// </summary>
+    private Tensor<T> BoundGeometry(Tensor<T> raw)
+    {
+        if (!_useRotatedBoxes) return raw;
+        int b = raw.Shape[0], h = raw.Shape[2], w = raw.Shape[3];
+        var distances = Engine.TensorMultiplyScalar(
+            Engine.Sigmoid(Engine.TensorSlice(raw, new[] { 0, 0, 0, 0 }, new[] { b, 4, h, w })), NumOps.FromDouble(Math.Max(h, w)));
+        var angle = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(Engine.Sigmoid(Engine.TensorSlice(raw, new[] { 0, 4, 0, 0 }, new[] { b, 1, h, w })), NumOps.FromDouble(-0.5)),
+            NumOps.FromDouble(Math.PI / 2));
+        return Engine.TensorConcatenate(new[] { distances, angle }, 1);
+    }
+
+    /// <summary>The paper's optimizer (Zhou et al. 2017, Section 4.1): Adam at learning rate 1e-3.</summary>
+    protected override AiDotNet.Interfaces.IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateTrainingOptimizer() => PaperAdam(1e-3);
+
+    /// <summary>
+    /// EAST's loss (Zhou et al. 2017, Section 3.4): <c>L = L_s + lambda_g L_g</c> with lambda_g = 1. <c>L_s</c> is
+    /// class-balanced cross-entropy on the score map. <c>L_g</c> is taken on positive pixels only: for RBOX it is
+    /// <c>-log IoU + 10 (1 - cos(theta - theta*))</c>, and for QUAD it is smooth-L1 on the vertex offsets,
+    /// normalised by 8 times the quad's shorter edge.
+    /// </summary>
+    protected override Tensor<T> TextDetectionLoss(List<Tensor<T>> outputs, TextDetectionTrainingBatch targets,
+        int imageWidth, int imageHeight)
+    {
+        var score = outputs[0];
+        var geometry = outputs[1];
+        int batch = score.Shape[0], mapHeight = score.Shape[2], mapWidth = score.Shape[3];
+        var scores = new List<double[][,]>();
+        var geometries = new List<double[][,]>();
+        var norms = new List<double[][,]>();
+        for (int b = 0; b < batch; b++)
+        {
+            var (s, geometryTarget, n) = BuildTargets(targets[b], imageWidth, imageHeight, mapWidth, mapHeight, _useRotatedBoxes);
+            scores.Add(new[] { s });
+            geometries.Add(geometryTarget);
+            norms.Add(new[] { n });
+        }
+        var y = MapTensor(scores);
+        var g = MapTensor(geometries);
+
+        // Class-balanced cross-entropy: beta = 1 - |Y*| / |Y|.
+        double positives = 0;
+        for (int i = 0; i < y.Length; i++) positives += NumOps.ToDouble(y[i]);
+        double beta = 1.0 - (positives / y.Length);
+        var p = Engine.TensorClamp(score, NumOps.FromDouble(1e-6), NumOps.FromDouble(1 - 1e-6));
+        var ones = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(y, NumOps.Zero), NumOps.One);
+        var positiveTerm = Engine.TensorMultiplyScalar(Engine.TensorMultiply(y, Engine.TensorLog(p)), NumOps.FromDouble(beta));
+        var negativeTerm = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(Engine.TensorSubtract(ones, y), Engine.TensorLog(Engine.TensorSubtract(ones, p))), NumOps.FromDouble(1 - beta));
+        var scoreLoss = Engine.TensorMultiplyScalar(Engine.ReduceSum(Engine.TensorAdd(positiveTerm, negativeTerm), null), NumOps.FromDouble(-1.0 / y.Length));
+
+        Tensor<T> Channel(Tensor<T> t, int c) => Engine.TensorSlice(t, new[] { 0, c, 0, 0 }, new[] { batch, 1, mapHeight, mapWidth });
+        Tensor<T> geometryLoss;
+        if (_useRotatedBoxes)
+        {
+            var (d0, d1, d2, d3, theta) = (Channel(geometry, 0), Channel(geometry, 1), Channel(geometry, 2), Channel(geometry, 3), Channel(geometry, 4));
+            var (t0, t1, t2, t3, thetaT) = (Channel(g, 0), Channel(g, 1), Channel(g, 2), Channel(g, 3), Channel(g, 4));
+            var predictedArea = Engine.TensorMultiply(Engine.TensorAdd(d0, d2), Engine.TensorAdd(d1, d3));
+            var targetArea = Engine.TensorMultiply(Engine.TensorAdd(t0, t2), Engine.TensorAdd(t1, t3));
+            var interWidth = Engine.TensorAdd(Engine.TensorMin(d1, t1), Engine.TensorMin(d3, t3));
+            var interHeight = Engine.TensorAdd(Engine.TensorMin(d0, t0), Engine.TensorMin(d2, t2));
+            var intersection = Engine.TensorMultiply(interWidth, interHeight);
+            var union = Engine.TensorSubtract(Engine.TensorAdd(predictedArea, targetArea), intersection);
+            var iouLoss = Engine.TensorMultiplyScalar(Engine.TensorLog(Engine.TensorDivide(
+                Engine.TensorAddScalar(intersection, NumOps.One), Engine.TensorAddScalar(union, NumOps.One))), NumOps.FromDouble(-1.0));
+            var angleLoss = Engine.TensorSubtract(ones, Engine.TensorCos(Engine.TensorSubtract(theta, thetaT)));
+            geometryLoss = WeightedMean(Engine.TensorAdd(iouLoss, Engine.TensorMultiplyScalar(angleLoss, NumOps.FromDouble(10.0))), y);
+        }
+        else
+        {
+            var difference = Engine.TensorAbs(Engine.TensorSubtract(geometry, g));
+            var clipped = Engine.TensorMin(difference, Engine.TensorAddScalar(Engine.TensorMultiplyScalar(difference, NumOps.Zero), NumOps.One));
+            var smoothL1 = Engine.TensorAdd(Engine.TensorMultiplyScalar(Engine.TensorSquare(clipped), NumOps.FromDouble(0.5)), Engine.TensorSubtract(difference, clipped));
+            var perPixel = Engine.ReduceSum(smoothL1, new[] { 1 }, keepDims: true);
+            var weighted = Engine.TensorMultiply(perPixel, MapTensor(norms));
+            geometryLoss = WeightedMean(weighted, y);
+        }
+        return Engine.TensorAdd(scoreLoss, geometryLoss);
+    }
+
+    /// <summary>
+    /// EAST's targets for one image, in map pixels:
+    /// <list type="bullet">
+    /// <item>The score map is each quad offset inwards by 0.3 times its shortest edge. The paper moves each vertex by 0.3 r_i, where r_i is its shorter adjacent edge; for a rectangle the two are the same.</item>
+    /// <item>For RBOX, a positive pixel's geometry is its distances to the top, right, bottom and left edges of
+    /// the quad's minimum-area rectangle, plus that rectangle's angle in [-pi/4, pi/4).</item>
+    /// <item>For QUAD, it is the offsets from the pixel centre to the four vertices, the first being the vertex
+    /// with the smallest x + y.</item>
+    /// </list>
+    /// </summary>
+    internal static (double[,] Score, double[][,] Geometry, double[,] Norm) BuildTargets(
+        IReadOnlyList<TextPolygonTarget> polygons, int imageWidth, int imageHeight, int mapWidth, int mapHeight, bool rotatedBoxes)
+    {
+        int channels = rotatedBoxes ? 5 : 8;
+        var score = new double[mapHeight, mapWidth];
+        var norm = new double[mapHeight, mapWidth];
+        var geometry = Enumerable.Range(0, channels).Select(_ => new double[mapHeight, mapWidth]).ToArray();
+        foreach (var target in polygons)
+            WritePolygonTargets(target, imageWidth, imageHeight, mapWidth, mapHeight, rotatedBoxes, score, geometry, norm);
+        return (score, geometry, norm);
+    }
+
+    /// <summary>
+    /// Writes one text polygon's score, geometry and normalisation targets into the maps: every pixel inside the
+    /// polygon shrunk by 0.3 of its shortest edge is positive (Zhou et al. 2017, EAST §3.3.1).
+    /// </summary>
+    private static void WritePolygonTargets(
+        TextPolygonTarget target, int imageWidth, int imageHeight, int mapWidth, int mapHeight, bool rotatedBoxes,
+        double[,] score, double[][,] geometry, double[,] norm)
+    {
+        var polygon = ToMap(target, imageWidth, imageHeight, mapWidth, mapHeight);
+        if (TextTargetGeometry.Area(polygon) < 1.0) return;
+        var quad = polygon.Length == 4 ? polygon : TextTargetGeometry.MinAreaRectangle(polygon);
+        double shortest = Enumerable.Range(0, 4).Min(i =>
+            Math.Sqrt(Math.Pow(quad[(i + 1) % 4].X - quad[i].X, 2) + Math.Pow(quad[(i + 1) % 4].Y - quad[i].Y, 2)));
+        var shrunk = TextTargetGeometry.Offset(quad, 0.3 * shortest);
+        if (shrunk is null) return;
+
+        var rect = TextTargetGeometry.MinAreaRectangle(quad);
+        var (theta, width, height) = RotatedBoxFrame(rect);
+        double cx = rect.Average(p => p.X), cy = rect.Average(p => p.Y);
+        int start = TopLeftVertex(quad);
+
+        double pixelNorm = 1.0 / (8.0 * Math.Max(shortest, 1e-6));
+        var (x0, y0, x1, y1) = TextTargetGeometry.Bounds(shrunk, mapWidth, mapHeight);
+        for (int py = y0; py <= y1; py++)
+            for (int px = x0; px <= x1; px++)
+            {
+                double sx = px + 0.5, sy = py + 0.5;
+                if (!TextTargetGeometry.Contains(shrunk, sx, sy)) continue;
+                score[py, px] = 1.0;
+                norm[py, px] = pixelNorm;
+                if (rotatedBoxes)
+                    WriteRotatedBoxGeometry(geometry, py, px, sx - cx, sy - cy, theta, width, height);
+                else
+                    WriteQuadGeometry(geometry, py, px, sx, sy, quad, start);
+            }
+    }
+
+    /// <summary>
+    /// The rotated box's angle, width and height, with the angle folded into [-pi/4, pi/4) by swapping width and
+    /// height on each quarter turn, so every box has one canonical RBOX description.
+    /// </summary>
+    private static (double Theta, double Width, double Height) RotatedBoxFrame(IReadOnlyList<(double X, double Y)> rect)
+    {
+        double ex = rect[1].X - rect[0].X, ey = rect[1].Y - rect[0].Y;
+        double theta = Math.Atan2(ey, ex);
+        double width = Math.Sqrt((ex * ex) + (ey * ey));
+        double height = Math.Sqrt(Math.Pow(rect[3].X - rect[0].X, 2) + Math.Pow(rect[3].Y - rect[0].Y, 2));
+        while (theta >= Math.PI / 4) { theta -= Math.PI / 2; (width, height) = (height, width); }
+        while (theta < -Math.PI / 4) { theta += Math.PI / 2; (width, height) = (height, width); }
+        return (theta, width, height);
+    }
+
+    /// <summary>
+    /// Index of the vertex with the smallest x + y, the QUAD target's starting (top-left) vertex.
+    /// </summary>
+    private static int TopLeftVertex(IReadOnlyList<(double X, double Y)> quad)
+    {
+        int start = 0;
+        for (int i = 1; i < 4; i++)
+        {
+            if (quad[i].X + quad[i].Y < quad[start].X + quad[start].Y) start = i;
+        }
+        return start;
+    }
+
+    /// <summary>
+    /// RBOX target at one pixel: distances to the top, right, bottom and left edges of the rotated box, then its
+    /// angle. (<paramref name="dx"/>, <paramref name="dy"/>) is the pixel's offset from the box centre.
+    /// </summary>
+    private static void WriteRotatedBoxGeometry(
+        double[][,] geometry, int py, int px, double dx, double dy, double theta, double width, double height)
+    {
+        double ux = Math.Cos(theta), uy = Math.Sin(theta);
+        double pu = (dx * ux) + (dy * uy);
+        double pv = (dx * -uy) + (dy * ux);
+        geometry[0][py, px] = (height / 2) + pv; // top
+        geometry[1][py, px] = (width / 2) - pu;  // right
+        geometry[2][py, px] = (height / 2) - pv; // bottom
+        geometry[3][py, px] = (width / 2) + pu;  // left
+        geometry[4][py, px] = theta;
+    }
+
+    /// <summary>
+    /// QUAD target at one pixel: the offset to each of the four vertices, starting from the top-left one.
+    /// </summary>
+    private static void WriteQuadGeometry(
+        double[][,] geometry, int py, int px, double sx, double sy, IReadOnlyList<(double X, double Y)> quad, int start)
+    {
+        for (int v = 0; v < 4; v++)
+        {
+            var vertex = quad[(start + v) % 4];
+            geometry[2 * v][py, px] = vertex.X - sx;
+            geometry[(2 * v) + 1][py, px] = vertex.Y - sy;
+        }
+    }
     private List<(double X, double Y)> DecodeGeometry(
         Tensor<T> geometry,
         int h,
@@ -401,6 +586,128 @@ public partial class EAST<T> : TextDetectorBase<T>
         // Asymmetric bilinear (src = dst * in / out, no half-pixel offset), as the loop it replaces.
         => CvTensorOps<T>.ResizeBilinearAsymmetric(x, targetH, targetW);
 
+    // Merges consecutive (row-major) regions whose boxes overlap by more than the threshold: vertices are
+    // averaged by score, and the merged score is the sum of the parts.
+    private List<TextRegion<T>> LocalityAwareMerge(List<TextRegion<T>> regions, double iouThreshold)
+    {
+        var merged = new List<TextRegion<T>>();
+        List<(double X, double Y)>? polygon = null;
+        double polygonScore = 0, angleSum = 0;
+        // Unweighted fallbacks for a merge whose scores sum to zero (only reachable with a 0.0 confidence
+        // threshold): a score-weighted average there divides by zero and yields non-finite vertices and angle.
+        double angleUnweightedSum = 0;
+        int parts = 0;
+
+        void Flush()
+        {
+            if (polygon is null) return;
+            var region = TextRegion<T>.FromPolygon(
+                polygon.Select(p => (NumOps.FromDouble(p.X), NumOps.FromDouble(p.Y))).ToList(),
+                NumOps.FromDouble(polygonScore));
+            region.RegionType = TextRegionType.Word;
+            if (_useRotatedBoxes)
+                region.RotationAngle = polygonScore > 0 ? angleSum / polygonScore : angleUnweightedSum / parts;
+            merged.Add(region);
+        }
+
+        foreach (var next in regions)
+        {
+            double s = NumOps.ToDouble(next.Confidence);
+            var points = next.Polygon?.Select(v => (X: NumOps.ToDouble(v.X), Y: NumOps.ToDouble(v.Y))).ToList();
+            if (points is null || points.Count == 0) continue;
+
+            // Overlap of the quadrilaterals themselves, as LANMS does: their axis-aligned boxes overlap for rotated
+            // neighbouring words whose quadrilaterals are disjoint, which merged them.
+            if (polygon is not null && polygon.Count == points.Count
+                && Metrics.TextDetectionMetrics<double>.PolygonIoU(polygon, points) > iouThreshold)
+            {
+                double total = polygonScore + s;
+                if (total > 0)
+                {
+                    for (int k = 0; k < polygon.Count; k++)
+                        polygon[k] = ((polygon[k].X * polygonScore + points[k].X * s) / total,
+                                      (polygon[k].Y * polygonScore + points[k].Y * s) / total);
+                }
+                else
+                {
+                    // Every part so far scored zero: average the vertices with equal weight per part.
+                    for (int k = 0; k < polygon.Count; k++)
+                        polygon[k] = ((polygon[k].X * parts + points[k].X) / (parts + 1),
+                                      (polygon[k].Y * parts + points[k].Y) / (parts + 1));
+                }
+                polygonScore = total;
+                angleSum += s * next.RotationAngle;
+                angleUnweightedSum += next.RotationAngle;
+                parts++;
+                continue;
+            }
+
+            Flush();
+            polygon = points;
+            polygonScore = s;
+            angleSum = s * next.RotationAngle;
+            angleUnweightedSum = next.RotationAngle;
+            parts = 1;
+        }
+
+        Flush();
+        return merged;
+    }
+
+    // The decoded quadrilateral in doubles, or null when a region carries no polygon.
+    private List<(double X, double Y)>? PolygonOf(TextRegion<T> region)
+    {
+        var polygon = region.Polygon?.Select(v => (X: NumOps.ToDouble(v.X), Y: NumOps.ToDouble(v.Y))).ToList();
+        return polygon is { Count: >= 3 } ? polygon : null;
+    }
+
+    // Polygon IoU when both regions carry their quadrilateral (always, for EAST's own output); box IoU otherwise.
+    private double RegionIoU(TextRegion<T> a, TextRegion<T> b)
+        => PolygonOf(a) is { } pa && PolygonOf(b) is { } pb
+            ? Metrics.TextDetectionMetrics<double>.PolygonIoU(pa, pb)
+            : ComputeBoxIoU(a.Box, b.Box);
+
+    // Even-odd ray casting: whether a point lies inside a simple polygon.
+    private static bool Contains(List<(double X, double Y)> polygon, double x, double y)
+    {
+        bool inside = false;
+        for (int i = 0, j = polygon.Count - 1; i < polygon.Count; j = i++)
+        {
+            var (xi, yi) = polygon[i];
+            var (xj, yj) = polygon[j];
+            if ((yi > y) != (yj > y) && x < ((xj - xi) * (y - yi) / (yj - yi)) + xi)
+                inside = !inside;
+        }
+        return inside;
+    }
+
+    // Mean score-map value over the cells whose centres fall inside the region's quadrilateral (its box when it has
+    // none): averaging the whole axis-aligned box of a rotated word diluted the score with background corners.
+    private double MeanScoreInside(TextRegion<T> region, Tensor<T> score, double scaleX, double scaleY)
+    {
+        var quadrilateral = PolygonOf(region);
+        var (left, top, right, bottom) = region.Box.ToXYXY();
+        double sum = 0;
+        int count = 0;
+        // Only cells whose centre (i + 0.5) * scale can lie in [low, high] are visited, instead of the whole map
+        // for every region (up to 1000 regions x 6,400 cells at the default size). The inclusive centre test
+        // below stays the source of truth; the bounds are widened by one cell so rounding cannot drop a cell.
+        int hMin = Math.Max(0, (int)Math.Floor(top / scaleY - 0.5) - 1);
+        int hMax = Math.Min(score.Shape[2] - 1, (int)Math.Ceiling(bottom / scaleY - 0.5) + 1);
+        int wMin = Math.Max(0, (int)Math.Floor(left / scaleX - 0.5) - 1);
+        int wMax = Math.Min(score.Shape[3] - 1, (int)Math.Ceiling(right / scaleX - 0.5) + 1);
+        for (int h = hMin; h <= hMax; h++)
+            for (int w = wMin; w <= wMax; w++)
+            {
+                double cx = (w + 0.5) * scaleX, cy = (h + 0.5) * scaleY;
+                if (cx < left || cx > right || cy < top || cy > bottom) continue;
+                if (quadrilateral is not null && !Contains(quadrilateral, cx, cy)) continue;
+                sum += NumOps.ToDouble(score[0, 0, h, w]);
+                count++;
+            }
+        return count > 0 ? sum / count : 0.0;
+    }
+
     private List<TextRegion<T>> ApplyTextNMS(List<TextRegion<T>> regions, double iouThreshold)
     {
         if (regions.Count == 0)
@@ -421,7 +728,7 @@ public partial class EAST<T> : TextDetectorBase<T>
             {
                 if (used[j]) continue;
 
-                double iou = ComputeBoxIoU(sorted[i].Box, sorted[j].Box);
+                double iou = RegionIoU(sorted[i], sorted[j]);
                 if (iou > iouThreshold)
                 {
                     used[j] = true;

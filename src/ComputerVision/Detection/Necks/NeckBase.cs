@@ -50,6 +50,12 @@ public abstract partial class NeckBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     public abstract int NumLevels { get; }
 
     /// <summary>
+    /// Channels of each output level, finest first. Most necks project every level to
+    /// <see cref="OutputChannels"/>; YOLO's PAN keeps each level at its own width.
+    /// </summary>
+    public virtual IReadOnlyList<int> LevelChannels => Enumerable.Repeat(OutputChannels, NumLevels).ToArray();
+
+    /// <summary>
     /// Creates a new neck module.
     /// </summary>
     protected NeckBase()

@@ -48,6 +48,11 @@ public partial class CRNN<T> : OCRBase<T>
     private readonly Conv2D<T> _conv6;
     private readonly Conv2D<T> _conv7;
 
+    // Batch normalization after the 5th and 6th convolutions (Shi et al. 2017, Table 1), with learned
+    // scale/shift and running statistics for inference.
+    private readonly BatchNorm2D<T> _bn5;
+    private readonly BatchNorm2D<T> _bn6;
+
     // Bidirectional LSTM layers using actual LSTMLayer
     private readonly LSTMLayer<T> _lstm1Forward;
     private readonly LSTMLayer<T> _lstm1Backward;
@@ -85,6 +90,8 @@ public partial class CRNN<T> : OCRBase<T>
 
         // Stage 4
         _conv7 = new Conv2D<T>(512, 512, kernelSize: 2, padding: 0);
+        _bn5 = new BatchNorm2D<T>(512);
+        _bn6 = new BatchNorm2D<T>(512);
 
         // Bidirectional LSTM Layer 1
         // Input: [batch, seqLen, 512], Output: [batch, seqLen, 256]
@@ -117,6 +124,16 @@ public partial class CRNN<T> : OCRBase<T>
         // Output layer to vocabulary (512 = 256*2 from bidirectional)
         _outputLayer = new Dense<T>(_hiddenDim * 2, VocabularySize);
 
+        // A new model predicts; batch norm must start on its running statistics.
+        SetTrainingMode(false);
+    }
+
+    /// <inheritdoc/>
+    public override void SetTrainingMode(bool training)
+    {
+        base.SetTrainingMode(training);
+        _bn5.SetTrainingMode(training);
+        _bn6.SetTrainingMode(training);
     }
 
     /// <inheritdoc/>
@@ -131,7 +148,7 @@ public partial class CRNN<T> : OCRBase<T>
         var input = PreprocessCrop(image);
 
         // Forward pass
-        var (text, confidence) = RecognizeText(input);
+        var (text, confidence) = RecognizePreparedText(input);
 
         var result = new OCRResult<T>
         {
@@ -150,9 +167,9 @@ public partial class CRNN<T> : OCRBase<T>
     }
 
     /// <inheritdoc/>
-    public override (string text, T confidence) RecognizeText(Tensor<T> croppedImage)
+    protected override (string text, T confidence) RecognizePreparedText(Tensor<T> preparedCrop)
     {
-        var probs = ApplySoftmax(ComputeLogits(croppedImage));
+        var probs = ApplySoftmax(ComputeLogits(preparedCrop));
         string text = DecodeCTC(probs);
         T confidence = ComputeConfidence(probs, text);
         return (text, confidence);
@@ -184,13 +201,12 @@ public partial class CRNN<T> : OCRBase<T>
         x = ApplyReLU(x);
         x = MaxPool2D(x, 2, 1); // Pool height only
 
-        x = _conv5.Forward(x);
+        // Convolution, batch norm, then ReLU (the reference order; BN came after ReLU before).
+        x = _bn5.Forward(_conv5.Forward(x));
         x = ApplyReLU(x);
-        x = ApplyBatchNorm(x);
 
-        x = _conv6.Forward(x);
+        x = _bn6.Forward(_conv6.Forward(x));
         x = ApplyReLU(x);
-        x = ApplyBatchNorm(x);
         x = MaxPool2D(x, 2, 1); // Pool height only
 
         x = _conv7.Forward(x);
@@ -276,15 +292,6 @@ public partial class CRNN<T> : OCRBase<T>
         return Engine.Softmax(logits, -1);
     }
 
-    /// <summary>
-    /// Applies simple batch normalization.
-    /// </summary>
-    private Tensor<T> ApplyBatchNorm(Tensor<T> x)
-        // Normalises with the CURRENT batch's statistics (biased variance, no affine parameters),
-        // exactly as the loop it replaces. Note that this makes one image's output depend on what else
-        // is in its batch; it is preserved here and not silently changed.
-        => CvTensorOps<T>.BatchStatisticsNorm(x, 1e-5);
-
     /// <inheritdoc/>
     public override long GetParameterCount()
     {
@@ -295,6 +302,8 @@ public partial class CRNN<T> : OCRBase<T>
                _conv5.GetParameterCount() +
                _conv6.GetParameterCount() +
                _conv7.GetParameterCount() +
+               _bn5.GetParameterCount() +
+               _bn6.GetParameterCount() +
                _lstm1Forward.GetParameters().Length +
                _lstm1Backward.GetParameters().Length +
                _lstm2Forward.GetParameters().Length +
@@ -353,6 +362,8 @@ public partial class CRNN<T> : OCRBase<T>
         MapConvWeights(weights, "cnn.conv4", _conv5);
         MapConvWeights(weights, "cnn.conv5", _conv6);
         MapConvWeights(weights, "cnn.conv6", _conv7);
+        MapBatchNormWeights(weights, "cnn.batchnorm4", _bn5);
+        MapBatchNormWeights(weights, "cnn.batchnorm5", _bn6);
 
         // Map LSTM weights (typical PyTorch naming: rnn.weight_ih_l0, rnn.weight_hh_l0, etc.)
         MapLSTMWeights(weights, "rnn", 0, _lstm1Forward, _lstm1Backward);
@@ -360,6 +371,14 @@ public partial class CRNN<T> : OCRBase<T>
 
         // Map output layer weights
         MapDenseWeights(weights, "fc", _outputLayer);
+    }
+
+    private void MapBatchNormWeights(Dictionary<string, Tensor<float>> weights, string prefix, BatchNorm2D<T> bn)
+    {
+        if (weights.TryGetValue($"{prefix}.weight", out var gamma)) CopyWeights(gamma, bn.Gamma);
+        if (weights.TryGetValue($"{prefix}.bias", out var beta)) CopyWeights(beta, bn.Beta);
+        if (weights.TryGetValue($"{prefix}.running_mean", out var mean)) CopyWeights(mean, bn.RunningMean);
+        if (weights.TryGetValue($"{prefix}.running_var", out var variance)) CopyWeights(variance, bn.RunningVariance);
     }
 
     private void MapConvWeights(Dictionary<string, Tensor<float>> weights, string prefix, Conv2D<T> conv)
@@ -495,7 +514,7 @@ public partial class CRNN<T> : OCRBase<T>
 
         // Write header
         writer.Write(0x43524E4E); // "CRNN" in ASCII
-        writer.Write(1); // Version 1
+        writer.Write(2); // Version 2: batch norms 5 and 6 (parameters and running statistics) are saved
         writer.Write(Name);
         writer.Write(_hiddenDim);
         writer.Write(_sequenceFeatureDim);
@@ -507,7 +526,9 @@ public partial class CRNN<T> : OCRBase<T>
         _conv3.WriteParameters(writer);
         _conv4.WriteParameters(writer);
         _conv5.WriteParameters(writer);
+        _bn5.WriteParameters(writer);
         _conv6.WriteParameters(writer);
+        _bn6.WriteParameters(writer);
         _conv7.WriteParameters(writer);
 
         // Write LSTM weights using existing Serialize method
@@ -536,9 +557,13 @@ public partial class CRNN<T> : OCRBase<T>
         }
 
         int version = reader.ReadInt32();
-        if (version != 1)
+        if (version != 2)
         {
-            throw new InvalidDataException($"Unsupported CRNN model version: {version}");
+            throw new InvalidDataException(version == 1
+                ? "This CRNN file is version 1, which did not save batch norms 5 and 6 (their learned scale and shift "
+                    + "and their running statistics), so it cannot reproduce the saved model's predictions. Re-save the "
+                    + "model with this version."
+                : $"Unsupported CRNN model version: {version}");
         }
 
         string name = reader.ReadString();
@@ -565,7 +590,9 @@ public partial class CRNN<T> : OCRBase<T>
         _conv3.ReadParameters(reader);
         _conv4.ReadParameters(reader);
         _conv5.ReadParameters(reader);
+        _bn5.ReadParameters(reader);
         _conv6.ReadParameters(reader);
+        _bn6.ReadParameters(reader);
         _conv7.ReadParameters(reader);
 
         // Read LSTM weights using existing Deserialize method
@@ -631,10 +658,12 @@ public partial class CRNN<T> : OCRBase<T>
 
         var labels = CtcLabelsFrom(expectedOutput);
         var ctc = new CTCLoss<T>(VocabularySize, blankIndex: 0);
-        RecordTrainingLoss(TensorModelTrainer<T>.Step(
-            this, input, EncodeCtcTargets(labels), NumOps.FromDouble(TrainingLearningRate), ForwardLogits,
-            (logits, encoded) => MeanCtcLoss(ctc, logits, encoded, labels)));
+        TrainWithTargets<Tensor<T>, Tensor<T>>(input, EncodeCtcTargets(labels), ForwardLogits,
+            (logits, encoded) => MeanCtcLoss(ctc, logits, encoded, labels));
     }
+
+    /// <summary>The paper's optimizer (Shi et al. 2015, Section 3.2): ADADELTA with rho 0.9.</summary>
+    protected override AiDotNet.Interfaces.IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateTrainingOptimizer() => PaperAdadelta(rho: 0.9, epsilon: 1e-6);
 
     private Tensor<T> MeanCtcLoss(CTCLoss<T> ctc, Tensor<T> logits, Tensor<T> encodedTargets, int[][] labels)
     {

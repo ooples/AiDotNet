@@ -510,7 +510,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>, IShapeContract
         int totalElements = _inputCapsules * _numClasses * _inputCapsuleDimension * _outputCapsuleDimension;
 
         // Create flat random tensor [0, 1] directly as 1D, shift to [-0.5, 0.5], scale.
-        var randomTensor = Tensor<T>.CreateRandom(totalElements);
+        var randomTensor = Tensor<T>.CreateRandom(Random, totalElements);
         var halfTensor = new Tensor<T>([totalElements]);
         halfTensor.Fill(NumOps.FromDouble(0.5));
         var shifted = Engine.TensorSubtract(randomTensor, halfTensor);

@@ -3562,6 +3562,26 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
+    /// Copies the values of every component registered with <c>RegisterParameterComponent</c> (the tail of the
+    /// flat parameter vector) into a copy.
+    /// </summary>
+    /// <remarks>
+    /// DeepCopy restores layers and generated tensors, but components a model registers itself, such as
+    /// Swin's layer norms and relative-position tables, were rebuilt fresh and never copied. A clone
+    /// therefore ran on re-initialized weights. Every such tensor used to be initialized from a fixed seed of
+    /// 42, so original and clone happened to agree, and the gap stayed hidden until initialization followed
+    /// the model seed (#2201).
+    /// </remarks>
+    private void CopyRegisteredComponentValuesTo(NeuralNetworkBase<T> destination)
+    {
+        _ = ParameterComponents;
+        _ = destination.ParameterComponents;
+        var values = _parameterRegistry.GetParameters();
+        if (values.Length > 0)
+            destination._parameterRegistry.SetParameters(values);
+    }
+
+    /// <summary>
     /// Transfers generated model-owned trainable tensors that are not part of <see cref="Layers"/>.
     /// </summary>
     protected virtual void CopyGeneratedTrainableTensorsTo(NeuralNetworkBase<T> destination)
@@ -11188,6 +11208,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // exit. See AcquireTrainSentinel for the contract.
         using var __reentrancyGuard = AcquireTrainSentinel();
 
+        // Every Train override passes its PUBLIC input straight in here, so apply the same public-input
+        // preparation as the conformance funnel (ForwardPreparedForTraining). Without it the probe and real
+        // training saw different tensors: Document models normalize in Predict via PreprocessDocument but
+        // trained on the raw page, and Donut fed a rank-3 page into a patch embedding that indexes NCHW.
+        // A model whose ForwardForTraining or PredictCore owns its input convention gets the input unchanged.
+        input = ForwardForTrainingOwnsPublicInputPreparation() ? input : PrepareInputForTraining(input);
+
         var configuredOptimizer = optimizer ?? _baseTrainOptimizer;
         bool useStreamingDefaults = configuredOptimizer is null;
         var resolvedOptimizer = configuredOptimizer ?? GetOrCreateBaseOptimizer();
@@ -16500,6 +16527,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 }
                 byte[] largeDeclaredStateEnvelope = CopyDeclaredStateBeforeParametersTo(largeBase);
                 CopyGeneratedTrainableTensorsTo(largeBase);
+                CopyRegisteredComponentValuesTo(largeBase);
                 // CreateNewInstance implementations sometimes receive an Architecture whose layer
                 // objects still belong to the source. Generated aliases must always point at the
                 // destination's canonical graph before its manifest or forward path is observed.
@@ -16548,6 +16576,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             _ = ModelStateEnvelope.ExtractAfterParameters(copyBase.DeclaredState, serialized);
             copyBase.OnMutableConstructorConfigurationRestored();
             CopyGeneratedTrainableTensorsTo(copyBase);
+            CopyRegisteredComponentValuesTo(copyBase);
             CopyCloneRuntimeConfigurationTo(copyBase);
             // Base LayerBase.Serialize does NOT persist the per-layer RandomSeed, so the
             // serialize/deserialize roundtrip drops it. Transfer it (and the wired latch) so the

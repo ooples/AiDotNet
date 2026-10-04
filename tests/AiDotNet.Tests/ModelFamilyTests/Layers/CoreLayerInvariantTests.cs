@@ -55,7 +55,7 @@ public sealed class DenseLayerWithReLUInvariantTests : LayerTestBase<double>
 public sealed class FullyConnectedLayerInvariantTests : LayerTestBase<double>
 {
     protected override int[] InputShape => [1, 4];
-    protected override ILayer<double> CreateLayer() => new FullyConnectedLayer<double>(4);
+    protected override ILayer<double> CreateLayer() => new FullyConnectedLayer<double>(4, (IActivationFunction<double>)new ReLUActivation<double>());
 }
 
 public sealed class ActivationLayerInvariantTests : LayerTestBase<double>

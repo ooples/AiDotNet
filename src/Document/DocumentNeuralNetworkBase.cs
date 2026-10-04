@@ -295,6 +295,17 @@ public abstract partial class DocumentNeuralNetworkBase<T> : NeuralNetworkBase<T
     protected abstract Tensor<T> ApplyDefaultPreprocessing(Tensor<T> rawImage);
 
     /// <summary>
+    /// Trains on the same prepared page that inference sees.
+    /// </summary>
+    /// <remarks>
+    /// Every document model's <c>PredictCore</c> runs <see cref="PreprocessDocument"/> before its layers, so
+    /// the family's public input is a raw page and its trainable graph consumes the preprocessed one. Stating
+    /// that here, once, is what keeps training and inference on one input path; before it, 22 of the 23
+    /// document models trained on the raw page while predicting on the normalized one.
+    /// </remarks>
+    protected override Tensor<T> PrepareInputForTraining(Tensor<T> input) => PreprocessDocument(input);
+
+    /// <summary>
     /// Postprocesses model output into the final result format.
     /// </summary>
     /// <param name="modelOutput">Raw output from the model.</param>
