@@ -58,6 +58,7 @@ internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>, ISha
     private readonly int _thetaSizeForecast;
     private readonly bool _useInterpretableBasis;
     private readonly int _polynomialDegree;
+    private readonly int? _seed;
 
     /// <summary>
     /// Initializes a new instance with default settings.
@@ -149,7 +150,8 @@ internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>, ISha
         int thetaSizeBackcast,
         int thetaSizeForecast,
         bool useInterpretableBasis,
-        int polynomialDegree = 3)
+        int polynomialDegree = 3,
+        int? seed = null)
         : base(
             CreateInputShape(lookbackWindow),
             CreateOutputShape(lookbackWindow, forecastHorizon))
@@ -207,6 +209,7 @@ internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>, ISha
         _thetaSizeForecast = thetaSizeForecast;
         _useInterpretableBasis = useInterpretableBasis;
         _polynomialDegree = polynomialDegree;
+        _seed = seed;
 
         _fcWeights = new List<Tensor<T>>();
         _fcBiases = new List<Tensor<T>>();
@@ -247,7 +250,7 @@ internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>, ISha
     /// </summary>
     private void InitializeWeights()
     {
-        var random = RandomHelper.CreateSeededRandom(42);
+        var random = RandomHelper.CreateSeededRandom(_seed ?? 42);
 
         // First layer: lookbackWindow -> hiddenLayerSize
         int inputSize = _lookbackWindow;

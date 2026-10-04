@@ -186,7 +186,28 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     {
         Guard.NotNull(regularization);
         Regularization = regularization;
+        RegularizationExplicitlyConfigured = true;
     }
+
+    /// <summary>
+    /// True when the regularization was chosen by the caller (options or <see cref="SetRegularization"/>) rather than
+    /// left at the options' default. See <c>GradientBasedOptimizerOptions.RegularizationExplicitlySet</c>.
+    /// </summary>
+    internal bool RegularizationExplicitlyConfigured { get; private set; }
+
+    /// <summary>
+    /// The global-norm threshold this optimizer's own tape step clips gradients to, on top of whatever the network
+    /// clips: 0 when its tape step does not clip, NaN when it clips in a form a compiled plan cannot reproduce
+    /// (by value). The fused path must apply the same clip, or fused and eager training take different steps.
+    /// </summary>
+    internal virtual double TapeStepGradientClipNorm => 0.0;
+
+    /// <summary>
+    /// The per-element bound this optimizer's own tape step clamps gradients to when it clips by value (the case
+    /// <see cref="TapeStepGradientClipNorm"/> reports as NaN), or 0 when it does not. Streaming training applies it
+    /// gradient by gradient, since a clamp needs no global norm.
+    /// </summary>
+    internal virtual double TapeStepGradientClipValue => 0.0;
 
     /// <summary>
     /// The active regularization applied during gradient updates. Set
@@ -239,6 +260,10 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </para>
     /// </remarks>
     protected SchedulerStepMode _schedulerStepMode;
+
+    // The fused plan's view of a per-epoch schedule (see TryGetFusedLrSchedule). SetLearningRate keeps it at the rate
+    // the host scheduler holds, and the plan reads it on every step.
+    private Tensors.Engines.Compilation.ExternalLrSchedule? _epochLrSchedule;
 
     /// <summary>
     /// Puts the model into training mode at the start of an Optimize run.
@@ -325,8 +350,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// never silently dropped — the caller falls back to eager). A null scheduler or
     /// a constant scheduler yields <c>true</c> with <paramref name="schedule"/> = null
     /// (constant LR; the spec's <c>GetCurrentLearningRate</c> supplies the rate). A
-    /// per-epoch scheduler of any type yields an
-    /// <see cref="Fused.OptimizerTrackingLrSchedule"/>. The per-batch set mirrors
+    /// per-epoch scheduler of any type yields an external schedule that holds the
+    /// optimizer's current rate (SetLearningRate keeps it there). The per-batch set mirrors
     /// the fused kernel's implemented schedule shapes; new shapes are added here
     /// alongside their kernel support.
     /// </para>
@@ -337,19 +362,18 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         if (_learningRateScheduler is null or LearningRateSchedulers.ConstantLRScheduler)
             return true;
 
-        // Every shape below advances once per optimizer step, which is only the eager cadence when the
-        // scheduler steps per batch. A per-epoch scheduler holds its rate for the whole epoch, so the plan
-        // reads the optimizer's current rate instead; OnEpochEnd moves it exactly as it moves the eager one.
-        // WarmupThenEpoch switches cadence mid-run on a per-batch warmup the fused path never advances
-        // (it does not call OnBatchEnd), so it stays eager.
-        switch (_schedulerStepMode)
+
+        // The plan evaluates its schedule once per optimizer step, which is StepPerBatch. StepPerEpoch (the default)
+        // holds the rate for the whole epoch, so the plan reads the rate the scheduler holds instead of advancing a
+        // mapped shape every batch. WarmupThenEpoch steps per batch during warmup, and a fused step does not advance
+        // the host scheduler, so it stays on the eager tape.
+        if (_schedulerStepMode == SchedulerStepMode.StepPerEpoch)
         {
-            case SchedulerStepMode.StepPerEpoch:
-                schedule = new Fused.OptimizerTrackingLrSchedule(GetCurrentLearningRate);
-                return true;
-            case SchedulerStepMode.WarmupThenEpoch:
-                return false;
+            schedule = _epochLrSchedule ??= Tensors.Engines.Compilation.LrSchedule.External(GetCurrentLearningRate());
+            return true;
         }
+        if (_schedulerStepMode != SchedulerStepMode.StepPerBatch)
+            return false;
 
         switch (_learningRateScheduler)
         {
@@ -461,6 +485,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         LossFunction = options.LossFunction;
         GradientCache = options.GradientCache;
         Regularization = options.Regularization;
+        RegularizationExplicitlyConfigured = options.RegularizationExplicitlySet;
 
         // Initialize learning rate scheduler from options.
         //
@@ -577,6 +602,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     {
         _currentLearningRate = learningRate;
         CurrentLearningRate = NumOps.FromDouble(learningRate);
+        if (_epochLrSchedule is not null) _epochLrSchedule.LearningRate = learningRate;
     }
 
     #region DataLoader Integration
@@ -1748,6 +1774,87 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// indicated by the gradient, hopefully improving the model's performance.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// True for optimizers whose facade batch loop has been verified to be equivalent under
+    /// <see cref="TryModelOwnStep"/>: nothing between CalculateGradient and UpdateSolution reads the flat gradient,
+    /// and nothing after UpdateSolution except taking the (unchanged) solution. Opt-in per optimizer.
+    /// </summary>
+    protected virtual bool SupportsModelOwnStep => false;
+
+    private int _suppressModelBatchEnd;
+
+    /// <summary>How many facade batches ran as the network's own step (diagnostics and tests).</summary>
+    internal int ModelOwnStepCount { get; private set; }
+
+    /// <summary>
+    /// Set by a wrapper that reads <see cref="LastComputedGradients"/> after each optimize (the sharded / DDP
+    /// optimizers synchronize those gradients across replicas).
+    /// </summary>
+    /// <remarks>
+    /// The model step does not produce that vector: the flat path stores the regularized, clipped gradient, while the
+    /// network publishes its raw tape gradient. Republishing one as the other would synchronize a different quantity,
+    /// and publishing nothing let the wrapper skip synchronization silently, so the model step is declined instead.
+    /// </remarks>
+    internal bool FlatGradientsConsumed { get; set; }
+
+    /// <summary>Why the most recent facade batch did not run as the network's own step, or null if it did.</summary>
+    internal string? LastModelStepDeclineReason { get; private set; }
+
+    private bool Decline(string reason)
+    {
+        LastModelStepDeclineReason = reason;
+        return false;
+    }
+
+    /// <summary>
+    /// Runs one facade batch as the NETWORK'S OWN training step with this optimizer - the compiled fused step (device
+    /// optimizer, CUDA-graph capture) when eligible, otherwise the tape plus <c>Step</c> on the parameter tensors -
+    /// instead of the flat round trip (tape gradients scattered into a host vector, clipped on the host, copied back
+    /// into host tensors, updated, re-uploaded). Returns false, changing nothing, whenever that could change the result.
+    /// </summary>
+    /// <remarks>
+    /// Measured (1024-3x1024-10 MLP, batch 256, GPU): the flat path read back ~35 MB per step and ran 150-300x slower
+    /// than PyTorch on the same network. The network already adopts this optimizer (SetModel ->
+    /// AdoptConfiguredOptimizer), and <c>UpdateSolution</c> already applies the SAME <c>Step</c> to network solutions
+    /// ("one update implementation per optimizer"), so this only removes the host round trip around it.
+    /// Declines for: optimizers not verified (<see cref="SupportsModelOwnStep"/>), non-network solutions, non-tensor
+    /// batches, a flat-vector regularization, mixed-precision loss scaling, and an explicitly configured loss that is
+    /// not the network's own. <c>AIDOTNET_FACADE_MODEL_STEP=0</c> turns it off.
+    /// </remarks>
+    protected bool TryModelOwnStep(IFullModel<T, TInput, TOutput> solution, TInput x, TOutput y)
+    {
+        if (!SupportsModelOwnStep) return Decline("optimizer not verified for the model step");
+        if (solution is not NeuralNetworks.NeuralNetworkBase<T> network) return Decline("solution is not a NeuralNetworkBase");
+        if (x is not Tensor<T> xTensor || y is not Tensor<T> yTensor) return Decline("batch is not tensors");
+        if (this is not IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> self) return Decline("optimizer is not a tensor optimizer");
+        // L2 is applied identically by the network's step (before clipping, fused or eager); other regularizers keep the
+        // flat path for now.
+        if (Regularization is not null && Regularization is not RegularizationNs.NoRegularization<T, TInput, TOutput>
+            && Regularization is not RegularizationNs.L2Regularization<T, TInput, TOutput>)
+            return Decline("regularization " + Regularization.GetType().Name + " has no model-step form yet");
+        if (_mixedPrecisionContext is not null) return Decline("mixed-precision loss scaling");
+        if (FlatGradientsConsumed) return Decline("a wrapper synchronizes LastComputedGradients, which only the flat path produces");
+        if (GradientOptions.LossFunctionExplicitlySet && !ReferenceEquals(LossFunction, network.DefaultLossFunction)) return Decline("explicit loss differs from the network's");
+        // The network's fused step clips by the NETWORK's global-norm threshold; the flat path clipped by this
+        // optimizer's. Take the model step only when the two agree (both default to 1.0), so the update is identical.
+        double optimizerClip = !GradientOptions.EnableGradientClipping ? 0.0
+            : GradientOptions.GradientClippingMethod == GradientClippingMethod.ByNorm ? GradientOptions.MaxGradientNorm
+            : double.NaN;
+        if (double.IsNaN(optimizerClip) || Math.Abs(optimizerClip - network.MaxGradNormValue) > 1e-12) return Decline($"clip differs: optimizer {optimizerClip} vs network {network.MaxGradNormValue}");
+        if (Environment.GetEnvironmentVariable("AIDOTNET_FACADE_MODEL_STEP") == "0") return Decline("AIDOTNET_FACADE_MODEL_STEP=0");
+
+        _suppressModelBatchEnd++;
+        try
+        {
+            if (!network.TryTrainStepWithOptimizer(xTensor, yTensor, self, out string? networkDeclineReason))
+                return Decline(networkDeclineReason ?? "network " + network.GetType().Name + " declined the model step");
+        }
+        finally { _suppressModelBatchEnd--; }
+        ModelOwnStepCount++;
+        LastModelStepDeclineReason = null;
+        return true;
+    }
+
     protected virtual IFullModel<T, TInput, TOutput> UpdateSolution(
         IFullModel<T, TInput, TOutput> currentSolution,
         Vector<T> gradient)
@@ -2282,6 +2389,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </remarks>
     public virtual void OnBatchEnd()
     {
+        // The model's own training step (TryModelOwnStep) ends by calling OnBatchEnd itself; the facade loop decides
+        // whether a batch end is counted, exactly as it did before the model step existed, so that call is ignored.
+        if (_suppressModelBatchEnd > 0) return;
         _currentStep++;
 
         if (_learningRateScheduler != null)
@@ -3301,8 +3411,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// in the tape step's <see cref="TapeStepContext{T}.Gradients"/> dictionary.
     /// Mirrors <c>torch.nn.utils.clip_grad_norm_(params, max_norm)</c>:
     /// computes <c>sqrt(Σ_p ‖grad_p‖²)</c>; if it exceeds <paramref name="maxNorm"/>,
-    /// scales every gradient by <c>maxNorm / globalNorm</c> in place so the
-    /// post-clip global norm is exactly <paramref name="maxNorm"/>. Without
+    /// scales every gradient by <c>maxNorm / (globalNorm + 1e-6)</c> (PyTorch clip_grad_norm_) in place so the
+    /// post-clip global norm is <paramref name="maxNorm"/> to within that 1e-6. Without
     /// clipping, randomly-initialised classifiers paired with CrossEntropyLoss
     /// and non-distribution targets diverge in a few iterations (ODISE: initial
     /// MSE 0.24 → final 184.69, 770× explosion). Pre-clipping every tape-path
@@ -3336,7 +3446,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             || double.IsNaN(globalNorm) || double.IsInfinity(globalNorm))
             return;
 
-        double scale = maxNorm / globalNorm;
+        // PyTorch's clip_grad_norm_ coefficient, the same one the network clip and the fused plan apply.
+        double scale = maxNorm / (globalNorm + 1e-6);
         foreach (var kvp in context.Gradients)
         {
             var grad = kvp.Value;

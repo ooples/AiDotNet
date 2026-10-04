@@ -90,6 +90,10 @@ public sealed class GpuTransformerWeightParityTests
         catch { return; } // no DirectGpu backend on this host — skip
 
         var savedEngine = AiDotNetEngine.Current;
+        // Train2Steps pins the process-wide seed fallback; put it back afterwards. Left at 42 it made every later
+        // default-seeded model in the process initialize identically (the Issue1191 transformer trials collapsed
+        // to one repeated init and failed only when run after this class).
+        int? savedSeedOverride = NeuralNetworkArchitecture<float>.DefaultRandomSeedOverride;
         float[] gpuW, cpuW;
         try
         {
@@ -101,6 +105,7 @@ public sealed class GpuTransformerWeightParityTests
         finally
         {
             AiDotNetEngine.Current = savedEngine;
+            NeuralNetworkArchitecture<float>.DefaultRandomSeedOverride = savedSeedOverride;
             gpu.Dispose();
         }
 
