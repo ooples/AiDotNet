@@ -1598,6 +1598,7 @@ shard:
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.TransformerProductionScaleConvergenceIssue1221Tests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.TransformerTrainConvergenceTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.FusedOptimizerParityTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.FusedOptimizerScheduleAndClipParityTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.OptimizerVectorUpdateStateSafetyTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Training.TrainerTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Training.TrainingRecipeIntegrationTests.|
@@ -1744,6 +1745,7 @@ shard:
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.TransformerLogitsLossHeadTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.TransformerProductionScaleHarnessIssue1221Tests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.TransformerTrainingTraceTest.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.Adam8BitBf16TrainingTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.Adam8BitFusedSpecTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.AdamOptimizerLengthMismatchIssue1245Tests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.FusedActivationParityTests.|
