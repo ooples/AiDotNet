@@ -55,6 +55,10 @@ public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
     private readonly int _stride;
     private readonly int _padding;
     private readonly int _dilation;
+    // Blocked input-to-output connections (PyTorch nn.Conv1d `groups`): each of the _groups output
+    // channel blocks sees only its own block of input channels, so the kernel's in-channel axis is
+    // C_in / _groups. 1 is the ordinary dense convolution.
+    private readonly int _groups;
 
     private Tensor<T> _kernels;
     private Tensor<T> _biases;
@@ -129,11 +133,16 @@ public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
         int stride = 1,
         int? padding = null,
         IActivationFunction<T>? activation = null,
-        IInitializationStrategy<T>? initializationStrategy = null)
+        IInitializationStrategy<T>? initializationStrategy = null,
+        int groups = 1)
         : base(new[] { -1, -1 }, new[] { outputChannels, -1 },
                activation ?? new AiDotNet.ActivationFunctions.IdentityActivation<T>())
     {
         if (outputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outputChannels));
+        if (groups <= 0) throw new ArgumentOutOfRangeException(nameof(groups));
+        if (outputChannels % groups != 0)
+            throw new ArgumentException(
+                $"outputChannels ({outputChannels}) must be divisible by groups ({groups}).", nameof(groups));
         if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize));
         if (dilation <= 0) throw new ArgumentOutOfRangeException(nameof(dilation));
         if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride));
@@ -151,6 +160,7 @@ public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
         // for the residual add). Caller can override for downsampling.
         _padding = padding ?? ((kernelSize - 1) * dilation / 2);
         _dilation = dilation;
+        _groups = groups;
 
         _kernels = new Tensor<T>([0, 0, 0, 0]);
         _biases = new Tensor<T>([0]);
@@ -185,12 +195,18 @@ public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
         // round-trips is the EFFECTIVE padding, which reproduces either spelling exactly.
         [LayerState(Key = "Padding")] int? padding = null,
         IActivationFunction<T>? activation = null,
-        IInitializationStrategy<T>? initializationStrategy = null)
+        IInitializationStrategy<T>? initializationStrategy = null,
+        [LayerState] int groups = 1)
         : base(new[] { inputChannels, -1 }, new[] { outputChannels, -1 },
                activation ?? new AiDotNet.ActivationFunctions.IdentityActivation<T>())
     {
         if (inputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(inputChannels));
         if (outputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(outputChannels));
+        if (groups <= 0) throw new ArgumentOutOfRangeException(nameof(groups));
+        if (inputChannels % groups != 0 || outputChannels % groups != 0)
+            throw new ArgumentException(
+                $"inputChannels ({inputChannels}) and outputChannels ({outputChannels}) must both be " +
+                $"divisible by groups ({groups}).", nameof(groups));
         if (kernelSize <= 0) throw new ArgumentOutOfRangeException(nameof(kernelSize));
         if (dilation <= 0) throw new ArgumentOutOfRangeException(nameof(dilation));
         if (stride <= 0) throw new ArgumentOutOfRangeException(nameof(stride));
@@ -204,10 +220,11 @@ public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
         _stride = stride;
         _padding = padding ?? ((kernelSize - 1) * dilation / 2);
         _dilation = dilation;
+        _groups = groups;
 
-        _kernels = AllocateLazyWeight([outputChannels, inputChannels, 1, kernelSize]);
+        _kernels = AllocateLazyWeight([outputChannels, inputChannels / groups, 1, kernelSize]);
         _biases = AllocateLazyWeight([outputChannels]);
-        InitializeLayerWeights(_kernels, inputChannels * kernelSize, outputChannels);
+        InitializeLayerWeights(_kernels, inputChannels / groups * kernelSize, outputChannels / groups);
         InitializeLayerBiases(_biases);
         RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
@@ -236,7 +253,15 @@ public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
         int tIn = input.Shape[2];
         int tOut = (tIn + 2 * _padding - _dilation * (_kernelSize - 1) - 1) / _stride + 1;
 
+        if (cIn % _groups != 0)
+        {
+            throw new ArgumentException(
+                $"Conv1DLayer with groups={_groups} needs an input channel count divisible by it; got {cIn}.",
+                nameof(input));
+        }
+
         _inputChannels = cIn;
+        int kernelInChannels = cIn / _groups;
 
         // Idempotent weight allocation. If this layer ALREADY holds correctly-shaped weights — because
         // they were installed by SetParameters / SetTrainableParameters (deserialize) or shared by a
@@ -246,14 +271,14 @@ public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
         // (the #1221 Clone_AfterTraining failure class for lazy conv/attention stacks). Only allocate
         // when the weights are missing or their input-channel count no longer matches the input.
         bool weightsAlreadyValid = _kernels is { Rank: 4 } k
-            && k.Shape[0] == _outputChannels && k.Shape[1] == cIn && k.Shape[3] == _kernelSize
+            && k.Shape[0] == _outputChannels && k.Shape[1] == kernelInChannels && k.Shape[3] == _kernelSize
             && _biases is { } b && b.Length == _outputChannels;
 
         if (!weightsAlreadyValid)
         {
-            _kernels = AllocateLazyWeight([_outputChannels, cIn, 1, _kernelSize]);
+            _kernels = AllocateLazyWeight([_outputChannels, kernelInChannels, 1, _kernelSize]);
             _biases = AllocateLazyWeight([_outputChannels]);
-            InitializeLayerWeights(_kernels, cIn * _kernelSize, _outputChannels);
+            InitializeLayerWeights(_kernels, kernelInChannels * _kernelSize, _outputChannels / _groups);
             InitializeLayerBiases(_biases);
             RegisterTrainableParameter(_kernels, PersistentTensorRole.Weights);
             RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
@@ -288,11 +313,13 @@ public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
         var input4D = Engine.Reshape(input,
             new[] { input.Shape[0], input.Shape[1], 1, input.Shape[2] });
 
-        var conv = Engine.Conv2D(
-            input4D, _kernels,
-            new[] { 1, _stride },
-            new[] { 0, _padding },
-            new[] { 1, _dilation });
+        var conv = _groups == 1
+            ? Engine.Conv2D(
+                input4D, _kernels,
+                new[] { 1, _stride },
+                new[] { 0, _padding },
+                new[] { 1, _dilation })
+            : GroupedConv2D(input4D);
 
         // Broadcast bias [C_out] -> [1, C_out, 1, 1] and add.
         var biasReshaped = Engine.Reshape(_biases, new[] { 1, _outputChannels, 1, 1 });
@@ -302,6 +329,31 @@ public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
         // [B, C_out, 1, T_out] -> [B, C_out, T_out]
         return Engine.Reshape(activated,
             new[] { activated.Shape[0], activated.Shape[1], activated.Shape[3] });
+    }
+
+    /// <summary>
+    /// Grouped convolution: group g convolves input channels [g*C_in/G, (g+1)*C_in/G) with output
+    /// kernels [g*C_out/G, (g+1)*C_out/G), and the group outputs are concatenated on the channel axis
+    /// (PyTorch nn.Conv1d groups semantics). Every step is an engine op, so the tape differentiates the
+    /// input and each kernel block.
+    /// </summary>
+    private Tensor<T> GroupedConv2D(Tensor<T> input4D)
+    {
+        int inPerGroup = input4D.Shape[1] / _groups;
+        int outPerGroup = _outputChannels / _groups;
+        var groupOutputs = new Tensor<T>[_groups];
+        for (int g = 0; g < _groups; g++)
+        {
+            var inputBlock = Engine.TensorNarrow(input4D, dim: 1, start: g * inPerGroup, length: inPerGroup);
+            var kernelBlock = Engine.TensorNarrow(_kernels, dim: 0, start: g * outPerGroup, length: outPerGroup);
+            groupOutputs[g] = Engine.Conv2D(
+                inputBlock, kernelBlock,
+                new[] { 1, _stride },
+                new[] { 0, _padding },
+                new[] { 1, _dilation });
+        }
+
+        return Engine.TensorConcatenate(groupOutputs, axis: 1);
     }
 
     /// <summary>Parameters handed to <see cref="SetParameters"/> before the shape was known.</summary>
@@ -353,6 +405,7 @@ public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
         metadata["Dilation"] = _dilation.ToString();
         metadata["Stride"] = _stride.ToString();
         metadata["Padding"] = _padding.ToString();
+        metadata["Groups"] = _groups.ToString();
         if (_inputChannels > 0)
             metadata["InputChannels"] = _inputChannels.ToString();
         if (ScalarActivation is not null)

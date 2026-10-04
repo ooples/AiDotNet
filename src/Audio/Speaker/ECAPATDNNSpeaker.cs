@@ -60,6 +60,9 @@ public partial class ECAPATDNNSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVe
     private bool _useNativeMode;
     private bool _disposed;
 
+    // The ECAPA-TDNN encoder that runs the default topology; null when the caller supplied layers.
+    private EcapaTdnnBackbone<T>? _backbone;
+
     #endregion
 
     #region Properties
@@ -239,19 +242,87 @@ public partial class ECAPATDNNSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVe
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers);
-        else Layers.AddRange(LayerHelper<T>.CreateDefaultECAPATDNNSpeakerLayers(
-            numMels: _options.NumMels, channels: _options.Channels[0],
-            embeddingDim: _options.EmbeddingDim, numBlocks: _options.Channels.Length - 2,
-            poolingDim: _options.PoolingDim, seBottleneckDim: _options.SEBottleneckDim,
-            dropoutRate: _options.DropoutRate));
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            return;
+        }
+
+        // Channels holds one width per stage, the MFA convolution last; the backbone validates the
+        // rest of the stage lists against it.
+        if (_options.Channels is null || _options.Channels.Length == 0)
+            throw new ArgumentException("ECAPATDNNSpeakerOptions.Channels must list at least one stage width.");
+
+        // Real 1-D convolutions over time with the paper's SE-Res2Blocks, MFA and attentive
+        // statistics pooling. Its layers are published through Layers, so training, serialization and
+        // clone walk the instances the forward runs.
+        _backbone = new EcapaTdnnBackbone<T>(
+            _options.Channels, _options.KernelSizes, _options.Dilations, _options.Res2NetScale,
+            _options.SEBottleneckDim, _options.AttentionChannels, _options.EmbeddingDim);
+        Layers.AddRange(_backbone.Layers);
     }
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+        return ForwardNative(input);
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => ForwardNative(input);
+
+    private bool _lazyShapesProbed;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// ECAPA-TDNN is not a sequential chain (Res2Net splits, the MFA concatenation, pooling over
+    /// time), so the base walk would mis-size its convolutions. Resolve through the real topology
+    /// with a short [frames, NumMels] feature matrix.
+    /// </remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (!_useNativeMode) return;
+        if (_backbone is null)
+        {
+            // A caller-supplied stack is an ordinary sequential chain, which the base walk resolves.
+            base.ResolveLazyLayerShapes();
+            return;
+        }
+
+        if (_lazyShapesProbed) return;
+        _lazyShapesProbed = true;
+
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            _ = ForwardNative(new Tensor<T>(new[] { 8, _options.NumMels }));
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
+    }
+
+    /// <summary>
+    /// Runs time-major features <c>[T, F]</c> (or <c>[B, T, F]</c>) through the encoder to an
+    /// embedding <c>[EmbeddingDim]</c> (or <c>[B, EmbeddingDim]</c>).
+    /// </summary>
+    private Tensor<T> ForwardNative(Tensor<T> input)
+    {
+        if (_backbone is null)
+        {
+            var c = input;
+            foreach (var l in Layers) c = l.Forward(c);
+            return c;
+        }
+
+        _backbone.BindTo(Layers);
+        var embedding = _backbone.Forward(EcapaTdnnBackbone<T>.ToChannelFirst(input));
+        return input.Shape.Length == 2
+            ? Engine.Reshape(embedding, new[] { embedding.Shape[embedding.Shape.Length - 1] })
+            : embedding;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)

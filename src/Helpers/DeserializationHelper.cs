@@ -1412,6 +1412,8 @@ public static class DeserializationHelper
             int stride = TryGetInt(additionalParams, "Stride") ?? 1;
             int padding = TryGetInt(additionalParams, "Padding") ?? ((kernelSize - 1) * dilation / 2);
             int? inputChannels = TryGetInt(additionalParams, "InputChannels");
+            // Absent in layers saved before grouped convolution existed, all of which were dense.
+            int groups = TryGetInt(additionalParams, "Groups") ?? 1;
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
@@ -1419,8 +1421,8 @@ public static class DeserializationHelper
                 throw new InvalidOperationException($"Failed to deserialize activation function of type '{additionalParams["ScalarActivationType"]}' for Conv1DLayer.");
 
             instance = (inputChannels.HasValue && inputChannels.Value > 0)
-                ? new Conv1DLayer<T>(inputChannels.Value, outputChannels, kernelSize, dilation, stride, padding, activation as IActivationFunction<T>)
-                : new Conv1DLayer<T>(outputChannels, kernelSize, dilation, stride, padding, activation as IActivationFunction<T>);
+                ? new Conv1DLayer<T>(inputChannels.Value, outputChannels, kernelSize, dilation, stride, padding, activation as IActivationFunction<T>, groups: groups)
+                : new Conv1DLayer<T>(outputChannels, kernelSize, dilation, stride, padding, activation as IActivationFunction<T>, groups: groups);
         }
         else if (genericDef == typeof(Conv1DTransposeLayer<>))
         {
