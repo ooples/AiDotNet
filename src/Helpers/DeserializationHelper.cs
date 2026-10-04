@@ -2705,14 +2705,12 @@ public static class DeserializationHelper
             // A block saved before NormPlacement was persisted was always Pre-LN. A value that is present but not a
             // placement is corrupt metadata: rebuilding it with the other placement would compute a different function.
             var placementTeb = AiDotNet.Enums.TransformerNormPlacement.PreNorm;
-            if (additionalParams is not null && additionalParams.TryGetValue("NormPlacement", out var placementTextTeb)
-                && placementTextTeb is not null)
-            {
-                if (!Enum.TryParse(placementTextTeb.ToString(), ignoreCase: false, out placementTeb)
-                    || !Enum.IsDefined(typeof(AiDotNet.Enums.TransformerNormPlacement), placementTeb))
-                    throw new InvalidOperationException(
-                        $"{genericDef.Name} metadata is corrupt: NormPlacement '{placementTextTeb}' is not a TransformerNormPlacement.");
-            }
+            string? placementTextTeb = TryGetString(additionalParams, "NormPlacement");
+            if (placementTextTeb is not null
+                && (!Enum.TryParse(placementTextTeb, ignoreCase: false, out placementTeb)
+                    || !Enum.IsDefined(typeof(AiDotNet.Enums.TransformerNormPlacement), placementTeb)))
+                throw new InvalidOperationException(
+                    $"{genericDef.Name} metadata is corrupt: NormPlacement '{placementTextTeb}' is not a TransformerNormPlacement.");
             // Validate positivity BEFORE the modulo: a corrupt numHeads of 0 would make
             // (hsTeb % nhTeb) throw DivideByZeroException, and a negative value would pass the
             // modulo (C# % takes the dividend's sign) yet yield a negative per-head dimension.
