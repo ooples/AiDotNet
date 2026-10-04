@@ -61,7 +61,7 @@ public static class StarCoder2ModelBuilder<T>
 
         var finalNorm = new LayerNormalizationLayer<T>(hidden, normEps);
         layers.Add(finalNorm);
-        var lmHead = new DenseLayer<T>(vocab, activationFunction: new IdentityActivation<T>());
+        var lmHead = LlamaModelBuilder<T>.CreateLmHead(embedding, config.TieWordEmbeddings, vocab);
         layers.Add(lmHead);
 
         var architecture = new NeuralNetworkArchitecture<T>(
@@ -91,12 +91,7 @@ public static class StarCoder2ModelBuilder<T>
 
         LoadLayerNorm(finalNorm, weights, "model.norm", hidden);
 
-        string headName = LlamaModelBuilder<T>.HasTensor(weights, LlamaModelBuilder<T>.LmHeadName)
-            ? LlamaModelBuilder<T>.LmHeadName : LlamaModelBuilder<T>.EmbedName;
-        if (!config.TieWordEmbeddings && !LlamaModelBuilder<T>.HasTensor(weights, LlamaModelBuilder<T>.LmHeadName))
-            throw new InvalidDataException(
-                "config does not tie word embeddings but lm_head.weight is absent from the checkpoint.");
-        LlamaModelBuilder<T>.LoadDense(lmHead, weights, headName, outDim: vocab, inDim: hidden);
+        LlamaModelBuilder<T>.LoadLmHead(lmHead, weights, vocab, hidden);
 
         return network;
     }

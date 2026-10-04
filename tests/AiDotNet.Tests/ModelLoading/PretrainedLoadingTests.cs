@@ -176,6 +176,119 @@ namespace AiDotNet.Tests.ModelLoading
             Assert.Equal(5, net.Layers.Count);
         }
 
+        private static InMemorySource CopyOf(InMemorySource source, Action<Dictionary<string, double[]>> edit)
+        {
+            var tensors = source.TensorNames.ToDictionary(n => n, n => (double[])source.ReadAsDouble(n).Clone());
+            edit(tensors);
+            return new InMemorySource(tensors);
+        }
+
+        private static Tensor<double> Tokens()
+        {
+            var tokens = new Tensor<double>(new[] { 1, 3 });
+            tokens[0, 0] = 1; tokens[0, 1] = 5; tokens[0, 2] = 2;
+            return tokens;
+        }
+
+        [Fact]
+        public void Builder_TiedCheckpoint_SharesTheEmbeddingTable_AndMatchesACopiedHead()
+        {
+            // tie_word_embeddings: Hugging Face ties the LM head to the embedding by reference. The head must read the
+            // embedding's own table rather than hold a copy.
+            var config = TinyConfig(tie: true);
+            var tiedWeights = TinyWeights(config, includeLmHead: false);
+            var tied = LlamaModelBuilder<double>.Build(config, tiedWeights);
+            var head = Assert.IsType<TiedEmbeddingHeadLayer<double>>(tied.Layers[tied.Layers.Count - 1]);
+            Assert.Same(tied.Layers[0], head.Embedding);
+
+            // Control: an untied model whose lm_head.weight is a copy of the table gives the same logits, and holds one
+            // extra vocab x hidden matrix plus its dense head's bias.
+            var copied = LlamaModelBuilder<double>.Build(TinyConfig(tie: false),
+                CopyOf(tiedWeights, t => t["lm_head.weight"] = (double[])t["model.embed_tokens.weight"].Clone()));
+            Assert.IsType<DenseLayer<double>>(copied.Layers[copied.Layers.Count - 1]);
+
+            var a = tied.Predict(Tokens());
+            var b = copied.Predict(Tokens());
+            for (int s = 0; s < a.Shape[1]; s++)
+                for (int v = 0; v < a.Shape[2]; v++)
+                    Assert.Equal(b[0, s, v], a[0, s, v], 10);
+
+            int vocab = config.VocabSize, hidden = config.HiddenSize;
+            Assert.Equal(copied.GetParameters().Length - vocab * hidden - vocab, tied.GetParameters().Length);
+        }
+
+        [Fact]
+        public void Builder_TiedCheckpoint_StaysTiedThroughTraining()
+        {
+            var config = TinyConfig(tie: true);
+            var net = LlamaModelBuilder<double>.Build(config, TinyWeights(config, includeLmHead: false));
+            var embedding = Assert.IsType<EmbeddingLayer<double>>(net.Layers[0]);
+            var head = Assert.IsType<TiedEmbeddingHeadLayer<double>>(net.Layers[net.Layers.Count - 1]);
+            int parameterCount = net.GetParameters().Length;
+            var tableBefore = embedding.GetMaterializedEmbeddingTable().ToArray();
+
+            var target = new Tensor<double>(new[] { 1, 3, config.VocabSize });
+            target[0, 0, 2] = 1; target[0, 1, 7] = 1; target[0, 2, 4] = 1;
+            net.SetTrainingMode(true);
+            for (int i = 0; i < 3; i++) net.Train(Tokens(), target);
+
+            // One table, updated by gradients from both of its uses, still read by the head.
+            Assert.Same(embedding, head.Embedding);
+            Assert.Equal(parameterCount, net.GetParameters().Length);
+            Assert.NotEqual(tableBefore, embedding.GetMaterializedEmbeddingTable().ToArray());
+        }
+
+        [Fact]
+        public void Builder_TiedCheckpoint_StaysTiedAcrossCloneAndSerialization()
+        {
+            var config = TinyConfig(tie: true);
+            var weights = TinyWeights(config, includeLmHead: false);
+            var net = LlamaModelBuilder<double>.Build(config, weights);
+            var expected = net.Predict(Tokens());
+
+            // A clone gets its own embedding, and its head must read that one, not the source model's.
+            var clone = Assert.IsType<NeuralNetwork<double>>(net.Clone());
+            var cloneHead = Assert.IsType<TiedEmbeddingHeadLayer<double>>(clone.Layers[clone.Layers.Count - 1]);
+            Assert.Same(clone.Layers[0], cloneHead.Embedding);
+            Assert.NotSame(net.Layers[0], cloneHead.Embedding);
+
+            // A different model restored from the saved bytes: rebound to its own embedding, predicting like the source.
+            var other = LlamaModelBuilder<double>.Build(config,
+                CopyOf(weights, t => { var e = t["model.embed_tokens.weight"]; for (int i = 0; i < e.Length; i++) e[i] *= 2; }));
+            other.Deserialize(net.Serialize());
+            var otherHead = Assert.IsType<TiedEmbeddingHeadLayer<double>>(other.Layers[other.Layers.Count - 1]);
+            Assert.Same(other.Layers[0], otherHead.Embedding);
+            var restored = other.Predict(Tokens());
+            for (int s = 0; s < expected.Shape[1]; s++)
+                for (int v = 0; v < expected.Shape[2]; v++)
+                    Assert.Equal(expected[0, s, v], restored[0, s, v], 10);
+        }
+
+        [Fact]
+        public void Builder_GemmaScale_RunsAfterTheEmbedding_SoATiedHeadReadsTheRawTable()
+        {
+            // Gemma multiplies embeddings by sqrt(hidden) at runtime (Hugging Face). The table must stay raw, or a tied head
+            // would read scaled weights.
+            var config = TinyConfig(tie: true);
+            var weights = TinyWeights(config, includeLmHead: false);
+            var net = LlamaModelBuilder<double>.Build(config, weights, DecoderOptions<double>.Gemma);
+
+            var embedding = Assert.IsType<EmbeddingLayer<double>>(net.Layers[0]);
+            var lookedUp = embedding.Forward(new Tensor<double>(new[] { 1, 1 }));
+            Assert.Equal(weights.ReadAsDouble("model.embed_tokens.weight")[0] * Math.Sqrt(config.HiddenSize), lookedUp[0, 0, 0], 9);
+            Assert.Equal(weights.ReadAsDouble("model.embed_tokens.weight"), embedding.GetMaterializedEmbeddingTable().ToArray());
+
+            // Control: an untied Gemma whose lm_head is a raw copy of the table predicts the same.
+            var copied = LlamaModelBuilder<double>.Build(TinyConfig(tie: false),
+                CopyOf(weights, t => t["lm_head.weight"] = (double[])t["model.embed_tokens.weight"].Clone()),
+                DecoderOptions<double>.Gemma);
+            var a = net.Predict(Tokens());
+            var b = copied.Predict(Tokens());
+            for (int s = 0; s < a.Shape[1]; s++)
+                for (int v = 0; v < a.Shape[2]; v++)
+                    Assert.Equal(b[0, s, v], a[0, s, v], 10);
+        }
+
         [Fact]
         public void Builder_Throws_WhenLmHeadMissingAndNotTied()
         {
@@ -270,9 +383,13 @@ namespace AiDotNet.Tests.ModelLoading
             for (int i = 0; i < h; i++)
                 Assert.Equal(inNorm[i] + 1.0, gamma[i], 9);
 
-            // sqrt(hidden) embedding scale baked into the table (row 0, col 0).
+            // sqrt(hidden) embedding scale, applied at runtime as Hugging Face's GemmaModel does (inputs_embeds * normalizer),
+            // not baked into the table: the table stays raw so a tied LM head reads the same weights HF's does.
             var emb = Assert.IsType<EmbeddingLayer<double>>(net.Layers[0]);
-            Assert.Equal(embed[0] * Math.Sqrt(h), emb.GetParameters()[0], 9);
+            Assert.Equal(embed[0], emb.GetParameters()[0], 9);
+            var tokenZero = new Tensor<double>(new[] { 1, 1 });
+            var looked = emb.Forward(tokenZero);
+            Assert.Equal(embed[0] * Math.Sqrt(h), looked[0, 0, 0], 9);
         }
 
         [Fact]

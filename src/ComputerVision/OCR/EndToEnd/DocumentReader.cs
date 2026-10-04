@@ -58,7 +58,8 @@ public partial class DocumentReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
         var detectionOptions = new TextDetectionOptions<T>
         {
             Architecture = TextDetectionArchitecture.DBNet,
-            ConfidenceThreshold = NumOps.FromDouble(0.3) // Lower threshold for documents
+            ConfidenceThreshold = NumOps.FromDouble(0.3), // Lower threshold for documents
+            RandomSeed = options.RandomSeed
         };
 
         _detector = new DBNet<T>(detectionOptions);

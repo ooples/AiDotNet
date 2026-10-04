@@ -58,7 +58,7 @@ public partial class NormalOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInp
     /// <param name="model">The model to optimize.</param>
     /// <param name="options">The optimization options.</param>
     /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
-    public NormalOptimizer(IFullModel<T, TInput, TOutput> model, GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>? options = null)
+    public NormalOptimizer(IFullModel<T, TInput, TOutput>? model, GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
 

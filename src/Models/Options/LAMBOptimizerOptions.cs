@@ -136,6 +136,11 @@ public class LAMBOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     /// Following best practices for transformer training, bias terms and normalization layer
     /// parameters (BatchNorm, LayerNorm) are typically excluded from weight decay.
     /// </para>
+    /// <para>
+    /// In neural-network (tape) training every parameter is a tensor, and the excluded ones are those of rank 1 or
+    /// less: biases and normalization scales and shifts. A flat parameter vector (the non-network
+    /// <c>Optimize</c> path) has no tensor structure to tell them apart, so the whole vector is decayed there.
+    /// </para>
     /// <para><b>For Beginners:</b> Bias terms are small and don't benefit from weight decay.
     /// Keeping this true (default) follows established best practices.</para>
     /// </remarks>

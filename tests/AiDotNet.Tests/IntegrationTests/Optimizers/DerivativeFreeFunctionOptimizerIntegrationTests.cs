@@ -180,6 +180,26 @@ public class DerivativeFreeFunctionOptimizerIntegrationTests
     }
 
     /// <summary>
+    /// A NaN tolerance compares false against everything, so it would silently disable a method's stopping test
+    /// (differential evolution would never stop on spread) or the search itself (simulated annealing's temperature
+    /// floor). Every method must refuse it, and a negative or infinite one, before searching.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Methods))]
+    public void EveryMethod_RejectsAnInvalidTolerance(
+        string name, Func<IDerivativeFreeFunctionOptimizer<double>> build)
+    {
+        foreach (double tolerance in new[] { double.NaN, double.PositiveInfinity, -1e-6 })
+        {
+            var exception = Assert.Throws<ArgumentException>(
+                () => build().Minimize(new Vector<double>(new[] { 1.0 }), Sphere, 10, tolerance));
+            Assert.Equal("tolerance", exception.ParamName);
+        }
+
+        // Zero is a valid tolerance: it means "never stop early".
+        build().Minimize(new Vector<double>(new[] { 1.0 }), Sphere, 10, 0.0);
+    }
+    /// <summary>
     /// The methods that are genuinely local refiners reach the optimum to machine precision.
     /// Simulated annealing and the genetic algorithm are not on this list, by design: they explore
     /// rather than polish, and both stop several digits short.

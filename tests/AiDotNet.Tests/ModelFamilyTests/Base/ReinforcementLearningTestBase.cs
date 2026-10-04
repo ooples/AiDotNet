@@ -1,4 +1,4 @@
-using AiDotNet.Interfaces;
+﻿using AiDotNet.Interfaces;
 using System;
 using System.Reflection;
 using AiDotNet.Tensors.LinearAlgebra;

@@ -71,7 +71,10 @@ public static class LlamaModelBuilder<T>
         int maxPos = config.MaxPositionEmbeddings;
 
         // ---- assemble the canonical servable decoder stack ----
-        var embedding = new EmbeddingLayer<T>(vocab, hidden);
+        // Gemma multiplies token embeddings by sqrt(hidden). Hugging Face does it at runtime, so it is the embedding's
+        // output scale here, not baked into the table: a tied LM head must read the raw weights.
+        var embedding = new EmbeddingLayer<T>(vocab, hidden,
+            outputScale: opt.ScaleEmbeddingBySqrtHidden ? Math.Sqrt(hidden) : 1.0);
         var layers = new List<ILayer<T>> { embedding };
 
         // RoPE convention reconciliation. AiDotNet applies interleaved (GPT-J) RoPE through its numerically
@@ -103,7 +106,7 @@ public static class LlamaModelBuilder<T>
         var finalNorm = new RMSNormalizationLayer<T>(hidden, config.RmsNormEps);
         layers.Add(finalNorm);
 
-        var lmHead = new DenseLayer<T>(vocab, activationFunction: new IdentityActivation<T>());
+        var lmHead = CreateLmHead(embedding, config.TieWordEmbeddings, vocab);
         layers.Add(lmHead);
 
         var architecture = new NeuralNetworkArchitecture<T>(
@@ -121,22 +124,9 @@ public static class LlamaModelBuilder<T>
         network.Predict(warmup);
 
         // ---- load pretrained weights ----
-        // Embedding: HF model.embed_tokens.weight is [vocab, hidden] row-major — same layout AiDotNet uses.
-        // Gemma multiplies the embeddings by sqrt(hidden); bake that into the embedding table (a tied LM head
-        // below still reads the UNSCALED embedding from the source).
-        var embedData = ReadTensor(weights, EmbedName, vocab * hidden);
-        if (opt.ScaleEmbeddingBySqrtHidden)
-        {
-            var scale = NumOps.FromDouble(Math.Sqrt(hidden));
-            var scaled = new T[embedData.Length];
-            for (int k = 0; k < embedData.Length; k++)
-                scaled[k] = NumOps.Multiply(embedData[k], scale);
-            embedding.SetParameters(new Vector<T>(scaled));
-        }
-        else
-        {
-            embedding.SetParameters(new Vector<T>(embedData));
-        }
+        // Embedding: HF model.embed_tokens.weight is [vocab, hidden] row-major - the same layout AiDotNet uses. Loaded raw:
+        // Gemma's sqrt(hidden) is the embedding's output scale, so a tied LM head reads the same raw table Hugging Face does.
+        embedding.SetParameters(new Vector<T>(ReadTensor(weights, EmbedName, vocab * hidden)));
 
         for (int i = 0; i < config.NumHiddenLayers; i++)
         {
@@ -163,11 +153,7 @@ public static class LlamaModelBuilder<T>
         LoadGamma(finalNorm, weights, "model.norm.weight", hidden, opt.RmsNormAddsOne);
 
         // LM head: HF lm_head.weight is [vocab, hidden]; when tie_word_embeddings, reuse the embedding.
-        string headName = HasTensor(weights, LmHeadName) ? LmHeadName : EmbedName;
-        if (!config.TieWordEmbeddings && !HasTensor(weights, LmHeadName))
-            throw new InvalidDataException(
-                "config does not tie word embeddings but lm_head.weight is absent from the checkpoint.");
-        LoadDense(lmHead, weights, headName, outDim: vocab, inDim: hidden);
+        LoadLmHead(lmHead, weights, vocab, hidden);
 
         return network;
     }
@@ -252,6 +238,55 @@ public static class LlamaModelBuilder<T>
     };
 
     // Loads a DenseLayer's weights ([in, out] after transposing HF's [out, in]) and a zero bias.
+    /// <summary>
+    /// Creates the LM head. A tied checkpoint (<c>tie_word_embeddings</c>) gets a head that shares the embedding's table,
+    /// as Hugging Face ties them by reference: a dense copy would break the tie on the first training step and hold a
+    /// second vocabulary × hidden matrix. An untied checkpoint keeps its own dense head.
+    /// </summary>
+    internal static ILayer<T> CreateLmHead(EmbeddingLayer<T> embedding, bool tieWordEmbeddings, int vocab, double logitScale = 1.0)
+        => tieWordEmbeddings
+            ? new TiedEmbeddingHeadLayer<T>(embedding, logitScale)
+            : new DenseLayer<T>(vocab, activationFunction: new IdentityActivation<T>());
+
+    /// <summary>
+    /// Loads the LM head. A tied head has no weights of its own (it reads the embedding, loaded separately) and only
+    /// takes the inference int8 copy when the source provides one; an untied head loads <c>lm_head.weight</c>.
+    /// </summary>
+    internal static void LoadLmHead(ILayer<T> head, INamedTensorSource weights, int vocab, int hidden, double logitScale = 1.0)
+    {
+        if (head is TiedEmbeddingHeadLayer<T> tied)
+        {
+            InstallTiedQ8IfAvailable(tied, weights, vocab, hidden);
+            return;
+        }
+
+        if (!HasTensor(weights, LmHeadName))
+            throw new InvalidDataException(
+                "config does not tie word embeddings but lm_head.weight is absent from the checkpoint.");
+        var dense = (DenseLayer<T>)head;
+        LoadDense(dense, weights, LmHeadName, outDim: vocab, inDim: hidden);
+        if (logitScale != 1.0)
+        {
+            // An untied head owns its weights, so a constant logit scale can be folded into them (weights and bias).
+            var parameters = dense.GetParameters();
+            var scale = NumOps.FromDouble(logitScale);
+            var scaled = new T[parameters.Length];
+            for (int k = 0; k < scaled.Length; k++) scaled[k] = NumOps.Multiply(parameters[k], scale);
+            dense.SetParameters(new Vector<T>(scaled));
+        }
+    }
+
+    // GGUF stores the token embedding as Q8_0 [vocab, hidden], which is exactly the block-Q8 kernel's [N, K]: the tied
+    // head can run its inference GEMM on it directly, as an untied head does on its own Q8 weight.
+    private static void InstallTiedQ8IfAvailable(TiedEmbeddingHeadLayer<T> head, INamedTensorSource weights, int vocab, int hidden)
+    {
+        if (typeof(T) != typeof(float)) return;
+        if ((hidden % 32) != 0) return;
+        if (weights is not GgufModelSource gguf) return;
+        if (!gguf.TryReadQ8_0(EmbedName, out var qs, out var scales)) return;
+        if (qs.Length != (long)vocab * hidden || scales.Length != (long)vocab * (hidden / 32)) return;
+        head.SetQuantizedTableQ8_0(qs, scales);
+    }
     internal static void LoadDense(DenseLayer<T> dense, INamedTensorSource weights, string name, int outDim, int inDim)
     {
         var wInOut = TransposeOutInToInOut(weights, name, outDim, inDim);

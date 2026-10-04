@@ -419,7 +419,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
     private void InitializeTensor(Tensor<T> tensor, T scale)
     {
         // Create random tensor using Engine operations
-        var randomTensor = Tensor<T>.CreateRandom(tensor._shape);
+        var randomTensor = Tensor<T>.CreateRandom(Random, tensor._shape);
 
         // Shift to [-0.5, 0.5] range: randomTensor - 0.5
         var halfTensor = new Tensor<T>(tensor._shape);

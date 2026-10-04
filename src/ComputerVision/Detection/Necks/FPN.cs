@@ -116,7 +116,8 @@ public class FPN<T> : NeckBase<T>
     {
         // He initialization
         double scale = Math.Sqrt(2.0 / weights.Shape[1]);
-        var random = RandomHelper.CreateSeededRandom(42);
+        // Drawn from the model's initialization scope (#2201). A fixed seed of 42 here ignored the configured seed and gave every same-shape tensor identical values.
+        var random = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextRandom();
 
         for (int i = 0; i < weights.Length; i++)
         {

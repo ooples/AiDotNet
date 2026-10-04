@@ -47,7 +47,7 @@ public partial class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : Gra
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.SGD,
-            (float)GetCurrentLearningRate(),
+            GetCurrentLearningRate(),
             0f, 0f, 0f, 0f, schedule);
         return true;
     }
@@ -80,7 +80,7 @@ public partial class MiniBatchGradientDescentOptimizer<T, TInput, TOutput> : Gra
     /// </remarks>
     /// <param name="model">The model to optimize.</param>
     public MiniBatchGradientDescentOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         MiniBatchGradientDescentOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

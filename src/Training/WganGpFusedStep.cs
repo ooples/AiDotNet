@@ -50,7 +50,7 @@ public sealed class WganGpFusedStep<T> : IDisposable
     private int[]? _cachedShapeKey;
     private object?[]? _cachedParamIdentities;
     private Tensor<T>[]? _cachedParameters;
-    private (OptimizerType Type, float Lr, float B1, float B2, float Eps, float Wd)? _configuredOptimizer;
+    private (OptimizerType Type, double Lr, double B1, double B2, double Eps, double Wd)? _configuredOptimizer;
     private bool _disposed;
 
     public static bool IsAvailable =>
@@ -85,11 +85,11 @@ public sealed class WganGpFusedStep<T> : IDisposable
         Func<int, Tensor<T>> epsilonSampler,
         double gradientPenaltyWeight,
         OptimizerType optimizerType,
-        float learningRate,
-        float beta1,
-        float beta2,
-        float epsilon,
-        float weightDecay,
+        double learningRate,
+        double beta1,
+        double beta2,
+        double epsilon,
+        double weightDecay,
         out T lossValue)
         => TryStep(discParameters, realBatch, fakeBatch, discForward, epsilonSampler, gradientPenaltyWeight,
             optimizerType, learningRate, beta1, beta2, epsilon, weightDecay, lrSchedule: null, extras: null, out lossValue);
@@ -103,11 +103,11 @@ public sealed class WganGpFusedStep<T> : IDisposable
         Func<int, Tensor<T>> epsilonSampler,
         double gradientPenaltyWeight,
         OptimizerType optimizerType,
-        float learningRate,
-        float beta1,
-        float beta2,
-        float epsilon,
-        float weightDecay,
+        double learningRate,
+        double beta1,
+        double beta2,
+        double epsilon,
+        double weightDecay,
         LrSchedule? lrSchedule,
         FusedOptimizerExtras? extras,
         out T lossValue)
@@ -344,7 +344,7 @@ public sealed class WganGpFusedStep<T> : IDisposable
         for (int i = 0; i < parameters.Count; i++) _cachedParamIdentities[i] = parameters[i];
     }
 
-    private bool OptimizerConfigChanged(OptimizerType type, float lr, float b1, float b2, float eps, float wd)
+    private bool OptimizerConfigChanged(OptimizerType type, double lr, double b1, double b2, double eps, double wd)
     {
         if (_configuredOptimizer is null) return true;
         var (cType, cLr, cB1, cB2, cEps, cWd) = _configuredOptimizer.Value;
