@@ -204,6 +204,9 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
         CurrentLearningRate = NumOps.FromDouble(_options.InitialLearningRate);
     }
 
+    /// <inheritdoc/>
+    protected override bool SupportsModelOwnStep => true;
+
     /// <summary>
     /// Performs the optimization process using the AdaDelta algorithm.
     /// </summary>
@@ -263,6 +266,7 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
 
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;   // the network's own step; see GradientBasedOptimizerBase
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
                 var newSolution = UpdateSolution(currentSolution, gradient);
                 currentSolution = newSolution;

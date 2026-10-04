@@ -164,6 +164,18 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         return true;
     }
 
+    /// <inheritdoc/>
+    /// <remarks>The tape step clips by global norm only (see <c>StepCore</c>).</remarks>
+    internal override double TapeStepGradientClipNorm =>
+        GradientOptions.EnableGradientClipping
+            && GradientOptions.GradientClippingMethod == GradientClippingMethod.ByNorm
+            && GradientOptions.MaxGradientNorm > 0.0
+            ? GradientOptions.MaxGradientNorm
+            : 0.0;
+
+    /// <inheritdoc/>
+    protected override bool SupportsModelOwnStep => true;
+
     /// <summary>
     /// Performs the optimization process using the Adam algorithm.
     /// </summary>
@@ -281,6 +293,21 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 {
                     _t++;
                     // Calculate gradient on the batch
+                    if (TryModelOwnStep(currentSolution, xBatch, yBatch))
+                    {
+                        if (useTrainingLoss && currentSolution is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nnModelStep)
+                        {
+                            double modelStepLoss = NumOps.ToDouble(nnModelStep.GetLastLoss());
+                            if (!double.IsNaN(modelStepLoss) && !double.IsInfinity(modelStepLoss))
+                            {
+                                epochLossSum += modelStepLoss;
+                                epochBatchCount++;
+                            }
+                        }
+                        (currentSolution as AiDotNet.Interfaces.INeuralNetwork<T>)?.SetTrainingMode(true);
+                        OnBatchEnd();
+                        continue;
+                    }
                     var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
 
                     // Mini-batch-loss mode: read the loss the model just computed on this batch
@@ -586,7 +613,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         var mSpan = _m.AsWritableSpan();
         var vSpan = _v.AsWritableSpan();
         var outSpan = updatedParameters.AsWritableSpan();
-        // AMSGrad tracks a per-coordinate running max of the bias-corrected v̂ (Reddi 2018), which
+        // AMSGrad tracks a per-coordinate running max of the second moment (Reddi 2018; raw v, corrected at use), which
         // keeps the denominator non-decreasing and bounds Adam's post-convergence m̂/√v̂ drift on
         // stochastic objectives (VGAE reparameterization noise, GraphGenerationModel in the #1332
         // cluster). Updated in place here; semantics are unchanged.
@@ -784,6 +811,20 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         new(TensorReferenceComparer<Tensor<T>>.Instance);
 
     /// <inheritdoc />
+    /// <summary>
+    /// The parameter's own managed array for an in-place update, or null when it has none at offset 0 (a view, device
+    /// storage). Privatizes copy-on-write peers first. The read accessor this replaced returned storage still shared
+    /// with a snapshot copy (the per-epoch best-model DeepCopy shares parameters copy-on-write), so the update wrote
+    /// into the snapshot as well - and once the parameter detached, into storage only the snapshot still used: its
+    /// updates were lost. Measured: after an epoch-end evaluation copy, both bias tensors' cached arrays were no longer
+    /// their live storage and the flat facade path trained a different model than the same run without the copy.
+    /// </summary>
+    private static TElement[]? WritableParameterArray<TElement>(Tensor<T> param)
+    {
+        var array = param.GetCpuBackingForContiguousWrite(out int storageOffset);
+        return storageOffset == 0 ? array as TElement[] : null;
+    }
+
     protected override void StepCore(TapeStepContext<T> context)
     {
         PrepareTapeState(context);
@@ -926,6 +967,9 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             if (useStepCache
                 && _fp32StepCache.TryGetValue(param, out var slot)
                 && slot.N == param.Length
+                // The cached array must still be the parameter's own storage: a snapshot DeepCopy shares it
+                // copy-on-write, and once the parameter detaches, the cached array belongs to the snapshot alone.
+                && ReferenceEquals(slot.P, WritableParameterArray<float>(param))
                 && context.Gradients.TryGetValue(param, out var fastGradObj) && fastGradObj is not null)
             {
                 var fastGrad = (Tensor<T>)fastGradObj;
@@ -1086,7 +1130,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 // AsWritableSpan which correctly slices into the buffer
                 // at the right offset. Both paths execute the same
                 // numerics — only the destination of writes differs.
-                double[]? paramArr = (double[]?)(object?)param.GetLiveBackingArrayOrNull();
+                double[]? paramArr = WritableParameterArray<double>(param);
                 double[]? gradArr = (double[]?)(object?)((Tensor<T>)grad).GetLiveBackingArrayOrNull();
                 double[]? mArr = (double[]?)(object?)m.GetLiveBackingArrayOrNull();
                 double[]? vArr = (double[]?)(object?)v.GetLiveBackingArrayOrNull();
@@ -1173,7 +1217,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             }
             else if (isFloat)
             {
-                float[]? paramArr = (float[]?)(object?)param.GetLiveBackingArrayOrNull();
+                float[]? paramArr = WritableParameterArray<float>(param);
                 float[]? gradArr = (float[]?)(object?)((Tensor<T>)grad).GetLiveBackingArrayOrNull();
                 float[]? mArr = (float[]?)(object?)m.GetLiveBackingArrayOrNull();
                 float[]? vArr = (float[]?)(object?)v.GetLiveBackingArrayOrNull();
@@ -1516,7 +1560,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// dictionary. Computes the global L2 norm
     /// <c>sqrt(Σ_p ‖grad_p‖²)</c> across all parameter gradients; if that
     /// norm exceeds <paramref name="maxNorm"/>, every gradient is scaled
-    /// by <c>maxNorm / globalNorm</c> in place so the post-clip global norm
+    /// by <c>maxNorm / (globalNorm + 1e-6)</c> (PyTorch clip_grad_norm_) in place so the post-clip global norm
     /// is exactly <paramref name="maxNorm"/>. Mirrors
     /// <c>torch.nn.utils.clip_grad_norm_(params, max_norm)</c>.
     /// </summary>
@@ -1622,8 +1666,9 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         if (globalNorm <= maxNorm || globalNorm == 0.0 || double.IsNaN(globalNorm) || double.IsInfinity(globalNorm))
             return;
 
-        // Pass 2: scale every gradient by (maxNorm / globalNorm) in place.
-        double scale = maxNorm / globalNorm;
+        // Pass 2: scale every gradient in place by PyTorch's clip_grad_norm_ coefficient,
+        // max_norm / (total_norm + 1e-6), the same one the network clip and the fused plan apply.
+        double scale = maxNorm / (globalNorm + 1e-6);
         foreach (var kvp in context.Gradients)
         {
             var grad = kvp.Value;

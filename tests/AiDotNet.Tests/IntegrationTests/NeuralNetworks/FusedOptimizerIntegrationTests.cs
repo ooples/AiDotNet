@@ -268,6 +268,133 @@ public class FusedOptimizerIntegrationTests
     }
 
     /// <summary>
+    /// Streaming optimizer-in-backward must apply the optimizer's OWN clip, not only the network's. The eager Adam
+    /// Step clips again by global norm after the network does. Streaming read only the
+    /// network's MaxGradNorm, so with it at 0 the streamed step trained unclipped while the eager one clipped. The
+    /// unclipped gate above caught that only when a random init pushed the gradient norm past Adam's default 1.0
+    /// (2 of 40 draws); the bounds here are small enough that every draw clips, and a positive control proves it.
+    /// The network bound case covers both clips composing: the network clip, then the optimizer's over its result.
+    /// </summary>
+    [Theory(Timeout = 120000)]
+    [InlineData(0.0)]
+    [InlineData(0.5)]
+    public async Task FusedInBackward_AppliesTheOptimizersOwnNormClip(double networkClip)
+    {
+        await Task.CompletedTask;
+
+        var input = CreateRandomTensor(new[] { 16, 4 }, seed: 42);
+        var target = CreateRandomTensor(new[] { 16, 2 }, seed: 43);
+
+        AdamOptimizer<float, Tensor<float>, Tensor<float>> Optimizer(FusedTrainingTestNetwork network, bool clip) =>
+            new(network, new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = 0.01,
+                UseAdaptiveLearningRate = false,
+                EnableGradientClipping = clip,
+                GradientClippingMethod = GradientClippingMethod.ByNorm,
+                MaxGradientNorm = 1e-2,
+            });
+
+        var classic = BuildMlp();
+        var fused = BuildMlp();
+        var unclipped = BuildMlp();
+        classic.Predict(CreateRandomTensor(new[] { 1, 4 }, seed: 99));
+        fused.Predict(CreateRandomTensor(new[] { 1, 4 }, seed: 99));
+        unclipped.Predict(CreateRandomTensor(new[] { 1, 4 }, seed: 99));
+        fused.UpdateParameters(classic.GetParameters());
+        unclipped.UpdateParameters(classic.GetParameters());
+
+        foreach (var network in new[] { classic, fused, unclipped })
+            network.SetMaxGradNormForTest(networkClip);
+        classic.StreamingTraining = StreamingTrainingMode.ForceOff;
+        unclipped.StreamingTraining = StreamingTrainingMode.ForceOff;
+        fused.StreamingTraining = StreamingTrainingMode.ForceOn;
+
+        var classicOpt = Optimizer(classic, clip: true);
+        var fusedOpt = Optimizer(fused, clip: true);
+        var unclippedOpt = Optimizer(unclipped, clip: false);
+
+        for (int step = 0; step < 10; step++)
+        {
+            classic.TrainPublic(input, target, classicOpt);
+            fused.TrainPublic(input, target, fusedOpt);
+            unclipped.TrainPublic(input, target, unclippedOpt);
+        }
+
+        var pc = SnapshotParameters(classic);
+        Assert.True(AnyParameterDiffers(pc, SnapshotParameters(unclipped), 1e-4f),
+            "the optimizer's clip did not bind, so this comparison could not see a streamed step that skipped it");
+        Assert.False(AnyParameterDiffers(pc, SnapshotParameters(fused), 1e-5f),
+            "streaming optimizer-in-backward skipped the optimizer's own gradient clip");
+    }
+
+    /// <summary>
+    /// AdamW clipping by value clamps every gradient element in its eager Step; streaming applies the same clamp to
+    /// each streamed gradient. AdamW streams through the 8-bit StreamingAdamW8Bit, so the runs cannot agree to float
+    /// precision and this compares distances instead: with the clamp the streamed run must land far closer to eager
+    /// clamped AdamW than a streamed run without it does.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task FusedInBackward_AppliesAdamWsValueClip()
+    {
+        await Task.CompletedTask;
+
+        var input = CreateRandomTensor(new[] { 16, 4 }, seed: 42);
+        var target = CreateRandomTensor(new[] { 16, 2 }, seed: 43);
+
+        AdamWOptimizer<float, Tensor<float>, Tensor<float>> Optimizer(FusedTrainingTestNetwork network, bool clip) =>
+            new(network, new AdamWOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = 0.01,
+                UseAdaptiveLearningRate = false,
+                EnableGradientClipping = clip,
+                GradientClippingMethod = GradientClippingMethod.ByValue,
+                MaxGradientValue = 1e-3,
+            });
+
+        var classic = BuildMlp();
+        var clamped = BuildMlp();
+        var unclamped = BuildMlp();
+        classic.Predict(CreateRandomTensor(new[] { 1, 4 }, seed: 99));
+        clamped.Predict(CreateRandomTensor(new[] { 1, 4 }, seed: 99));
+        unclamped.Predict(CreateRandomTensor(new[] { 1, 4 }, seed: 99));
+        clamped.UpdateParameters(classic.GetParameters());
+        unclamped.UpdateParameters(classic.GetParameters());
+
+        foreach (var network in new[] { classic, clamped, unclamped })
+            network.SetMaxGradNormForTest(0.0);
+        classic.StreamingTraining = StreamingTrainingMode.ForceOff;
+        clamped.StreamingTraining = StreamingTrainingMode.ForceOn;
+        unclamped.StreamingTraining = StreamingTrainingMode.ForceOn;
+
+        var classicOpt = Optimizer(classic, clip: true);
+        var clampedOpt = Optimizer(clamped, clip: true);
+        var unclampedOpt = Optimizer(unclamped, clip: false);
+
+        for (int step = 0; step < 10; step++)
+        {
+            classic.TrainPublic(input, target, classicOpt);
+            clamped.TrainPublic(input, target, clampedOpt);
+            unclamped.TrainPublic(input, target, unclampedOpt);
+        }
+
+        var pc = SnapshotParameters(classic);
+        double clampedGap = MaxAbsDifference(pc, SnapshotParameters(clamped));
+        double unclampedGap = MaxAbsDifference(pc, SnapshotParameters(unclamped));
+        Assert.True(clampedGap < unclampedGap / 4.0,
+            $"streamed AdamW is no closer to eager value-clipped AdamW with the clamp ({clampedGap:E3}) than without it " +
+            $"({unclampedGap:E3}); the streaming step is not applying the optimizer's value clip");
+    }
+
+    private static double MaxAbsDifference(float[] a, float[] b)
+    {
+        Assert.Equal(a.Length, b.Length);
+        double max = 0.0;
+        for (int i = 0; i < a.Length; i++)
+            max = Math.Max(max, Math.Abs((double)a[i] - b[i]));
+        return max;
+    }
+    /// <summary>
     /// #1662 lever #1 clipped gate (the COMMON case — MaxGradNorm defaults to 1.0): the
     /// full-precision two-pass clipped fused optimizer-in-backward must track the classic
     /// clip-then-step eager path to float precision. The fused path streams once to accumulate
@@ -948,6 +1075,9 @@ public class FusedOptimizerIntegrationTests
         public override bool SupportsTraining => true;
 
         public void AddLayer(ILayer<double> layer) => AddLayerToCollection(layer);
+
+        /// <summary>Test-only: set the global grad-norm clip threshold (0 disables clipping).</summary>
+        public void SetMaxGradNormForTest(double value) => MaxGradNorm = NumOps.FromDouble(value);
 
         public void TrainPublic(
             Tensor<double> input, Tensor<double> target,

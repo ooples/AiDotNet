@@ -590,15 +590,17 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
         int dims = count == 0 ? 0 : centers.Length / count;
         double maxSquared = 0;
         for (int a = 0; a < count; a++)
-        for (int b = a + 1; b < count; b++)
         {
-            double squared = 0;
-            for (int d = 0; d < dims; d++)
+            for (int b = a + 1; b < count; b++)
             {
-                double diff = NumOps.ToDouble(centers[a * dims + d]) - NumOps.ToDouble(centers[b * dims + d]);
-                squared += diff * diff;
+                double squared = 0;
+                for (int d = 0; d < dims; d++)
+                {
+                    double diff = NumOps.ToDouble(centers[a * dims + d]) - NumOps.ToDouble(centers[b * dims + d]);
+                    squared += diff * diff;
+                }
+                if (squared > maxSquared) maxSquared = squared;
             }
-            if (squared > maxSquared) maxSquared = squared;
         }
 
         return maxSquared > 0 ? Math.Sqrt(maxSquared) / Math.Sqrt(2.0 * count) : 1.0;
@@ -620,6 +622,20 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
         if (rows <= 0 || dims <= 0 || count <= 0 || input2D.Length != rows * dims) return;
 
         var data = input2D.ToArray();
+        // A non-finite value would become a trainable centre permanently: placement happens once, and the centre would
+        // then answer every later input with NaN. Refuse the batch before touching any parameter, so placement still
+        // happens on the first finite batch.
+        for (int i = 0; i < data.Length; i++)
+        {
+            double value = NumOps.ToDouble(data[i]);
+            if (double.IsNaN(value) || double.IsInfinity(value))
+            {
+                throw new ArgumentException(
+                    $"RBFLayer places its centres on the first batch it sees, and this batch holds a non-finite value at " +
+                    $"flat index {i}. No centre was placed; pass finite input.", nameof(input2D));
+            }
+        }
+
         var parameters = GetParameters();
         var centers = new T[count * dims];
         for (int i = 0; i < centers.Length; i++) centers[i] = parameters[i];

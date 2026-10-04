@@ -258,12 +258,39 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
 
     #endregion
 
+    /// <summary>
+    /// The stream training draws its diffusion steps, noise and mixup masks from: created once per model, seeded from
+    /// <see cref="ModelOptions.Seed"/> when one is set, secure otherwise.
+    /// </summary>
+    private Random TrainingRandom => _trainingRandom ??= _options.Seed.HasValue
+        ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
+        : RandomHelper.CreateSecureRandom();
+
+    private Random? _trainingRandom;
+
     #region Initialization
 
     protected override void InitializeLayers()
     {
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); ExtractLayerReferences(); }
-        else if (_useNativeMode) { Layers.AddRange(LayerHelper<T>.CreateDefaultTimeDiffLayers(Architecture, _contextLength, _forecastHorizon, _hiddenDimension, _numLayers, _numHeads, _dropout)); ExtractLayerReferences(); }
+        else if (_useNativeMode)
+        {
+            // Options.Seed already makes Predict reproducible; without this the denoiser's weights were drawn
+            // unseeded whenever the architecture carried no seed of its own, so two models built from the same
+            // seeded options disagreed before training started. The architecture's seed still wins when set.
+            var previousScope = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CaptureScope();
+            if (!Architecture.RandomSeed.HasValue && _options.Seed.HasValue)
+                AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(_options.Seed);
+            try
+            {
+                Layers.AddRange(LayerHelper<T>.CreateDefaultTimeDiffLayers(Architecture, _contextLength, _forecastHorizon, _hiddenDimension, _numLayers, _numHeads, _dropout));
+            }
+            finally
+            {
+                AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.RestoreScope(previousScope);
+            }
+            ExtractLayerReferences();
+        }
     }
 
     private void ExtractLayerReferences()
@@ -301,9 +328,11 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
     /// with the ground-truth future under an elementwise Uniform[0,1) mask - available here
     /// precisely because this is the training path.
     ///
-    /// The draw is deliberately NOT seeded from <c>Options.Seed</c>. That seed makes inference
-    /// reproducible; reusing it here would hand every call the same k and the same epsilon, so
-    /// the model would be fitted at one single noise level out of DiffusionSteps.
+    /// The draws come from <see cref="TrainingRandom"/>, one stream for the model's life seeded from
+    /// <c>Options.Seed</c>. Re-seeding on every call would hand each call the same k and the same
+    /// epsilon and fit the model at a single noise level; one stream still draws a fresh (k, epsilon)
+    /// per step while making a seeded model's training reproducible. It replaced a fresh secure
+    /// generator per call, which ignored the configured seed.
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
@@ -325,7 +354,7 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
                 conditioned = Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
 
             int outputLen = _forecastHorizon;
-            var rand = RandomHelper.CreateSecureRandom();
+            var rand = TrainingRandom;
             int rows = Math.Max(1, _trainingBatchSize);
 
             var autoregressiveInit = BuildAutoregressiveInit(conditioned, outputLen);

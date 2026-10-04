@@ -267,21 +267,43 @@ public class TransformerTrainPathReproIssue1227And1228Tests
         var warmupTarget = BuildOneHotTarget(0, vocab);
         for (int i = 0; i < 3; i++) model.Train(warmupInput, warmupTarget);
 
+        // This probe measures multi-core Train dispatch, so it must run with the machine's parallelism, not the test
+        // harness's. ModuleInitializer caps managed parallelism at ONE thread for the whole test process (16 xUnit
+        // workers x 16 threads oversubscribed CI), and determinism-pinning tests (the model-family base and others)
+        // turn BLAS deterministic mode on - OpenBLAS pinned to one thread - and leave it on. Under either the probe
+        // measured a process that was serial by configuration: alone its 1.2-1.5 ratio came from incidental threads
+        // (JIT tiering, GC), and in-suite, once those were quiet, it read 1.00 and blamed Train dispatch. Raise both
+        // for the measurement, as FoundationScaleCpuFixture does, and restore them. The collection runs alone
+        // (DisableParallelization), so nothing else observes the change.
+        bool previousDeterministicMode = AiDotNet.Tensors.Helpers.BlasProvider.IsDeterministicMode;
+        int previousMaxDegreeOfParallelism = AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism;
+        AiDotNet.Tensors.Helpers.BlasProvider.SetDeterministicMode(false);
+        AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism = Environment.ProcessorCount;
         var process = Process.GetCurrentProcess();
-        process.Refresh();
-        TimeSpan cpuStart = process.TotalProcessorTime;
-        var sw = Stopwatch.StartNew();
-
-        for (int step = 0; step < trainSteps; step++)
+        TimeSpan cpuStart, cpuEnd;
+        var sw = new Stopwatch();
+        try
         {
-            var input = BuildInputTensor(ctx, vocab, seed: step);
-            var target = BuildOneHotTarget(step % vocab, vocab);
-            model.Train(input, target);
-        }
+            process.Refresh();
+            cpuStart = process.TotalProcessorTime;
+            sw.Start();
 
-        sw.Stop();
-        process.Refresh();
-        TimeSpan cpuEnd = process.TotalProcessorTime;
+            for (int step = 0; step < trainSteps; step++)
+            {
+                var input = BuildInputTensor(ctx, vocab, seed: step);
+                var target = BuildOneHotTarget(step % vocab, vocab);
+                model.Train(input, target);
+            }
+
+            sw.Stop();
+            process.Refresh();
+            cpuEnd = process.TotalProcessorTime;
+        }
+        finally
+        {
+            AiDotNet.Tensors.Helpers.BlasProvider.SetDeterministicMode(previousDeterministicMode);
+            AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism = previousMaxDegreeOfParallelism;
+        }
 
         double wallSec = sw.Elapsed.TotalSeconds;
         double cpuSec = (cpuEnd - cpuStart).TotalSeconds;
@@ -468,17 +490,18 @@ public class TransformerTrainPathReproIssue1227And1228Tests
         long window2Growth = managedHeapEnd - managedHeapMid;
         _output.WriteLine($"  Window growth:    win1(0..{trainSteps / 2})=+{window1Growth / (1024 * 1024)}MB  win2({trainSteps / 2}..{trainSteps})=+{window2Growth / (1024 * 1024)}MB  per-call={window2Growth / (double)(trainSteps / 2) / 1024:F0}KB");
 
-        // Tripwire: tight working-set bound now that both ends of the fix
-        // have landed — Tensors 0.75.5 (graph + persistent-tape .Grad cleanup)
-        // and the LayerBase._preActivationCache gating below. Measured on a
-        // clean local build: ~0 MB delta across the full 1000 calls. The
-        // 1 GB ceiling tolerates working-set noise (native pool warm-up, JIT
-        // compilation, IO buffers) while still firing if per-call retention
-        // climbs back to even ~1 MB.
-        Assert.True(workingSetGrowthMB < 1024,
-            $"Working-set grew by {workingSetGrowthMB} MB across {trainSteps} L=4 train calls. " +
-            $"With the Tensors-side cleanup + LayerBase fix this should be ~0 MB. " +
-            $"At this rate the reporter's 56k-sample run would hit {workingSetGrowthMB * 56L} MB — see #1227.");
+        // Tripwire on the SECOND half of the run only. The working set settles during the first
+        // few hundred calls (native pool, JIT and allocator warm-up) and the size of that one-time
+        // step depends on what ran earlier in the process: measured +554 MB then +19 MB alone, +350 MB
+        // then -6 MB after the Transformer suite, and +1399 MB total in the full suite - always with a
+        // flat managed heap. A whole-run bound therefore failed on warm-up, not retention. A leak shows
+        // up as growth after warm-up: 0.5 MB per call over the 500 calls of window 2 trips this, twice
+        // as sensitive as the old whole-run 1 GB bound (~1 MB per call).
+        long workingSetGrowthWindow2MB = (workingSetEnd - workingSetMid) / (1024 * 1024);
+        Assert.True(workingSetGrowthWindow2MB < 256,
+            $"Working-set grew by {workingSetGrowthWindow2MB} MB over the last {trainSteps / 2} L=4 train calls " +
+            $"(after warm-up; whole run {workingSetGrowthMB} MB). Retention per call should be ~0. " +
+            $"At this rate the reporter's 56k-sample run would hit {workingSetGrowthWindow2MB * 112L} MB — see #1227.");
 
         // Tripwire: managed heap retention > 100 MB across 1000 calls means
         // graph nodes or activations are surviving Gen2 GC. Measured locally

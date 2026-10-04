@@ -101,7 +101,7 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     {
         _options = options;
         Options = _options;
-        _random = RandomHelper.CreateSeededRandom(42);
+        _random = RandomHelper.CreateSeededRandom(SeedOr(42));
         _hiddenSize = _options.HiddenSize;
         _normMean = NumOps.Zero;
         _normStd = NumOps.One;

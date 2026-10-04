@@ -38,7 +38,7 @@ public static class DeserializationHelper
             && message.Contains("constructor", StringComparison.Ordinal);
     }
 
-    private static readonly Dictionary<string, Type> LayerTypes = new Dictionary<string, Type>();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Type> LayerTypes = new();
 
     static DeserializationHelper()
     {
@@ -126,6 +126,105 @@ public static class DeserializationHelper
     /// This design makes it easy to add new types of layers in the future without changing this method.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Resolves a layer type that is not one of AiDotNet's own by its full name across the loaded assemblies, and
+    /// caches it. Discovery scans only this assembly, so a model containing a layer defined anywhere else - a user's
+    /// custom layer - could not be deep-copied or deserialized ("not supported for deserialization"), which also broke
+    /// every optimizer that snapshots the model each epoch. Only full names resolve: a short name is ambiguous across
+    /// assemblies.
+    /// </summary>
+    private static bool TryResolveLayerTypeFromLoadedAssemblies(string layerType, out Type? type)
+    {
+        type = null;
+        if (string.IsNullOrEmpty(layerType) || layerType.IndexOf('.') < 0) return false;
+
+        // "Full.Name, AssemblyName" - what Serialize writes for a layer defined outside AiDotNet. Resolve it in that
+        // assembly only, so a same-named layer in another assembly (or in AiDotNet) can never be substituted.
+        int comma = layerType.IndexOf(',');
+        if (comma > 0)
+        {
+            string fullName = layerType.Substring(0, comma).Trim();
+            string assemblyName = layerType.Substring(comma + 1).Trim();
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (assembly.IsDynamic
+                    || !string.Equals(assembly.GetName().Name, assemblyName, StringComparison.Ordinal)) continue;
+                var candidate = TryGetLayerType(assembly, fullName);
+                if (candidate is null) continue;
+                type = LayerTypes.GetOrAdd(layerType, candidate);
+                return true;
+            }
+
+            // Not loaded yet: load it by name, since a record naming one assembly may resolve ONLY there. Any
+            // other assembly defining the same full name is exactly the substitution this identity exists to stop.
+            System.Reflection.Assembly? named = null;
+            try { named = System.Reflection.Assembly.Load(new System.Reflection.AssemblyName(assemblyName)); }
+            // Not found or not loadable: reported below as "cannot be found".
+            catch (System.IO.IOException) { named = null; }
+            catch (BadImageFormatException) { named = null; }
+            var fromNamed = named is null ? null : TryGetLayerType(named, fullName);
+            if (fromNamed is null)
+            {
+                throw new NotSupportedException(
+                    $"Layer type {fullName} was saved from assembly '{assemblyName}', which "
+                    + (named is null ? "cannot be found" : "does not define it")
+                    + ". Load that assembly before deserializing; a same-named type from another assembly is not substituted.");
+            }
+            type = LayerTypes.GetOrAdd(layerType, fromNamed);
+            return true;
+        }
+
+        // A bare full name (records written before assembly identity was saved). Collect every match rather than
+        // taking the first: two loaded assemblies defining the same full name would otherwise rebuild the layer as
+        // whichever happened to load first.
+        Type? found = null;
+        foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            if (assembly.IsDynamic) continue;
+            var candidate = TryGetLayerType(assembly, layerType);
+            if (candidate is null) continue;
+            if (found is not null && found != candidate)
+            {
+                throw new NotSupportedException(
+                    $"Layer type {layerType} is defined in more than one loaded assembly ({found.Assembly.GetName().Name} "
+                    + $"and {candidate.Assembly.GetName().Name}); the saved model does not record which one it used. "
+                    + "Re-save the model with this version to record the assembly.");
+            }
+            found = candidate;
+        }
+
+        if (found is null) return false;
+        type = LayerTypes.GetOrAdd(layerType, found);
+        return true;
+    }
+
+    /// <summary>The concrete <see cref="ILayer{T}"/> type <paramref name="fullName"/> names in <paramref name="assembly"/>, or null.</summary>
+    private static Type? TryGetLayerType(System.Reflection.Assembly assembly, string fullName)
+    {
+        Type? candidate;
+        try { candidate = assembly.GetType(fullName, throwOnError: false); }
+        catch (Exception) { return null; }
+        if (candidate is null || candidate.IsAbstract) return null;
+        bool isLayer = candidate.GetInterfaces()
+            .Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(ILayer<>));
+        return isLayer ? candidate : null;
+    }
+
+    /// <summary>
+    /// The layer-type identity <c>Serialize</c> writes: the generic definition's full name, plus the assembly's simple
+    /// name for a layer defined outside AiDotNet. The simple name (no version) keeps a user's model loadable after
+    /// they bump their assembly version, while still telling apart same-named layers in different assemblies.
+    /// </summary>
+    internal static string GetLayerTypeIdentity(Type layerDefinitionType)
+    {
+        // FullName is null only for a generic parameter or an open constructed type; fall back to the simple name.
+        string? qualified = layerDefinitionType.FullName;
+        string fullName = qualified is null ? layerDefinitionType.Name : qualified;
+        if (layerDefinitionType.Assembly == typeof(DeserializationHelper).Assembly) return fullName;
+        string? assemblyName = layerDefinitionType.Assembly.GetName().Name;
+        return string.IsNullOrEmpty(assemblyName) ? fullName : fullName + ", " + assemblyName;
+    }
+
     public static ILayer<T> CreateLayerFromType<T>(string layerType, int[] inputShape, int[] outputShape, Dictionary<string, object>? additionalParams = null)
     {
         // Allow layerType to contain serialized constructor metadata, e.g. "MultiHeadAttentionLayer;HeadCount=8".
@@ -135,7 +234,8 @@ public static class DeserializationHelper
             additionalParams = MergeParams(additionalParams, parsedParams);
         }
 
-        if (!LayerTypes.TryGetValue(layerType, out Type? openGenericType))
+        if (!LayerTypes.TryGetValue(layerType, out Type? openGenericType)
+            && !TryResolveLayerTypeFromLoadedAssemblies(layerType, out openGenericType))
         {
             throw new NotSupportedException($"Layer type {layerType} is not supported for deserialization.");
         }
@@ -237,15 +337,16 @@ public static class DeserializationHelper
             ? openGenericType.MakeGenericType(typeof(T))
             : openGenericType;
 
-        // Get the generic type definition for comparison (handles both open and closed types)
-        // All layer types should be generic; if not, throw a descriptive error
-        if (!openGenericType.IsGenericType)
+        // A concrete (non-generic) layer - a user's LayerBase<float> subclass - is rebuilt as itself, provided it is a
+        // layer for this T; it matches none of the per-type branches below and reaches the constructor matcher.
+        if (!openGenericType.IsGenericType && !typeof(ILayer<T>).IsAssignableFrom(openGenericType))
         {
-            throw new InvalidOperationException($"Layer type {layerType} is not a generic type. All ILayer<T> implementations must be generic.");
+            throw new InvalidOperationException(
+                $"Layer type {layerType} is not generic and does not implement ILayer<{typeof(T).Name}>.");
         }
         Type genericDef = openGenericType.IsGenericTypeDefinition
             ? openGenericType
-            : openGenericType.GetGenericTypeDefinition();
+            : openGenericType.IsGenericType ? openGenericType.GetGenericTypeDefinition() : openGenericType;
 
         // Prepare constructor and parameters based on layer type. The if-chain
         // below is wrapped so that any explicit branch's "Cannot find ...

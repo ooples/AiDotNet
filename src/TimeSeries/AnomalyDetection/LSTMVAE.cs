@@ -80,8 +80,8 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
     {
         _options = options;
 
-        _encoder = new LSTMEncoderTensor<T>(_options.WindowSize, _options.LatentDim, _options.HiddenSize);
-        _decoder = new LSTMDecoderTensor<T>(_options.LatentDim, _options.WindowSize, _options.HiddenSize);
+        _encoder = new LSTMEncoderTensor<T>(_options.WindowSize, _options.LatentDim, _options.HiddenSize, SeedOr(42));
+        _decoder = new LSTMDecoderTensor<T>(_options.LatentDim, _options.WindowSize, _options.HiddenSize, SeedOr(42));
 
         _reconstructionThreshold = _numOps.FromDouble(0.1);
     }
@@ -96,7 +96,7 @@ public partial class LSTMVAE<T> : TimeSeriesModelBase<T>
         // sample, allocating a fresh Mersenne-style generator each time.
         // A single deterministic RNG keyed off a fixed seed gives reproducible
         // training while saving Epochs × x.Rows allocations.
-        var random = RandomHelper.CreateSeededRandom(42);
+        var random = RandomHelper.CreateSeededRandom(SeedOr(42));
 
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
@@ -424,6 +424,7 @@ public class LSTMVAEOptions<T> : TimeSeriesRegressionOptions<T>
     public LSTMVAEOptions() { }
 
     public LSTMVAEOptions(LSTMVAEOptions<T> other)
+        : base(other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
         WindowSize = other.WindowSize;
@@ -529,14 +530,14 @@ internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         return output;
     }
 
-    public LSTMEncoderTensor(int inputSize, int latentDim, int hiddenSize)
+    public LSTMEncoderTensor(int inputSize, int latentDim, int hiddenSize, int seed = 42)
         : base(new[] { inputSize }, new[] { latentDim * 2 })
     {
         _inputSize = inputSize;
         _latentDim = latentDim;
         _hiddenSize = hiddenSize;
 
-        var random = RandomHelper.CreateSeededRandom(42);
+        var random = RandomHelper.CreateSeededRandom(seed);
         double stddev = Math.Sqrt(2.0 / Math.Max(1, inputSize));
 
         _weights = InitTensor(new[] { hiddenSize, inputSize }, stddev, random);
@@ -803,14 +804,14 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         return output;
     }
 
-    public LSTMDecoderTensor(int latentDim, int outputSize, int hiddenSize)
+    public LSTMDecoderTensor(int latentDim, int outputSize, int hiddenSize, int seed = 42)
         : base(new[] { latentDim }, new[] { outputSize })
     {
         _latentDim = latentDim;
         _outputSize = outputSize;
         _hiddenSize = hiddenSize;
 
-        var random = RandomHelper.CreateSeededRandom(42);
+        var random = RandomHelper.CreateSeededRandom(seed);
         double stddev = Math.Sqrt(2.0 / Math.Max(1, latentDim));
 
         _weights = InitTensor(new[] { hiddenSize, latentDim }, stddev, random);

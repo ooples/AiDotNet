@@ -280,6 +280,22 @@ public abstract class FTTransformerBase<T> : IParameterSource<T>
     }
 
     /// <summary>
+    /// The input to the prediction head: ReLU of the final-LayerNorm [CLS] representation that
+    /// <see cref="ForwardBackbone"/> returns.
+    /// </summary>
+    /// <remarks>
+    /// Gorishniy et al. (2021), "Revisiting Deep Learning Models for Tabular Data", §3.3: the prediction
+    /// is <c>Linear(ReLU(LayerNorm(T_L^[CLS])))</c>, so the non-linearity sits before the head's linear map
+    /// and the head itself emits unbounded logits or values. Applying ReLU after the linear map instead
+    /// clamps every output to be non-negative; for a classifier, an initialisation that left every logit
+    /// at or below zero then produced a uniform softmax with zero gradient everywhere, and training never
+    /// started.
+    /// </remarks>
+    /// <param name="clsRepresentation">The [CLS] representation from <see cref="ForwardBackbone"/>.</param>
+    /// <returns>The activated representation the head consumes.</returns>
+    protected Tensor<T> ActivateForHead(Tensor<T> clsRepresentation) => Engine.ReLU(clsRepresentation);
+
+    /// <summary>
     /// Updates all parameters using the calculated gradients.
     /// </summary>
     /// <param name="learningRate">The learning rate.</param>
