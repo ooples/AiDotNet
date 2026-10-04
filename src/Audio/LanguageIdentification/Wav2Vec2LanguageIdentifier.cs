@@ -94,8 +94,8 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
     private LayerNormalizationLayer<T>? _encoderNorm;
     private DropoutLayer<T>? _encoderDropout;
 
-    // Transformer encoder: views over Layers, rebuilt by PartitionDefaultLayers.
-    private readonly List<EncoderBlock> _blocks = [];
+    // Transformer encoder: the post-LN blocks Layers holds, rebound by PartitionDefaultLayers.
+    private readonly List<TransformerEncoderBlock<T>> _blocks = [];
 
     // Classification head
     private DenseLayer<T>? _poolingProjection;
@@ -232,7 +232,7 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
     /// <summary>
     /// Assigns every role from <paramref name="built"/>, in the factory's documented order. Run at
     /// construction and again whenever a deserialize or eager clone has replaced the layer instances,
-    /// since the transformer blocks are views this model holds, not layer-typed members it rebinds.
+    /// so every role, the transformer blocks included, points at the instances Layers holds.
     /// </summary>
     private void PartitionDefaultLayers(IReadOnlyList<ILayer<T>> built)
     {
@@ -273,13 +273,14 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
 
         for (int i = 0; i < _options.NumLayers; i++)
         {
-            _blocks.Add(new EncoderBlock(
-                Next<MultiHeadAttentionLayer<T>>(),
-                Next<LayerNormalizationLayer<T>>(),
-                Next<DenseLayer<T>>(),
-                Next<DenseLayer<T>>(),
-                Next<LayerNormalizationLayer<T>>(),
-                _options.HiddenDropout > 0 ? Next<DropoutLayer<T>>() : null));
+            var block = Next<TransformerEncoderBlock<T>>();
+            if (block.NormPlacement != TransformerNormPlacement.PostNorm)
+            {
+                throw new InvalidOperationException(
+                    $"Wav2Vec2 BASE transformer blocks are post-LN; the block at layer {index - 1} is {block.NormPlacement}.");
+            }
+
+            _blocks.Add(block);
         }
 
         _poolingProjection = Next<DenseLayer<T>>();
@@ -679,7 +680,7 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
         // Post-LN transformer blocks: x = LN(x + Attn(x)); x = LN(x + FFN(x)).
         foreach (var block in _blocks)
         {
-            x = block.Forward(Engine, x);
+            x = block.Forward(x);
         }
 
         // Mean over time, the tanh projection and the per-language logits.
@@ -691,7 +692,7 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
     /// <summary>
     /// Whether every role view still points at the instance Layers holds at its position. The views
     /// themselves are compared, not a saved copy of the list: the generated alias rebinding updates
-    /// layer-typed members and layer lists after a clone, but not the EncoderBlock views.
+    /// layer-typed members and layer lists after a clone, but a deserialize replaces the instances outright.
     /// </summary>
     private bool DefaultLayersMatch()
     {
@@ -714,15 +715,7 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
         if (_positionalConv is not null) yield return _positionalConv;
         if (_encoderNorm is not null) yield return _encoderNorm;
         if (_encoderDropout is not null) yield return _encoderDropout;
-        foreach (var block in _blocks)
-        {
-            yield return block.Attention;
-            yield return block.AttentionNorm;
-            yield return block.FeedForwardUp;
-            yield return block.FeedForwardDown;
-            yield return block.FeedForwardNorm;
-            if (block.Dropout is not null) yield return block.Dropout;
-        }
+        foreach (var block in _blocks) yield return block;
 
         if (_poolingProjection is not null) yield return _poolingProjection;
         if (_classifierLayer is not null) yield return _classifierLayer;
@@ -730,43 +723,6 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
 
     private static TLayer RequireLayer<TLayer>(TLayer? layer) where TLayer : class
         => layer ?? throw new InvalidOperationException("The Wav2Vec2 network has not been initialized.");
-
-    /// <summary>One post-LN Wav2Vec2 transformer block.</summary>
-    private sealed class EncoderBlock
-    {
-        public EncoderBlock(
-            MultiHeadAttentionLayer<T> attention, LayerNormalizationLayer<T> attentionNorm,
-            DenseLayer<T> feedForwardUp, DenseLayer<T> feedForwardDown, LayerNormalizationLayer<T> feedForwardNorm,
-            DropoutLayer<T>? dropout)
-        {
-            Attention = attention;
-            AttentionNorm = attentionNorm;
-            FeedForwardUp = feedForwardUp;
-            FeedForwardDown = feedForwardDown;
-            FeedForwardNorm = feedForwardNorm;
-            Dropout = dropout;
-        }
-
-        public MultiHeadAttentionLayer<T> Attention { get; }
-        public LayerNormalizationLayer<T> AttentionNorm { get; }
-        public DenseLayer<T> FeedForwardUp { get; }
-        public DenseLayer<T> FeedForwardDown { get; }
-        public LayerNormalizationLayer<T> FeedForwardNorm { get; }
-        public DropoutLayer<T>? Dropout { get; }
-
-        public Tensor<T> Forward(IEngine engine, Tensor<T> x)
-        {
-            var attended = Attention.Forward(x);
-            if (Dropout is not null) attended = Dropout.Forward(attended);
-            x = AttentionNorm.Forward(engine.TensorAdd(x, attended));
-
-            int batch = x.Shape[0], frames = x.Shape[1], width = x.Shape[2];
-            var fed = FeedForwardDown.Forward(FeedForwardUp.Forward(engine.Reshape(x, new[] { batch * frames, width })));
-            fed = engine.Reshape(fed, new[] { batch, frames, width });
-            if (Dropout is not null) fed = Dropout.Forward(fed);
-            return FeedForwardNorm.Forward(engine.TensorAdd(x, fed));
-        }
-    }
 
     private T[] Softmax(T[] logits)
     {

@@ -5904,14 +5904,14 @@ public static partial class LayerHelper<T>
     /// <paramref name="hiddenSize"/>, and dropout when its rate is non-zero.</item>
     /// <item>Convolutional relative positional embedding: a grouped convolution with GELU, added to
     /// the projected frames; then the encoder LayerNorm and dropout when the rate is non-zero.</item>
-    /// <item>Per transformer block (post-LN): multi-head self-attention, LayerNorm, the GELU
-    /// feed-forward pair, LayerNorm, and dropout when the rate is non-zero.</item>
+    /// <item>Per transformer block: one post-LN <see cref="TransformerEncoderBlock{T}"/> with a GELU
+    /// feed-forward, and dropout on each sublayer's output when the rate is non-zero.</item>
     /// <item>Head: a tanh projection of the time-averaged frames and the per-language logits.</item>
     /// </list>
     /// <para>
-    /// The residual additions, the layout changes between [B, C, T] and [B, T, C], and the positional
-    /// embedding's trimmed frame are wired by Wav2Vec2LanguageIdentifier's forward, which partitions
-    /// this list in exactly this order.
+    /// The layout changes between [B, C, T] and [B, T, C], the positional embedding's residual addition
+    /// and trimmed frame are wired by Wav2Vec2LanguageIdentifier's forward, which partitions this list in
+    /// exactly this order.
     /// </para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultWav2Vec2LanguageIdentifierLayers(
@@ -5978,19 +5978,12 @@ public static partial class LayerHelper<T>
             yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        // Post-LN transformer blocks.
+        // Post-LN transformer blocks: x = LN(x + Dropout(Attn(x))); x = LN(x + Dropout(FFN(x))), with a GELU
+        // feed-forward. One layer per block carries its own residual connections.
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(
-                numAttentionHeads, hiddenSize / numAttentionHeads, activationFunction: identity);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(intermediateSize, gelu);
-            yield return new DenseLayer<T>(hiddenSize, identity);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0)
-            {
-                yield return new DropoutLayer<T>(dropoutRate);
-            }
+            yield return new TransformerEncoderBlock<T>(
+                hiddenSize, numAttentionHeads, intermediateSize, dropoutRate, gelu, TransformerNormPlacement.PostNorm);
         }
 
         // Classification head
