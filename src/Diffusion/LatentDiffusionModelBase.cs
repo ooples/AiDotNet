@@ -322,6 +322,54 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
         return VAE.ScaleLatent(latent);
     }
 
+    /// <summary>
+    /// Prepares the clean sample for a training step: the latent z = E(x) of an image, as latent
+    /// diffusion trains its denoiser (Rombach et al. 2022, section 3.3).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The sample is the one the base contract trains on. When it is an image, laid out
+    /// <c>[batch, VAE.InputChannels, height, width]</c> (or <c>[VAE.InputChannels, height, width]</c>), it is
+    /// encoded by the frozen first stage with a posterior sample and scaled, exactly as
+    /// <see cref="EncodeToLatent"/> does for inference. A sample that is already a latent is used as it is,
+    /// so callers that pass latents keep working.
+    /// </para>
+    /// <para>
+    /// Before this the sample reached the scheduler unchanged: a caller who passed images trained the
+    /// denoiser on pixels, while <c>Generate</c> runs it on latents and decodes the result.
+    /// </para>
+    /// </remarks>
+    protected override Tensor<T> PrepareTrainingSample(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        var sample = base.PrepareTrainingSample(input, expectedOutput);
+        if (!IsFirstStageImage(sample))
+            return sample;
+
+        if (sample.Rank == 3)
+        {
+            var batched = EncodeToLatent(
+                Engine.Reshape(sample, new[] { 1, sample.Shape[0], sample.Shape[1], sample.Shape[2] }), sampleMode: true);
+            return Engine.Reshape(batched, new[] { batched.Shape[1], batched.Shape[2], batched.Shape[3] });
+        }
+
+        return EncodeToLatent(sample, sampleMode: true);
+    }
+
+    /// <summary>
+    /// Whether a tensor is an image the VAE encodes rather than a latent: image channels in the channel
+    /// slot of a [C, H, W] or [B, C, H, W] layout, and not also the latent depth.
+    /// </summary>
+    private bool IsFirstStageImage(Tensor<T> sample)
+    {
+        if (sample is null || (sample.Rank != 3 && sample.Rank != 4))
+            return false;
+        var vae = VAE;
+        if (vae is null)
+            return false;
+        int channels = sample.Shape[sample.Rank - 3];
+        return channels == vae.InputChannels && channels != LatentChannels;
+    }
+
     /// <inheritdoc />
     public virtual Tensor<T> DecodeFromLatent(Tensor<T> latent)
     {
