@@ -5931,6 +5931,12 @@ public static partial class LayerHelper<T>
     {
         int[] kernels = Wav2Vec2EncoderKernels(featureEncoderKernels);
         int[] strides = Wav2Vec2EncoderStrides(featureEncoderStrides);
+        // A zero width passes every divisibility check below (0 % h == 0) and a negative depth builds no blocks, so
+        // both would fail later and far from the cause.
+        if (hiddenSize <= 0) throw new ArgumentOutOfRangeException(nameof(hiddenSize));
+        if (featureEncoderDim <= 0) throw new ArgumentOutOfRangeException(nameof(featureEncoderDim));
+        if (intermediateSize <= 0) throw new ArgumentOutOfRangeException(nameof(intermediateSize));
+        if (numLayers < 0) throw new ArgumentOutOfRangeException(nameof(numLayers));
         if (positionalConvKernel <= 0) throw new ArgumentOutOfRangeException(nameof(positionalConvKernel));
         if (numAttentionHeads <= 0 || hiddenSize % numAttentionHeads != 0)
             throw new ArgumentException(
@@ -20514,7 +20520,7 @@ public static partial class LayerHelper<T>
     /// <param name="numBlocks">Number of SE-Res2Net blocks (default: 3).</param>
     /// <param name="poolingDim">Attentive statistics pooling dimension (default: 1536).</param>
     /// <param name="seBottleneckDim">Squeeze-Excitation bottleneck dimension (default: 128).</param>
-    /// <param name="dropoutRate">Ignored: ECAPA-TDNN applies no dropout. Kept for source compatibility.</param>
+    /// <param name="dropoutRate">Must be 0: ECAPA-TDNN applies no dropout (Desplanques et al. 2020). The parameter remains so existing callers compile; a nonzero value is rejected rather than silently ignored, since ignoring it would train a different model from the one requested.</param>
     /// <returns>A collection of layers for ECAPA-TDNN speaker embedding.</returns>
     /// <remarks>
     /// <para>
