@@ -80,7 +80,7 @@ public class AdamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
 
         // Inherited GradientBasedOptimizerOptions settings (between
         // OptimizationAlgorithmOptions and this class).
-        Regularization = other.Regularization;
+        CopyRegularizationFrom(other);
         ShuffleData = other.ShuffleData;
         RandomSeed = other.RandomSeed;
         EnableGradientClipping = other.EnableGradientClipping;

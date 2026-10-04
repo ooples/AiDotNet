@@ -169,6 +169,9 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
         CurrentMomentum = NumOps.FromDouble(_options.InitialMomentum);
     }
 
+    /// <inheritdoc/>
+    protected override bool SupportsModelOwnStep => true;
+
     /// <summary>
     /// Performs the optimization process using the Momentum algorithm.
     /// </summary>
@@ -218,6 +221,7 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
                 // Calculate gradient on the batch
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;   // the network's own step; see GradientBasedOptimizerBase
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
 
                 IFullModel<T, TInput, TOutput> newSolution;
