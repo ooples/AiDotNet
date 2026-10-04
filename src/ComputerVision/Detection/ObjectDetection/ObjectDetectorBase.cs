@@ -42,7 +42,42 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     /// satisfies the contract — ResNet, CSPDarknet, EfficientNet, SwinTransformer,
     /// or a future custom implementation — can plug in.
     /// </summary>
-    protected IDetectionBackbone<T>? Backbone { get; set; }
+    /// <remarks>
+    /// A backbone is itself a NeuralNetworkBase, whose constructor starts its own per-layer init-seed scope
+    /// (none, without an architecture seed) and so ends this detector's. Assigning it re-arms the detector's
+    /// scope, so the neck and heads built after it, and the lazy heads resolved on the first forward, draw
+    /// from Options.RandomSeed instead of the process-shared generator, whose position depends on everything
+    /// that ran before.
+    /// </remarks>
+    protected IDetectionBackbone<T>? Backbone
+    {
+        get => _backbone;
+        set
+        {
+            _backbone = value;
+            if (_backboneSeedPending)
+            {
+                _backboneSeedPending = false;
+                AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = _ambientSeedBefore;
+            }
+
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.RestoreScope(_initializationScope);
+        }
+    }
+
+    private IDetectionBackbone<T>? _backbone;
+
+    // The per-layer init-seed scope this detector armed from Options.RandomSeed (null when unseeded).
+    [AiDotNet.Attributes.Scratch]
+    private readonly Random? _initializationScope;
+
+    // While the backbone is built, the thread's ambient fallback seed is a child of Options.RandomSeed: a backbone
+    // has no architecture seed of its own, so without it its weights came from the process-shared generator.
+    // The previous ambient value is restored when the backbone is assigned.
+    [AiDotNet.Attributes.Scratch]
+    private bool _backboneSeedPending;
+    [AiDotNet.Attributes.Scratch]
+    private readonly int? _ambientSeedBefore;
 
     /// <summary>
     /// The neck module for feature fusion. Optional: a detector such as DETR feeds the
@@ -131,6 +166,17 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     protected ObjectDetectorBase(ObjectDetectionOptions<T> options)
     {
         Options = options;
+        // Every detector builds its backbone, neck and heads in its own constructor, after this one. Arming the
+        // per-layer init-seed sequence here makes Options.RandomSeed reach those layers, as NeuralNetworkBase does
+        // for networks; without it the initial weights, and a two-stage detector's proposals, changed every run.
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(options.RandomSeed);
+        _initializationScope = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CaptureScope();
+        if (_initializationScope is not null)
+        {
+            _ambientSeedBefore = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed;
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = _initializationScope.Next();
+            _backboneSeedPending = true;
+        }
         Nms = new NMS<T>();
         WeightDownloader = new WeightDownloader();
         IsTrainingMode = false;
