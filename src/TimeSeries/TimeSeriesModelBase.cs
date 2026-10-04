@@ -182,6 +182,36 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     /// </remarks>
     protected TimeSeriesRegressionOptions<T> Options { get; set; }
 
+    /// <summary>
+    /// The seed for one of this model's random streams.
+    /// </summary>
+    /// <param name="fallback">The fixed seed the stream has always used.</param>
+    /// <returns><paramref name="fallback"/> when <see cref="ModelOptions.Seed"/> is unset, so results without a seed
+    /// reproduce exactly as before; otherwise a seed derived from <see cref="ModelOptions.Seed"/> and the stream.</returns>
+    /// <remarks>
+    /// <para>Every deep time-series model used a hard-coded seed (42, 12345) and ignored <c>Options.Seed</c>, so two
+    /// runs with different seeds were the same run. Seed-to-seed variance could not be measured, and an ensemble over
+    /// seeds was a single model repeated.</para>
+    /// <para>The derivation is a SplitMix64 finalizer over (seed, stream), so streams stay distinct from each other and
+    /// from neighbouring seeds. It is deterministic across processes, unlike <see cref="HashCode"/>.</para>
+    /// </remarks>
+    protected int SeedOr(int fallback) => Options?.Seed is int seed ? DeriveSeed(seed, fallback) : fallback;
+
+    /// <summary>A reproducible seed for stream <paramref name="stream"/> of a run seeded with <paramref name="seed"/>.</summary>
+    internal static int DeriveSeed(int seed, int stream)
+    {
+        unchecked
+        {
+            ulong z = ((ulong)(uint)seed << 32) | (uint)stream;
+            z += 0x9E3779B97F4A7C15UL;
+            z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9UL;
+            z = (z ^ (z >> 27)) * 0x94D049BB133111EBUL;
+            z ^= z >> 31;
+            // 30 bits: callers add per-layer offsets (seed + i * 1000) and must not overflow.
+            return (int)(z & 0x3FFFFFFF);
+        }
+    }
+
     /// <inheritdoc/>
     public virtual ModelOptions GetOptions() => Options;
 
@@ -2660,7 +2690,7 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
         var gradients_spsa = new Vector<T>(parameters.Length);
         T epsilon = NumOps.FromDouble(1e-3);
         T twoEpsilon = NumOps.Multiply(epsilon, NumOps.FromDouble(2.0));
-        var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
+        var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(SeedOr(42));
         int numSamples = 3;
 
         var delta = new Vector<T>(parameters.Length);

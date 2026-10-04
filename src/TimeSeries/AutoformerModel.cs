@@ -183,7 +183,7 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
         if (_options.MovingAverageKernel <= 0 || _options.MovingAverageKernel % 2 == 0)
             throw new ArgumentException("MovingAverageKernel must be a positive odd number.", nameof(options));
 
-        _random = RandomHelper.CreateSeededRandom(42);
+        _random = RandomHelper.CreateSeededRandom(SeedOr(42));
         _movingAvgKernel = _options.MovingAverageKernel;
         _encoderLayers = new List<AutoformerEncoderLayer<T>>();
         _decoderLayers = new List<AutoformerDecoderLayer<T>>();
@@ -204,7 +204,7 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
     private void InitializeModel()
     {
         double stddev = Math.Sqrt(2.0 / _options.EmbeddingDim);
-        var random = RandomHelper.CreateSeededRandom(42);
+        var random = RandomHelper.CreateSeededRandom(SeedOr(42));
 
         // Input projection: maps single time step values to embedding dimension
         _inputProjection = InitTensor(new[] { _options.EmbeddingDim, 1 }, stddev, random);
@@ -223,7 +223,7 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
                 _movingAvgKernel,
                 _options.AutoCorrelationFactor,
                 _options.DropoutRate,
-                42 + i));
+                SeedOr(42) + i));
         }
 
         // Decoder layers
@@ -235,7 +235,7 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
                 _movingAvgKernel,
                 _options.AutoCorrelationFactor,
                 _options.DropoutRate,
-                42 + _options.NumEncoderLayers + i));
+                SeedOr(42) + _options.NumEncoderLayers + i));
         }
 
         // Decoder initialization tensors (learnable)
