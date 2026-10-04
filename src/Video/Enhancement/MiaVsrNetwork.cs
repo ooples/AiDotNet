@@ -69,8 +69,9 @@ internal sealed class MiaVsrNetwork<T>
     // Roles over _layers, assigned by Build.
     private ConvolutionalLayer<T> _shallow;
     // The SPyNet flow estimator for PSRT patch alignment: the caller's pretrained one, or a fresh one trained
-    // from scratch. It is the last layer of the graph, so it is serialized and cloned with the network; the
-    // owning model sets its learning-rate scale (0 while frozen) and whether the photometric loss trains it.
+    // from scratch. It is the final entry of the graph published through Layers, so it is serialized and cloned
+    // with the network. While it is frozen, flow is estimated under NoGradScope and it receives no gradient; the
+    // owning model sets its LearningRateScale only for a step in which flow trains.
     private SpyNetLayer<T> _flow;
     private readonly SpyNetLayer<T>? _flowSource;
     // Gumbel noise is a function of (seed, training step, mask position), not of draw order, so a compiled

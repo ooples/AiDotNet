@@ -207,11 +207,13 @@ public class MIAVSRMaskedAttentionTests
     public void PretrainedFlow_StaysFrozenByDefault()
     {
         var model = CreateModel(FlowOptions(), new SpyNetLayer<double>());
-        model.Train(CreateClip(21), HighResTarget(22));
+        model.Predict(CreateClip(20));
         var before = FlowWeights(model);
 
-        model.Train(CreateClip(23), HighResTarget(24));
+        model.Train(CreateClip(21), HighResTarget(22));
+        Assert.Equal(before, FlowWeights(model));
 
+        model.Train(CreateClip(23), HighResTarget(24));
         Assert.Equal(before, FlowWeights(model));
     }
 
@@ -219,7 +221,11 @@ public class MIAVSRMaskedAttentionTests
     public void BuiltFlow_TrainsFromTheFirstStep()
     {
         var model = CreateModel(FlowOptions(), flow: null);
+        model.Predict(CreateClip(30));
+        var beforeFirstStep = FlowWeights(model);
         model.Train(CreateClip(31), HighResTarget(32));
+        Assert.True(beforeFirstStep.Zip(FlowWeights(model), (a, b) => a != b).Any(changed => changed),
+            "The SPyNet MIA-VSR built for itself did not train on its first step.");
         var before = FlowWeights(model);
 
         model.Train(CreateClip(33), HighResTarget(34));
@@ -234,8 +240,11 @@ public class MIAVSRMaskedAttentionTests
     public void FineTunedFlow_IsFrozenForTheWarmUp_ThenTrains()
     {
         var model = CreateModel(FlowOptions(fineTune: true, freezeSteps: 2), new SpyNetLayer<double>());
+        model.Predict(CreateClip(40));
+        var initial = FlowWeights(model);
         model.Train(CreateClip(41), HighResTarget(42));
         var afterFirst = FlowWeights(model);
+        Assert.Equal(initial, afterFirst);
 
         model.Train(CreateClip(43), HighResTarget(44));
         Assert.Equal(afterFirst, FlowWeights(model));
@@ -275,9 +284,14 @@ public class MIAVSRMaskedAttentionTests
         for (int i = 0; i < clip.Length; i++) clip[i] = rng.NextDouble();
         for (int i = 0; i < target.Length; i++) target[i] = rng.NextDouble();
 
-        // Two samples in chunks of one: the base trainer steps the optimizer itself, not through Train.
+        // Two samples in chunks of one: the base trainer accumulates both chunks and applies ONE optimizer
+        // step, not through Train. With FlowFreezeSteps = 1 that step is the frozen one, so SPyNet must come
+        // out of it unchanged and train on the very next step.
+        model.Predict(CreateClip(60));
+        var beforeChunks = FlowWeights(model);
         model.TrainWithGradientAccumulation(clip, target, batchSize: 1);
         var afterFrozenStep = FlowWeights(model);
+        Assert.Equal(beforeChunks, afterFrozenStep);
 
         model.Train(CreateClip(62), HighResTarget(63));
         Assert.True(afterFrozenStep.Zip(FlowWeights(model), (a, b) => a != b).Any(changed => changed),

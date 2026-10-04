@@ -83,12 +83,15 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
     private bool _useNativeMode;
     private bool _disposed;
 
-    // The paper network; null in ONNX mode or when the caller supplied its own layers.
+    // The paper network, bound to the native layer graph (the default layers or the caller's, matched to the
+    // layout by position); null only in ONNX mode.
     private MiaVsrNetwork<T>? _network;
 
-    // The pretrained, frozen flow estimator for patch alignment; null aligns with zero motion. The caller
-    // owns its weights: they are not this model's parameters, so they are never counted, optimized or
-    // restored here.
+    // The caller's optional pretrained flow estimator. Without one, the default layers build a fresh SPyNet
+    // that trains from the first step; a supplied one stays frozen, and is fine-tuned only when
+    // FineTuneFlowEstimator is set and FlowFreezeSteps have passed. Either way it is the graph's last layer.
+    // ExternalState: the parameter graph must not count, optimize or restore it through this field as well,
+    // since the network's graph already publishes the same layer through Layers.
     [AiDotNet.Attributes.ExternalState]
     private readonly SpyNetLayer<T>? _flowEstimator;
 
@@ -341,15 +344,23 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         if (_stepDepth == 0) BeginTrainingStep();
         _stepDepth++;
-        SetTrainingMode(true);
         try
         {
-            TrainWithTape(input, expected, _optimizer);
-            _flowTrainingSteps++;
+            // Inside the outer try: entering training mode runs the lazy-shape probe, and a probe that
+            // throws must not leave _stepDepth raised, or every later step would skip BeginTrainingStep.
+            SetTrainingMode(true);
+            try
+            {
+                TrainWithTape(input, expected, _optimizer);
+                _flowTrainingSteps++;
+            }
+            finally
+            {
+                SetTrainingMode(false);
+            }
         }
         finally
         {
-            SetTrainingMode(false);
             _stepDepth--;
         }
     }
