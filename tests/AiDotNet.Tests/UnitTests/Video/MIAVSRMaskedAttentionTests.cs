@@ -64,7 +64,9 @@ public class MIAVSRMaskedAttentionTests
         var dense = model.Predict(clip);
 
         Assert.Equal(dense.Length, sparse.Length);
-        for (int i = 0; i < dense.Length; i++) Assert.Equal(dense[i], sparse[i], 10);
+        // An absolute bound, not Assert.Equal's 10-digit rounding: the two paths sum in different orders, and
+        // values 2.6E-15 apart (-0.44574832545000176 vs ...44999921 on CI) round to different 10th digits.
+        for (int i = 0; i < dense.Length; i++) Assert.Equal(dense[i], sparse[i], 1e-10);
     }
 
     [Fact]
