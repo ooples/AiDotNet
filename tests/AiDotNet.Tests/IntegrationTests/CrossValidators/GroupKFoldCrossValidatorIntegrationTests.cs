@@ -94,7 +94,7 @@ public class GroupKFoldCrossValidatorIntegrationTests
         var options = new CrossValidationOptions
         {
             NumberOfFolds = 3,
-            RandomSeed = 42
+            Seed = 42
         };
 
         // Act

@@ -409,7 +409,10 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         // geometric mean of the default range -- a single point in the middle of the interval the
         // paper spreads dt across, so every channel started with the same timescale and the whole
         // point of the range was lost.
-        var dtRandom = RandomHelper.CreateSecureRandom();
+        // The layer's own stream, seeded from RandomSeed like every other initialisation here. A secure
+        // random source made dt differ on every construction, so a seeded Mamba or TimeMachine never
+        // reproduced its initial weights (#2290).
+        var dtRandom = Random;
         double logDeltaMin = Math.Log(_deltaMin);
         double logDeltaMax = Math.Log(_deltaMax);
         for (int i = 0; i < _dtProjectionBias.Length; i++)

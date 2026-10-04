@@ -253,7 +253,7 @@ public class ByteLMV256Issue1380Tests
                     InitialLearningRate = LearningRate,
                     UseAdaptiveLearningRate = false,
                     UseAdaptiveBetas = false,
-                    RandomSeed = Seed,
+                    Seed = Seed,
                     ShuffleData = true,
                     Regularization = new NoRegularization<float, Tensor<float>, Tensor<float>>(),
                 });
@@ -291,7 +291,7 @@ public class ByteLMV256Issue1380Tests
                 BatchSize = BatchSize,
                 UseAdaptiveLearningRate = false,
                 UseAdaptiveBetas = false,
-                RandomSeed = Seed,
+                Seed = Seed,
                 ShuffleData = true,
                 Regularization = new NoRegularization<float, Tensor<float>, Tensor<float>>(),
             };

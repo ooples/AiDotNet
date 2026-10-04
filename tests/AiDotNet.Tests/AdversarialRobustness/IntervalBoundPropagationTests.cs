@@ -429,7 +429,7 @@ public class IntervalBoundPropagationTests
             NormType = "L2",
             UseTightBounds = true,
             BatchSize = 32,
-            RandomSeed = 42
+            Seed = 42
         };
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(options);
 
@@ -446,7 +446,7 @@ public class IntervalBoundPropagationTests
         Assert.Equal("L2", restoredOptions.NormType);
         Assert.True(restoredOptions.UseTightBounds);
         Assert.Equal(32, restoredOptions.BatchSize);
-        Assert.Equal(42, restoredOptions.RandomSeed);
+        Assert.Equal(42, restoredOptions.Seed);
     }
 
     #endregion

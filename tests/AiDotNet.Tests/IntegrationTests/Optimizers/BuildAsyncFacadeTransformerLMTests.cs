@@ -166,7 +166,7 @@ public class BuildAsyncFacadeTransformerLMTests
                 BatchSize = BatchSize,
                 UseAdaptiveLearningRate = false,
                 UseAdaptiveBetas = false,
-                RandomSeed = Seed,
+                Seed = Seed,
                 ShuffleData = true,
                 Regularization = new NoRegularization<float, Tensor<float>, Tensor<float>>(),
             };
@@ -394,7 +394,7 @@ public class BuildAsyncFacadeTransformerLMTests
             BatchSize = BatchSize,
             UseAdaptiveLearningRate = false,
             UseAdaptiveBetas = false,
-            RandomSeed = Seed,
+            Seed = Seed,
             ShuffleData = false,
             Regularization = new NoRegularization<float, Tensor<float>, Tensor<float>>(),
         };

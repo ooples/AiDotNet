@@ -644,7 +644,7 @@ public class AdversarialRobustnessIntegrationTests
             NoiseSigma = 0.25,
             NumSamples = 100,
             ConfidenceLevel = 0.95,
-            RandomSeed = Seed
+            Seed = Seed
         };
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var model = CreateMockClassificationModel();
@@ -667,7 +667,7 @@ public class AdversarialRobustnessIntegrationTests
         {
             NoiseSigma = 0.25,
             NumSamples = 50,
-            RandomSeed = Seed
+            Seed = Seed
         };
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var model = CreateMockClassificationModel();
@@ -693,7 +693,7 @@ public class AdversarialRobustnessIntegrationTests
         {
             NoiseSigma = 0.25,
             NumSamples = 100,
-            RandomSeed = Seed
+            Seed = Seed
         };
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var model = CreateMockClassificationModel();
@@ -714,7 +714,7 @@ public class AdversarialRobustnessIntegrationTests
         {
             NoiseSigma = 0.25,
             NumSamples = 50,
-            RandomSeed = Seed
+            Seed = Seed
         };
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var model = CreateMockClassificationModel();
@@ -739,13 +739,13 @@ public class AdversarialRobustnessIntegrationTests
         {
             NoiseSigma = 0.1,
             NumSamples = 100,
-            RandomSeed = Seed
+            Seed = Seed
         };
         var optionsHighSigma = new CertifiedDefenseOptions<double>
         {
             NoiseSigma = 0.5,
             NumSamples = 100,
-            RandomSeed = Seed
+            Seed = Seed
         };
         var smoothingLow = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(optionsLowSigma);
         var smoothingHigh = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(optionsHighSigma);
@@ -790,7 +790,7 @@ public class AdversarialRobustnessIntegrationTests
     public async Task RandomizedSmoothing_ThrowsOnNullInput()
     {
         // Arrange
-        var options = new CertifiedDefenseOptions<double> { RandomSeed = Seed };
+        var options = new CertifiedDefenseOptions<double> { Seed = Seed };
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var model = CreateMockClassificationModel();
 
@@ -803,7 +803,7 @@ public class AdversarialRobustnessIntegrationTests
     public async Task RandomizedSmoothing_ThrowsOnNullModel()
     {
         // Arrange
-        var options = new CertifiedDefenseOptions<double> { RandomSeed = Seed };
+        var options = new CertifiedDefenseOptions<double> { Seed = Seed };
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var input = CreateTestInput();
 
@@ -824,7 +824,7 @@ public class AdversarialRobustnessIntegrationTests
         {
             NoiseSigma = 0.1,
             NumSamples = 50,
-            RandomSeed = Seed
+            Seed = Seed
         };
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(options);
         var model = CreateMockClassificationModel();
@@ -858,7 +858,7 @@ public class AdversarialRobustnessIntegrationTests
         {
             NoiseSigma = 0.1,
             NumSamples = 30,
-            RandomSeed = Seed
+            Seed = Seed
         };
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(options);
         var model = CreateMockClassificationModel();
@@ -880,7 +880,7 @@ public class AdversarialRobustnessIntegrationTests
         {
             NoiseSigma = 0.1,
             NumSamples = 30,
-            RandomSeed = Seed
+            Seed = Seed
         };
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(options);
         var model = CreateMockClassificationModel();
@@ -901,7 +901,7 @@ public class AdversarialRobustnessIntegrationTests
         {
             NoiseSigma = 0.1,
             NumSamples = 30,
-            RandomSeed = Seed
+            Seed = Seed
         };
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(options);
         var model = CreateMockClassificationModel();
@@ -982,7 +982,7 @@ public class AdversarialRobustnessIntegrationTests
         {
             NoiseSigma = 0.1,
             NumSamples = 30,
-            RandomSeed = Seed
+            Seed = Seed
         };
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>(options);
         var model = CreateMockClassificationModel();
@@ -1017,7 +1017,7 @@ public class AdversarialRobustnessIntegrationTests
         {
             NoiseSigma = 0.1,
             NumSamples = 20,
-            RandomSeed = Seed
+            Seed = Seed
         };
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>(options);
         var model = CreateMockClassificationModel();
@@ -1042,7 +1042,7 @@ public class AdversarialRobustnessIntegrationTests
         {
             NoiseSigma = 0.1,
             NumSamples = 30,
-            RandomSeed = Seed
+            Seed = Seed
         };
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>(options);
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(options);
@@ -1547,7 +1547,7 @@ public class AdversarialRobustnessIntegrationTests
         {
             NoiseSigma = 0.1,
             NumSamples = 30,
-            RandomSeed = Seed
+            Seed = Seed
         };
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(certOptions);
 
@@ -1580,7 +1580,7 @@ public class AdversarialRobustnessIntegrationTests
         {
             NoiseSigma = 0.1,
             NumSamples = 20,
-            RandomSeed = Seed
+            Seed = Seed
         };
         var ibp = new IntervalBoundPropagation<double, Vector<double>, Vector<double>>(certOptions);
 
@@ -1647,7 +1647,7 @@ public class AdversarialRobustnessIntegrationTests
         {
             NoiseSigma = 0.1,
             NumSamples = 30,
-            RandomSeed = Seed
+            Seed = Seed
         };
 
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
@@ -1786,7 +1786,7 @@ public class AdversarialRobustnessIntegrationTests
         {
             NoiseSigma = 0.1,
             NumSamples = 30,
-            RandomSeed = Seed
+            Seed = Seed
         };
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var model = CreateMockClassificationModel();

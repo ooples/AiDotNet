@@ -70,8 +70,8 @@ public class RandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense<T, TInp
 
         // Use the configured seed if provided, otherwise use non-deterministic random
         // for proper statistical validity of the certification
-        this.random = options.RandomSeed.HasValue
-            ? RandomHelper.CreateSeededRandom(options.RandomSeed.Value)
+        this.random = options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(options.Seed.Value)
             : RandomHelper.CreateSeededRandom(Environment.TickCount);
     }
 

@@ -75,7 +75,7 @@ public class StandardCrossValidatorIntegrationTests
         {
             NumberOfFolds = 10,
             ShuffleData = false,
-            RandomSeed = 42
+            Seed = 42
         };
 
         // Act
@@ -223,7 +223,7 @@ public class StandardCrossValidatorIntegrationTests
         {
             NumberOfFolds = 5,
             ShuffleData = true,
-            RandomSeed = 42
+            Seed = 42
         };
 
         var model1 = CreateMockModel();

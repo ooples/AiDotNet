@@ -596,7 +596,7 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         // reference scheme, and the zero start is the load-bearing part â€” the previous full-rank
         // InitializeProjection(_aWeights) injected noise into the decay logit before a single step.
         _w1.Fill(NumOps.Zero);
-        new OrthogonalInitializationStrategy<T>(0.1).InitializeWeights(_w2, _loraRank, _modelDimension);
+        OrthogonalLoRA().InitializeWeights(_w2, _loraRank, _modelDimension);
         // Decay logit init, per the reference implementation (RWKV-LM RWKV-v7):
         //     www[n] = -6 + 6 * (n/(C-1))^(1 + ratio_0_to_1^0.3)
         //     w0[n]  = www[n] + 0.5 + zigzag[n] * 2.5
@@ -626,7 +626,7 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         // ICL-rate LoRA, same scheme. No tanh on this path in the reference â€” the sigmoid applied to
         // the sum bounds it.
         _a1.Fill(NumOps.Zero);
-        new OrthogonalInitializationStrategy<T>(0.1).InitializeWeights(_a2, _loraRank, _modelDimension);
+        OrthogonalLoRA().InitializeWeights(_a2, _loraRank, _modelDimension);
         _bBias.Fill(NumOps.FromDouble(0.0));
 
         // Removal- and injection-key scales, initialised as in the reference implementation
@@ -651,9 +651,9 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
             _v0[n] = NumOps.FromDouble(0.73 - vlin * 0.4);
         }
         _v1.Fill(NumOps.Zero);
-        new OrthogonalInitializationStrategy<T>(0.1).InitializeWeights(_v2, _mvLoraRank, _modelDimension);
+        OrthogonalLoRA().InitializeWeights(_v2, _mvLoraRank, _modelDimension);
         _g1.Fill(NumOps.Zero);
-        new OrthogonalInitializationStrategy<T>(0.1).InitializeWeights(_g2, _gateLoraRank, _modelDimension);
+        OrthogonalLoRA().InitializeWeights(_g2, _gateLoraRank, _modelDimension);
         // x_g uses the same 0.2 exponent as x_r in the reference's token-shift ramp.
         for (int n = 0; n < _modelDimension; n++)
         {
@@ -722,6 +722,17 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
     private const int SqCmAllRGate = 8, SqCmAllVProj = 9;
     // FFN-dimension sequence buffers (separate indices since different shape suffix)
     private const int SqCmAllSiLU = 10, SqCmAllKProj = 11;
+
+    /// <summary>
+    /// The reference's orthogonal LoRA initialisation (gain 0.1), driven by this layer's seeded stream
+    /// when it has a <see cref="LayerBase{T}.RandomSeed"/>. A bare strategy drew from the process-shared
+    /// generator, so a seeded RWKV-7 never reproduced its initial weights (#2290).
+    /// </summary>
+    private IInitializationStrategy<T> OrthogonalLoRA()
+    {
+        var strategy = new OrthogonalInitializationStrategy<T>(0.1);
+        return RandomSeed.HasValue ? strategy.WithSeededRandom(Random) : strategy;
+    }
 
     private void InitializeProjection(Tensor<T> tensor)
     {

@@ -96,8 +96,8 @@ public abstract partial class FineTuningBase<T, TInput, TOutput> : IFineTuning<T
     {
         Guard.NotNull(options);
         Options = options;
-        Random = options.RandomSeed.HasValue
-            ? RandomHelper.CreateSeededRandom(options.RandomSeed.Value)
+        Random = options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(options.Seed.Value)
             : RandomHelper.CreateSeededRandom(Environment.TickCount);
         CurrentMetrics = new FineTuningMetrics<T>();
     }
@@ -136,8 +136,8 @@ public abstract partial class FineTuningBase<T, TInput, TOutput> : IFineTuning<T
     public virtual void Reset()
     {
         CurrentMetrics = new FineTuningMetrics<T>();
-        Random = Options.RandomSeed.HasValue
-            ? RandomHelper.CreateSeededRandom(Options.RandomSeed.Value)
+        Random = Options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(Options.Seed.Value)
             : RandomHelper.CreateSeededRandom(Environment.TickCount);
     }
 

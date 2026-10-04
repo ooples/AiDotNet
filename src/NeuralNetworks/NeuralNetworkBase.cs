@@ -283,9 +283,25 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// Configuration options for this neural network model.
     /// </summary>
     /// <remarks>
-    /// Derived classes should set this to their specific options type in their constructor.
+    /// <para>Derived classes should set this to their specific options type in their constructor.</para>
+    /// <para>
+    /// Setting it also applies <see cref="ModelOptions.Seed"/> (see <see cref="ApplyOptionsSeed"/>), so a
+    /// model that assigns its options before building its layers, as constructors do, initialises its
+    /// weights from that seed. Before this, 81 of 90 finance models, and every other model that took its
+    /// seed only from the architecture, silently ignored <c>Options.Seed</c> (#2290).
+    /// </para>
     /// </remarks>
-    protected ModelOptions Options { get; set; } = new NeuralNetworkOptions();
+    protected ModelOptions Options
+    {
+        get => _modelOptions;
+        set
+        {
+            _modelOptions = value;
+            ApplyOptionsSeed(value?.Seed);
+        }
+    }
+
+    private ModelOptions _modelOptions = new NeuralNetworkOptions();
 
     /// <inheritdoc/>
     public virtual ModelOptions GetOptions() => Options;
@@ -7382,6 +7398,45 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     private bool _layerRandomSeedsWired;
 
     /// <summary>
+    /// The seed from this model's options (<see cref="Models.Options.ModelOptions.Seed"/>), applied by
+    /// <see cref="ApplyOptionsSeed"/> when the architecture carries no explicit seed of its own.
+    /// </summary>
+    private int? _optionsSeed;
+
+    /// <summary>
+    /// The seed this model's weight initialisation and stochastic layers derive from: the architecture's
+    /// explicit seed if it has one, otherwise the options seed, otherwise the architecture's fallback.
+    /// </summary>
+    private int? EffectiveRandomSeed =>
+        Architecture is { HasExplicitRandomSeed: true } ? Architecture.RandomSeed : _optionsSeed ?? Architecture?.RandomSeed;
+
+    /// <summary>
+    /// Seeds this model from its options, so <see cref="Models.Options.ModelOptions.Seed"/> reproduces the
+    /// initial weights and the stochastic layers' streams exactly as an architecture seed does.
+    /// </summary>
+    /// <param name="seed">The options seed; null leaves the model unseeded (or architecture-seeded).</param>
+    /// <remarks>
+    /// <para>
+    /// Call it from the constructor <b>before</b> the layers are built: weight initialisation draws from the
+    /// construction seed scope, which this restarts from <paramref name="seed"/>. An explicit
+    /// <see cref="NeuralNetworkArchitecture{T}.RandomSeed"/> wins, so code that seeded the architecture keeps
+    /// its results.
+    /// </para>
+    /// <para>
+    /// Without this, models whose options carry a seed but build their layers from the architecture alone
+    /// ignored it: the finance transformers read neither <c>Options.Seed</c> nor their own
+    /// <c>RandomSeed</c> (#2290).
+    /// </para>
+    /// </remarks>
+    protected void ApplyOptionsSeed(int? seed)
+    {
+        if (seed is not int value || Architecture is { HasExplicitRandomSeed: true })
+            return;
+        _optionsSeed = value;
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(value);
+    }
+
+    /// <summary>
     /// Propagates <see cref="NeuralNetworkArchitecture{T}.RandomSeed"/> to every layer (and nested
     /// sub-layer) so seed-respecting stochastic layers — chiefly <see cref="Layers.DropoutLayer{T}"/>,
     /// whose mask derives from <see cref="Layers.LayerBase{T}.RandomSeed"/> plus a per-forward
@@ -7392,7 +7447,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </summary>
     private void WireLayerRandomSeeds()
     {
-        if (Architecture?.RandomSeed is not int seed) return;
+        if (EffectiveRandomSeed is not int seed) return;
         var seedRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var visited = new HashSet<ILayer<T>>(Helpers.TensorReferenceComparer<ILayer<T>>.Instance);
         foreach (var layer in Layers)

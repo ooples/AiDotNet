@@ -600,7 +600,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             batchSize,
             shuffle: GradientOptions.ShuffleData,
             dropLast: GradientOptions.DropLastBatch,
-            seed: GradientOptions.RandomSeed,
+            seed: GradientOptions.Seed,
             sampler: GradientOptions.DataSampler,
             epoch: epoch);
     }
@@ -639,7 +639,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             batchSize,
             shuffle: GradientOptions.ShuffleData,
             dropLast: GradientOptions.DropLastBatch,
-            seed: GradientOptions.RandomSeed,
+            seed: GradientOptions.Seed,
             sampler: sampler,
             epoch: epoch);
     }

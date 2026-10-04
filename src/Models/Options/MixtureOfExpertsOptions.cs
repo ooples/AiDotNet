@@ -263,36 +263,6 @@ public class MixtureOfExpertsOptions<T> : ModelHyperparameterOptions
     public double LoadBalancingWeight { get; set; } = 0.01;
 
     /// <summary>
-    /// Gets or sets the random seed for expert initialization.
-    /// </summary>
-    /// <value>The random seed, defaulting to null for non-deterministic initialization.</value>
-    /// <remarks>
-    /// <para>
-    /// When set, this seed ensures deterministic initialization of expert networks and the gating network,
-    /// making training reproducible. When null, initialization uses a non-deterministic seed, leading to
-    /// different results across runs. Reproducibility is important for research, debugging, and production
-    /// systems where consistent behavior is required.
-    /// </para>
-    /// <para><b>For Beginners:</b> This controls whether training produces the same results every time.
-    ///
-    /// The default value of null means:
-    /// - Each training run will produce slightly different results
-    /// - Initial weights are randomly chosen each time
-    ///
-    /// Set a specific number (e.g., 42) for reproducibility:
-    /// - Same seed = same initial weights = same training trajectory
-    /// - Useful for debugging, comparing changes, or research
-    ///
-    /// Example usage:
-    /// - RandomSeed = null: Different results each time (fine for production)
-    /// - RandomSeed = 42: Same results each time (good for debugging/research)
-    ///
-    /// Note: This only controls initialization. Other factors like data shuffling may still introduce variability.
-    /// </para>
-    /// </remarks>
-    public int? RandomSeed { get => Seed; set => Seed = value; }
-
-    /// <summary>
     /// Validates that all option values are within acceptable ranges.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when any option value is invalid.</exception>

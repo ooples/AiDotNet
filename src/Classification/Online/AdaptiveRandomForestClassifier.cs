@@ -159,8 +159,8 @@ public partial class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnl
         : base(options)
     {
         _options = options ?? new AdaptiveRandomForestOptions<T>();
-        _random = _options.RandomSeed.HasValue
-            ? RandomHelper.CreateSeededRandom(_options.RandomSeed.Value)
+        _random = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
         _knownClasses = new List<T>();
         _ensemble = new List<TreeMember>();
@@ -433,7 +433,7 @@ public partial class AdaptiveRandomForestClassifier<T> : ClassifierBase<T>, IOnl
             TieThreshold = _options.TieThreshold,
             MaxDepth = _options.MaxTreeDepth,
             NumBins = _options.NumBins,
-            RandomSeed = _random.Next()
+            Seed = _random.Next()
         };
 
         return new HoeffdingTreeClassifier<T>(treeOptions);

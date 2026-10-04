@@ -304,15 +304,6 @@ public class ContinualLearningOptions : ModelOptions
     public double DropoutRate { get; set; } = 0.5;
 
     /// <summary>
-    /// Gets or sets the random seed for reproducibility.
-    /// </summary>
-    /// <remarks>
-    /// Setting a seed ensures reproducible behavior across runs.
-    /// Leave as null for random behavior each time.
-    /// </remarks>
-    public int? RandomSeed { get; set; }
-
-    /// <summary>
     /// Gets or sets whether to normalize importance scores.
     /// </summary>
     /// <remarks>

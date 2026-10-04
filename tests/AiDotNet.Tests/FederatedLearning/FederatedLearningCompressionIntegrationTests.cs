@@ -34,7 +34,7 @@ public class FederatedLearningCompressionIntegrationTests
             ClientSelectionFraction = 1.0,
             LocalEpochs = 1,
             AggregationStrategy = FederatedAggregationStrategy.FedAvg,
-            RandomSeed = 123,
+            Seed = 123,
             MinRoundsBeforeConvergence = 100,
             ConvergenceThreshold = 0.0,
             Compression = new FederatedCompressionOptions
@@ -77,7 +77,7 @@ public class FederatedLearningCompressionIntegrationTests
             ClientSelectionFraction = 1.0,
             LocalEpochs = 1,
             AggregationStrategy = FederatedAggregationStrategy.FedAvg,
-            RandomSeed = 123,
+            Seed = 123,
             MinRoundsBeforeConvergence = 100,
             ConvergenceThreshold = 0.0,
             Compression = new FederatedCompressionOptions

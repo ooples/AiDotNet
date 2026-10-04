@@ -88,8 +88,8 @@ public class AdaptiveRandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense
         _maxSigma = maxSigma;
         _sensitivitySamples = sensitivitySamples;
 
-        _random = options.RandomSeed.HasValue
-            ? RandomHelper.CreateSeededRandom(options.RandomSeed.Value)
+        _random = options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(options.Seed.Value)
             : RandomHelper.CreateSeededRandom(Environment.TickCount);
     }
 

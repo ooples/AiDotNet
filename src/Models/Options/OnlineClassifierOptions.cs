@@ -20,10 +20,6 @@ public class OnlineClassifierOptions<T> : ClassifierOptions<T>
     /// </remarks>
     public int InitialNumClasses { get; set; } = 0;
 
-    /// <summary>
-    /// Gets or sets the random seed for reproducible results.
-    /// </summary>
-    public int? RandomSeed { get; set; }
 }
 
 /// <summary>

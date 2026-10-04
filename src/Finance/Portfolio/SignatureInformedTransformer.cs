@@ -111,6 +111,10 @@ public partial class SignatureInformedTransformer<T> : PortfolioOptimizerBase<T>
         Attention = new SignatureAugmentedAttention<T>();
         Objective = new CVaRPortfolioObjective<T>(options.CVaRAlpha);
 
+        // Assigning Options applies Options.Seed (#2290). It must come right before the layers are built:
+        // constructing the helpers above can start another model construction, which resets the
+        // thread's initialisation seed scope.
+        Options = options;
         InitializeLayers();
     }
 

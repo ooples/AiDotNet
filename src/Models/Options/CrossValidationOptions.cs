@@ -43,15 +43,6 @@ public class CrossValidationOptions : ModelOptions
     public CrossValidationType ValidationType { get; set; } = CrossValidationType.KFold;
 
     /// <summary>
-    /// Gets or sets the random seed for data shuffling.
-    /// </summary>
-    /// <remarks>
-    /// If set, this ensures reproducibility of random operations. If null, a random seed will be used.
-    /// Setting a specific seed allows you to get the same results across multiple runs.
-    /// </remarks>
-    public int? RandomSeed { get; set; }
-
-    /// <summary>
     /// Gets or sets whether to shuffle the data before splitting into folds.
     /// </summary>
     /// <remarks>
