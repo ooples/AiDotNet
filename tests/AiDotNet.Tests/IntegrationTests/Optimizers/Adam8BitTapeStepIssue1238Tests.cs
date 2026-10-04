@@ -1,3 +1,4 @@
+using AiDotNet.Tensors.Helpers;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -53,6 +54,7 @@ public class Adam8BitTapeStepIssue1238Tests
 
         var options = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
+            Min8BitSize = 0,
             BlockSize = 64,
             CompressBothMoments = true,
             InitialLearningRate = 0.01,
@@ -107,6 +109,7 @@ public class Adam8BitTapeStepIssue1238Tests
 
         var options = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
+            Min8BitSize = 0,
             BlockSize = 64,
             CompressBothMoments = false,
             InitialLearningRate = 0.01,
@@ -160,6 +163,7 @@ public class Adam8BitTapeStepIssue1238Tests
         // review time.
         var options = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
+            Min8BitSize = 0,
             BlockSize = 16,
             CompressBothMoments = true,
             InitialLearningRate = 0.5,
@@ -209,6 +213,7 @@ public class Adam8BitTapeStepIssue1238Tests
 
         var options = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
+            Min8BitSize = 0,
             BlockSize = 32,
             CompressBothMoments = true,
             InitialLearningRate = 0.01,
@@ -251,5 +256,67 @@ public class Adam8BitTapeStepIssue1238Tests
         // buffers themselves is verified at the impl level by
         // AllocateTapeState always allocating a fresh Vector<byte>).
         Assert.NotEqual(infoA.VQuantizedLength, infoB.VQuantizedLength);
+    }
+
+    /// <summary>
+    /// bitsandbytes' <c>min_8bit_size</c> (default 4096): a parameter below it takes exactly the plain Adam step on
+    /// full-precision moments, while a parameter at the threshold in the same step is 8-bit.
+    /// </summary>
+    [Fact(Timeout = 60000)]
+    public async Task Step_ParameterBelowMin8BitSize_RunsFullPrecisionAdam()
+    {
+        await Task.Yield();
+
+        var options = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
+        {
+            BlockSize = 64,
+            InitialLearningRate = 0.01,
+        };
+        Assert.Equal(4096, options.Min8BitSize);
+        var optimizer = new Adam8BitOptimizer<double, Matrix<double>, Vector<double>>(null, options);
+
+        var rng = RandomHelper.CreateSeededRandom(17);
+        var small = new Tensor<double>(new[] { 8, 8 });
+        var large = new Tensor<double>(new[] { 64, 64 });
+        for (int i = 0; i < small.Length; i++) small[i] = rng.NextDouble() - 0.5;
+        for (int i = 0; i < large.Length; i++) large[i] = rng.NextDouble() - 0.5;
+
+        var expected = small.ToArray();
+        var m = new double[small.Length];
+        var v = new double[small.Length];
+        double beta1 = options.Beta1, beta2 = options.Beta2, lr = options.InitialLearningRate, eps = options.Epsilon;
+        for (int t = 1; t <= 4; t++)
+        {
+            var gSmall = new Tensor<double>(small._shape);
+            var gLarge = new Tensor<double>(large._shape);
+            for (int i = 0; i < gSmall.Length; i++) gSmall[i] = rng.NextDouble() * 2 - 1;
+            for (int i = 0; i < gLarge.Length; i++) gLarge[i] = rng.NextDouble() * 2 - 1;
+
+            for (int i = 0; i < expected.Length; i++)
+            {
+                m[i] = beta1 * m[i] + (1 - beta1) * gSmall[i];
+                v[i] = beta2 * v[i] + (1 - beta2) * gSmall[i] * gSmall[i];
+                double mHat = m[i] / (1 - Math.Pow(beta1, t));
+                double vHat = v[i] / (1 - Math.Pow(beta2, t));
+                expected[i] -= lr * mHat / (Math.Sqrt(vHat) + eps);
+            }
+
+            optimizer.Step(new TapeStepContext<double>(
+                parameters: new[] { small, large },
+                gradients: new Dictionary<Tensor<double>, Tensor<double>> { [small] = gSmall, [large] = gLarge },
+                loss: 0.0));
+        }
+
+        var snapshot = optimizer.GetTapeStateSnapshotForTests();
+        Assert.True(snapshot[small].HasMFullPrecision);
+        Assert.True(snapshot[small].HasVFullPrecision);
+        Assert.False(snapshot[small].HasMQuantized);
+        Assert.Equal(0, snapshot[small].VQuantizedLength);
+        Assert.True(snapshot[large].HasMQuantized);
+        Assert.False(snapshot[large].HasVFullPrecision);
+        Assert.Equal(4096, snapshot[large].VQuantizedLength);
+
+        for (int i = 0; i < expected.Length; i++)
+            Assert.True(Math.Abs(small[i] - expected[i]) < 1e-12, $"small[{i}]: {small[i]:R} vs Adam {expected[i]:R}");
     }
 }

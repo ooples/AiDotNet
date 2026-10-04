@@ -378,11 +378,11 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     // instruction (vpdpbusd). Detected once at startup; false on AVX2-only CPUs, net8 (where AvxVnni is
     // still marked as a preview API), and net471 (no intrinsics), where the fp32 path is used instead.
 #if NET9_0_OR_GREATER
-    private static readonly bool Q8SpeedFavorable =
+    internal static readonly bool Q8SpeedFavorable =
         System.Runtime.Intrinsics.X86.AvxVnni.IsSupported
         || System.Runtime.Intrinsics.X86.Avx512BW.IsSupported;
 #else
-    private const bool Q8SpeedFavorable = false;
+    internal const bool Q8SpeedFavorable = false;
 #endif
 
     /// <summary>
@@ -406,6 +406,34 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         _weightScalesQ8 = scales;
         _q8In = inFeatures;
         _q8Out = outFeatures;
+        _weightsAtQuantization = _weights;
+        _weightsVersionAtQuantization = _weights.Version;
+    }
+
+    // The fp32 weights the Q8 copy was made from. The copy is valid only while they are the same tensor, unmodified:
+    // a restore or clone can install a different tensor, and an engine write bumps the version. It was never retired
+    // before, so after fine-tuning a GGUF-loaded model, small-batch inference on VNNI hardware (token-by-token decode)
+    // kept running the pre-training weights.
+    [Scratch]
+    private Tensor<T>? _weightsAtQuantization;
+    private int _weightsVersionAtQuantization;
+
+    private void DropQuantizedWeights()
+    {
+        _weightsQ8 = null;
+        _weightScalesQ8 = null;
+        _weightsAtQuantization = null;
+    }
+
+    private bool IsQuantizedWeightCurrent()
+    {
+        if (_weightsQ8 is null) return false;
+        if (!ReferenceEquals(_weights, _weightsAtQuantization) || _weights.Version != _weightsVersionAtQuantization)
+        {
+            DropQuantizedWeights();
+            return false;
+        }
+        return true;
     }
 
     // GPU-resident cached tensors for GPU training pipeline
@@ -1249,7 +1277,12 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         // wins and the quantized path is skipped (no regression). Also gated to small M — even on VNNI the
         // large-M prefill path favors the fp32 BLAS's 2D register tiling until the int8 GEMM is 2D-tiled.
         const int q8MaxRowsForNaiveKernel = 16;
-        if (_weightsQ8 is not null && _weightScalesQ8 is not null
+        // Training (a tape, a compiled-plan trace, or training mode) retires the Q8 copy for good: optimizer writes can
+        // bypass the version counter, and every training step is preceded by such a forward.
+        if (IsTrainingMode || AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+            DropQuantizedWeights();
+        if (_weightsQ8 is not null && _weightScalesQ8 is not null && IsQuantizedWeightCurrent()
             && Q8SpeedFavorable
             && !IsTrainingMode && !DeterministicForward
             && typeof(T) == typeof(float)

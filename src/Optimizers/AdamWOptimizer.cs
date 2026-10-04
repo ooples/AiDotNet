@@ -1,4 +1,4 @@
-﻿using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using System.Collections.Concurrent;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -196,9 +196,9 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             _options.UseAMSGrad
                 ? Tensors.Engines.Compilation.OptimizerType.AMSGrad
                 : Tensors.Engines.Compilation.OptimizerType.AdamW,
-            (float)GetCurrentLearningRate(),
-            (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
-            (float)_options.WeightDecay, schedule)
+            GetCurrentLearningRate(),
+            _options.Beta1, _options.Beta2, _options.Epsilon,
+            _options.WeightDecay, schedule)
         {
             MaxGradientNorm = clips && GradientOptions.GradientClippingMethod == GradientClippingMethod.ByNorm
                 ? GradientOptions.MaxGradientNorm

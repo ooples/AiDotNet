@@ -87,6 +87,22 @@ public sealed class BatchNormalizationInvariantTests : LayerTestBase<double>
     protected override ILayer<double> CreateLayer() => new BatchNormalizationLayer<double>();
 }
 
+public sealed class TiedEmbeddingHeadLayerInvariantTests : LayerTestBase<double>
+{
+    // The head projects a hidden vector onto the vocabulary through the embedding's own table, so it owns no
+    // parameters and computes no weight gradients of its own: both belong to the embedding it is tied to.
+    //
+    // That table is the embedding's state, saved with the embedding by the owning network, not with the head.
+    // Every head this fixture creates is therefore tied to the same embedding, as two heads restored into one
+    // network would be; a fresh random embedding per head would compare two different tables, not a round trip.
+    private readonly EmbeddingLayer<double> _embedding = new(vocabularySize: 6, embeddingDimension: 4);
+
+    protected override int[] InputShape => [1, 4];
+    protected override bool ExpectsTrainableParameters => false;
+    protected override bool ExpectsNonZeroGradients => false;
+    protected override ILayer<double> CreateLayer() => new TiedEmbeddingHeadLayer<double>(_embedding);
+}
+
 public sealed class FlattenLayerInvariantTests : LayerTestBase<double>
 {
     protected override int[] InputShape => [2, 3, 4];

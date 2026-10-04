@@ -91,7 +91,7 @@ public partial class RAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// </para>
     /// </remarks>
     public RAdamOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         RAdamOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
@@ -123,8 +123,8 @@ public partial class RAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.RAdam,
-            (float)GetCurrentLearningRate(),
-            (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
+            GetCurrentLearningRate(),
+            _options.Beta1, _options.Beta2, _options.Epsilon,
             0f, schedule);
         return true;
     }

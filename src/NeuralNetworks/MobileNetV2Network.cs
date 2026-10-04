@@ -80,6 +80,9 @@ public partial class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
     private readonly MobileNetV2Options _options;
 
     /// <inheritdoc/>
+    protected override bool FusedTrainingDisabledByConfiguration => _options is not null && _options.DisableFusedOptimizerStep;
+
+    /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
     private readonly ILossFunction<T> _lossFunction;
@@ -125,7 +128,9 @@ public partial class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
     {
         _options = options;
         Options = _options;
-        _fusedTrainingDisabled = _options.DisableFusedOptimizerStep;
+        // The configured value itself, not the virtual FusedTrainingDisabledByConfiguration: a subclass override would
+        // run here before that subclass is initialized. The base's later resets read the virtual, after construction.
+        _fusedTrainingDisabled = options.DisableFusedOptimizerStep;
         Guard.NotNull(configuration);
         _configuration = configuration;
 

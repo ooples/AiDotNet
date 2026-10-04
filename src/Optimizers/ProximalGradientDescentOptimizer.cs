@@ -97,7 +97,7 @@ public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : Grad
         {
             config = new Fused.FusedOptimizerConfig(
                 Tensors.Engines.Compilation.OptimizerType.SGD,
-                (float)lr,
+                lr,
                 0f, 0f, 0f, 0f, schedule);
             return true;
         }
@@ -109,21 +109,54 @@ public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : Grad
             if (!(lr > 0.0) || double.IsInfinity(lr)) return false;
 
             double strength = _regularization.GetOptions().Strength;
+            float l1Lr = (float)lr;
+            float l1Threshold = (float)(strength / lr);
+            if (!IsRepresentableFusedRate(l1Lr) || !IsRepresentableFusedWeight(l1Threshold)) return false;
             config = new Fused.FusedOptimizerConfig(
                 Tensors.Engines.Compilation.OptimizerType.ProximalL1,
-                (float)lr,
+                l1Lr,
                 0f, 0f, 0f, 0f, schedule)
             {
                 Extras = new Tensors.Engines.Compilation.FusedOptimizerExtras
                 {
-                    L1 = (float)(strength / lr),
+                    L1 = l1Threshold,
                 },
+                // Soft-thresholding holds a weight at exactly zero while |w - lr g| <= threshold.
+                UpdateCanBeExactlyZero = true,
             };
+            return true;
+        }
+
+        if (_regularization is L2Regularization<T, TInput, TOutput>)
+        {
+            // The eager step is w' = s * (w - lr * g) with s = 1 - strength (L2Regularization's shrink). The fused SGD
+            // kernel applies L2 weight decay as w' = w * (1 - lr' * wd) - lr' * g, which is the same update exactly when
+            // lr' = s * lr and wd = (1 - s) / (s * lr). That identity needs the configured lr, so only a constant rate
+            // maps, and s = 0 (the prox zeroes every weight) has no finite weight decay.
+            if (schedule is not null) return false;
+            if (!(lr > 0.0) || double.IsInfinity(lr)) return false;
+            double shrink = 1.0 - _regularization.GetOptions().Strength;
+            if (!(shrink > 0.0) || shrink > 1.0) return false;
+            // Checked AFTER narrowing to float, which is what the kernel receives: a tiny lr underflows to 0 and
+            // (1 - s) / (s * lr) overflows to infinity, and either would make the fused step differ from the eager one.
+            float l2Lr = (float)(shrink * lr);
+            float l2WeightDecay = (float)((1.0 - shrink) / (shrink * lr));
+            if (!IsRepresentableFusedRate(l2Lr) || !IsRepresentableFusedWeight(l2WeightDecay)) return false;
+            config = new Fused.FusedOptimizerConfig(
+                Tensors.Engines.Compilation.OptimizerType.SGD,
+                l2Lr,
+                0f, 0f, 0f, l2WeightDecay, schedule);
             return true;
         }
 
         return false;
     }
+
+    /// <summary>A learning rate the fused kernel can apply: positive and finite once narrowed to float.</summary>
+    private static bool IsRepresentableFusedRate(float value) => value > 0f && !float.IsInfinity(value);
+
+    /// <summary>A threshold or decay the fused kernel can apply: non-negative and finite once narrowed to float.</summary>
+    private static bool IsRepresentableFusedWeight(float value) => value >= 0f && !float.IsInfinity(value);
 
     /// <summary>
     /// Configuration options specific to Proximal Gradient Descent optimization.
@@ -260,7 +293,7 @@ public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : Grad
     /// </para>
     /// </remarks>
     public ProximalGradientDescentOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         ProximalGradientDescentOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

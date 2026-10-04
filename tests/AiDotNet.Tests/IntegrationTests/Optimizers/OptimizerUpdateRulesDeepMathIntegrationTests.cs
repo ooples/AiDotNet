@@ -480,17 +480,14 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
             Epsilon = 1e-8
         };
 
-        // AMSGrad requires a model - we need to check if it works with null model
-        // If it throws, we'll use a workaround
-        try
-        {
-            var optimizer = new AMSGradOptimizer<double, Matrix<double>, Vector<double>>(
-                null!, options);
+        // Built for a bare parameter vector (no model), so UpdateParameters always runs and the assertion is
+        // unconditional: a construction or update failure fails the test instead of passing it silently.
+        var optimizer = AMSGradOptimizer<double, Matrix<double>, Vector<double>>.CreateForFunction(options);
 
-            var parameters = new Vector<double>(new double[] { 1.0, 2.0 });
-            var gradient = new Vector<double>(new double[] { 0.1, -0.2 });
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0 });
+        var gradient = new Vector<double>(new double[] { 0.1, -0.2 });
 
-            var result = optimizer.UpdateParameters(parameters, gradient);
+        var result = optimizer.UpdateParameters(parameters, gradient);
 
             // Step 1 with the default BiasCorrection = Paper: Reddi, Kale and Kumar (2018), "On the Convergence of
             // Adam and Beyond", Algorithm 2, which applies no bias correction to either moment:
@@ -502,13 +499,7 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
             double update0 = 0.001 * m0 / (Math.Sqrt(v0) + 1e-8);
             double expected0 = 1.0 - update0;
 
-            Assert.Equal(expected0, result[0], RelaxedTol);
-        }
-        catch (NullReferenceException)
-        {
-            // If null model causes issues in constructor, skip gracefully
-            // The test still documents the expected behavior
-        }
+        Assert.Equal(expected0, result[0], RelaxedTol);
     }
 
     [Fact(Timeout = 120000)]

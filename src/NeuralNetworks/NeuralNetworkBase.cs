@@ -2914,7 +2914,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Also drop compiled fused training plans and reset sticky-disable
         // so the next training run gets a fresh chance at the fused path.
         Training.CompiledTapeTrainingStep<T>.Invalidate(this);
-        _fusedTrainingDisabled = false;
+        _fusedTrainingDisabled = FusedTrainingDisabledByConfiguration;
         _fusedTrainingCommitted = false;
         _fusedPersistenceVerified = false;
     }
@@ -3206,6 +3206,19 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
+    /// Points every layer that refers to another layer of this network (a tied language-model head) at that layer's
+    /// current instance. Runs whenever the canonical layer list is built or replaced, because construction, clone and
+    /// deserialization each create new layer instances and a stale reference would silently untie the weights.
+    /// </summary>
+    private void BindLayerGraphReferences()
+    {
+        for (int i = 0; i < _layers.Count; i++)
+        {
+            if (_layers[i] is Layers.ILayerGraphBinding<T> binding)
+                binding.BindToLayerGraph(_layers);
+        }
+    }
+    /// <summary>
     /// Transfers generated named-layer views from this source model to a clone whose canonical
     /// <see cref="Layers"/> graph has already been reconstructed.
     /// </summary>
@@ -3306,6 +3319,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         child._layers.Clear();
         child._layers.AddRange(replacements);
         child.RebindLayerAliases(previousChildLayers, child._layers);
+        child.BindLayerGraphReferences();
         child.InvalidateParameterCountCache();
     }
 
@@ -3386,6 +3400,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         destinationChild._layers.Clear();
         destinationChild._layers.AddRange(replacements);
         destinationChild.RebindLayerAliases(previousChildLayers, destinationChild._layers);
+        destinationChild.BindLayerGraphReferences();
         sourceChild.CopyGeneratedLayerAliasesTo(destinationChild);
         destinationChild.InvalidateParameterCountCache();
     }
@@ -3465,6 +3480,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             destination._layers.AddRange(reconstructed);
             destination.InvalidateParameterCountCache();
             destination.RebindLayerAliases(previousDestinationLayers, destination._layers);
+            destination.BindLayerGraphReferences();
             return true;
         }
 
@@ -3540,6 +3556,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         if (pending.Count > 0)
             destination.RebindLayerAliases(previousDestinationLayers, destination._layers);
+        destination.BindLayerGraphReferences();
 
         return true;
     }
@@ -4973,6 +4990,68 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// vector rather than retaining the tensors, so the published surface is already independent of
     /// the plan's buffers by the time this returns.
     /// </remarks>
+    /// <summary>
+    /// Whether a fused step could have moved any parameter, so that finding every parameter unchanged afterwards is
+    /// evidence of a plan that has come loose from the live tensors (ooples/AiDotNet#1822) rather than of a step that
+    /// legitimately did nothing.
+    /// </summary>
+    /// <remarks>
+    /// A step legitimately changes nothing when its learning rate is exactly zero (a warmup that starts at 0, a cosine
+    /// schedule that decays to 0), when every gradient is exactly zero, or when the optimizer's update can itself be
+    /// exactly zero (an L1 proximal step holding weights at zero). Treating those as a decoupled plan disabled fused
+    /// training for the rest of the run and discarded the optimizer's fused state. Anything this cannot establish
+    /// (gradients not observed, the plan's step unknown) counts as "could have moved", so the guard keeps catching a
+    /// genuinely decoupled plan.
+    /// <para>
+    /// An optimizer that CAN produce an exactly-zero update says nothing about whether this step did: a nonzero
+    /// gradient at a nonzero rate usually moves an FTRL or L1-proximal weight. So the capability alone never excuses an
+    /// unchanged step; it does only when the plan's own introspection confirms it updates this model's live
+    /// parameters, which rules out the decoupled plan the guard exists to catch. Without that confirmation the step
+    /// stays eligible to fail the guard, whose worst case is a fallback to the eager tape, not a silent no-op.
+    /// </para>
+    /// </remarks>
+    /// <summary>
+    /// The single global-norm bound equivalent to clipping at <paramref name="first"/> and then at
+    /// <paramref name="second"/>, where 0 (or less) means that clip is off. Returns 0 when both are off.
+    /// </summary>
+    internal static double SmallerPositiveGradNorm(double first, double second)
+    {
+        if (first <= 0.0) return second > 0.0 ? second : 0.0;
+        if (second <= 0.0) return first;
+        return Math.Min(first, second);
+    }
+    private static bool FusedStepCouldHaveMovedParameters(
+        AiDotNet.Optimizers.Fused.FusedOptimizerConfig config,
+        double learningRate,
+        AiDotNet.Tensors.Engines.Compilation.LrSchedule? schedule,
+        bool gradientsObserved,
+        bool anyGradientNonZero,
+        bool planConfirmedAttached)
+    {
+        if (config.UpdateCanBeExactlyZero && planConfirmedAttached) return false;
+        if (gradientsObserved && !anyGradientNonZero) return false;
+
+        if (schedule is null)
+            return learningRate != 0f;
+
+        // The plan evaluates its schedule at its own 1-based step; when that step is known, so is this step's rate.
+        return !Training.CompiledTapeTrainingStep<T>.TryGetPlanOptimizerStep(out int step)
+            || schedule.GetLr(step) != 0.0;
+    }
+
+    private bool AnyGradientNonZero(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+    {
+        foreach (var gradient in grads.Values)
+        {
+            if (gradient is null) continue;
+            var span = gradient.AsSpan();
+            for (int i = 0; i < span.Length; i++)
+            {
+                if (!NumOps.Equals(span[i], NumOps.Zero)) return true;
+            }
+        }
+        return false;
+    }
     private void ScatterFusedGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
     {
         PublishParameterGradients(grads);
@@ -5292,6 +5371,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             if (!_layerOnlyInitialized && Layers.Count == 0)
             {
                 InitializeLayers();
+                BindLayerGraphReferences();
                 ReconcileCanonicalNestedNetworkLayerViews();
                 ReportLayerContractMismatches();
             }
@@ -5314,6 +5394,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
             // Initialize network-specific layers
             InitializeLayers();
+            BindLayerGraphReferences();
             ReconcileCanonicalNestedNetworkLayerViews();
             ReportLayerContractMismatches();
 
@@ -9532,6 +9613,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         try
         {
             RebindLayerAliases(previous, _layers);
+            BindLayerGraphReferences();
         }
         catch (InvalidOperationException)
         {
@@ -12134,6 +12216,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     protected bool _fusedTrainingDisabled;
 
     /// <summary>
+    /// Whether the model's own configuration turns the fused optimizer step off, as opposed to a failure having
+    /// turned it off for the rest of a run. Resets restore this value rather than <c>false</c>, so a reset, a new
+    /// training optimizer or a layer change never re-enables a path the caller disabled on purpose.
+    /// </summary>
+    protected virtual bool FusedTrainingDisabledByConfiguration => false;
+
+    /// <summary>
     /// Whether this model is eligible for the compile-once/replay-many fused
     /// compiled training path (<see cref="Training.CompiledTapeTrainingStep{T}.TryStepWithFusedOptimizer"/>).
     /// Default <c>true</c>. Override to <c>false</c> for models whose forward
@@ -12422,6 +12511,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return acc;
     }
 
+    private static IEnumerable<Tensor<T>> EnumerateFusedLiveParameters(
+        IReadOnlyList<ITrainableLayer<T>> layers,
+        IReadOnlyList<Tensor<T>>? extraParameters)
+    {
+        for (int layerIndex = 0; layerIndex < layers.Count; layerIndex++)
+        {
+            foreach (var parameter in layers[layerIndex].GetTrainableParameters())
+            {
+                if (parameter is not null) yield return parameter;
+            }
+        }
+        if (extraParameters is null) yield break;
+        for (int i = 0; i < extraParameters.Count; i++) yield return extraParameters[i];
+    }
+
     private double FusedTrainableParamChecksum(
         IReadOnlyList<ITrainableLayer<T>> layers,
         IReadOnlyList<Tensor<T>>? extraParameters)
@@ -12533,17 +12637,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             return EmitFusedMissAndFallback($"optimizer {resolvedOptimizer.GetType().Name} not compatible with fused kernel");
 
         var fusedType = fusedCfg.Type;
-        float lr = fusedCfg.LearningRate;
-        float b1 = fusedCfg.Beta1;
-        float b2 = fusedCfg.Beta2;
-        float eps = fusedCfg.Epsilon;
-        float wd = fusedCfg.WeightDecay;
+        double lr = fusedCfg.LearningRate;
+        double b1 = fusedCfg.Beta1;
+        double b2 = fusedCfg.Beta2;
+        double eps = fusedCfg.Epsilon;
+        double wd = fusedCfg.WeightDecay;
         var lrSched = fusedCfg.Schedule;
         bool useBf16Moments = fusedCfg.UseBf16Moments;
-        // The eager path clips twice: the model's MaxGradNorm in TrainWithTape, then the optimizer's own
-        // global-norm clip inside its Step. Two successive global-norm clips equal one clip at the smaller
-        // bound, so the compiled plan gets that one. Passing only the model's bound let the fused step skip
-        // the optimizer's clip, a different training whenever a gradient sits near Adam's epsilon.
+        // The eager path clips twice: the model's MaxGradNorm in TrainWithTape, then the optimizer's own global-norm
+        // clip inside its Step. Two successive global-norm clips equal one clip at the smaller bound, so the compiled
+        // plan gets that one. Passing only the model's bound let the fused step skip the optimizer's clip: a different
+        // training whenever a gradient sits near Adam's epsilon.
         double fusedMaxGradNorm = SmallerPositiveGradNorm(MaxGradNormValue, fusedCfg.MaxGradientNorm);
 
         // Use the existing recursive trainable-layer collector instead of the
@@ -12672,6 +12776,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 : FusedTrainableParamChecksum(trainableLayers, fusedExtraParameters);
         }
 
+        // Whether this step's gradients were seen, and whether any was non-zero: a step whose gradients are all exactly
+        // zero cannot move a parameter, so leaving them unchanged is not evidence of a decoupled plan. Only recorded on
+        // probe steps, where it is needed.
+        bool fusedGradientsObserved = false;
+        bool fusedGradientNonZero = false;
+        void OnFusedGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+        {
+            if (verifyFusedPersistence)
+            {
+                fusedGradientsObserved = true;
+                fusedGradientNonZero = AnyGradientNonZero(grads);
+            }
+            ScatterFusedGradients(grads);
+        }
+
         bool ran;
         T lossValue;
         try
@@ -12708,7 +12827,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 // updates parameters in-replay and returns without ever passing through the eager
                 // gradient code below, which is why the surface stayed empty for every model that
                 // engages fusion -- the largest single cause of the all-zero gradient reports.
-                onGradients: ScatterFusedGradients,
+                onGradients: OnFusedGradients,
                 trainableSelection: selectedParameters,
                 owner: this);
         }
@@ -12733,6 +12852,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     ? FusedTrainableParamChecksum(selectedParameters)
                     : FusedTrainableParamChecksum(trainableLayers, fusedExtraParameters);
                 bool persisted = fusedParamChecksumAfter != fusedParamChecksumBefore;
+                // The plan reports which tensors its update writes. Any that is not a live parameter of this model
+                // proves the plan has come loose, even on a step that could legitimately have moved nothing, where
+                // the checksum alone is inconclusive.
+                bool? planTrainsLiveParameters = Training.CompiledTapeTrainingStep<T>.ConfiguredPlanTrainsLiveParameters(
+                    selectedParameters ?? EnumerateFusedLiveParameters(trainableLayers, fusedExtraParameters));
+                bool planDetached = planTrainsLiveParameters == false;
                 // Do NOT gate on fusedParamChecksumBefore != 0.0: the checksum is a sum of
                 // squares, so 0.0 means every trainable parameter starts exactly at zero. A
                 // non-persisting fused step then leaves it at 0.0 too (persisted == false),
@@ -12745,7 +12870,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 // regression fixture) therefore made Train() return successfully without
                 // changing a single parameter. Treat every non-persisting first step as an
                 // unsafe plan and retry it through the eager tape in this same Train() call.
-                if (!persisted)
+                if (!persisted && !planDetached
+                    && !FusedStepCouldHaveMovedParameters(fusedCfg, lr, lrSched, fusedGradientsObserved, fusedGradientNonZero,
+                        planTrainsLiveParameters == true))
+                {
+                    // Inconclusive, not a failure: this step could not have moved anything (zero learning rate, all-zero
+                    // gradients, or an optimizer whose update is legitimately exactly zero). Leave the plan unverified and
+                    // re-probe on the next step, so a truly decoupled plan is still caught the first time it should move.
+                    _fusedStepsSincePersistenceCheck = FusedPersistenceRecheckInterval;
+                }
+                else if (!persisted || planDetached)
                 {
                     if (_fusedTrainingCommitted)
                     {
@@ -12781,10 +12915,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     }
                     return false; // fall through to the eager tape path in TrainWithTape
                 }
-                // Proven to persist for THIS PLAN, for now. Re-armed rather than latched off, so a
-                // plan that later decouples from the live parameter tensors is still caught.
-                _fusedPersistenceVerified = true;
-                _fusedStepsSincePersistenceCheck = 0;
+                else
+                {
+                    // Proven to persist for THIS PLAN, for now. Re-armed rather than latched off, so a
+                    // plan that later decouples from the live parameter tensors is still caught.
+                    _fusedPersistenceVerified = true;
+                    _fusedStepsSincePersistenceCheck = 0;
+                }
             }
 
             LastLoss = lossValue;
@@ -12924,6 +13061,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // mid-run. Cleared on next ResetState/InvalidateParameterCountCache.
             _fusedTrainingDisabled = true;
         }
+        // A fused step ran the schedule inside the plan; the optimizer's own step and learning rate (what
+        // GetCurrentLearningRate, checkpoints and callers read) advance here, as the eager and streaming paths do.
+        // The streaming fallback above has already stepped them and returns before reaching this.
+        if (ran) StepSchedulerIfSupported(resolvedOptimizer);
         return ran;
     }
 
@@ -13084,28 +13225,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
-    /// The single global-norm bound equivalent to clipping at <paramref name="first"/> and then at
-    /// <paramref name="second"/>, where 0 (or less) means that clip is off. Returns 0 when both are off.
-    /// </summary>
-    internal static double SmallerPositiveGradNorm(double first, double second)
-    {
-        if (first <= 0.0) return second > 0.0 ? second : 0.0;
-        if (second <= 0.0) return first;
-        return Math.Min(first, second);
-    }
-
-    /// <summary>
     /// Legacy out-parameter shape, retained so the existing fused call sites keep compiling while they
     /// migrate to the config-returning overload above. New code should use that one.
     /// </summary>
     internal static bool TryMapToFusedOptimizerConfig(
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
         out AiDotNet.Tensors.Engines.Compilation.OptimizerType optimizerType,
-        out float learningRate,
-        out float beta1,
-        out float beta2,
-        out float epsilon,
-        out float weightDecay,
+        out double learningRate,
+        out double beta1,
+        out double beta2,
+        out double epsilon,
+        out double weightDecay,
         out AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule,
         out bool useBf16Moments)
     {
@@ -14014,22 +14144,23 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     internal virtual void SetBaseTrainOptimizer(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
     {
         // Interface-typed, so != is reference identity; ReferenceEquals would box a struct implementation and never match.
-        bool replaced = _baseTrainOptimizer != optimizer;
-        _baseTrainOptimizer = optimizer;
-        _baseTrainOptimizerExplicitlyConfigured = optimizer is not null;
-        _baseTrainOptimizerLearningRate = null;
-
-        // A different optimizer is a new trajectory the caller asked for, so the fused plan built for the old one
-        // (its moments live inside the plan) must go, exactly as ResetBaseTrainOptimizerState does. Leaving it
-        // committed made the next step refuse outright: the plan could not engage with the new optimizer, and the
-        // committed-plan guard forbids the eager fallback, so Train threw after any mid-run optimizer swap.
-        if (replaced)
+        if (_baseTrainOptimizer != optimizer)
         {
+            // The fused plan holds the PREVIOUS optimizer's moments. A different optimizer instance starts from its
+            // own (fresh) state, as it would eagerly, so this model's compiled optimizer state is dropped rather than
+            // treated as hyperparameter drift on a committed plan, which refuses the next step.
             Training.CompiledTapeTrainingStep<T>.Invalidate(this);
             _fusedTrainingCommitted = false;
             _fusedPersistenceVerified = false;
+            // A sticky disable protected the previous optimizer's moments from a fused re-engagement mid-run. The new
+            // optimizer has no such moments, so it gets the configured default rather than inheriting the disable.
+            _fusedTrainingDisabled = FusedTrainingDisabledByConfiguration;
         }
+        _baseTrainOptimizer = optimizer;
+        _baseTrainOptimizerExplicitlyConfigured = optimizer is not null;
+        _baseTrainOptimizerLearningRate = null;
     }
+
 
     /// <summary>
     /// Clears momentum and other optimizer history while preserving the configured optimizer.
@@ -14711,7 +14842,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Also clear the fused-commitment: ResetState is an explicit
         // "start training over" signal, so any plan-embedded Adam/SGD state
         // is no longer needed, and the next run can engage fused fresh.
-        _fusedTrainingDisabled = false;
+        _fusedTrainingDisabled = FusedTrainingDisabledByConfiguration;
         _fusedTrainingCommitted = false;
         _fusedPersistenceVerified = false;
     }
@@ -14832,6 +14963,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </summary>
     private byte[] SerializeInternalUnchecked()
     {
+        // Record where layer-to-layer references point (a tied LM head's embedding) before this graph is copied.
+        BindLayerGraphReferences();
         // MATERIALIZE BEFORE WRITING, so the saved form is not a function of the source's
         // materialization state.
         //
@@ -15207,6 +15340,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Repair all generated fields and collections that were views into the old canonical graph.
         // Independent layer members are left alone because rebinding is reference-identity based.
         RebindLayerAliases(previousLayers, _layers);
+        BindLayerGraphReferences();
 
         if (version >= 6) RestoreGeneratedAdditionalLayerState(reader, version);
 
@@ -15588,6 +15722,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
     {
+        // Record where layer-to-layer references point (a tied LM head's embedding) before this graph is copied.
+        BindLayerGraphReferences();
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
 
         var sourceLayout = ParameterLayout;
@@ -15925,6 +16061,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> DeepCopy()
     {
+        // Record where layer-to-layer references point (a tied LM head's embedding) before this graph is copied.
+        BindLayerGraphReferences();
         // A copy is state-identical to its source, INCLUDING its training mode. Every path below
         // restores through the layer deserializer, which deliberately leaves a restored model in
         // inference mode (right for a model loaded from bytes, wrong for a clone). Before training
@@ -16135,6 +16273,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 // objects still belong to the source. Generated aliases must always point at the
                 // destination's canonical graph before its manifest or forward path is observed.
                 largeBase.RebindLayerAliases(_layers, largeBase._layers);
+                largeBase.BindLayerGraphReferences();
                 CopyGeneratedLayerAliasesTo(largeBase);
                 CompleteDeclaredStateRestore(largeBase, largeDeclaredStateEnvelope);
                 largeBase.InvalidateParameterCountCache();
@@ -16293,6 +16432,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         try
         {
             copyBase.RebindLayerAliases(_layers, copyBase._layers);
+            copyBase.BindLayerGraphReferences();
             CopyGeneratedLayerAliasesTo(copyBase);
         }
         catch (InvalidOperationException ex)
@@ -16921,6 +17061,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             try
             {
                 destination.RebindLayerAliases(previousDestinationLayers, destination._layers);
+                destination.BindLayerGraphReferences();
                 CopyGeneratedLayerAliasesTo(destination);
             }
             catch (InvalidOperationException ex)
@@ -17187,6 +17328,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     public virtual IFullModel<T, Tensor<T>, Tensor<T>> Clone()
     {
+        // Record where layer-to-layer references point (a tied LM head's embedding) before this graph is copied.
+        BindLayerGraphReferences();
         // By default, Clone behaves the same as DeepCopy
         return DeepCopy();
     }

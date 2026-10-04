@@ -158,13 +158,13 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             _options.UseAMSGrad
                 ? Tensors.Engines.Compilation.OptimizerType.AMSGrad
                 : Tensors.Engines.Compilation.OptimizerType.Adam,
-            (float)GetCurrentLearningRate(),
-            (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
+            GetCurrentLearningRate(),
+            _options.Beta1, _options.Beta2, _options.Epsilon,
             0f, schedule)
         {
-            // The eager tape step clips by global norm before the update (ApplyGlobalNormGradientClipping);
-            // the compiled plan must apply the same clip or the two paths train differently. The tape step
-            // ignores ByValue, so only ByNorm is carried.
+            // The eager tape step clips by global norm before the update (ApplyGlobalNormGradientClipping); the
+            // compiled plan must apply the same clip or the two paths train differently. The tape step ignores
+            // ByValue, so only ByNorm is carried.
             MaxGradientNorm = GradientOptions.EnableGradientClipping
                 && GradientOptions.GradientClippingMethod == GradientClippingMethod.ByNorm
                     ? GradientOptions.MaxGradientNorm
@@ -1525,7 +1525,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// dictionary. Computes the global L2 norm
     /// <c>sqrt(Σ_p ‖grad_p‖²)</c> across all parameter gradients; if that
     /// norm exceeds <paramref name="maxNorm"/>, every gradient is scaled
-    /// by <c>maxNorm / globalNorm</c> in place so the post-clip global norm
+    /// by <c>maxNorm / (globalNorm + 1e-6)</c> (PyTorch clip_grad_norm_) in place so the post-clip global norm
     /// is exactly <paramref name="maxNorm"/>. Mirrors
     /// <c>torch.nn.utils.clip_grad_norm_(params, max_norm)</c>.
     /// </summary>
@@ -1631,8 +1631,9 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         if (globalNorm <= maxNorm || globalNorm == 0.0 || double.IsNaN(globalNorm) || double.IsInfinity(globalNorm))
             return;
 
-        // Pass 2: scale every gradient by (maxNorm / globalNorm) in place.
-        double scale = maxNorm / globalNorm;
+        // Pass 2: scale every gradient in place by PyTorch's clip_grad_norm_ coefficient,
+        // max_norm / (total_norm + 1e-6), the same one the network clip and the fused plan apply.
+        double scale = maxNorm / (globalNorm + 1e-6);
         foreach (var kvp in context.Gradients)
         {
             var grad = kvp.Value;

@@ -48,7 +48,9 @@ public static class Gemma2ModelBuilder<T>
         int vocab = config.VocabSize;
         int maxPos = config.MaxPositionEmbeddings;
 
-        var embedding = new EmbeddingLayer<T>(vocab, hidden);
+        // Gemma multiplies token embeddings by sqrt(hidden). Hugging Face does it at runtime, so it is the embedding's
+        // output scale here, not baked into the table: a tied LM head must read the raw weights.
+        var embedding = new EmbeddingLayer<T>(vocab, hidden, outputScale: Math.Sqrt(hidden));
         var layers = new List<ILayer<T>> { embedding };
 
         var blocks = new Gemma2DecoderBlock<T>[config.NumHiddenLayers];
@@ -67,7 +69,7 @@ public static class Gemma2ModelBuilder<T>
 
         var finalNorm = new RMSNormalizationLayer<T>(hidden, config.RmsNormEps);
         layers.Add(finalNorm);
-        var lmHead = new DenseLayer<T>(vocab, activationFunction: new IdentityActivation<T>());
+        var lmHead = LlamaModelBuilder<T>.CreateLmHead(embedding, config.TieWordEmbeddings, vocab);
         layers.Add(lmHead);
 
         LogitSoftcapLayer<T>? softcap = null;
@@ -87,12 +89,8 @@ public static class Gemma2ModelBuilder<T>
         network.Predict(warmup);
 
         // ---- load pretrained weights ----
-        // Embedding x sqrt(hidden); a tied LM head keeps the UNSCALED embedding (read from source below).
-        var embedData = LlamaModelBuilder<T>.ReadTensor(weights, LlamaModelBuilder<T>.EmbedName, vocab * hidden);
-        var scale = NumOps.FromDouble(Math.Sqrt(hidden));
-        var scaled = new T[embedData.Length];
-        for (int k = 0; k < embedData.Length; k++) scaled[k] = NumOps.Multiply(embedData[k], scale);
-        embedding.SetParameters(new Vector<T>(scaled));
+        // Loaded raw: sqrt(hidden) is the embedding's output scale, so a tied LM head reads the unscaled table.
+        embedding.SetParameters(new Vector<T>(LlamaModelBuilder<T>.ReadTensor(weights, LlamaModelBuilder<T>.EmbedName, vocab * hidden)));
 
         for (int i = 0; i < config.NumHiddenLayers; i++)
         {
@@ -114,12 +112,7 @@ public static class Gemma2ModelBuilder<T>
 
         LlamaModelBuilder<T>.LoadGamma(finalNorm, weights, "model.norm.weight", hidden, addOne: true);
 
-        string headName = LlamaModelBuilder<T>.HasTensor(weights, LlamaModelBuilder<T>.LmHeadName)
-            ? LlamaModelBuilder<T>.LmHeadName : LlamaModelBuilder<T>.EmbedName;
-        if (!config.TieWordEmbeddings && !LlamaModelBuilder<T>.HasTensor(weights, LlamaModelBuilder<T>.LmHeadName))
-            throw new InvalidDataException(
-                "config does not tie word embeddings but lm_head.weight is absent from the checkpoint.");
-        LlamaModelBuilder<T>.LoadDense(lmHead, weights, headName, outDim: vocab, inDim: hidden);
+        LlamaModelBuilder<T>.LoadLmHead(lmHead, weights, vocab, hidden);
 
         return network;
     }

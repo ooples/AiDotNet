@@ -17,11 +17,11 @@ namespace AiDotNet.Optimizers.Fused;
 /// <param name="Schedule">Optional fused-side LR schedule, or null for constant LR.</param>
 internal readonly record struct FusedOptimizerConfig(
     OptimizerType Type,
-    float LearningRate,
-    float Beta1,
-    float Beta2,
-    float Epsilon,
-    float WeightDecay,
+    double LearningRate,
+    double Beta1,
+    double Beta2,
+    double Epsilon,
+    double WeightDecay,
     LrSchedule? Schedule)
 {
     /// <summary>
@@ -37,6 +37,20 @@ internal readonly record struct FusedOptimizerConfig(
     /// </para>
     /// </summary>
     public bool UseBf16Moments { get; init; }
+
+    /// <summary>
+    /// The global-norm gradient clip this optimizer's own eager tape step applies before its update
+    /// (<c>torch.nn.utils.clip_grad_norm_</c> semantics), or 0 when it applies none.
+    /// </summary>
+    /// <remarks>
+    /// The fused kernel never sees the optimizer's <c>Step</c>, so a clip that lives there must be handed to the
+    /// compiled plan explicitly. Without it the two paths train differently, and the difference hides whenever
+    /// gradients are large: Adam's first update is <c>lr * g / (|g| + eps)</c>, so scaling every gradient by one
+    /// factor barely moves it. Where a gradient is near eps (a weight feeding batch-statistics normalization,
+    /// whose output is invariant to that weight's scale) the scale passes straight through to the update.
+    /// Init-only for the same reason as <see cref="UseBf16Moments"/>.
+    /// </remarks>
+    public double MaxGradientNorm { get; init; }
 
     /// <summary>
     /// Optimizer-specific coefficients for the kernels that do not read them from the beta/epsilon
@@ -59,23 +73,15 @@ internal readonly record struct FusedOptimizerConfig(
     public AiDotNet.Tensors.Engines.Compilation.FusedOptimizerExtras? Extras { get; init; }
 
     /// <summary>
-    /// The global-norm gradient clip this optimizer's own eager tape step applies before its update
-    /// (<c>torch.nn.utils.clip_grad_norm_</c> semantics), or 0 when it applies none.
+    /// Whether this optimizer's update can legitimately leave every parameter exactly where it was despite a non-zero
+    /// gradient and learning rate, as an L1 proximal step does when it holds weights at zero (FTRL, proximal L1).
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// The fused kernel never sees the optimizer's <c>Step</c>, so a clip that lives there must be
-    /// handed to the compiled plan explicitly. Without it the two paths train differently, and the
-    /// difference is invisible whenever gradients are large: Adam's first update is
-    /// <c>lr * g / (|g| + eps)</c>, so scaling every gradient by the same factor barely moves it.
-    /// Where a gradient is near eps (a weight feeding batch-statistics normalization, whose output
-    /// is invariant to that weight's scale), the scale passes straight through to the update.
-    /// </para>
-    /// <para>
-    /// Init-only for the same reason as <see cref="UseBf16Moments"/>.
-    /// </para>
+    /// The fused path's persistence probe treats a step that changes no parameter as a compiled plan that has come
+    /// loose from the live tensors (ooples/AiDotNet#1822). For these optimizers an unchanged step is expected, so the
+    /// probe must not conclude that from it. Init-only for the same reason as <see cref="UseBf16Moments"/>.
     /// </remarks>
-    public double MaxGradientNorm { get; init; }
+    public bool UpdateCanBeExactlyZero { get; init; }
 }
 
 /// <summary>
