@@ -67,6 +67,8 @@ namespace AiDotNet.Audio.LanguageIdentification;
 [ModelTask(ModelTask.Classification)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[PreprocessesInput("The ECAPA-TDNN forward converts the caller's time-major [frames, features] (or [batch, frames, features]) input to channel-first [batch, features, frames] before the first 1-D convolution.")]
+[StackInputLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time)]
 [ResearchPaper("VoxLingua107: A Dataset for Spoken Language Recognition", "https://arxiv.org/abs/2011.12998", Year = 2021, Authors = "Jörgen Valk, Tanel Alumäe")]
 public partial class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILanguageIdentifier<T>
 {

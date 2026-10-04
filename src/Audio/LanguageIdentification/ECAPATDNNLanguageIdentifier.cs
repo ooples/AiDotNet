@@ -63,6 +63,8 @@ namespace AiDotNet.Audio.LanguageIdentification;
 [ModelTask(ModelTask.Embedding)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[PreprocessesInput("The ECAPA-TDNN forward converts the caller's time-major [frames, features] (or [batch, frames, features]) input to channel-first [batch, features, frames] before the first 1-D convolution.")]
+[StackInputLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time)]
 [ResearchPaper("ECAPA-TDNN: Emphasized Channel Attention, Propagation and Aggregation in TDNN Based Speaker Verification", "https://arxiv.org/abs/2005.07143", Year = 2020, Authors = "Brecht Desplanques, Jenthe Thienpondt, Kris Demuynck")]
 [PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-3, MinLearningRate = 1e-8,
                 WeightDecay = 2e-5, Schedule = LearningRateSchedulerType.Cyclic,
