@@ -73,6 +73,11 @@ internal sealed class MiaVsrNetwork<T>
     // owning model sets its learning-rate scale (0 while frozen) and whether the photometric loss trains it.
     private SpyNetLayer<T> _flow;
     private readonly SpyNetLayer<T>? _flowSource;
+    // Gumbel noise is a function of (seed, training step, mask position), not of draw order, so a compiled
+    // replay that runs the masks in another order samples exactly what the eager tape does, and every
+    // forward of one optimizer step (a step may evaluate the objective more than once) shares one draw.
+    private readonly NoiseClock _noiseClock;
+    private int? _noiseSeed;
     private readonly List<AttentionBlock[]> _branchBlocks = new();
     private readonly List<ConvolutionalLayer<T>> _branchConvs = new();
     private readonly List<(ConvolutionalLayer<T> Conv, PixelShuffleLayer<T> Shuffle)> _upsample = new();
@@ -122,6 +127,7 @@ internal sealed class MiaVsrNetwork<T>
         _flowSource = flowEstimator;
         _reconChannels = options.ReconstructionChannels;
         _temperature = options.GumbelTemperature;
+        _noiseClock = new NoiseClock();
         _relativeIndex = BuildRelativeIndex(_window);
 
         Build();
@@ -234,7 +240,14 @@ internal sealed class MiaVsrNetwork<T>
 
         var alignment = new PatchAlignment(engine, _flow, lowRes, geometry, MinimumFlowSize, _channels,
             trackFlowLoss: training && TrainFlowEstimator);
-        var context = new ForwardContext(training, random, _temperature, DenseInference);
+        NoiseSource? noise = null;
+        if (training)
+        {
+            _noiseSeed ??= random.Next();
+            noise = new NoiseSource(_noiseSeed.Value, _noiseClock, AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive);
+        }
+
+        var context = new ForwardContext(training, noise, _temperature, DenseInference);
         var current = shallow;
         for (int m = 0; m < _branches; m++)
         {
@@ -527,6 +540,7 @@ internal sealed class MiaVsrNetwork<T>
         private readonly int _minimumFlowSize;
         private readonly int _channels;
         private readonly Dictionary<(int From, int To), (double[] Dx, double[] Dy)> _fields = new();
+        private readonly Dictionary<(int From, int To), Tensor<T>> _flows = new();
         private readonly bool _trackFlowLoss;
         private readonly List<Tensor<T>> _flowLosses = new();
         private Tensor<T>? _zeros;
@@ -568,14 +582,93 @@ internal sealed class MiaVsrNetwork<T>
                 return _zeros ??= new Tensor<T>(new[] { _geometry.Tokens, _channels });
             }
 
+            // The hops' flows, in order: frame t to t+step, then on to t+2*step.
+            var flows = new List<Tensor<T>>();
+            for (int hop = 1; _flow is not null && hop <= order; hop++)
+            {
+                flows.Add(FlowTensor(t + (hop - 1) * step, t + hop * step));
+            }
+
+            if (!AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+            {
+                var fields = new List<(double[] Dx, double[] Dy)>(flows.Count);
+                for (int hop = 1; hop <= flows.Count; hop++)
+                {
+                    var key = (t + (hop - 1) * step, t + hop * step);
+                    if (!_fields.TryGetValue(key, out var field))
+                    {
+                        field = ToField(flows[hop - 1]);
+                        _fields[key] = field;
+                    }
+
+                    fields.Add(field);
+                }
+
+                return _engine.TensorIndexSelect(neighbour, ShiftedPartition(fields), 0);
+            }
+
+            // Compiled training: the window shifts depend on this step's flow, so they are computed when the
+            // node replays rather than frozen at trace time. The gather's gradient scatters back to the
+            // neighbour's rows; the shifts are discrete and pass no gradient to the flow.
+            var scope = AiDotNet.Tensors.Engines.Compilation.GraphMode.Current
+                ?? throw new InvalidOperationException("GraphMode reported active without a scope.");
+            var state = new AlignmentReplayState();
+            var inputs = new Tensor<T>[flows.Count + 1];
+            inputs[0] = neighbour;
+            for (int i = 0; i < flows.Count; i++) inputs[i + 1] = flows[i];
+            return scope.RecordVariadic(
+                AiDotNet.Tensors.Engines.Compilation.LazyNodeType.Custom,
+                "MiaVsrPatchAlignment",
+                inputs,
+                neighbour._shape,
+                (replayEngine, output) =>
+                {
+                    var fields = new List<(double[] Dx, double[] Dy)>(inputs.Length - 1);
+                    for (int i = 1; i < inputs.Length; i++) fields.Add(ToField(inputs[i]));
+                    var index = ShiftedPartition(fields);
+                    state.Index = index;
+                    using var noGrad = new NoGradScope<T>();
+                    AiDotNet.Tensors.Engines.DirectGpuTensorEngine.CopyResultInto(
+                        replayEngine, replayEngine.TensorIndexSelect(inputs[0], index, 0), output);
+                },
+                (gradOutput, gradInputs, _, savedState, gradEngine, gradAccumulator) =>
+                {
+                    var replayState = (AlignmentReplayState)savedState[0];
+                    var index = replayState.Index
+                        ?? throw new InvalidOperationException("MIA-VSR alignment backward ran before its forward.");
+                    var source = gradInputs[0];
+                    int columns = source.Shape[1];
+                    var numOps = MathHelper.GetNumericOperations<T>();
+                    var gradSource = new Tensor<T>(source._shape);
+                    for (int row = 0; row < index.Length; row++)
+                    {
+                        int target = index[row];
+                        for (int column = 0; column < columns; column++)
+                        {
+                            gradSource[target, column] = numOps.Add(gradSource[target, column], gradOutput[row, column]);
+                        }
+                    }
+
+                    AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.AccumulateGrad(
+                        gradAccumulator, source, gradSource, gradEngine);
+                },
+                new object[] { state });
+        }
+
+        /// <summary>The gather indices the compiled alignment chose on its latest replay, for its backward.</summary>
+        private sealed class AlignmentReplayState
+        {
+            public Tensor<int>? Index { get; set; }
+        }
+
+        /// <summary>Composes the hops' per-window whole-pixel moves into one shifted window partition.</summary>
+        private Tensor<int> ShiftedPartition(IReadOnlyList<(double[] Dx, double[] Dy)> fields)
+        {
             int windows = _geometry.Windows;
             var offsetY = new int[windows];
             var offsetX = new int[windows];
-            int via = t;
-            for (int hop = 1; _flow is not null && hop <= order; hop++)
+            foreach (var (dx, dy) in fields)
             {
-                int next = t + hop * step;
-                var (dx, dy) = Field(via, next);
                 for (int w = 0; w < windows; w++)
                 {
                     // Mean motion over the window region where the previous hops left it.
@@ -583,11 +676,9 @@ internal sealed class MiaVsrNetwork<T>
                     offsetX[w] += (int)Math.Round(mx);
                     offsetY[w] += (int)Math.Round(my);
                 }
-
-                via = next;
             }
 
-            return _engine.TensorIndexSelect(neighbour, _geometry.ShiftedPartition(offsetY, offsetX), 0);
+            return _geometry.ShiftedPartition(offsetY, offsetX);
         }
 
         private (double Dx, double Dy) WindowMean(double[] dx, double[] dy, int windowIndex, int shiftY, int shiftX)
@@ -615,9 +706,10 @@ internal sealed class MiaVsrNetwork<T>
             return count == 0 ? (0, 0) : (sumX / count, sumY / count);
         }
 
-        private (double[] Dx, double[] Dy) Field(int from, int to)
+        /// <summary>SPyNet flow from frame <paramref name="from"/> to <paramref name="to"/>, estimated once per pair.</summary>
+        private Tensor<T> FlowTensor(int from, int to)
         {
-            if (_fields.TryGetValue((from, to), out var cached)) return cached;
+            if (_flows.TryGetValue((from, to), out var cached)) return cached;
 
             var g = _geometry;
             int flowH = Math.Max(g.Height, _minimumFlowSize), flowW = Math.Max(g.Width, _minimumFlowSize);
@@ -643,6 +735,16 @@ internal sealed class MiaVsrNetwork<T>
                 }
             }
 
+            _flows[(from, to)] = flow;
+            return flow;
+        }
+
+        /// <summary>The per-token motion of a realized flow, with non-finite values treated as no motion.</summary>
+        private (double[] Dx, double[] Dy) ToField(Tensor<T> flow)
+        {
+            var g = _geometry;
+            int flowH = flow.Shape[2], flowW = flow.Shape[3];
+            var numOps = MathHelper.GetNumericOperations<T>();
             var dx = new double[g.Tokens];
             var dy = new double[g.Tokens];
             int plane = flowH * flowW;
@@ -662,9 +764,7 @@ internal sealed class MiaVsrNetwork<T>
                 }
             }
 
-            var field = (dx, dy);
-            _fields[(from, to)] = field;
-            return field;
+            return (dx, dy);
         }
 
         private Tensor<T> Fit(Tensor<T> frame, int height, int width, T zero)
@@ -674,22 +774,73 @@ internal sealed class MiaVsrNetwork<T>
         }
     }
 
+    /// <summary>
+    /// Starts a new optimizer step: every training forward until the next call samples the same masks. The
+    /// owning model calls this once per step, on both the eager and the compiled path, so the replayed noise
+    /// nodes read the same step the eager forward would.
+    /// </summary>
+    public void BeginTrainingStep() => _noiseClock.Step++;
+    /// <summary>The training-step counter that seeds every mask's noise.</summary>
+    private sealed class NoiseClock
+    {
+        public long Step { get; set; }
+    }
+
+    /// <summary>One training forward's noise: the seed, the step clock, and the next mask position.</summary>
+    private sealed class NoiseSource
+    {
+        private int _nextOrdinal;
+
+        public NoiseSource(int seed, NoiseClock clock, bool compiled)
+        {
+            Seed = seed;
+            Clock = clock;
+            Compiled = compiled;
+        }
+
+        public int Seed { get; }
+        public NoiseClock Clock { get; }
+        /// <summary>True while a compiled graph is being traced: the noise is then drawn when the node replays.</summary>
+        public bool Compiled { get; }
+
+        public int NextOrdinal() => _nextOrdinal++;
+
+        /// <summary>A generator for mask <paramref name="ordinal"/> at the clock's current step.</summary>
+        public Random For(int ordinal) => AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Mix(Seed, Clock.Step, ordinal));
+
+        private static int Mix(int seed, long step, int ordinal)
+        {
+            // SplitMix64 finalizer over the three coordinates.
+            unchecked
+            {
+                ulong z = ((ulong)(uint)seed * 0x9E3779B97F4A7C15UL)
+                    ^ ((ulong)step * 0xBF58476D1CE4E5B9UL)
+                    ^ ((ulong)(uint)ordinal * 0x94D049BB133111EBUL);
+                z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9UL;
+                z = (z ^ (z >> 27)) * 0x94D049BB133111EBUL;
+                z ^= z >> 31;
+                return (int)(z & 0x7FFFFFFFUL);
+            }
+        }
+    }
+
     /// <summary>Per-forward training state: the Gumbel noise source and every soft mask's mean.</summary>
     private sealed class ForwardContext
     {
         private readonly List<Tensor<T>> _maskMeans = new();
 
-        public ForwardContext(bool training, Random random, double temperature, bool denseInference)
+        public ForwardContext(bool training, NoiseSource? noise, double temperature, bool denseInference)
         {
             Training = training;
             DenseInference = denseInference;
-            Random = random;
+            Noise = noise;
             Temperature = temperature;
         }
 
         public bool Training { get; }
         public bool DenseInference { get; }
-        public Random Random { get; }
+        /// <summary>The training forward's noise; null at inference.</summary>
+        public NoiseSource? Noise { get; }
         public double Temperature { get; }
 
         public void AddMaskMean(Tensor<T> mean) => _maskMeans.Add(mean);
@@ -828,20 +979,59 @@ internal sealed class MiaVsrNetwork<T>
         {
             // Two-way Gumbel-softmax: g1 − g2 is logistic, so the soft keep value is σ((s + L)/τ).
             var numOps = MathHelper.GetNumericOperations<T>();
-            var noise = new Tensor<T>(score._shape);
-            for (int i = 0; i < noise.Length; i++)
-            {
-                double u = context.Random.NextDouble();
-                u = Math.Min(Math.Max(u, 1e-10), 1 - 1e-10);
-                noise[i] = numOps.FromDouble(Math.Log(u) - Math.Log(1 - u));
-            }
-
-            var soft = engine.Sigmoid(engine.TensorMultiplyScalar(engine.TensorAdd(score, noise), numOps.FromDouble(1.0 / context.Temperature)));
+            var soft = engine.Sigmoid(engine.TensorMultiplyScalar(AddLogisticNoise(engine, score, context.Noise ?? throw new InvalidOperationException("Training masks need a noise source.")), numOps.FromDouble(1.0 / context.Temperature)));
             context.AddMaskMean(engine.Reshape(engine.ReduceMean(soft, new[] { 0, 1 }, keepDims: false), new[] { 1 }));
 
             // Straight-through: the forward uses the binary mask, the backward the soft one.
             var hard = engine.TensorGreaterThan(engine.StopGradient(soft), numOps.FromDouble(0.5));
             return engine.TensorAdd(hard, engine.TensorSubtract(soft, engine.StopGradient(soft)));
+        }
+
+        /// <summary>
+        /// score + L with logistic noise L for this mask's position at the current training step. Under
+        /// compiled training the noise is drawn when the node replays, reading the step the model began, so every
+        /// step samples new masks exactly as the eager tape does; the noise does not depend on the score, so
+        /// the gradient passes straight through.
+        /// </summary>
+        private static Tensor<T> AddLogisticNoise(IEngine engine, Tensor<T> score, NoiseSource noise)
+        {
+            int ordinal = noise.NextOrdinal();
+            if (!noise.Compiled)
+            {
+                return engine.TensorAdd(score, LogisticNoise(score._shape, noise.For(ordinal)));
+            }
+
+            var scope = AiDotNet.Tensors.Engines.Compilation.GraphMode.Current
+                ?? throw new InvalidOperationException("A compiled noise clock was recorded outside GraphMode.");
+            var captured = score;
+            return scope.RecordUnary(
+                AiDotNet.Tensors.Engines.Compilation.LazyNodeType.Custom,
+                "MiaVsrLogisticNoise",
+                score,
+                score._shape,
+                (replayEngine, output) =>
+                {
+                    using var noGrad = new NoGradScope<T>();
+                    var perturbed = replayEngine.TensorAdd(captured, LogisticNoise(captured._shape, noise.For(ordinal)));
+                    AiDotNet.Tensors.Engines.DirectGpuTensorEngine.CopyResultInto(replayEngine, perturbed, output);
+                },
+                (gradOutput, inputs, _, _, gradEngine, gradAccumulator) =>
+                    AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.AccumulateGrad(
+                        gradAccumulator, inputs[0], gradOutput, gradEngine));
+        }
+
+        private static Tensor<T> LogisticNoise(int[] shape, Random random)
+        {
+            var numOps = MathHelper.GetNumericOperations<T>();
+            var noise = new Tensor<T>(shape);
+            for (int i = 0; i < noise.Length; i++)
+            {
+                double u = random.NextDouble();
+                u = Math.Min(Math.Max(u, 1e-10), 1 - 1e-10);
+                noise[i] = numOps.FromDouble(Math.Log(u) - Math.Log(1 - u));
+            }
+
+            return noise;
         }
 
         private static Tensor<T> Blend(IEngine engine, Tensor<T> fresh, Tensor<T> previous, Tensor<T> keep)

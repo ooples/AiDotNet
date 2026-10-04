@@ -196,7 +196,11 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
     /// The training forward samples Gumbel keep-masks and records their mean, which
     /// <see cref="ConsumeAuxiliaryTapeLoss"/> hands to the objective as λ·L_mask.
     /// </remarks>
-    public override Tensor<T> ForwardForTraining(Tensor<T> input) => ForwardNative(input, training: true);
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (_stepDepth == 0 && _network is not null) BeginTrainingStep();
+        return ForwardNative(input, training: true);
+    }
 
     /// <inheritdoc />
     /// <remarks>
@@ -209,14 +213,6 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
         _pendingMaskLoss = null;
         return term;
     }
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// MIA-VSR's graph is dynamic: it recurs over frames, samples fresh Gumbel noise every step and
-    /// keeps or drops positions by a data-dependent mask. A traced and replayed graph would freeze one
-    /// step's masks and noise, so training runs on the eager tape.
-    /// </remarks>
-    protected override bool SupportsFusedCompiledTraining => false;
 
     private bool _lazyShapesProbed;
     private bool _lazyShapesProbing;
@@ -261,13 +257,9 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
         double maskWeight = RequireNonNegativeFinite(_options.MaskLossWeight, nameof(MIAVSROptions.MaskLossWeight));
         double flowWeight = RequireNonNegativeFinite(_options.FlowLossWeight, nameof(MIAVSROptions.FlowLossWeight));
 
-        double flowRateScale = 0.0;
-        bool trainFlow = training && FlowTrainsThisStep(out flowRateScale);
-        network.TrainFlowEstimator = trainFlow;
-        // A frozen estimator runs under NoGradScope, so it has no gradient and the optimizer leaves it alone;
-        // a training one steps at its own fraction of the model's rate.
-        if (trainFlow) network.FlowEstimator.LearningRateScale = flowRateScale;
-
+        // The step's SPyNet phase was decided when the step began (BeginTrainingStep), before a compiled
+        // step chooses between replaying its plan and the eager tape.
+        bool trainFlow = training && network.TrainFlowEstimator;
         var result = network.Forward(input, training, _random, out var maskLoss, out var flowLoss);
         var maskTerm = training && maskLoss is not null && maskWeight > 0
             ? Engine.TensorMultiplyScalar(maskLoss, NumOps.FromDouble(maskWeight))
@@ -329,13 +321,26 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
     public override void TrainWithGradientAccumulation(Tensor<T> input, Tensor<T> target, int batchSize)
     {
         int stepsBefore = _flowTrainingSteps;
-        base.TrainWithGradientAccumulation(input, target, batchSize);
+        bool outermost = _stepDepth == 0;
+        if (outermost) BeginTrainingStep();
+        _stepDepth++;
+        try
+        {
+            base.TrainWithGradientAccumulation(input, target, batchSize);
+        }
+        finally
+        {
+            _stepDepth--;
+        }
+
         if (_flowTrainingSteps == stepsBefore) _flowTrainingSteps++;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        if (_stepDepth == 0) BeginTrainingStep();
+        _stepDepth++;
         SetTrainingMode(true);
         try
         {
@@ -345,7 +350,27 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
         finally
         {
             SetTrainingMode(false);
+            _stepDepth--;
         }
+    }
+
+    // How many step entry points (Train, TrainWithGradientAccumulation) are on the stack; a training forward
+    // outside any is a step of its own.
+    private int _stepDepth;
+
+    /// <summary>
+    /// Begins one optimizer step: new Gumbel noise for its masks, and the step's SPyNet phase. Both are decided
+    /// here, before a compiled step chooses between replaying its plan and the eager tape, because a replay never
+    /// re-runs the forward: a SPyNet fine-tuning at its own learning rate makes the base trainer take the eager
+    /// tape, and a frozen one is estimated off the tape, so it gets no gradient and Adam leaves it in place.
+    /// </summary>
+    private void BeginTrainingStep()
+    {
+        var network = _network ?? throw new InvalidOperationException("MIA-VSR has no native network in ONNX mode.");
+        network.BeginTrainingStep();
+        bool trainFlow = FlowTrainsThisStep(out double rateScale);
+        network.TrainFlowEstimator = trainFlow;
+        if (trainFlow) network.FlowEstimator.LearningRateScale = rateScale;
     }
 
     /// <inheritdoc />
