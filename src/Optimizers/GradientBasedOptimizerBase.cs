@@ -3411,8 +3411,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// in the tape step's <see cref="TapeStepContext{T}.Gradients"/> dictionary.
     /// Mirrors <c>torch.nn.utils.clip_grad_norm_(params, max_norm)</c>:
     /// computes <c>sqrt(Σ_p ‖grad_p‖²)</c>; if it exceeds <paramref name="maxNorm"/>,
-    /// scales every gradient by <c>maxNorm / globalNorm</c> in place so the
-    /// post-clip global norm is exactly <paramref name="maxNorm"/>. Without
+    /// scales every gradient by <c>maxNorm / (globalNorm + 1e-6)</c> (PyTorch clip_grad_norm_) in place so the
+    /// post-clip global norm is <paramref name="maxNorm"/> to within that 1e-6. Without
     /// clipping, randomly-initialised classifiers paired with CrossEntropyLoss
     /// and non-distribution targets diverge in a few iterations (ODISE: initial
     /// MSE 0.24 → final 184.69, 770× explosion). Pre-clipping every tape-path
@@ -3446,7 +3446,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             || double.IsNaN(globalNorm) || double.IsInfinity(globalNorm))
             return;
 
-        double scale = maxNorm / globalNorm;
+        // PyTorch's clip_grad_norm_ coefficient, the same one the network clip and the fused plan apply.
+        double scale = maxNorm / (globalNorm + 1e-6);
         foreach (var kvp in context.Gradients)
         {
             var grad = kvp.Value;
