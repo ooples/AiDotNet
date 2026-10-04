@@ -45,7 +45,7 @@ public sealed class CvNullableComponentReviewTests
             if (!assembly.IsDynamic && !string.IsNullOrEmpty(assembly.Location)) paths.Add(assembly.Location);
         paths.Add(typeof(ModelBase<,,>).Assembly.Location);
         paths.Add(typeof(Tensor<>).Assembly.Location);
-        var references = paths.Select(path => MetadataReference.CreateFromFile(path));
+        var references = paths.Select(path => global::AiDotNet.Tests.Generators.CachedMetadataReference.FromFile(path));
         var compilation = CSharpCompilation.Create(
             "NullableComponentReview_" + Guid.NewGuid().ToString("N"),
             new[] { CSharpSyntaxTree.ParseText(source) }, references,

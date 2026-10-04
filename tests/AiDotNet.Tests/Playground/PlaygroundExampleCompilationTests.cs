@@ -362,7 +362,7 @@ public class PlaygroundExampleCompilationTests
             var path = Path.Combine(runtimeDir, assembly);
             if (File.Exists(path) && addedPaths.Add(path))
             {
-                references.Add(MetadataReference.CreateFromFile(path));
+                references.Add(global::AiDotNet.Tests.Generators.CachedMetadataReference.FromFile(path));
             }
         }
 
@@ -373,7 +373,7 @@ public class PlaygroundExampleCompilationTests
             {
                 if (!assembly.IsDynamic && !string.IsNullOrEmpty(assembly.Location) && addedPaths.Add(assembly.Location))
                 {
-                    references.Add(MetadataReference.CreateFromFile(assembly.Location));
+                    references.Add(global::AiDotNet.Tests.Generators.CachedMetadataReference.FromFile(assembly.Location));
                 }
             }
             catch
@@ -393,7 +393,7 @@ public class PlaygroundExampleCompilationTests
                 {
                     try
                     {
-                        references.Add(MetadataReference.CreateFromFile(dllPath));
+                        references.Add(global::AiDotNet.Tests.Generators.CachedMetadataReference.FromFile(dllPath));
                     }
                     catch
                     {
