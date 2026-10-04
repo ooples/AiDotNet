@@ -6356,9 +6356,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// tensor and clear it, so a later step never re-adds a stale term from an earlier graph.
     /// </para>
     /// <para>
-    /// The term must belong to the forward being trained on. A model that returns one should also
-    /// opt out of fused compiled training (<see cref="SupportsFusedCompiledTraining"/>), whose replay
-    /// of a traced graph would not re-run the forward that produces it.
+    /// The term must belong to the forward being trained on. Fused compiled training traces it with the rest
+    /// of the objective, so a replay recomputes it from the replayed forward; anything inside that forward that
+    /// must change per step (noise, data-dependent indices) has to be a replay-time node, as MIA-VSR's are.
     /// </para>
     /// </remarks>
     protected virtual Tensor<T>? ConsumeAuxiliaryTapeLoss() => null;

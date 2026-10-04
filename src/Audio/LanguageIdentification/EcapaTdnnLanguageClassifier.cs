@@ -89,7 +89,7 @@ internal sealed class EcapaTdnnLanguageClassifier<T>
     public void BindTo(IReadOnlyList<ILayer<T>> layers)
     {
         if (layers is null) throw new ArgumentNullException(nameof(layers));
-        _backbone.BindTo(layers);
+        // The head is checked before the encoder rebinds, so a refused graph leaves the encoder unchanged too.
         int encoderCount = _backbone.Layers.Count;
         if (layers.Count != encoderCount + 2
             || layers[encoderCount] is not BatchNormalizationLayer<T> embeddingNorm
@@ -99,6 +99,8 @@ internal sealed class EcapaTdnnLanguageClassifier<T>
                 "The layer graph does not match the ECAPA-TDNN language classifier layout: expected the " +
                 $"{encoderCount} encoder layers, a BatchNormalizationLayer and a DenseLayer, found {layers.Count} layers.");
         }
+
+        _backbone.BindTo(layers);
 
         bool same = _layers.Count == layers.Count;
         for (int i = 0; same && i < layers.Count; i++)

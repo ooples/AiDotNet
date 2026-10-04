@@ -517,6 +517,7 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
     #region NeuralNetworkBase Abstract Methods
 
     private bool _lazyShapesProbed;
+    private bool _lazyShapesProbing;
 
     /// <inheritdoc/>
     /// <remarks>
@@ -535,8 +536,7 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
             return;
         }
 
-        if (_lazyShapesProbed) return;
-        _lazyShapesProbed = true;
+        if (_lazyShapesProbed || _lazyShapesProbing) return;
 
         int samples = 1;
         int[] kernels = LayerHelper<T>.Wav2Vec2EncoderKernels(_options.FeatureEncoderKernels);
@@ -546,15 +546,26 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
             samples = (samples - 1) * strides[i] + kernels[i];
         }
 
+        _lazyShapesProbing = true;
         bool wasTraining = IsTrainingMode;
-        if (wasTraining) SetTrainingMode(false);
         try
         {
+            if (wasTraining) SetTrainingMode(false);
             _ = ForwardNative(new Tensor<T>(new[] { samples }));
+            // Set only once the probe succeeded: set before it, a throwing probe made every later call return early
+            // with the lazy layers still unresolved and the original error lost.
+            _lazyShapesProbed = true;
         }
         finally
         {
-            if (wasTraining) SetTrainingMode(true);
+            try
+            {
+                if (wasTraining) SetTrainingMode(true);
+            }
+            finally
+            {
+                _lazyShapesProbing = false;
+            }
         }
     }
 
