@@ -114,12 +114,70 @@ public sealed class MultiSlotFusedStep<T> : IDisposable
         float epsilon,
         float weightDecay,
         out T lossValue)
+        => TryStep(parameters, zeroGradAction, freshSlotData, forward, computeLoss,
+            optimizerType, learningRate, beta1, beta2, epsilon, weightDecay, lrSchedule: null, extras: null, out lossValue);
+
+    /// <summary>
+    /// <see cref="TryStep(IReadOnlyList{Tensor{T}}, Action?, IReadOnlyList{Tensor{T}}, Func{IReadOnlyList{Tensor{T}}, Tensor{T}}, Func{Tensor{T}, IReadOnlyList{Tensor{T}}, Tensor{T}}, OptimizerType, float, float, float, float, float, out T)"/>
+    /// with the optimizer's fused LR schedule and kernel extras (from its <c>FusedOptimizerConfig</c>).
+    /// </summary>
+    public bool TryStep(
+        IReadOnlyList<Tensor<T>> parameters,
+        Action? zeroGradAction,
+        IReadOnlyList<Tensor<T>> freshSlotData,
+        Func<IReadOnlyList<Tensor<T>>, Tensor<T>> forward,
+        Func<Tensor<T>, IReadOnlyList<Tensor<T>>, Tensor<T>> computeLoss,
+        OptimizerType optimizerType,
+        float learningRate,
+        float beta1,
+        float beta2,
+        float epsilon,
+        float weightDecay,
+        LrSchedule? lrSchedule,
+        FusedOptimizerExtras? extras,
+        out T lossValue)
+    {
+        if (parameters is null || parameters.Count == 0)
+        {
+            lossValue = MathHelper.GetNumericOperations<T>().Zero;
+            return false;
+        }
+        return TryStep(() => parameters, zeroGradAction, freshSlotData, forward, computeLoss,
+            optimizerType, learningRate, beta1, beta2, epsilon, weightDecay, lrSchedule, extras, out lossValue);
+    }
+
+    /// <summary>
+    /// The step with the trainable set supplied as a PROVIDER, read before the step and again right after the
+    /// first trace. Models whose layers materialize their weights lazily on the first forward (and models that
+    /// hold trainable layers outside <c>Layers</c>) otherwise hand this step a set collected before those tensors
+    /// exist: the plan compiled against placeholders, and the next call saw a different set, recompiled and
+    /// restarted the optimizer. Pass the model's full trainable set (<c>CollectModelTrainableTensors</c>) - the
+    /// set its eager step updates - or the fused step silently freezes whatever it leaves out.
+    /// </summary>
+    public bool TryStep(
+        Func<IReadOnlyList<Tensor<T>>> parameterProvider,
+        Action? zeroGradAction,
+        IReadOnlyList<Tensor<T>> freshSlotData,
+        Func<IReadOnlyList<Tensor<T>>, Tensor<T>> forward,
+        Func<Tensor<T>, IReadOnlyList<Tensor<T>>, Tensor<T>> computeLoss,
+        OptimizerType optimizerType,
+        float learningRate,
+        float beta1,
+        float beta2,
+        float epsilon,
+        float weightDecay,
+        LrSchedule? lrSchedule,
+        FusedOptimizerExtras? extras,
+        out T lossValue)
     {
         ThrowIfDisposed();
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
 
         if (!IsAvailable) return false;
-        if (parameters is null || parameters.Count == 0) return false;
+        if (parameterProvider is null) throw new ArgumentNullException(nameof(parameterProvider));
+        var parameters = parameterProvider();
+        // An empty set before any plan exists can be a lazily-built model: trace first, then read it again.
+        if (parameters is null || (parameters.Count == 0 && _plan is not null)) return false;
         if (freshSlotData is null || freshSlotData.Count == 0) return false;
         if (forward is null) throw new ArgumentNullException(nameof(forward));
         if (computeLoss is null) throw new ArgumentNullException(nameof(computeLoss));
@@ -152,27 +210,16 @@ public sealed class MultiSlotFusedStep<T> : IDisposable
             if (fresh.Length != slot.Length)
                 return false;
             fresh.AsSpan().CopyTo(slot.AsWritableSpan());
+            // AsWritableSpan does not bump the GPU-cache version by contract; a writer must. Without it a device
+            // copy of the previous step's slot (a resident binding) stays "current" after the host data changed.
+            slot.IncrementVersion();
         }
 
         // Cache the (already-deduplicated) parameter list. The caller
         // guarantees dedup — this class doesn't know about the caller's layer
         // structure so it can't do reference-based dedup on its own.
         if (_cachedParameters is null)
-        {
-            _cachedParameters = new Tensor<T>[parameters.Count];
-            for (int i = 0; i < parameters.Count; i++) _cachedParameters[i] = parameters[i];
-            // GPU-residency: mark parameters as GPU-resident so the compiled
-            // plan's optimizer branch takes the GPU Adam path (params stay
-            // on-device across steps).
-            if (typeof(T) == typeof(float)
-                && Environment.GetEnvironmentVariable("AIDOTNET_GPU_RESIDENT_PARAMS") != "0"
-                && (optimizerType == OptimizerType.Adam
-                    || optimizerType == OptimizerType.AdamW
-                    || optimizerType == OptimizerType.SGD))
-            {
-                foreach (var p in _cachedParameters) p.Gpu();
-            }
-        }
+            CacheParameters(parameters, optimizerType);
 
         zeroGradAction?.Invoke();
 
@@ -185,13 +232,29 @@ public sealed class MultiSlotFusedStep<T> : IDisposable
                 using var scope = GraphMode.Enable();
                 var pred = forward(_persistentSlots);
                 var loss = computeLoss(pred, _persistentSlots);
-                _plan = scope.CompileTraining(_cachedParameters, loss);
+                // The trace just ran the model's forward, which is where lazy layers create their weights:
+                // compile against the set as it is NOW, and remember it so the next call does not see a change.
+                var traced = parameterProvider();
+                if (traced is null || traced.Count == 0) return false;
+                if (ParameterSetChanged(traced))
+                {
+                    RememberParameterSet(traced);
+                    CacheParameters(traced, optimizerType);
+                }
+                _plan = scope.CompileTraining(_cachedParameters!, loss);
             }
 
             // Configure optimizer on first Step OR when config changed.
             if (optimizerChanged || _configuredOptimizer is null)
             {
-                _plan.ConfigureOptimizer(optimizerType, learningRate, beta1, beta2, epsilon, weightDecay);
+                // The schedule and extras are applied at configure time, as CompiledTapeTrainingStep does: the
+                // fused kernel evaluates the scheduled LR per step, and extras select the algorithm variant
+                // (Nesterov, decoupled AMSGrad decay, LARS/FTRL constants). Dropping either ran a different
+                // optimizer from the eager one.
+                if (lrSchedule is not null)
+                    _plan.ConfigureOptimizer(optimizerType, lrSchedule, beta1, beta2, epsilon, weightDecay, extras);
+                else
+                    _plan.ConfigureOptimizer(optimizerType, learningRate, beta1, beta2, epsilon, weightDecay, extras);
                 _configuredOptimizer = (optimizerType, learningRate, beta1, beta2, epsilon, weightDecay);
             }
 
@@ -211,6 +274,23 @@ public sealed class MultiSlotFusedStep<T> : IDisposable
         {
             InvalidateCachedPlan();
             return false;
+        }
+    }
+
+    private void CacheParameters(IReadOnlyList<Tensor<T>> parameters, OptimizerType optimizerType)
+    {
+        _cachedParameters = new Tensor<T>[parameters.Count];
+        for (int i = 0; i < parameters.Count; i++) _cachedParameters[i] = parameters[i];
+        // GPU-residency: mark parameters as GPU-resident so the compiled
+        // plan's optimizer branch takes the GPU Adam path (params stay
+        // on-device across steps).
+        if (typeof(T) == typeof(float)
+            && Environment.GetEnvironmentVariable("AIDOTNET_GPU_RESIDENT_PARAMS") != "0"
+            && (optimizerType == OptimizerType.Adam
+                || optimizerType == OptimizerType.AdamW
+                || optimizerType == OptimizerType.SGD))
+        {
+            foreach (var p in _cachedParameters) p.Gpu();
         }
     }
 

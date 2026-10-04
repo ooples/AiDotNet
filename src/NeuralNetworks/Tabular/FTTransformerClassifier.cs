@@ -96,11 +96,12 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
 
         _numClasses = numClasses;
 
-        // Classification head: Linear layer from embedding dimension to number of classes
+        // Classification head: Linear layer from embedding dimension to number of classes. It emits raw
+        // logits (softmax is applied separately); the paper's ReLU comes before it (ActivateForHead).
         _classificationHead = new FullyConnectedLayer<T>(
             EmbeddingDimension,
             numClasses,
-            (IActivationFunction<T>?)null);  // No activation, softmax applied separately
+            new IdentityActivation<T>());
     }
 
     /// <summary>
@@ -115,8 +116,8 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
         var clsOutput = ForwardBackbone(numericalFeatures, categoricalIndices);
         _clsOutputCache = clsOutput;
 
-        // Apply classification head
-        var logits = _classificationHead.Forward(clsOutput);
+        // Apply classification head: Linear(ReLU(LayerNorm(CLS)))
+        var logits = _classificationHead.Forward(ActivateForHead(clsOutput));
         _logitsCache = logits;
 
         return logits;

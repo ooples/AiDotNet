@@ -234,6 +234,7 @@ public class TabularDualImplementationTests
             {
                 if (i + 4 > il.Length) break;
                 int count = BitConverter.ToInt32(il, i);
+                if (count < 0 || i + 4 + ((long)count * 4) > il.Length) break;
                 i += 4 + (count * 4);
                 continue;
             }
@@ -253,51 +254,43 @@ public class TabularDualImplementationTests
         return tokens;
     }
 
+    // Operand sizes from the runtime's own opcode table. A hand-written table missed the 0xFE-prefixed opcodes with no
+    // operand (ceq, cgt, clt, readonly.) and unaligned.'s 1-byte operand, treating them as 4-byte tokens: the walk
+    // then desynchronized, read a garbage switch count and indexed off the array (IndexOutOfRangeException).
+    private static readonly Dictionary<int, System.Reflection.Emit.OperandType> OpcodeOperands = BuildOpcodeTable();
+
+    private static Dictionary<int, System.Reflection.Emit.OperandType> BuildOpcodeTable()
+    {
+        var table = new Dictionary<int, System.Reflection.Emit.OperandType>();
+        foreach (var field in typeof(System.Reflection.Emit.OpCodes).GetFields(BindingFlags.Public | BindingFlags.Static))
+        {
+            if (field.GetValue(null) is System.Reflection.Emit.OpCode op)
+                table[(ushort)op.Value] = op.OperandType;
+        }
+        return table;
+    }
+
     private static int OperandSize(int opcode, byte[] il, int position, out bool isSwitch)
     {
         isSwitch = false;
-
-        switch (opcode)
+        if (!OpcodeOperands.TryGetValue(opcode, out var operand)) return -1;   // unknown opcode: stop, never guess
+        switch (operand)
         {
-            case 0x45: // switch
+            case System.Reflection.Emit.OperandType.InlineSwitch:
                 isSwitch = true;
                 return 0;
-
-            // inline none
-            case 0x00: case 0x01: case 0x02: case 0x03: case 0x04: case 0x05: case 0x06:
-            case 0x07: case 0x08: case 0x09: case 0x0A: case 0x0B: case 0x0C: case 0x0D:
-            case 0x14: case 0x15: case 0x16: case 0x17: case 0x18: case 0x19: case 0x1A:
-            case 0x1B: case 0x1C: case 0x1D: case 0x1E: case 0x25: case 0x26: case 0x2A:
-            case 0x58: case 0x59: case 0x5A: case 0x5B: case 0x5C: case 0x5D: case 0x5E:
-            case 0x5F: case 0x60: case 0x61: case 0x62: case 0x63: case 0x64: case 0x65:
-            case 0x66: case 0x67: case 0x68: case 0x69: case 0x6A: case 0x6B: case 0x6C:
-            case 0x6D: case 0x6E: case 0x82: case 0x83: case 0x84: case 0x85: case 0x86:
-            case 0x87: case 0x88: case 0x89: case 0x8A: case 0x90: case 0x91: case 0x92:
-            case 0x93: case 0x94: case 0x95: case 0x96: case 0x97: case 0x98: case 0x99:
-            case 0x9A: case 0x9B: case 0x9C: case 0x9D: case 0x9E: case 0x9F: case 0xA0:
-            case 0xA1: case 0xA2: case 0xA3: case 0xA4: case 0xB3: case 0xB4: case 0xB5:
-            case 0xB6: case 0xB7: case 0xB8: case 0xB9: case 0xBA: case 0xBB: case 0xBC:
-            case 0xBD: case 0xBE: case 0xBF: case 0xC0: case 0xC1: case 0xC2: case 0xC3:
-            case 0xCE: case 0xCF: case 0xD0: case 0xD1: case 0xD2: case 0xD3: case 0xD4:
-            case 0xD5: case 0xD6: case 0xD7: case 0xDA: case 0xDB: case 0xDC: case 0xDD:
+            case System.Reflection.Emit.OperandType.InlineNone:
                 return 0;
-
-            // inline i1 / var / short branch
-            case 0x0E: case 0x0F: case 0x10: case 0x11: case 0x12: case 0x13: case 0x1F:
-            case 0x2B: case 0x2C: case 0x2D: case 0x2E: case 0x2F: case 0x30: case 0x31:
-            case 0x32: case 0x33: case 0x34: case 0x35: case 0x36: case 0x37: case 0xDE:
+            case System.Reflection.Emit.OperandType.ShortInlineBrTarget:
+            case System.Reflection.Emit.OperandType.ShortInlineI:
+            case System.Reflection.Emit.OperandType.ShortInlineVar:
                 return 1;
-
-            // inline var (2 bytes)
-            case 0xFE0C: case 0xFE0D: case 0xFE0E: case 0xFE0F:
+            case System.Reflection.Emit.OperandType.InlineVar:
                 return 2;
-
-            // inline i8 / r8
-            case 0x21: case 0x23:
+            case System.Reflection.Emit.OperandType.InlineI8:
+            case System.Reflection.Emit.OperandType.InlineR:
                 return 8;
-
             default:
-                // Everything else in use here is a 4-byte operand: tokens, i4, r4, branches.
                 return position + 4 <= il.Length ? 4 : -1;
         }
     }

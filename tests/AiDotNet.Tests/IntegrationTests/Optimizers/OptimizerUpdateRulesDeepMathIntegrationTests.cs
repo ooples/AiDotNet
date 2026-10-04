@@ -468,47 +468,70 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
     #region AMSGrad Tests
 
     [Fact(Timeout = 120000)]
-    public async Task AMSGrad_Step1_HandCalculated()
+    public async Task AMSGrad_TwoSteps_HandCalculated_PyTorchConvention()
     {
-        // AMSGrad step 1 under the paper default: vHat = max(vHat, v) with vHat starting at 0, and no bias
-        // correction (so, unlike Adam, step 1 is not scaled up by 1/(1 - beta^t))
-        var options = new AMSGradOptimizerOptions<double, Matrix<double>, Vector<double>>
+        // AMSGradBiasCorrection.PyTorch, i.e. PyTorch Adam(amsgrad=True): vMax = max(vMax, v); p -= lr * (m / (1-b1^t)) / (sqrt(vMax / (1-b2^t)) + eps).
+        // Every AMSGrad kernel AiDotNet dispatches to (fused CPU, GPU, sparse) uses this; the CPU eager path used to
+        // skip the (1-b2^t) term, a ~31x larger first step than the same model got on the GPU.
+        const double lr = 0.001, b1 = 0.9, b2 = 0.999, eps = 1e-8;
+        var optimizer = new AMSGradOptimizer<double, Matrix<double>, Vector<double>>(null!,
+            new AMSGradOptimizerOptions<double, Matrix<double>, Vector<double>>
+            {
+                InitialLearningRate = lr, Beta1 = b1, Beta2 = b2, Epsilon = eps,
+                // The default is the paper (Reddi et al. 2018, Algorithm 2, no bias correction); this pins the
+                // PyTorch variant, which the fused, GPU and sparse kernels compute. AMSGradBiasCorrectionTests
+                // pins the paper default.
+                BiasCorrection = AiDotNet.Enums.AMSGradBiasCorrection.PyTorch,
+            });
+
+        double[] p = { 1.0, 2.0 };
+        double[][] grads = { new[] { 0.1, -0.2 }, new[] { 0.01, 0.5 } };   // step 2 shrinks g[0]: vMax must hold
+        double[] m = new double[2], v = new double[2], vMax = new double[2];
+        var actual = new Vector<double>(p);
+        for (int t = 1; t <= 2; t++)
         {
-            InitialLearningRate = 0.001,
-            Beta1 = 0.9,
-            Beta2 = 0.999,
-            Epsilon = 1e-8
-        };
-
-        // AMSGrad requires a model - we need to check if it works with null model
-        // If it throws, we'll use a workaround
-        try
-        {
-            var optimizer = new AMSGradOptimizer<double, Matrix<double>, Vector<double>>(
-                null!, options);
-
-            var parameters = new Vector<double>(new double[] { 1.0, 2.0 });
-            var gradient = new Vector<double>(new double[] { 0.1, -0.2 });
-
-            var result = optimizer.UpdateParameters(parameters, gradient);
-
-            // Step 1 with the default BiasCorrection = Paper: Reddi, Kale and Kumar (2018), "On the Convergence of
-            // Adam and Beyond", Algorithm 2, which applies no bias correction to either moment:
-            //   m = 0.1*g, v = 0.001*g^2, vHat = max(0, v) = v, update = lr * m / (sqrt(vHat) + eps)
-            // (This test previously expected m / (1 - beta1) with an uncorrected v: a hybrid that matches neither
-            // the paper nor PyTorch's amsgrad=True. AMSGradBiasCorrectionTests pins both published variants.)
-            double m0 = 0.1 * 0.1;
-            double v0 = 0.001 * 0.01;
-            double update0 = 0.001 * m0 / (Math.Sqrt(v0) + 1e-8);
-            double expected0 = 1.0 - update0;
-
-            Assert.Equal(expected0, result[0], RelaxedTol);
+            var g = grads[t - 1];
+            actual = optimizer.UpdateParameters(actual, new Vector<double>(g));
+            for (int i = 0; i < 2; i++)
+            {
+                m[i] = b1 * m[i] + (1 - b1) * g[i];
+                v[i] = b2 * v[i] + (1 - b2) * g[i] * g[i];
+                vMax[i] = Math.Max(vMax[i], v[i]);
+                p[i] -= lr * (m[i] / (1 - Math.Pow(b1, t))) / (Math.Sqrt(vMax[i] / (1 - Math.Pow(b2, t))) + eps);
+                Assert.Equal(p[i], actual[i], StrictTol);
+            }
         }
-        catch (NullReferenceException)
+        await Task.CompletedTask;
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Nadam_TwoSteps_HandCalculated_DozatAlgorithm2()
+    {
+        // Dozat (2016) Alg. 2 with constant mu = b1 (= PyTorch NAdam at constant momentum, = the fused and GPU
+        // kernels): mBar = b1 * m / (1-b1^(t+1)) + (1-b1) * g / (1-b1^t); p -= lr * mBar / (sqrt(v / (1-b2^t)) + eps).
+        const double lr = 0.002, b1 = 0.9, b2 = 0.999, eps = 1e-8;
+        var optimizer = new NadamOptimizer<double, Matrix<double>, Vector<double>>(null!,
+            new NadamOptimizerOptions<double, Matrix<double>, Vector<double>>
+            { InitialLearningRate = lr, Beta1 = b1, Beta2 = b2, Epsilon = eps });
+
+        double[] p = { 1.0, -0.5 };
+        double[][] grads = { new[] { 0.3, -0.1 }, new[] { -0.2, 0.4 } };
+        double[] m = new double[2], v = new double[2];
+        var actual = new Vector<double>(p);
+        for (int t = 1; t <= 2; t++)
         {
-            // If null model causes issues in constructor, skip gracefully
-            // The test still documents the expected behavior
+            var g = grads[t - 1];
+            actual = optimizer.UpdateParameters(actual, new Vector<double>(g));
+            for (int i = 0; i < 2; i++)
+            {
+                m[i] = b1 * m[i] + (1 - b1) * g[i];
+                v[i] = b2 * v[i] + (1 - b2) * g[i] * g[i];
+                double mBar = b1 * m[i] / (1 - Math.Pow(b1, t + 1)) + (1 - b1) * g[i] / (1 - Math.Pow(b1, t));
+                p[i] -= lr * mBar / (Math.Sqrt(v[i] / (1 - Math.Pow(b2, t))) + eps);
+                Assert.Equal(p[i], actual[i], StrictTol);
+            }
         }
+        await Task.CompletedTask;
     }
 
     [Fact(Timeout = 120000)]

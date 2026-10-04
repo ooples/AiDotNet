@@ -174,6 +174,9 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         _t = 0;
     }
 
+    /// <inheritdoc/>
+    protected override bool SupportsModelOwnStep => true;
+
     /// <summary>
     /// Performs the optimization process using the AMSGrad algorithm.
     /// </summary>
@@ -224,6 +227,7 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
                 // Note: _t is incremented inside UpdateParameters, not here
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;   // the network's own step; see GradientBasedOptimizerBase
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
                 var newSolution = UpdateSolution(currentSolution, gradient);
                 currentSolution = newSolution;
@@ -494,7 +498,7 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         var biasCorrection1Vec = Vector<T>.CreateDefault(_m.Length, biasCorrection1);
         var mHat = (Vector<T>)Engine.Divide(_m, biasCorrection1Vec);
 
-        // Recalculate the update: update = (lr * mHat) / (sqrt(vHat) + epsilon)
+        // Recalculate the update: update = (lr * mHat) / (sqrt(vHat / (1 - beta2^t)) + epsilon)
         var currentLrVec = Vector<T>.CreateDefault(_m.Length, CurrentLearningRate);
         var lrTimesMHat = (Vector<T>)Engine.Multiply(currentLrVec, mHat);
 

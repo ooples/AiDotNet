@@ -98,9 +98,9 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
     {
         _options = options;
         Options = _options;
-        _random = RandomHelper.CreateSeededRandom(42);
+        _random = RandomHelper.CreateSeededRandom(SeedOr(42));
         _lstmLayers = new List<DeepARLstmCellTape<T>>();
-        _head = new DeepARGaussianHead<T>(_options.HiddenSize, seed: 12345);
+        _head = new DeepARGaussianHead<T>(_options.HiddenSize, seed: SeedOr(12345));
 
         ValidateDeepAROptions();
         InitializeModel();
@@ -140,7 +140,7 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         for (int i = 0; i < _options.NumLayers; i++)
         {
             int layerInputSize = (i == 0) ? firstInputSize : _options.HiddenSize;
-            _lstmLayers.Add(new DeepARLstmCellTape<T>(layerInputSize, _options.HiddenSize, 42 + i * 1000));
+            _lstmLayers.Add(new DeepARLstmCellTape<T>(layerInputSize, _options.HiddenSize, SeedOr(42) + i * 1000));
         }
 
         _head = CreateHead();
@@ -155,10 +155,10 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
     {
         string kind = _options.LikelihoodType?.Trim() ?? "Gaussian";
         if (string.Equals(kind, "StudentT", StringComparison.OrdinalIgnoreCase))
-            return new DeepARStudentTHead<T>(_options.HiddenSize, _options.StudentTDegreesOfFreedom, seed: 12345);
+            return new DeepARStudentTHead<T>(_options.HiddenSize, _options.StudentTDegreesOfFreedom, seed: SeedOr(12345));
         if (string.Equals(kind, "Spline", StringComparison.OrdinalIgnoreCase))
-            return new DeepARSplineHead<T>(_options.HiddenSize, seed: 12345);
-        return new DeepARGaussianHead<T>(_options.HiddenSize, seed: 12345);
+            return new DeepARSplineHead<T>(_options.HiddenSize, seed: SeedOr(12345));
+        return new DeepARGaussianHead<T>(_options.HiddenSize, seed: SeedOr(12345));
     }
 
     private IReadOnlyList<Interfaces.ILayer<T>> AllLayers()

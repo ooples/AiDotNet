@@ -60,7 +60,7 @@ public partial class NLinearModel<T> : TimeSeriesModelBase<T>
     {
         _options = options;
         Options = _options;
-        _random = RandomHelper.CreateSeededRandom(42);
+        _random = RandomHelper.CreateSeededRandom(SeedOr(42));
         _l = Math.Max(2, _options.LookbackWindow);
         _w = new double[_l];
         for (int j = 0; j < _l; j++) { _w[j] = 1.0 / _l; }
