@@ -60,7 +60,7 @@ public partial class TiDEModel<T> : TimeSeriesModelBase<T>
     {
         _options = options;
         Options = _options;
-        _random = RandomHelper.CreateSeededRandom(42);
+        _random = RandomHelper.CreateSeededRandom(SeedOr(42));
         _l = Math.Max(2, _options.LookbackWindow);
         _h = Math.Max(1, _options.HiddenSize);
 

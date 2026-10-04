@@ -391,6 +391,9 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         }
     }
 
+    /// <inheritdoc/>
+    protected override bool SupportsModelOwnStep => true;
+
     /// <summary>
     /// Performs the main optimization process using the FTRL algorithm.
     /// </summary>
@@ -435,6 +438,7 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
                 _t++;
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;   // the network's own step; see GradientBasedOptimizerBase
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
                 currentSolution = UpdateSolution(currentSolution, gradient);
             }

@@ -144,6 +144,9 @@ public partial class RAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         _t = 0;
     }
 
+    /// <inheritdoc/>
+    protected override bool SupportsModelOwnStep => true;
+
     /// <summary>
     /// Performs the optimization process using the RAdam algorithm.
     /// </summary>
@@ -188,6 +191,7 @@ public partial class RAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
                 // Note: _t is incremented inside UpdateParameters, not here.
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;   // the network's own step; see GradientBasedOptimizerBase
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
                 var newSolution = UpdateSolution(currentSolution, gradient);
                 currentSolution = newSolution;

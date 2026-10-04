@@ -39,20 +39,6 @@ internal readonly record struct FusedOptimizerConfig(
     public bool UseBf16Moments { get; init; }
 
     /// <summary>
-    /// The global-norm gradient clip this optimizer's own eager tape step applies before its update
-    /// (<c>torch.nn.utils.clip_grad_norm_</c> semantics), or 0 when it applies none.
-    /// </summary>
-    /// <remarks>
-    /// The fused kernel never sees the optimizer's <c>Step</c>, so a clip that lives there must be handed to the
-    /// compiled plan explicitly. Without it the two paths train differently, and the difference hides whenever
-    /// gradients are large: Adam's first update is <c>lr * g / (|g| + eps)</c>, so scaling every gradient by one
-    /// factor barely moves it. Where a gradient is near eps (a weight feeding batch-statistics normalization,
-    /// whose output is invariant to that weight's scale) the scale passes straight through to the update.
-    /// Init-only for the same reason as <see cref="UseBf16Moments"/>.
-    /// </remarks>
-    public double MaxGradientNorm { get; init; }
-
-    /// <summary>
     /// Optimizer-specific coefficients for the kernels that do not read them from the beta/epsilon
     /// slots: LARS (momentum, trust coefficient), FTRL (L1, L2, lr power), ASGD (lambd, alpha, t0) and
     /// Rprop (eta+/eta-, step bounds). Null for every other kernel, which needs none.

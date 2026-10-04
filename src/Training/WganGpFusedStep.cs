@@ -91,6 +91,26 @@ public sealed class WganGpFusedStep<T> : IDisposable
         double epsilon,
         double weightDecay,
         out T lossValue)
+        => TryStep(discParameters, realBatch, fakeBatch, discForward, epsilonSampler, gradientPenaltyWeight,
+            optimizerType, learningRate, beta1, beta2, epsilon, weightDecay, lrSchedule: null, extras: null, out lossValue);
+
+    /// <summary>The same step with the optimizer's fused LR schedule and kernel extras.</summary>
+    public bool TryStep(
+        IReadOnlyList<Tensor<T>> discParameters,
+        Tensor<T> realBatch,
+        Tensor<T> fakeBatch,
+        Func<Tensor<T>, Tensor<T>> discForward,
+        Func<int, Tensor<T>> epsilonSampler,
+        double gradientPenaltyWeight,
+        OptimizerType optimizerType,
+        double learningRate,
+        double beta1,
+        double beta2,
+        double epsilon,
+        double weightDecay,
+        LrSchedule? lrSchedule,
+        FusedOptimizerExtras? extras,
+        out T lossValue)
     {
         ThrowIfDisposed();
         lossValue = Ops.Zero;
@@ -151,7 +171,14 @@ public sealed class WganGpFusedStep<T> : IDisposable
 
             if (optimizerChanged || _configuredOptimizer is null)
             {
-                _plan.ConfigureOptimizer(optimizerType, learningRate, beta1, beta2, epsilon, weightDecay);
+                // The schedule and extras are applied at configure time, as CompiledTapeTrainingStep does: the
+                // fused kernel evaluates the scheduled LR per step, and extras select the algorithm variant
+                // (Nesterov, decoupled AMSGrad decay, LARS/FTRL constants). Dropping either ran a different
+                // optimizer from the eager one.
+                if (lrSchedule is not null)
+                    _plan.ConfigureOptimizer(optimizerType, lrSchedule, beta1, beta2, epsilon, weightDecay, extras);
+                else
+                    _plan.ConfigureOptimizer(optimizerType, learningRate, beta1, beta2, epsilon, weightDecay, extras);
                 _configuredOptimizer = (optimizerType, learningRate, beta1, beta2, epsilon, weightDecay);
             }
 
