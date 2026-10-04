@@ -20,7 +20,7 @@ public class FacadeConfigurationValidationGeneratorTests
         {
             if (assembly.IsDynamic || string.IsNullOrEmpty(assembly.Location) || !seen.Add(assembly.Location))
                 continue;
-            references.Add(MetadataReference.CreateFromFile(assembly.Location));
+            references.Add(global::AiDotNet.Tests.Generators.CachedMetadataReference.FromFile(assembly.Location));
         }
         return references.ToImmutableArray();
     }
