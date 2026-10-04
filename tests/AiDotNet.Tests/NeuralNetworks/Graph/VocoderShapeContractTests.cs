@@ -145,10 +145,7 @@ public class VocoderShapeContractTests
             InputType.TwoDimensional, NeuralNetworkTaskType.Regression,
             inputHeight: 80, inputWidth: Frames, outputSize: 1);
 
-        var pars = ctor.GetParameters();
-        var args = new object?[pars.Length];
-        args[0] = architecture;
-        for (int i = 1; i < pars.Length; i++) args[i] = pars[i].DefaultValue;
+        var args = ModelSweepConstruction.Arguments(ctor.GetParameters(), architecture);
 
         try { return ctor.Invoke(args); }
         catch { return null; }
