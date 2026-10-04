@@ -440,6 +440,10 @@ public partial class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>,
 
     private bool _lazyShapesProbed;
 
+    // True while the probe runs: entering or leaving training mode builds the parameter layout, which calls
+    // back into ResolveLazyLayerShapes, and that re-entry must not start a second probe.
+    private bool _lazyShapesProbing;
+
     /// <inheritdoc/>
     /// <remarks>
     /// The base walk feeds the architecture's input shape through Layers as if they were one
@@ -458,18 +462,28 @@ public partial class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>,
             return;
         }
 
-        if (_lazyShapesProbed) return;
-        _lazyShapesProbed = true;
+        if (_lazyShapesProbed || _lazyShapesProbing) return;
 
+        _lazyShapesProbing = true;
         bool wasTraining = IsTrainingMode;
-        if (wasTraining) SetTrainingMode(false);
         try
         {
+            if (wasTraining) SetTrainingMode(false);
             _ = ForwardNative(PreprocessAudio(EcapaTdnnLanguageClassifier<T>.CreateProbeClip(_options)));
+            // Set only once the probe succeeded: set before it, a throwing probe made every later call return early
+            // with the lazy layers still unresolved and the original error lost.
+            _lazyShapesProbed = true;
         }
         finally
         {
-            if (wasTraining) SetTrainingMode(true);
+            try
+            {
+                if (wasTraining) SetTrainingMode(true);
+            }
+            finally
+            {
+                _lazyShapesProbing = false;
+            }
         }
     }
 

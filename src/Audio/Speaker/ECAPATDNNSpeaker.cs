@@ -247,6 +247,7 @@ public partial class ECAPATDNNSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVe
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
+            _backbone = TryBindSuppliedLayers(Architecture.Layers);
             return;
         }
 
@@ -264,6 +265,47 @@ public partial class ECAPATDNNSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVe
         Layers.AddRange(_backbone.Layers);
     }
 
+    /// <summary>
+    /// Routes a supplied stack that has the ECAPA-TDNN layout of these options, such as the one
+    /// <c>LayerHelper.CreateDefaultECAPATDNNSpeakerLayers</c> builds, through the encoder graph.
+    /// </summary>
+    /// <remarks>
+    /// Those layers are not a sequential chain: run one after another they would skip the
+    /// channel-first conversion, the Res2Net splits, the MFA concatenation and the attentive pooling.
+    /// The stack binds only when it is exactly that layout, so a stack with extra layers, or a
+    /// genuinely custom one, keeps running as the sequential chain it was written as.
+    /// </remarks>
+    private EcapaTdnnBackbone<T>? TryBindSuppliedLayers(IReadOnlyList<ILayer<T>> supplied)
+    {
+        if (_options.Channels is null || _options.Channels.Length < 2) return null;
+
+        EcapaTdnnBackbone<T> backbone;
+        try
+        {
+            backbone = new EcapaTdnnBackbone<T>(
+                _options.Channels, _options.KernelSizes, _options.Dilations, _options.Res2NetScale,
+                _options.SEBottleneckDim, _options.AttentionChannels, _options.EmbeddingDim);
+        }
+        catch (ArgumentException)
+        {
+            // Options that cannot describe an ECAPA-TDNN layout cannot match the stack either.
+            return null;
+        }
+
+        if (backbone.Layers.Count != supplied.Count) return null;
+        try
+        {
+            backbone.BindTo(supplied);
+        }
+        catch (InvalidOperationException)
+        {
+            // A layer type or convolution contract differs, so this is not the layout.
+            return null;
+        }
+
+        return backbone;
+    }
+
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -275,6 +317,10 @@ public partial class ECAPATDNNSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVe
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => ForwardNative(input);
 
     private bool _lazyShapesProbed;
+
+    // True while the probe runs: entering or leaving training mode builds the parameter layout, which calls
+    // back into ResolveLazyLayerShapes, and that re-entry must not start a second probe.
+    private bool _lazyShapesProbing;
 
     /// <inheritdoc/>
     /// <remarks>
@@ -292,18 +338,28 @@ public partial class ECAPATDNNSpeaker<T> : SpeakerRecognitionBase<T>, ISpeakerVe
             return;
         }
 
-        if (_lazyShapesProbed) return;
-        _lazyShapesProbed = true;
+        if (_lazyShapesProbed || _lazyShapesProbing) return;
 
+        _lazyShapesProbing = true;
         bool wasTraining = IsTrainingMode;
-        if (wasTraining) SetTrainingMode(false);
         try
         {
+            if (wasTraining) SetTrainingMode(false);
             _ = ForwardNative(new Tensor<T>(new[] { 8, _options.NumMels }));
+
+            // Only a probe that completed resolved the shapes; a failed one must run, and fail, again.
+            _lazyShapesProbed = true;
         }
         finally
         {
-            if (wasTraining) SetTrainingMode(true);
+            try
+            {
+                if (wasTraining) SetTrainingMode(true);
+            }
+            finally
+            {
+                _lazyShapesProbing = false;
+            }
         }
     }
 
