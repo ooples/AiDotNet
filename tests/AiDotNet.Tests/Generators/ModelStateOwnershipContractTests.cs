@@ -287,10 +287,10 @@ public sealed class ModelStateOwnershipContractTests
         var trusted = AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string;
         if (trusted is not null)
             foreach (string path in trusted.Split(Path.PathSeparator))
-                if (paths.Add(path)) references.Add(MetadataReference.CreateFromFile(path));
+                if (paths.Add(path)) references.Add(global::AiDotNet.Tests.Generators.CachedMetadataReference.FromFile(path));
         foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
             if (!assembly.IsDynamic && !string.IsNullOrEmpty(assembly.Location) && paths.Add(assembly.Location))
-                references.Add(MetadataReference.CreateFromFile(assembly.Location));
+                references.Add(global::AiDotNet.Tests.Generators.CachedMetadataReference.FromFile(assembly.Location));
         // Generated in-library models use internal ownership helpers. Reuse the repository's
         // existing test-friend identity without changing or widening that production boundary.
         var compilation = CSharpCompilation.Create("AiDotNetTestConsole",

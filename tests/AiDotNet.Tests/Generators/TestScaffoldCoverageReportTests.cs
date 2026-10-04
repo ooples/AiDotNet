@@ -158,7 +158,7 @@ namespace Probe
         var compilation = CSharpCompilation.Create(
             assemblyName,
             new[] { CSharpSyntaxTree.ParseText(Infrastructure), CSharpSyntaxTree.ParseText(modelSource) },
-            new[] { MetadataReference.CreateFromFile(typeof(object).Assembly.Location) },
+            new[] { global::AiDotNet.Tests.Generators.CachedMetadataReference.FromFile(typeof(object).Assembly.Location) },
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
 
         Assert.Empty(compilation.GetDiagnostics().Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
