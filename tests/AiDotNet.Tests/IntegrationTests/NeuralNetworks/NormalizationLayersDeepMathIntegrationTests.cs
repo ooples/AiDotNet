@@ -373,6 +373,64 @@ public class NormalizationLayersDeepMathIntegrationTests
         Assert.Equal(expectedRM2, rm2[0], Tol);
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task BatchNorm_Training_SingleSampleConvInput_NormalizesOverSpatialPositions()
+    {
+        // A [1, C, H, W] activation has H*W values per channel. Batch statistics are taken over
+        // every one of them (Ioffe & Szegedy 2015, sec. 3.2; PyTorch BatchNorm2d), so one image
+        // is a normalizable batch. This used to be gated on the batch axis alone: the layer took
+        // its single-sample fallback, normalized with the frozen initial running statistics
+        // (mean 0, variance 1) and never updated them, so every convolutional model trained one
+        // sample at a time trained with BatchNorm switched off.
+        var bn = new BatchNormalizationLayer<double>() { Layout = BatchNormDataLayout.ChannelsFirst };
+        bn.SetTrainingMode(true);
+
+        // Channel 0: [1, 2, 3, 4] -> mean 2.5, variance 1.25. Channel 1: [10, 20, 30, 40] -> mean 25, variance 125.
+        var input = new Tensor<double>(new[] { 1, 2, 2, 2 },
+            new Vector<double>(new double[] { 1, 2, 3, 4, 10, 20, 30, 40 }));
+        var output = bn.Forward(input);
+
+        double[] expected =
+        {
+            (1 - 2.5) / Math.Sqrt(1.25 + Eps), (2 - 2.5) / Math.Sqrt(1.25 + Eps),
+            (3 - 2.5) / Math.Sqrt(1.25 + Eps), (4 - 2.5) / Math.Sqrt(1.25 + Eps),
+            (10 - 25) / Math.Sqrt(125 + Eps), (20 - 25) / Math.Sqrt(125 + Eps),
+            (30 - 25) / Math.Sqrt(125 + Eps), (40 - 25) / Math.Sqrt(125 + Eps),
+        };
+        var actual = output.ToArray();
+        Assert.Equal(expected.Length, actual.Length);
+        for (int i = 0; i < expected.Length; i++)
+            Assert.Equal(expected[i], actual[i], Tol);
+
+        // And the running statistics move toward the batch: 0.9 * init + 0.1 * batch.
+        var runningMean = bn.GetRunningMean();
+        var runningVar = bn.GetRunningVariance();
+        Assert.Equal(0.25, runningMean[0], Tol);
+        Assert.Equal(2.5, runningMean[1], Tol);
+        Assert.Equal(0.9 + 0.1 * 1.25, runningVar[0], Tol);
+        Assert.Equal(0.9 + 0.1 * 125.0, runningVar[1], Tol);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task BatchNorm_Training_OneValuePerChannel_FallsBackToRunningStatistics()
+    {
+        // Exactly one value per channel has zero batch variance: batch normalization would map
+        // every input to beta, with a zero gradient (PyTorch refuses: "Expected more than 1 value
+        // per channel when training"). That case alone keeps the running-statistics fallback,
+        // which is inference-identical and differentiable, and leaves the running statistics as
+        // they were.
+        var bn = new BatchNormalizationLayer<double>() { Layout = BatchNormDataLayout.ChannelsFirst };
+        bn.SetTrainingMode(true);
+
+        var input = new Tensor<double>(new[] { 1, 2, 1, 1 }, new Vector<double>(new double[] { 3.0, -2.0 }));
+        var actual = bn.Forward(input).ToArray();
+
+        Assert.Equal(3.0 / Math.Sqrt(1 + Eps), actual[0], Tol);
+        Assert.Equal(-2.0 / Math.Sqrt(1 + Eps), actual[1], Tol);
+        Assert.Equal(0.0, bn.GetRunningMean()[0], Tol);
+        Assert.Equal(1.0, bn.GetRunningVariance()[1], Tol);
+    }
+
     // ========================================================================
     // BatchNormalizationLayer - Custom Epsilon
     // ========================================================================

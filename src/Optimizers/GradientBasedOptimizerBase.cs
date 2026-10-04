@@ -403,11 +403,14 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <see cref="Fused.IFusedOptimizerSpec"/> implementations. Shared so the
     /// per-optimizer specs don't each repeat the mapping.
     /// <para>
-    /// Returns <c>false</c> only for an UNKNOWN scheduler type (so a configured
-    /// schedule is never silently dropped — the caller falls back to eager). A
-    /// null scheduler or a constant scheduler yields <c>true</c> with
-    /// <paramref name="schedule"/> = null (constant LR; the spec's
-    /// <c>GetCurrentLearningRate</c> supplies the rate). The supported set mirrors
+    /// Returns <c>false</c> for a per-batch scheduler of an UNKNOWN type and for
+    /// <see cref="SchedulerStepMode.WarmupThenEpoch"/> (so a configured schedule is
+    /// never silently dropped — the caller falls back to eager). A null scheduler or
+    /// a constant scheduler yields <c>true</c> with <paramref name="schedule"/> = null
+    /// (constant LR; the spec's <c>GetCurrentLearningRate</c> supplies the rate). A
+    /// per-epoch scheduler of any type yields an external schedule that holds the
+    /// optimizer's current rate (SetLearningRate keeps it there) and that a checkpointed
+    /// plan can restore. The per-batch set mirrors
     /// the fused kernel's implemented schedule shapes; new shapes are added here
     /// alongside their kernel support.
     /// </para>

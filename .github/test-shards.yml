@@ -1614,6 +1614,8 @@ shard:
     # 139 classes, about 344 s of test time measured locally (before 4 small classes were added).
     filter: >-
       Category!=GPU&Category!=Stress&Category!=Sweep&(
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.BatchNormalizationLayoutAndRecalibrationTests.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.FusedOptimizerScheduleAndClipParityTests.|
       FullyQualifiedName~AiDotNet.Tests.ActiveLearning.ActiveLearningStrategyTests.|
       FullyQualifiedName~AiDotNet.Tests.DiagnosticTest.|
       FullyQualifiedName~AiDotNet.Tests.DirectGpuTests.|

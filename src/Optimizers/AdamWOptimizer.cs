@@ -185,6 +185,10 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         // the compiled kernel would decay every parameter including the ones the mask exempts. Decline
         // rather than diverge from the eager path.
         if (_options.WeightDecayMask is not null) return false;
+        // The eager tape step clips before the update. The compiled plan can reproduce a global-norm
+        // clip (carried below) but not a per-element value clip, so a value-clipped run stays eager.
+        bool clips = GradientOptions.EnableGradientClipping;
+        if (clips && GradientOptions.GradientClippingMethod == GradientClippingMethod.ByValue) return false;
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         // AdamW + AMSGrad uses the same max-second-moment kernel; decoupled weight
         // decay is carried in WeightDecay and applied by the AdamW update path.
@@ -194,7 +198,12 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                 : Tensors.Engines.Compilation.OptimizerType.AdamW,
             GetCurrentLearningRate(),
             _options.Beta1, _options.Beta2, _options.Epsilon,
-            _options.WeightDecay, schedule);
+            _options.WeightDecay, schedule)
+        {
+            MaxGradientNorm = clips && GradientOptions.GradientClippingMethod == GradientClippingMethod.ByNorm
+                ? GradientOptions.MaxGradientNorm
+                : 0.0
+        };
         return true;
     }
 
