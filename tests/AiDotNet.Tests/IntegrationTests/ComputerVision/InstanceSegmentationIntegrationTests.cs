@@ -194,6 +194,9 @@ public class InstanceSegmentationIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task MaskRCNN_RpnLaysAnchorsOnEveryPyramidLevelAtItsOwnStride()
     {
+        // Yield first: xUnit v2 starts the Timeout clock only once the test returns its task, so the synchronous
+        // ProposeRegions work below would otherwise run outside the 120 s limit.
+        await Task.Yield();
         // Regression for #2172: the RPN read only P2 (stride 4) but laid its anchors out at stride 16,
         // so every anchor centre sat at 4x its true position, and P3-P6 never proposed anything.
         var options = new InstanceSegmentationOptions<double>
