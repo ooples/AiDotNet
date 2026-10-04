@@ -26,6 +26,32 @@ namespace AiDotNet.Models.Options;
 public class Adam8BitOptimizerOptions<T, TInput, TOutput> : AdamOptimizerOptions<T, TInput, TOutput>
 {
     /// <summary>
+    /// Initializes the options with their defaults.
+    /// </summary>
+    public Adam8BitOptimizerOptions()
+    {
+    }
+
+    /// <summary>
+    /// Copy constructor: copies every Adam and base-class setting (through the Adam copy constructor) and every
+    /// 8-bit setting declared here, so a cloned configuration never falls back to a default.
+    /// </summary>
+    /// <param name="other">Source options to copy. Must be non-null.</param>
+    /// <exception cref="ArgumentNullException">When <paramref name="other"/> is null.</exception>
+    public Adam8BitOptimizerOptions(Adam8BitOptimizerOptions<T, TInput, TOutput> other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
+    {
+        BlockSize = other.BlockSize;
+        UseDynamicQuantization = other.UseDynamicQuantization;
+        QuantizationPercentile = other.QuantizationPercentile;
+        FullPrecisionUpdateFrequency = other.FullPrecisionUpdateFrequency;
+        UseStochasticRounding = other.UseStochasticRounding;
+        CompressBothMoments = other.CompressBothMoments;
+        UseBFloat16MomentStorage = other.UseBFloat16MomentStorage;
+        Min8BitSize = other.Min8BitSize;
+    }
+
+    /// <summary>
     /// Gets or sets the block size for block-wise quantization.
     /// </summary>
     /// <value>The number of elements per quantization block, defaulting to 2048.</value>
@@ -63,22 +89,26 @@ public class Adam8BitOptimizerOptions<T, TInput, TOutput> : AdamOptimizerOptions
     public bool UseDynamicQuantization { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets the percentile to use for outlier-aware quantization.
+    /// Gets or sets the percentile of each block's magnitudes used as its quantization scale.
     /// </summary>
-    /// <value>The percentile for computing the scale, defaulting to 99.9.</value>
+    /// <value>The scale percentile. Default 100: the block's absolute maximum, as in the paper.</value>
     /// <remarks>
     /// <para>
-    /// Instead of using the absolute maximum value to compute the quantization scale (which can be
-    /// sensitive to outliers), this option uses a percentile. Values above this percentile are clipped.
-    /// Set to 100 to use the absolute maximum (standard quantization).
+    /// Block-wise dynamic quantization normalizes each block by its absolute maximum (Dettmers et al., 2022, and the
+    /// bitsandbytes reference). A lower percentile clips the block's largest values to the scale. For the second
+    /// moment that is harmful rather than an outlier guard: a clipped v is stored SMALLER than it is, so exactly the
+    /// coordinates with the largest gradients get too-small Adam denominators and oversized steps. With the former
+    /// default of 99.9, a 40-step training run's parameters diverged to ~14 while full-precision Adam moved 0.14, and
+    /// on a four-element quadratic the first parameter stalled at 1.53 where Adam (and this optimizer at 100) reaches
+    /// 0.90. Values below 100 remain available for experiments.
     /// </para>
-    /// <para><b>For Beginners:</b> Sometimes there are a few very large numbers (outliers) that would
-    /// cause the quantization to waste precision. By using the 99.9th percentile instead of the maximum,
-    /// we ignore extreme outliers and get better precision for the majority of values. Think of it like
-    /// adjusting your camera's exposure based on typical brightness rather than the brightest spot.
-    /// </para>
+    /// <para><b>For Beginners:</b> Each group of numbers is compressed relative to its largest member. Keeping that
+    /// largest member exact (100) is what the original method does; lowering it trades accuracy on the biggest values
+    /// for precision on the rest, which for Adam's second moment makes training unstable.</para>
+    /// <para><b>Reference:</b> T. Dettmers, M. Lewis, S. Shleifer, L. Zettlemoyer, "8-bit Optimizers via Block-wise
+    /// Quantization", ICLR 2022.</para>
     /// </remarks>
-    public double QuantizationPercentile { get; set; } = 99.9;
+    public double QuantizationPercentile { get; set; } = 100.0;
 
     /// <summary>
     /// Gets or sets the frequency of full-precision state updates.
@@ -151,4 +181,24 @@ public class Adam8BitOptimizerOptions<T, TInput, TOutput> : AdamOptimizerOptions
     /// </para>
     /// </remarks>
     public bool UseBFloat16MomentStorage { get; set; } = false;
+
+    /// <summary>
+    /// Parameters with fewer elements than this keep full-precision Adam moments instead of 8-bit ones.
+    /// Default: 4096.
+    /// </summary>
+    /// <value>A non-negative element count; 0 quantizes every parameter. Negative values are rejected when the optimizer
+    /// is constructed or restored.</value>
+    /// <remarks>
+    /// <para>
+    /// This is bitsandbytes' <c>min_8bit_size</c>, the reference implementation of Dettmers et al., "8-bit
+    /// Optimizers via Block-wise Quantization" (ICLR 2022). Small tensors (biases, normalization scales) add almost
+    /// nothing to optimizer memory but are where one block's quantization error touches every element, so they stay
+    /// full precision. The rule applies to each parameter tensor in the tape training step and to the whole
+    /// parameter vector in the flat-vector path. Set to 0 to quantize every parameter.
+    /// </para>
+    /// <para><b>For Beginners:</b> Only big weight tensors are compressed; tiny ones are kept exact because
+    /// compressing them saves nearly no memory.
+    /// </para>
+    /// </remarks>
+    public int Min8BitSize { get; set; } = 4096;
 }

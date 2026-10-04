@@ -26,7 +26,7 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection;
 /// </para>
 /// </remarks>
 [AiDotNet.Configuration.YamlConfigurable("ObjectDetector")]
-public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
+public abstract partial class ObjectDetectorBase<T> : VisionTaskModelBase<T>
 {
     // Engine and NumOps inherited from ModelBase
 
@@ -42,42 +42,7 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     /// satisfies the contract — ResNet, CSPDarknet, EfficientNet, SwinTransformer,
     /// or a future custom implementation — can plug in.
     /// </summary>
-    /// <remarks>
-    /// A backbone is itself a NeuralNetworkBase, whose constructor starts its own per-layer init-seed scope
-    /// (none, without an architecture seed) and so ends this detector's. Assigning it re-arms the detector's
-    /// scope, so the neck and heads built after it, and the lazy heads resolved on the first forward, draw
-    /// from Options.RandomSeed instead of the process-shared generator, whose position depends on everything
-    /// that ran before.
-    /// </remarks>
-    protected IDetectionBackbone<T>? Backbone
-    {
-        get => _backbone;
-        set
-        {
-            _backbone = value;
-            if (_backboneSeedPending)
-            {
-                _backboneSeedPending = false;
-                AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = _ambientSeedBefore;
-            }
-
-            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.RestoreScope(_initializationScope);
-        }
-    }
-
-    private IDetectionBackbone<T>? _backbone;
-
-    // The per-layer init-seed scope this detector armed from Options.RandomSeed (null when unseeded).
-    [AiDotNet.Attributes.Scratch]
-    private readonly Random? _initializationScope;
-
-    // While the backbone is built, the thread's ambient fallback seed is a child of Options.RandomSeed: a backbone
-    // has no architecture seed of its own, so without it its weights came from the process-shared generator.
-    // The previous ambient value is restored when the backbone is assigned.
-    [AiDotNet.Attributes.Scratch]
-    private bool _backboneSeedPending;
-    [AiDotNet.Attributes.Scratch]
-    private readonly int? _ambientSeedBefore;
+    protected IDetectionBackbone<T>? Backbone { get; set; }
 
     /// <summary>
     /// The neck module for feature fusion. Optional: a detector such as DETR feeds the
@@ -114,11 +79,6 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     /// NMS algorithm for removing duplicate detections.
     /// </summary>
     protected readonly NMS<T> Nms;
-
-    /// <summary>
-    /// Whether the model is in training mode.
-    /// </summary>
-    protected bool IsTrainingMode;
 
     /// <summary>
     /// Weight downloader for fetching pre-trained weights.
@@ -166,17 +126,13 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     protected ObjectDetectorBase(ObjectDetectionOptions<T> options)
     {
         Options = options;
-        // Every detector builds its backbone, neck and heads in its own constructor, after this one. Arming the
-        // per-layer init-seed sequence here makes Options.RandomSeed reach those layers, as NeuralNetworkBase does
-        // for networks; without it the initial weights, and a two-stage detector's proposals, changed every run.
+        // Arm the per-layer initialization seed scope before the derived constructor builds any layer
+        // (the same root-model contract DiffusionModelBase follows). Every layer, the BackboneLayerShims
+        // adapters' inner layers, and the necks and query tables that draw from the scope then take a
+        // deterministic seed, so two models built from equal options start from equal weights (#2201).
+        // A null seed leaves the scope unarmed and initialization stays unseeded.
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(options.RandomSeed);
-        _initializationScope = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CaptureScope();
-        if (_initializationScope is not null)
-        {
-            _ambientSeedBefore = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed;
-            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = _initializationScope.Next();
-            _backboneSeedPending = true;
-        }
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.OfferSeedToNestedBackbone();
         Nms = new NMS<T>();
         WeightDownloader = new WeightDownloader();
         IsTrainingMode = false;
@@ -276,42 +232,7 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     /// Extracts the outputs for a single batch item from batch outputs.
     /// </summary>
     protected virtual List<Tensor<T>> ExtractBatchOutputs(List<Tensor<T>> batchOutputs, int batchIndex)
-    {
-        var itemOutputs = new List<Tensor<T>>();
-
-        foreach (var output in batchOutputs)
-        {
-            int batchSize = output.Shape[0];
-            if (batchSize == 1 && batchIndex == 0)
-            {
-                // Single image in batch, return as-is
-                itemOutputs.Add(output);
-            }
-            else
-            {
-                // Extract the slice for this batch item
-                var itemShape = new int[output.Shape.Length];
-                itemShape[0] = 1;
-                for (int d = 1; d < output.Shape.Length; d++)
-                {
-                    itemShape[d] = output.Shape[d];
-                }
-
-                var itemTensor = new Tensor<T>(itemShape);
-                int elementsPerItem = output.Length / batchSize;
-                int sourceOffset = batchIndex * elementsPerItem;
-
-                for (int j = 0; j < elementsPerItem; j++)
-                {
-                    itemTensor[j] = output[sourceOffset + j];
-                }
-
-                itemOutputs.Add(itemTensor);
-            }
-        }
-
-        return itemOutputs;
-    }
+        => DetectionOutputBatching<T>.SliceItem(batchOutputs, batchIndex);
 
     /// <summary>
     /// Performs forward pass through the network.
@@ -340,9 +261,9 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     /// Sets the model to training or inference mode.
     /// </summary>
     /// <param name="training">True for training mode, false for inference.</param>
-    public virtual void SetTrainingMode(bool training)
+    public override void SetTrainingMode(bool training)
     {
-        IsTrainingMode = training;
+        base.SetTrainingMode(training);
         Backbone?.SetTrainingMode(training);
         Neck?.SetTrainingMode(training);
     }
@@ -603,88 +524,7 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
         return CvTensorOps<T>.ConcatenateOutputs(Forward(input));
     }
 
-    /// <summary>
-    /// Gets the step size used by <see cref="Train"/>.
-    /// </summary>
-    /// <remarks>
-    /// Detection losses are large early in training, so this is deliberately conservative.
-    /// Override it to match a paper recipe.
-    /// </remarks>
-    protected virtual double TrainingLearningRate => 0.001;
-
-    /// <summary>
-    /// Runs one training step against the model's public prediction.
-    /// </summary>
-    /// <param name="input">The training image.</param>
-    /// <param name="expectedOutput">The desired output, shaped like <see cref="Predict"/>.</param>
-    /// <remarks>
-    /// <para>
-    /// This used to be an empty method whose comment said "override in subclasses" -- and no
-    /// subclass ever did, so every detector in the library silently ignored training and left
-    /// its weights at their initial values.
-    /// </para>
-    /// <para>
-    /// The step records the forward pass on a gradient tape, takes mean squared error against
-    /// <paramref name="expectedOutput"/>, and applies a stochastic-gradient update to every
-    /// trainable tensor reachable from this model. A detector-specific loss (assignment plus
-    /// box regression plus classification) is the right objective for a full training recipe and
-    /// is not implied by a tensor's shape. This overload is raw-output regression, not semantic
-    /// detection training. Models implementing <see cref="IDetectionTrainingModel{T}"/> expose
-    /// a separate typed target API for their detection objective.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (input is null)
-        {
-            throw new ArgumentNullException(nameof(input));
-        }
-
-        if (expectedOutput is null)
-        {
-            throw new ArgumentNullException(nameof(expectedOutput));
-        }
-
-        bool wasTraining = IsTrainingMode;
-        SetTrainingMode(true);
-        try
-        {
-            RecordTrainingLoss(TensorModelTrainer<T>.Step(
-                this, input, expectedOutput, NumOps.FromDouble(TrainingLearningRate), Predict));
-        }
-        finally
-        {
-            SetTrainingMode(wasTraining);
-        }
-    }
-
-    /// <inheritdoc />
-    public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
-    {
-        var copy = DeepCopy();
-        InterfaceGuard.Parameterizable(copy).SetParameters(parameters);
-        return copy;
-    }
-
-    // DeepCopy is deliberately NOT overridden here. It used to return MemberwiseClone(), which
-    // is a SHALLOW copy: the clone shared every layer, backbone and neck reference with the
-    // original, so fine-tuning a clone silently rewrote the source model's weights. ModelBase
-    // rebuilds the model from its recorded constructor and reloads state through
-    // Serialize/Deserialize, giving the copy its own storage -- the same reasoning already
-    // recorded on NeckBase.
-
     #endregion
-
-    /// <summary>
-    /// The shape of the first input this model's forward pass ran on. Its lazily-shaped layers sized
-    /// their weights from it, so replaying it on a rebuilt copy reproduces the same parameter
-    /// topology. Scratch: never persisted, and rebuilt copies record their own.
-    /// </summary>
-    [AiDotNet.Attributes.Scratch]
-    private int[]? _resolvedInputShape;
 
     /// <summary>Trains structured heads with typed targets through the shared single-update path.</summary>
     /// <remarks>The derived model validates its task targets before calling this method.</remarks>
@@ -696,55 +536,15 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     /// <remarks>The derived model validates its task targets before calling this method.</remarks>
     protected void TrainWithTargets<TTarget>(Tensor<T> input, TTarget targets,
         Func<Tensor<T>, List<Tensor<T>>> forward, Func<List<Tensor<T>>, TTarget, Tensor<T>> loss) where TTarget : class
-    {
-        if (input is null) throw new ArgumentNullException(nameof(input));
-        if (targets is null) throw new ArgumentNullException(nameof(targets));
-        if (forward is null) throw new ArgumentNullException(nameof(forward));
-        if (loss is null) throw new ArgumentNullException(nameof(loss));
-        NoteResolvedInput(input);
-        bool wasTraining = IsTrainingMode;
-        SetTrainingMode(true);
-        try
-        {
-            RecordTrainingLoss(TensorModelTrainer<T>.StepWithTargets(
-                this, input, targets, NumOps.FromDouble(TrainingLearningRate), forward, loss));
-        }
-        finally
-        {
-            SetTrainingMode(wasTraining);
-        }
-    }
-
-    /// <summary>Records the input shape on the first forward pass.</summary>
-    private void NoteResolvedInput(Tensor<T> input)
-    {
-        if (_resolvedInputShape is not null || input is null)
-        {
-            return;
-        }
-
-        var shape = new int[input.Shape.Length];
-        for (int i = 0; i < shape.Length; i++)
-        {
-            shape[i] = input.Shape[i];
-        }
-
-        _resolvedInputShape = shape;
-    }
+        => TrainWithTargets<List<Tensor<T>>, TTarget>(input, targets, forward, loss);
 
     /// <inheritdoc />
-    /// <remarks>
-    /// Runs the copy once on a zero input of the shape this model has already processed, so its
-    /// lazily-shaped layers (the convolutions behind the Conv2D adapter, the backbone's lazy layers)
-    /// size their weights exactly as this model's did before its state is loaded into them.
-    /// </remarks>
-    protected override void PrepareCopyForStateRestore(ModelBase<T, Tensor<T>, Tensor<T>> copy)
+    protected override int[] DeferredParameterProbeShape
     {
-        if (_resolvedInputShape is not null && copy is ObjectDetectorBase<T> rebuilt)
+        get
         {
-            var shape = (int[])_resolvedInputShape.Clone();
-            shape[0] = 1;
-            rebuilt.Predict(new Tensor<T>(shape));
+            var (height, width) = GetValidatedInputSize();
+            return new[] { 1, InputChannels, height, width };
         }
     }
 
@@ -774,57 +574,4 @@ public abstract partial class ObjectDetectorBase<T> : ModelBase<T, Tensor<T>, Te
     /// </remarks>
     public virtual double EffectiveNmsThreshold(double requested) => requested;
 
-    /// <summary>
-    /// Gets the number of channels in the images this model reads.
-    /// </summary>
-    /// <remarks>RGB unless a model overrides it; every backbone here is built for three channels.</remarks>
-    protected virtual int InputChannels => 3;
-
-    /// <summary>
-    /// Gives a model that has never run a concrete parameter topology, so its state can be captured.
-    /// </summary>
-    /// <remarks>
-    /// Several layers size their weights on their first forward pass. Until then the model reports
-    /// its parameters as shape-deferred, which is correct for a parameter query but made
-    /// <see cref="Serialize"/> - and therefore <c>Clone</c> - throw on a freshly constructed model.
-    /// Running the network once on a zero image of the configured input size resolves exactly the
-    /// shapes the first real image would, because every image is resized to that size first.
-    /// </remarks>
-    private void ResolveDeferredParameters()
-    {
-        if (_resolvedInputShape is not null)
-        {
-            return;
-        }
-
-        var (height, width) = GetValidatedInputSize();
-        Predict(new Tensor<T>(new[] { 1, InputChannels, height, width }));
-    }
-
-    /// <inheritdoc />
-    /// <remarks>Resolves shape-deferred layers first; see <see cref="ResolveDeferredParameters"/>.</remarks>
-    public override byte[] Serialize()
-    {
-        ResolveDeferredParameters();
-        return base.Serialize();
-    }
-
-    /// <summary>
-    /// The loss of the most recent <see cref="Train"/> call, measured before its update.
-    /// </summary>
-    [AiDotNet.Attributes.Scratch]
-    private T _lastTrainingLoss = MathHelper.GetNumericOperations<T>().Zero;
-
-    /// <summary>
-    /// Gets the loss of the most recent <see cref="Train"/> call, measured on that call's input before
-    /// its update (zero before the first call).
-    /// </summary>
-    /// <returns>The training objective's value: mean squared error, or the model's own loss where it
-    /// has one.</returns>
-    /// <remarks>Same contract as <c>INeuralNetwork&lt;T&gt;.GetLastLoss</c>.</remarks>
-    public T GetLastLoss() => _lastTrainingLoss;
-
-    /// <summary>Records the loss a training step reported.</summary>
-    /// <param name="loss">The step's loss.</param>
-    protected void RecordTrainingLoss(T loss) => _lastTrainingLoss = loss;
 }

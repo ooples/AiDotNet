@@ -67,7 +67,8 @@ public class StreamingStepTrainingTests : IDisposable
             N, (i, _) => Task.FromResult((x[i], y[i])), BatchSize);
     }
 
-    private static AdamOptimizer<float, Tensor<float>, Tensor<float>> Optimizer(int epochs, ILearningRateScheduler? scheduler = null)
+    private static AdamOptimizer<float, Tensor<float>, Tensor<float>> Optimizer(
+        int epochs, ILearningRateScheduler? scheduler = null, SchedulerStepMode stepMode = SchedulerStepMode.StepPerBatch)
     {
         var options = new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
         {
@@ -77,7 +78,7 @@ public class StreamingStepTrainingTests : IDisposable
             UseEarlyStopping = false,
             Tolerance = 0.0,
             LearningRateScheduler = scheduler,
-            SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+            SchedulerStepMode = stepMode,
             FitnessCalculator = new MeanSquaredErrorFitnessCalculator<float, Tensor<float>, Tensor<float>>()
         };
         return new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null, options);
@@ -191,6 +192,288 @@ public class StreamingStepTrainingTests : IDisposable
         Assert.True(MaxAbsDiff(resumed.Model.GetParameters(), straight.Model.GetParameters()) < 1e-6,
             "resumed run diverged from the uninterrupted run");
         Assert.Equal(straight.Opt.GetCurrentLearningRate(), resumed.Opt.GetCurrentLearningRate(), 12);
+    }
+
+    [Fact(Timeout = 180000)]
+    public async Task StoppedAndResumedRun_OnTheFusedPath_ContinuesTheOptimizerExactly()
+    {
+        // Without a scheduler the builder trains on the FUSED compiled path, where Adam's moments and step counter
+        // live inside the compiled plan rather than the optimizer object. The checkpoint must carry the plan's state:
+        // before it did, the resumed run restarted Adam and diverged on its very first step.
+        await Task.Yield();
+        var init = InitialWeights();
+        var straight = await Train(25, resume: false, Checkpoints("fused-straight", saveEvery: 1000), init);
+
+        // Guard against a vacuous pass: this test is about the fused path, so prove the run took it. The eager tape
+        // path advances the optimizer's own step counter; the fused path leaves it at zero.
+        var tapeStep = typeof(AdamOptimizer<float, Tensor<float>, Tensor<float>>).GetField(
+            "_tapeStep", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            ?? throw new InvalidOperationException("AdamOptimizer has no _tapeStep field");
+        Assert.Equal(0, Assert.IsType<int>(tapeStep.GetValue(straight.Opt)));
+
+        var first = await Train(13, resume: true, Checkpoints("fused-resumed", saveEvery: 4), init);
+        Assert.True(MaxAbsDiff(first.Model.GetParameters(), straight.Model.GetParameters()) > 1e-3,
+            "the stop point must differ from the end point, or the equality below proves nothing");
+
+        var scrambled = new Vector<float>(Enumerable.Repeat(0.123f, init.Length).ToArray());
+        var resumed = await Train(25, resume: true, Checkpoints("fused-resumed", saveEvery: 4), scrambled);
+        Assert.True(MaxAbsDiff(resumed.Model.GetParameters(), straight.Model.GetParameters()) == 0.0,
+            "resumed fused run diverged from the uninterrupted run by " +
+            $"{MaxAbsDiff(resumed.Model.GetParameters(), straight.Model.GetParameters())}");
+    }
+
+    [Fact(Timeout = 180000)]
+    public async Task FusedCheckpoint_Resumed_ReportsTheResumedPlanStep_AndALivePlan()
+    {
+        // After a checkpoint import the plan continues from the checkpoint's optimizer step. The #1822 probe evaluates
+        // the learning-rate schedule at that step, so it must read it from the plan (it used to mark it unknown), and
+        // the plan it verifies must be updating this model's own tensors.
+        await Task.Yield();
+        var init = InitialWeights();
+        var fused = await Train(13, resume: false, Checkpoints("fused-plan-step", saveEvery: 1000), init);
+        byte[] optimizerState = fused.Opt.Serialize();
+
+        var optimizer = Optimizer(epochs: 100);
+        var model = Model(optimizer);
+        model.SetParameters(fused.Model.GetParameters());
+        model.SetBaseTrainOptimizer(optimizer);
+        optimizer.Deserialize(optimizerState);
+        var (x, y) = Data(1);
+        model.Train(Stack(x.Take(BatchSize).ToArray()), Stack(y.Take(BatchSize).ToArray()));
+
+        Assert.True(AiDotNet.Training.CompiledTapeTrainingStep<float>.TryGetPlanOptimizerStep(out int step),
+            "the resumed plan's optimizer step was not readable");
+        Assert.True(step > 1, $"the resumed plan reported step {step}, as if the optimizer had restarted");
+
+        var live = model.Layers.OfType<AiDotNet.Interfaces.ITrainableLayer<float>>()
+            .SelectMany(layer => layer.GetTrainableParameters()).ToList();
+        Assert.True(AiDotNet.Training.CompiledTapeTrainingStep<float>.ConfiguredPlanTrainsLiveParameters(live),
+            "the plan does not report this model's live parameter tensors");
+        var foreign = live.Select(parameter => new Tensor<float>(parameter.Shape.ToArray())).ToList();
+        Assert.False(AiDotNet.Training.CompiledTapeTrainingStep<float>.ConfiguredPlanTrainsLiveParameters(foreign),
+            "a plan compared against tensors it does not train was reported as attached");
+    }
+
+    [Fact(Timeout = 180000)]
+    public async Task FusedCheckpoint_Resumed_PerEpochSchedule_KeepsReachingTheRestoredPlan()
+    {
+        // A per-epoch schedule reaches the plan as an external rate the optimizer sets at each epoch end. Importing a
+        // checkpoint rebuilds the plan's schedules, so the optimizer must drive the restored one; it used to keep
+        // setting the instance the import replaced, and the resumed plan stayed at the checkpointed rate.
+        await Task.Yield();
+        var (x, y) = Data(1);
+        var batchX = Stack(x.Take(BatchSize).ToArray());
+        var batchY = Stack(y.Take(BatchSize).ToArray());
+        StepLRScheduler Halving() => new StepLRScheduler(0.02, stepSize: 1, gamma: 0.5);
+
+        var sourceOptimizer = Optimizer(epochs: 100, Halving(), SchedulerStepMode.StepPerEpoch);
+        var source = Model(sourceOptimizer);
+        source.SetParameters(InitialWeights());
+        source.SetBaseTrainOptimizer(sourceOptimizer);
+        for (int i = 0; i < 3; i++) source.Train(batchX, batchY);
+        sourceOptimizer.OnEpochEnd();
+        byte[] optimizerState = sourceOptimizer.Serialize();
+
+        var optimizer = Optimizer(epochs: 100, Halving(), SchedulerStepMode.StepPerEpoch);
+        var model = Model(optimizer);
+        model.SetParameters(source.GetParameters());
+        model.SetBaseTrainOptimizer(optimizer);
+        optimizer.Deserialize(optimizerState);
+        model.Train(batchX, batchY);
+        Assert.True(AiDotNet.Training.CompiledTapeTrainingStep<float>.TryGetPlanOptimizerStep(out _),
+            "the resumed run did not take the fused path, so there is no restored plan to check");
+
+        double before = optimizer.GetCurrentLearningRate();
+        optimizer.OnEpochEnd();
+        double after = optimizer.GetCurrentLearningRate();
+        Assert.True(after < before, $"the epoch end did not move the host rate ({before} -> {after})");
+
+        var schedules = AiDotNet.Training.CompiledTapeTrainingStep<float>.ConfiguredPlanLearningRateSchedules();
+        Assert.NotNull(schedules);
+        var external = Assert.IsType<AiDotNet.Tensors.Engines.Compilation.ExternalLrSchedule>(Assert.Single(schedules!));
+        Assert.Equal(after, external.LearningRate, 12);
+    }
+
+    [Fact(Timeout = 180000)]
+    public async Task FusedCheckpoint_ResumedOnTheEagerPath_IsRefusedRatherThanRestartingTheOptimizer()
+    {
+        await Task.Yield();
+        var init = InitialWeights();
+        var fused = await Train(13, resume: false, Checkpoints("fused-to-eager", saveEvery: 1000), init);
+        byte[] optimizerState = fused.Opt.Serialize();
+
+        var optimizer = Optimizer(epochs: 100);
+        var model = Model(optimizer);
+        model.SetParameters(fused.Model.GetParameters());
+        model.SetBaseTrainOptimizer(optimizer);
+        optimizer.Deserialize(optimizerState);
+
+        // Force the eager path: the checkpoint's Adam state lives in a compiled-plan payload the eager optimizer
+        // cannot use, so training on would restart Adam silently.
+        (typeof(NeuralNetworkBase<float>).GetField(
+                "_fusedTrainingDisabled", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            ?? throw new InvalidOperationException("NeuralNetworkBase has no _fusedTrainingDisabled field"))
+            .SetValue(model, true);
+        var (x, y) = Data(1);
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => model.Train(Stack(x.Take(BatchSize).ToArray()), Stack(y.Take(BatchSize).ToArray())));
+        Assert.Contains("fused compiled training", ex.Message);
+    }
+
+    [Fact(Timeout = 180000)]
+    public async Task FusedCheckpoint_ThenReset_TrainsExactlyLikeAFreshOptimizer()
+    {
+        // Reset() must discard a restored fused checkpoint that is still waiting to be imported. Otherwise the next
+        // plan would resume the checkpoint's moments, and on the eager path the pending state would refuse to train.
+        await Task.Yield();
+        var init = InitialWeights();
+        var fused = await Train(13, resume: false, Checkpoints("fused-then-reset", saveEvery: 1000), init);
+        byte[] optimizerState = fused.Opt.Serialize();
+        var (x, y) = Data(1);
+        var batchX = Stack(x.Take(BatchSize).ToArray());
+        var batchY = Stack(y.Take(BatchSize).ToArray());
+
+        FeedForwardNeuralNetwork<float> EagerModel(bool restoreThenReset)
+        {
+            var optimizer = Optimizer(epochs: 100);
+            var model = Model(optimizer);
+            model.SetParameters(fused.Model.GetParameters());
+            model.SetBaseTrainOptimizer(optimizer);
+            if (restoreThenReset)
+            {
+                optimizer.Deserialize(optimizerState);
+                optimizer.Reset();
+            }
+
+            // The eager path is where a leftover pending checkpoint shows: it refuses to train.
+            (typeof(NeuralNetworkBase<float>).GetField(
+                    "_fusedTrainingDisabled", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                ?? throw new InvalidOperationException("NeuralNetworkBase has no _fusedTrainingDisabled field"))
+                .SetValue(model, true);
+            return model;
+        }
+
+        var reset = EagerModel(restoreThenReset: true);
+        var fresh = EagerModel(restoreThenReset: false);
+        reset.Train(batchX, batchY);
+        fresh.Train(batchX, batchY);
+
+        Assert.Equal(fresh.GetParameters().ToArray(), reset.GetParameters().ToArray());
+    }
+    [Fact(Timeout = 180000)]
+    public async Task FusedCheckpoint_WhoseImportFails_IsRefusedRatherThanRestartingTheOptimizer()
+    {
+        // A fused-plan payload that cannot be installed must stay pending: the fused step falls back to the eager
+        // path, and the eager path must then refuse instead of restarting Adam from nothing.
+        await Task.Yield();
+        var init = InitialWeights();
+        var fused = await Train(13, resume: false, Checkpoints("fused-bad-import", saveEvery: 1000), init);
+        byte[] optimizerState = fused.Opt.Serialize();
+
+        var (x, y) = Data(1);
+        FeedForwardNeuralNetwork<float> Restore(byte[] payload)
+        {
+            var optimizer = Optimizer(epochs: 100);
+            var model = Model(optimizer);
+            model.SetParameters(fused.Model.GetParameters());
+            model.SetBaseTrainOptimizer(optimizer);
+            optimizer.Deserialize(payload);
+            return model;
+        }
+
+        // Control: the intact payload imports into the fused plan and the step runs, so the refusal below is caused
+        // by the corruption and nothing else.
+        var intact = Restore((byte[])optimizerState.Clone());
+        intact.Train(Stack(x.Take(BatchSize).ToArray()), Stack(y.Take(BatchSize).ToArray()));
+
+        // Corrupt the compiled-plan payload's magic ("AOPT") so ImportOptimizerState rejects it.
+        int magic = IndexOf(optimizerState, new byte[] { 0x41, 0x4F, 0x50, 0x54 });
+        Assert.True(magic >= 0, "the checkpoint must carry a fused-plan payload");
+        optimizerState[magic] = (byte)'X';
+
+        var corrupted = Restore(optimizerState);
+        var ex = Assert.Throws<InvalidOperationException>(
+            () => corrupted.Train(Stack(x.Take(BatchSize).ToArray()), Stack(y.Take(BatchSize).ToArray())));
+        // The PENDING-state refusal specifically: the failed import left the fused payload uninstalled, and the eager
+        // fallback refused to restart the optimizer. (Other fused refusals share the words "fused compiled training".)
+        Assert.Contains("restored from a checkpoint written during fused compiled training", ex.Message);
+    }
+
+    [Fact(Timeout = 180000)]
+    public async Task EagerCheckpoint_ResumedWithFusedEnabled_ContinuesFromTheRestoredEagerMoments()
+    {
+        // The mirror case: moments written on the eager path live in the optimizer, which a fused plan cannot use.
+        // The fused step must decline so the eager path consumes them; the resumed step then matches an eager
+        // continuation from the same checkpoint exactly, instead of restarting Adam inside a fresh plan.
+        await Task.Yield();
+        var (x, y) = Data(1);
+        var bx = Stack(x.Take(BatchSize).ToArray());
+        var by = Stack(y.Take(BatchSize).ToArray());
+        var fusedDisabled = typeof(NeuralNetworkBase<float>).GetField(
+            "_fusedTrainingDisabled", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            ?? throw new InvalidOperationException("NeuralNetworkBase has no _fusedTrainingDisabled field");
+
+        var sourceOptimizer = Optimizer(epochs: 100);
+        var source = Model(sourceOptimizer);
+        source.SetParameters(InitialWeights());
+        source.SetBaseTrainOptimizer(sourceOptimizer);
+        fusedDisabled.SetValue(source, true);
+        for (int i = 0; i < 5; i++) source.Train(bx, by);
+        // Positive control 1: the source really trained on the eager path, so the checkpoint carries eager moments.
+        Assert.True(TapeStep(sourceOptimizer) > 0, "the source optimizer never took an eager step");
+        byte[] eagerState = sourceOptimizer.Serialize();
+        var weights = source.GetParameters();
+
+        FeedForwardNeuralNetwork<float> Restore(bool fused)
+        {
+            var optimizer = Optimizer(epochs: 100);
+            var model = Model(optimizer);
+            model.SetParameters(weights.Clone());
+            model.SetBaseTrainOptimizer(optimizer);
+            optimizer.Deserialize(eagerState);
+            if (!fused) fusedDisabled.SetValue(model, true);
+            return model;
+        }
+
+        // Positive control 2: fused training is available for this model and data, so the decline below is a decision
+        // about the restored eager state, not a fused path that could never engage.
+        var freshOptimizer = Optimizer(epochs: 100);
+        var fresh = Model(freshOptimizer);
+        fresh.SetParameters(weights.Clone());
+        fresh.SetBaseTrainOptimizer(freshOptimizer);
+        AiDotNet.Training.CompiledTapeTrainingStep<float>.ResetFusedStepCount();
+        fresh.Train(bx, by);
+        Assert.True(AiDotNet.Training.CompiledTapeTrainingStep<float>.GetFusedStepCount() > 0, "the fused path never engages here");
+
+        var eagerContinuation = Restore(fused: false);
+        eagerContinuation.Train(bx, by);
+        var withFusedEnabled = Restore(fused: true);
+        withFusedEnabled.Train(bx, by);
+        Assert.True(MaxAbsDiff(withFusedEnabled.GetParameters(), eagerContinuation.GetParameters()) == 0.0,
+            "resuming an eager checkpoint with fused enabled discarded the restored moments; diverged by " +
+            $"{MaxAbsDiff(withFusedEnabled.GetParameters(), eagerContinuation.GetParameters())}");
+    }
+
+    private static int TapeStep(object optimizer)
+    {
+        for (var type = optimizer.GetType(); type is not null; type = type.BaseType)
+        {
+            var field = type.GetField("_tapeStep",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (field?.GetValue(optimizer) is int step) return step;
+        }
+        throw new InvalidOperationException($"{optimizer.GetType().Name} has no _tapeStep field");
+    }
+
+    private static int IndexOf(byte[] haystack, byte[] needle)
+    {
+        for (int i = 0; i <= haystack.Length - needle.Length; i++)
+        {
+            int j = 0;
+            while (j < needle.Length && haystack[i + j] == needle[j]) j++;
+            if (j == needle.Length) return i;
+        }
+        return -1;
     }
 
     [Fact(Timeout = 180000)]

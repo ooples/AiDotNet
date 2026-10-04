@@ -76,11 +76,7 @@ public partial class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     /// </param>
     public CSPDarknet(IActivationFunction<T>? activation = null,
         CSPDarknetOptions? options = null)
-        : base(NeuralNetworkArchitecture<T>.CreateDynamicSpatial(
-                inputType: InputType.ThreeDimensional,
-                taskType: NeuralNetworkTaskType.ImageClassification,
-                channels: (options ??= new CSPDarknetOptions()).InChannels,
-                outputSize: 1),
+        : base(DetectionBackboneArchitecture<T>.Create((options ??= new CSPDarknetOptions()).InChannels),
               new MeanSquaredErrorLoss<T>())
     {
         _depthOriginal = options.Depth;

@@ -468,6 +468,42 @@ public class OptimizerUpdateRulesDeepMathIntegrationTests
     #region AMSGrad Tests
 
     [Fact(Timeout = 120000)]
+    public async Task AMSGrad_Step1_HandCalculated()
+    {
+        // AMSGrad step 1 under the paper default: vHat = max(vHat, v) with vHat starting at 0, and no bias
+        // correction (so, unlike Adam, step 1 is not scaled up by 1/(1 - beta^t))
+        var options = new AMSGradOptimizerOptions<double, Matrix<double>, Vector<double>>
+        {
+            InitialLearningRate = 0.001,
+            Beta1 = 0.9,
+            Beta2 = 0.999,
+            Epsilon = 1e-8
+        };
+
+        // Built for a bare parameter vector (no model), so UpdateParameters always runs and the assertion is
+        // unconditional: a construction or update failure fails the test instead of passing it silently.
+        var optimizer = AMSGradOptimizer<double, Matrix<double>, Vector<double>>.CreateForFunction(options);
+
+        var parameters = new Vector<double>(new double[] { 1.0, 2.0 });
+        var gradient = new Vector<double>(new double[] { 0.1, -0.2 });
+
+        var result = optimizer.UpdateParameters(parameters, gradient);
+
+        // Step 1 with the default BiasCorrection = Paper: Reddi, Kale and Kumar (2018), "On the Convergence of
+        // Adam and Beyond", Algorithm 2, which applies no bias correction to either moment:
+        //   m = 0.1*g, v = 0.001*g^2, vHat = max(0, v) = v, update = lr * m / (sqrt(vHat) + eps)
+        // (This test previously expected m / (1 - beta1) with an uncorrected v: a hybrid that matches neither
+        // the paper nor PyTorch's amsgrad=True. AMSGradBiasCorrectionTests pins both published variants.)
+        double m0 = 0.1 * 0.1;
+        double v0 = 0.001 * 0.01;
+        double update0 = 0.001 * m0 / (Math.Sqrt(v0) + 1e-8);
+        double expected0 = 1.0 - update0;
+
+        Assert.Equal(expected0, result[0], RelaxedTol);
+        await Task.CompletedTask;
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task AMSGrad_TwoSteps_HandCalculated_PyTorchConvention()
     {
         // AMSGradBiasCorrection.PyTorch, i.e. PyTorch Adam(amsgrad=True): vMax = max(vMax, v); p -= lr * (m / (1-b1^t)) / (sqrt(vMax / (1-b2^t)) + eps).

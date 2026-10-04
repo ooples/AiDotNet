@@ -107,7 +107,8 @@ public class PANet<T> : NeckBase<T>
 
         // Create random generator once for all weight initializations
         // Using a seed for reproducibility, but the same RNG instance ensures different values
-        _random = RandomHelper.CreateSeededRandom(42);
+        // Drawn from the model's initialization scope (#2201). A fixed seed of 42 here ignored the configured seed and gave every same-shape tensor identical values.
+        _random = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextRandom();
 
         // Initialize top-down pathway weights
         for (int i = 0; i < _numLevels; i++)

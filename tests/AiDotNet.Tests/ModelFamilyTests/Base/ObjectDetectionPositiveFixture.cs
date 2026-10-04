@@ -36,7 +36,7 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
     internal static void Verify(ObjectDetectorBase<T> detector)
     {
         var profile = ProfileOf(detector);
-        VerifyOne(detector, profile, suppressionDisabled: detector is YOLOv10<T>);
+        VerifyOne(detector, profile, suppressionDisabled: detector is YOLOv10<T> or DINO<T> or RTDETR<T>);
         if (detector is YOLOv10<T>)
         {
             // YOLOv10 intentionally defaults to NMS-free. Test that public default separately
@@ -81,7 +81,7 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
         Assert.NotEmpty(trainable);
         Assert.All(trainable, chunk => Assert.True(chunk.IsWritableInPlace, chunk.StableId));
         foreach (var chunk in trainable) chunk.Tensor.Fill(ToT(0));
-        ConfigureHead(trainable, profile);
+        ConfigureHead(detector, trainable, profile);
 
         var raw = detector.Predict(normalized);
         var expected = ExpectedCandidates(raw, profile);
@@ -99,7 +99,7 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
         Assert.Empty(detector.Detect(image, 0.99, 0.45).Detections);
     }
 
-    private static void ConfigureHead(ParameterChunk<T>[] trainable, HeadProfile profile)
+    private static void ConfigureHead(ObjectDetectorBase<T> detector, ParameterChunk<T>[] trainable, HeadProfile profile)
     {
         if (profile == HeadProfile.Yolo)
         {
@@ -116,14 +116,68 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
             }
             return;
         }
-        if (profile is HeadProfile.Detr or HeadProfile.RtDetr or HeadProfile.Dino)
+        if (profile == HeadProfile.Dino)
+        {
+            // Every weight is zero except: LayerNorm gammas (1), two content queries, the class head's
+            // [0, 0] weight and bias, and the box MLP's last-layer bias D = (0, 0, 1, 1). Zero features and
+            // zero attention make every decoder sub-layer LayerNorm(its input), so a query's hidden state is
+            // 19 LayerNorms of its content row. Its box is its encoder proposal refined by D in each of the
+            // six layers, then predicted with D once more (see ExpectedDino).
+            var transformer = Assert.IsType<DINO<T>>(detector).GetTransformer();
+            foreach (var gamma in transformer.LayerNormGammas()) gamma.Fill(ToT(1));
+            var content = transformer.ContentQueries;
+            foreach (var (row, column, value) in DinoContent) content[row, column] = ToT(value);
+            transformer.ClassHead.Weight[0, 0] = ToT(1); // [input, output] storage.
+            transformer.ClassHead.Bias[0] = ToT(ForegroundBias(profile));
+            transformer.ClassHead.Bias[1] = ToT(-20);
+            var boxBias = transformer.BoxHead.Layers[transformer.BoxHead.Layers.Count - 1].Bias;
+            for (int c = 0; c < 4; c++) boxBias[c] = ToT(DinoBoxDelta[c]);
+            return;
+        }
+        if (profile == HeadProfile.RtDetr)
+        {
+            // Every weight is zero except the levers below. RT-DETR's content queries are the (zero) encoder
+            // features, so the per-query signal comes through the positional path of the LAST decoder layer
+            // (see ExpectedRtdetr for the derivation).
+            // - query_pos channel 0 = 4 w + cx + 0.04 cy of the query's reference box (the cy term breaks the tie
+            //   between the two mirror-image candidates).
+            // - Head 0 of the deformable cross-attention puts weight on level 2 as a steep function of it.
+            // - Level 2's memory is 1 in channel 0 (decoder input-projection BN shift), the other levels 0.
+            // - The output projection carries that sample to channel 0 and adds a constant 1 to channel 1, so
+            //   the LayerNorms keep the magnitude.
+            // - Every layer's box MLP adds D = (0, 0, 2, 2) in logit space.
+            var decoder = Assert.IsType<RTDETR<T>>(detector).GetDecoder();
+            foreach (var gamma in decoder.LayerNormGammas()) gamma.Fill(ToT(1));
+            decoder.InputProjectionBetas().Last()[0] = ToT(1);
+            decoder.QueryPosHead.Layers[0].Weight[2, 0] = ToT(4);
+            decoder.QueryPosHead.Layers[0].Weight[0, 0] = ToT(1);
+            decoder.QueryPosHead.Layers[0].Weight[1, 0] = ToT(RtdetrCyWeight);
+            decoder.QueryPosHead.Layers[1].Weight[0, 0] = ToT(1);
+            var cross = decoder.Layers[decoder.Layers.Count - 1].CrossAttention;
+            cross.ValueWeight[0, 0] = ToT(1);
+            for (int point = 0; point < 4; point++)
+            {
+                cross.AttentionWeight[0, 8 + point] = ToT(RtdetrAttentionScale); // head 0, level 2
+                cross.AttentionBias[8 + point] = ToT(-RtdetrAttentionScale * RtdetrAttentionCenter);
+            }
+            cross.OutputWeight[0, 0] = ToT(1);
+            cross.OutputBias[1] = ToT(1);
+            var score = decoder.ScoreHeads[decoder.ScoreHeads.Count - 1];
+            score.Weight[0, 0] = ToT(1);
+            score.Bias[0] = ToT(RtdetrForegroundBias);
+            score.Bias[1] = ToT(-20);
+            foreach (var box in decoder.BoxHeads)
+                for (int c = 0; c < 4; c++) box.Layers[box.Layers.Count - 1].Bias[c] = ToT(RtdetrBoxDelta[c]);
+            return;
+        }
+        if (profile is HeadProfile.Detr)
         {
             const int hidden = 128;
             int queries = profile == HeadProfile.Detr ? 50 : 100;
             foreach (var chunk in trainable.Where(chunk => chunk.Tensor.Rank == 1 && chunk.Tensor.Length == hidden))
                 chunk.Tensor.Fill(ToT(1));
             var embeddings = trainable.Where(chunk => HasMatrixShape(chunk.Tensor, queries, hidden)).ToArray();
-            Assert.Equal(profile == HeadProfile.Dino ? 2 : 1, embeddings.Length);
+            Assert.Single(embeddings);
             foreach (var embedding in embeddings)
             {
                 // Two different zero-mean query directions survive the actual normalization
@@ -172,7 +226,9 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
         => profile switch
         {
             HeadProfile.Yolo => ExpectedYolo(raw),
-            HeadProfile.Detr or HeadProfile.RtDetr or HeadProfile.Dino => ExpectedDetr(raw, profile),
+            HeadProfile.Dino => ExpectedDino(raw),
+            HeadProfile.RtDetr => ExpectedRtdetr(raw),
+            HeadProfile.Detr => ExpectedDetr(raw, profile),
             HeadProfile.FasterRcnn or HeadProfile.CascadeRcnn => ExpectedRcnn(raw, profile),
             _ => throw new ArgumentOutOfRangeException(nameof(profile))
         };
@@ -200,6 +256,151 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
         return expected.OrderByDescending(candidate => candidate.Score).ToList();
     }
 
+    private static readonly (int Row, int Column, double Value)[] DinoContent =
+    {
+        (0, 0, 1), (0, 1, 1), (0, 2, -1), (0, 3, -1),
+        (1, 0, 1), (1, 1, 1), (1, 2, 1), (1, 3, -1), (1, 4, -1), (1, 5, -1)
+    };
+
+    private static readonly double[] DinoBoxDelta = { 0, 0, 1, 1 };
+
+    /// <summary>
+    /// DINO's controlled outputs, re-derived on the host. Nano's ResNet-50 C3-C5 at 64x64 are 8x8, 4x4 and
+    /// 2x2, and the extra stride-2 level is 1x1: 85 tokens, all selected, in token order (every encoder score
+    /// ties at zero). Query q's anchor is token q's proposal ((x + 0.5) / side, (y + 0.5) / side,
+    /// 0.05 * 2^level). Its final box logits are 6 D + inverse_sigmoid(anchor): five refinements before the
+    /// last layer plus the last layer's own prediction.
+    /// </summary>
+    private static List<ExpectedDetection> ExpectedDino(Tensor<T> raw)
+    {
+        const int queries = 85, classes = 2;
+        Assert.Equal(new[] { 1, queries * (classes + 4) }, raw.Shape.ToArray());
+        var anchors = new List<double[]>();
+        int[] sides = { 8, 4, 2, 1 };
+        for (int level = 0; level < sides.Length; level++)
+            for (int y = 0; y < sides[level]; y++)
+                for (int x = 0; x < sides[level]; x++)
+                    anchors.Add(new[] { (x + 0.5) / sides[level], (y + 0.5) / sides[level], 0.05 * Math.Pow(2, level), 0.05 * Math.Pow(2, level) });
+        Assert.Equal(queries, anchors.Count);
+
+        static double InverseSigmoid(double x) => Math.Log(Math.Max(x, 1e-5) / Math.Max(1 - x, 1e-5));
+        static double Sigmoid(double x) => 1 / (1 + Math.Exp(-x));
+        var expected = new List<ExpectedDetection>();
+        for (int query = 0; query < queries; query++)
+        {
+            double classLogit = DinoHiddenFirstCoordinate(query) + ForegroundBias(HeadProfile.Dino);
+            AssertClose(classLogit, ToD(raw[0, query * classes]));
+            AssertClose(-20, ToD(raw[0, query * classes + 1]));
+            var box = new double[4];
+            for (int c = 0; c < 4; c++)
+            {
+                double logit = (6 * DinoBoxDelta[c]) + InverseSigmoid(anchors[query][c]);
+                AssertClose(logit, ToD(raw[0, queries * classes + query * 4 + c]));
+                box[c] = Sigmoid(logit) * 64;
+            }
+
+            double score = (float)Sigmoid(classLogit);
+            if (query < 2)
+            {
+                Assert.True(score > 0.05);
+                expected.Add(new ExpectedDetection(score, (float)Math.Max(0, box[0] - box[2] / 2), (float)Math.Max(0, box[1] - box[3] / 2),
+                    (float)Math.Min(64, box[0] + box[2] / 2), (float)Math.Min(64, box[1] + box[3] / 2))); // float corners, like the score
+            }
+            else Assert.True(score < 0.05);
+        }
+        return expected.OrderByDescending(candidate => candidate.Score).ToList();
+    }
+
+    /// <summary>First coordinate of 19 successive LayerNorms (gamma 1, beta 0, eps 1e-5) of a content query.</summary>
+    private static double DinoHiddenFirstCoordinate(int query)
+    {
+        var values = new double[256];
+        foreach (var (row, column, value) in DinoContent)
+            if (row == query) values[column] = value;
+        for (int normalization = 0; normalization < 19; normalization++)
+        {
+            double mean = values.Average();
+            double variance = values.Sum(value => (value - mean) * (value - mean)) / values.Length;
+            double scale = Math.Sqrt(variance + 1e-5);
+            for (int index = 0; index < values.Length; index++) values[index] = (values[index] - mean) / scale;
+        }
+        return values[0];
+    }
+    private const double RtdetrAttentionScale = 40, RtdetrAttentionCenter = 4.39, RtdetrForegroundBias = -9, RtdetrCyWeight = 0.04;
+    private static readonly double[] RtdetrBoxDelta = { 0, 0, 2, 2 };
+
+    /// <summary>
+    /// RT-DETR's controlled outputs, re-derived on the host:
+    /// <list type="bullet">
+    /// <item>Tokens: Nano's R18 C3-C5 at 64x64 give hybrid-encoder levels 8x8, 4x4 and 2x2, so 84 tokens, all
+    /// selected in token order (every encoder score ties).</item>
+    /// <item>Anchors: token-centered, 0.05 * 2^level.</item>
+    /// <item>References: each of the three layers adds D, so the last layer sees anchor + 2 D (in logit space),
+    /// and the final box logits are 3 D + inverse_sigmoid(anchor).</item>
+    /// <item>Class logit: the last layer's hidden state is LN(LN((w2 * v, 1, 0, ...))), where w2 is head 0's
+    /// softmax weight on level 2 and v is the zero-padded bilinear sample of the level-2 map (1 inside) at the
+    /// reference point.</item>
+    /// </list>
+    /// </summary>
+    private static List<ExpectedDetection> ExpectedRtdetr(Tensor<T> raw)
+    {
+        const int queries = 84, classes = 2;
+        Assert.Equal(new[] { 1, queries * (classes + 4) }, raw.Shape.ToArray());
+        static double Sigmoid(double x) => 1 / (1 + Math.Exp(-x));
+        static double InverseSigmoid(double x) => Math.Log(Math.Max(x, 1e-5) / Math.Max(1 - x, 1e-5));
+        static double Coverage(double normalized, int size)
+        {
+            // Share of a bilinear sample that falls inside [0, size) with zero padding, align_corners = false.
+            double p = normalized * size - 0.5;
+            return p < -1 || p > size ? 0 : p < 0 ? p + 1 : p > size - 1 ? size - p : 1;
+        }
+        static double[] LayerNorm(double[] values)
+        {
+            double mean = values.Average();
+            double variance = values.Sum(v => (v - mean) * (v - mean)) / values.Length;
+            return values.Select(v => (v - mean) / Math.Sqrt(variance + 1e-5)).ToArray();
+        }
+
+        var anchors = new List<double[]>();
+        int[] sides = { 8, 4, 2 };
+        for (int level = 0; level < sides.Length; level++)
+            for (int y = 0; y < sides[level]; y++)
+                for (int x = 0; x < sides[level]; x++)
+                    anchors.Add(new[] { (x + 0.5) / sides[level], (y + 0.5) / sides[level], 0.05 * Math.Pow(2, level), 0.05 * Math.Pow(2, level) });
+        Assert.Equal(queries, anchors.Count);
+
+        var expected = new List<ExpectedDetection>();
+        for (int query = 0; query < queries; query++)
+        {
+            var reference = anchors[query].Select((a, c) => Sigmoid(InverseSigmoid(a) + 2 * RtdetrBoxDelta[c])).ToArray();
+            double position = 4 * reference[2] + reference[0] + RtdetrCyWeight * reference[1];
+            double z = RtdetrAttentionScale * (position - RtdetrAttentionCenter);
+            double levelTwoWeight = 4 * Math.Exp(z) / (4 * Math.Exp(z) + 8);
+            double sample = Coverage(reference[0], 2) * Coverage(reference[1], 2);
+            var hidden = new double[256];
+            hidden[0] = levelTwoWeight * sample;
+            hidden[1] = 1;
+            double classLogit = LayerNorm(LayerNorm(hidden))[0] + RtdetrForegroundBias;
+            AssertClose(classLogit, ToD(raw[0, query * classes]));
+            AssertClose(-20, ToD(raw[0, query * classes + 1]));
+
+            var box = new double[4];
+            for (int c = 0; c < 4; c++)
+            {
+                double logit = 3 * RtdetrBoxDelta[c] + InverseSigmoid(anchors[query][c]);
+                AssertClose(logit, ToD(raw[0, queries * classes + query * 4 + c]));
+                box[c] = Sigmoid(logit) * 64;
+            }
+
+            double score = (float)Sigmoid(classLogit);
+            if (score > 0.05)
+                expected.Add(new ExpectedDetection(score, (float)Math.Max(0, box[0] - box[2] / 2), (float)Math.Max(0, box[1] - box[3] / 2),
+                    (float)Math.Min(64, box[0] + box[2] / 2), (float)Math.Min(64, box[1] + box[3] / 2))); // float corners, like the score
+        }
+
+        Assert.Equal(2, expected.Count); // the two right-hand level-2 tokens
+        return expected.OrderByDescending(candidate => candidate.Score).ToList();
+    }
     private static List<ExpectedDetection> ExpectedDetr(Tensor<T> raw, HeadProfile profile)
     {
         int queries = profile == HeadProfile.Detr ? 50 : 100;
@@ -208,7 +409,7 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
         var expected = new List<ExpectedDetection>();
         for (int query = 0; query < queries; query++)
         {
-            double classLogit = NormalizedQueryFirstCoordinate(query, profile == HeadProfile.Dino ? 2 : 1) + ForegroundBias(profile);
+            double classLogit = NormalizedQueryFirstCoordinate(query, 1) + ForegroundBias(profile);
             AssertClose(classLogit, ToD(raw[0, query * classes]));
             AssertClose(-20, ToD(raw[0, query * classes + 1]));
             if (classes == 3) AssertClose(2, ToD(raw[0, query * classes + 2]));

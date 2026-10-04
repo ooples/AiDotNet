@@ -1,4 +1,4 @@
-﻿using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using System.Collections.Concurrent;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -46,8 +46,8 @@ public partial class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimize
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.AdaMax,
-            (float)GetCurrentLearningRate(),
-            (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
+            GetCurrentLearningRate(),
+            _options.Beta1, _options.Beta2, _options.Epsilon,
             0f, schedule);
         return true;
     }
@@ -152,7 +152,7 @@ public partial class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimize
     /// </para>
     /// </remarks>
     public AdaMaxOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         AdaMaxOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

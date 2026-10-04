@@ -67,7 +67,7 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// </para>
     /// </remarks>
     public AMSGradOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         AMSGradOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())
@@ -128,8 +128,8 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.AMSGrad,
-            (float)GetCurrentLearningRate(),
-            (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
+            GetCurrentLearningRate(),
+            _options.Beta1, _options.Beta2, _options.Epsilon,
             0f, schedule);
         return true;
     }
@@ -498,7 +498,7 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         var biasCorrection1Vec = Vector<T>.CreateDefault(_m.Length, biasCorrection1);
         var mHat = (Vector<T>)Engine.Divide(_m, biasCorrection1Vec);
 
-        // Recalculate the update: update = (lr * mHat) / (sqrt(vHat / (1 - beta2^t)) + epsilon)
+        // Recalculate the update: update = (lr * mHat) / (sqrt(vHat / bc2) + epsilon), bc2 = 1 for the paper variant
         var currentLrVec = Vector<T>.CreateDefault(_m.Length, CurrentLearningRate);
         var lrTimesMHat = (Vector<T>)Engine.Multiply(currentLrVec, mHat);
 

@@ -57,6 +57,7 @@ internal static class TensorModelTrainer<T>
     /// operations. Null means mean squared error. A model whose paper trains it with another objective
     /// (TrOCR: cross-entropy under teacher forcing) passes it here.
     /// </param>
+    /// <param name="optimizer">The update rule. Null means plain SGD at <paramref name="learningRate"/>.</param>
     /// <returns>The loss value for this step, measured before the update.</returns>
     public static T Step(
         ModelBase<T, Tensor<T>, Tensor<T>> model,
@@ -64,8 +65,9 @@ internal static class TensorModelTrainer<T>
         Tensor<T> target,
         T learningRate,
         Func<Tensor<T>, Tensor<T>> forward,
-        Func<Tensor<T>, Tensor<T>, Tensor<T>>? loss = null)
-        => StepWithTargets(model, input, target, learningRate, forward, loss ?? MeanSquaredError);
+        Func<Tensor<T>, Tensor<T>, Tensor<T>>? loss = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        => StepWithTargets(model, input, target, learningRate, forward, loss ?? MeanSquaredError, optimizer);
 
     /// <summary>
     /// Runs the same single update for structured heads and typed task targets, without flattening
@@ -77,7 +79,8 @@ internal static class TensorModelTrainer<T>
         TTarget target,
         T learningRate,
         Func<Tensor<T>, TPrediction> forward,
-        Func<TPrediction, TTarget, Tensor<T>> loss)
+        Func<TPrediction, TTarget, Tensor<T>> loss,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
 
@@ -124,6 +127,7 @@ internal static class TensorModelTrainer<T>
             // [1024, 256]). The no-grad scope keeps the update itself off the tape.
             using (new NoGradScope<T>())
             {
+                var reached = new List<Tensor<T>>(parameters.Length);
                 foreach (var parameter in parameters)
                 {
                     if (gradients.TryGetValue(parameter, out var gradient))
@@ -137,11 +141,24 @@ internal static class TensorModelTrainer<T>
                                 + "a view created outside the engine records the wrong tensor on the tape.");
                         }
 
-                        engine.TensorSubtractInPlace(parameter, engine.TensorMultiplyScalar(gradient, learningRate));
+                        reached.Add(parameter);
                     }
                 }
 
-                return objective.Length > 0 ? objective[0] : numOps.Zero;
+                T value = objective.Length > 0 ? objective[0] : numOps.Zero;
+                if (optimizer is null)
+                {
+                    foreach (var parameter in reached)
+                        engine.TensorSubtractInPlace(parameter, engine.TensorMultiplyScalar(gradients[parameter], learningRate));
+                }
+                else
+                {
+                    // The optimizer keys its state (momentum, moments) by tensor reference, and these are the
+                    // live tensors the forward reads, so the state follows the weights from step to step.
+                    optimizer.Step(new TapeStepContext<T>(reached, gradients, value));
+                }
+
+                return value;
             }
         }
     }

@@ -55,7 +55,7 @@ public partial class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, T
     /// </para>
     /// </remarks>
     public AntColonyOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         AntColonyOptimizationOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())
@@ -441,7 +441,7 @@ public partial class AntColonyOptimizer<T, TInput, TOutput> : OptimizerBase<T, T
     public Vector<T> Minimize(
         Vector<T> initialParameters, Func<Vector<T>, T> objective, int maxIterations, T tolerance)
     {
-        ValidateMinimizeArguments(initialParameters, objective, maxIterations);
+        ValidateMinimizeArguments(initialParameters, objective, maxIterations, tolerance);
 
         var search = new DerivativeFreeSearch(objective, NumOps, initialParameters);
         var random = CreateSearchRandom();

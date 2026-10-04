@@ -200,7 +200,9 @@ public class TapeOptimizerSerializationTests
         yield return new object[] { "Adam", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new AdamOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>> { UseAMSGrad = false }))) };
         yield return new object[] { "AdamAMSGrad", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new AdamOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>> { UseAMSGrad = true }))) };
         yield return new object[] { "AdamW", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new AdamWOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>> { WeightDecay = 0.0 }))) };
-        yield return new object[] { "Adam8Bit", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new Adam8BitOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new Adam8BitOptimizerOptions<double, Tensor<double>, Tensor<double>> { BlockSize = 2, CompressBothMoments = true, QuantizationPercentile = 100.0, UseStochasticRounding = false, UseBFloat16MomentStorage = false }))) };
+        yield return new object[] { "Adam8Bit", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new Adam8BitOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new Adam8BitOptimizerOptions<double, Tensor<double>, Tensor<double>> { Min8BitSize = 0, BlockSize = 2, CompressBothMoments = true, QuantizationPercentile = 100.0, UseStochasticRounding = false, UseBFloat16MomentStorage = false }))) };
+        // Default Min8BitSize: these small parameters take the full-precision moment layout.
+        yield return new object[] { "Adam8BitBelowMin8BitSize", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new Adam8BitOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new Adam8BitOptimizerOptions<double, Tensor<double>, Tensor<double>> { BlockSize = 2, CompressBothMoments = true }))) };
         yield return new object[] { "AMSGrad", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new AMSGradOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new AMSGradOptimizerOptions<double, Tensor<double>, Tensor<double>>()))) };
         yield return new object[] { "AdaMax", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new AdaMaxOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new AdaMaxOptimizerOptions<double, Tensor<double>, Tensor<double>>()))) };
         yield return new object[] { "AdaDelta", (Func<IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>)(() => new AdaDeltaOptimizer<double, Tensor<double>, Tensor<double>>(null, Common(new AdaDeltaOptimizerOptions<double, Tensor<double>, Tensor<double>>()))) };
@@ -330,6 +332,91 @@ public class TapeOptimizerSerializationTests
     }
 
     [Fact]
+    public void Deserialize_CorruptExtensionTail_LeavesTheOptimizerStateUntouched()
+    {
+        // The restore is atomic: an unknown trailing section must throw BEFORE anything in the target optimizer changes,
+        // including the step counter carried by the declared-state envelope.
+        static AdamOptimizer<double, Tensor<double>, Tensor<double>> NewAdam() =>
+            new(null, new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>> { InitialLearningRate = 0.01 });
+
+        var source = NewAdam();
+        var sourceParameters = CreateParameters();
+        source.Step(new TapeStepContext<double>(sourceParameters, CreateFirstGradients(sourceParameters), 0.0));
+        byte[] corrupt = source.Serialize();
+        // Corrupt the LAST section's marker (the fused-plan section), so parsing fails only after the tape-state and
+        // scheduler sections have been read: the point where the old restore had already changed live state.
+        byte[] marker = System.Text.Encoding.UTF8.GetBytes("AiDotNet.FusedPlanOptimizerState.v1");
+        int at = -1;
+        for (int i = corrupt.Length - marker.Length; i >= 0 && at < 0; i--)
+        {
+            int j = 0;
+            while (j < marker.Length && corrupt[i + j] == marker[j]) j++;
+            if (j == marker.Length) at = i;
+        }
+        Assert.True(at >= 0, "the payload carries no fused-plan section to corrupt");
+        corrupt[at + marker.Length - 1] = (byte)'X';
+
+        // The target has its OWN trained state: three steps, so its moments and step count differ from the source's.
+        var target = NewAdam();
+        var targetParameters = CreateParameters();
+        for (int i = 0; i < 3; i++)
+            target.Step(new TapeStepContext<double>(targetParameters, CreateSecondGradients(targetParameters), 0.0));
+        var momentsBefore = SnapshotTapeMoments(target);
+        Assert.NotEmpty(momentsBefore);   // positive control: the target really holds moments that could be lost
+        byte[] serializedBefore = target.Serialize();
+
+        // A twin trained identically that never sees the corrupt payload: the reference for the next update.
+        var twin = NewAdam();
+        var twinParameters = CreateParameters();
+        for (int i = 0; i < 3; i++)
+            twin.Step(new TapeStepContext<double>(twinParameters, CreateSecondGradients(twinParameters), 0.0));
+        Assert.Equal(serializedBefore, twin.Serialize());   // control: the twin really is identical before the restore
+
+        Assert.Throws<InvalidOperationException>(() => target.Deserialize(corrupt));
+
+        // Nothing changed: the whole optimizer serializes byte-identically (moments, step counter, options, scheduler),
+        // the live moments keep their values, nothing was staged as pending, and the next update matches the twin's.
+        Assert.Equal(serializedBefore, target.Serialize());
+        var momentsAfter = SnapshotTapeMoments(target);
+        Assert.Equal(momentsBefore.Count, momentsAfter.Count);
+        foreach (var (field, values) in momentsBefore)
+            Assert.Equal(values, momentsAfter[field]);
+        Assert.Equal(0, PendingTapeTensorStateCount(target));
+
+        target.Step(new TapeStepContext<double>(targetParameters, CreateSecondGradients(targetParameters), 0.0));
+        twin.Step(new TapeStepContext<double>(twinParameters, CreateSecondGradients(twinParameters), 0.0));
+        for (int p = 0; p < targetParameters.Length; p++)
+            Assert.Equal(twinParameters[p].ToArray(), targetParameters[p].ToArray());
+    }
+
+    private static Dictionary<string, double[]> SnapshotTapeMoments(object optimizer)
+    {
+        var snapshot = new Dictionary<string, double[]>();
+        for (var type = optimizer.GetType(); type is not null; type = type.BaseType)
+        {
+            foreach (var field in type.GetFields(System.Reflection.BindingFlags.NonPublic
+                | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.DeclaredOnly))
+            {
+                if (field.GetValue(optimizer) is not System.Collections.Concurrent.ConcurrentDictionary<Tensor<double>, Tensor<double>> state)
+                    continue;
+                var values = state.Values.SelectMany(t => t.ToArray()).ToArray();
+                if (values.Length > 0) snapshot[$"{type.Name}.{field.Name}"] = values;
+            }
+        }
+        return snapshot;
+    }
+
+    private static int PendingTapeTensorStateCount(object optimizer)
+    {
+        for (var type = optimizer.GetType(); type is not null; type = type.BaseType)
+        {
+            var field = type.GetField("_pendingTapeTensorStates",
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (field?.GetValue(optimizer) is System.Collections.ICollection pending) return pending.Count;
+        }
+        throw new InvalidOperationException("optimizer has no _pendingTapeTensorStates field");
+    }
+    [Fact]
     public void Adam8BitDeserialize_TruncatedTapeStatePayload_ThrowsInvalidOperationException()
     {
         var optimizer = CreateAdam8BitOptimizer();
@@ -357,6 +444,7 @@ public class TapeOptimizerSerializationTests
             null,
             Common(new Adam8BitOptimizerOptions<double, Tensor<double>, Tensor<double>>
             {
+                Min8BitSize = 0,
                 BlockSize = 2,
                 CompressBothMoments = true,
                 QuantizationPercentile = 100.0,
@@ -376,7 +464,8 @@ public class TapeOptimizerSerializationTests
         stream.Position += baseDataLength;
 
         _ = reader.ReadString();
-        _ = reader.ReadInt32();
+        _ = reader.ReadInt32(); // magic
+        int versionOffset = checked((int)stream.Position);
         _ = reader.ReadInt32();
         _ = reader.ReadInt32();
         _ = reader.ReadInt32();
@@ -404,6 +493,9 @@ public class TapeOptimizerSerializationTests
         int tapeOffset = checked((int)stream.Position);
         var legacyPayload = new byte[tapeOffset];
         Array.Copy(serialized, legacyPayload, tapeOffset);
+        // Payloads that ended before the tape section were written by format version 2, which also had no
+        // full-precision (below Min8BitSize) section; label it as such so it is a genuine legacy payload.
+        BitConverter.GetBytes(2).CopyTo(legacyPayload, versionOffset);
         return legacyPayload;
     }
 

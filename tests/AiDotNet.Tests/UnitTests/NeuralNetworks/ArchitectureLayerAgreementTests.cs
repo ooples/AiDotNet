@@ -65,8 +65,8 @@ public class ArchitectureLayerAgreementTests
             // FullyConnectedLayer's two-int overload declares a CONCRETE input shape. The lazy
             // single-int layers report [-1], which IsFirstLayerShapeCompatible treats as compatible
             // by design, so they could never express the disagreement under test.
-            Layers.Add(new FullyConnectedLayer<double>(_firstLayerInput, 8));
-            Layers.Add(new FullyConnectedLayer<double>(8, 4));
+            Layers.Add(new FullyConnectedLayer<double>(_firstLayerInput, 8, new AiDotNet.ActivationFunctions.ReLUActivation<double>()));
+            Layers.Add(new FullyConnectedLayer<double>(8, 4, new AiDotNet.ActivationFunctions.ReLUActivation<double>()));
         }
 
         public override IFullModel<double, Tensor<double>, Tensor<double>> DeepCopy()

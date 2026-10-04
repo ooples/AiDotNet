@@ -71,11 +71,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     /// </param>
     public ResNet(IActivationFunction<T>? activation = null,
         ResNetBackboneOptions? options = null)
-        : base(NeuralNetworkArchitecture<T>.CreateDynamicSpatial(
-                inputType: InputType.ThreeDimensional,
-                taskType: NeuralNetworkTaskType.ImageClassification,
-                channels: (options ??= new ResNetBackboneOptions()).InChannels,
-                outputSize: 1),
+        : base(DetectionBackboneArchitecture<T>.Create((options ??= new ResNetBackboneOptions()).InChannels),
               new MeanSquaredErrorLoss<T>())
     {
         _variant = options.Variant;

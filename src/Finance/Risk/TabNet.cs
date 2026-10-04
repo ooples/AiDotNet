@@ -123,7 +123,7 @@ public partial class TabNet<T> : RiskModelBase<T>
         _options = options ?? new TabNetOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperOptimizer();
 
         InitializeLayers();
     }
@@ -167,10 +167,29 @@ public partial class TabNet<T> : RiskModelBase<T>
         _options = options ?? new TabNetOptions<T>();
         Options = _options;
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-        _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreatePaperOptimizer();
 
         InitializeLayers();
     }
+
+    /// <summary>
+    /// The optimizer TabNet trains with when the caller supplies none: Adam at <see cref="TabNetOptions{T}.LearningRate"/>,
+    /// decayed by <see cref="TabNetOptions{T}.LearningRateDecayRate"/> every
+    /// <see cref="TabNetOptions{T}.LearningRateDecaySteps"/> optimizer steps (Arik &amp; Pfister 2019).
+    /// </summary>
+    /// <remarks>
+    /// This used to be <c>new AdamOptimizer(this)</c> with no options, which trained on the library defaults
+    /// (learning rate 1e-3, no schedule) rather than the paper's recipe. The decay counts iterations, as the paper
+    /// does, so the scheduler steps per batch.
+    /// </remarks>
+    private AdamOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer() =>
+        new(this, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = _options.LearningRate,
+            LearningRateScheduler = new AiDotNet.LearningRateSchedulers.StepLRScheduler(
+                _options.LearningRate, _options.LearningRateDecaySteps, _options.LearningRateDecayRate),
+            SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+        });
 
     #region Initialization
 

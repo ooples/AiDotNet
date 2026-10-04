@@ -231,6 +231,29 @@ public class TabNetOptions<T> : RiskModelOptions<T>
     /// </remarks>
     public double DropoutRate { get; set; } = 0.0;
 
+    /// <summary>
+    /// Gets or sets the Adam learning rate used when no optimizer is supplied.
+    /// </summary>
+    /// <value>Defaults to 0.02.</value>
+    /// <remarks>
+    /// Arik &amp; Pfister (2019), "TabNet: Attentive Interpretable Tabular Learning", train with Adam at a learning
+    /// rate chosen from {0.005, 0.01, 0.02, 0.025}; 0.02 is also the reference implementation's default. Pass an
+    /// optimizer to the constructor to train with anything else.
+    /// </remarks>
+    public double LearningRate { get; set; } = 0.02;
+
+    /// <summary>
+    /// Gets or sets the factor the learning rate is multiplied by every <see cref="LearningRateDecaySteps"/> steps.
+    /// </summary>
+    /// <value>Defaults to 0.95, the paper's Forest Cover Type schedule.</value>
+    public double LearningRateDecayRate { get; set; } = 0.95;
+
+    /// <summary>
+    /// Gets or sets how many optimizer steps pass between learning-rate decays.
+    /// </summary>
+    /// <value>Defaults to 500 iterations, the paper's Forest Cover Type schedule.</value>
+    public int LearningRateDecaySteps { get; set; } = 500;
+
     // CategoricalEmbeddingDimension was declared here and never read. This TabNet takes a
     // numeric feature matrix: neither TabNetBase, TabNetNetwork nor TabNetEncoderLayer mentions
     // categorical features, embeddings or cardinalities anywhere, so there is no embedding table
@@ -257,6 +280,9 @@ public class TabNetOptions<T> : RiskModelOptions<T>
             EnablePreTraining = EnablePreTraining,
             PreTrainingMaskingRatio = PreTrainingMaskingRatio,
             DropoutRate = DropoutRate,
+            LearningRate = LearningRate,
+            LearningRateDecayRate = LearningRateDecayRate,
+            LearningRateDecaySteps = LearningRateDecaySteps,
             MaxGradNorm = MaxGradNorm
         };
     }

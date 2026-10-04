@@ -81,7 +81,7 @@ public partial class ASGDOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// want the averaging to actually engage.</para>
     /// </remarks>
     public ASGDOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         ASGDOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
@@ -113,9 +113,9 @@ public partial class ASGDOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.ASGD,
-            (float)GetCurrentLearningRate(),
+            GetCurrentLearningRate(),
             0f, 0f, 0f,
-            (float)_options.WeightDecay, schedule)
+            _options.WeightDecay, schedule)
         {
             Extras = new Tensors.Engines.Compilation.FusedOptimizerExtras
             {

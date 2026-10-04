@@ -17,11 +17,11 @@ namespace AiDotNet.Optimizers.Fused;
 /// <param name="Schedule">Optional fused-side LR schedule, or null for constant LR.</param>
 internal readonly record struct FusedOptimizerConfig(
     OptimizerType Type,
-    float LearningRate,
-    float Beta1,
-    float Beta2,
-    float Epsilon,
-    float WeightDecay,
+    double LearningRate,
+    double Beta1,
+    double Beta2,
+    double Epsilon,
+    double WeightDecay,
     LrSchedule? Schedule)
 {
     /// <summary>
@@ -57,6 +57,17 @@ internal readonly record struct FusedOptimizerConfig(
     /// </para>
     /// </remarks>
     public AiDotNet.Tensors.Engines.Compilation.FusedOptimizerExtras? Extras { get; init; }
+
+    /// <summary>
+    /// Whether this optimizer's update can legitimately leave every parameter exactly where it was despite a non-zero
+    /// gradient and learning rate, as an L1 proximal step does when it holds weights at zero (FTRL, proximal L1).
+    /// </summary>
+    /// <remarks>
+    /// The fused path's persistence probe treats a step that changes no parameter as a compiled plan that has come
+    /// loose from the live tensors (ooples/AiDotNet#1822). For these optimizers an unchanged step is expected, so the
+    /// probe must not conclude that from it. Init-only for the same reason as <see cref="UseBf16Moments"/>.
+    /// </remarks>
+    public bool UpdateCanBeExactlyZero { get; init; }
 }
 
 /// <summary>
