@@ -860,7 +860,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // (verified: System.OutOfMemoryException in the train step) and even <float> can't fit the
         // ~150M-param forward+backward + AdamW moments in the 120s gate. Genuine foundation-scale
         // compute, not a correctness bug — deferred to the nightly heavy lane.
-        "TortoiseTTS", "FastSpeech", "FastSpeech2",
+        "TortoiseTTS", "FastSpeech",
+        // FastSpeech2 is NOT here (#2093): its training tests run in seconds, and the tag had hidden a
+        // diverging training loss from the PR gate while the nightly heavy lane was red.
         // MaskDINO: foundation-scale unified DETR detection+segmentation transformer (Li 2023, in the
         // Segmentation/Foundation namespace). The training invariants exceed the 120s per-test timeout
         // on CPU (verified: MoreData_ShouldNotDegrade times out). Genuine foundation-scale compute —
@@ -14751,8 +14753,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // No tolerance is relaxed; only the measurement point moves past the hump, the
                     // same remedy E2TTS / SpeechT5 / AudioLM already use in this file.
                     bool naturalSpeechWarmup = model.ClassName == "NaturalSpeech";
-                    int ttsSmokeIterations = model.ClassName is "FastSpeech" or "FastSpeech2" ? 1
-                                           : naturalSpeechWarmup ? 12 : 2;
+                    // FastSpeech2 (#2093) diverged once (9.66 -> 15.63) and a 1-step probe cannot see a trajectory.
+                    // Measured on a fixed (input, target) pair, seed 11: 11.88, 6.16, 6.10, 7.19, 5.50, then
+                    // 5.12 at step 10 and 1.30 at step 40. Twelve steps clear the step-4 bump with a wide margin.
+                    int ttsSmokeIterations = model.ClassName == "FastSpeech" ? 1
+                                           : model.ClassName == "FastSpeech2" || naturalSpeechWarmup ? 12 : 2;
                     sb.AppendLine($"    protected override int TrainingIterations => {ttsSmokeIterations};");
                     sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
                     sb.AppendLine($"    protected override int MoreDataLongIterations => {ttsSmokeIterations};");
