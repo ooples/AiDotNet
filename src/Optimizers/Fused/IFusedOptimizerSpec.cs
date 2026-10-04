@@ -57,6 +57,25 @@ internal readonly record struct FusedOptimizerConfig(
     /// </para>
     /// </remarks>
     public AiDotNet.Tensors.Engines.Compilation.FusedOptimizerExtras? Extras { get; init; }
+
+    /// <summary>
+    /// The global-norm gradient clip this optimizer's own eager tape step applies before its update
+    /// (<c>torch.nn.utils.clip_grad_norm_</c> semantics), or 0 when it applies none.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The fused kernel never sees the optimizer's <c>Step</c>, so a clip that lives there must be
+    /// handed to the compiled plan explicitly. Without it the two paths train differently, and the
+    /// difference is invisible whenever gradients are large: Adam's first update is
+    /// <c>lr * g / (|g| + eps)</c>, so scaling every gradient by the same factor barely moves it.
+    /// Where a gradient is near eps (a weight feeding batch-statistics normalization, whose output
+    /// is invariant to that weight's scale), the scale passes straight through to the update.
+    /// </para>
+    /// <para>
+    /// Init-only for the same reason as <see cref="UseBf16Moments"/>.
+    /// </para>
+    /// </remarks>
+    public double MaxGradientNorm { get; init; }
 }
 
 /// <summary>

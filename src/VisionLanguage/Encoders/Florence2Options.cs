@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 namespace AiDotNet.VisionLanguage.Encoders;
 
 /// <summary>
@@ -8,6 +9,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 /// (0.23B-0.77B) that handles captioning, object detection, grounding, OCR, and segmentation through
 /// a unified prompt-based approach. It uses DaViT as the vision encoder and a multi-task decoder.</para>
 /// </remarks>
+[DimensionDivisibility(nameof(DecoderEmbeddingDim), nameof(NumDecoderHeads))]
 public class Florence2Options : VisionEncoderOptions
 {
     /// <summary>Initializes a new instance by copying from another instance.</summary>
