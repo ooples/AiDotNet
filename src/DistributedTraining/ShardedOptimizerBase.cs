@@ -140,6 +140,10 @@ public abstract partial class ShardedOptimizerBase<T, TInput, TOutput> : ISharde
     {
         Guard.NotNull(wrappedOptimizer);
         _wrappedOptimizer = wrappedOptimizer;
+        // Sharded optimizers read the wrapped optimizer's LastComputedGradients to synchronize replicas; the facade's
+        // model step does not produce them, so it must stay on the flat path.
+        if (wrappedOptimizer is AiDotNet.Optimizers.GradientBasedOptimizerBase<T, TInput, TOutput> gradientBased)
+            gradientBased.FlatGradientsConsumed = true;
         Guard.NotNull(config);
         Config = config;
         NumOps = MathHelper.GetNumericOperations<T>();

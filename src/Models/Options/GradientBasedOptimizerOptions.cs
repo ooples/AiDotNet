@@ -28,7 +28,8 @@ namespace AiDotNet.Models.Options;
 /// gradient-based methods.
 /// </para>
 /// </remarks>
-public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlgorithmOptions<T, TInput, TOutput>
+public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlgorithmOptions<T, TInput, TOutput>,
+    IConfigurationCopyCompletion
 {
     private double _armijoConstant = 1e-4;
     private double _lineSearchContractionFactor = 0.5;
@@ -48,7 +49,8 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
         GradientCache = other.GradientCache;
         _lossFunction = other._lossFunction;
         LossFunctionExplicitlySet = other.LossFunctionExplicitlySet;
-        Regularization = other.Regularization;
+        _regularization = other._regularization;
+        RegularizationExplicitlySet = other.RegularizationExplicitlySet;
         DataSampler = other.DataSampler;
         ShuffleData = other.ShuffleData;
         DropLastBatch = other.DropLastBatch;
@@ -133,7 +135,8 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
         GradientCache = other.GradientCache;
         _lossFunction = other._lossFunction;
         LossFunctionExplicitlySet = other.LossFunctionExplicitlySet;
-        Regularization = other.Regularization;
+        _regularization = other._regularization;
+        RegularizationExplicitlySet = other.RegularizationExplicitlySet;
         DataSampler = other.DataSampler;
         ShuffleData = other.ShuffleData;
         DropLastBatch = other.DropLastBatch;
@@ -237,7 +240,44 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
     /// which can actually hurt performance on new, unseen data.
     /// </para>
     /// </remarks>
-    public IRegularization<T, TInput, TOutput> Regularization { get; set; } = new L2Regularization<T, TInput, TOutput>();
+    public IRegularization<T, TInput, TOutput> Regularization
+    {
+        get => _regularization;
+        set
+        {
+            _regularization = value ?? throw new ArgumentNullException(nameof(value));
+            RegularizationExplicitlySet = true;
+        }
+    }
+
+    private IRegularization<T, TInput, TOutput> _regularization = new L2Regularization<T, TInput, TOutput>();
+
+    /// <summary>
+    /// True when a caller assigned <see cref="Regularization"/> rather than leaving the default L2. A network's own
+    /// training step (<c>Train</c>, the fused compiled step) applies only an explicitly chosen regularization: the
+    /// implicit default is weight decay the caller never asked for, and under Adam even a 0.01 L2 term becomes a
+    /// near-full learning-rate step on every parameter, frozen ones included.
+    /// </summary>
+    internal bool RegularizationExplicitlySet { get; private set; }
+
+    /// <summary>
+    /// A configuration clone assigns <see cref="Regularization"/> through its setter, which would mark even the untouched
+    /// default as chosen; the clone takes whether it was chosen from its source instead.
+    /// </summary>
+    void IConfigurationCopyCompletion.CompleteConfigurationCopy(object source)
+    {
+        if (source is GradientBasedOptimizerOptions<T, TInput, TOutput> other)
+        {
+            RegularizationExplicitlySet = other.RegularizationExplicitlySet;
+        }
+    }
+
+    /// <summary>Copies <paramref name="other"/>'s regularization together with whether it was explicitly chosen.</summary>
+    private protected void CopyRegularizationFrom(GradientBasedOptimizerOptions<T, TInput, TOutput> other)
+    {
+        _regularization = other._regularization;
+        RegularizationExplicitlySet = other.RegularizationExplicitlySet;
+    }
 
     /// <summary>
     /// Gets or sets the optional data sampler for advanced sampling strategies during batch creation.
