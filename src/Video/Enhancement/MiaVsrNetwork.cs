@@ -83,6 +83,11 @@ internal sealed class MiaVsrNetwork<T>
     {
         if (options is null) throw new ArgumentNullException(nameof(options));
         if (inputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(inputChannels));
+        // A supplied estimator already resolved for other frames would reject the first flow pass; say so here.
+        if (flowEstimator is not null && flowEstimator.ResolvedFrameChannels > 0 && flowEstimator.ResolvedFrameChannels != inputChannels)
+            throw new ArgumentException(
+                $"The flow estimator was built for {flowEstimator.ResolvedFrameChannels}-channel frames, but MIA-VSR uses {inputChannels}.",
+                nameof(flowEstimator));
         if (options.NumFeatures <= 0) throw new ArgumentOutOfRangeException(nameof(options), "NumFeatures must be positive.");
         if (options.NumHeads <= 0 || options.NumFeatures % options.NumHeads != 0)
             throw new ArgumentException(

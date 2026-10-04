@@ -252,4 +252,33 @@ public class MIAVSRMaskedAttentionTests
 
         Assert.Throws<InvalidOperationException>(() => model.Train(CreateClip(51), HighResTarget(52)));
     }
+
+    [Fact]
+    public void FlowEstimator_ResolvedForOtherFrames_IsRefused()
+    {
+        var flow = new SpyNetLayer<double>();
+        var grey = new Tensor<double>(new[] { 1, 1, 16, 16 });
+        flow.EstimateFlow(grey, grey);
+
+        Assert.Throws<ArgumentException>(() => CreateModel(FlowOptions(), flow));
+    }
+
+    [Fact]
+    public void ChunkedTraining_AdvancesTheFineTuningFreeze()
+    {
+        var model = CreateModel(FlowOptions(fineTune: true, freezeSteps: 1), new SpyNetLayer<double>());
+        var clip = new Tensor<double>(new[] { 2, Frames, Channels, Side, Side });
+        var target = new Tensor<double>(new[] { 2, Frames, Channels, Side * 2, Side * 2 });
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(61);
+        for (int i = 0; i < clip.Length; i++) clip[i] = rng.NextDouble();
+        for (int i = 0; i < target.Length; i++) target[i] = rng.NextDouble();
+
+        // Two samples in chunks of one: the base trainer steps the optimizer itself, not through Train.
+        model.TrainWithGradientAccumulation(clip, target, batchSize: 1);
+        var afterFrozenStep = FlowWeights(model);
+
+        model.Train(CreateClip(62), HighResTarget(63));
+        Assert.True(afterFrozenStep.Zip(FlowWeights(model), (a, b) => a != b).Any(changed => changed),
+            "The chunked step did not count toward the freeze, so the opted-in SPyNet never started training.");
+    }
 }

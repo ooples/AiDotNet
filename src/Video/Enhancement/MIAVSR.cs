@@ -141,6 +141,8 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
     ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
         new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
         { InitialLearningRate = _options.LearningRate });
+        // Every training path steps this optimizer, including the base trainer's chunked accumulation.
+        SetBaseTrainOptimizer(_optimizer);
         ScaleFactor = _options.ScaleFactor;
         InitializeLayers();
     }
@@ -316,6 +318,19 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
             throw new InvalidOperationException(
                 $"{name} must be finite and non-negative; it is {value.ToString(System.Globalization.CultureInfo.InvariantCulture)}.");
         return value;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// A batch larger than <paramref name="batchSize"/> is stepped by the base trainer directly, not through
+    /// <see cref="Train"/>, so that step is counted here for the SPyNet fine-tuning freeze; a smaller batch goes
+    /// through <see cref="Train"/>, which counts it itself.
+    /// </remarks>
+    public override void TrainWithGradientAccumulation(Tensor<T> input, Tensor<T> target, int batchSize)
+    {
+        int stepsBefore = _flowTrainingSteps;
+        base.TrainWithGradientAccumulation(input, target, batchSize);
+        if (_flowTrainingSteps == stepsBefore) _flowTrainingSteps++;
     }
 
     public override void Train(Tensor<T> input, Tensor<T> expected)

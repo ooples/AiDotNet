@@ -759,6 +759,20 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
     /// <returns>The warped image.</returns>
     internal Tensor<T> WarpByFlow(Tensor<T> image, Tensor<T> flow) => WarpImageWithGrid(image, flow, hasBatch: true).warped;
 
+    /// <summary>
+    /// The per-frame channel count this estimator is bound to, or -1 while it is unresolved. EstimateFlow does not
+    /// run OnFirstForward, so the basic modules (2·C + 2 input channels) are the record when it was used that way.
+    /// </summary>
+    internal int ResolvedFrameChannels
+    {
+        get
+        {
+            if (_inputChannels > 0) return _inputChannels;
+            int moduleInput = _basicModules.Count > 0 ? _basicModules[0].InputDepth : 0;
+            return moduleInput > 2 ? (moduleInput - 2) / 2 : -1;
+        }
+    }
+
     private (Tensor<T> warped, Tensor<T> grid) WarpImageWithGrid(Tensor<T> image, Tensor<T> flow, bool hasBatch)
     {
         int batch = hasBatch ? image.Shape[0] : 1;
