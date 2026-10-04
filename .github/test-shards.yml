@@ -1744,6 +1744,7 @@ shard:
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.TransformerLogitsLossHeadTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.TransformerProductionScaleHarnessIssue1221Tests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.NeuralNetworks.TransformerTrainingTraceTest.|
+      FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.Adam8BitBf16TrainingTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.Adam8BitFusedSpecTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.AdamOptimizerLengthMismatchIssue1245Tests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Optimizers.FusedActivationParityTests.|
