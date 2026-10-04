@@ -468,16 +468,9 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
         int targetLen = target.Length;
         if (targetLen <= 0) return NumOps.Zero;
 
-        var sqrtAlphaBar = new Vector<T>(_numDiffusionSteps);
-        var sqrtOneMinus = new Vector<T>(_numDiffusionSteps);
-        for (int t = 0; t < _numDiffusionSteps; t++)
-        {
-            sqrtAlphaBar[t] = NumOps.Sqrt(_alphasCumprod[t]);
-            sqrtOneMinus[t] = NumOps.Sqrt(NumOps.Subtract(NumOps.One, _alphasCumprod[t]));
-        }
-
+        // The schedule ComputeNoiseSchedule already holds; only the timesteps and noise are taken from the batch.
         var (_, noise, timesteps) = BuildDeterministicDenoisingBatch(
-            target, targetLen, _numDiffusionSteps, sqrtAlphaBar, sqrtOneMinus);
+            target, targetLen, _numDiffusionSteps, _sqrtAlphasCumprod, _sqrtOneMinusAlphasCumprod);
 
         bool wasTraining = IsTrainingMode;
         SetTrainingMode(false);

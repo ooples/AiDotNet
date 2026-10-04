@@ -185,6 +185,10 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         // the compiled kernel would decay every parameter including the ones the mask exempts. Decline
         // rather than diverge from the eager path.
         if (_options.WeightDecayMask is not null) return false;
+        // The eager tape step clips before the update. The compiled plan can reproduce a global-norm
+        // clip (carried below) but not a per-element value clip, so a value-clipped run stays eager.
+        bool clips = GradientOptions.EnableGradientClipping;
+        if (clips && GradientOptions.GradientClippingMethod == GradientClippingMethod.ByValue) return false;
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         // AdamW + AMSGrad runs the max-second-moment kernel with its decay switched to decoupled via Extras.
         config = new Fused.FusedOptimizerConfig(

@@ -52,11 +52,13 @@ namespace AiDotNet.NeuralNetworks.Layers;
 //
 // Rank 3 is declared rather than [ElementWiseShape], which would claim every rank down to 1: the
 // self-attention sublayer needs a sequence axis as well as a feature axis, so rank 1 is not this
-// layer's to accept. Matching layouts let the generator derive Same(role) per axis.
+// layer's to accept. The batch axis is optional: an unbatched [time, features] sequence (PyTorch's unbatched (S, E)
+// TransformerEncoderLayer input) computes exactly what the same sequence does as a batch of one, which
+// TransformerEncoderBlockUnbatchedTests holds. Matching layouts let the generator derive Same(role) per axis.
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
-    Direction = TensorLayoutDirection.Input)]
+    BatchOptional = true, Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
-    Direction = TensorLayoutDirection.Output)]
+    BatchOptional = true, Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
 public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
 {
