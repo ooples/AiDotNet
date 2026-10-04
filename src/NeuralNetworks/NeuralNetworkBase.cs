@@ -12540,10 +12540,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         float wd = fusedCfg.WeightDecay;
         var lrSched = fusedCfg.Schedule;
         bool useBf16Moments = fusedCfg.UseBf16Moments;
-        // The eager path clips twice: the model's MaxGradNorm in TrainWithTape, then the optimizer's own global-norm
-        // clip inside its Step. Two successive global-norm clips equal one clip at the smaller bound, so the compiled
-        // plan gets that one. Passing only the model's bound let the fused step skip the optimizer's clip: a different
-        // training whenever a gradient sits near Adam's epsilon.
+        // The eager path clips twice: the model's MaxGradNorm in TrainWithTape, then the optimizer's own
+        // global-norm clip inside its Step. Two successive global-norm clips equal one clip at the smaller
+        // bound, so the compiled plan gets that one. Passing only the model's bound let the fused step skip
+        // the optimizer's clip, a different training whenever a gradient sits near Adam's epsilon.
         double fusedMaxGradNorm = SmallerPositiveGradNorm(MaxGradNormValue, fusedCfg.MaxGradientNorm);
 
         // Use the existing recursive trainable-layer collector instead of the
@@ -13058,17 +13058,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
-    /// The single global-norm bound equivalent to clipping at <paramref name="first"/> and then at
-    /// <paramref name="second"/>, where 0 (or less) means that clip is off. Returns 0 when both are off.
-    /// </summary>
-    internal static double SmallerPositiveGradNorm(double first, double second)
-    {
-        if (first <= 0.0) return second > 0.0 ? second : 0.0;
-        if (second <= 0.0) return first;
-        return Math.Min(first, second);
-    }
-
-    /// <summary>
     /// Asks a pluggable optimizer to describe itself for the Tensors-side fused kernel, returning the
     /// whole <see cref="Optimizers.Fused.FusedOptimizerConfig"/>.
     /// </summary>
@@ -13092,6 +13081,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         config = default;
         return optimizer is Optimizers.Fused.IFusedOptimizerSpec spec
             && spec.TryGetFusedOptimizerConfig(out config);
+    }
+
+    /// <summary>
+    /// The single global-norm bound equivalent to clipping at <paramref name="first"/> and then at
+    /// <paramref name="second"/>, where 0 (or less) means that clip is off. Returns 0 when both are off.
+    /// </summary>
+    internal static double SmallerPositiveGradNorm(double first, double second)
+    {
+        if (first <= 0.0) return second > 0.0 ? second : 0.0;
+        if (second <= 0.0) return first;
+        return Math.Min(first, second);
     }
 
     /// <summary>

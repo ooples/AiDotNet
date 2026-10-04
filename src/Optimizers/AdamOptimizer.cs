@@ -162,9 +162,9 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
             0f, schedule)
         {
-            // The eager tape step clips by global norm before the update (ApplyGlobalNormGradientClipping); the
-            // compiled plan must apply the same clip or the two paths train differently. The tape step ignores
-            // ByValue, so only ByNorm is carried.
+            // The eager tape step clips by global norm before the update (ApplyGlobalNormGradientClipping);
+            // the compiled plan must apply the same clip or the two paths train differently. The tape step
+            // ignores ByValue, so only ByNorm is carried.
             MaxGradientNorm = GradientOptions.EnableGradientClipping
                 && GradientOptions.GradientClippingMethod == GradientClippingMethod.ByNorm
                     ? GradientOptions.MaxGradientNorm

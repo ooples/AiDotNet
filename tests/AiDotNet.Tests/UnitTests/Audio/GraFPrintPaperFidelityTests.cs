@@ -180,10 +180,13 @@ public class GraFPrintPaperFidelityTests
         var second = BuildFourNodeInput([0.0, 10.0, 11.0, 1.0]);
         var target = new Tensor<double>([1, 2, 2, 2]);
 
-        bool previousCompilation = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation;
+        // Current returns a fresh default copy unless SetCurrent installed one on this thread, so writing
+        // Current.EnableCompilation is lost and the "eager" leg could replay the compiled plan. Install the
+        // mode explicitly for each leg.
+        var previousOptions = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
         try
         {
-            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = true;
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(new AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions { EnableCompilation = true });
             AiDotNet.Training.CompiledTapeTrainingStep<double>.Invalidate();
             AiDotNet.Training.CompiledTapeTrainingStep<double>.ResetFusedStepCount();
 
@@ -199,7 +202,7 @@ public class GraFPrintPaperFidelityTests
                 "Compiled replay reused the first input's k-NN topology for a different input.");
 
             double[] compiledValues = compiledModel.GetParameters().ToArray();
-            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = false;
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(new AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions { EnableCompilation = false });
             AiDotNet.Training.CompiledTapeTrainingStep<double>.Invalidate();
             eagerModel.Train(first, target);
             eagerModel.Train(second, target);
@@ -224,7 +227,7 @@ public class GraFPrintPaperFidelityTests
         {
             AiDotNet.Training.CompiledTapeTrainingStep<double>.Invalidate();
             AiDotNet.Training.CompiledTapeTrainingStep<double>.ResetFusedStepCount();
-            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = previousCompilation;
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(previousOptions);
         }
     }
 
