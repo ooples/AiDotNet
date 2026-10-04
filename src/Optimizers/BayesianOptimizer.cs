@@ -60,7 +60,7 @@ public partial class BayesianOptimizer<T, TInput, TOutput> : OptimizerBase<T, TI
     /// </para>
     /// </remarks>
     public BayesianOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         BayesianOptimizerOptions<T, TInput, TOutput>? options = null,
         IGaussianProcess<T>? gaussianProcess = null,
         IEngine? engine = null)

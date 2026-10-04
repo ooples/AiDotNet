@@ -80,6 +80,8 @@ internal static class GpuResidentFusedStep<T>
             cfg.Type, cfg.LearningRate, cfg.Beta1, cfg.Beta2, cfg.Epsilon, cfg.WeightDecay, out lossValue,
             maxGradNorm: maxGradNorm,
             lrSchedule: cfg.Schedule,
+            // The optimizer INSTANCE, not just its hyperparameters: its moments live in the compiled plan, and the
+            // plan links itself to this instance so a checkpoint of the optimizer carries them.
             eagerOptimizer: optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>,
             useBf16Moments: cfg.UseBf16Moments,
             extraTensors: extraTensors,

@@ -87,7 +87,7 @@ public partial class LevenbergMarquardtOptimizer<T, TInput, TOutput> : GradientB
     /// <param name="options">Custom options for the Levenberg-Marquardt algorithm.</param>
     /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     public LevenbergMarquardtOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         LevenbergMarquardtOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

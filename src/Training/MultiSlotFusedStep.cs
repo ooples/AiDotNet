@@ -60,7 +60,7 @@ public sealed class MultiSlotFusedStep<T> : IDisposable
 
     // Optimizer configuration frozen at first Step. A different optimizer
     // config on a subsequent Step invalidates and reconfigures.
-    private (OptimizerType Type, float Lr, float B1, float B2, float Eps, float Wd)? _configuredOptimizer;
+    private (OptimizerType Type, double Lr, double B1, double B2, double Eps, double Wd)? _configuredOptimizer;
 
     private bool _disposed;
 
@@ -108,11 +108,11 @@ public sealed class MultiSlotFusedStep<T> : IDisposable
         Func<IReadOnlyList<Tensor<T>>, Tensor<T>> forward,
         Func<Tensor<T>, IReadOnlyList<Tensor<T>>, Tensor<T>> computeLoss,
         OptimizerType optimizerType,
-        float learningRate,
-        float beta1,
-        float beta2,
-        float epsilon,
-        float weightDecay,
+        double learningRate,
+        double beta1,
+        double beta2,
+        double epsilon,
+        double weightDecay,
         out T lossValue)
         => TryStep(parameters, zeroGradAction, freshSlotData, forward, computeLoss,
             optimizerType, learningRate, beta1, beta2, epsilon, weightDecay, lrSchedule: null, extras: null, out lossValue);
@@ -128,11 +128,11 @@ public sealed class MultiSlotFusedStep<T> : IDisposable
         Func<IReadOnlyList<Tensor<T>>, Tensor<T>> forward,
         Func<Tensor<T>, IReadOnlyList<Tensor<T>>, Tensor<T>> computeLoss,
         OptimizerType optimizerType,
-        float learningRate,
-        float beta1,
-        float beta2,
-        float epsilon,
-        float weightDecay,
+        double learningRate,
+        double beta1,
+        double beta2,
+        double epsilon,
+        double weightDecay,
         LrSchedule? lrSchedule,
         FusedOptimizerExtras? extras,
         out T lossValue)
@@ -161,11 +161,11 @@ public sealed class MultiSlotFusedStep<T> : IDisposable
         Func<IReadOnlyList<Tensor<T>>, Tensor<T>> forward,
         Func<Tensor<T>, IReadOnlyList<Tensor<T>>, Tensor<T>> computeLoss,
         OptimizerType optimizerType,
-        float learningRate,
-        float beta1,
-        float beta2,
-        float epsilon,
-        float weightDecay,
+        double learningRate,
+        double beta1,
+        double beta2,
+        double epsilon,
+        double weightDecay,
         LrSchedule? lrSchedule,
         FusedOptimizerExtras? extras,
         out T lossValue)
@@ -356,7 +356,7 @@ public sealed class MultiSlotFusedStep<T> : IDisposable
         for (int i = 0; i < parameters.Count; i++) _cachedLayerIdentities[i] = parameters[i];
     }
 
-    private bool OptimizerConfigChanged(OptimizerType type, float lr, float b1, float b2, float eps, float wd)
+    private bool OptimizerConfigChanged(OptimizerType type, double lr, double b1, double b2, double eps, double wd)
     {
         if (_configuredOptimizer is null) return true;
         var (cType, cLr, cB1, cB2, cEps, cWd) = _configuredOptimizer.Value;

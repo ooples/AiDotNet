@@ -130,6 +130,69 @@ public sealed class ModelStateRegistryTests
             Assert.Equal(untouched.Next(), destination.Next());
     }
 
+    [Fact]
+    public void Options_WithAForwardingSetter_StageLeavesTheLiveOptionsUntouchedAndReportsAFallibleCommit()
+    {
+        // The dry run writes to a shallow copy, which shares Inner with the live options, so the
+        // forwarding setter reaches the live object through it. Staging must undo that and say the
+        // commit is no longer side-effect free.
+        var restored = RoundTripOptions(
+            new ForwardingOptions { Label = "checkpoint" }, new ForwardingOptions { Label = "live" },
+            out var commit, out bool hasFallibleCommit);
+
+        Assert.Equal("live", restored.Label);
+        Assert.True(hasFallibleCommit);
+        commit();
+        Assert.Equal("checkpoint", restored.Label);
+    }
+
+    [Fact]
+    public void Options_WithPlainSetters_StageIsSideEffectFreeAndNotFallible()
+    {
+        // Control: detection must not mark every options restore fallible, or every restore would
+        // pay for a rollback snapshot.
+        var restored = RoundTripOptions(
+            new PlainOptions { Label = "checkpoint" }, new PlainOptions { Label = "live" },
+            out var commit, out bool hasFallibleCommit);
+
+        Assert.Equal("live", restored.Label);
+        Assert.False(hasFallibleCommit);
+        commit();
+        Assert.Equal("checkpoint", restored.Label);
+    }
+
+    private static TOptions RoundTripOptions<TOptions>(
+        TOptions source, TOptions destination, out Action commit, out bool hasFallibleCommit)
+        where TOptions : class
+    {
+        var writingRegistry = new ModelStateRegistry<double>();
+        writingRegistry.DeclareOptions("options", () => source);
+        using var payload = Write(writingRegistry);
+
+        var readingRegistry = new ModelStateRegistry<double>();
+        readingRegistry.DeclareOptions("options", () => destination);
+        using var reader = new BinaryReader(
+            payload, System.Text.Encoding.UTF8, leaveOpen: true);
+        commit = readingRegistry.StageAll(reader, restoreAfterParameters: null, out hasFallibleCommit);
+        Assert.Equal(payload.Length, payload.Position);
+        return destination;
+    }
+
+    public sealed class ForwardingOptions
+    {
+        public LabelHolder Inner { get; set; } = new LabelHolder();
+        public string Label { get => Inner.Value; set => Inner.Value = value; }
+    }
+
+    public sealed class LabelHolder
+    {
+        public string Value { get; set; } = string.Empty;
+    }
+
+    public sealed class PlainOptions
+    {
+        public string Label { get; set; } = string.Empty;
+    }
     private static void RoundTripRandom(Random source, Random destination)
     {
         var writingRegistry = new ModelStateRegistry<double>();

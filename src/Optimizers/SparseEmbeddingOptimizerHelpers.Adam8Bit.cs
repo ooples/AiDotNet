@@ -125,8 +125,8 @@ internal static partial class SparseEmbeddingOptimizerHelpers
             double vScale = vScales[b];
             for (int i = 0; i < blockLen; i++)
             {
-                mDeq[i] = (mQuantized[blockStart + i] - 128) * mScale;
-                vDeq[i] = vQuantized[blockStart + i] * vScale;
+                mDeq[i] = DynamicQuantizationMap.Decode(mQuantized[blockStart + i], mScale, DynamicQuantizationMap.Signed);
+                vDeq[i] = DynamicQuantizationMap.Decode(vQuantized[blockStart + i], vScale, DynamicQuantizationMap.Unsigned);
             }
 
             // Apply Adam at touched indices within this block. We need to walk the
@@ -166,21 +166,18 @@ internal static partial class SparseEmbeddingOptimizerHelpers
                 double a = Math.Abs(mDeq[i]); if (a > mMax) mMax = a;
                 double s = Math.Abs(vDeq[i]); if (s > vMax) vMax = s;
             }
-            double mScaleNew = mMax / 127.0; if (mScaleNew < 1e-10) mScaleNew = 1e-10;
-            double vScaleNew = vMax / 255.0; if (vScaleNew < 1e-10) vScaleNew = 1e-10;
+            // Block-wise dynamic quantization (Dettmers et al.): the scale is the block absmax and each value is
+            // stored as its nearest codebook entry, so small second moments keep their relative precision.
+            double mScaleNew = DynamicQuantizationMap.Scale(mMax);
+            double vScaleNew = DynamicQuantizationMap.Scale(vMax);
             mScales[b] = mScaleNew;
             vScales[b] = vScaleNew;
 
             // Re-quantize the whole block with new scales.
             for (int i = 0; i < blockLen; i++)
             {
-                int qm = (int)Math.Round(mDeq[i] / mScaleNew);
-                if (qm < -127) qm = -127; if (qm > 127) qm = 127;
-                mQuantized[blockStart + i] = (byte)(qm + 128);
-
-                int qv = (int)Math.Round(vDeq[i] / vScaleNew);
-                if (qv < 0) qv = 0; if (qv > 255) qv = 255;
-                vQuantized[blockStart + i] = (byte)qv;
+                mQuantized[blockStart + i] = DynamicQuantizationMap.Encode(mDeq[i], mScaleNew, DynamicQuantizationMap.Signed);
+                vQuantized[blockStart + i] = DynamicQuantizationMap.Encode(vDeq[i], vScaleNew, DynamicQuantizationMap.Unsigned);
             }
         }
         return true;
@@ -227,8 +224,8 @@ internal static partial class SparseEmbeddingOptimizerHelpers
             double vScale = vScales[b];
             for (int i = 0; i < blockLen; i++)
             {
-                mDeq[i] = (mQuantized[blockStart + i] - 128) * mScale;
-                vDeq[i] = vQuantized[blockStart + i] * vScale;
+                mDeq[i] = DynamicQuantizationMap.Decode(mQuantized[blockStart + i], mScale, DynamicQuantizationMap.Signed);
+                vDeq[i] = DynamicQuantizationMap.Decode(vQuantized[blockStart + i], vScale, DynamicQuantizationMap.Unsigned);
             }
 
             foreach (var sparseObj in sparseList)
@@ -265,20 +262,17 @@ internal static partial class SparseEmbeddingOptimizerHelpers
                 double a = Math.Abs(mDeq[i]); if (a > mMax) mMax = a;
                 double s = Math.Abs(vDeq[i]); if (s > vMax) vMax = s;
             }
-            double mScaleNew = mMax / 127.0; if (mScaleNew < 1e-10) mScaleNew = 1e-10;
-            double vScaleNew = vMax / 255.0; if (vScaleNew < 1e-10) vScaleNew = 1e-10;
+            // Block-wise dynamic quantization (Dettmers et al.): the scale is the block absmax and each value is
+            // stored as its nearest codebook entry, so small second moments keep their relative precision.
+            double mScaleNew = DynamicQuantizationMap.Scale(mMax);
+            double vScaleNew = DynamicQuantizationMap.Scale(vMax);
             mScales[b] = mScaleNew;
             vScales[b] = vScaleNew;
 
             for (int i = 0; i < blockLen; i++)
             {
-                int qm = (int)Math.Round(mDeq[i] / mScaleNew);
-                if (qm < -127) qm = -127; if (qm > 127) qm = 127;
-                mQuantized[blockStart + i] = (byte)(qm + 128);
-
-                int qv = (int)Math.Round(vDeq[i] / vScaleNew);
-                if (qv < 0) qv = 0; if (qv > 255) qv = 255;
-                vQuantized[blockStart + i] = (byte)qv;
+                mQuantized[blockStart + i] = DynamicQuantizationMap.Encode(mDeq[i], mScaleNew, DynamicQuantizationMap.Signed);
+                vQuantized[blockStart + i] = DynamicQuantizationMap.Encode(vDeq[i], vScaleNew, DynamicQuantizationMap.Unsigned);
             }
         }
     }
@@ -324,8 +318,8 @@ internal static partial class SparseEmbeddingOptimizerHelpers
             double vScale = vScales[b];
             for (int i = 0; i < blockLen; i++)
             {
-                mDeq[i] = (mQuantized[blockStart + i] - 128) * mScale;
-                vDeq[i] = vQuantized[blockStart + i] * vScale;
+                mDeq[i] = DynamicQuantizationMap.Decode(mQuantized[blockStart + i], mScale, DynamicQuantizationMap.Signed);
+                vDeq[i] = DynamicQuantizationMap.Decode(vQuantized[blockStart + i], vScale, DynamicQuantizationMap.Unsigned);
             }
 
             foreach (var sparseObj in sparseList)
@@ -362,20 +356,17 @@ internal static partial class SparseEmbeddingOptimizerHelpers
                 double a = Math.Abs(mDeq[i]); if (a > mMax) mMax = a;
                 double s = Math.Abs(vDeq[i]); if (s > vMax) vMax = s;
             }
-            double mScaleNew = mMax / 127.0; if (mScaleNew < 1e-10) mScaleNew = 1e-10;
-            double vScaleNew = vMax / 255.0; if (vScaleNew < 1e-10) vScaleNew = 1e-10;
+            // Block-wise dynamic quantization (Dettmers et al.): the scale is the block absmax and each value is
+            // stored as its nearest codebook entry, so small second moments keep their relative precision.
+            double mScaleNew = DynamicQuantizationMap.Scale(mMax);
+            double vScaleNew = DynamicQuantizationMap.Scale(vMax);
             mScales[b] = mScaleNew;
             vScales[b] = vScaleNew;
 
             for (int i = 0; i < blockLen; i++)
             {
-                int qm = (int)Math.Round(mDeq[i] / mScaleNew);
-                if (qm < -127) qm = -127; if (qm > 127) qm = 127;
-                mQuantized[blockStart + i] = (byte)(qm + 128);
-
-                int qv = (int)Math.Round(vDeq[i] / vScaleNew);
-                if (qv < 0) qv = 0; if (qv > 255) qv = 255;
-                vQuantized[blockStart + i] = (byte)qv;
+                mQuantized[blockStart + i] = DynamicQuantizationMap.Encode(mDeq[i], mScaleNew, DynamicQuantizationMap.Signed);
+                vQuantized[blockStart + i] = DynamicQuantizationMap.Encode(vDeq[i], vScaleNew, DynamicQuantizationMap.Unsigned);
             }
         }
     }
