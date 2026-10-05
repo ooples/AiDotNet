@@ -43,14 +43,7 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class TimeGradOptions<T> : TimeSeriesRegressionOptions<T>
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="TimeGradOptions{T}"/> class with default values.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Creates a default TimeGrad configuration optimized for
-    /// probabilistic time series forecasting.
-    /// </para>
-    /// </remarks>
+    /// <summary>Creates options with the paper's defaults.</summary>
     public TimeGradOptions()
     {
         // Seed is INHERITED from ModelOptions and assigned here rather than shadowed with `new`,
@@ -59,11 +52,7 @@ public class TimeGradOptions<T> : TimeSeriesRegressionOptions<T>
         Seed = 1;
     }
 
-    /// <summary>
-    /// Initializes a new instance by copying from another instance.
-    /// </summary>
-    /// <param name="other">The options instance to copy from.</param>
-    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    /// <summary>Copies every setting of <paramref name="other"/>.</summary>
     public TimeGradOptions(TimeGradOptions<T> other)
     {
         if (other == null)
@@ -83,146 +72,60 @@ public class TimeGradOptions<T> : TimeSeriesRegressionOptions<T>
         BetaSchedule = other.BetaSchedule;
         NumSamples = other.NumSamples;
         DropoutRate = other.DropoutRate;
-        UseResidualConnection = other.UseResidualConnection;
         DenoisingNetworkDim = other.DenoisingNetworkDim;
+        ResidualLayers = other.ResidualLayers;
+        ResidualChannels = other.ResidualChannels;
+        DilationCycleLength = other.DilationCycleLength;
+        TimeEmbeddingDim = other.TimeEmbeddingDim;
     }
 
-    /// <summary>
-    /// Gets or sets the context length (input sequence length).
-    /// </summary>
-    /// <value>The context length, defaulting to 168 (one week of hourly data).</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How many past time steps the model can look at
-    /// to make predictions. The default of 168 corresponds to one week of hourly data.
-    /// </para>
-    /// </remarks>
+    /// <summary>Gets or sets the number of past steps the model conditions on.</summary>
     public int ContextLength { get; set; } = 168;
 
-    /// <summary>
-    /// Gets or sets the forecast horizon (prediction length).
-    /// </summary>
-    /// <value>The forecast horizon, defaulting to 24 (one day ahead for hourly data).</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How far into the future to predict.
-    /// The default of 24 corresponds to one day ahead for hourly data.
-    /// </para>
-    /// </remarks>
+    /// <summary>Gets or sets the number of future steps to forecast.</summary>
     public int ForecastHorizon { get; set; } = 24;
 
-    /// <summary>
-    /// Gets or sets the hidden dimension for the RNN encoder.
-    /// </summary>
-    /// <value>The hidden dimension, defaulting to 64.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The size of the RNN hidden state that encodes
-    /// historical information. Larger values capture more complex patterns.
-    /// </para>
-    /// </remarks>
-    public int HiddenDimension { get; set; } = 64;
+    /// <summary>Gets or sets the hidden size of each RNN layer (40 in the paper).</summary>
+    public int HiddenDimension { get; set; } = 40;
 
-    /// <summary>
-    /// Gets or sets the number of RNN layers in the encoder.
-    /// </summary>
-    /// <value>The number of RNN layers, defaulting to 2.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How many RNN layers are stacked to encode
-    /// historical data. More layers = more capacity but also more computation.
-    /// </para>
-    /// </remarks>
+    /// <summary>Gets or sets the number of stacked LSTM layers in the history encoder (2 in the paper).</summary>
     public int NumRnnLayers { get; set; } = 2;
 
-    /// <summary>
-    /// Gets or sets the number of diffusion steps (T in the paper).
-    /// </summary>
-    /// <value>The number of diffusion steps, defaulting to 100.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The diffusion process adds noise in T steps.
-    /// More steps = finer-grained denoising = better quality but slower.
-    ///
-    /// <b>Analogy:</b> Like slowly adding static to a TV signal (forward process),
-    /// then learning to remove it frame-by-frame (reverse process).
-    /// </para>
-    /// </remarks>
+    /// <summary>Gets or sets the number of diffusion steps N (100 in the paper).</summary>
     public int NumDiffusionSteps { get; set; } = 100;
 
-    /// <summary>
-    /// Gets or sets the starting noise level (beta_1).
-    /// </summary>
-    /// <value>The starting beta, defaulting to 0.0001.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How much noise to add at the first diffusion step.
-    /// Small values mean the first step barely changes the data.
-    /// </para>
-    /// </remarks>
+    /// <summary>Gets or sets the first noise variance beta_1 (1e-4 in the paper).</summary>
     public double BetaStart { get; set; } = 0.0001;
 
-    /// <summary>
-    /// Gets or sets the ending noise level (beta_T).
-    /// </summary>
-    /// <value>The ending beta, defaulting to 0.02.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How much noise to add at the last diffusion step.
-    /// By step T, the data should be almost completely noise.
-    /// </para>
-    /// </remarks>
-    public double BetaEnd { get; set; } = 0.02;
+    /// <summary>Gets or sets the last noise variance beta_N (0.1 in the paper).</summary>
+    public double BetaEnd { get; set; } = 0.1;
 
-    /// <summary>
-    /// Gets or sets the noise schedule type.
-    /// </summary>
-    /// <value>The beta schedule, defaulting to "linear".</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How noise levels change across diffusion steps:
-    /// - "linear": Noise increases uniformly from beta_start to beta_end
-    /// - "cosine": Smoother schedule, often better for images
-    /// - "quadratic": Noise increases quadratically
-    /// </para>
-    /// </remarks>
-    public string BetaSchedule { get; set; } = "linear";
+    /// <summary>Gets or sets how beta grows from <see cref="BetaStart"/> to <see cref="BetaEnd"/> (linear in the paper).</summary>
+    public AiDotNet.Enums.BetaSchedule BetaSchedule { get; set; } = AiDotNet.Enums.BetaSchedule.Linear;
 
-    /// <summary>
-    /// Gets or sets the number of samples to generate for probabilistic forecasting.
-    /// </summary>
-    /// <value>The number of samples, defaulting to 100.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How many different forecast paths to generate.
-    /// More samples = better uncertainty estimates but slower inference.
-    ///
-    /// <b>Example:</b> With 100 samples, you can compute the 10th and 90th
-    /// percentiles to get an 80% prediction interval.
-    /// </para>
-    /// </remarks>
+    /// <summary>Gets or sets how many sample paths a forecast averages (and quantile forecasts summarize).</summary>
     public int NumSamples { get; set; } = 100;
 
-    /// <summary>
-    /// Gets or sets the dropout rate for regularization.
-    /// </summary>
-    /// <value>The dropout rate, defaulting to 0.1.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Dropout helps prevent overfitting during training.
-    /// </para>
-    /// </remarks>
+    /// <summary>Gets or sets the dropout applied between stacked RNN layers (0.1 in the reference).</summary>
     public double DropoutRate { get; set; } = 0.1;
 
     /// <summary>
-    /// Gets or sets whether to use residual connections in the denoising network.
+    /// Gets or sets the width the diffusion-step embedding is projected to before each residual block
+    /// (<c>residual_hidden</c> in the reference implementation, 64).
     /// </summary>
-    /// <value>True to use residual connections; false otherwise. Default: true.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Residual connections help gradients flow during
-    /// training by adding shortcut paths. Generally improves training stability.
-    /// </para>
-    /// </remarks>
-    public bool UseResidualConnection { get; set; } = true;
+    public int DenoisingNetworkDim { get; set; } = 64;
+
+    /// <summary>Gets or sets the number of gated residual blocks in the denoiser (8 in the paper).</summary>
+    public int ResidualLayers { get; set; } = 8;
+
+    /// <summary>Gets or sets the channel width of each residual block (8 in the paper).</summary>
+    public int ResidualChannels { get; set; } = 8;
 
     /// <summary>
-    /// Gets or sets the dimension of the denoising network.
+    /// Gets or sets the dilation cycle: block i dilates by 2^(i mod cycle) (2 in the paper, so 1, 2, 1, 2, ...).
     /// </summary>
-    /// <value>The denoising network dimension, defaulting to 128.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The hidden size of the network that learns to
-    /// remove noise. Larger values can model more complex noise patterns.
-    /// </para>
-    /// </remarks>
-    public int DenoisingNetworkDim { get; set; } = 128;
+    public int DilationCycleLength { get; set; } = 2;
+
+    /// <summary>Gets or sets the size E of the sinusoidal diffusion-step embedding, which has 2E entries (16 in the reference).</summary>
+    public int TimeEmbeddingDim { get; set; } = 16;
 }
