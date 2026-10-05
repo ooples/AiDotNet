@@ -789,7 +789,7 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         // the fused plan compiles on the first row and replays across the batch
         // with refreshed input per iteration.
         var trainableVaeLayers = vaeLayers.OfType<ITrainableLayer<T>>().ToList();
-        if (trainableVaeLayers.Count > 0 && AiDotNet.Training.GpuResidentFusedStep<T>.IsGpuResidentAvailable)
+        if (trainableVaeLayers.Count > 0 && AiDotNet.Training.FusedTrainingStep<T>.IsAvailable)
         {
             // Closure-captured (mean, logVar) from Fwd's single encoder pass —
             // reused by Loss so the encoder doesn't run twice per row. Since input
@@ -826,7 +826,7 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
             for (int row = startRow; row < endRow; row++)
             {
                 var inputTensor = VectorToTensor(GetRow(transformedData, row));
-                bool ran = AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                bool ran = AiDotNet.Training.FusedTrainingStep<T>.TryStep(
                     trainableVaeLayers, inputTensor, inputTensor,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _optimizer,

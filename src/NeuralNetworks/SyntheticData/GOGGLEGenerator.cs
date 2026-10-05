@@ -776,7 +776,7 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
                     var (m, lv) = EncoderForwardTape(tgt);
                     return ComputeGoggleLossTape(raw, tgt, m, lv);
                 }
-                if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                if (AiDotNet.Training.FusedTrainingStep<T>.TryStep(
                         trainableLayers, input, expectedOutput,
                         forward: Fwd, computeLoss: Loss,
                         optimizer: _optimizer,

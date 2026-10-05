@@ -625,7 +625,7 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
                 var (m, lv) = EncoderForward(target);
                 return ComputeElboLossTape(rawOutput, target, m, lv);
             }
-            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+            if (AiDotNet.Training.FusedTrainingStep<T>.TryStep(
                     trainableLayers, input, input,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _optimizer,

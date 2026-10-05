@@ -631,7 +631,7 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
         // Preferred fused path: WganGpFusedStep runs the full WGAN-GP objective
         // (Wasserstein + λ·GP with createGraph=true GP) in one compiled plan,
         // with persistent (real, fake, ε) slots refreshed each Step. Falls
-        // through to the GpuResidentFusedStep path (which uses this critic's
+        // through to the FusedTrainingStep path (which uses this critic's
         // per-batch epsilon sampled inline) when the optimizer has no fused-
         // kernel mapping (adaptive LR, non-fuse-able type) or the primitive
         // itself declines. See ooples/AiDotNet#1845.
@@ -666,7 +666,7 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
             }
         }
 
-        // Secondary fused path: GpuResidentFusedStep with the loss composed via
+        // Secondary fused path: FusedTrainingStep with the loss composed via
         // this class's ComputeGradientPenalty (createGraph=true GP fix, #1844).
         var trainableDiscLayers = _discLayers.OfType<ITrainableLayer<T>>().ToList();
         if (trainableDiscLayers.Count > 0)
@@ -692,7 +692,7 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
                 return Engine.TensorAdd(wasserstein,
                     Engine.TensorMultiplyScalar(gp, NumOps.FromDouble(_options.GradientPenaltyWeight)));
             }
-            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+            if (AiDotNet.Training.FusedTrainingStep<T>.TryStep(
                     trainableDiscLayers, stacked, target,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _discriminatorOptimizer,
@@ -884,7 +884,7 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
                 }
                 return lossT;
             }
-            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+            if (AiDotNet.Training.FusedTrainingStep<T>.TryStep(
                     trainableGenLayers, fusedInput, target,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _generatorOptimizer,

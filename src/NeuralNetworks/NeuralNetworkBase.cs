@@ -5008,7 +5008,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// vector rather than retaining the tensors, so the published surface is already independent of
     /// the plan's buffers by the time this returns.
     /// </remarks>
-    private void ScatterFusedGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+    private protected void ScatterFusedGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
     {
         PublishParameterGradients(grads);
     }

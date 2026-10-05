@@ -615,7 +615,7 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         // inside the closure keeps both noise sources refreshed per replay.
         var dataGenLayers = BuildDataGenLayerList();
         var trainableDataGen = dataGenLayers.OfType<ITrainableLayer<T>>().ToList();
-        if (trainableDataGen.Count > 0 && AiDotNet.Training.GpuResidentFusedStep<T>.IsGpuResidentAvailable)
+        if (trainableDataGen.Count > 0 && AiDotNet.Training.FusedTrainingStep<T>.IsAvailable)
         {
             int embed = _options.EmbeddingDimension;
             var target = new Tensor<T>(new[] { 1 });
@@ -637,7 +637,7 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
                 for (int k = 0; k < embed; k++) packed[k] = dn[k];
                 for (int k = 0; k < embed; k++) packed[embed + k] = mn[k];
                 var packedTensor = new Tensor<T>(new[] { 2 * embed }, packed);
-                bool ran = AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                bool ran = AiDotNet.Training.FusedTrainingStep<T>.TryStep(
                     trainableDataGen, packedTensor, target,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _dataGenOptimizer,
@@ -667,7 +667,7 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         // GPU-RESIDENT: per-sample loop; fused plan replays with fresh noise.
         var maskGenLayers = BuildMaskGenLayerList();
         var trainableMaskGen = maskGenLayers.OfType<ITrainableLayer<T>>().ToList();
-        if (trainableMaskGen.Count > 0 && AiDotNet.Training.GpuResidentFusedStep<T>.IsGpuResidentAvailable)
+        if (trainableMaskGen.Count > 0 && AiDotNet.Training.FusedTrainingStep<T>.IsAvailable)
         {
             var target = new Tensor<T>(new[] { 1 });
             Tensor<T> Fwd(Tensor<T> noise) => MaskDiscriminatorForward(MaskGeneratorForward(noise), isTraining: true);
@@ -676,7 +676,7 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
             for (int i = batchStart; i < batchEnd; i++)
             {
                 var noiseTensor = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
-                bool ran = AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                bool ran = AiDotNet.Training.FusedTrainingStep<T>.TryStep(
                     trainableMaskGen, noiseTensor, target,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _maskGenOptimizer,

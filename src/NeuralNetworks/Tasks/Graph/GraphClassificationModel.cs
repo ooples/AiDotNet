@@ -711,23 +711,21 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
                 + $"implements ComputeTapeLoss); the configured loss '{_lossFunction.GetType().Name}' is "
                 + "not tape-differentiable. Supply a LossFunctionBase<T>-derived loss such as CrossEntropyWithLogitsLoss.");
 
-        // GPU-RESIDENT fast path (float + DirectGpuTensorEngine + compilation + Adam-family
-        // optimizer). Routes forward + backward + optimizer step through the compiled fused plan
-        // so weights / activations / moments stay resident on the device — no per-op host<->device
-        // round-trip. Falls through to the eager tape+optimizer path on any failure (unsupported
-        // optimizer, non-compilable graph, etc). Mirrors NeuralNetworkBase.TrainWithFusedStep and
-        // TimeSeriesModelBase.TryFusedResidentStep — same seam, applied per Train() call because
-        // GraphClassificationModel.Train is a single-batch entry (not a training loop).
+        // Fused compiled step (FusedTrainingStep): forward + backward + optimizer update as one plan,
+        // GPU-resident on a GPU engine and a fused CPU kernel otherwise. Falls through to the eager
+        // tape+optimizer path when it does not apply (unsupported optimizer, non-compilable graph).
+        // Applied per Train() call because GraphClassificationModel.Train is a single-batch entry.
         var trainableLayers = Layers
             .Where(l => l is ITrainableLayer<T>).Cast<ITrainableLayer<T>>()
             .ToList();
-        if (CanTrainOnGpu
-            && AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+        if (AiDotNet.Training.FusedTrainingStep<T>.TryStep(
                 trainableLayers, input, expectedOutput,
                 forward: Forward,
                 computeLoss: tapeLoss.ComputeTapeLoss,
                 optimizer: _optimizer,
-                out T fusedLoss, owner: this))
+                out T fusedLoss,
+                onGradients: ScatterFusedGradients,
+                owner: this))
         {
             LastLoss = fusedLoss;
             return;

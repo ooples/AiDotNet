@@ -556,7 +556,7 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         // compiles once and replays across the batch with refreshed noise per step.
         var generatorLayers = BuildGeneratorLayerList();
         var trainableGenLayers = generatorLayers.OfType<ITrainableLayer<T>>().ToList();
-        if (trainableGenLayers.Count > 0 && AiDotNet.Training.GpuResidentFusedStep<T>.IsGpuResidentAvailable)
+        if (trainableGenLayers.Count > 0 && AiDotNet.Training.FusedTrainingStep<T>.IsAvailable)
         {
             var target = new Tensor<T>(new[] { 1 });
             Tensor<T> Fwd(Tensor<T> noiseT) => DiscriminatorForward(GeneratorForward(noiseT), isTraining: false);
@@ -565,7 +565,7 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
             for (int i = 0; i < batchSize; i++)
             {
                 var noiseTensor = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
-                bool ran = AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                bool ran = AiDotNet.Training.FusedTrainingStep<T>.TryStep(
                     trainableGenLayers, noiseTensor, target,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _generatorOptimizer,

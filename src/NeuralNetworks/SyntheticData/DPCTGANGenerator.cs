@@ -776,7 +776,7 @@ public partial class DPCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
                 var axes = Enumerable.Range(0, scores.Shape.Length).ToArray();
                 return Engine.TensorNegate(Engine.ReduceMean(scores, axes, keepDims: false));
             }
-            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+            if (AiDotNet.Training.FusedTrainingStep<T>.TryStep(
                     trainableGenLayers, genInput, target,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _generatorOptimizer,
