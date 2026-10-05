@@ -57,6 +57,7 @@
     <InternalsVisibleTo Include="AiDotNet.Serving.Tests" />
     <InternalsVisibleTo Include="AiDotNet.ProgramSynthesis.Tooling" />
     <InternalsVisibleTo Include="AiDotNetBenchmarkTests" />
+    <InternalsVisibleTo Include="AiDotNet.PyTorchParity" />
     <InternalsVisibleTo Include="HarmonicEngine" />
     <InternalsVisibleTo Include="HarmonicEngine.Tests" />
     <!-- ConsistencyModelPerfDiag reads UNetNoisePredictor.ForwardProfilingSink

@@ -215,7 +215,7 @@ def synthetic_batch(batch_size: int, shape: tuple[int, ...], device: torch.devic
     return x, y
 
 
-def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.device, epochs: int, batches: int, batch_size: int) -> TrainingResult:
+def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.device, epochs: int, batches: int, batch_size: int, breakdown: bool = False) -> TrainingResult:
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
     epoch_seconds: list[float] = []
@@ -235,11 +235,17 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
                 optimizer.zero_grad(set_to_none=True)
                 logits = model(x)
                 loss = criterion(logits, y)
-                synchronize(device)
-                start_grad = time.perf_counter()
+                # Per-step device syncs inflate the step on GPU; they run only under --breakdown,
+                # which attributes time to the backward. Default timing matches AiDotNet's loop.
+                if breakdown:
+                    synchronize(device)
+                    start_grad = time.perf_counter()
                 loss.backward()
-                synchronize(device)
-                gradient_seconds.append(time.perf_counter() - start_grad)
+                if breakdown:
+                    synchronize(device)
+                    gradient_seconds.append(time.perf_counter() - start_grad)
+                # Same global-norm clip AiDotNet applies by default (MaxGradNorm 1.0).
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 optimizer.step()
             synchronize(device)
             epoch_seconds.append(time.perf_counter() - start_epoch)
@@ -247,7 +253,7 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
     return TrainingResult(
         epoch_seconds=[round(value, 6) for value in epoch_seconds],
         total_seconds=round(total, 6),
-        gradient_seconds_avg=round(statistics.fmean(gradient_seconds), 6),
+        gradient_seconds_avg=round(statistics.fmean(gradient_seconds), 6) if gradient_seconds else 0.0,
         data_loading_seconds_avg=round(statistics.fmean(data_seconds), 6),
         resources=monitor.summary(),
     )
@@ -315,7 +321,7 @@ def run(args: argparse.Namespace) -> dict[str, object]:
             # torch.compile (TorchInductor) — the "PyTorch compiled" comparison.
             # Counts params BEFORE compile (the wrapper hides .parameters()).
             model = torch.compile(model)
-        training = benchmark_training(model, shape, device, args.epochs, args.train_batches, args.batch_size)
+        training = benchmark_training(model, shape, device, args.epochs, args.train_batches, args.batch_size, args.breakdown)
         model.eval()
         inference = benchmark_inference(model, shape, device, args.inference_iterations, args.warmup_iterations)
         model_results.append(ModelResult(name, str(device), parameters, training, inference))
@@ -341,6 +347,8 @@ def main() -> None:
     parser.add_argument("--inference-iterations", type=int, default=100)
     parser.add_argument("--warmup-iterations", type=int, default=10)
     parser.add_argument("--seed", type=int, default=1234)
+    parser.add_argument("--breakdown", action="store_true",
+                        help="sync per step to attribute time to the backward (slows GPU steps)")
     parser.add_argument("--threads", type=int, default=0,
                         help="Pin CPU thread count (0 = PyTorch default = all cores). "
                              "Match the AiDotNet side's AIDOTNET_BLAS_THREADS for a fair comparison.")

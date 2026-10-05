@@ -22,6 +22,9 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models.Options;
+using AiDotNet.Optimizers;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -179,7 +182,8 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
                 dataTimer.Stop();
                 dataSeconds.Add(dataTimer.Elapsed.TotalSeconds);
 
-                model.Forward();
+                // One training step = one forward + backward + optimizer update (Train), exactly what the
+                // PyTorch twin times. A separate Predict here made every AiDotNet step do two forwards.
                 var gradientTimer = Stopwatch.StartNew();
                 model.Backward();
                 gradientTimer.Stop();
@@ -320,6 +324,13 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
     {
         Random = new Random(seed);
         Network = BuildNetwork();
+        // Same optimizer as the PyTorch twin (torch.optim.AdamW defaults, lr 1e-3). Families differ in which
+        // constructor parameter takes an optimizer (LSTM takes none), so it is pinned uniformly here.
+        Network.SetBaseTrainOptimizer(new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(null,
+            new AdamWOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = 1e-3, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, WeightDecay = 0.01,
+            }));
 
         // Materialize lazy layers BEFORE counting parameters (issue #1566 item 1).
         // Some layers — notably MultiHeadAttentionLayer — allocate their weight
@@ -400,7 +411,7 @@ internal sealed class AiDotNetMlpModel : AiDotNetBenchmarkModel
             inputSize: 784,
             outputSize: 10,
             layers: layers);
-        return new FeedForwardNeuralNetwork<float>(arch);
+        return new FeedForwardNeuralNetwork<float>(arch, lossFunction: new CrossEntropyWithLogitsLoss<float>());
     }
 }
 
@@ -488,7 +499,7 @@ internal sealed class AiDotNetCnnModel : AiDotNetBenchmarkModel
             inputHeight: 28, inputWidth: 28, inputDepth: 1,
             outputSize: 10,
             layers: layers);
-        return new ConvolutionalNeuralNetwork<float>(arch);
+        return new ConvolutionalNeuralNetwork<float>(arch, lossFunction: new CrossEntropyWithLogitsLoss<float>());
     }
 }
 
@@ -512,7 +523,7 @@ internal sealed class AiDotNetLstmModel : AiDotNetBenchmarkModel
             inputSize: 32,
             outputSize: 10,
             layers: layers);
-        return new LSTMNeuralNetwork<float>(arch, outputActivation: (IActivationFunction<float>?)null);
+        return new LSTMNeuralNetwork<float>(arch, lossFunction: new CrossEntropyWithLogitsLoss<float>(), outputActivation: (IActivationFunction<float>?)null);
     }
 }
 
@@ -540,7 +551,7 @@ internal sealed class AiDotNetTransformerModel : AiDotNetBenchmarkModel
             vocabularySize: 0,
             usePositionalEncoding: true,
             sequencePooling: SequencePoolingMode.MeanPool);
-        return new Transformer<float>(arch);
+        return new Transformer<float>(arch, lossFunction: new CrossEntropyWithLogitsLoss<float>());
     }
 }
 
