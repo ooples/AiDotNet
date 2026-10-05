@@ -3727,7 +3727,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
             // Vocoders implement IVocoder<T> (mel-spectrogram -> waveform). They
             // get a channels-first rank-3 [B, melCh, T] input contract so the
-            // 1-D conv generator (CreateDefaultVocoderLayers) runs natively.
+            // vocoders' 1-D conv generators run natively.
             if (display.EndsWith(".IVocoder<T>", System.StringComparison.Ordinal) ||
                 display.Contains(".IVocoder<"))
             {
@@ -10647,6 +10647,76 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // The paper's Adam at 1e-4 halves every 100k steps; the probes measure learning at a constant 1e-3.
                     ", optimizer: new AiDotNet.Optimizers.AdamOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null))";
             }
+            else if (model.ClassName == "EnCodec" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Audio.Generation.", System.StringComparison.Ordinal))
+            {
+                // EnCodec's paper model is a 32-to-512-channel SEANet with 32 codebooks of 1024 and five MS-STFT
+                // discriminators per bandwidth. Keep every component - causal weight-normalized SEANet with its LSTM,
+                // a two-codebook RVQ with EMA, k-means and dead codes, the balancer and the per-bandwidth MS-STFT
+                // discriminators - at a narrow width: 4 filters, latent 8, strides 2 and 4 (hop 8), 16 codes, mel scales
+                // 2^5 and 2^6, discriminator windows 32 and 16.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 96, outputSize: 96), " +
+                    "new AiDotNet.Audio.Generation.EnCodecOptions { Filters = 4, Dimension = 8, Ratios = [4, 2], NumQuantizers = 2, " +
+                    "CodebookSize = 16, TargetBandwidths = [12.0, 24.0], TargetBandwidthKbps = 24.0, SegmentSize = 96, KMeansIterations = 5, " +
+                    "MelScales = [5, 6], MelBins = 8, DiscriminatorWindows = [32, 16], DiscriminatorFilters = 4 }" +
+                    // The paper's Adam (0.5, 0.9) at 3e-4; the probes measure learning at a constant Adam rate of 1e-3.
+                    ", optimizer: new AiDotNet.Optimizers.AdamOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null))";
+            }
+            else if (model.ClassName == "SoundStream" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Audio.Generation.", System.StringComparison.Ordinal))
+            {
+                // SoundStream's paper model is C = 32 with 24 codebooks of 1024 and 1024-wide discriminators. Keep every
+                // component - the causal ELU SEANet with three dilated residual units per block, FiLM, the scalable RVQ with
+                // quantizer dropout, the MelGAN wave discriminators and the STFT discriminator - at a narrow width: 4
+                // filters, latent 8, strides 2 and 4 (hop 8), 16 codes, mel scales 2^5 and 2^6, wave discriminators at a
+                // sixteenth and an STFT discriminator over 128-sample windows.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 256, outputSize: 256), " +
+                    "new AiDotNet.Audio.Generation.SoundStreamOptions { Filters = 4, Dimension = 8, Ratios = [4, 2], NumQuantizers = 2, " +
+                    "CodebookSize = 16, TargetBandwidthKbps = 24.0, SegmentSize = 256, KMeansIterations = 5, MelScales = [5, 6], MelBins = 8, " +
+                    "WaveDiscriminatorWidthDivisor = 16, StftWindow = 128, StftHop = 32, StftChannels = 2 }" +
+                    // The probes measure learning at a constant Adam rate of 1e-3.
+                    ", optimizer: new AiDotNet.Optimizers.AdamOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null))";
+            }
+            else if (model.ClassName == "DAC" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Audio.Effects.", System.StringComparison.Ordinal))
+            {
+                // DAC's paper model is 64 to 1024 channels in, 1536 out, with nine 1024-entry codebooks and 1024-wide period
+                // discriminators. Keep every component - Snake residual units, the factorized L2-normalized RVQ with
+                // quantizer dropout, the period and multi-band STFT discriminators and the multi-scale mel loss - at a narrow
+                // width: encoder 4 wide with strides 2 and 4 (hop 8), decoder 16 wide, 16 codes of 2 dimensions, mel windows
+                // 32 and 64, STFT discriminator windows 64 and 32 with 4 channels, period discriminators at a thirty-second.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 256, outputSize: 256), " +
+                    "new AiDotNet.Audio.Effects.DACOptions { SampleRate = 16000, EncoderDim = 4, EncoderRates = [2, 4], DecoderDim = 16, " +
+                    "DecoderRates = [4, 2], NumQuantizers = 2, CodebookSize = 16, CodebookDim = 2, TargetBandwidthKbps = 16.0, SegmentSize = 256, " +
+                    "MelWindows = [32, 64], MelBins = [5, 10], DiscriminatorWindows = [64, 32], DiscriminatorChannels = 4, DiscriminatorWidthDivisor = 32 }" +
+                    // The probes measure learning at a constant Adam rate of 1e-3.
+                    ", optimizer: new AiDotNet.Optimizers.AdamOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null))";
+            }
+            else if (model.ClassName == "SpeechTokenizer" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Audio.Generation.", System.StringComparison.Ordinal))
+            {
+                // SpeechTokenizer's paper model is EnCodec's SEANet at C = 32 with a 1024-wide latent and BiLSTM, eight
+                // 1024-entry codebooks, a 768-dim teacher projection and HiFi-Codec's three discriminators. Keep every
+                // component at a narrow width: 4 filters, latent 8, strides 2 and 4 (hop 8), 16 codes, a 6-dim teacher,
+                // mel scales 2^5 and 2^6, MS-STFT windows 32 and 16, period and scale discriminators at a sixty-fourth.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 96, outputSize: 96), " +
+                    "new AiDotNet.Audio.Generation.SpeechTokenizerOptions { Filters = 4, Ratios = [4, 2], Dimension = 8, SemanticDimension = 6, " +
+                    "NumQuantizers = 2, CodebookSize = 16, TargetBandwidthKbps = 16.0, SegmentSize = 96, KMeansIterations = 5, MelScales = [5, 6], " +
+                    "MelBins = 8, StftDiscriminatorWindows = [32, 16], StftDiscriminatorFilters = 4, DiscriminatorWidthDivisor = 64 }" +
+                    ", optimizer: new AiDotNet.Optimizers.AdamOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null))";
+            }
             else if (model.ClassName == "MelGAN" && model.TypeParameterCount == 1)
             {
                 // MelGAN's paper generator starts at 512 channels (ngf 32) and its discriminators reach 1024; keep the
@@ -14414,6 +14484,70 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] InputShape => new[] { 3, 32, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 11 };");
         }
+        else if (model.ClassName == "EnCodec"
+                 && typeName.StartsWith("AiDotNet.Audio.Generation.", System.StringComparison.Ordinal))
+        {
+            // The residual codebooks start empty and take k-means centroids of the first training batch (EnCodec §3.2,
+            // SoundStream §III-C), so an untrained codec quantizes every latent to zero; one step initializes them.
+            sb.AppendLine("    protected override int InputSensitivityWarmUpSteps => 1;");
+            // A mono waveform [1, channels, samples] in, its reconstruction out: 96 samples are 12 frames at hop 8.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 1, 96 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 96 };");
+            // Each step's reported loss is the balanced generator objective, adversarial terms included; memorization is
+            // judged on the deterministic reconstruction objective (time L1 + multi-scale mel) instead.
+            sb.AppendLine("    protected override bool MemorizationTaskUsesDeterministicEvalLoss => true;");
+        }
+        else if (model.ClassName == "SoundStream"
+                 && typeName.StartsWith("AiDotNet.Audio.Generation.", System.StringComparison.Ordinal))
+        {
+            // The residual codebooks start empty and take k-means centroids of the first training batch (EnCodec §3.2,
+            // SoundStream §III-C), so an untrained codec quantizes every latent to zero; one step initializes them.
+            sb.AppendLine("    protected override int InputSensitivityWarmUpSteps => 1;");
+            // A mono waveform [1, channels, samples] in, its reconstruction out: 256 samples are 32 frames at hop 8, two
+            // windows of the fixture's 128-sample STFT discriminator.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 1, 256 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 256 };");
+            // Each step's loss includes the adversarial terms, and quantizer dropout draws n_q per step; memorization is judged
+            // on the deterministic reconstruction objective at the target bitrate instead.
+            sb.AppendLine("    protected override bool MemorizationTaskUsesDeterministicEvalLoss => true;");
+        }
+        else if (model.ClassName == "DAC"
+                 && typeName.StartsWith("AiDotNet.Audio.Effects.", System.StringComparison.Ordinal))
+        {
+            // A mono waveform [1, channels, samples] in, its reconstruction out: 256 samples are 32 frames at hop 8.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 1, 256 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 256 };");
+            // Each step's loss includes the adversarial terms, and quantizer dropout draws n_q per step; memorization is judged
+            // on the deterministic mel distance at the target bitrate instead.
+            sb.AppendLine("    protected override bool MemorizationTaskUsesDeterministicEvalLoss => true;");
+        }
+        else if (model.ClassName == "SpeechTokenizer"
+                 && typeName.StartsWith("AiDotNet.Audio.Generation.", System.StringComparison.Ordinal))
+        {
+            // The residual codebooks start empty and take k-means centroids of the first training batch (EnCodec §3.2,
+            // SoundStream §III-C), so an untrained codec quantizes every latent to zero; one step initializes them.
+            sb.AppendLine("    protected override int InputSensitivityWarmUpSteps => 1;");
+            // A mono waveform [1, channels, samples] in, its reconstruction out: 96 samples are 12 frames at hop 8.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 1, 96 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 96 };");
+            sb.AppendLine("    protected override bool MemorizationTaskUsesDeterministicEvalLoss => true;");
+            // SpeechTokenizer trains on speech with its semantic teacher's representations (§3.2), which a waveform
+            // fixture does not carry: each step trains on a deterministic stand-in teacher derived from the input's frames,
+            // one 6-dim vector per 8-sample frame.
+            sb.AppendLine("    protected override void TrainOn(AiDotNet.Interfaces.INeuralNetworkModel<double> network, " +
+                "AiDotNet.Tensors.LinearAlgebra.Tensor<double> input, AiDotNet.Tensors.LinearAlgebra.Tensor<double> target)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        int frames = input.Length / 8;");
+            sb.AppendLine("        var teacher = new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(new[] { frames, 6 });");
+            sb.AppendLine("        for (int t = 0; t < frames; t++)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            double energy = 0;");
+            sb.AppendLine("            for (int i = 0; i < 8; i++) energy += ConvertToDouble(input[t * 8 + i]);");
+            sb.AppendLine("            for (int d = 0; d < 6; d++) teacher[t, d] = NumOps.FromDouble(System.Math.Sin((d + 1) * (energy + t)));");
+            sb.AppendLine("        }");
+            sb.AppendLine("        network.Train(input, teacher);");
+            sb.AppendLine("    }");
+        }
         else if (model.ClassName == "DocOwl"
                  && typeName.StartsWith(
                      "AiDotNet.Document.VisionLanguage.", System.StringComparison.Ordinal))
@@ -15285,8 +15419,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // threshold, four do. The threshold is unchanged.
                     // E2 TTS and F5-TTS zero-initialize DiT's adaLN and output projection (reference initialize_weights),
                     // so an untrained model returns its noise whatever the text; two steps open the conditioning path
-                    // before the input-sensitivity probes.
-                    if (model.ClassName is "E2TTS" or "F5TTS")
+                    // before the input-sensitivity probes. ProDiff's DiffNet zero-initializes its output projection
+                    // (reference nn.init.zeros_), so its untrained denoiser predicts a constant whatever the condition.
+                    if (model.ClassName is "E2TTS" or "F5TTS" or "ProDiff")
                         sb.AppendLine("    protected override int InputSensitivityWarmUpSteps => 2;");
                     int memorizationSteps = model.ClassName is "E2TTS" or "F5TTS" ? 15 : naturalSpeechWarmup ? 12
                         : model.ClassName is "AdaSpeech" or "AdaSpeech2" ? 4
@@ -20675,9 +20810,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
     /// <summary>
     /// Returns true for the waveform vocoders that use a paper-faithful
-    /// channels-first 1-D conv generator: the HiFi-GAN family via
-    /// <c>LayerHelper.CreateDefaultHiFiGANLayers</c> AND the WaveNet-style stacks
-    /// (WaveGlow, ParallelWaveGAN) via <c>LayerHelper.CreateDefaultWaveNetVocoderLayers</c>.
+    /// channels-first 1-D conv generator: the HiFi-GAN family AND the WaveNet-style stacks
+    /// (WaveGlow, ParallelWaveGAN), each built by its own model class.
     /// Both are mel-channels = 80, single waveform output channel, rank-3 [B, 80, T]
     /// input. The IVocoder models that keep the dimension-flexible Dense generator and
     /// its rank-2 [T, 80] -> [T, 1] contract (BigVGAN with mel = 100) are NOT listed here
@@ -20710,8 +20844,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
     /// <summary>
     /// True for the conv1d vocoders whose generator preserves the time axis
-    /// (the WaveNet/Parallel-WaveGAN gated-residual stack via
-    /// <c>CreateDefaultWaveNetVocoderLayers</c>) rather than upsampling it. The
+    /// (a WaveNet-style gated-residual stack) rather than upsampling it. The
     /// HiFi-GAN family upsamples T by prod(upsample_rates).
     /// </summary>
     private static bool IsTimePreservingConv1DVocoder(string className)

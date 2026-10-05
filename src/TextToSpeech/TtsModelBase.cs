@@ -443,7 +443,9 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     protected AcousticTargets<T> DeriveAcousticTargets(TtsTrainingSample<T> sample)
     {
         Guard.NotNull(sample);
-        var spectrogram = new TacotronSpectrogram(SampleRate, TargetFftSize, HopSize, TargetWindowSize, MelChannels);
+        // Tacotron 2's 8 kHz mel ceiling assumes 22.05 kHz audio; at lower rates the bands stop at Nyquist.
+        var spectrogram = new TacotronSpectrogram(SampleRate, TargetFftSize, HopSize, TargetWindowSize, MelChannels,
+            maxFrequency: Math.Min(8000.0, SampleRate / 2.0));
         double[]? audio = sample.Audio is null ? null : ToDoubles(sample.Audio);
         double[,]? magnitude = audio is null ? null : spectrogram.Magnitude(PreEmphasize(audio));
 

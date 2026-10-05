@@ -89,6 +89,20 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
         return base.MeasureLoss(network, input, output, target);
     }
 
+    /// <inheritdoc />
+    /// <remarks>A model measured on its typed objective (<see cref="MeasureLoss"/>) re-estimates its BatchNorm statistics on
+    /// that objective's forward pass, over the same synthetic supervision.</remarks>
+    protected override void RunRecalibrationPass(AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network, Tensor<T> input, Tensor<T>? target)
+    {
+        if (target is not null && network is AiDotNet.TextToSpeech.TtsModelBase<T> tts
+            && tts.TrainingSupervision != AiDotNet.TextToSpeech.TtsSupervision.None)
+        {
+            tts.EvaluateTrainingObjective(SyntheticSupervision(input, target, tts));
+            return;
+        }
+        base.RunRecalibrationPass(network, input, target);
+    }
+
     private static AiDotNet.TextToSpeech.TtsTrainingSample<T> SyntheticSupervision(Tensor<T> tokens, Tensor<T> target,
         AiDotNet.TextToSpeech.TtsModelBase<T>? network = null)
     {

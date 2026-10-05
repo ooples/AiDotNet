@@ -88,6 +88,10 @@ public class ProDiffPaperTests
     {
         await Task.Yield();
         var model = CreateModel();
+        // DiffNet zero-initializes its output projection (reference nn.init.zeros_), so an untrained denoiser predicts x0 = 0
+        // at every step and any step count returns that same sample; a few teacher steps make the steps matter.
+        var sample = Sample();
+        for (int i = 0; i < 5; i++) model.Train(sample);
         var teacherSample = model.Synthesize("ab");
         Assert.Equal(teacherSample.ToVector().ToArray(), model.Synthesize("ab").ToVector().ToArray());
         Assert.Equal(2, teacherSample.Rank);

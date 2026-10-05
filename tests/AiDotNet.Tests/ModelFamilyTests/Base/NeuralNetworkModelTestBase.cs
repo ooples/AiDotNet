@@ -1329,8 +1329,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             // Each network is judged under BatchNorm statistics re-estimated for its OWN weights (see
             // RecalibrateBatchNormalization); sharing the trained network's trailing average favoured whichever
             // weights that average happened to lag behind.
-            RecalibrateBatchNormalization((AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)untrained, input);
-            RecalibrateBatchNormalization((AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)network, input);
+            RecalibrateBatchNormalization((AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)untrained, input, target);
+            RecalibrateBatchNormalization((AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)network, input, target);
             initialLoss = MeasureLoss(untrained, input, untrained.Predict(input), target);
             finalLoss = MeasureLoss(network, input, network.Predict(input), target);
             regime = " (both measured in eval mode under BatchNorm statistics recalibrated for their own weights)";
@@ -1407,7 +1407,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// mode is changed, so a PredictCore that forces evaluation mode cannot undo the recalibration.
     /// </para>
     /// </remarks>
-    private static void RecalibrateBatchNormalization(AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network, Tensor<T> input)
+    private void RecalibrateBatchNormalization(AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network, Tensor<T> input,
+        Tensor<T>? target = null)
     {
         var batchNorms = BatchNormalizationLayers(network.LayersIncludingComponents()).ToList();
         if (batchNorms.Count == 0) return;
@@ -1418,9 +1419,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             // mode is touched: a PredictCore that forces evaluation mode (NeuralVaR does, unconditionally) would
             // otherwise reset per-layer training modes mid-pass and leave the statistics stale.
             foreach (var batchNorm in batchNorms) batchNorm.OverwriteRunningStatistics = true;
-            // Through Predict, so the model's own input preparation runs (a raw forward bypassed it and fed
-            // ContextNet's transpose the wrong rank).
-            using var _ = network.Predict(input);
+            // A model that declares its training objective is measured on that objective (MeasureLoss), so its
+            // statistics are re-estimated on the same path: SpeedySpeech's objective runs the decoder over the
+            // recording's durations while Predict runs it over predicted ones, and statistics taken from Predict
+            // scored the trained weights at 1075 against an untrained 6.5. Otherwise through Predict, so the model's own
+            // input preparation runs (a raw forward bypassed it and fed ContextNet's transpose the wrong rank).
+            RunRecalibrationPass(network, input, target);
         }
         finally
         {
@@ -2783,13 +2787,13 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             && ContainsBatchNormalization(nnBase.LayersIncludingComponents())
                 ? nnBase
                 : null;
-        if (batchNormNetwork is not null) RecalibrateBatchNormalization(batchNormNetwork, input);
+        if (batchNormNetwork is not null) RecalibrateBatchNormalization(batchNormNetwork, input, target);
         double lossUntrained = MeasureLoss(network1, input, network1.Predict(input), target);
 
 
         for (int i = 0; i < longIters; i++)
             TrainOn(network1, input, target);
-        if (batchNormNetwork is not null) RecalibrateBatchNormalization(batchNormNetwork, input);
+        if (batchNormNetwork is not null) RecalibrateBatchNormalization(batchNormNetwork, input, target);
         double lossTrained = MeasureLoss(network1, input, network1.Predict(input), target);
 
         double lossLong = lossTrained;
@@ -3813,8 +3817,25 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             return MeasureDeclaredTrainingObjective(network, diffusion, input, target);
         if (!MemorizationTaskUsesDeterministicEvalLoss)
             return ConvertToDouble(network.GetLastLoss());
-        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nnBase) RecalibrateBatchNormalization(nnBase, input);
+        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nnBase) RecalibrateBatchNormalization(nnBase, input, target);
         return MeasureLoss(network, input, network.Predict(input), target);
+    }
+
+    /// <summary>
+    /// The forward pass whose batch statistics <see cref="RecalibrateBatchNormalization"/> installs: the path the loss is
+    /// then measured on. A model that declares its training objective is measured on that objective, so its statistics come
+    /// from it (SpeedySpeech's objective runs its decoder over the recording's durations, Predict over predicted ones);
+    /// otherwise Predict, so the model's own input preparation runs. A family that measures through its own entry point
+    /// overrides this to run that entry point.
+    /// </summary>
+    protected virtual void RunRecalibrationPass(AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network, Tensor<T> input, Tensor<T>? target)
+    {
+        if (target is not null && network is ITrainingObjectiveProvider<T> objective)
+        {
+            objective.EvaluateTrainingObjective(input, target);
+            return;
+        }
+        using var _ = network.Predict(input);
     }
 
     /// <summary>
@@ -4854,8 +4875,17 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </summary>
     private static double SumSquaredChunks(INeuralNetworkModel<T> network)
     {
+        // The optimizer-step invariant bounds what one optimizer step does, so it measures the TRAINABLE parameters only.
+        // Fitted state and buffers move by their own rules: an EMA codebook takes k-means centroids of the first batch and
+        // its never-used codes are divided by a Laplace-smoothed usage near zero (EnCodec's reference), which says nothing
+        // about the optimizer.
+        System.Collections.Generic.IEnumerable<Tensor<T>> chunks = network is NeuralNetworkBase<T> neuralNetwork
+            ? neuralNetwork.GetParameterStateChunks()
+                .Where(c => c.Role == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable)
+                .Select(c => MaterializeIfSparse(c.Tensor))
+            : EnumerateParameterChunks(network);
         double sumSq = 0;
-        foreach (var chunk in EnumerateParameterChunks(network))
+        foreach (var chunk in chunks)
         {
             int n = chunk.Length;
             for (int i = 0; i < n; i++)
