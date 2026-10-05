@@ -219,7 +219,7 @@ public sealed class RgLruFamilyFusedCompiledTrainingTests
         {
         }
 
-        public bool FusedTrainingDisabled => _fusedTrainingDisabled;
+        public bool FusedTrainingDisabled => IsFusedTrainingDisabled;
     }
 
     private sealed class TestableGriffin : GriffinLanguageModel<double>, IFusedTrainingProbe
@@ -233,7 +233,7 @@ public sealed class RgLruFamilyFusedCompiledTrainingTests
         {
         }
 
-        public bool FusedTrainingDisabled => _fusedTrainingDisabled;
+        public bool FusedTrainingDisabled => IsFusedTrainingDisabled;
     }
 
     private sealed class TestableHawk : HawkLanguageModel<double>, IFusedTrainingProbe
@@ -247,6 +247,6 @@ public sealed class RgLruFamilyFusedCompiledTrainingTests
         {
         }
 
-        public bool FusedTrainingDisabled => _fusedTrainingDisabled;
+        public bool FusedTrainingDisabled => IsFusedTrainingDisabled;
     }
 }
