@@ -174,7 +174,7 @@ internal sealed class FusedTrainingSession<T>
 
         bool verifyPersistence = (!_persistenceVerified && !IsCommitted)
             || ++_stepsSincePersistenceCheck >= PersistenceRecheckInterval;
-        double checksumBefore = verifyPersistence ? ParameterChecksum(request) : 0.0;
+        var probe = verifyPersistence ? SampleParameters(request) : null;
         bool gradientsObserved = false;
         bool gradientNonZero = false;
         void OnGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> gradients)
@@ -237,7 +237,7 @@ internal sealed class FusedTrainingSession<T>
 
         if (verifyPersistence)
         {
-            bool persisted = ParameterChecksum(request) != checksumBefore;
+            bool persisted = probe is not null && AnySampleChanged(probe);
             bool? attached = CompiledTapeTrainingStep<T>.ConfiguredPlanTrainsLiveParameters(
                 (IEnumerable<Tensor<T>>?)request.Selection ?? EnumerateLiveParameters(request));
             bool detached = attached == false;
@@ -358,28 +358,47 @@ internal sealed class FusedTrainingSession<T>
         foreach (var parameter in request.ExtraParameters) yield return parameter;
     }
 
-    // Sum of squares over a strided sample of the trained tensors, capped near ChecksumTargetSamples elements: a full
-    // generic-ToDouble sum costs seconds on the critical first step of a 385M-parameter model (#1822). The same
-    // indices are read before and after, so != stays valid, and small models are covered completely.
-    private static double ParameterChecksum(FusedTrainingStepRequest<T> request)
+    // The #1822 persistence probe. Before the step it copies the first elements of every trained tensor (about
+    // ChecksumTargetSamples in total, at least one per tensor) on whatever device holds the tensor; after the step it
+    // reduces the squared difference to ONE scalar, and only that scalar reaches the host. A host checksum over the
+    // tensors instead downloaded every GPU-resident parameter before and after each checked step (#1804: four times
+    // the step's allocation on N-BEATS). Any real update moves a sampled element: Adam, SGD and the rest update every
+    // parameter whose gradient is nonzero, and a plan decoupled from the live tensors moves none.
+    private static (Tensor<T> Source, int Count, Tensor<T> Before)[] SampleParameters(FusedTrainingStepRequest<T> request)
     {
         var parameters = request.Selection is not null
             ? request.Selection
             : EnumerateLiveParameters(request).ToList();
-        long total = 0;
-        foreach (var parameter in parameters) total += parameter.Length;
-        if (total == 0) return 0.0;
-        int stride = (int)Math.Max(1, total / ChecksumTargetSamples);
-        double sum = 0.0;
+        int perTensor = Math.Max(1, ChecksumTargetSamples / Math.Max(1, parameters.Count));
+        var engine = AiDotNetEngine.Current;
+        var samples = new List<(Tensor<T>, int, Tensor<T>)>(parameters.Count);
+        using var noGrad = new NoGradScope<T>();
         foreach (var parameter in parameters)
         {
-            var span = parameter.AsSpan();
-            for (int i = 0; i < span.Length; i += stride)
-            {
-                double value = NumOps.ToDouble(span[i]);
-                sum += value * value;
-            }
+            if (parameter.Length == 0) continue;
+            int count = Math.Min(perTensor, parameter.Length);
+            samples.Add((parameter, count, engine.TensorMultiplyScalar(Head(engine, parameter, count), NumOps.One)));
         }
-        return sum;
+        return samples.ToArray();
     }
+
+    private static bool AnySampleChanged((Tensor<T> Source, int Count, Tensor<T> Before)[] samples)
+    {
+        if (samples.Length == 0) return false;
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        Tensor<T>? total = null;
+        foreach (var (source, count, before) in samples)
+        {
+            var delta = engine.TensorSubtract(Head(engine, source, count), before);
+            var squares = engine.Reshape(engine.ReduceSum(engine.TensorMultiply(delta, delta), null), new[] { 1 });
+            total = total is null ? squares : engine.TensorAdd(total, squares);
+        }
+        double changed = total is null ? 0.0 : NumOps.ToDouble(total[0]);
+        // NaN means the update reached the tensor (as non-finite values, which the plan's own guard handles).
+        return changed != 0.0;
+    }
+
+    private static Tensor<T> Head(IEngine engine, Tensor<T> tensor, int count)
+        => engine.TensorNarrow(engine.Reshape(tensor, new[] { tensor.Length }), 0, 0, count);
 }

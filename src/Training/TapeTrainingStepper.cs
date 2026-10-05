@@ -32,6 +32,8 @@ internal sealed class TapeTrainingStepper<T>
     /// <summary>The fused lifecycle; exposed for diagnostics and explicit resets.</summary>
     public FusedTrainingSession<T> Session { get; }
 
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _lastOptimizer;
+
     /// <summary>Whether the most recent <see cref="Step"/> ran on the fused compiled plan.</summary>
     public bool LastStepFused { get; private set; }
 
@@ -39,6 +41,17 @@ internal sealed class TapeTrainingStepper<T>
     public T Step(FusedTrainingStepRequest<T> request)
     {
         Guard.NotNull(request);
+
+        // The compiled plan carries the optimizer's moments. A different optimizer instance (a model's next
+        // Train call builds a fresh one) starts from its own fresh state, as it would eagerly, so the old plan is
+        // dropped rather than treated as hyperparameter drift on a committed plan, which refuses the step.
+        if (!ReferenceEquals(_lastOptimizer, request.Optimizer))
+        {
+            if (_lastOptimizer is not null)
+                Session.Reset(stickyDisable: false);
+            _lastOptimizer = request.Optimizer;
+        }
+
         var outcome = Session.TryStep(request, out T fusedLoss);
         if (outcome == FusedStepOutcome.Stepped)
         {

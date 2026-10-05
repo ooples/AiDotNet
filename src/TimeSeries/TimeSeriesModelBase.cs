@@ -253,87 +253,52 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     protected IEngine Engine => AiDotNetEngine.Current;
 
     /// <summary>
-    /// Gets whether this model can train through the GPU-resident <b>fused compiled</b>
-    /// training path — forward + backward + optimizer step captured as a single
-    /// on-device graph with no per-op host&lt;-&gt;device round-trips.
+    /// Trains one batch on the gradient tape: the fused compiled plan (forward, backward and optimizer update as
+    /// one plan, GPU-resident on a GPU engine, a fused CPU kernel otherwise) when it applies, the eager tape with
+    /// <paramref name="optimizer"/> when it does not.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Mirrors <c>NeuralNetworkBase&lt;T&gt;.CanTrainOnGpu</c> for the time-series family.
-    /// Three conditions must hold:
-    /// </para>
-    /// <list type="number">
-    /// <item><c>T == float</c> — the Tensors fused-optimizer kernels and the GPU-resident
-    /// activation/weight buffers are float32-only (consumer NVIDIA FP64 is crippled and
-    /// the DirectGpu resident path is float-oriented).</item>
-    /// <item>The current engine is a <see cref="DirectGpuTensorEngine"/> with GPU available.</item>
-    /// <item>Graph compilation is enabled (<c>TensorCodecOptions.Current.EnableCompilation</c>).</item>
-    /// </list>
-    /// <para>
-    /// When false, a model should fall back to its eager tape training loop (which still
-    /// dispatches individual ops to the GPU when one is current, but round-trips activations
-    /// through host memory every op).
+    /// This is the one training-step entry point for every tape-trained forecaster: supply the trainable layers
+    /// (or loose tensors through <paramref name="extraParameters"/>), a <c>[B, ...]</c> batch, the forward that
+    /// runs the model's tape graph, and the loss. Nothing model-specific about fusion, residency or fallback lives
+    /// in the model: <see cref="Training.TapeTrainingStepper{T}"/> owns it, the same code
+    /// <c>NeuralNetworkBase</c> trains through.
     /// </para>
     /// <para>
-    /// <b>For Beginners:</b> When this is true, an entire training step runs on the GPU as one
-    /// compiled program, which keeps the data on the graphics card instead of copying it back
-    /// and forth for every little operation — much higher GPU utilization and throughput.
+    /// Keep the batch shape constant across steps where the data allows: each distinct shape is its own compiled
+    /// plan, so a loop that drops invalid samples per batch (varying B) recompiles instead of replaying.
     /// </para>
     /// </remarks>
-    private protected bool CanTrainOnGpu =>
-        typeof(T) == typeof(float)
-        && AiDotNetEngine.Current is DirectGpuTensorEngine gpu && gpu.SupportsGpu
-        && AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation;
-
-    /// <summary>
-    /// Runs a single GPU-resident fused training step (forward + backward + Adam update)
-    /// through the compiled-plan capture path shared with <c>NeuralNetworkBase</c>.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This is the reusable seam that lets any tensorized time-series forecaster (N-BEATS today,
-    /// N-HiTS / DeepAR / Autoformer next) become GPU-resident: supply the trainable layers,
-    /// a batch <paramref name="input"/>/<paramref name="target"/> pair, a <paramref name="forward"/>
-    /// closure that runs the model's tape graph, and a <paramref name="computeLoss"/> closure. The
-    /// first call traces + compiles the graph; subsequent calls with the <b>same tensor shapes</b>
-    /// replay the compiled plan, keeping weights, activations and the Adam moment buffers on the
-    /// device across the whole training loop.
-    /// </para>
-    /// <para>
-    /// Returns <c>false</c> when the fused/compiled path cannot engage (e.g. an op in the graph
-    /// isn't compilable in the linked Tensors build, or compilation is disabled); the caller must
-    /// then fall back to its eager loop. To keep the compiled plan cache hitting (and thus stay
-    /// resident) callers must pass a <b>constant batch shape</b> on every step.
-    /// </para>
-    /// </remarks>
-    private protected bool TryFusedResidentStep(
+    /// <returns>The batch loss.</returns>
+    private protected T TrainTapeBatch(
         IReadOnlyList<ITrainableLayer<T>> layers,
         Tensor<T> input,
         Tensor<T> target,
         Func<Tensor<T>, Tensor<T>> forward,
         Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss,
-        float learningRate,
-        float beta1,
-        float beta2,
-        float epsilon,
-        float weightDecay,
-        out T lossValue,
-        double maxGradNorm = 1.0)
-        => AiDotNet.Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
-            layers,
-            input,
-            target,
-            forward,
-            computeLoss,
-            AiDotNet.Tensors.Engines.Compilation.OptimizerType.Adam,
-            learningRate,
-            beta1,
-            beta2,
-            epsilon,
-            weightDecay,
-            out lossValue,
-            maxGradNorm: maxGradNorm,
-            owner: this);
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
+        IReadOnlyList<Tensor<T>>? extraParameters = null,
+        double gradientClip = 0.0)
+        => TapeStepper.Step(new Training.FusedTrainingStepRequest<T>
+        {
+            Layers = layers,
+            Input = input,
+            Target = target,
+            Forward = forward,
+            ComputeLoss = computeLoss,
+            Optimizer = optimizer,
+            ExtraParameters = extraParameters,
+            ModelGradientClip = gradientClip,
+        });
+
+    /// <summary>The model's tape training stepper (fused session plus eager fallback).</summary>
+    private protected Training.TapeTrainingStepper<T> TapeStepper => _tapeStepper ??= new Training.TapeTrainingStepper<T>(this);
+
+    private Training.TapeTrainingStepper<T>? _tapeStepper;
+
+    /// <summary>Whether the most recent training step ran on the fused compiled plan.</summary>
+    internal bool LastTrainingStepFused => _tapeStepper?.LastStepFused ?? false;
 
     /// <summary>
     /// Gets or sets the trained model parameters.
