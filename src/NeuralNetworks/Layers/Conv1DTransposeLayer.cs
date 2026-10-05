@@ -34,7 +34,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// conv-transpose + bias (+ activation) kernel when available.
 /// </para>
 /// <para>
-/// Used by <c>LayerHelper.CreateDefaultHiFiGANLayers</c>: each upsample stage is a
+/// Shaped for HiFi-GAN-style generators: each upsample stage is a
 /// <c>ConvTranspose1d(ch, ch/2, kernel=2*rate, stride=rate, padding=rate/2)</c>
 /// matching the official <c>jik876/hifi-gan</c> generator
 /// (<c>upsample_rates=[8,8,2,2]</c>, <c>upsample_kernel_sizes=[16,16,4,4]</c>).
