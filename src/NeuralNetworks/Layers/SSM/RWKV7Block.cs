@@ -562,6 +562,42 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         RegisterTrainableParameter(_normGamma2, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_normBeta2, PersistentTensorRole.Biases);
 
+        NoteConstructorInitialization();
+    }
+
+    /// <summary>
+    /// Set when the constructor initialised without a seed, with the parameter fingerprint at that point.
+    /// </summary>
+    [AiDotNet.Attributes.Scratch]
+    private bool _initializedWithoutSeed;
+
+    [AiDotNet.Attributes.Scratch]
+    private long _unseededInitFingerprint;
+
+    /// <summary>
+    /// Records a constructor initialisation that ran without a seed, so a seed assigned later can redo it.
+    /// </summary>
+    private void NoteConstructorInitialization()
+    {
+        if (RandomSeed.HasValue) return;
+        _initializedWithoutSeed = true;
+        _unseededInitFingerprint = ComputeParameterFingerprint();
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// This layer draws random values in its constructor. Built into an explicit architecture layer list it is
+    /// constructed before the network opens its seed scope, so it initialised unseeded and the seed arrives
+    /// later, when the network wires layer seeds. If the parameters are still exactly what construction made,
+    /// the initialisation is redone from the seed, so equal seeds reproduce the initial weights (#2290 review).
+    /// Weights that were trained, loaded or set since are left alone.
+    /// </remarks>
+    protected override void OnRandomSeedAssigned()
+    {
+        if (!_initializedWithoutSeed) return;
+        _initializedWithoutSeed = false;
+        if (ComputeParameterFingerprint() != _unseededInitFingerprint) return;
+        InitializeParameters();
     }
 
     private void InitializeParameters()

@@ -632,6 +632,37 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             // post-construction LayerHelper wiring update look seeded while it continues from the
             // previous seed (or from a clone-construction stream).
             _seededRandom = null;
+            if (value.HasValue) OnRandomSeedAssigned();
+        }
+    }
+
+    /// <summary>
+    /// Called when <see cref="RandomSeed"/> is assigned a value.
+    /// </summary>
+    /// <remarks>
+    /// A layer that draws random values in its constructor and was constructed before a seed existed (a
+    /// layer built into an explicit <see cref="NeuralNetworkArchitecture{T}.Layers"/> list, before the network
+    /// opens its seed scope) can override this to re-run that initialisation from the seed, provided its
+    /// parameters are still exactly the ones construction produced. It can run while a base constructor is
+    /// still executing, before the derived fields exist, so an override must check its own state first.
+    /// </remarks>
+    protected virtual void OnRandomSeedAssigned()
+    {
+    }
+
+    /// <summary>
+    /// A fingerprint of this layer's current parameter values, used to tell whether they have changed since
+    /// a point in time (training, loading or <c>SetParameters</c>) without keeping a copy of them.
+    /// </summary>
+    protected long ComputeParameterFingerprint()
+    {
+        var parameters = GetParameters();
+        unchecked
+        {
+            long hash = 1469598103934665603L;
+            for (int i = 0; i < parameters.Length; i++)
+                hash = (hash ^ System.BitConverter.DoubleToInt64Bits(NumOps.ToDouble(parameters[i]))) * 1099511628211L;
+            return hash ^ parameters.Length;
         }
     }
 

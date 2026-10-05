@@ -356,9 +356,15 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
     }
 
     /// <summary>
-    /// Whether a tensor is an image the VAE encodes rather than a latent: image channels in the channel
-    /// slot of a [C, H, W] or [B, C, H, W] layout, and not also the latent depth.
+    /// Whether a tensor is an image the VAE encodes: the VAE's input channels in the channel slot of a
+    /// [C, H, W] or [B, C, H, W] layout.
     /// </summary>
+    /// <remarks>
+    /// The channel count alone decides, even where it equals the latent depth. Imagen, DALL-E 2 and DeepFloyd
+    /// IF use three image channels and three latent channels, and their first stage still downsamples (by 4),
+    /// so a three-channel sample there is an image that must be encoded; excluding it trained those denoisers
+    /// on pixels while they generate in the latent space.
+    /// </remarks>
     private bool IsFirstStageImage(Tensor<T> sample)
     {
         if (sample is null || (sample.Rank != 3 && sample.Rank != 4))
@@ -366,8 +372,7 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
         var vae = VAE;
         if (vae is null)
             return false;
-        int channels = sample.Shape[sample.Rank - 3];
-        return channels == vae.InputChannels && channels != LatentChannels;
+        return sample.Shape[sample.Rank - 3] == vae.InputChannels;
     }
 
     /// <inheritdoc />

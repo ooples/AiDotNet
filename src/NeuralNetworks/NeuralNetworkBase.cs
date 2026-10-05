@@ -297,7 +297,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         set
         {
             _modelOptions = value;
-            ApplyOptionsSeed(value?.Seed);
+            // Only while no layer exists yet: restarting the construction scope after layers were built
+            // would hand later layers the seeds earlier ones already used, so they would initialise alike.
+            if (_layers is null || _layers.Count == 0)
+                ApplyOptionsSeed(value?.Seed);
         }
     }
 
