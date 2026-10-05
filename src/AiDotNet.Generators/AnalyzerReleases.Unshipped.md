@@ -93,6 +93,8 @@ AIDN103 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Paper optimiz
 AIDN104 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Declared paper recipe is never used, because the optimizer is still hardcoded
 AIDN105 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Citation URL claims to be arXiv but its identifier cannot exist
 AIDN107 | AiDotNet.PaperFidelity | Info | PaperOptimizerAnalyzer, Model cites a paper but does not declare the optimizer settings that paper specifies (Info while the backlog is large; promote per the AIDN087 ladder)
+AIDN108 | AiDotNet.ComponentMetadata | Warning | ComponentMetadataValidationGenerator, Component has [ComponentType] but is missing [PipelineStage]
+AIDN109 | AiDotNet.ComponentMetadata | Warning | ComponentMetadataValidationGenerator, Component has [PipelineStage] but is missing [ComponentType]
 ADNDEF001 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Two models implement the same paper
 ADNDEF002 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Transformer factory yields attention without a residual connection
 ADNDEF003 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Model reuses another paper's layer factory without declaring it
