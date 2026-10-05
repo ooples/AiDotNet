@@ -626,6 +626,8 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         get => _randomSeed;
         set
         {
+            // Anyone setting the seed directly chose it; only AssignInitializationSeedFromScope marks a scope draw.
+            RandomSeedCameFromConstructionScope = false;
             if (_randomSeed == value) return;
             _randomSeed = value;
             // A changed seed denotes a new stream. Keeping the old Random instance here makes a
@@ -634,6 +636,17 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             _seededRandom = null;
         }
     }
+
+    /// <summary>
+    /// True when <see cref="RandomSeed"/> was drawn from whatever construction scope was armed when this layer was
+    /// built, rather than chosen by someone.
+    /// </summary>
+    /// <remarks>
+    /// The scope stays armed on the thread after a model finishes constructing, so a layer a caller builds later,
+    /// for another model's <c>Architecture.Layers</c>, can draw from the previous model's sequence. That seed belongs
+    /// to neither model, and the model that adopts the layer replaces it with one of its own.
+    /// </remarks>
+    internal bool RandomSeedCameFromConstructionScope { get; private set; }
 
     /// <summary>Copies base-owned stochastic progress into a reconstructed clone.</summary>
     internal void CopyBaseRandomStateTo(LayerBase<T> clone, bool shareRandomState)
@@ -662,7 +675,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         {
             int? scoped = LayerInitializationSeedScope.NextSeedOrNull();
             if (scoped.HasValue)
+            {
                 RandomSeed = scoped;
+                RandomSeedCameFromConstructionScope = true;
+            }
         }
     }
 

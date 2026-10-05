@@ -386,7 +386,37 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         _outputProjectionWeights = new Tensor<T>([_innerDimension, modelDimension]);
         _outputProjectionBias = new Tensor<T>([modelDimension]);
 
-        InitializeParameters();
+        // Register ALL trainable parameters for tape-based autodiff at construction time. The tape training
+        // path (NeuralNetworkBase.Train -> TrainWithTape) collects registered parameters BEFORE the first
+        // UpdateParameters call, so registering here (not only inside UpdateParameters) is what lets the
+        // optimizer actually see and update this block's weights â€” otherwise CollectParameters finds nothing
+        // and every Train step is a silent no-op. _aLog and _dParam are learnable SSM parameters (Gu & Dao
+        // 2023) and MUST be registered too, or they would be excluded from gradient updates and make the
+        // registered-vs-flat parameter counts disagree.
+        RegisterTrainableParameters();
+
+        // The values are drawn on first use (EnsureInitialized), not here. A block the caller builds for
+        // Architecture.Layers is constructed before the model exists, so a draw here could never see the seed
+        // the model assigns it; deferred, it draws from that seed.
+        _randomInitializationPending = true;
+    }
+
+    // True from construction until InitializeParameters has drawn the initial values.
+    private bool _randomInitializationPending;
+
+    /// <inheritdoc/>
+    public override bool IsInitialized => !_randomInitializationPending;
+
+    /// <inheritdoc/>
+    protected override void EnsureInitialized()
+    {
+        if (_randomInitializationPending)
+        {
+            InitializeParameters();
+            _randomInitializationPending = false;
+        }
+
+        base.EnsureInitialized();
     }
 
     private void InitializeParameters()
@@ -440,15 +470,6 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         // Xavier for output projection
         InitializeTensor(_outputProjectionWeights);
         _outputProjectionBias.Fill(NumOps.Zero);
-
-        // Register ALL trainable parameters for tape-based autodiff at construction time. The tape training
-        // path (NeuralNetworkBase.Train -> TrainWithTape) collects registered parameters BEFORE the first
-        // UpdateParameters call, so registering here (not only inside UpdateParameters) is what lets the
-        // optimizer actually see and update this block's weights â€” otherwise CollectParameters finds nothing
-        // and every Train step is a silent no-op. _aLog and _dParam are learnable SSM parameters (Gu & Dao
-        // 2023) and MUST be registered too, or they would be excluded from gradient updates and make the
-        // registered-vs-flat parameter counts disagree.
-        RegisterTrainableParameters();
     }
 
     // Registers every trainable tensor with the autodiff/optimizer machinery. Called at init and re-called
@@ -476,6 +497,7 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
+        EnsureInitializationSerialized();
         _originalInputShape = input._shape;
 
         int rank = input.Shape.Length;
@@ -837,22 +859,38 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Gets a copy of the input projection weights for external inspection or quantization.
     /// </summary>
-    public Tensor<T> GetInputProjectionWeights() => _inputProjectionWeights.Clone();
+    public Tensor<T> GetInputProjectionWeights()
+    {
+        EnsureInitializationSerialized();
+        return _inputProjectionWeights.Clone();
+    }
 
     /// <summary>
     /// Gets a copy of the output projection weights for external inspection or quantization.
     /// </summary>
-    public Tensor<T> GetOutputProjectionWeights() => _outputProjectionWeights.Clone();
+    public Tensor<T> GetOutputProjectionWeights()
+    {
+        EnsureInitializationSerialized();
+        return _outputProjectionWeights.Clone();
+    }
 
     /// <summary>
     /// Gets a copy of the A_log parameter tensor (A = -exp(A_log)) for external inspection.
     /// </summary>
-    public Tensor<T> GetALogParameter() => _aLog.Clone();
+    public Tensor<T> GetALogParameter()
+    {
+        EnsureInitializationSerialized();
+        return _aLog.Clone();
+    }
 
     /// <summary>
     /// Gets a copy of the D skip connection parameter for external inspection.
     /// </summary>
-    public Tensor<T> GetDParameter() => _dParam.Clone();
+    public Tensor<T> GetDParameter()
+    {
+        EnsureInitializationSerialized();
+        return _dParam.Clone();
+    }
 
     /// <summary>
     /// Overwrites the D (skip-connection) parameter in place.
@@ -877,6 +915,9 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         {
             throw new ArgumentNullException(nameof(values));
         }
+
+        // Draw the other initial values first, so a later first use cannot overwrite the D written here.
+        EnsureInitializationSerialized();
 
         if (values.Length != _dParam.Length)
         {

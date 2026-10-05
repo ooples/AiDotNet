@@ -519,8 +519,10 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         _normGamma2 = new Tensor<T>([modelDimension]);
         _normBeta2 = new Tensor<T>([modelDimension]);
 
-        InitializeParameters();
-
+        // The values are drawn on first use (EnsureInitialized), not here. A block the caller builds for
+        // Architecture.Layers is constructed before the model exists, so a draw here could never see the seed
+        // the model assigns it; deferred, the orthogonal LoRA factors draw from that seed.
+        _randomInitializationPending = true;
         // Register trainable parameters for tape-based autodiff
         RegisterTrainableParameter(_receptanceWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
@@ -564,10 +566,27 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
 
     }
 
+    // True from construction until InitializeParameters has drawn the initial values.
+    private bool _randomInitializationPending;
+
+    /// <inheritdoc/>
+    public override bool IsInitialized => !_randomInitializationPending;
+
+    /// <inheritdoc/>
+    protected override void EnsureInitialized()
+    {
+        if (_randomInitializationPending)
+        {
+            InitializeParameters();
+            _randomInitializationPending = false;
+        }
+
+        base.EnsureInitialized();
+    }
+
     private void InitializeParameters()
     {
         T half = NumOps.FromDouble(0.5);
-
         // Token shift mixing coefficients initialized to 0.5
         for (int i = 0; i < _modelDimension; i++)
         {
@@ -757,6 +776,7 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     internal (Tensor<T> Output, Tensor<T> VFirst) ForwardWithValueResidual(Tensor<T> input, Tensor<T>? vFirst)
     {
+        EnsureInitializationSerialized();
         _incomingVFirst = vFirst;
         _publishedVFirst = null;
         _originalInputShape = input._shape;

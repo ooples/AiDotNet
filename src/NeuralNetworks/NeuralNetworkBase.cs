@@ -639,6 +639,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // training-determinism bug). Inert when no seed was requested (production
         // default), preserving the existing non-reproducible init behaviour.
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(architecture.RandomSeed);
+        SeedCallerBuiltLayers();
         _layers = new List<ILayer<T>>();
         NumOps = MathHelper.GetNumericOperations<T>();
         MaxGradNorm = NumOps.FromDouble(maxGradNorm);
@@ -7558,10 +7559,72 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     {
         if (seed is not int value || Architecture is { HasExplicitRandomSeed: true })
             return;
+
+        // Re-assigning options that carry the seed already applied must not restart the scope: layers built after
+        // it would draw the per-layer seeds the earlier layers already used, and initialise identically.
+        if (_optionsSeed == value)
+            return;
         _optionsSeed = value;
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(value);
+        SeedCallerBuiltLayers();
     }
 
+    // The caller-built layers this model gave a seed, so a later options seed can replace those seeds and no others.
+    private HashSet<ILayer<T>>? _layersSeededAtConstruction;
+
+    /// <summary>
+    /// Gives every caller-built layer (<see cref="NeuralNetworkArchitecture{T}.Layers"/>) whose seed nobody chose the
+    /// next seed of this model's construction scope.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The caller constructs those layers before this model exists, so the scope that seeds the layers a model
+    /// builds for itself was never active for them. Layers that draw their initial weights lazily (most of them,
+    /// and MambaBlock and RWKV7Block, which defer their random draws to first use for this reason) take this
+    /// seed when they materialize, so equal model seeds give equal initial weights for a caller-built stack too.
+    /// </para>
+    /// <para>
+    /// A seed the caller set on a layer is left alone. One the layer drew from a construction scope left armed by an
+    /// earlier model is not the caller's choice, and is replaced (see
+    /// <see cref="Layers.LayerBase{T}.RandomSeedCameFromConstructionScope"/>). When <see cref="ApplyOptionsSeed"/> restarts the scope,
+    /// the seeds given here are replaced from the new scope; a layer that already materialized keeps its weights,
+    /// which is why the draws are deferred.
+    /// </para>
+    /// </remarks>
+    private void SeedCallerBuiltLayers()
+    {
+        var supplied = Architecture?.Layers;
+        if (supplied is null || supplied.Count == 0)
+            return;
+
+        var visited = new HashSet<ILayer<T>>(Helpers.TensorReferenceComparer<ILayer<T>>.Instance);
+        foreach (var layer in supplied)
+        {
+            if (layer is not null) SeedCallerBuiltLayer(layer, visited);
+        }
+    }
+
+    private void SeedCallerBuiltLayer(ILayer<T> layer, HashSet<ILayer<T>> visited)
+    {
+        if (!visited.Add(layer) || layer is not Layers.LayerBase<T> baseLayer)
+            return;
+
+        bool seededHere = _layersSeededAtConstruction?.Contains(layer) == true;
+        if (baseLayer.RandomSeed is null || baseLayer.RandomSeedCameFromConstructionScope || seededHere)
+        {
+            int? seed = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextSeedOrNull();
+            if (seed is null)
+                return;
+            baseLayer.RandomSeed = seed;
+            (_layersSeededAtConstruction ??= new HashSet<ILayer<T>>(Helpers.TensorReferenceComparer<ILayer<T>>.Instance))
+                .Add(layer);
+        }
+
+        foreach (var sub in baseLayer.GetSubLayers())
+        {
+            if (sub is not null) SeedCallerBuiltLayer(sub, visited);
+        }
+    }
     /// <summary>
     /// Propagates <see cref="NeuralNetworkArchitecture{T}.RandomSeed"/> to every layer (and nested
     /// sub-layer) so seed-respecting stochastic layers — chiefly <see cref="Layers.DropoutLayer{T}"/>,
