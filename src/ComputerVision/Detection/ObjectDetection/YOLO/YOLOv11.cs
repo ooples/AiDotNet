@@ -45,8 +45,7 @@ public partial class YOLOv11<T> : ObjectDetectorBase<T>, IDetectionTrainingModel
     private readonly AiDotNet.ComputerVision.Detection.Losses.TaskAlignedDetectionLoss<T> _detectionLoss;
     private readonly YOLOv8Head<T> _head;
     private readonly int[] _strides;
-    private readonly List<AttentionBlock<T>> _attentionBlocks;
-    private readonly SPPFBlock<T> _sppf;
+
     private readonly NMS<T> _nms;
 
     /// <inheritdoc/>
@@ -58,43 +57,18 @@ public partial class YOLOv11<T> : ObjectDetectorBase<T>, IDetectionTrainingModel
     /// <param name="options">Detection options.</param>
     public YOLOv11(ObjectDetectionOptions<T> options) : base(options)
     {
-        var (depth, width) = GetSizeConfig(options.Size);
-
-        // Initialize backbone with enhanced C3k2 blocks
-        Backbone = new CSPDarknet<T>(options: new CSPDarknetOptions { Depth = depth * 1.1, WidthMultiplier = width });
-
-        // Initialize neck
-        Neck = new PANet<T>(Backbone.OutputChannels.ToArray(), outputChannels: (int)(256 * width));
-
-        // Add attention blocks to neck features
-        _attentionBlocks = new List<AttentionBlock<T>>();
-        for (int i = 0; i < Neck.NumLevels; i++)
-        {
-            _attentionBlocks.Add(new AttentionBlock<T>(Neck.OutputChannels));
-        }
-
-        // SPPF block for the deepest feature level
-        _sppf = new SPPFBlock<T>(Backbone.OutputChannels[^1], kernelSize: 5);
-
-        // Initialize detection head
-        var neckChannels = Enumerable.Repeat(Neck.OutputChannels, Neck.NumLevels).ToArray();
-        _head = new YOLOv8Head<T>(neckChannels, options.NumClasses);
+        // YOLO11's own architecture (yolo11.yaml): C3k2 stages, SPPF and C2PSA attention in the backbone,
+        // C3k2 in the PAN neck. This was the YOLOv4/v5 CSPDarknet with an SPPF and a generic attention
+        // block bolted onto every neck output, neither of which is YOLO11's design.
+        Backbone = new YOLOv11Backbone<T>(new YoloBackboneOptions { Size = options.Size });
+        Neck = new YOLOv11Neck<T>(options.Size);
+        _head = new YOLOv8Head<T>(Neck.LevelChannels.ToArray(), options.NumClasses);
 
         _strides = Backbone.Strides.ToArray();
         _detectionLoss = new AiDotNet.ComputerVision.Detection.Losses.TaskAlignedDetectionLoss<T>(options.NumClasses,
             _head.RegMax, options.TaskAlignedLoss ?? new AiDotNet.ComputerVision.Detection.Losses.TaskAlignedLossOptions());
         _nms = new NMS<T>();
     }
-
-    private static (double depth, double width) GetSizeConfig(ModelSize size) => size switch
-    {
-        ModelSize.Nano => (0.33, 0.25),
-        ModelSize.Small => (0.50, 0.50),
-        ModelSize.Medium => (0.67, 0.75),
-        ModelSize.Large => (1.00, 1.00),
-        ModelSize.XLarge => (1.33, 1.25),
-        _ => (0.67, 0.75)
-    };
 
     /// <summary>Trains the head with task-aligned assignment, BCE classification, CIoU and distribution focal loss.</summary>
     /// <remarks>
@@ -138,23 +112,8 @@ public partial class YOLOv11<T> : ObjectDetectorBase<T>, IDetectionTrainingModel
         // Backbone feature extraction
         var backboneFeatures = EnsureBackbone.ExtractFeatures(input);
 
-        // Apply SPPF to deepest feature level
-        var enhancedFeatures = new List<Tensor<T>>(backboneFeatures);
-        enhancedFeatures[^1] = _sppf.Forward(enhancedFeatures[^1]);
-
-        // Neck feature fusion
-        var neckFeatures = EnsureNeck.Forward(enhancedFeatures);
-
-        // Apply attention to each feature level
-        var attentionFeatures = new List<Tensor<T>>();
-        for (int i = 0; i < neckFeatures.Count; i++)
-        {
-            var attended = _attentionBlocks[i].Forward(neckFeatures[i]);
-            attentionFeatures.Add(attended);
-        }
-
-        // Detection head
-        var (clsOutputs, regOutputs) = _head.Forward(attentionFeatures);
+        // Neck feature fusion, then the decoupled head.
+        var (clsOutputs, regOutputs) = _head.Forward(EnsureNeck.Forward(backboneFeatures));
 
         var outputs = new List<Tensor<T>>();
         outputs.AddRange(clsOutputs);
@@ -218,13 +177,8 @@ public partial class YOLOv11<T> : ObjectDetectorBase<T>, IDetectionTrainingModel
     /// <inheritdoc/>
     protected override long GetHeadParameterCount()
     {
-        long count = _head.GetParameterCount();
-        count += _sppf.GetParameterCount();
-        foreach (var attn in _attentionBlocks)
-        {
-            count += attn.GetParameterCount();
-        }
-        return count;
+        return _head.GetParameterCount();
+
     }
 
     /// <inheritdoc/>
@@ -254,7 +208,9 @@ public partial class YOLOv11<T> : ObjectDetectorBase<T>, IDetectionTrainingModel
         }
 
         int version = reader.ReadInt32();
-        if (version != 1)
+        // Version 2: YOLO11's own backbone and neck; version 1 carried the old bolt-on SPPF and attention.
+        if (version != 2)
+
         {
             throw new InvalidDataException($"Unsupported weight file version: {version}.");
         }
@@ -273,8 +229,6 @@ public partial class YOLOv11<T> : ObjectDetectorBase<T>, IDetectionTrainingModel
         }
         Backbone.ReadParameters(reader);
 
-        // Read SPPF parameters
-        _sppf.ReadParameters(reader);
 
         // Read neck parameters
         if (Neck is null)
@@ -283,16 +237,6 @@ public partial class YOLOv11<T> : ObjectDetectorBase<T>, IDetectionTrainingModel
         }
         Neck.ReadParameters(reader);
 
-        // Read attention block parameters
-        int attnCount = reader.ReadInt32();
-        if (attnCount != _attentionBlocks.Count)
-        {
-            throw new InvalidDataException($"Attention block count mismatch: expected {_attentionBlocks.Count}, got {attnCount}.");
-        }
-        foreach (var block in _attentionBlocks)
-        {
-            block.ReadParameters(reader);
-        }
 
         // Read head parameters
         _head.ReadParameters(reader);
@@ -306,7 +250,8 @@ public partial class YOLOv11<T> : ObjectDetectorBase<T>, IDetectionTrainingModel
 
         // Write magic number and version for identification
         writer.Write(0x594F4C4F); // "YOLO" in ASCII
-        writer.Write(1); // Version 1
+        writer.Write(2); // Version 2
+
 
         // Write model configuration
         writer.Write(Name);
@@ -314,218 +259,12 @@ public partial class YOLOv11<T> : ObjectDetectorBase<T>, IDetectionTrainingModel
         // Write backbone parameters
         EnsureBackbone.WriteParameters(writer);
 
-        // Write SPPF parameters
-        _sppf.WriteParameters(writer);
 
         // Write neck parameters
         EnsureNeck.WriteParameters(writer);
 
-        // Write attention block parameters
-        writer.Write(_attentionBlocks.Count);
-        foreach (var block in _attentionBlocks)
-        {
-            block.WriteParameters(writer);
-        }
 
         // Write head parameters
         _head.WriteParameters(writer);
-    }
-}
-
-/// <summary>
-/// Spatial Pyramid Pooling Fast (SPPF) block.
-/// </summary>
-internal class SPPFBlock<T> : CvParameterModule<T>
-{
-    private readonly INumericOperations<T> _numOps;
-    private readonly Conv2D<T> _conv1;
-    private readonly Conv2D<T> _conv2;
-    private readonly int _kernelSize;
-    private readonly int _channels;
-
-    public SPPFBlock(int channels, int kernelSize = 5)
-    {
-        _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-        _kernelSize = kernelSize;
-        _channels = channels;
-
-        int hiddenChannels = channels / 2;
-        _conv1 = new Conv2D<T>(channels, hiddenChannels, kernelSize: 1);
-        _conv2 = new Conv2D<T>(hiddenChannels * 4, channels, kernelSize: 1);
-    }
-
-    public Tensor<T> Forward(Tensor<T> input)
-    {
-        // First conv
-        var x = _conv1.Forward(input);
-        x = ApplySiLU(x);
-
-        // Three consecutive max pools
-        var pool1 = MaxPool(x, _kernelSize);
-        var pool2 = MaxPool(pool1, _kernelSize);
-        var pool3 = MaxPool(pool2, _kernelSize);
-
-        // Concatenate
-        var concat = ConcatenateChannels(x, pool1, pool2, pool3);
-
-        // Final conv
-        var output = _conv2.Forward(concat);
-        output = ApplySiLU(output);
-
-        return output;
-    }
-
-    public long GetParameterCount()
-    {
-        int hiddenChannels = _channels / 2;
-        return _channels * hiddenChannels + hiddenChannels + // conv1
-               hiddenChannels * 4 * _channels + _channels;    // conv2
-    }
-
-    public void WriteParameters(BinaryWriter writer)
-    {
-        writer.Write(_channels);
-        writer.Write(_kernelSize);
-        _conv1.WriteParameters(writer);
-        _conv2.WriteParameters(writer);
-    }
-
-    public void ReadParameters(BinaryReader reader)
-    {
-        int channels = reader.ReadInt32();
-        int kernelSize = reader.ReadInt32();
-
-        if (channels != _channels)
-        {
-            throw new InvalidDataException($"SPPFBlock channels mismatch: expected {_channels}, got {channels}.");
-        }
-
-        if (kernelSize != _kernelSize)
-        {
-            throw new InvalidDataException($"SPPFBlock kernelSize mismatch: expected {_kernelSize}, got {kernelSize}.");
-        }
-
-        _conv1.ReadParameters(reader);
-        _conv2.ReadParameters(reader);
-    }
-
-    private Tensor<T> MaxPool(Tensor<T> x, int kernelSize)
-        // Stride-1 "same" max pooling that ignores out-of-bounds cells (SPPF), tape-visible.
-        => CvTensorOps<T>.MaxPoolSame(x, kernelSize);
-
-    private Tensor<T> ConcatenateChannels(params Tensor<T>[] tensors)
-    {
-        return AiDotNetEngine.Current.TensorConcatenate(tensors, axis: 1);
-    }
-
-    /// <summary>
-    /// Elementwise Swish, delegated to the engine.
-    /// </summary>
-    /// <remarks>
-    /// This was a scalar loop that read each element out to <c>double</c> and wrote a fresh
-    /// tensor. Arithmetically identical, but it severed the autodiff tape: the gradient chain
-    /// stopped here, so every trainable layer UPSTREAM of this call received no gradient and
-    /// silently never trained. The engine op records itself on the tape.
-    /// </remarks>
-    private Tensor<T> ApplySiLU(Tensor<T> x) => AiDotNetEngine.Current.Swish(x);
-
-    /// <inheritdoc />
-    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
-    {
-        yield return _conv1;
-        yield return _conv2;
-    }
-}
-
-/// <summary>
-/// Lightweight attention block for feature enhancement.
-/// </summary>
-internal class AttentionBlock<T> : CvParameterModule<T>
-{
-    private readonly INumericOperations<T> _numOps;
-    private readonly Conv2D<T> _query;
-    private readonly Conv2D<T> _key;
-    private readonly Conv2D<T> _value;
-    private readonly Conv2D<T> _proj;
-    private readonly int _channels;
-    private readonly double _scale;
-
-    public AttentionBlock(int channels)
-    {
-        _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-        _channels = channels;
-        _scale = 1.0 / Math.Sqrt(channels);
-
-        _query = new Conv2D<T>(channels, channels, kernelSize: 1);
-        _key = new Conv2D<T>(channels, channels, kernelSize: 1);
-        _value = new Conv2D<T>(channels, channels, kernelSize: 1);
-        _proj = new Conv2D<T>(channels, channels, kernelSize: 1);
-    }
-
-    public Tensor<T> Forward(Tensor<T> input)
-    {
-        var engine = AiDotNetEngine.Current;
-        int batch = input.Shape[0];
-        int channels = input.Shape[1];
-        int height = input.Shape[2];
-        int width = input.Shape[3];
-        int spatialSize = height * width;
-
-        var q = _query.Forward(input);
-        var k = _key.Forward(input);
-        var v = _value.Forward(input);
-
-        // Channel attention: logit_c = sum_hw(Q_c) * sum_hw(K_c) * scale / (H*W), softmax over channels,
-        // then each channel of V is scaled by its weight. The softmax is max-shifted (the loop it
-        // replaces exponentiated unshifted logits, which overflowed to NaN on large activations).
-        var qSum = engine.ReduceSum(q, new[] { 2, 3 }, false);                  // [B, C]
-        var kSum = engine.ReduceSum(k, new[] { 2, 3 }, false);
-        var logits = engine.TensorMultiplyScalar(
-            engine.TensorMultiply(qSum, kSum), _numOps.FromDouble(_scale / spatialSize));
-        var weights = engine.Softmax(logits, -1);
-        var gate = engine.TensorBroadcastTo(
-            engine.Reshape(weights, new[] { batch, channels, 1, 1 }), new[] { batch, channels, height, width });
-
-        // Project, then add the residual with an engine op (the old in-place indexer write severed
-        // the tape for everything upstream of this block).
-        return engine.TensorAdd(_proj.Forward(engine.TensorMultiply(v, gate)), input);
-    }
-
-    public long GetParameterCount()
-    {
-        return 4 * _channels * _channels + 4 * _channels; // 4 conv1x1 with bias
-    }
-
-    public void WriteParameters(BinaryWriter writer)
-    {
-        writer.Write(_channels);
-        _query.WriteParameters(writer);
-        _key.WriteParameters(writer);
-        _value.WriteParameters(writer);
-        _proj.WriteParameters(writer);
-    }
-
-    public void ReadParameters(BinaryReader reader)
-    {
-        int channels = reader.ReadInt32();
-
-        if (channels != _channels)
-        {
-            throw new InvalidDataException($"AttentionBlock channels mismatch: expected {_channels}, got {channels}.");
-        }
-
-        _query.ReadParameters(reader);
-        _key.ReadParameters(reader);
-        _value.ReadParameters(reader);
-        _proj.ReadParameters(reader);
-    }
-
-    /// <inheritdoc />
-    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
-    {
-        yield return _query;
-        yield return _key;
-        yield return _value;
-        yield return _proj;
     }
 }

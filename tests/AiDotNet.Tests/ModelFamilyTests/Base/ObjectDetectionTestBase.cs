@@ -83,7 +83,12 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
         for (int index = 0; index < input.Length; index++)
             input[index] = ops.FromDouble(((index * 37) % 101) / 101.0);
 
+        // The oracle reads the forward the training step optimizes. With BatchNorm (RT-DETR's hybrid encoder) that
+        // is the TRAINING-mode forward, which normalizes with the batch's statistics; inference uses running
+        // statistics and would give a different loss. The task-aligned oracle does the same.
+        detector.SetTrainingMode(true);
         using var before = detector.Predict(input);
+        detector.SetTrainingMode(false);
         Assert.Equal(0, before.Length % (classes + 4));
         int queries = before.Length / (classes + 4);
         var logits = new double[queries * classes];
@@ -100,11 +105,18 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
         {
             emptyTargets ? Array.Empty<AiDotNet.ComputerVision.Detection.DetectionTrainingTarget<T>>() : new[] { target }
         });
-        double expected = IndependentSigmoidSetObjective(logits, boxes, queries, classes,
+        Func<AiDotNet.ComputerVision.Detection.ObjectDetection.DETR.DetrTrainingRecord<T>?>? recorded = detector switch
+        {
+            AiDotNet.ComputerVision.Detection.ObjectDetection.DETR.DINO<T> dino => () => dino.LastTrainingRecord,
+            AiDotNet.ComputerVision.Detection.ObjectDetection.DETR.RTDETR<T> rtdetr => () => rtdetr.LastTrainingRecord,
+            _ => null
+        };
+        double expected = recorded is not null ? double.NaN : IndependentSigmoidSetObjective(logits, boxes, queries, classes,
             emptyTargets ? -1 : goldClass, gold, varifocal);
 
         if (trainingStep is null) training.TrainDetections(input, batch);
         else trainingStep(input, batch);
+        if (recorded is not null) expected = IndependentDetrObjective(recorded(), logits, boxes, queries, classes, emptyTargets ? -1 : goldClass, gold, varifocal);
 
         double actual = ops.ToDouble(detector.GetLastLoss());
         double tolerance = typeof(T) == typeof(float) ? 2e-4 * Math.Max(1, Math.Abs(expected)) : 1e-8;
@@ -183,44 +195,71 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
         for (int index = 0; index < input.Length; index++)
             input[index] = ops.FromDouble(((index * 37) % 101) / 101.0);
 
-        using var before = detector.Predict(input);
-        var beforeValues = before.ToArray().Select(value => ops.ToDouble(value)).ToArray();
-        var heads = new List<(TaskAlignedDetectionOracle.Level[] Levels, int TopK)>();
-        if (detector is AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv10<T> yolo10)
+        // The oracle must see the forward the training step optimizes. With batch-normalized backbones
+        // (YOLOv8's Conv = conv + BN + SiLU) that is the TRAINING-mode forward, which normalizes with the
+        // batch's statistics; inference normalizes with running statistics and yields a different loss.
+        // Batch statistics depend only on the input, so this forward and the step's own forward agree.
+        // The window covers every oracle read, including YOLOv10's ForwardTrainingHeads.
+        double expected;
+        double[] beforeValues;
+        AiDotNet.ComputerVision.Detection.DetectionTrainingBatch<T> batch;
+        detector.SetTrainingMode(true);
+        try
         {
-            var outputs = yolo10.ForwardTrainingHeads(input)
-                .Select(output => output.ToArray().Select(value => ops.ToDouble(value)).ToArray()).ToList();
-            Assert.Equal(4 * strides.Length, outputs.Count);
-            heads.Add((OracleLevels(outputs.Take(2 * strides.Length).ToList()), 1));
-            heads.Add((OracleLevels(outputs.Skip(2 * strides.Length).ToList()), 10));
-        }
-        else
-        {
-            var outputs = new List<double[]>();
-            int offset = 0;
-            foreach (int width in new[] { classes, 4 * regMax })
-                foreach (int stride in strides)
-                {
-                    int length = width * (imageSize / stride) * (imageSize / stride);
-                    outputs.Add(beforeValues.Skip(offset).Take(length).ToArray());
-                    offset += length;
-                }
-            Assert.Equal(beforeValues.Length, offset);
-            heads.Add((OracleLevels(outputs), 10));
-        }
+            using var before = detector.Predict(input);
+            beforeValues = before.ToArray().Select(value => ops.ToDouble(value)).ToArray();
+            var heads = new List<(TaskAlignedDetectionOracle.Level[] Levels, int TopK, double Weight)>();
+            if (detector is AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv10<T> yolo10)
+            {
+                var outputs = yolo10.ForwardTrainingHeads(input)
+                    .Select(output => output.ToArray().Select(value => ops.ToDouble(value)).ToArray()).ToList();
+                Assert.Equal(4 * strides.Length, outputs.Count);
+                heads.Add((OracleLevels(outputs.Take(2 * strides.Length).ToList()), 1, 1.0));
+                heads.Add((OracleLevels(outputs.Skip(2 * strides.Length).ToList()), 10, 1.0));
+            }
+            else if (detector is AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9<T> yolo9)
+            {
+                // PGI (Wang et al. 2024; loss_tal_dual.py): the main head plus the auxiliary branch's head,
+                // both task-aligned with top-10 assignment; the auxiliary loss is weighted 0.25.
+                var outputs = yolo9.ForwardTrainingHeads(input)
+                    .Select(output => output.ToArray().Select(value => ops.ToDouble(value)).ToArray()).ToList();
+                Assert.Equal(4 * strides.Length, outputs.Count);
+                heads.Add((OracleLevels(outputs.Take(2 * strides.Length).ToList()), 10, 1.0));
+                heads.Add((OracleLevels(outputs.Skip(2 * strides.Length).ToList()), 10, 0.25));
+            }
+            else
+            {
+                var outputs = new List<double[]>();
+                int offset = 0;
+                foreach (int width in new[] { classes, 4 * regMax })
+                    foreach (int stride in strides)
+                    {
+                        int length = width * (imageSize / stride) * (imageSize / stride);
+                        outputs.Add(beforeValues.Skip(offset).Take(length).ToArray());
+                        offset += length;
+                    }
+                Assert.Equal(beforeValues.Length, offset);
+                heads.Add((OracleLevels(outputs), 10, 1.0));
+            }
 
-        var gold = new[] { 0.55, 0.45, 0.3, 0.35 };
-        var oracleGold = emptyTargets
-            ? Array.Empty<TaskAlignedDetectionOracle.Gold>()
-            : new[] { new TaskAlignedDetectionOracle.Gold(1, gold[0], gold[1], gold[2], gold[3]) };
-        double expected = heads.Sum(head => TaskAlignedDetectionOracle.Loss(head.Levels, 1, classes, regMax,
-            TaskAlignedDetectionOracle.Assign(head.Levels, 1, classes, regMax, new[] { oracleGold }, imageSize, imageSize, head.TopK)));
+            var gold = new[] { 0.55, 0.45, 0.3, 0.35 };
+            var oracleGold = emptyTargets
+                ? Array.Empty<TaskAlignedDetectionOracle.Gold>()
+                : new[] { new TaskAlignedDetectionOracle.Gold(1, gold[0], gold[1], gold[2], gold[3]) };
+            expected = heads.Sum(head => head.Weight * TaskAlignedDetectionOracle.Loss(head.Levels, 1, classes, regMax,
+                TaskAlignedDetectionOracle.Assign(head.Levels, 1, classes, regMax, new[] { oracleGold }, imageSize, imageSize, head.TopK)));
 
-        var batch = new AiDotNet.ComputerVision.Detection.DetectionTrainingBatch<T>(new[]
+            batch = new AiDotNet.ComputerVision.Detection.DetectionTrainingBatch<T>(new[]
+            {
+                oracleGold.Select(g => new AiDotNet.ComputerVision.Detection.DetectionTrainingTarget<T>(g.ClassId,
+                    ops.FromDouble(g.CenterX), ops.FromDouble(g.CenterY), ops.FromDouble(g.Width), ops.FromDouble(g.Height))).ToArray()
+            });
+        }
+        finally
         {
-            oracleGold.Select(g => new AiDotNet.ComputerVision.Detection.DetectionTrainingTarget<T>(g.ClassId,
-                ops.FromDouble(g.CenterX), ops.FromDouble(g.CenterY), ops.FromDouble(g.Width), ops.FromDouble(g.Height))).ToArray()
-        });
+            // An assertion failing inside the window must not leave the detector in training mode.
+            detector.SetTrainingMode(false);
+        }
         if (trainingStep is null) training.TrainDetections(input, batch);
         else trainingStep(input, batch);
 
@@ -297,6 +336,86 @@ public abstract class ObjectDetectionTestBase<T> : DetectionModelTestBase<T>
         return classification + 5 * boxL1 + 2 * giouLoss;
     }
 
+    /// <summary>
+    /// The full reference objective of DINO (sigmoid focal) or RT-DETR (varifocal), re-derived from the step's recorded outputs:
+    /// <list type="bullet">
+    /// <item>The Hungarian sigmoid-focal set loss of the encoder proposals and of every decoder layer.</item>
+    /// <item>For each layer, the fixed-assignment denoising loss: each group's positive copy of the target
+    /// reconstructs it, and negatives and padding are background.</item>
+    /// </list>
+    /// The recording is tied to an independent forward: its final layer must equal what Predict returned
+    /// before the step.
+    /// </summary>
+    private static double IndependentDetrObjective(AiDotNet.ComputerVision.Detection.ObjectDetection.DETR.DetrTrainingRecord<T>? record,
+        double[] logits, double[] boxes, int queries, int classes, int goldClass, double[] gold, bool varifocal)
+    {
+        Assert.NotNull(record);
+        if (record is null) return double.NaN;
+        Assert.Equal(queries, record.Queries);
+        double closeness = typeof(T) == typeof(float) ? 1e-4 : 1e-9;
+        var finalClasses = record.LayerClasses[record.LayerClasses.Length - 1];
+        var finalBoxes = record.LayerBoxes[record.LayerBoxes.Length - 1];
+        for (int i = 0; i < logits.Length; i++)
+            Assert.True(Math.Abs(finalClasses[i] - logits[i]) <= closeness * Math.Max(1, Math.Abs(logits[i])), $"recorded final logit {i} differs from Predict");
+        for (int i = 0; i < boxes.Length; i++)
+            Assert.True(Math.Abs(finalBoxes[i] - boxes[i]) <= closeness, $"recorded final box {i} differs from Predict");
+
+        double total = IndependentSigmoidSetObjective(record.EncoderClasses, record.EncoderBoxes, queries, classes, goldClass, gold, varifocal);
+        for (int layer = 0; layer < record.LayerClasses.Length; layer++)
+            total += IndependentSigmoidSetObjective(record.LayerClasses[layer], record.LayerBoxes[layer], queries, classes, goldClass, gold, varifocal);
+
+        if (goldClass < 0)
+        {
+            Assert.Null(record.Denoising);
+            Assert.Empty(record.DenoisingClasses);
+            return total;
+        }
+
+        // prepare_for_cdn (DINO) / get_contrastive_denoising_training_group (RT-DETR) with 100 denoising queries and
+        // one target: 100 groups of a positive and a negative copy; group g's positive copy sits at slot 2 * g.
+        const int groups = 100;
+        var positives = Enumerable.Range(0, groups).Select(g => 2 * g).ToArray();
+        var plan = record.Denoising;
+        Assert.NotNull(plan);
+        Assert.Equal(positives, plan?.Assignments[0]);
+        Assert.Equal(record.LayerClasses.Length, record.DenoisingClasses.Length);
+        foreach (var (layerLogits, layerBoxes) in record.DenoisingClasses.Zip(record.DenoisingBoxes, (c, b) => (c, b)))
+        {
+            Assert.Equal(2 * groups * classes, layerLogits.Length);
+            total += IndependentFixedAssignmentObjective(layerLogits, layerBoxes, classes, positives, goldClass, gold, varifocal);
+        }
+        return total;
+    }
+
+    /// <summary>Sigmoid focal (or varifocal) + L1 + GIoU with a fixed query per target copy, normalized by the number of copies.</summary>
+    private static double IndependentFixedAssignmentObjective(double[] logits, double[] boxes, int classes, int[] positives, int goldClass, double[] gold, bool varifocal)
+    {
+        static double Sigmoid(double x) => 1 / (1 + Math.Exp(-x));
+        static double Softplus(double x) => x > 0 ? x + Math.Log(1 + Math.Exp(-x)) : Math.Log(1 + Math.Exp(x));
+        // Varifocal soft target of a positive: the IoU of its (detached) predicted box with the target.
+        var quality = positives.ToDictionary(query => query * classes + goldClass, query => PlainIoU(boxes.Skip(query * 4).Take(4).ToArray(), gold));
+        double classification = 0;
+        for (int index = 0; index < logits.Length; index++)
+        {
+            double x = logits[index], p = Sigmoid(x);
+            bool positive = quality.TryGetValue(index, out double q);
+            if (varifocal)
+                classification += (positive ? q : 0.75 * p * p) * (Softplus(x) - (positive ? q : 0) * x);
+            else
+                classification += positive ? 0.25 * Math.Pow(1 - p, 2) * Softplus(-x) : 0.75 * p * p * Softplus(x);
+        }
+
+        double boxTerms = 0;
+        const double stabilizer = 1e-7;
+        foreach (int query in positives)
+        {
+            var predicted = boxes.Skip(query * 4).Take(4).ToArray();
+            double l1 = predicted.Zip(gold, (left, right) => Math.Abs(left - right)).Sum();
+            var (intersection, union, enclosure) = Overlap(predicted, gold);
+            boxTerms += 5 * l1 + 2 * (1 - intersection / (union + stabilizer) + (enclosure - union) / (enclosure + stabilizer));
+        }
+        return (classification + boxTerms) / positives.Length;
+    }
     private static (double Intersection, double Union, double Enclosure) Overlap(double[] predicted, double[] target)
     {
         var p = new[] { predicted[0] - predicted[2] / 2, predicted[1] - predicted[3] / 2,

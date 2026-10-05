@@ -55,8 +55,8 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.RMSprop,
-            (float)GetCurrentLearningRate(),
-            0f, (float)_options.Decay, (float)_options.Epsilon, 0f, schedule);
+            GetCurrentLearningRate(),
+            0f, _options.Decay, _options.Epsilon, 0f, schedule);
         return true;
     }
 
@@ -157,7 +157,7 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
     /// </para>
     /// </remarks>
     public RootMeanSquarePropagationOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

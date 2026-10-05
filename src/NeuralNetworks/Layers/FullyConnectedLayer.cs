@@ -291,7 +291,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     /// <param name="inputSize">The number of input neurons.</param>
     /// <param name="outputSize">The number of output neurons.</param>
-    /// <param name="activationFunction">The activation function to apply after the linear transformation. Defaults to ReLU if not specified.</param>
+    /// <param name="activationFunction">The activation function to apply after the linear transformation. Null means none (identity), as in <see cref="DenseLayer{T}"/>; pass <c>new ReLUActivation&lt;T&gt;()</c> for a ReLU layer.</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new fully connected layer with the specified input size, output size, and
@@ -322,7 +322,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     public FullyConnectedLayer([LayerState] int outputSize, IActivationFunction<T>? activationFunction = null)
-        : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new ReLUActivation<T>())
+        : base(new[] { -1 }, new[] { outputSize }, activationFunction ?? new IdentityActivation<T>())
     {
         if (outputSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(outputSize));
@@ -345,9 +345,9 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     /// <param name="inputSize">The number of input neurons. Must be positive.</param>
     /// <param name="outputSize">The number of output neurons. Must be positive.</param>
-    /// <param name="activationFunction">Activation applied after the linear transform. Defaults to ReLU.</param>
+    /// <param name="activationFunction">Activation applied after the linear transform. Null means none (identity), as in <see cref="DenseLayer{T}"/>.</param>
     public FullyConnectedLayer(int inputSize, int outputSize, IActivationFunction<T>? activationFunction = null)
-        : base(new[] { inputSize }, new[] { outputSize }, activationFunction ?? new ReLUActivation<T>())
+        : base(new[] { inputSize }, new[] { outputSize }, activationFunction ?? new IdentityActivation<T>())
     {
         _inputSize = inputSize;
         if (inputSize <= 0)
@@ -461,7 +461,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     /// <param name="inputSize">The number of input neurons.</param>
     /// <param name="outputSize">The number of output neurons.</param>
-    /// <param name="vectorActivationFunction">The vector activation function to apply after the linear transformation. Defaults to ReLU if not specified.</param>
+    /// <param name="vectorActivationFunction">The vector activation function to apply after the linear transformation. Null means none (identity).</param>
     /// <remarks>
     /// <para>
     /// This constructor creates a new fully connected layer with the specified input size, output size, and
@@ -491,7 +491,7 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     public FullyConnectedLayer([LayerState] int outputSize, IVectorActivationFunction<T> vectorActivationFunction)
-        : base(new[] { -1 }, new[] { outputSize }, vectorActivationFunction ?? new ReLUActivation<T>())
+        : base(new[] { -1 }, new[] { outputSize }, vectorActivationFunction ?? new IdentityActivation<T>())
     {
         if (outputSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(outputSize));

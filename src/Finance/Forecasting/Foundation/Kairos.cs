@@ -147,7 +147,7 @@ public partial class Kairos<T> : TimeSeriesFoundationModelBase<T>
 
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+    ?? CreateDefaultOptimizer();
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
@@ -173,7 +173,7 @@ public partial class Kairos<T> : TimeSeriesFoundationModelBase<T>
 
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+    ?? CreateDefaultOptimizer();
         _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
 
         CopyOptionsToFields(options);
@@ -210,6 +210,32 @@ public partial class Kairos<T> : TimeSeriesFoundationModelBase<T>
 
     #endregion
 
+    /// <summary>
+    /// The optimizer Kairos trains with when the caller supplies none and the paper declares none: Adam at
+    /// <see cref="KairosOptions{T}.LearningRate"/>, ramped linearly over <see cref="KairosOptions{T}.WarmupSteps"/>.
+    /// </summary>
+    /// <remarks>
+    /// The ramp starts at LearningRate / WarmupSteps rather than 0: <see cref="LinearWarmupScheduler"/> trains its
+    /// first batch at the initial rate, and a zero there would make the first step a silent no-op.
+    /// </remarks>
+    private AdamOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+    {
+        double peak = _options.LearningRate;
+        int warmup = _options.WarmupSteps;
+        if (warmup <= 0)
+            return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = peak });
+
+        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = peak,
+            LearningRateScheduler = new LinearWarmupScheduler(
+                baseLearningRate: peak,
+                warmupSteps: warmup,
+                warmupInitLr: peak / warmup,
+                decayMode: LinearWarmupScheduler.DecayMode.Constant),
+            SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+        });
+    }
     #region Initialization
 
     /// <inheritdoc/>

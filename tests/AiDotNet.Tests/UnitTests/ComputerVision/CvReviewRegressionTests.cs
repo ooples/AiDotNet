@@ -390,7 +390,7 @@ public sealed class CvReviewRegressionTests
         }
         public override long GetParameterCount() => 0;
         public override OCRResult<double> Recognize(Tensor<double> image) => throw new NotSupportedException();
-        public override (string text, double confidence) RecognizeText(Tensor<double> croppedImage) => throw new NotSupportedException();
+        protected override (string text, double confidence) RecognizePreparedText(Tensor<double> preparedCrop) => throw new NotSupportedException();
         public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public override void SaveWeights(string path) => throw new NotSupportedException();
     }
@@ -407,6 +407,9 @@ public sealed class CvReviewRegressionTests
             return new() { input };
         }
         protected override long GetHeadParameterCount() => 0;
+        protected override Tensor<double> TextDetectionLoss(List<Tensor<double>> outputs,
+            AiDotNet.ComputerVision.Detection.TextDetection.TextDetectionTrainingBatch targets, int imageWidth, int imageHeight) =>
+            throw new NotSupportedException();
         protected override List<TextRegion<double>> PostProcess(List<Tensor<double>> outputs,
             int imageWidth, int imageHeight, double confidenceThreshold) => throw new NotSupportedException();
         public override TextDetectionResult<double> Detect(Tensor<double> image) => throw new NotSupportedException();

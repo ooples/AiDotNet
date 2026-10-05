@@ -1,4 +1,4 @@
-using AiDotNet.LearningRateSchedulers;
+﻿using AiDotNet.LearningRateSchedulers;
 using System;
 using System.Collections.Generic;
 using System.IO;

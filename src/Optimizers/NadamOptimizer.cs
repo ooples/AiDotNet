@@ -41,8 +41,8 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.Nadam,
-            (float)GetCurrentLearningRate(),
-            (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
+            GetCurrentLearningRate(),
+            _options.Beta1, _options.Beta2, _options.Epsilon,
             0f, schedule);
         return true;
     }
@@ -110,7 +110,7 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// <param name="model">The model to optimize.</param>
     /// <param name="options">The Nadam-specific optimization options.</param>
     public NadamOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         NadamOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
@@ -284,13 +284,16 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
         T oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
         T epsilon = NumOps.FromDouble(_options.Epsilon);
+        // Dozat (2016), Alg. 8 with constant momentum: the momentum term is bias-corrected with 1 - beta1^(t+1) (it
+        // stands for the NEXT step's momentum), the gradient term with 1 - beta1^t. Using 1 - beta1^t for both made
+        // the first steps up to ~2x off the fused kernel and the paper.
         T biasCorrectionM = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t));
+        T biasCorrectionMNext = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t + 1));
         T biasCorrectionV = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t));
         T nesterovFactor = NumOps.Divide(oneMinusBeta1, biasCorrectionM);
         // Dozat (2016) Alg. 2 with constant mu = beta1: the look-ahead momentum is bias-corrected by the NEXT
         // step's (1 - beta1^(t+1)); the current gradient (nesterovFactor) by this step's (1 - beta1^t). This is
         // PyTorch NAdam at constant momentum and what the fused and GPU Nadam kernels compute.
-        T biasCorrectionMNext = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t + 1));
 
         // Update biased first moment estimate: m = beta1 * m + (1 - beta1) * gradient
         var beta1TimesM = (Vector<T>)Engine.Multiply(_m!, beta1);
@@ -381,13 +384,16 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
         T oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
         T epsilon = NumOps.FromDouble(_options.Epsilon);
+        // Dozat (2016), Alg. 8 with constant momentum: the momentum term is bias-corrected with 1 - beta1^(t+1) (it
+        // stands for the NEXT step's momentum), the gradient term with 1 - beta1^t. Using 1 - beta1^t for both made
+        // the first steps up to ~2x off the fused kernel and the paper.
         T biasCorrectionM = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t));
+        T biasCorrectionMNext = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t + 1));
         T biasCorrectionV = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t));
         T nesterovFactor = NumOps.Divide(oneMinusBeta1, biasCorrectionM);
         // Dozat (2016) Alg. 2 with constant mu = beta1: the look-ahead momentum is bias-corrected by the NEXT
         // step's (1 - beta1^(t+1)); the current gradient (nesterovFactor) by this step's (1 - beta1^t). This is
         // PyTorch NAdam at constant momentum and what the fused and GPU Nadam kernels compute.
-        T biasCorrectionMNext = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t + 1));
 
         // Update biased first moment estimate: m = beta1 * m + (1 - beta1) * gradient
         // ONE FUSED IN-PLACE PASS -- same rewrite as Adam/AdamW/Adagrad/Lion, same reason.
@@ -401,7 +407,7 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         // Per-element operand and association order preserved exactly (Dozat 2016), including the
         // Nesterov term built from the bias-corrected mHat and the raw gradient:
         //   m = b1*m + (1-b1)*g ;  v = b2*v + ((g*g)*(1-b2))
-        //   mHatNesterov = b1*(m/bcMNext) + nesterovFactor*g   (bcMNext = 1 - b1^(t+1))
+        //   mHatNesterov = b1*(m/bcMNext) + nesterovFactor*g   (bcMNext = 1 - b1^(t+1), nesterovFactor = (1-b1)/(1 - b1^t))
         //   out = p - (mHatNesterov*lr) / (sqrt(v/bcV) + eps)
         var updatedParams = new Vector<T>(parameters.Length, skipZeroInit: true);
         var pSpan = parameters.AsSpan();
@@ -455,10 +461,13 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
         T oneMinusBeta2 = NumOps.FromDouble(1 - _options.Beta2);
         T epsilon = NumOps.FromDouble(_options.Epsilon);
+        // Dozat (2016), Alg. 8 with constant momentum: the momentum term is bias-corrected with 1 - beta1^(t+1) (it
+        // stands for the NEXT step's momentum), the gradient term with 1 - beta1^t. Using 1 - beta1^t for both made
+        // the first steps up to ~2x off the fused kernel and the paper.
         T biasCorrectionM = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _tapeStep));
+        T biasCorrectionMNext = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _tapeStep + 1));
         T biasCorrectionV = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _tapeStep));
         T nesterovFactor = NumOps.Divide(oneMinusBeta1, biasCorrectionM);
-        T biasCorrectionMNext = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _tapeStep + 1));   // Dozat 2016 Alg. 2
 
         // GPU-resident step (AIDOTNET_GPU_ADAM=1); gated off, CPU fallback per-param when not GPU-resident.
         bool gpuAdam = typeof(T) == typeof(float)
@@ -564,11 +573,12 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         T beta2 = NumOps.FromDouble(_options.Beta2);
         T oneMinusBeta1 = NumOps.FromDouble(1 - _options.Beta1);
         T biasCorrection1 = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t));
+        T biasCorrection1Next = NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t + 1));
         T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _t));
 
         // CRITICAL: Use UPDATED moments (current _m and _v), not previous moments
         // Bias-corrected moments
-        var biasCorr1NextVec = Vector<T>.CreateDefault(_m.Length, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _t + 1)));
+        var biasCorr1NextVec = Vector<T>.CreateDefault(_m.Length, biasCorrection1Next);
         var biasCorr2Vec = Vector<T>.CreateDefault(_v.Length, biasCorrection2);
         var mHat = (Vector<T>)Engine.Divide(_m, biasCorr1NextVec);
         var vHat = (Vector<T>)Engine.Divide(_v, biasCorr2Vec);

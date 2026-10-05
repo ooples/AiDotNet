@@ -92,7 +92,7 @@ public partial class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// </para>
     /// </remarks>
     public BFGSOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         BFGSOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

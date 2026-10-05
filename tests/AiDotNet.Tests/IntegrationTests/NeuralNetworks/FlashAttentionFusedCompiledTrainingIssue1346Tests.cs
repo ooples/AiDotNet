@@ -205,7 +205,7 @@ public class FlashAttentionFusedCompiledTrainingIssue1346Tests
             inputSize: SeqLen * EmbedDim, outputSize: NumClasses,
             dropoutRate: 0.0, maxSequenceLength: SeqLen, vocabularySize: NumClasses,
             usePositionalEncoding: false, temperature: 1.0,
-            sequencePooling: null, layers: layers);
+            sequencePooling: null, layers: layers) { RandomSeed = 1346 };
         var optimizer = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null,
             new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
             {

@@ -258,10 +258,10 @@ public class ShapeContractConformanceTests
         Assert.False(ShapeInference.HasDeclaredOutputShapeContract(
             typeof(AiDotNet.Document.VisionLanguage.UDOP<double>)));
 
-        // CRNN supplies OutputClassCount, so the same inherited base implementation is concrete without
-        // requiring a repetitive per-model OutputAxesFor override.
-        Assert.True(ShapeInference.HasDeclaredOutputShapeContract(
-            typeof(AiDotNet.Document.OCR.TextRecognition.CRNN<double>)));
+        // The satisfying direction (a subclass that supplies the required property makes the inherited
+        // contract concrete) is SatisfiesConditionalContract above. Its document-model example was the
+        // Document/OCR CRNN, deleted as a duplicate of ComputerVision.OCR.Recognition.CRNN, and no
+        // other document model overrides OutputClassCount.
     }
 
     [Fact]

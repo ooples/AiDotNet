@@ -190,8 +190,8 @@ public class ArchitectureSharingGuardTests
     {
         List<ILayer<double>> incompatibleLayers =
         [
-            new FullyConnectedLayer<double>(3072, 8),
-            new FullyConnectedLayer<double>(7, 2)
+            new FullyConnectedLayer<double>(3072, 8, new AiDotNet.ActivationFunctions.ReLUActivation<double>()),
+            new FullyConnectedLayer<double>(7, 2, new AiDotNet.ActivationFunctions.ReLUActivation<double>())
         ];
         var architecture = new NeuralNetworkArchitecture<double>(
             inputType: InputType.ThreeDimensional,

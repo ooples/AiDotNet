@@ -54,37 +54,19 @@ public partial class YOLOv8<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<
     /// <param name="options">Detection options.</param>
     public YOLOv8(ObjectDetectionOptions<T> options) : base(options)
     {
-        // Get configuration based on model size
-        var (depth, width) = GetSizeConfig(options.Size);
+        // YOLOv8's own backbone (Conv/C2f stages + SPPF) and PAN-FPN neck with C2f, at the size's
+        // depth/width/max-channel scale. This ran a YOLOv4/v5-style CSPDarknet and a generic PANet.
+        Backbone = new YOLOv8Backbone<T>(new YoloBackboneOptions { Size = options.Size });
+        Neck = new YOLOv8Neck<T>(options.Size);
 
-        // Initialize backbone
-        Backbone = new CSPDarknet<T>(options: new CSPDarknetOptions { Depth = depth, WidthMultiplier = width });
-
-        // Initialize neck
-        Neck = new PANet<T>(Backbone.OutputChannels.ToArray(), outputChannels: (int)(256 * width));
-
-        // Initialize detection head
-        var neckChannels = Enumerable.Repeat(Neck.OutputChannels, Neck.NumLevels).ToArray();
-        _head = new YOLOv8Head<T>(neckChannels, options.NumClasses);
+        // The decoupled head reads each level at its own width (P3, P4, P5 differ in YOLOv8).
+        _head = new YOLOv8Head<T>(Neck.LevelChannels.ToArray(), options.NumClasses);
 
         _strides = Backbone.Strides.ToArray();
         _detectionLoss = new AiDotNet.ComputerVision.Detection.Losses.TaskAlignedDetectionLoss<T>(options.NumClasses,
             _head.RegMax, options.TaskAlignedLoss ?? new AiDotNet.ComputerVision.Detection.Losses.TaskAlignedLossOptions());
         _nms = new NMS<T>();
     }
-
-    /// <summary>
-    /// Gets depth and width multipliers for each model size.
-    /// </summary>
-    private static (double depth, double width) GetSizeConfig(ModelSize size) => size switch
-    {
-        ModelSize.Nano => (0.33, 0.25),
-        ModelSize.Small => (0.33, 0.50),
-        ModelSize.Medium => (0.67, 0.75),
-        ModelSize.Large => (1.00, 1.00),
-        ModelSize.XLarge => (1.33, 1.25),
-        _ => (0.67, 0.75)
-    };
 
     /// <summary>Trains the head with task-aligned assignment, BCE classification, CIoU and distribution focal loss.</summary>
     /// <remarks>
@@ -224,9 +206,9 @@ public partial class YOLOv8<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<
         }
 
         int version = reader.ReadInt32();
-        if (version != 1)
+        if (version != 2)
         {
-            throw new InvalidDataException($"Unsupported weight file version: {version}.");
+            throw new InvalidDataException($"Unsupported weight file version: {version}. Version 1 files use the pre-YOLOv8Backbone (CSPDarknet/PANet) layout, which cannot be read as the current one; re-save or re-export the weights with this version.");
         }
 
         // Read model configuration
@@ -256,7 +238,7 @@ public partial class YOLOv8<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<
 
         // Write magic number and version for identification
         writer.Write(0x594F4C4F); // "YOLO" in ASCII
-        writer.Write(1); // Version 1
+        writer.Write(2); // Version 2: YOLOv8Backbone and YOLOv8Neck layout
 
         // Write model configuration
         writer.Write(Name);

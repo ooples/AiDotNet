@@ -1,5 +1,8 @@
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.ObjectDetection;
+using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
@@ -180,6 +183,18 @@ public class InstanceSegmentationOptions<T>
     /// Mask threshold for binarization.
     /// </summary>
     public T MaskThreshold { get; set; } = NumOps.FromDouble(0.5);
+
+    /// <summary>
+    /// Seed for the training draws (RoI and anchor sampling), for reproducible training. Null draws
+    /// from a secure random source.
+    /// </summary>
+    public int? RandomSeed { get; set; } = 42;
+
+    /// <summary>
+    /// Two-stage training settings (proposal and RoI sampling, IoU thresholds, loss weights) for
+    /// models trained with the R-CNN objectives, such as Mask R-CNN. Null uses the published settings.
+    /// </summary>
+    public AiDotNet.ComputerVision.Detection.Losses.TwoStageDetectionLossOptions? TwoStageLoss { get; set; }
 }
 
 /// <summary>
@@ -205,9 +220,11 @@ public enum InstanceSegmentationArchitecture
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [AiDotNet.Configuration.YamlConfigurable("InstanceSegmenter")]
-public abstract class InstanceSegmenterBase<T>
+public abstract partial class InstanceSegmenterBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 {
-    protected readonly INumericOperations<T> NumOps;
+    // Engine and NumOps are inherited from ModelBase, which also gives every instance segmenter the
+    // shared parameter surface (count, flat vector, chunks, serialization, cloning) and the tape-based
+    // training step. As a plain class this base had none of it, so no instance segmenter could train.
     protected readonly InstanceSegmentationOptions<T> Options;
 
     /// <summary>
@@ -220,9 +237,161 @@ public abstract class InstanceSegmenterBase<T>
     /// </summary>
     protected InstanceSegmenterBase(InstanceSegmentationOptions<T> options)
     {
-        NumOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-        Options = options;
+        Options = options ?? throw new ArgumentNullException(nameof(options));
     }
+
+    /// <summary>
+    /// Runs the network and returns its raw heads, in a fixed order the model documents.
+    /// </summary>
+    /// <param name="input">Input image tensor [batch, channels, height, width].</param>
+    protected abstract List<Tensor<T>> Forward(Tensor<T> input);
+
+    /// <summary>
+    /// Predicts by running the forward pass and returning every raw head, flattened per image and
+    /// concatenated, so a step trained against <see cref="Predict"/> reaches every head.
+    /// </summary>
+    public override Tensor<T> Predict(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        return CvTensorOps<T>.ConcatenateOutputs(Forward(input));
+    }
+
+    /// <summary>Gets the step size used by <see cref="Train"/>.</summary>
+    protected virtual double TrainingLearningRate => 0.001;
+
+    /// <summary>
+    /// Runs one raw-output regression step against <see cref="Predict"/> (mean squared error, SGD on
+    /// every trainable tensor). A model's own objective, such as Mask R-CNN's multi-task loss, is
+    /// exposed through its typed training method.
+    /// </summary>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (expectedOutput is null) throw new ArgumentNullException(nameof(expectedOutput));
+        RecordTrainingLoss(TensorModelTrainer<T>.Step(
+            this, input, expectedOutput, NumOps.FromDouble(TrainingLearningRate), Predict));
+    }
+
+    /// <summary>
+    /// Runs one step of a model-specific objective over typed targets, through the shared tape step.
+    /// </summary>
+    protected void TrainWithTargets<TTarget>(Tensor<T> input, TTarget targets,
+        Func<Tensor<T>, List<Tensor<T>>> forward, Func<List<Tensor<T>>, TTarget, Tensor<T>> loss) where TTarget : class
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (forward is null) throw new ArgumentNullException(nameof(forward));
+        if (loss is null) throw new ArgumentNullException(nameof(loss));
+        RecordTrainingLoss(TensorModelTrainer<T>.StepWithTargets(
+            this, input, targets, NumOps.FromDouble(TrainingLearningRate), forward, loss));
+    }
+
+    [AiDotNet.Attributes.Scratch]
+    private bool _parametersResolved;
+
+    [AiDotNet.Attributes.Scratch]
+    private bool _resolvingParameters;
+
+    /// <summary>
+    /// Gives every lazily-shaped layer its weights, once, by running a zero image of the configured
+    /// input size through <see cref="Forward"/> and then <see cref="MaterializeAuxiliaryHeads"/>.
+    /// </summary>
+    /// <remarks>
+    /// Several layers size their weights on their first forward pass, so until then the parameter
+    /// layout is shape-deferred: counting, reading, training, serializing and cloning all threw. Every
+    /// image of a given size resolves the same shapes, as convolution weights do not depend on it.
+    /// </remarks>
+    protected void ResolveDeferredParameters()
+    {
+        if (_parametersResolved || _resolvingParameters) return;
+        _resolvingParameters = true;
+        try
+        {
+            var size = Options.InputSize;
+            if (size is null || size.Length != 2 || size[0] <= 0 || size[1] <= 0)
+                throw new InvalidOperationException("InputSize must be [height, width] with positive entries.");
+            Forward(new Tensor<T>(new[] { 1, 3, size[0], size[1] }));
+            MaterializeAuxiliaryHeads();
+            _parametersResolved = true;
+        }
+        finally
+        {
+            _resolvingParameters = false;
+        }
+    }
+
+    /// <summary>
+    /// Runs a zero input through any head <see cref="Forward"/> does not reach (one fed per detection,
+    /// such as a mask head), so its weights exist before the parameters are read.
+    /// </summary>
+    protected virtual void MaterializeAuxiliaryHeads()
+    {
+    }
+
+    /// <inheritdoc />
+    public override long ParameterCount
+    {
+        get
+        {
+            ResolveDeferredParameters();
+            return base.ParameterCount;
+        }
+    }
+
+    /// <inheritdoc />
+    public override Vector<T> GetParameters()
+    {
+        ResolveDeferredParameters();
+        return base.GetParameters();
+    }
+
+    /// <inheritdoc />
+    public override void SetParameters(Vector<T> parameters)
+    {
+        ResolveDeferredParameters();
+        base.SetParameters(parameters);
+    }
+
+    /// <inheritdoc />
+    public override IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
+    {
+        ResolveDeferredParameters();
+        return base.GetParameterStateChunks();
+    }
+
+    /// <inheritdoc />
+    public override byte[] Serialize()
+    {
+        ResolveDeferredParameters();
+        return base.Serialize();
+    }
+
+    /// <inheritdoc />
+    /// <remarks>A rebuilt copy resolves the same shapes before this model's state is loaded into it.</remarks>
+    protected override void PrepareCopyForStateRestore(ModelBase<T, Tensor<T>, Tensor<T>> copy)
+    {
+        if (copy is InstanceSegmenterBase<T> rebuilt) rebuilt.ResolveDeferredParameters();
+    }
+
+    /// <inheritdoc />
+    public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
+
+    /// <inheritdoc />
+    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
+    {
+        var copy = DeepCopy();
+        InterfaceGuard.Parameterizable(copy).SetParameters(parameters);
+        return copy;
+    }
+
+    [AiDotNet.Attributes.Scratch]
+    private T _lastTrainingLoss = Tensors.Helpers.MathHelper.GetNumericOperations<T>().Zero;
+
+    /// <summary>Gets the loss of the most recent training step, measured before its update.</summary>
+    public T GetLastLoss() => _lastTrainingLoss;
+
+    /// <summary>Records the loss a training step reported.</summary>
+    protected void RecordTrainingLoss(T loss) => _lastTrainingLoss = loss;
 
     /// <summary>
     /// Performs instance segmentation on an image.

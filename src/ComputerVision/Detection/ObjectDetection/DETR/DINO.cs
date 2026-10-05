@@ -1,7 +1,6 @@
 ﻿using System.IO;
 using AiDotNet.Augmentation.Image;
 using AiDotNet.ComputerVision.Detection.Backbones;
-using AiDotNet.ComputerVision.Detection.Necks;
 using AiDotNet.ComputerVision.Detection.PostProcessing;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -13,21 +12,32 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.ComputerVision.Detection.ObjectDetection.DETR;
 
 /// <summary>
-/// DINO (DETR with Improved deNoising anchOr boxes) - State-of-the-art DETR variant.
+/// DINO (DETR with Improved deNoising anchOr boxes).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// <para><b>For Beginners:</b> DINO improves upon DETR by using contrastive denoising training
-/// and mixed query selection. It achieves better performance with faster convergence than
-/// the original DETR.</para>
-///
-/// <para>Key improvements:
-/// - Contrastive denoising training for better query learning
-/// - Mixed query selection (both content and position queries)
-/// - Look forward twice for better box predictions
-/// - Multi-scale deformable attention (optional)
+/// <para><b>For Beginners:</b> DINO is an end-to-end detector: it predicts a fixed set of boxes and learns
+/// which of them are objects, so it needs no anchors or non-maximum suppression. It trains faster and more
+/// accurately than the original DETR through three ideas. Contrastive denoising teaches the decoder to
+/// repair noised copies of the real boxes and to reject harder negatives. Mixed query selection starts the
+/// queries from the encoder's best positions. "Look forward twice" lets each layer's box correction
+/// improve the layer before it.</para>
+/// <para>
+/// The architecture follows the reference implementation (IDEA-Research/DINO) at DINO-4scale:
+/// <list type="bullet">
+/// <item>The backbone's C3-C5 (C2-C5 at five scales) plus an extra stride-2 level are projected to 256
+/// channels with GroupNorm.</item>
+/// <item>Six deformable encoder layers (<see cref="MultiScaleDeformableAttention{T}"/>).</item>
+/// <item>Two-stage proposals: the encoder's top-K positions are the anchors, and the content queries
+/// are learnable.</item>
+/// <item>Six decoder layers (self-attention, deformable cross-attention, FFN) with iterative box
+/// refinement.</item>
+/// <item>Shared sigmoid class and box heads.</item>
+/// </list>
+/// The training objective is the reference's: focal + L1 + GIoU with Hungarian matching on the final
+/// layer, on each intermediate layer and on the encoder proposals. On top of that come the contrastive
+/// denoising losses of every layer.
 /// </para>
-///
 /// <para>Reference: Zhang et al., "DINO: DETR with Improved DeNoising Anchor Boxes for End-to-End Object Detection", ICLR 2023</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
@@ -42,73 +52,64 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.DETR;
     Authors = "Hao Zhang, Feng Li, Shilong Liu, Lei Zhang, Hang Su, Jun Zhu, Lionel M. Ni, Heung-Yeung Shum")]
 public partial class DINO<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
 {
-    private readonly DINOEncoder<T> _encoder;
-    private readonly DINODecoder<T> _decoder;
-    private readonly Dense<T> _inputProj;
-    private readonly int _hiddenDim;
-    private readonly int _numQueries;
+    private readonly DinoDetectionTransformer<T> _transformer;
+    private readonly DINOOptions<T> _dino;
+    private readonly int[] _backboneTaps;
     private readonly NMS<T> _nms;
     private readonly AiDotNet.ComputerVision.Detection.Losses.DETRSetLoss<T> _detectionLoss;
     private readonly int _trainingClassCount;
+    private readonly Random _denoisingRandom;
 
     /// <inheritdoc/>
     public override string Name => $"DINO-{Options.Size}";
 
     /// <summary>
-    /// Creates a new DINO detector.
+    /// Creates DINO. Pass a <see cref="DINOOptions{T}"/> to change the transformer; plain
+    /// <see cref="ObjectDetectionOptions{T}"/> use the paper's DINO-4scale values.
     /// </summary>
-    /// <param name="options">Detection options.</param>
     public DINO(ObjectDetectionOptions<T> options) : base(options)
     {
-        var (hiddenDim, numHeads, numEncoderLayers, numDecoderLayers, numQueries) = GetSizeConfig(options.Size);
-        _hiddenDim = hiddenDim;
-        _numQueries = numQueries;
+        _dino = options as DINOOptions<T> ?? new DINOOptions<T>();
+        if (_dino.NumQueries <= 0) throw new ArgumentException("NumQueries must be positive.", nameof(options));
+        if (_dino.NumDecoderLayers <= 0) throw new ArgumentException("DINO needs at least one decoder layer.", nameof(options));
 
-        // Initialize backbone with FPN for multi-scale features
-        Backbone = new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetVariant.ResNet50 });
-        Neck = new FPN<T>(Backbone.OutputChannels.ToArray(), outputChannels: hiddenDim);
+        // ModelSize selects the paper's backbone: ResNet-50 4-scale, Swin-L 4-scale, or Swin-L 5-scale.
+        bool fiveScale = options.Size == ModelSize.XLarge;
+        Backbone = options.Size is ModelSize.Large or ModelSize.XLarge
+            ? new SwinTransformer<T>(new SwinTransformerOptions { Variant = SwinVariant.SwinLarge })
+            : new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetVariant.ResNet50 });
+        _backboneTaps = fiveScale ? new[] { 0, 1, 2, 3 } : new[] { 1, 2, 3 };
+        var channels = _backboneTaps.Select(tap => Backbone.OutputChannels[tap]).ToArray();
 
-        // Project features to hidden dimension (for sequence data)
-        _inputProj = new Dense<T>(hiddenDim, hiddenDim);
-
-        // DINO encoder with deformable attention
-        _encoder = new DINOEncoder<T>(hiddenDim, numHeads, numEncoderLayers, Neck.NumLevels);
-
-        // DINO decoder with contrastive denoising
-        _decoder = new DINODecoder<T>(hiddenDim, numHeads, numDecoderLayers, numQueries, options.NumClasses);
+        _transformer = new DinoDetectionTransformer<T>(
+            new DINOOptionsView(_dino.HiddenDimension, _dino.NumHeads, _dino.NumEncoderLayers, _dino.NumDecoderLayers,
+                _dino.FeedForwardDimension, _dino.NumQueries, _dino.NumSamplingPoints, _dino.PositionalTemperature),
+            channels, options.NumClasses);
 
         var lossOptions = options.SetPredictionLoss ?? AiDotNet.ComputerVision.Detection.Losses.DetrSetLossOptions.ForDino();
         if (lossOptions.ClassificationLoss == SetPredictionClassificationLoss.SoftmaxCrossEntropy)
             throw new ArgumentException("DINO's class head has independent sigmoid classes and no no-object class; use a sigmoid focal or varifocal set loss.", nameof(options));
         _trainingClassCount = options.NumClasses;
         _detectionLoss = new AiDotNet.ComputerVision.Detection.Losses.DETRSetLoss<T>(options.NumClasses, lossOptions);
-
+        _denoisingRandom = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextRandom();
         _nms = new NMS<T>();
     }
 
-    private static (int hiddenDim, int numHeads, int numEncoderLayers, int numDecoderLayers, int numQueries) GetSizeConfig(ModelSize size) => size switch
-    {
-        ModelSize.Nano => (128, 4, 3, 3, 100),
-        ModelSize.Small => (192, 6, 4, 4, 300),
-        ModelSize.Medium => (256, 8, 6, 6, 300),
-        ModelSize.Large => (384, 8, 6, 6, 900),
-        ModelSize.XLarge => (512, 8, 6, 6, 900),
-        _ => (256, 8, 6, 6, 300)
-    };
+    /// <summary>
+    /// The pre-update outputs, denoising plan and recorded loss of the last <see cref="TrainDetections"/> step,
+    /// for tests that re-derive the objective independently.
+    /// </summary>
+    internal DetrTrainingRecord<T>? LastTrainingRecord { get; private set; }
 
-    /// <summary>Trains the final DINO heads with exact assignment, sigmoid focal loss, L1 and GIoU.</summary>
+    /// <summary>The transformer and heads, for tests that configure controlled weights.</summary>
+    /// <remarks>A method, not a property: the parameter registry names components after the members that hold them.</remarks>
+    internal DinoDetectionTransformer<T> GetTransformer() => _transformer;
+
+    /// <inheritdoc/>
     /// <remarks>
-    /// <para>
-    /// Uses DINO's published recipe by default (Zhang et al. 2022, Table 8): focal loss with alpha 0.25
-    /// and gamma 2, matching costs 2/5/2 and loss weights 1/5/2 for class/L1/GIoU. Override it with
-    /// <see cref="ObjectDetectionOptions{T}.SetPredictionLoss"/>.
-    /// </para>
-    /// <para>
-    /// Inputs are model-ready NCHW tensors, as for Predict. Targets use normalized center-format boxes.
-    /// An image with more targets than queries is rejected before any update. This architecture
-    /// exposes only its final decoder heads, so the paper's per-layer auxiliary, query-selection and
-    /// contrastive denoising losses are not claimed.
-    /// </para>
+    /// One step of the reference objective: the Hungarian set loss of the final layer, of every intermediate
+    /// layer and of the encoder proposals, plus the fixed-assignment denoising loss of every layer. Inputs are
+    /// model-ready NCHW tensors, as for Predict, and targets are normalized against that input.
     /// </remarks>
     public void TrainDetections(Tensor<T> input, DetectionTrainingBatch<T> targets)
     {
@@ -116,30 +117,84 @@ public partial class DINO<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
         if (targets is null) throw new ArgumentNullException(nameof(targets));
         if (input.Rank != 4 || input.Shape[0] <= 0 || input.Shape[1] != 3 || input.Shape[2] <= 0 || input.Shape[3] <= 0)
             throw new ArgumentException("DINO training requires a nonempty NCHW three-channel image batch.", nameof(input));
-        targets.ValidateForModel(input.Shape[0], _trainingClassCount, _numQueries);
-        TrainWithTargets(input, targets, ComputeDetectionLoss);
+        targets.ValidateForModel(input.Shape[0], _trainingClassCount, _dino.NumQueries);
+
+        var plan = ContrastiveDenoising<T>.Plan(targets, _trainingClassCount, _dino.DenoisingQueries,
+            _dino.LabelNoiseRatio, _dino.BoxNoiseScale, _denoisingRandom);
+        DetrPass<T>? pass = null;
+        TrainWithTargets(input, targets,
+            x =>
+            {
+                pass = _transformer.Forward(BackboneLevels(x), plan);
+                return pass.All();
+            },
+            (heads, batch) =>
+            {
+                var current = pass ?? throw new InvalidOperationException("DINO's training forward did not run.");
+                var loss = Objective(current, batch);
+                LastTrainingRecord = DetrTrainingRecord<T>.Capture(current, NumOps.ToDouble(loss.ToArray()[0]));
+                return loss;
+            });
     }
 
-    private Tensor<T> ComputeDetectionLoss(List<Tensor<T>> heads, DetectionTrainingBatch<T> targets)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The generic tensor objective covers the same outputs as <see cref="TrainDetections"/>, each layer
+    /// weighted equally as in the reference: the encoder proposals and every decoder layer, each in Predict's
+    /// [class logits, box logits] format, scored by mean squared error against the target. There are no
+    /// targets to noise here, so no denoising queries run.
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (heads.Count != 2)
-            throw new InvalidOperationException("DINO training requires the actual final class and box heads.");
-        // Forward exposes raw box logits and DecodeOutputs applies sigmoid; apply it on the tape here.
-        return _detectionLoss.ComputeTapeLoss(heads[0], Engine.Sigmoid(heads[1]), targets);
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (expectedOutput is null) throw new ArgumentNullException(nameof(expectedOutput));
+        DetrPass<T>? pass = null;
+        TrainWithTargets(input, expectedOutput,
+            x =>
+            {
+                pass = _transformer.Forward(BackboneLevels(x), null);
+                return pass.All();
+            },
+            (heads, target) =>
+            {
+                var current = pass ?? throw new InvalidOperationException("DINO's training forward did not run.");
+                var total = TensorModelTrainer<T>.MeanSquaredError(
+                    CvTensorOps<T>.ConcatenateOutputs(new List<Tensor<T>> { current.EncoderClasses, current.EncoderBoxLogits }), target);
+                for (int layer = 0; layer < current.Classes.Count; layer++)
+                    total = Engine.TensorAdd(total, TensorModelTrainer<T>.MeanSquaredError(
+                        CvTensorOps<T>.ConcatenateOutputs(new List<Tensor<T>> { current.Classes[layer], current.BoxLogits[layer] }), target));
+                return total;
+            });
+    }
+    private Tensor<T> Objective(DetrPass<T> pass, DetectionTrainingBatch<T> targets)
+    {
+        var total = _detectionLoss.ComputeTapeLoss(pass.EncoderClasses, pass.EncoderBoxes, targets);
+        for (int layer = 0; layer < pass.Classes.Count; layer++)
+            total = Engine.TensorAdd(total, _detectionLoss.ComputeTapeLoss(pass.Classes[layer], pass.Boxes[layer], targets));
+        if (pass.Denoising is { } plan)
+        {
+            for (int layer = 0; layer < pass.DenoisingClasses.Count; layer++)
+                total = Engine.TensorAdd(total, _detectionLoss.ComputeTapeLoss(
+                    pass.DenoisingClasses[layer], pass.DenoisingBoxes[layer], plan.Targets, plan.Assignments));
+        }
+        return total;
+    }
+
+    private List<Tensor<T>> BackboneLevels(Tensor<T> input)
+    {
+        var features = EnsureBackbone.ExtractFeatures(input);
+        return _backboneTaps.Select(tap => features[tap]).ToList();
     }
 
     /// <inheritdoc/>
     public override DetectionResult<T> Detect(Tensor<T> image, double confidenceThreshold, double nmsThreshold)
     {
         var startTime = DateTime.UtcNow;
-
         int originalHeight = image.Shape[2];
         int originalWidth = image.Shape[3];
-
         var input = Preprocess(image);
         var outputs = Forward(input);
         var detections = PostProcess(outputs, originalWidth, originalHeight, confidenceThreshold, nmsThreshold);
-
         return new DetectionResult<T>
         {
             Detections = detections,
@@ -150,30 +205,11 @@ public partial class DINO<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>The final decoder layer's class logits <c>[N, K, C]</c> and box logits <c>[N, K, 4]</c> (pre-sigmoid).</remarks>
     protected override List<Tensor<T>> Forward(Tensor<T> input)
     {
-        // Extract multi-scale features from backbone
-        var backboneFeatures = EnsureBackbone.ExtractFeatures(input);
-
-        // Apply FPN
-        var fpnFeatures = EnsureNeck.Forward(backboneFeatures);
-
-        // Flatten and concatenate multi-scale features
-        var (flattenedFeatures, levelStarts, spatialShapes) = FlattenMultiScale(fpnFeatures);
-
-        // Project features
-        var projected = ProjectFeatures(flattenedFeatures);
-
-        // Generate multi-scale positional encoding
-        var posEncoding = GenerateMultiScalePositionalEncoding(projected._shape, spatialShapes, levelStarts);
-
-        // Encode with deformable attention
-        var memory = _encoder.Forward(projected, posEncoding, spatialShapes, levelStarts);
-
-        // Decode with contrastive denoising
-        var (classLogits, boxPreds) = _decoder.Forward(memory, posEncoding, spatialShapes);
-
-        return new List<Tensor<T>> { classLogits, boxPreds };
+        var pass = _transformer.Forward(BackboneLevels(input), null);
+        return new List<Tensor<T>> { pass.Classes[pass.Classes.Count - 1], pass.FinalBoxLogits };
     }
 
     /// <inheritdoc/>
@@ -184,101 +220,35 @@ public partial class DINO<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
         double confidenceThreshold,
         double nmsThreshold)
     {
-        var classLogits = outputs[0];
-        var boxPreds = outputs[1];
-
-        // Decode outputs
-        var decoded = _decoder.DecodeOutputs(classLogits, boxPreds, imageHeight, imageWidth);
-
-        float[] boxes = decoded[0].boxes;
-        float[] scores = decoded[0].scores;
-        int[] classIds = decoded[0].classIds;
-
-        // Build detection list with confidence filtering
-        var candidateDetections = new List<Detection<T>>();
-
-        for (int i = 0; i < scores.Length; i++)
-        {
-            if (scores[i] >= confidenceThreshold)
-            {
-                var box = new BoundingBox<T>(
-                    NumOps.FromDouble(boxes[i * 4]),
-                    NumOps.FromDouble(boxes[i * 4 + 1]),
-                    NumOps.FromDouble(boxes[i * 4 + 2]),
-                    NumOps.FromDouble(boxes[i * 4 + 3]));
-
-                int classId = classIds[i];
-                candidateDetections.Add(new Detection<T>(
-                    box,
-                    classId,
-                    NumOps.FromDouble(scores[i]),
-                    classId < ClassNames.Length ? ClassNames[classId] : null));
-            }
-        }
-
-        // Apply NMS (DINO typically has minimal duplicates due to set prediction)
-        var nmsResults = _nms.Apply(candidateDetections, nmsThreshold);
-
-        if (nmsResults.Count > Options.MaxDetections)
-        {
-            return nmsResults.Take(Options.MaxDetections).ToList();
-        }
-
-        return nmsResults;
+        // The reference PostProcess: every (query, class) pair scored by its own sigmoid, no NMS (see
+        // EffectiveNmsThreshold).
+        var detections = DetrHeads<T>.TopKSigmoid(outputs[0], outputs[1], imageWidth, imageHeight, confidenceThreshold, ClassNames);
+        var kept = _nms.Apply(detections, EffectiveNmsThreshold(nmsThreshold)); return kept.Count > Options.MaxDetections ? kept.Take(Options.MaxDetections).ToList() : kept;
     }
 
     /// <inheritdoc/>
-    protected override long GetHeadParameterCount()
-    {
-        long count = _inputProj.GetParameterCount();
-        count += _encoder.GetParameterCount();
-        count += _decoder.GetParameterCount();
-        return count;
-    }
+    /// <remarks>DINO is NMS-free: one query per object is what its set loss trains, and the reference post-processing applies no suppression.</remarks>
+    public override double EffectiveNmsThreshold(double requested) => 1.0;
+
+    /// <inheritdoc/>
+    protected override long GetHeadParameterCount() => _transformer.ParameterCount;
 
     /// <inheritdoc/>
     public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-
         using var stream = File.OpenRead(pathOrUrl);
         using var reader = new BinaryReader(stream);
-
-        // Read and verify magic number and version
-        int magic = reader.ReadInt32();
-        if (magic != 0x44494E4F) // "DINO" in ASCII
-        {
+        if (reader.ReadInt32() != 0x44494E4F) // "DINO" in ASCII
             throw new InvalidDataException("Invalid weight file format: incorrect magic number.");
-        }
-
         int version = reader.ReadInt32();
-        if (version != 1)
-        {
-            throw new InvalidDataException($"Unsupported weight file version: {version}.");
-        }
-
-        // Read model configuration
+        if (version != 2)
+            throw new InvalidDataException($"Unsupported DINO weight file version {version}; this build reads version 2 (deformable DINO).");
         string modelName = reader.ReadString();
-        if (!modelName.StartsWith("DINO"))
-        {
+        if (!modelName.StartsWith("DINO", StringComparison.Ordinal))
             throw new InvalidDataException($"Weight file is for {modelName}, not DINO.");
-        }
-
-        // Read backbone parameters
         EnsureBackbone.ReadParameters(reader);
-
-        // Read neck parameters
-        EnsureNeck.ReadParameters(reader);
-
-        // Read input projection
-        _inputProj.ReadParameters(reader);
-
-        // Read encoder parameters
-        _encoder.ReadParameters(reader);
-
-        // Read decoder parameters
-        _decoder.ReadParameters(reader);
-
+        _transformer.Read(reader);
         return Task.CompletedTask;
     }
 
@@ -287,541 +257,51 @@ public partial class DINO<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
     {
         using var stream = File.Create(path);
         using var writer = new BinaryWriter(stream);
-
-        // Write magic number and version
         writer.Write(0x44494E4F); // "DINO" in ASCII
-        writer.Write(1); // Version 1
-
-        // Write model configuration
+        writer.Write(2);
         writer.Write(Name);
-
-        // Write backbone parameters
         EnsureBackbone.WriteParameters(writer);
-
-        // Write neck parameters
-        EnsureNeck.WriteParameters(writer);
-
-        // Write input projection
-        _inputProj.WriteParameters(writer);
-
-        // Write encoder parameters
-        _encoder.WriteParameters(writer);
-
-        // Write decoder parameters
-        _decoder.WriteParameters(writer);
+        _transformer.Write(writer);
     }
 
-    private (Tensor<T> flattened, int[] levelStarts, int[][] spatialShapes) FlattenMultiScale(List<Tensor<T>> features)
-    {
-        return DETRHelpers.FlattenMultiScale(features, _hiddenDim);
-    }
-
-    private Tensor<T> ProjectFeatures(Tensor<T> features) => _inputProj.ForwardTokens(features);
-
-    private Tensor<T> GenerateMultiScalePositionalEncoding(int[] shape, int[][] spatialShapes, int[] levelStarts)
-    {
-        int batch = shape[0];
-        int seqLen = shape[1];
-        int hiddenDim = shape[2];
-
-        // Pre-compute frequencies to avoid repeated Math.Pow calls
-        var freqsX = new double[hiddenDim / 2];
-        var freqsY = new double[hiddenDim / 2];
-        for (int i = 0; i < hiddenDim / 2; i++)
-        {
-            freqsX[i] = 1.0 / Math.Pow(10000.0, (2.0 * i) / hiddenDim);
-            freqsY[i] = 1.0 / Math.Pow(10000.0, (2.0 * i + 1) / hiddenDim);
-        }
-
-        var encoding = new Tensor<T>(shape);
-
-        for (int level = 0; level < spatialShapes.Length; level++)
-        {
-            int h = spatialShapes[level][0];
-            int w = spatialShapes[level][1];
-            int start = levelStarts[level];
-
-            // Pre-compute level embedding value with proper scaling
-            double levelEmbedValue = level * 0.1;
-
-            for (int b = 0; b < batch; b++)
-            {
-                for (int y = 0; y < h; y++)
-                {
-                    for (int x = 0; x < w; x++)
-                    {
-                        int tokenIdx = start + y * w + x;
-
-                        // 2D positional encoding using pre-computed frequencies
-                        for (int i = 0; i < hiddenDim / 2; i++)
-                        {
-                            encoding[b, tokenIdx, i * 2] = NumOps.FromDouble(Math.Sin(x * freqsX[i]));
-                            encoding[b, tokenIdx, i * 2 + 1] = NumOps.FromDouble(Math.Cos(y * freqsY[i]));
-                        }
-
-                        // Add level embedding to first dimension
-                        encoding[b, tokenIdx, 0] = NumOps.Add(encoding[b, tokenIdx, 0], NumOps.FromDouble(levelEmbedValue));
-                    }
-                }
-            }
-        }
-
-        return encoding;
-    }
 }
 
-/// <summary>
-/// DINO encoder with deformable attention.
-/// </summary>
-internal class DINOEncoder<T> : CvParameterModule<T>
+/// <summary>Host copies of one DINO training step's head outputs and its recorded loss.</summary>
+internal sealed class DetrTrainingRecord<T>
 {
-    private readonly INumericOperations<T> _numOps;
-    private readonly int _hiddenDim;
-    private readonly int _numHeads;
-    private readonly int _numLayers;
-    private readonly int _numLevels;
-    private readonly List<DINOEncoderLayer<T>> _layers;
-
-    public DINOEncoder(int hiddenDim, int numHeads, int numLayers, int numLevels)
+    private DetrTrainingRecord(double loss, int queries, int classes, double[][] classes2, double[][] boxes,
+        double[][] denoisingClasses, double[][] denoisingBoxes, double[] encoderClasses, double[] encoderBoxes, ContrastiveDenoisingPlan<T>? plan)
     {
-        _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-        _hiddenDim = hiddenDim;
-        _numHeads = numHeads;
-        _numLayers = numLayers;
-        _numLevels = numLevels;
-
-        _layers = new List<DINOEncoderLayer<T>>();
-        for (int i = 0; i < numLayers; i++)
-        {
-            _layers.Add(new DINOEncoderLayer<T>(hiddenDim, numHeads, numLevels));
-        }
+        Loss = loss;
+        Queries = queries;
+        Classes = classes;
+        LayerClasses = classes2;
+        LayerBoxes = boxes;
+        DenoisingClasses = denoisingClasses;
+        DenoisingBoxes = denoisingBoxes;
+        EncoderClasses = encoderClasses;
+        EncoderBoxes = encoderBoxes;
+        Denoising = plan;
     }
 
-    public Tensor<T> Forward(Tensor<T> x, Tensor<T> posEncoding, int[][] spatialShapes, int[] levelStarts)
+    public double Loss { get; }
+    public int Queries { get; }
+    public int Classes { get; }
+    public double[][] LayerClasses { get; }
+    public double[][] LayerBoxes { get; }
+    public double[][] DenoisingClasses { get; }
+    public double[][] DenoisingBoxes { get; }
+    public double[] EncoderClasses { get; }
+    public double[] EncoderBoxes { get; }
+    public ContrastiveDenoisingPlan<T>? Denoising { get; }
+
+    internal static DetrTrainingRecord<T> Capture(DetrPass<T> pass, double loss)
     {
-        var output = AiDotNetEngine.Current.TensorAdd(x, posEncoding);
-        foreach (var layer in _layers)
-        {
-            output = layer.Forward(output, spatialShapes, levelStarts);
-        }
-
-        return output;
-    }
-
-    public long GetParameterCount()
-    {
-        long count = 0;
-        foreach (var layer in _layers)
-        {
-            count += layer.GetParameterCount();
-        }
-        return count;
-    }
-
-    /// <summary>
-    /// Writes all parameters to a binary writer for serialization.
-    /// </summary>
-    public void WriteParameters(BinaryWriter writer)
-    {
-        writer.Write(_hiddenDim);
-        writer.Write(_numHeads);
-        writer.Write(_numLayers);
-        writer.Write(_numLevels);
-
-        foreach (var layer in _layers)
-        {
-            layer.WriteParameters(writer);
-        }
-    }
-
-    /// <summary>
-    /// Reads parameters from a binary reader for deserialization.
-    /// </summary>
-    public void ReadParameters(BinaryReader reader)
-    {
-        int hiddenDim = reader.ReadInt32();
-        int numHeads = reader.ReadInt32();
-        int numLayers = reader.ReadInt32();
-        int numLevels = reader.ReadInt32();
-
-        if (hiddenDim != _hiddenDim || numHeads != _numHeads ||
-            numLayers != _numLayers || numLevels != _numLevels)
-        {
-            throw new InvalidOperationException(
-                $"DINOEncoder configuration mismatch: expected hiddenDim={_hiddenDim}, numHeads={_numHeads}, " +
-                $"numLayers={_numLayers}, numLevels={_numLevels}.");
-        }
-
-        foreach (var layer in _layers)
-        {
-            layer.ReadParameters(reader);
-        }
-    }
-
-    /// <inheritdoc />
-    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
-    {
-        foreach (var child in _layers) yield return child;
-    }
-}
-
-/// <summary>
-/// Single DINO encoder layer with deformable attention.
-/// </summary>
-internal class DINOEncoderLayer<T> : CvParameterModule<T>
-{
-    private readonly INumericOperations<T> _numOps;
-    private readonly MultiHeadSelfAttention<T> _selfAttn;
-    private readonly Dense<T> _ffn1;
-    private readonly Dense<T> _ffn2;
-    private readonly LayerNorm<T> _norm1;
-    private readonly LayerNorm<T> _norm2;
-    private readonly int _hiddenDim;
-
-    public DINOEncoderLayer(int hiddenDim, int numHeads, int numLevels)
-    {
-        _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-        _hiddenDim = hiddenDim;
-
-        _selfAttn = new MultiHeadSelfAttention<T>(hiddenDim, numHeads);
-        _ffn1 = new Dense<T>(hiddenDim, hiddenDim * 4);
-        _ffn2 = new Dense<T>(hiddenDim * 4, hiddenDim);
-        _norm1 = new LayerNorm<T>(hiddenDim);
-        _norm2 = new LayerNorm<T>(hiddenDim);
-    }
-
-    public Tensor<T> Forward(Tensor<T> x, int[][] spatialShapes, int[] levelStarts)
-    {
-        // Self-attention (simplified - would use deformable attention in full implementation)
-        var attnOut = _selfAttn.Forward(x);
-        var x1 = AddTensors(x, attnOut);
-        x1 = _norm1.Forward(x1);
-
-        // FFN
-        var ffnOut = ApplyFFN(x1);
-        var output = AddTensors(x1, ffnOut);
-        output = _norm2.Forward(output);
-
-        return output;
-    }
-
-    public long GetParameterCount()
-    {
-        return _selfAttn.GetParameterCount() +
-               _ffn1.GetParameterCount() +
-               _ffn2.GetParameterCount() +
-               _norm1.GetParameterCount() +
-               _norm2.GetParameterCount();
-    }
-
-    /// <summary>
-    /// Writes all parameters to a binary writer for serialization.
-    /// </summary>
-    public void WriteParameters(BinaryWriter writer)
-    {
-        writer.Write(_hiddenDim);
-
-        _selfAttn.WriteParameters(writer);
-        _ffn1.WriteParameters(writer);
-        _ffn2.WriteParameters(writer);
-        _norm1.WriteParameters(writer);
-        _norm2.WriteParameters(writer);
-    }
-
-    /// <summary>
-    /// Reads parameters from a binary reader for deserialization.
-    /// </summary>
-    public void ReadParameters(BinaryReader reader)
-    {
-        int hiddenDim = reader.ReadInt32();
-
-        if (hiddenDim != _hiddenDim)
-        {
-            throw new InvalidOperationException(
-                $"DINOEncoderLayer configuration mismatch: expected hiddenDim={_hiddenDim}, got {hiddenDim}.");
-        }
-
-        _selfAttn.ReadParameters(reader);
-        _ffn1.ReadParameters(reader);
-        _ffn2.ReadParameters(reader);
-        _norm1.ReadParameters(reader);
-        _norm2.ReadParameters(reader);
-    }
-
-    private Tensor<T> ApplyFFN(Tensor<T> x)
-        => _ffn2.ForwardTokens(AiDotNetEngine.Current.GELU(_ffn1.ForwardTokens(x)));
-
-    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
-    {
-        return AiDotNetEngine.Current.TensorAdd(a, b);
-    }
-
-    /// <inheritdoc />
-    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
-    {
-        yield return _selfAttn;
-        yield return _ffn1;
-        yield return _ffn2;
-        yield return _norm1;
-        yield return _norm2;
-    }
-}
-
-/// <summary>
-/// DINO decoder with contrastive denoising and mixed query selection.
-/// </summary>
-internal class DINODecoder<T> : CvParameterModule<T>
-{
-    private readonly INumericOperations<T> _numOps;
-    private readonly int _numLayers;
-    private readonly int _hiddenDim;
-    private readonly int _numHeads;
-    private readonly int _numQueries;
-    private readonly List<DecoderLayer<T>> _layers;
-    private readonly Tensor<T> _contentQueries;
-    private readonly Tensor<T> _positionQueries;
-    private readonly Dense<T> _classHead;
-    private readonly Dense<T> _boxHead;
-
-    public DINODecoder(int hiddenDim, int numHeads, int numLayers, int numQueries, int numClasses)
-    {
-        _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-        _hiddenDim = hiddenDim;
-        _numHeads = numHeads;
-        _numLayers = numLayers;
-        _numQueries = numQueries;
-
-        _layers = new List<DecoderLayer<T>>();
-        for (int i = 0; i < numLayers; i++)
-        {
-            _layers.Add(new DecoderLayer<T>(hiddenDim, numHeads));
-        }
-
-        // Mixed queries: content and position
-        _contentQueries = InitializeQueries(numQueries, hiddenDim);
-        _positionQueries = InitializeQueries(numQueries, hiddenDim);
-
-        _classHead = new Dense<T>(hiddenDim, numClasses); // Sigmoid classes; no no-object column.
-        _boxHead = new Dense<T>(hiddenDim, 4);
-    }
-
-    public (Tensor<T> classLogits, Tensor<T> boxPreds) Forward(Tensor<T> memory, Tensor<T> posEncoding, int[][] spatialShapes)
-    {
-        int batch = memory.Shape[0];
-
-        // Combine content and position queries
-        var queries = CombineQueries(batch);
-
-        // Pass through decoder layers with look-forward-twice
-        var output = queries;
-        for (int i = 0; i < _layers.Count; i++)
-        {
-            output = _layers[i].Forward(output, memory, posEncoding);
-        }
-
-        // Apply prediction heads
-        var classLogits = ApplyHead(output, _classHead);
-        var boxPreds = ApplyHead(output, _boxHead);
-
-        return (classLogits, boxPreds);
-    }
-
-    public List<(float[] boxes, float[] scores, int[] classIds)> DecodeOutputs(
-        Tensor<T> classLogits,
-        Tensor<T> boxPreds,
-        int imageHeight,
-        int imageWidth)
-    {
-        int batchSize = classLogits.Shape[0];
-        int numQueries = classLogits.Shape[1];
-        int numClasses = classLogits.Shape[2];
-
-        // Initialize per-batch collections
-        var batchBoxes = new List<float>[batchSize];
-        var batchScores = new List<float>[batchSize];
-        var batchClassIds = new List<int>[batchSize];
-        for (int i = 0; i < batchSize; i++)
-        {
-            batchBoxes[i] = new List<float>();
-            batchScores[i] = new List<float>();
-            batchClassIds[i] = new List<int>();
-        }
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int q = 0; q < numQueries; q++)
-            {
-                // DINO classifies each query with independent per-class sigmoids trained by focal
-                // loss (Zhang et al. 2022); there is no no-object column.
-                double maxScore = 0;
-                int maxClassId = 0;
-                for (int c = 0; c < numClasses; c++)
-                {
-                    double prob = Sigmoid(_numOps.ToDouble(classLogits[b, q, c]));
-                    if (prob > maxScore)
-                    {
-                        maxScore = prob;
-                        maxClassId = c;
-                    }
-                }
-
-                // Decode box
-                double cx = Sigmoid(_numOps.ToDouble(boxPreds[b, q, 0])) * imageWidth;
-                double cy = Sigmoid(_numOps.ToDouble(boxPreds[b, q, 1])) * imageHeight;
-                double w = Sigmoid(_numOps.ToDouble(boxPreds[b, q, 2])) * imageWidth;
-                double h = Sigmoid(_numOps.ToDouble(boxPreds[b, q, 3])) * imageHeight;
-
-                float x1 = (float)Math.Max(0, cx - w / 2);
-                float y1 = (float)Math.Max(0, cy - h / 2);
-                float x2 = (float)Math.Min(imageWidth, cx + w / 2);
-                float y2 = (float)Math.Min(imageHeight, cy + h / 2);
-
-                // Add to this batch's collections
-                batchBoxes[b].AddRange(new[] { x1, y1, x2, y2 });
-                batchScores[b].Add((float)maxScore);
-                batchClassIds[b].Add(maxClassId);
-            }
-        }
-
-        // Return one result per batch item
-        var results = new List<(float[] boxes, float[] scores, int[] classIds)>();
-        for (int b = 0; b < batchSize; b++)
-        {
-            results.Add((batchBoxes[b].ToArray(), batchScores[b].ToArray(), batchClassIds[b].ToArray()));
-        }
-        return results;
-    }
-
-    public long GetParameterCount()
-    {
-        long count = _numQueries * _hiddenDim * 2; // Content + position queries
-
-        foreach (var layer in _layers)
-        {
-            count += layer.GetParameterCount();
-        }
-
-        count += _classHead.GetParameterCount();
-        count += _boxHead.GetParameterCount();
-
-        return count;
-    }
-
-    /// <summary>
-    /// Writes all parameters to a binary writer for serialization.
-    /// </summary>
-    public void WriteParameters(BinaryWriter writer)
-    {
-        writer.Write(_hiddenDim);
-        writer.Write(_numHeads);
-        writer.Write(_numLayers);
-        writer.Write(_numQueries);
-
-        // Write content queries
-        for (int i = 0; i < _contentQueries.Length; i++)
-        {
-            writer.Write(_numOps.ToDouble(_contentQueries[i]));
-        }
-
-        // Write position queries
-        for (int i = 0; i < _positionQueries.Length; i++)
-        {
-            writer.Write(_numOps.ToDouble(_positionQueries[i]));
-        }
-
-        // Write decoder layers
-        foreach (var layer in _layers)
-        {
-            layer.WriteParameters(writer);
-        }
-
-        // Write prediction heads
-        _classHead.WriteParameters(writer);
-        _boxHead.WriteParameters(writer);
-    }
-
-    /// <summary>
-    /// Reads parameters from a binary reader for deserialization.
-    /// </summary>
-    public void ReadParameters(BinaryReader reader)
-    {
-        int hiddenDim = reader.ReadInt32();
-        int numHeads = reader.ReadInt32();
-        int numLayers = reader.ReadInt32();
-        int numQueries = reader.ReadInt32();
-
-        if (hiddenDim != _hiddenDim || numHeads != _numHeads ||
-            numLayers != _numLayers || numQueries != _numQueries)
-        {
-            throw new InvalidOperationException(
-                $"DINODecoder configuration mismatch: expected hiddenDim={_hiddenDim}, numHeads={_numHeads}, " +
-                $"numLayers={_numLayers}, numQueries={_numQueries}.");
-        }
-
-        // Read content queries
-        for (int i = 0; i < _contentQueries.Length; i++)
-        {
-            _contentQueries[i] = _numOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Read position queries
-        for (int i = 0; i < _positionQueries.Length; i++)
-        {
-            _positionQueries[i] = _numOps.FromDouble(reader.ReadDouble());
-        }
-
-        // Read decoder layers
-        foreach (var layer in _layers)
-        {
-            layer.ReadParameters(reader);
-        }
-
-        // Read prediction heads
-        _classHead.ReadParameters(reader);
-        _boxHead.ReadParameters(reader);
-    }
-
-    private Tensor<T> InitializeQueries(int numQueries, int hiddenDim)
-    {
-        var queries = new Tensor<T>(new[] { numQueries, hiddenDim });
-        double scale = Math.Sqrt(2.0 / (numQueries + hiddenDim));
-        var random = RandomHelper.CreateSeededRandom(42);
-
-        for (int i = 0; i < queries.Length; i++)
-        {
-            queries[i] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * scale);
-        }
-
-        return queries;
-    }
-
-    private Tensor<T> CombineQueries(int batch)
-    {
-        // content + position, broadcast over the batch. Both query tensors are learnable.
-        int numQueries = _contentQueries.Shape[0];
-        var combined = AiDotNetEngine.Current.TensorAdd(_contentQueries, _positionQueries);
-        return AiDotNetEngine.Current.TensorBroadcastTo(AiDotNetEngine.Current.Reshape(combined, new[] { 1, numQueries, _hiddenDim }), new[] { batch, numQueries, _hiddenDim });
-    }
-
-    private Tensor<T> ApplyHead(Tensor<T> output, Dense<T> head) => head.ForwardTokens(output);
-
-    private static double Sigmoid(double x)
-    {
-        return 1.0 / (1.0 + Math.Exp(-x));
-    }
-
-    /// <inheritdoc />
-    protected override IEnumerable<IParameterSource<T>?> ParameterChildren()
-    {
-        foreach (var child in _layers) yield return child;
-        yield return _classHead;
-        yield return _boxHead;
-    }
-
-    /// <inheritdoc />
-    protected override IEnumerable<Tensor<T>> OwnParameterTensors()
-    {
-        yield return _contentQueries;
-        yield return _positionQueries;
+        var ops = MathHelper.GetNumericOperations<T>();
+        double[] Host(Tensor<T> t) => t.ToArray().Select(v => ops.ToDouble(v)).ToArray();
+        return new DetrTrainingRecord<T>(loss, pass.Classes[0].Shape[1], pass.Classes[0].Shape[2],
+            pass.Classes.Select(Host).ToArray(), pass.Boxes.Select(Host).ToArray(),
+            pass.DenoisingClasses.Select(Host).ToArray(), pass.DenoisingBoxes.Select(Host).ToArray(),
+            Host(pass.EncoderClasses), Host(pass.EncoderBoxes), pass.Denoising);
     }
 }

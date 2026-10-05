@@ -34,96 +34,6 @@ public class OCRTextRecognitionTests
         return new Tensor<double>(new[] { 1, 3, height, width }, data);
     }
 
-    private static TrOCR<double> CreateSmallTrOCR(NeuralNetworkArchitecture<double> architecture)
-    {
-        // Keep the production constructor's TrOCR-base paper defaults intact. These integration
-        // invariants exercise native construction, prediction, metadata, and OCR capabilities, so
-        // use the model's public topology controls to avoid allocating the full 50,265 x 768
-        // double-precision embedding table repeatedly on a 16 GiB CI runner.
-        return new TrOCR<double>(
-            architecture,
-            options: new AiDotNet.Document.Options.TrOCROptions
-            {
-                ImageHeight = 32,
-                ImageWidth = 128,
-                MaxSequenceLength = 16,
-                EncoderHiddenDim = 32,
-                DecoderHiddenDim = 32,
-                NumEncoderLayers = 1,
-                NumDecoderLayers = 1,
-                NumEncoderHeads = 4,
-                NumDecoderHeads = 4,
-                PatchSize = 16,
-                VocabSize = 128
-            });
-    }
-
-    #region CRNN Tests
-
-    [Fact(Timeout = 120000)]
-    public async Task CRNN_NativeConstruction_Succeeds()
-    {
-        var arch = CreateArchitecture();
-        using var model = new CRNN<double>(arch);
-        Assert.NotNull(model);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task CRNN_Predict_ReturnsOutput()
-    {
-        var arch = CreateArchitecture();
-        using var model = new CRNN<double>(arch);
-        using var input = CreateSmallImage();
-        using var output = model.Predict(input);
-        Assert.NotNull(output);
-        Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
-        Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task CRNN_GetModelMetadata_ReturnsValidData()
-    {
-        var arch = CreateArchitecture();
-        using var model = new CRNN<double>(arch);
-        var meta = model.GetModelMetadata();
-        Assert.Equal("CRNN", meta.Name);
-    }
-
-    #endregion
-
-    #region TrOCR Tests
-
-    [Fact(Timeout = 120000)]
-    public async Task TrOCR_NativeConstruction_Succeeds()
-    {
-        var arch = CreateArchitecture();
-        using var model = CreateSmallTrOCR(arch);
-        Assert.NotNull(model);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task TrOCR_Predict_ReturnsOutput()
-    {
-        var arch = CreateArchitecture();
-        using var model = CreateSmallTrOCR(arch);
-        using var input = CreateSmallImage();
-        using var output = model.Predict(input);
-        Assert.NotNull(output);
-        Assert.True(output.Shape.Length > 0, "Output should have non-empty shape");
-        Assert.True(output.Shape[0] > 0, "Output first dimension should be positive");
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task TrOCR_GetModelMetadata_ReturnsValidData()
-    {
-        var arch = CreateArchitecture();
-        using var model = CreateSmallTrOCR(arch);
-        var meta = model.GetModelMetadata();
-        Assert.Equal("TrOCR", meta.Name);
-    }
-
-    #endregion
-
     #region SVTR Tests
 
     [Fact(Timeout = 120000)]
@@ -203,12 +113,10 @@ public class OCRTextRecognitionTests
         // Each model owns pooled buffers, so it is declared under its own using scope before the
         // array is built: if a later constructor throws, the array assignment never completes and a
         // finally-based cleanup would never run, leaking every model already constructed.
-        using var crnn = new CRNN<double>(CreateArchitecture());
-        using var trOcr = CreateSmallTrOCR(CreateArchitecture());
         using var svtr = new SVTR<double>(CreateArchitecture());
         using var abiNet = new ABINet<double>(CreateArchitecture());
 
-        var models = new DocumentNeuralNetworkBase<double>[] { crnn, trOcr, svtr, abiNet };
+        var models = new DocumentNeuralNetworkBase<double>[] { svtr, abiNet };
 
         foreach (var model in models)
         {

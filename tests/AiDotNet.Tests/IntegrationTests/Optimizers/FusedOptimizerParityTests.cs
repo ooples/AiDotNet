@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -65,6 +66,10 @@ public class FusedOptimizerParityTests
     private (double maxAbsDiff, long fusedSteps, double trainDelta) Divergence(
         Func<IGradientBasedOptimizer<float, Tensor<float>, Tensor<float>>> optFactory)
     {
+        // Pin the global default init seed. The model-family test base sets it to 1234 process-wide and never resets it,
+        // so without this the initial weights, and every result here, depended on whether such a test had already run
+        // in the process (FTRL's L1 held all weights at zero under one init and not the other).
+        NeuralNetworkArchitecture<float>.DefaultRandomSeedOverride = 1234;
         var fused = new FeedForwardNeuralNetwork<float>(MakeArch(), optFactory(), new MeanSquaredErrorLoss<float>());
         var eager = new FeedForwardNeuralNetwork<float>(MakeArch(), optFactory(), new MeanSquaredErrorLoss<float>());
         // Identical initial weights: copy the fused model's init into the eager one.
@@ -74,27 +79,38 @@ public class FusedOptimizerParityTests
         eager.SetTrainingMode(true);
         var (x, y) = MakeData();
 
-        bool saved = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation;
+        // Install the options with SetCurrent. TensorCodecOptions.Current returns a fresh copy of the defaults on a
+        // thread that never called SetCurrent, so assigning Current.EnableCompilation there changed nothing: the
+        // "eager" run trained fused as well and every optimizer reported a divergence of exactly zero.
+        var saved = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
         long fusedSteps;
+        long eagerFusedSteps;
         try
         {
             // Fused run.
-            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = true;
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(
+                new AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions { EnableCompilation = true });
             CompiledTapeTrainingStep<float>.Invalidate();
             CompiledTapeTrainingStep<float>.ResetFusedStepCount();
             for (int i = 0; i < Steps; i++) fused.Train(x, y);
             fusedSteps = CompiledTapeTrainingStep<float>.GetFusedStepCount();
 
             // Eager run (compilation disabled → pure tape path).
-            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = false;
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(
+                new AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions { EnableCompilation = false });
             CompiledTapeTrainingStep<float>.Invalidate();
+            CompiledTapeTrainingStep<float>.ResetFusedStepCount();
             for (int i = 0; i < Steps; i++) eager.Train(x, y);
+            eagerFusedSteps = CompiledTapeTrainingStep<float>.GetFusedStepCount();
         }
         finally
         {
-            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = saved;
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(saved);
             CompiledTapeTrainingStep<float>.Invalidate();
         }
+
+        // The comparison is only meaningful when the reference really ran eagerly.
+        Assert.Equal(0, eagerFusedSteps);
 
         var pf = fused.GetParameters();
         var pe = eager.GetParameters();
@@ -111,6 +127,111 @@ public class FusedOptimizerParityTests
     private static AdamOptimizer<float, Tensor<float>, Tensor<float>> Adam() =>
         new(null, new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 });
 
+    /// <summary>
+    /// Every optimizer that maps onto a fused kernel must actually engage the fused path when a network trains, and
+    /// train it the way its eager step does. FusedKernelParityTests drives each kernel directly from a fixed gradient
+    /// sequence, which cannot notice an optimizer that maps onto a kernel but whose training never reaches it
+    /// (Momentum, TrustRegion, ProximalGradientDescent and L-BFGS all did); this runs the real training step.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(FusedKernelParityTests.Cases), MemberType = typeof(FusedKernelParityTests))]
+    public void Training_EngagesTheFusedPath_AndMatchesTheEagerStep(string name)
+    {
+        var (adamDiff, _, _) = Divergence(Adam);
+        var (diff, fusedSteps, trainDelta) = Divergence(() => FusedKernelParityTests.Create(name));
+        _output.WriteLine($"{name}: fusedSteps={fusedSteps}, maxAbsDiff={diff:E3}, trainDelta={trainDelta:E3} (Adam control {adamDiff:E3})");
+        Assert.True(fusedSteps > 0, $"{name} maps onto a fused kernel but training never engaged it (fusedSteps == 0).");
+        Assert.True(trainDelta > 1e-6, $"{name}: training barely moved the parameters ({trainDelta:E3}); the comparison would be vacuous.");
+        Assert.True(diff <= ParityBound(name, adamDiff),
+            $"{name}: fused and eager training differ by {diff:E3}, against {adamDiff:E3} for the Adam control " +
+            $"(bound {ParityBound(name, adamDiff):E3}).");
+    }
+
+    /// <summary>
+    /// The fused-vs-eager bound: 10x the fp32 Adam control, or, for bfloat16 moment storage, one bf16 rounding step
+    /// per update.
+    /// </summary>
+    /// <remarks>
+    /// Fused and eager gradients differ by fp32 ulps because the compiled plan orders its float operations differently
+    /// (the Adam control measures this, about 1e-6). With fp32 moments that noise stays at ulp scale. With bf16 moments,
+    /// an ulp that straddles a bf16 rounding boundary moves the stored moment by a whole bf16 step (2^-8 relative), so
+    /// that parameter's update differs by about lr * 2^-8. Measured for Adam8BitBf16: agreement to 1e-7 for four steps,
+    /// then 4 of 4931 parameters off by ~2e-5 at step 5, compounding to 3.8e-4 by step 40. Kernel-level parity, where
+    /// both sides get identical gradients, is exact (FusedKernelParityTests). The bf16 bound allows one bf16 step
+    /// (2^-7 with rounding) per update: Steps * lr * 2^-7, 3.1e-3 at lr 1e-2. A wrong mapping such as a missing bias
+    /// correction or beta diverges by ~1e-1 and still fails.
+    /// </remarks>
+    private static double ParityBound(string name, double adamDiff)
+    {
+        double fp32Bound = Math.Max(adamDiff * 10.0, 1e-4);
+        if (FusedKernelParityTests.Create(name) is AiDotNet.Optimizers.Fused.IFusedOptimizerSpec spec
+            && spec.TryGetFusedOptimizerConfig(out var config)
+            && config.UseBf16Moments)
+        {
+            return Math.Max(fp32Bound, Steps * config.LearningRate * Math.Pow(2, -7));
+        }
+
+        return fp32Bound;
+    }
+    /// <summary>
+    /// A warmup that starts at learning rate 0 (the LinearWarmupScheduler default) makes the first step change nothing.
+    /// The #1822 persistence probe read that as a plan decoupled from the live tensors and disabled fused training for
+    /// the rest of the run. It must stay fused for every step, and match the eager warmup.
+    /// </summary>
+    [Fact]
+    public void Adam_WithAWarmupFromZero_StaysOnTheFusedPath()
+    {
+        var (adamDiff, _, _) = Divergence(Adam);
+        var (diff, fusedSteps, trainDelta) = Divergence(() =>
+            new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null, new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = 1e-2,
+                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(1e-2, warmupSteps: 5),
+                // Per batch: the cadence the compiled plan's per-step schedule expresses.
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+            }));
+        _output.WriteLine($"Adam + warmup from 0: fusedSteps={fusedSteps}, maxAbsDiff={diff:E3} (Adam control {adamDiff:E3})");
+        Assert.Equal(Steps, fusedSteps);
+        Assert.True(trainDelta > 1e-6, $"training barely moved the parameters ({trainDelta:E3}); the comparison would be vacuous.");
+        Assert.True(diff <= Math.Max(adamDiff * 10.0, 1e-4), $"fused and eager warmup differ by {diff:E3}, against {adamDiff:E3}.");
+    }
+
+    /// <summary>
+    /// A scheduler stepped per epoch (the default mode) cannot be expressed by the compiled plan's per-step schedule.
+    /// Mapping it as one made the fused path ramp the learning rate every batch while the eager path, following the
+    /// configuration, held it until the epoch ended. It runs fused with an external schedule instead: the optimizer
+    /// sets the rate when its scheduler steps, so the fused model must train like the eager one within the Adam
+    /// control. A per-batch ramp moves the rate by far more than that bound.
+    /// </summary>
+    [Fact]
+    public void Adam_WithAPerEpochScheduler_RunsFused_AndMatchesTheEagerStep()
+    {
+        var (adamDiff, _, _) = Divergence(Adam);
+        var (diff, fusedSteps, trainDelta) = Divergence(() =>
+            new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null, new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = 1e-2,
+                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.CosineAnnealingLRScheduler(1e-2, tMax: 40),
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerEpoch,
+            }));
+        _output.WriteLine($"Adam + per-epoch cosine: fusedSteps={fusedSteps}, maxAbsDiff={diff:E3} (Adam control {adamDiff:E3})");
+        Assert.Equal(Steps, fusedSteps);
+        Assert.True(trainDelta > 1e-6, $"training barely moved the parameters ({trainDelta:E3}); the comparison would be vacuous.");
+        Assert.True(diff <= Math.Max(adamDiff * 10.0, 1e-4),
+            $"fused and eager per-epoch schedules differ by {diff:E3}, against {adamDiff:E3}: the fused rate moved within the epoch.");
+    }
+    /// <summary>
+    /// FTRL's L1 term holds a weight at exactly zero while its accumulator stays inside lambda1, so under this init a
+    /// fused step can leave every parameter unchanged. That is FTRL working, not a decoupled plan: FTRL must keep the
+    /// fused path for every step instead of being reset to eager.
+    /// </summary>
+    [Fact]
+    public void FTRL_KeepsTheFusedPath_WhenItsL1TermHoldsEveryWeightAtZero()
+    {
+        var (_, fusedSteps, _) = Divergence(() => FusedKernelParityTests.Create("FTRL"));
+        _output.WriteLine($"FTRL: fusedSteps={fusedSteps}");
+        Assert.Equal(Steps, fusedSteps);
+    }
     [Fact]
     public void Adam_Control_FusedMatchesEager()
     {
@@ -120,40 +241,6 @@ public class FusedOptimizerParityTests
         Assert.True(trainDelta > 1e-6,
             $"Adam control: training did not move parameters (trainDelta={trainDelta:E3}); the fused-vs-eager parity comparison is vacuous.");
         Assert.True(diff < 1e-3, $"Adam fused-vs-eager divergence {diff:E3} unexpectedly large — forward/backward float-order issue?");
-    }
-
-    [Fact]
-    public void AdaMax_FusedMatchesEager_NoWorseThanAdam()
-    {
-        var (adamDiff, _, _) = Divergence(Adam);
-        var (diff, fusedSteps, trainDelta) = Divergence(() =>
-            new AdaMaxOptimizer<float, Tensor<float>, Tensor<float>>(
-                null, new AdaMaxOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }));
-        _output.WriteLine($"AdaMax: fusedSteps={fusedSteps}, maxAbsDiff={diff:E3} (Adam control {adamDiff:E3})");
-        Assert.True(fusedSteps > 0,
-            "AdaMax must engage the fused path (OptimizerType.AdaMax) — fusedSteps==0 means the mapping didn't take.");
-        Assert.True(trainDelta > 1e-6,
-            $"AdaMax: training did not move parameters (trainDelta={trainDelta:E3}); the fused-vs-eager parity comparison is vacuous.");
-        Assert.True(diff <= Math.Max(adamDiff * 10.0, 1e-4),
-            $"AdaMax fused-vs-eager divergence {diff:E3} ≫ Adam control {adamDiff:E3} — the fused AdaMax kernel does " +
-            "not match AiDotNet's eager AdaMax update. Do NOT wire this mapping until reconciled.");
-    }
-
-    [Fact]
-    public void Nadam_FusedMatchesEager_NoWorseThanAdam()
-    {
-        var (adamDiff, _, _) = Divergence(Adam);
-        var (diff, fusedSteps, trainDelta) = Divergence(() =>
-            new NadamOptimizer<float, Tensor<float>, Tensor<float>>(
-                null, new NadamOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }));
-        _output.WriteLine($"Nadam: fusedSteps={fusedSteps}, maxAbsDiff={diff:E3} (Adam control {adamDiff:E3})");
-        Assert.True(fusedSteps > 0,
-            "Nadam must engage the fused path (OptimizerType.Nadam) — fusedSteps==0 means the mapping didn't take.");
-        Assert.True(trainDelta > 1e-6,
-            $"Nadam: training did not move parameters (trainDelta={trainDelta:E3}); the fused-vs-eager parity comparison is vacuous.");
-        Assert.True(diff <= Math.Max(adamDiff * 10.0, 1e-4),
-            $"Nadam fused-vs-eager divergence {diff:E3} ≫ Adam control {adamDiff:E3} — the fused Nadam kernel does " +
-            "not match AiDotNet's eager Nadam update. Do NOT wire this mapping until reconciled.");
     }
 
     private void AssertOptimizerParity(
@@ -169,26 +256,6 @@ public class FusedOptimizerParityTests
         Assert.True(diff <= Math.Max(adamDiff * 10.0, 1e-4),
             $"{name} fused-vs-eager divergence {diff:E3} ≫ Adam control {adamDiff:E3} — the fused kernel does not " +
             $"match AiDotNet's eager {name} update. Do NOT wire this mapping until reconciled.");
-    }
-
-    [Fact]
-    public void RMSprop_FusedMatchesEager_NoWorseThanAdam()
-    {
-        var (adamDiff, _, _) = Divergence(Adam);
-        var (diff, fusedSteps, trainDelta) = Divergence(() =>
-            new RootMeanSquarePropagationOptimizer<float, Tensor<float>, Tensor<float>>(
-                null, new RootMeanSquarePropagationOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }));
-        AssertOptimizerParity("RMSprop", fusedSteps, diff, trainDelta, adamDiff);
-    }
-
-    [Fact]
-    public void Adagrad_FusedMatchesEager_NoWorseThanAdam()
-    {
-        var (adamDiff, _, _) = Divergence(Adam);
-        var (diff, fusedSteps, trainDelta) = Divergence(() =>
-            new AdagradOptimizer<float, Tensor<float>, Tensor<float>>(
-                null, new AdagradOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }));
-        AssertOptimizerParity("Adagrad", fusedSteps, diff, trainDelta, adamDiff);
     }
 
     [Fact]
@@ -211,29 +278,25 @@ public class FusedOptimizerParityTests
         AssertOptimizerParity("AdaDelta", fusedSteps, diff, trainDelta, adamDiff);
     }
 
-    [Fact]
-    public void LAMB_FusedMatchesEager_NoWorseThanAdam()
+    // LAMB is deliberately NOT fused (see LAMBOptimizer's IFusedOptimizerSpec): the kernel does not clamp the trust
+    // ratio, and even unclamped its divergence grows past the parity bound after ~20 steps. Both configurations must
+    // decline and still train on the eager path.
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void LAMB_DeclinesTheFusedPath_AndTrainsEager(bool clipTrustRatio)
     {
-        var (adamDiff, _, _) = Divergence(Adam);
-        var (diff, fusedSteps, trainDelta) = Divergence(() =>
-            new LAMBOptimizer<float, Tensor<float>, Tensor<float>>(
-                null, new LAMBOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 }));
-        AssertOptimizerParity("LAMB", fusedSteps, diff, trainDelta, adamDiff);
-    }
+        LAMBOptimizer<float, Tensor<float>, Tensor<float>> Create() => new(
+            null, new LAMBOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = 1e-2,
+                ClipTrustRatio = clipTrustRatio,
+            });
 
-    [Fact]
-    public void AMSGrad_FusedMatchesEager_NoWorseThanAdam()
-    {
-        var (adamDiff, _, _) = Divergence(Adam);
-        var (diff, fusedSteps, trainDelta) = Divergence(() =>
-            new AMSGradOptimizer<float, Tensor<float>, Tensor<float>>(
-                // The fused kernel implements the PyTorch variant; the paper default trains eagerly by design
-                // (AMSGradBiasCorrectionTests pins both formulas and that mapping).
-                null, new AMSGradOptimizerOptions<float, Tensor<float>, Tensor<float>>
-                {
-                    InitialLearningRate = 1e-2,
-                    BiasCorrection = AiDotNet.Enums.AMSGradBiasCorrection.PyTorch,
-                }));
-        AssertOptimizerParity("AMSGrad", fusedSteps, diff, trainDelta, adamDiff);
+        AiDotNet.Optimizers.Fused.IFusedOptimizerSpec spec = Create();
+        Assert.False(spec.TryGetFusedOptimizerConfig(out _), "LAMB mapped to the fused kernel.");
+        var (_, fusedSteps, trainDelta) = Divergence(Create);
+        Assert.Equal(0, fusedSteps);
+        Assert.True(trainDelta > 1e-6, "LAMB did not train on the eager path.");
     }
 }

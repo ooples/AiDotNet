@@ -565,6 +565,22 @@ public static class DeserializationHelper
 
             instance = new ConvNeXtV2Block<T>(channels, intermediate, kernelSize);
         }
+        else if (genericDef == typeof(BidirectionalClozeNetworkLayer<>))
+        {
+            // ABINet's full Bidirectional Cloze Network (BCNLanguage). Every dimension is required: a
+            // default depth or width would silently rebuild a different network than the one saved.
+            int modelDim = TryGetInt(additionalParams, "ModelDim") ?? 0;
+            int heads = TryGetInt(additionalParams, "NumHeads") ?? 0;
+            int feedForward = TryGetInt(additionalParams, "FeedForwardDim") ?? 0;
+            int layers = TryGetInt(additionalParams, "NumLayers") ?? 0;
+            if (modelDim <= 0 || heads <= 0 || feedForward <= 0 || layers <= 0)
+            {
+                throw new InvalidOperationException(
+                    "BidirectionalClozeNetworkLayer requires ModelDim, NumHeads, FeedForwardDim and NumLayers in metadata.");
+            }
+
+            instance = new BidirectionalClozeNetworkLayer<T>(modelDim, heads, feedForward, layers);
+        }
         else if (genericDef == typeof(ClozeAttentionLayer<>))
         {
             // ABINet's Bidirectional Cloze Network attention (Fang et al., CVPR 2021).

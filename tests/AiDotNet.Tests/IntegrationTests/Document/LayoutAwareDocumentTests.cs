@@ -336,10 +336,17 @@ public class LayoutAwareDocumentTests
         return new Tensor<float>(new[] { count }, data);
     }
 
-    private static Tensor<float> CreateBoxFeatures(int count, int boxDim = 6)
+    // LiLT's layout flow takes one integer box per token on the 0-1000 page grid, as (x0, y0, x1, y1): the
+    // reference LiltLayoutEmbeddings indexes coordinate tables with them. Normalized floats used to be rounded
+    // into buckets 0 and 1, which erased nearly all layout; the layer now rejects them as non-indices.
+    private static Tensor<float> CreateBoxFeatures(int count)
     {
-        var t = new Tensor<float>(new[] { count, boxDim });
-        for (int i = 0; i < t.Length; i++) t[i] = 0.1f * ((i % 7) + 1);
+        var t = new Tensor<float>(new[] { count, 4 });
+        for (int i = 0; i < count; i++)
+        {
+            float x0 = 40 + 110 * (i % 8), y0 = 60 + 90 * (i % 5);
+            t[i, 0] = x0; t[i, 1] = y0; t[i, 2] = x0 + 70; t[i, 3] = y0 + 25;
+        }
         return t;
     }
 
@@ -597,7 +604,7 @@ public class LayoutAwareDocumentTests
     #region DocFormer Tests
 
     private static DocFormer<float> CreateSmallDocFormer()
-        => new DocFormer<float>(CreateArchitecture(imageSize: 32), options: new DocFormerOptions { NumClasses = 7, ImageSize = 32, MaxSequenceLength = 64, HiddenDim = 64, NumLayers = 2, NumHeads = 4, VocabSize = 100 });
+        => new DocFormer<float>(CreateArchitecture(imageSize: 32), options: new DocFormerOptions { NumClasses = 7, ImageSize = 32, MaxSequenceLength = 64, HiddenDim = 64, NumLayers = 2, NumHeads = 4, VocabSize = 100, SpatialDim = 8 });
 
     /// <summary>
     /// DocFormer routes by input rank, and its text stream is now ONE LayoutEmbeddingLayer where it
