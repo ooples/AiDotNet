@@ -1,199 +1,68 @@
-using AiDotNet.Attributes;
-using AiDotNet.Helpers;
-using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
-using AiDotNet.Models.Options;
-using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
-using AiDotNet.Optimizers;
-using AiDotNet.TextToSpeech.Interfaces;
+using System.Net.Http;
+using System.Text;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 
-/// <summary>Amazon Polly: AWS neural TTS service with neural and standard engines.</summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <summary>A client of Amazon Polly's <c>SynthesizeSpeech</c> API.</summary>
+/// <typeparam name="T">The numeric type of the returned waveform.</typeparam>
 /// <remarks>
-/// <para><b>For Beginners:</b> Amazon Polly converts text into lifelike speech using deep learning.
-/// It offers multiple voices and languages, with neural and standard synthesis engines.
-/// The neural engine produces more natural-sounding speech but requires more compute.
-/// This local implementation provides API-compatible inference for offline use.</para>
+/// <para>Sends <c>POST https://polly.{region}.amazonaws.com/v1/speech</c> with the JSON body
+/// <c>{ Engine, OutputFormat: "pcm", SampleRate, Text, TextType, VoiceId[, LanguageCode] }</c>, signed with AWS Signature
+/// Version 4 for the service "polly"; the response is signed 16-bit little-endian mono PCM.</para>
+/// <para><b>For Beginners:</b> <c>new AmazonPolly&lt;float&gt;(new AmazonPollyOptions { AccessKeyId = "…", SecretAccessKey = "…" })
+/// .Synthesize("Hello")</c> returns the spoken audio.</para>
 /// </remarks>
-/// <example>
-/// <code>
-/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Generative,
-///     inputSize: 256, outputSize: 22050);
-///
-/// var model = new AmazonPolly&lt;float&gt;(architecture, "polly.onnx");
-/// Tensor&lt;float&gt; audio = model.Synthesize("Hello from Amazon Polly!");
-/// </code>
-/// </example>
-[ModelDomain(ModelDomain.Audio)]
-[ModelCategory(ModelCategory.Transformer)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ResearchPaper("Amazon Polly", "https://aws.amazon.com/polly/")]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public partial class AmazonPolly<T> : TtsModelBase<T>, IEndToEndTts<T>
+public class AmazonPolly<T> : CloudTtsClientBase<T>
 {
-    private readonly AmazonPollyOptions _options;
-
-    public override ModelOptions GetOptions() => _options;
-
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-
-    public AmazonPolly(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        AmazonPollyOptions? options = null
-    )
-        : base(architecture)
+    /// <summary>Creates the client; a supplied <see cref="HttpClient"/> is used as is and not disposed.</summary>
+    public AmazonPolly(AmazonPollyOptions? options = null, HttpClient? httpClient = null)
+        : base(options ?? new AmazonPollyOptions(), httpClient)
     {
-        _options = options ?? new AmazonPollyOptions();
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
     }
 
-    public AmazonPolly(
-        NeuralNetworkArchitecture<T> architecture,
-        AmazonPollyOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
+    private AmazonPollyOptions Options => (AmazonPollyOptions)Settings;
+
+    /// <inheritdoc />
+    public override string ProviderName => "Amazon Polly";
+
+    /// <summary>The clock the signature is dated by (the system clock; replaceable for tests).</summary>
+    internal Func<DateTime> UtcNow { get; set; } = () => DateTime.UtcNow;
+
+    /// <inheritdoc />
+    protected override void ValidateConfiguration()
     {
-        _options = options ?? new AmazonPollyOptions();
-        _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        InitializeLayers();
-    }
-
-    int ITtsModel<T>.SampleRate => _options.SampleRate;
-    public int MaxTextLength => _options.MaxTextLength;
-    public new int HiddenDim => _options.HiddenDim;
-    public int NumFlowSteps => _options.NumFlowSteps;
-
-    /// <summary>Synthesizes speech using AmazonPolly's API-compatible local inference pipeline.</summary>
-    public override Tensor<T> Synthesize(string text)
-    {
-        ThrowIfDisposed();
-        var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        var output = Predict(input);
-        return PostprocessAudio(output);
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
-    }
-
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultProprietaryTTSLayers(
-                    _options.HiddenDim,
-                    _options.HiddenDim,
-                    _options.NumEncoderLayers,
-                    _options.NumDecoderLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate
-                )
-            );
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        var o = Options;
+        if (string.IsNullOrWhiteSpace(o.AccessKeyId) || string.IsNullOrWhiteSpace(o.SecretAccessKey))
+            throw new InvalidOperationException("Amazon Polly needs AWS credentials: set AccessKeyId and SecretAccessKey.");
+        if (string.IsNullOrWhiteSpace(o.Region)) throw new InvalidOperationException("Amazon Polly needs a region.");
+        RequireSampleRate(8000, 16000);
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
-    public override ModelMetadata<T> GetModelMetadata()
+    protected override HttpRequestMessage CreateRequest(string text)
     {
-        var m = new ModelMetadata<T>
+        var o = Options;
+        var body = new JObject
         {
-            Name = _useNativeMode ? "AmazonPolly-Native" : "AmazonPolly-ONNX",
-            Description = "Amazon Polly Neural TTS",
-            FeatureCount = _options.HiddenDim,
+            ["Engine"] = o.Engine,
+            ["OutputFormat"] = "pcm",
+            ["SampleRate"] = o.SampleRate.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["Text"] = text,
+            ["TextType"] = o.UseSsml ? "ssml" : "text",
+            ["VoiceId"] = o.VoiceId,
         };
-        m.AdditionalInfo["Architecture"] = "AmazonPolly";
-        m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
-        m.AdditionalInfo["HiddenDim"] = _options.HiddenDim;
-        m.AdditionalInfo["SampleRate"] = _options.SampleRate;
-        m.AdditionalInfo["MelChannels"] = _options.MelChannels;
-        m.AdditionalInfo["HopSize"] = _options.HopSize;
-        return m;
+        if (!string.IsNullOrWhiteSpace(o.LanguageCode)) body["LanguageCode"] = o.LanguageCode;
+        var bytes = Encoding.UTF8.GetBytes(body.ToString(Newtonsoft.Json.Formatting.None));
+        var request = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl($"https://polly.{o.Region}.amazonaws.com")}/v1/speech")
+        {
+            Content = new ByteArrayContent(bytes),
+        };
+        request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
+        AwsSignatureV4.Sign(request, bytes, "polly", o.Region, o.AccessKeyId, o.SecretAccessKey, o.SessionToken, UtcNow());
+        return request;
     }
 
-
-
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(AmazonPolly<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
-    }
+    /// <inheritdoc />
+    protected override Tensor<T> DecodeAudio(byte[] body, string? mediaType) => FromPcm16(body);
 }

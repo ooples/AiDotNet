@@ -1,199 +1,60 @@
-using AiDotNet.Attributes;
-using AiDotNet.Helpers;
-using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
-using AiDotNet.Models.Options;
-using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
-using AiDotNet.Optimizers;
-using AiDotNet.TextToSpeech.Interfaces;
+using System.Net.Http;
+using System.Text;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 
-/// <summary>ElevenLabs: AI voice synthesis platform with voice cloning, emotion control, and multilingual support.</summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <summary>A client of the ElevenLabs text-to-speech API.</summary>
+/// <typeparam name="T">The numeric type of the returned waveform.</typeparam>
 /// <remarks>
-/// <para><b>For Beginners:</b> ElevenLabs provides highly realistic AI voice synthesis with
-/// voice cloning (create a custom voice from a few minutes of audio), emotion control,
-/// and multilingual support across 29+ languages. This local implementation provides
-/// offline inference compatible with the ElevenLabs API surface.</para>
+/// <para>Sends <c>POST {endpoint}/v1/text-to-speech/{voice_id}?output_format=pcm_{rate}</c> with the <c>xi-api-key</c>
+/// header and the JSON body <c>{ text, model_id, voice_settings }</c>; the response is signed 16-bit little-endian mono
+/// PCM at the requested rate.</para>
+/// <para><b>For Beginners:</b> <c>new ElevenLabsTTS&lt;float&gt;(new ElevenLabsTTSOptions { ApiKey = "…" }).Synthesize("Hello")</c>
+/// returns the spoken audio.</para>
 /// </remarks>
-/// <example>
-/// <code>
-/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Generative,
-///     inputSize: 256, outputSize: 24000);
-///
-/// var model = new ElevenLabsTTS&lt;float&gt;(architecture, "elevenlabs.onnx");
-/// Tensor&lt;float&gt; audio = model.Synthesize("Hello from ElevenLabs!");
-/// </code>
-/// </example>
-[ModelDomain(ModelDomain.Audio)]
-[ModelCategory(ModelCategory.Transformer)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("ElevenLabs", "https://elevenlabs.io")]
-public partial class ElevenLabsTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
+public class ElevenLabsTTS<T> : CloudTtsClientBase<T>
 {
-    private readonly ElevenLabsTTSOptions _options;
-
-    public override ModelOptions GetOptions() => _options;
-
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-
-    public ElevenLabsTTS(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        ElevenLabsTTSOptions? options = null
-    )
-        : base(architecture)
+    /// <summary>Creates the client; a supplied <see cref="HttpClient"/> is used as is and not disposed.</summary>
+    public ElevenLabsTTS(ElevenLabsTTSOptions? options = null, HttpClient? httpClient = null)
+        : base(options ?? new ElevenLabsTTSOptions(), httpClient)
     {
-        _options = options ?? new ElevenLabsTTSOptions();
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
     }
 
-    public ElevenLabsTTS(
-        NeuralNetworkArchitecture<T> architecture,
-        ElevenLabsTTSOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
+    private ElevenLabsTTSOptions Options => (ElevenLabsTTSOptions)Settings;
+
+    /// <inheritdoc />
+    public override string ProviderName => "ElevenLabs";
+
+    /// <inheritdoc />
+    protected override void ValidateConfiguration()
     {
-        _options = options ?? new ElevenLabsTTSOptions();
-        _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        InitializeLayers();
-    }
-
-    int ITtsModel<T>.SampleRate => _options.SampleRate;
-    public int MaxTextLength => _options.MaxTextLength;
-    public new int HiddenDim => _options.HiddenDim;
-    public int NumFlowSteps => _options.NumFlowSteps;
-
-    /// <summary>Synthesizes speech using ElevenLabs's API-compatible local inference pipeline.</summary>
-    public override Tensor<T> Synthesize(string text)
-    {
-        ThrowIfDisposed();
-        var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        var output = Predict(input);
-        return PostprocessAudio(output);
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
-    }
-
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultProprietaryTTSLayers(
-                    _options.HiddenDim,
-                    _options.HiddenDim,
-                    _options.NumEncoderLayers,
-                    _options.NumDecoderLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate
-                )
-            );
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        RequireApiKey();
+        RequireSampleRate(8000, 16000, 22050, 24000, 32000, 44100, 48000);
+        if (string.IsNullOrWhiteSpace(Options.VoiceId)) throw new InvalidOperationException("ElevenLabs needs a voice id.");
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
-    public override ModelMetadata<T> GetModelMetadata()
+    protected override HttpRequestMessage CreateRequest(string text)
     {
-        var m = new ModelMetadata<T>
+        var o = Options;
+        var body = new JObject { ["text"] = text, ["model_id"] = o.ModelId };
+        var settings = new JObject();
+        if (o.Stability is double stability) settings["stability"] = stability;
+        if (o.SimilarityBoost is double similarity) settings["similarity_boost"] = similarity;
+        if (o.Style is double style) settings["style"] = style;
+        if (o.Speed is double speed) settings["speed"] = speed;
+        if (o.UseSpeakerBoost is bool boost) settings["use_speaker_boost"] = boost;
+        if (settings.Count > 0) body["voice_settings"] = settings;
+        var url = $"{BaseUrl("https://api.elevenlabs.io")}/v1/text-to-speech/{Uri.EscapeDataString(o.VoiceId)}?output_format=pcm_{o.SampleRate}";
+        var request = new HttpRequestMessage(HttpMethod.Post, url)
         {
-            Name = _useNativeMode ? "ElevenLabsTTS-Native" : "ElevenLabsTTS-ONNX",
-            Description = "ElevenLabs Neural Voice Synthesis",
-            FeatureCount = _options.HiddenDim,
+            Content = new StringContent(body.ToString(Newtonsoft.Json.Formatting.None), Encoding.UTF8, "application/json"),
         };
-        m.AdditionalInfo["Architecture"] = "ElevenLabsTTS";
-        m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
-        m.AdditionalInfo["HiddenDim"] = _options.HiddenDim;
-        m.AdditionalInfo["SampleRate"] = base.SampleRate;
-        m.AdditionalInfo["MelChannels"] = base.MelChannels;
-        m.AdditionalInfo["HopSize"] = base.HopSize;
-        return m;
+        request.Headers.Add("xi-api-key", o.ApiKey);
+        return request;
     }
 
-
-
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(ElevenLabsTTS<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
-    }
+    /// <inheritdoc />
+    protected override Tensor<T> DecodeAudio(byte[] body, string? mediaType) => FromPcm16(body);
 }

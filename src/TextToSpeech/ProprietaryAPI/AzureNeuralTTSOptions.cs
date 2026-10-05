@@ -1,36 +1,44 @@
-using AiDotNet.TextToSpeech.EndToEnd;
-
 namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 
-/// <summary>Options for Azure Neural TTS API wrapper.</summary>
+/// <summary>Options for the Azure AI Speech text-to-speech client (<c>POST /cognitiveservices/v1</c>).</summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the AzureNeuralTTS model. Default values follow the original paper settings.</para>
+/// <para>Defaults: region eastus (endpoint https://eastus.tts.speech.microsoft.com), the voice en-US-JennyNeural, and
+/// 24 kHz raw 16-bit mono PCM (<c>raw-24khz-16bit-mono-pcm</c>; 8, 16, 22.05, 24, 44.1 and 48 kHz are offered). The
+/// resource key goes in <c>Ocp-Apim-Subscription-Key</c>; a bearer token can be used instead. A response is at most ten
+/// minutes of audio.</para>
+/// <para><b>For Beginners:</b> Set <see cref="CloudTtsOptions.ApiKey"/> to your Speech resource key and
+/// <see cref="Region"/> to its region.</para>
 /// </remarks>
-public class AzureNeuralTTSOptions : EndToEndTtsOptions
+public class AzureNeuralTTSOptions : CloudTtsOptions
 {
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public AzureNeuralTTSOptions(AzureNeuralTTSOptions other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
     {
-        if (other == null)
-            throw new ArgumentNullException(nameof(other));
-
-        ApiKey = other.ApiKey;
-        ApiEndpoint = other.ApiEndpoint;
-        VoiceId = other.VoiceId;
+        Region = other.Region;
+        BearerToken = other.BearerToken;
+        TextIsSsml = other.TextIsSsml;
+        UserAgent = other.UserAgent;
     }
 
+    /// <summary>Creates the default options.</summary>
     public AzureNeuralTTSOptions()
     {
-        NumFlowSteps = 0;
-        NumEncoderLayers = 2;
-        NumDecoderLayers = 2;
-        NumHeads = 4;
-        DropoutRate = 0.0;
+        VoiceId = "en-US-JennyNeural";
+        SampleRate = 24000;
     }
 
-    public string ApiKey { get; set; } = string.Empty;
-    public string ApiEndpoint { get; set; } = string.Empty;
-    public string VoiceId { get; set; } = "default";
+    /// <summary>Gets or sets the resource's region (eastus).</summary>
+    public string Region { get; set; } = "eastus";
+
+    /// <summary>Gets or sets a bearer token used instead of the resource key, or null.</summary>
+    public string? BearerToken { get; set; }
+
+    /// <summary>Gets or sets whether the text is a complete SSML document rather than plain text.</summary>
+    public bool TextIsSsml { get; set; }
+
+    /// <summary>Gets or sets the application name sent as User-Agent (required by the service).</summary>
+    public string UserAgent { get; set; } = "AiDotNet";
 }

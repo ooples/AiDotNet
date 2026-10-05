@@ -1,223 +1,81 @@
-using AiDotNet.Attributes;
-using AiDotNet.Helpers;
-using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
-using AiDotNet.Models.Options;
-using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
-using AiDotNet.Optimizers;
-using AiDotNet.TextToSpeech.Interfaces;
+using System.Net.Http;
+using System.Text;
 
 namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 
-/// <summary>Azure Neural TTS: local neural synthesis model inspired by Microsoft's architecture.</summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <summary>A client of the Azure AI Speech text-to-speech REST API.</summary>
+/// <typeparam name="T">The numeric type of the returned waveform.</typeparam>
 /// <remarks>
-/// <para><b>For Beginners:</b> Azure Neural TTS uses Microsoft's neural speech synthesis architecture
-/// to generate natural-sounding speech from text. It supports expressive styles like newscast,
-/// cheerful, and customer service tones. This local implementation provides offline inference
-/// compatible with the Azure Cognitive Services API surface.</para>
+/// <para>Sends <c>POST https://{region}.tts.speech.microsoft.com/cognitiveservices/v1</c> with the SSML
+/// <c>&lt;speak version='1.0' xml:lang='…'&gt;&lt;voice name='…'&gt;text&lt;/voice&gt;&lt;/speak&gt;</c>, the headers
+/// <c>Ocp-Apim-Subscription-Key</c> (or <c>Authorization: Bearer</c>), <c>X-Microsoft-OutputFormat:
+/// raw-{rate}-16bit-mono-pcm</c> and <c>User-Agent</c>; the response is signed 16-bit little-endian mono PCM.</para>
+/// <para><b>For Beginners:</b> <c>new AzureNeuralTTS&lt;float&gt;(new AzureNeuralTTSOptions { ApiKey = "…", Region = "westeurope" })
+/// .Synthesize("Hello")</c> returns the spoken audio.</para>
 /// </remarks>
-/// <example>
-/// <code>
-/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Generative,
-///     inputSize: 256, outputSize: 24000);
-///
-/// var model = new AzureNeuralTTS&lt;float&gt;(architecture, "azure_tts.onnx");
-/// Tensor&lt;float&gt; audio = model.Synthesize("Hello from Azure Neural TTS!");
-/// </code>
-/// </example>
-[ModelDomain(ModelDomain.Audio)]
-[ModelCategory(ModelCategory.Transformer)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper(
-    "Microsoft Azure Neural Text-to-Speech",
-    "https://azure.microsoft.com/en-us/products/ai-services/text-to-speech"
-)]
-public partial class AzureNeuralTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
+public class AzureNeuralTTS<T> : CloudTtsClientBase<T>
 {
-    private readonly AzureNeuralTTSOptions _options;
-
-    public override ModelOptions GetOptions() => _options;
-
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-
-    public AzureNeuralTTS(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        AzureNeuralTTSOptions? options = null
-    )
-        : base(architecture)
+    /// <summary>Creates the client; a supplied <see cref="HttpClient"/> is used as is and not disposed.</summary>
+    public AzureNeuralTTS(AzureNeuralTTSOptions? options = null, HttpClient? httpClient = null)
+        : base(options ?? new AzureNeuralTTSOptions(), httpClient)
     {
-        _options = options ?? new AzureNeuralTTSOptions();
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
     }
 
-    public AzureNeuralTTS(
-        NeuralNetworkArchitecture<T> architecture,
-        AzureNeuralTTSOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
+    private AzureNeuralTTSOptions Options => (AzureNeuralTTSOptions)Settings;
+
+    /// <inheritdoc />
+    public override string ProviderName => "Azure AI Speech";
+
+    /// <inheritdoc />
+    protected override void ValidateConfiguration()
     {
-        _options = options ?? new AzureNeuralTTSOptions();
-        _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        InitializeLayers();
+        var o = Options;
+        if (string.IsNullOrWhiteSpace(o.ApiKey) && string.IsNullOrWhiteSpace(o.BearerToken))
+            throw new InvalidOperationException("Azure AI Speech needs a resource key (ApiKey) or a BearerToken.");
+        RequireSampleRate(8000, 16000, 22050, 24000, 44100, 48000);
+        if (!o.TextIsSsml && string.IsNullOrWhiteSpace(o.VoiceId)) throw new InvalidOperationException("Azure AI Speech needs a voice name.");
     }
 
-    int ITtsModel<T>.SampleRate => _options.SampleRate;
-    public int MaxTextLength => _options.MaxTextLength;
-    public new int HiddenDim => _options.HiddenDim;
-    public int NumFlowSteps => _options.NumFlowSteps;
-
-    /// <summary>Synthesizes speech using a local neural synthesis pipeline.</summary>
-    public override Tensor<T> Synthesize(string text)
+    /// <summary>The <c>X-Microsoft-OutputFormat</c> of a sample rate.</summary>
+    internal static string OutputFormat(int sampleRate) => sampleRate switch
     {
-        ThrowIfDisposed();
-        var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        var features = input;
-        foreach (var l in Layers)
-            features = l.Forward(features);
-        int textLen = Math.Min(text.Length, _options.MaxTextLength);
-        double[] textHidden = new double[textLen];
-        for (int t = 0; t < textLen; t++)
-            textHidden[t] = (text[t] % 128) / 128.0 - 0.5;
-        int totalFrames = 0;
-        int[] durations = new int[textLen];
-        for (int t = 0; t < textLen; t++)
-        {
-            durations[t] = Math.Max(1, (int)(3 + textHidden[t] * 2));
-            totalFrames += durations[t];
-        }
-        double[] mel = new double[totalFrames];
-        int fIdx = 0;
-        for (int t = 0; t < textLen; t++)
-        for (int r = 0; r < durations[t] && fIdx < totalFrames; r++, fIdx++)
-            mel[fIdx] = Math.Tanh(textHidden[t] * 0.8 + Math.Sin(fIdx * 0.06) * 0.15);
-        int waveLen = totalFrames * _options.HopSize;
-        var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            int frame = Math.Min(i / _options.HopSize, totalFrames - 1);
-            waveform[i] = NumOps.FromDouble(
-                Math.Tanh(mel[frame] * Math.Sin(i * 0.01 + mel[frame]) * 0.8)
-            );
-        }
-        return waveform;
-    }
+        8000 => "raw-8khz-16bit-mono-pcm",
+        16000 => "raw-16khz-16bit-mono-pcm",
+        22050 => "raw-22050hz-16bit-mono-pcm",
+        24000 => "raw-24khz-16bit-mono-pcm",
+        44100 => "raw-44100hz-16bit-mono-pcm",
+        48000 => "raw-48khz-16bit-mono-pcm",
+        _ => throw new ArgumentOutOfRangeException(nameof(sampleRate)),
+    };
 
-    protected override Tensor<T> PreprocessText(string text)
+    /// <summary>The SSML document of plain text for a voice (its locale is the voice name's first two parts).</summary>
+    internal static string Ssml(string text, string voice)
     {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
-    }
-
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultProprietaryTTSLayers(
-                    _options.HiddenDim,
-                    _options.HiddenDim,
-                    _options.NumEncoderLayers,
-                    _options.NumDecoderLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate
-                )
-            );
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
+        var parts = voice.Split('-');
+        string locale = parts.Length >= 2 ? $"{parts[0]}-{parts[1]}" : "en-US";
+        return $"<speak version='1.0' xml:lang='{locale}'><voice name='{System.Security.SecurityElement.Escape(voice)}'>"
+            + $"{System.Security.SecurityElement.Escape(text)}</voice></speak>";
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
-    public override ModelMetadata<T> GetModelMetadata()
+    protected override HttpRequestMessage CreateRequest(string text)
     {
-        var m = new ModelMetadata<T>
+        var o = Options;
+        var request = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl($"https://{o.Region}.tts.speech.microsoft.com")}/cognitiveservices/v1")
         {
-            Name = _useNativeMode ? "AzureNeuralTTS-Native" : "AzureNeuralTTS-ONNX",
-            Description = "Microsoft Azure Cognitive Services Neural TTS",
-            FeatureCount = _options.HiddenDim,
+            Content = new StringContent(o.TextIsSsml ? text : Ssml(text, o.VoiceId), Encoding.UTF8),
         };
-        m.AdditionalInfo["Architecture"] = "AzureNeuralTTS";
-        m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
-        m.AdditionalInfo["HiddenDim"] = _options.HiddenDim;
-        m.AdditionalInfo["SampleRate"] = base.SampleRate;
-        m.AdditionalInfo["MelChannels"] = base.MelChannels;
-        m.AdditionalInfo["HopSize"] = base.HopSize;
-        return m;
+        // The service accepts exactly application/ssml+xml (415 otherwise); the body is UTF-8.
+        request.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/ssml+xml");
+        if (!string.IsNullOrWhiteSpace(o.BearerToken))
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", o.BearerToken);
+        else
+            request.Headers.Add("Ocp-Apim-Subscription-Key", o.ApiKey);
+        request.Headers.Add("X-Microsoft-OutputFormat", OutputFormat(o.SampleRate));
+        request.Headers.TryAddWithoutValidation("User-Agent", o.UserAgent);
+        return request;
     }
 
-
-
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(AzureNeuralTTS<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
-    }
+    /// <inheritdoc />
+    protected override Tensor<T> DecodeAudio(byte[] body, string? mediaType) => FromPcm16(body);
 }

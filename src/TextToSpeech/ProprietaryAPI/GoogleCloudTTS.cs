@@ -1,220 +1,77 @@
-using AiDotNet.Attributes;
-using AiDotNet.Helpers;
-using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
-using AiDotNet.Models.Options;
-using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
-using AiDotNet.Optimizers;
-using AiDotNet.TextToSpeech.Interfaces;
+using System.Net.Http;
+using System.Text;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 
-/// <summary>Google Cloud Text-to-Speech: local WaveNet-style neural synthesis model inspired by Google's architecture.</summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <summary>A client of the Google Cloud Text-to-Speech API.</summary>
+/// <typeparam name="T">The numeric type of the returned waveform.</typeparam>
 /// <remarks>
-/// <para><b>For Beginners:</b> Google Cloud TTS uses WaveNet technology (from DeepMind) to
-/// generate extremely natural-sounding speech. WaveNet models audio at the waveform level,
-/// producing speech that closely mimics human voice patterns including breathing and
-/// intonation. This local implementation provides offline WaveNet-style inference.</para>
+/// <para>Sends <c>POST https://texttospeech.googleapis.com/v1/text:synthesize</c> with
+/// <c>{ input: { text | ssml }, voice: { languageCode, name }, audioConfig: { audioEncoding: "LINEAR16", sampleRateHertz } }</c>;
+/// the response's <c>audioContent</c> is a base64 WAV file (LINEAR16 includes the header).</para>
+/// <para><b>For Beginners:</b> <c>new GoogleCloudTTS&lt;float&gt;(new GoogleCloudTTSOptions { ApiKey = "…" }).Synthesize("Hello")</c>
+/// returns the spoken audio.</para>
 /// </remarks>
-/// <example>
-/// <code>
-/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Generative,
-///     inputSize: 256, outputSize: 24000);
-///
-/// var model = new GoogleCloudTTS&lt;float&gt;(architecture, "google_tts.onnx");
-/// Tensor&lt;float&gt; audio = model.Synthesize("Hello from Google Cloud TTS!");
-/// </code>
-/// </example>
-[ModelDomain(ModelDomain.Audio)]
-[ModelCategory(ModelCategory.Transformer)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ResearchPaper("Google Cloud Text-to-Speech", "https://cloud.google.com/text-to-speech")]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public partial class GoogleCloudTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
+public class GoogleCloudTTS<T> : CloudTtsClientBase<T>
 {
-    private readonly GoogleCloudTTSOptions _options;
-
-    public override ModelOptions GetOptions() => _options;
-
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-
-    public GoogleCloudTTS(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        GoogleCloudTTSOptions? options = null
-    )
-        : base(architecture)
+    /// <summary>Creates the client; a supplied <see cref="HttpClient"/> is used as is and not disposed.</summary>
+    public GoogleCloudTTS(GoogleCloudTTSOptions? options = null, HttpClient? httpClient = null)
+        : base(options ?? new GoogleCloudTTSOptions(), httpClient)
     {
-        _options = options ?? new GoogleCloudTTSOptions();
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
     }
 
-    public GoogleCloudTTS(
-        NeuralNetworkArchitecture<T> architecture,
-        GoogleCloudTTSOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
+    private GoogleCloudTTSOptions Options => (GoogleCloudTTSOptions)Settings;
+
+    /// <inheritdoc />
+    public override string ProviderName => "Google Cloud Text-to-Speech";
+
+    /// <inheritdoc />
+    protected override void ValidateConfiguration()
     {
-        _options = options ?? new GoogleCloudTTSOptions();
-        _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        InitializeLayers();
-    }
-
-    int ITtsModel<T>.SampleRate => _options.SampleRate;
-    public int MaxTextLength => _options.MaxTextLength;
-    public new int HiddenDim => _options.HiddenDim;
-    public int NumFlowSteps => _options.NumFlowSteps;
-
-    /// <summary>Synthesizes speech using a local WaveNet-style neural pipeline.</summary>
-    public override Tensor<T> Synthesize(string text)
-    {
-        ThrowIfDisposed();
-        var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        var features = input;
-        foreach (var l in Layers)
-            features = l.Forward(features);
-        int textLen = Math.Min(text.Length, _options.MaxTextLength);
-        double[] textHidden = new double[textLen];
-        for (int t = 0; t < textLen; t++)
-            textHidden[t] = (text[t] % 128) / 128.0 - 0.5;
-        int totalFrames = 0;
-        int[] durations = new int[textLen];
-        for (int t = 0; t < textLen; t++)
-        {
-            durations[t] = Math.Max(1, (int)(3 + textHidden[t] * 2));
-            totalFrames += durations[t];
-        }
-        double[] mel = new double[totalFrames];
-        int fIdx = 0;
-        for (int t = 0; t < textLen; t++)
-        for (int r = 0; r < durations[t] && fIdx < totalFrames; r++, fIdx++)
-            mel[fIdx] = Math.Tanh(textHidden[t] * 0.8 + Math.Sin(fIdx * 0.06) * 0.15);
-        int waveLen = totalFrames * _options.HopSize;
-        var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            int frame = Math.Min(i / _options.HopSize, totalFrames - 1);
-            waveform[i] = NumOps.FromDouble(
-                Math.Tanh(mel[frame] * Math.Sin(i * 0.01 + mel[frame]) * 0.8)
-            );
-        }
-        return waveform;
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
-    }
-
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultProprietaryTTSLayers(
-                    _options.HiddenDim,
-                    _options.HiddenDim,
-                    _options.NumEncoderLayers,
-                    _options.NumDecoderLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate
-                )
-            );
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
+        var o = Options;
+        if (string.IsNullOrWhiteSpace(o.ApiKey) && string.IsNullOrWhiteSpace(o.AccessToken))
+            throw new InvalidOperationException("Google Cloud Text-to-Speech needs an ApiKey or an AccessToken.");
+        if (o.SampleRate < 8000 || o.SampleRate > 48000)
+            throw new InvalidOperationException($"Google Cloud Text-to-Speech resamples to 8–48 kHz; {o.SampleRate} Hz is outside it.");
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
-    public override ModelMetadata<T> GetModelMetadata()
+    protected override HttpRequestMessage CreateRequest(string text)
     {
-        var m = new ModelMetadata<T>
+        var o = Options;
+        if (Encoding.UTF8.GetByteCount(text) > 5000)
+            throw new ArgumentException("Google Cloud Text-to-Speech accepts at most 5,000 bytes of input per request.", nameof(text));
+        var parts = o.VoiceId.Split('-');
+        string language = o.LanguageCode ?? (parts.Length >= 2 ? $"{parts[0]}-{parts[1]}" : "en-US");
+        var audio = new JObject { ["audioEncoding"] = "LINEAR16", ["sampleRateHertz"] = o.SampleRate };
+        if (o.SpeakingRate is double rate) audio["speakingRate"] = rate;
+        if (o.Pitch is double pitch) audio["pitch"] = pitch;
+        var voice = new JObject { ["languageCode"] = language };
+        if (!string.IsNullOrWhiteSpace(o.VoiceId)) voice["name"] = o.VoiceId;
+        var body = new JObject
         {
-            Name = _useNativeMode ? "GoogleCloudTTS-Native" : "GoogleCloudTTS-ONNX",
-            Description = "Google Cloud Neural TTS",
-            FeatureCount = _options.HiddenDim,
+            ["input"] = new JObject { [o.TextIsSsml ? "ssml" : "text"] = text },
+            ["voice"] = voice,
+            ["audioConfig"] = audio,
         };
-        m.AdditionalInfo["Architecture"] = "GoogleCloudTTS";
-        m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
-        m.AdditionalInfo["HiddenDim"] = _options.HiddenDim;
-        m.AdditionalInfo["SampleRate"] = base.SampleRate;
-        m.AdditionalInfo["MelChannels"] = base.MelChannels;
-        m.AdditionalInfo["HopSize"] = base.HopSize;
-        return m;
+        var request = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl("https://texttospeech.googleapis.com")}/v1/text:synthesize")
+        {
+            Content = new StringContent(body.ToString(Newtonsoft.Json.Formatting.None), Encoding.UTF8, "application/json"),
+        };
+        if (!string.IsNullOrWhiteSpace(o.AccessToken))
+            request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", o.AccessToken);
+        else
+            request.Headers.Add("X-Goog-Api-Key", o.ApiKey);
+        return request;
     }
 
-
-
-
-
-    private void ThrowIfDisposed()
+    /// <inheritdoc />
+    protected override Tensor<T> DecodeAudio(byte[] body, string? mediaType)
     {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(GoogleCloudTTS<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
+        var json = JObject.Parse(Encoding.UTF8.GetString(body));
+        var content = json["audioContent"]?.ToString()
+            ?? throw new InvalidDataException("Google Cloud Text-to-Speech returned no audioContent.");
+        return FromWav(Convert.FromBase64String(content));
     }
 }
