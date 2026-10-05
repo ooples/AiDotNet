@@ -236,6 +236,11 @@ internal static class PaperOptimizerFactory
                     if (!double.IsNaN(recipe.Beta2)) adamax.Beta2 = recipe.Beta2;
                     if (!double.IsNaN(recipe.Epsilon)) adamax.Epsilon = recipe.Epsilon;
                     break;
+                case RAdamOptimizerOptions<T, TInput, TOutput> radam:
+                    if (!double.IsNaN(recipe.Beta1)) radam.Beta1 = recipe.Beta1;
+                    if (!double.IsNaN(recipe.Beta2)) radam.Beta2 = recipe.Beta2;
+                    if (!double.IsNaN(recipe.Epsilon)) radam.Epsilon = recipe.Epsilon;
+                    break;
                 case NadamOptimizerOptions<T, TInput, TOutput> nadam:
                     if (!double.IsNaN(recipe.Beta1)) nadam.Beta1 = recipe.Beta1;
                     if (!double.IsNaN(recipe.Beta2)) nadam.Beta2 = recipe.Beta2;
@@ -302,6 +307,9 @@ internal static class PaperOptimizerFactory
 
             OptimizerKind.Nadam => new NadamOptimizer<T, TInput, TOutput>(
                 model, Configured(new NadamOptimizerOptions<T, TInput, TOutput>())),
+
+            OptimizerKind.RAdam => new RAdamOptimizer<T, TInput, TOutput>(
+                model, Configured(new RAdamOptimizerOptions<T, TInput, TOutput>())),
 
             OptimizerKind.Adam8Bit => new Adam8BitOptimizer<T, TInput, TOutput>(
                 model, Configured(new Adam8BitOptimizerOptions<T, TInput, TOutput>())),

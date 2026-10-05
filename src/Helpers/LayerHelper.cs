@@ -32720,12 +32720,17 @@ public static partial class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates Tacotron2 encoder, attention, decoder, and post-net layers.
+    /// Creates Tacotron 2's spectrogram prediction network (Shen et al. 2018, §2.2) in the order
+    /// <c>Tacotron2Model</c> binds it: character embedding; 3 convolutions (512, kernel 5) with batch normalization,
+    /// ReLU and dropout; a bidirectional LSTM; the 2-layer bias-free pre-net; the attention LSTM cell; location-sensitive
+    /// attention (128-dim, 32 filters of length 31); the decoder LSTM cell; the mel and stop-token projections; and the
+    /// 5-layer post-net (tanh on all but the last convolution).
     /// </summary>
+    /// <param name="encoderDim">Width of the encoder output, both LSTM directions together (512 = 2 × 256).</param>
     public static IEnumerable<ILayer<T>> CreateTacotron2Layers(
         int vocabSize = 148,
         int embeddingDim = 512,
-        int encoderDim = 256,
+        int encoderDim = 512,
         int decoderDim = 1024,
         int attentionDim = 128,
         int attentionFilters = 32,
@@ -32734,50 +32739,25 @@ public static partial class LayerHelper<T>
         int numMelsPerFrame = 1,
         int numEncoderConvLayers = 3,
         int numPostnetConvLayers = 5,
-        int postnetEmbeddingDim = 512)
+        int postnetEmbeddingDim = 512,
+        double convolutionDropout = 0.5,
+        int attentionKernelSize = 31)
     {
-        IActivationFunction<T> relu = new ReLUActivation<T>();
-        IActivationFunction<T> tanh = (IActivationFunction<T>)new TanhActivation<T>();
-        IActivationFunction<T> sigmoid = new SigmoidActivation<T>();
+        if (encoderDim % 2 != 0) throw new ArgumentException("The encoder width is split over two LSTM directions; it must be even.", nameof(encoderDim));
         IActivationFunction<T> identity = new IdentityActivation<T>();
-
-        // Encoder conv layers
-        for (int i = 0; i < numEncoderConvLayers; i++)
-        {
-            yield return new DenseLayer<T>(embeddingDim, relu);
-        }
-        // Encoder LSTM
-        yield return new DenseLayer<T>(encoderDim * 2, tanh);
-
-        // Attention layers
-        yield return new DenseLayer<T>(attentionDim, identity);
-        yield return new DenseLayer<T>(attentionDim, identity);
-        yield return new DenseLayer<T>(attentionDim, identity);
-        yield return new DenseLayer<T>(1, identity);
-
-        // Decoder pre-net
-        yield return new DenseLayer<T>(prenetDim, relu);
-        yield return new DenseLayer<T>(prenetDim, relu);
-
-        // Decoder LSTM layers
-        yield return new DenseLayer<T>(decoderDim, tanh);
-        yield return new DenseLayer<T>(decoderDim, tanh);
-
-        // Mel output
+        yield return new EmbeddingLayer<T>(vocabSize, embeddingDim);
+        yield return new ConvBatchNormStackLayer<T>(embeddingDim, Enumerable.Repeat(embeddingDim, numEncoderConvLayers).ToArray(),
+            5, useTanh: false, linearLast: false, dropoutRate: convolutionDropout);
+        yield return new BidirectionalRecurrentLayer<T>(embeddingDim, encoderDim / 2, RecurrentCellType.Lstm);
+        yield return new BiasFreeLinearLayer<T>(numMels * numMelsPerFrame, prenetDim);
+        yield return new BiasFreeLinearLayer<T>(prenetDim, prenetDim);
+        yield return new LSTMCellLayer<T>(prenetDim + encoderDim, decoderDim);
+        yield return new LocationSensitiveAttentionLayer<T>(decoderDim, encoderDim, attentionDim, attentionFilters, attentionKernelSize);
+        yield return new LSTMCellLayer<T>(decoderDim + encoderDim, decoderDim);
         yield return new DenseLayer<T>(numMels * numMelsPerFrame, identity);
-
-        // Stop token
-        yield return new DenseLayer<T>(1, sigmoid);
-
-        // Post-net
-        for (int i = 0; i < numPostnetConvLayers; i++)
-        {
-            var isLast = i == numPostnetConvLayers - 1;
-            var activation = isLast ? identity : tanh;
-            yield return new DenseLayer<T>(
-                isLast ? numMels : postnetEmbeddingDim,
-                activation);
-        }
+        yield return new DenseLayer<T>(1, identity);
+        var postnet = Enumerable.Repeat(postnetEmbeddingDim, Math.Max(0, numPostnetConvLayers - 1)).Append(numMels).ToArray();
+        yield return new ConvBatchNormStackLayer<T>(numMels, postnet, 5, useTanh: true, linearLast: true, dropoutRate: convolutionDropout);
     }
 
     /// <summary>

@@ -209,6 +209,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     internal IReadOnlyList<ILayer<T>> LayersReadOnly => _layers;
 
     /// <summary>
+    /// Every top-level layer the model runs: <see cref="Layers"/> followed by the trainable layers it owns outside that
+    /// stack (<see cref="GetExtraTrainableLayers"/>), each once, in a stable order.
+    /// </summary>
+    /// <remarks>A walk over <see cref="Layers"/> alone misses a model's component sub-networks — a post-net's
+    /// BatchNorm, a duration predictor — which take part in training, mode switching and serialization.</remarks>
+    internal IEnumerable<ILayer<T>> LayersIncludingComponents()
+    {
+        var seen = new HashSet<ILayer<T>>(ReferenceEqualityComparer<ILayer<T>>.Instance);
+        foreach (var layer in _layers)
+            if (seen.Add(layer)) yield return layer;
+        foreach (var layer in GetExtraTrainableLayers())
+            if (layer is not null && seen.Add(layer)) yield return layer;
+    }
+
+    /// <summary>
     /// Inserts a layer into the internal layer collection and invalidates the parameter count cache.
     /// </summary>
     /// <remarks>
@@ -13221,6 +13236,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         try
         {
             var opt = optimizer ?? GetOrCreateBaseOptimizer();
+            // The step's own arena, as TrainWithTape has: the top-level tape's Dispose Resets the CURRENT arena
+            // (Tensors #1804), and without a step arena that was the caller's. A model that runs several steps on the
+            // same inputs in one Train call (a GAN's discriminator then generator step, VITS's discriminator, generator
+            // and duration steps) then had those inputs recycled between steps: the arena's tensor ring re-issued the
+            // same Tensor objects and reshaped them in place. Tensors escaping a nested arena are never re-issued.
+            using var stepArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
             using var tape = new GradientTape<T>();
             var lossTensor = RecomputeObjective(input, expected);
             var trainableParams = CollectModelTrainableTensors();

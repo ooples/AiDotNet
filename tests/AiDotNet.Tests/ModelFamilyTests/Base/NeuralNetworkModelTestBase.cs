@@ -1130,6 +1130,25 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// Creates a constant tensor, automatically translating scalar probes into
     /// distinct legal indices when the production input contract is discrete.
     /// </summary>
+    /// <summary>
+    /// Training steps taken before the input-sensitivity probes, for models whose reference zero-initializes the output
+    /// head — DiT's adaLN-Zero, as F5-TTS and E2 TTS use it — so that an untrained model ignores its input by design. A
+    /// few steps open the path; a model whose conditioning is actually broken still fails. Default 0.
+    /// </summary>
+    protected virtual int InputSensitivityWarmUpSteps => 0;
+
+    /// <summary>Takes <see cref="InputSensitivityWarmUpSteps"/> training steps on a fixed pair.</summary>
+    protected void WarmUpForInputSensitivity(INeuralNetworkModel<T> network)
+    {
+        if (InputSensitivityWarmUpSteps <= 0 || TrainingInvariantsNotApplicable(network)) return;
+        var rng = ModelTestHelpers.CreateSeededRandom(7);
+        var input = CreateRandomTensor(EffectiveInputShape, rng);
+        var target = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
+        target = ResolveTrainingObjectiveTarget(network, input, target);
+        PrepareForSupervisedTrainingInvariant(network, input);
+        for (int i = 0; i < InputSensitivityWarmUpSteps; i++) TrainOn(network, input, target);
+    }
+
     protected virtual Tensor<T> CreateConstantTensor(int[] shape, double value)
     {
         var tensor = new Tensor<T>(shape);
@@ -1292,7 +1311,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // BatchNorm: keep an untrained copy, to re-measure the starting weights under the trained running
         // statistics (see ContainsBatchNormalization).
         using var untrained = network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nnBase
-            && ContainsBatchNormalization(nnBase.Layers)
+            && ContainsBatchNormalization(nnBase.LayersIncludingComponents())
                 ? (INeuralNetworkModel<T>)network.Clone()
                 : null;
 
@@ -1372,8 +1391,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     private static void AdoptBatchNormalizationStatistics(
         AiDotNet.NeuralNetworks.NeuralNetworkBase<T> destination, AiDotNet.NeuralNetworks.NeuralNetworkBase<T> source)
     {
-        var to = BatchNormalizationLayers(destination.Layers).ToList();
-        var from = BatchNormalizationLayers(source.Layers).ToList();
+        var to = BatchNormalizationLayers(destination.LayersIncludingComponents()).ToList();
+        var from = BatchNormalizationLayers(source.LayersIncludingComponents()).ToList();
         Assert.True(to.Count == from.Count,
             $"The untrained clone has {to.Count} BatchNorm layers but the trained network has {from.Count}.");
         for (int i = 0; i < to.Count; i++)
@@ -1532,6 +1551,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
+        WarmUpForInputSensitivity(network);
 
         var input1 = CreateConstantTensor(EffectiveInputShape, 0.1);
         var input2 = CreateConstantTensor(EffectiveInputShape, 0.9);
@@ -1727,6 +1747,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var _arena = TensorArena.Create();
         var rng = ModelTestHelpers.CreateSeededRandom();
         using var network = CreateNetwork();
+        WarmUpForInputSensitivity(network);
 
         var input = CreateRandomTensor(EffectiveInputShape, rng);
         // MULTIPLYING A TOKEN INDEX IS MEANINGLESS, and a custom bounded domain
@@ -2725,9 +2746,24 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // it needs no per-model knowledge of where a given architecture stops oscillating.
         double lossUntrained = MeasureLoss(network1, input, network1.Predict(input), target);
 
+        // An evaluation reads BatchNorm through its running statistics, which training moves: the trained model would
+        // be measured under different normalization than the untrained baseline. Keep the untrained weights and, at the
+        // end, re-measure them under the final statistics, exactly as Training_ShouldReduceLoss does.
+        using var untrained = network1 is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> moreDataNet
+            && ContainsBatchNormalization(moreDataNet.LayersIncludingComponents())
+                ? (INeuralNetworkModel<T>)network1.Clone()
+                : null;
+
         for (int i = 0; i < longIters; i++)
             TrainOn(network1, input, target);
         double lossTrained = MeasureLoss(network1, input, network1.Predict(input), target);
+        if (untrained is not null)
+        {
+            AdoptBatchNormalizationStatistics(
+                (AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)untrained,
+                (AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)network1);
+            lossUntrained = MeasureLoss(untrained, input, untrained.Predict(input), target);
+        }
 
         double lossLong = lossTrained;
 
@@ -3780,6 +3816,16 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         TrainOn(network, input, target);
         double lossStep1 = MemorizationProbeLoss(network, input, target);
 
+        // A deterministic evaluation reads BatchNorm through its running statistics, which keep moving while the
+        // probe trains: two evaluations taken at different steps would compare different normalizations as well as
+        // different weights. Keep the step-1 weights and, at the end, re-measure them under the final statistics,
+        // exactly as Training_ShouldReduceLoss does.
+        using var afterStep1 = MemorizationTaskUsesDeterministicEvalLoss
+            && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> memorizationNet
+            && ContainsBatchNormalization(memorizationNet.LayersIncludingComponents())
+                ? (INeuralNetworkModel<T>)network.Clone()
+                : null;
+
         // Run up to the configured number of follow-on steps. The 120-second training budget leaves
         // one minute of the 180-second test timeout for construction, target preparation, final
         // deterministic evaluation, assertions, and slow-runner variance.
@@ -3794,6 +3840,13 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         }
         double lossFinal = MemorizationProbeLoss(network, input, target);
         int completedSteps = completedFollowOnSteps + 1;
+        if (afterStep1 is not null)
+        {
+            AdoptBatchNormalizationStatistics(
+                (AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)afterStep1,
+                (AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)network);
+            lossStep1 = MemorizationProbeLoss(afterStep1, input, target);
+        }
 
         Assert.False(double.IsNaN(lossStep1) || double.IsInfinity(lossStep1),
             $"Loss after step 1 is non-finite: {lossStep1}");

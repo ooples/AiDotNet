@@ -91,4 +91,4 @@ AIDN102 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Every [PaperO
 AIDN103 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Paper optimizer variants must be unique across optimizer kinds
 AIDN104 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Declared paper recipe is never used, because the optimizer is still hardcoded
 AIDN105 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Citation URL claims to be arXiv but its identifier cannot exist
-AIDN106 | AiDotNet.PaperFidelity | Info | PaperOptimizerAnalyzer, Model cites a paper but does not declare the optimizer settings that paper specifies (Info while the backlog is large; promote per the AIDN087 ladder)
+AIDN107 | AiDotNet.PaperFidelity | Info | PaperOptimizerAnalyzer, Model cites a paper but does not declare the optimizer settings that paper specifies (Info while the backlog is large; promote per the AIDN087 ladder)

@@ -5,6 +5,19 @@ using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
+/// <summary>Which reference implementation's CBHG conventions a <see cref="CbhgLayer{T}"/> follows.</summary>
+public enum CbhgVariant
+{
+    /// <summary>Tacotron (keithito/tacotron): TensorFlow "same" padding, max pooling over the next frame, a highway
+    /// input projection only when the widths differ, no dropout.</summary>
+    Tacotron = 0,
+
+    /// <summary>ForwardTacotron (as-ideas/ForwardTacotron <c>common_layers.CBHG</c>): PyTorch padding of k / 2 with the
+    /// sequence truncated to its length, max pooling over the previous frame, dropout after the pooling and the first
+    /// projection, and an always-present bias-free projection into the highways.</summary>
+    ForwardTacotron = 1,
+}
+
 /// <summary>
 /// Tacotron's CBHG module: a 1-D Convolution Bank, Highway network and bidirectional GRU.
 /// </summary>
@@ -32,7 +45,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [LayerCategory(LayerCategory.Recurrent)]
 [LayerTask(LayerTask.SequenceModeling)]
 [LayerProperty(IsTrainable = true, HasTrainingMode = true, ChangesShape = true, TestInputShape = "1, 6, 8",
-    TestConstructorArgs = "8, 4, 8, new[] { 8, 8 }, 8, 4")]
+    TestConstructorArgs = "8, 4, 8, new[] { 8, 8 }, 8, 4, AiDotNet.NeuralNetworks.Layers.CbhgVariant.Tacotron, 0.0")]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
     BatchOptional = true, Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
@@ -57,6 +70,10 @@ public partial class CbhgLayer<T> : LayerBase<T>, IShapeContract
     private readonly BatchNormalizationLayer<T> _projection2Norm;
     [SubLayerInput("_inputChannels")]
     private readonly DenseLayer<T>? _highwayInput;
+    private readonly BiasFreeLinearLayer<T>? _highwayInputBiasFree;
+    private readonly CbhgVariant _variant;
+    private readonly double _dropoutRate;
+    private readonly DropoutLayer<T>? _dropout;
     [SubLayerInput("_highwayWidth")]
     private readonly List<HighwayLayer<T>> _highways = new();
     // GRU input sizes resolve lazily; declaring them lets a restored layer size its weights before any forward.
@@ -82,7 +99,9 @@ public partial class CbhgLayer<T> : LayerBase<T>, IShapeContract
         [LayerState] int bankChannels,
         [LayerState] int[] projections,
         [LayerState] int highwayWidth,
-        [LayerState] int gruUnits)
+        [LayerState] int gruUnits,
+        [LayerState] CbhgVariant variant = CbhgVariant.Tacotron,
+        [LayerState] double dropoutRate = 0.0)
         : base(new[] { inputChannels }, new[] { 2 * gruUnits })
     {
         if (inputChannels <= 0) throw new ArgumentOutOfRangeException(nameof(inputChannels));
@@ -96,6 +115,9 @@ public partial class CbhgLayer<T> : LayerBase<T>, IShapeContract
                 nameof(projections));
         if (highwayWidth <= 0) throw new ArgumentOutOfRangeException(nameof(highwayWidth));
         if (gruUnits <= 0) throw new ArgumentOutOfRangeException(nameof(gruUnits));
+        if (dropoutRate < 0 || dropoutRate >= 1) throw new ArgumentOutOfRangeException(nameof(dropoutRate));
+        _variant = variant;
+        _dropoutRate = dropoutRate;
 
         _inputChannels = inputChannels;
         _bankSize = bankSize;
@@ -124,7 +146,17 @@ public partial class CbhgLayer<T> : LayerBase<T>, IShapeContract
         RegisterSubLayer(_projection1Norm);
         RegisterSubLayer(_projection2);
         RegisterSubLayer(_projection2Norm);
-        if (inputChannels != highwayWidth)
+        if (variant == CbhgVariant.ForwardTacotron)
+        {
+            _highwayInputBiasFree = new BiasFreeLinearLayer<T>(inputChannels, highwayWidth);
+            RegisterSubLayer(_highwayInputBiasFree);
+            if (dropoutRate > 0)
+            {
+                _dropout = new DropoutLayer<T>(dropoutRate);
+                RegisterSubLayer(_dropout);
+            }
+        }
+        else if (inputChannels != highwayWidth)
         {
             _highwayInput = new DenseLayer<T>(highwayWidth, new IdentityActivation<T>() as IActivationFunction<T>);
             RegisterSubLayer(_highwayInput);
@@ -174,13 +206,16 @@ public partial class CbhgLayer<T> : LayerBase<T>, IShapeContract
         var stacked = _bankSize == 1 ? bank[0] : Engine.TensorConcatenate(bank, 2);
 
         var pooled = MaxPoolWidth2(stacked);
+        if (_dropout is not null) pooled = _dropout.Forward(pooled);
         var projected = Normalize(_projection1Norm, SameConv(_projection1, pooled, 3));
+        if (_dropout is not null) projected = _dropout.Forward(projected);
         projected = Normalize(_projection2Norm, SameConv(_projection2, projected, 3));
 
         var highway = Engine.TensorAdd(projected, x);
         int batch = highway.Shape[0], time = highway.Shape[1];
         var rows = Engine.Reshape(highway, new[] { batch * time, highway.Shape[2] });
         if (_highwayInput is not null) rows = _highwayInput.Forward(rows);
+        if (_highwayInputBiasFree is not null) rows = _highwayInputBiasFree.Forward(rows);
         foreach (var layer in _highways) rows = layer.Forward(rows);
         var sequence = Engine.Reshape(rows, new[] { batch, time, _highwayWidth });
 
@@ -194,7 +229,10 @@ public partial class CbhgLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> SameConv(Conv1DLayer<T> conv, Tensor<T> x, int kernel)
     {
         int batch = x.Shape[0], channels = x.Shape[2];
-        int front = (kernel - 1) / 2, back = kernel - 1 - front;
+        // Tacotron: TensorFlow "same" (floor((k-1)/2) in front). ForwardTacotron: PyTorch padding k/2 on both sides with
+        // the output truncated to the input length, i.e. k/2 in front and k-1-k/2 behind.
+        int front = _variant == CbhgVariant.ForwardTacotron ? kernel / 2 : (kernel - 1) / 2;
+        int back = kernel - 1 - front;
         var parts = new List<Tensor<T>>(3);
         if (front > 0) parts.Add(new Tensor<T>(new[] { batch, front, channels }));
         parts.Add(x);
@@ -216,11 +254,19 @@ public partial class CbhgLayer<T> : LayerBase<T>, IShapeContract
     {
         int batch = x.Shape[0], time = x.Shape[1], channels = x.Shape[2];
         if (time == 1) return x;
-        var next = Engine.TensorConcatenate(new[]
-        {
-            Engine.TensorSlice(x, new[] { 0, 1, 0 }, new[] { batch, time - 1, channels }),
-            Engine.TensorSlice(x, new[] { 0, time - 1, 0 }, new[] { batch, 1, channels }),
-        }, 1);
+        // Tacotron pools frame t with t + 1 (the last with itself); ForwardTacotron (padding 1, truncated) pools t with
+        // t - 1 (the first with itself).
+        var next = _variant == CbhgVariant.ForwardTacotron
+            ? Engine.TensorConcatenate(new[]
+            {
+                Engine.TensorSlice(x, new[] { 0, 0, 0 }, new[] { batch, 1, channels }),
+                Engine.TensorSlice(x, new[] { 0, 0, 0 }, new[] { batch, time - 1, channels }),
+            }, 1)
+            : Engine.TensorConcatenate(new[]
+            {
+                Engine.TensorSlice(x, new[] { 0, 1, 0 }, new[] { batch, time - 1, channels }),
+                Engine.TensorSlice(x, new[] { 0, time - 1, 0 }, new[] { batch, 1, channels }),
+            }, 1);
         // max(a, b) = (a + b + |a - b|) / 2
         var sum = Engine.TensorAdd(x, next);
         var gap = Engine.TensorAbs(Engine.TensorSubtract(x, next));
@@ -256,6 +302,8 @@ public partial class CbhgLayer<T> : LayerBase<T>, IShapeContract
         metadata["Projections"] = string.Join(",", _projections);
         metadata["HighwayWidth"] = _highwayWidth.ToString(inv);
         metadata["GruUnits"] = _gruUnits.ToString(inv);
+        metadata["Variant"] = _variant.ToString();
+        metadata["DropoutRate"] = _dropoutRate.ToString("R", inv);
         return metadata;
     }
 }

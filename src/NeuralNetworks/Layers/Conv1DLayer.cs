@@ -279,6 +279,12 @@ public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
+        // OnFirstForward rejects a wrong rank only on the first call; once the layer is built a rank-2 input would
+        // otherwise fail below with an IndexOutOfRangeException that names no layer and no shape.
+        if (input.Shape.Length != 3)
+            throw new ArgumentException(
+                $"Conv1DLayer requires rank-3 [B, C, T] input; got [{string.Join(", ", input.Shape)}].",
+                nameof(input));
         _originalInputShape = input._shape;
 
         // Reshape [B, C, T] -> [B, C, 1, T] for the Engine.Conv2D call.

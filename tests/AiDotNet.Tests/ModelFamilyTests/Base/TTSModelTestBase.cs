@@ -27,7 +27,8 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
 
     /// <summary>
     /// Creates the model and, when its paper synthesizes in a given voice (AdaSpeech reads a speaker and a reference
-    /// recording, Chen et al. 2021 §3), gives it one: speaker 0 and a smooth reference mel spectrogram. Every
+    /// recording, Chen et al. 2021 §3), gives it one: speaker 0, language 0, a smooth reference mel spectrogram and a
+    /// one-second reference waveform. Every
     /// inherited invariant then exercises the model's real inference path instead of a voice-less refusal.
     /// </summary>
     protected sealed override INeuralNetworkModel<T> CreateNetwork()
@@ -42,7 +43,18 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
             for (int f = 0; f < 12; f++)
                 for (int c = 0; c < melChannels; c++)
                     reference[f, c] = ops.FromDouble(Math.Sin(0.37 * f + 0.21 * c));
-            tts.Voice = new AiDotNet.TextToSpeech.TtsVoice<T> { SpeakerId = 0, Reference = reference };
+            // A second of a two-tone waveform at the model's rate, for models whose speaker encoder reads audio (YourTTS).
+            int samples = Math.Max(1, tts.SampleRate);
+            var recording = new Tensor<T>(new[] { samples });
+            for (int i = 0; i < samples; i++)
+                recording[i] = ops.FromDouble(0.4 * Math.Sin(2 * Math.PI * 180.0 * i / samples) + 0.2 * Math.Sin(2 * Math.PI * 470.0 * i / samples));
+            tts.Voice = new AiDotNet.TextToSpeech.TtsVoice<T>
+            {
+                SpeakerId = 0,
+                Reference = reference,
+                ReferenceAudio = recording,
+                LanguageId = 0,
+            };
         }
         return network;
     }
@@ -142,6 +154,7 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
         await Task.Yield();
         using var _arena = TensorArena.Create();
         var network = CreateNetwork();
+        WarmUpForInputSensitivity(network);
 
         var text1 = CreateConstantTensor(EffectiveInputShape, 0.2);
         var text2 = CreateConstantTensor(EffectiveInputShape, 0.8);
