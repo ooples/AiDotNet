@@ -7578,16 +7578,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <remarks>
     /// <para>
     /// The caller constructs those layers before this model exists, so the scope that seeds the layers a model
-    /// builds for itself was never active for them. Layers that draw their initial weights lazily (most of them,
-    /// and MambaBlock and RWKV7Block, which defer their random draws to first use for this reason) take this
-    /// seed when they materialize, so equal model seeds give equal initial weights for a caller-built stack too.
+    /// builds for itself was never active for them. Layers that draw their initial weights lazily (most of them) take
+    /// this seed when they materialize, and layers that draw in their constructor (MambaBlock, RWKV7Block) redo that
+    /// draw from it through <see cref="Layers.LayerBase{T}.OnRandomSeedAssigned"/> while their weights are untouched.
+    /// Seeding here, at construction, is what makes that redraw land before any Predict, so equal model seeds give
+    /// equal initial weights for a caller-built stack too.
     /// </para>
     /// <para>
     /// A seed the caller set on a layer is left alone. One the layer drew from a construction scope left armed by an
     /// earlier model is not the caller's choice, and is replaced (see
     /// <see cref="Layers.LayerBase{T}.RandomSeedCameFromConstructionScope"/>). When <see cref="ApplyOptionsSeed"/> restarts the scope,
-    /// the seeds given here are replaced from the new scope; a layer that already materialized keeps its weights,
-    /// which is why the draws are deferred.
+    /// the seeds given here are replaced from the new scope, still before any forward has read the weights.
     /// </para>
     /// </remarks>
     private void SeedCallerBuiltLayers()

@@ -386,37 +386,52 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         _outputProjectionWeights = new Tensor<T>([_innerDimension, modelDimension]);
         _outputProjectionBias = new Tensor<T>([modelDimension]);
 
-        // Register ALL trainable parameters for tape-based autodiff at construction time. The tape training
-        // path (NeuralNetworkBase.Train -> TrainWithTape) collects registered parameters BEFORE the first
-        // UpdateParameters call, so registering here (not only inside UpdateParameters) is what lets the
-        // optimizer actually see and update this block's weights â€” otherwise CollectParameters finds nothing
-        // and every Train step is a silent no-op. _aLog and _dParam are learnable SSM parameters (Gu & Dao
-        // 2023) and MUST be registered too, or they would be excluded from gradient updates and make the
-        // registered-vs-flat parameter counts disagree.
-        RegisterTrainableParameters();
-
-        // The values are drawn on first use (EnsureInitialized), not here. A block the caller builds for
-        // Architecture.Layers is constructed before the model exists, so a draw here could never see the seed
-        // the model assigns it; deferred, it draws from that seed.
-        _randomInitializationPending = true;
+        InitializeParameters();
+        NoteConstructorInitialization();
     }
 
-    // True from construction until InitializeParameters has drawn the initial values.
-    private bool _randomInitializationPending;
+    /// <summary>
+    /// Set when the constructor initialised without a seed, with the parameter fingerprint at that point.
+    /// </summary>
+    [AiDotNet.Attributes.Scratch]
+    private bool _initializedWithoutSeed;
 
-    /// <inheritdoc/>
-    public override bool IsInitialized => !_randomInitializationPending;
+    [AiDotNet.Attributes.Scratch]
+    private long _unseededInitFingerprint;
 
-    /// <inheritdoc/>
-    protected override void EnsureInitialized()
+    // The tensors InitializeParameters writes, in a fixed order, for the construction fingerprint.
+    private Tensor<T>[] InitializedTensors() => new[]
     {
-        if (_randomInitializationPending)
-        {
-            InitializeParameters();
-            _randomInitializationPending = false;
-        }
+        _inputProjectionWeights, _inputProjectionBias, _convWeights, _convBias, _xProjectionWeights, _dtProjectionWeights, _dtProjectionBias, _aLog, _dParam, _outputProjectionWeights, _outputProjectionBias
+    };
 
-        base.EnsureInitialized();
+    /// <summary>
+    /// Records a constructor initialisation that ran without a seed, so a seed assigned later can redo it.
+    /// </summary>
+    private void NoteConstructorInitialization()
+    {
+        // A seed drawn from a construction scope an earlier model left armed was chosen by nobody; the model that
+        // adopts this layer replaces it, and that replacement must redo the draw like a first seed does.
+        if (RandomSeed.HasValue && !RandomSeedCameFromConstructionScope) return;
+        _initializedWithoutSeed = true;
+        _unseededInitFingerprint = ComputeParameterFingerprint(InitializedTensors());
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// This layer draws random values in its constructor. Built into an explicit architecture layer list it is
+    /// constructed before the network opens its seed scope, so it initialised unseeded and the seed arrives
+    /// later, when the network wires layer seeds. If the parameters are still exactly what construction made,
+    /// the initialisation is redone from the seed, so equal seeds reproduce the initial weights (#2290 review).
+    /// Weights that were trained, loaded or set since are left alone.
+    /// </remarks>
+    protected override void OnRandomSeedAssigned()
+    {
+        if (!_initializedWithoutSeed) return;
+        _initializedWithoutSeed = false;
+        if (ComputeParameterFingerprint(InitializedTensors()) != _unseededInitFingerprint) return;
+        RestartSeededInitializationSequence();
+        InitializeParameters();
     }
 
     private void InitializeParameters()
@@ -470,6 +485,15 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         // Xavier for output projection
         InitializeTensor(_outputProjectionWeights);
         _outputProjectionBias.Fill(NumOps.Zero);
+
+        // Register ALL trainable parameters for tape-based autodiff at construction time. The tape training
+        // path (NeuralNetworkBase.Train -> TrainWithTape) collects registered parameters BEFORE the first
+        // UpdateParameters call, so registering here (not only inside UpdateParameters) is what lets the
+        // optimizer actually see and update this block's weights â€” otherwise CollectParameters finds nothing
+        // and every Train step is a silent no-op. _aLog and _dParam are learnable SSM parameters (Gu & Dao
+        // 2023) and MUST be registered too, or they would be excluded from gradient updates and make the
+        // registered-vs-flat parameter counts disagree.
+        RegisterTrainableParameters();
     }
 
     // Registers every trainable tensor with the autodiff/optimizer machinery. Called at init and re-called
@@ -497,7 +521,6 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        EnsureInitializationSerialized();
         _originalInputShape = input._shape;
 
         int rank = input.Shape.Length;
@@ -859,38 +882,22 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
     /// <summary>
     /// Gets a copy of the input projection weights for external inspection or quantization.
     /// </summary>
-    public Tensor<T> GetInputProjectionWeights()
-    {
-        EnsureInitializationSerialized();
-        return _inputProjectionWeights.Clone();
-    }
+    public Tensor<T> GetInputProjectionWeights() => _inputProjectionWeights.Clone();
 
     /// <summary>
     /// Gets a copy of the output projection weights for external inspection or quantization.
     /// </summary>
-    public Tensor<T> GetOutputProjectionWeights()
-    {
-        EnsureInitializationSerialized();
-        return _outputProjectionWeights.Clone();
-    }
+    public Tensor<T> GetOutputProjectionWeights() => _outputProjectionWeights.Clone();
 
     /// <summary>
     /// Gets a copy of the A_log parameter tensor (A = -exp(A_log)) for external inspection.
     /// </summary>
-    public Tensor<T> GetALogParameter()
-    {
-        EnsureInitializationSerialized();
-        return _aLog.Clone();
-    }
+    public Tensor<T> GetALogParameter() => _aLog.Clone();
 
     /// <summary>
     /// Gets a copy of the D skip connection parameter for external inspection.
     /// </summary>
-    public Tensor<T> GetDParameter()
-    {
-        EnsureInitializationSerialized();
-        return _dParam.Clone();
-    }
+    public Tensor<T> GetDParameter() => _dParam.Clone();
 
     /// <summary>
     /// Overwrites the D (skip-connection) parameter in place.
@@ -915,9 +922,6 @@ public partial class MambaBlock<T> : LayerBase<T>, IShapeContract
         {
             throw new ArgumentNullException(nameof(values));
         }
-
-        // Draw the other initial values first, so a later first use cannot overwrite the D written here.
-        EnsureInitializationSerialized();
 
         if (values.Length != _dParam.Length)
         {

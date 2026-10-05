@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -519,10 +519,8 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         _normGamma2 = new Tensor<T>([modelDimension]);
         _normBeta2 = new Tensor<T>([modelDimension]);
 
-        // The values are drawn on first use (EnsureInitialized), not here. A block the caller builds for
-        // Architecture.Layers is constructed before the model exists, so a draw here could never see the seed
-        // the model assigns it; deferred, the orthogonal LoRA factors draw from that seed.
-        _randomInitializationPending = true;
+        InitializeParameters();
+
         // Register trainable parameters for tape-based autodiff
         RegisterTrainableParameter(_receptanceWeights, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_keyWeights, PersistentTensorRole.Weights);
@@ -564,29 +562,57 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
         RegisterTrainableParameter(_normGamma2, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_normBeta2, PersistentTensorRole.Biases);
 
+        NoteConstructorInitialization();
     }
 
-    // True from construction until InitializeParameters has drawn the initial values.
-    private bool _randomInitializationPending;
+    /// <summary>
+    /// Set when the constructor initialised without a seed, with the parameter fingerprint at that point.
+    /// </summary>
+    [AiDotNet.Attributes.Scratch]
+    private bool _initializedWithoutSeed;
 
-    /// <inheritdoc/>
-    public override bool IsInitialized => !_randomInitializationPending;
+    [AiDotNet.Attributes.Scratch]
+    private long _unseededInitFingerprint;
 
-    /// <inheritdoc/>
-    protected override void EnsureInitialized()
+    // The tensors InitializeParameters writes, in a fixed order, for the construction fingerprint.
+    private Tensor<T>[] InitializedTensors() => new[]
     {
-        if (_randomInitializationPending)
-        {
-            InitializeParameters();
-            _randomInitializationPending = false;
-        }
+        _receptanceWeights, _keyWeights, _valueWeights, _outputWeights, _w1, _w2, _aBias, _a1, _a2, _bBias, _v0, _v1, _v2, _rk, _timeMixG, _g1, _g2, _kk, _ka, _channelKeyWeights, _channelValueWeights, _channelReceptanceWeights, _timeMixR, _timeMixK, _timeMixV, _timeMixA, _timeMixB, _channelMixR, _channelMixK, _groupNormGamma, _groupNormBeta, _normGamma1, _normBeta1, _normGamma2, _normBeta2
+    };
 
-        base.EnsureInitialized();
+    /// <summary>
+    /// Records a constructor initialisation that ran without a seed, so a seed assigned later can redo it.
+    /// </summary>
+    private void NoteConstructorInitialization()
+    {
+        // A seed drawn from a construction scope an earlier model left armed was chosen by nobody; the model that
+        // adopts this layer replaces it, and that replacement must redo the draw like a first seed does.
+        if (RandomSeed.HasValue && !RandomSeedCameFromConstructionScope) return;
+        _initializedWithoutSeed = true;
+        _unseededInitFingerprint = ComputeParameterFingerprint(InitializedTensors());
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// This layer draws random values in its constructor. Built into an explicit architecture layer list it is
+    /// constructed before the network opens its seed scope, so it initialised unseeded and the seed arrives
+    /// later, when the network wires layer seeds. If the parameters are still exactly what construction made,
+    /// the initialisation is redone from the seed, so equal seeds reproduce the initial weights (#2290 review).
+    /// Weights that were trained, loaded or set since are left alone.
+    /// </remarks>
+    protected override void OnRandomSeedAssigned()
+    {
+        if (!_initializedWithoutSeed) return;
+        _initializedWithoutSeed = false;
+        if (ComputeParameterFingerprint(InitializedTensors()) != _unseededInitFingerprint) return;
+        RestartSeededInitializationSequence();
+        InitializeParameters();
     }
 
     private void InitializeParameters()
     {
         T half = NumOps.FromDouble(0.5);
+
         // Token shift mixing coefficients initialized to 0.5
         for (int i = 0; i < _modelDimension; i++)
         {
@@ -776,7 +802,6 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     internal (Tensor<T> Output, Tensor<T> VFirst) ForwardWithValueResidual(Tensor<T> input, Tensor<T>? vFirst)
     {
-        EnsureInitializationSerialized();
         _incomingVFirst = vFirst;
         _publishedVFirst = null;
         _originalInputShape = input._shape;

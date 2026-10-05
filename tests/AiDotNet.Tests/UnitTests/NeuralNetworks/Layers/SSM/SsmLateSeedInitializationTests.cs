@@ -8,10 +8,11 @@ using Xunit;
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM;
 
 /// <summary>
-/// MambaBlock and RWKV7Block draw their random initial values (dt init, orthogonal LoRA init) on first use, not in
-/// their constructors. Built into an explicit architecture layer list, they are constructed before the network
-/// opens its seed scope; the network seeds them at its construction, before anything reads their weights, so
-/// equal seeds reproduce the initial weights. Weights already read, set or trained are never redrawn (#2290 review).
+/// MambaBlock and RWKV7Block draw random values in their constructors (dt init, orthogonal LoRA init). Built
+/// into an explicit architecture layer list, they are constructed before the network opens its seed scope, so
+/// they initialise unseeded and receive their seed only later, when the network wires layer seeds. A seed that
+/// arrives while their parameters are still the constructed ones now redoes the initialisation from it, so equal
+/// seeds reproduce the initial weights; parameters changed since are kept (#2290 review).
 /// </summary>
 public class SsmLateSeedInitializationTests
 {
@@ -45,13 +46,11 @@ public class SsmLateSeedInitializationTests
     [MemberData(nameof(Layers))]
     public void ASeedAssignedAfterConstruction_ReproducesTheInitialWeights(string name, Func<LayerBase<double>> create)
     {
-        // Control, on separate instances so the layers under test stay unread: unseeded, the draws differ.
-        Assert.False(ConstructUnseeded(create).GetParameters().ToArray()
-                .SequenceEqual(ConstructUnseeded(create).GetParameters().ToArray()),
-            $"{name}: two unseeded constructions came out identical, so this test could not tell anything apart.");
-
         var first = ConstructUnseeded(create);
         var second = ConstructUnseeded(create);
+        Assert.False(first.GetParameters().ToArray().SequenceEqual(second.GetParameters().ToArray()),
+            $"{name}: two unseeded constructions came out identical, so this test could not tell anything apart.");
+
         first.RandomSeed = 5;
         second.RandomSeed = 5;
 
