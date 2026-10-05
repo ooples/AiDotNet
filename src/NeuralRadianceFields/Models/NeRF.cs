@@ -953,72 +953,8 @@ public partial class NeRF<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>,
         double[] rayNear,
         double[] rayFar,
         double[]? sampleTs = null)
-    {
-        var colors = new T[numRays * 3];
-        var numOps = NumOps;
-        var rgbData = rgb.Data.Span;
-        var densityData = density.Data.Span;
-
-        for (int r = 0; r < numRays; r++)
-        {
-            double transmittance = 1.0;
-            double accumR = 0.0;
-            double accumG = 0.0;
-            double accumB = 0.0;
-            double uniformDeltaT = numSamples > 0 ? (rayFar[r] - rayNear[r]) / numSamples : 0.0;
-
-            if (uniformDeltaT < 0.0)
-            {
-                uniformDeltaT = 0.0;
-            }
-
-            for (int s = 0; s < numSamples; s++)
-            {
-                int idx = r * numSamples + s;
-                double deltaT = uniformDeltaT;
-                if (sampleTs != null)
-                {
-                    double t0 = sampleTs[idx];
-                    double t1 = s + 1 < numSamples ? sampleTs[idx + 1] : rayFar[r];
-                    if (t1 <= t0)
-                    {
-                        t1 = rayFar[r];
-                    }
-
-                    deltaT = t1 - t0;
-                    if (deltaT < 0.0)
-                    {
-                        deltaT = 0.0;
-                    }
-                }
-
-                double sigma = numOps.ToDouble(densityData[idx]);
-                double alpha = 1.0 - Math.Exp(-sigma * deltaT);
-                if (alpha <= 0.0)
-                {
-                    continue;
-                }
-
-                int rgbIdx = idx * 3;
-                accumR += transmittance * alpha * numOps.ToDouble(rgbData[rgbIdx]);
-                accumG += transmittance * alpha * numOps.ToDouble(rgbData[rgbIdx + 1]);
-                accumB += transmittance * alpha * numOps.ToDouble(rgbData[rgbIdx + 2]);
-
-                transmittance *= (1.0 - alpha);
-                if (transmittance < 1e-4)
-                {
-                    break;
-                }
-            }
-
-            int outIdx = r * 3;
-            colors[outIdx] = numOps.FromDouble(accumR);
-            colors[outIdx + 1] = numOps.FromDouble(accumG);
-            colors[outIdx + 2] = numOps.FromDouble(accumB);
-        }
-
-        return new Tensor<T>(colors, [numRays, 3]);
-    }
+        => NeuralRadianceFields.Helpers.VolumeRenderer<T>.Render(
+            Engine, rgb, density, numRays, numSamples, rayNear, rayFar, sampleTs);
 
     private double[] ComputeSampleWeights(
         Tensor<T> density,

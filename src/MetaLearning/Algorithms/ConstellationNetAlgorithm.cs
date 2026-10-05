@@ -95,7 +95,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 // unrelated to either. This class implements ConstellationNet — cell feature clustering with a dense
 // part representation, whose relationships are then modeled by attention — which is what its name says
 // and what the code does. ConstellationNet has no arXiv preprint, so the ICLR 2021 OpenReview record is
-// the canonical reference.
+// the canonical reference. AWGIM itself is AWGIMAlgorithm (#1929).
 [ResearchPaper("Attentional Constellation Nets for Few-Shot Learning",
     "https://openreview.net/forum?id=vujTf_I8Kmc",
     Year = 2021,

@@ -1,14 +1,15 @@
 using System.Collections.Generic;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
 /// <summary>
-/// Pre-Layer-Normalization transformer encoder block — multi-head self-attention
-/// and a position-wise feed-forward network, each wrapped in a residual (skip)
-/// connection with layer normalization applied BEFORE the sublayer (Pre-LN).
+/// Transformer encoder block — multi-head self-attention and a position-wise feed-forward network,
+/// each wrapped in a residual (skip) connection with layer normalization applied before the sublayer
+/// (Pre-LN, the default) or after the residual sum (Post-LN).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
@@ -20,6 +21,11 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <item>y = x + Dropout(SelfAttention(LayerNorm(x)))</item>
 /// <item>z = y + Dropout(FFN(LayerNorm(y)))</item>
 /// </list>
+/// <para>
+/// With <see cref="TransformerNormPlacement.PostNorm"/> it is the original ordering instead, which
+/// BERT and wav2vec 2.0 BASE use: y = LayerNorm(x + Dropout(SelfAttention(x))),
+/// z = LayerNorm(y + Dropout(FFN(y))).
+/// </para>
 /// <para>
 /// The <b>residual connections</b> (the <c>x +</c> / <c>y +</c> terms) are the
 /// defining feature of the transformer: they let the input signal flow
@@ -66,6 +72,7 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
     private readonly int _numHeads;
     private readonly int _ffnDim;
     private readonly double _dropoutRate;
+    private readonly TransformerNormPlacement _normPlacement;
     // The FFN inner activation, retained so it round-trips through serialization
     // (the FFN Dense layer is reconstructed from the block's metadata, not its own).
     private readonly IActivationFunction<T> _ffnActivation;
@@ -93,15 +100,19 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
     public override bool SupportsTraining => true;
 
     /// <summary>
-    /// Initialises a Post-LN transformer encoder block.
+    /// Initialises a transformer encoder block.
     /// </summary>
     /// <param name="hiddenSize">Model (input/output) feature dimension.</param>
     /// <param name="numHeads">Number of self-attention heads. Must divide <paramref name="hiddenSize"/>.</param>
     /// <param name="ffnDim">Inner dimension of the feed-forward network (typically 4× hiddenSize).</param>
     /// <param name="dropoutRate">Dropout probability applied to each sublayer's output before the
     /// residual add (Vaswani §5.4). 0 disables dropout.</param>
+    /// <param name="ffnActivation">The feed-forward inner activation; null uses ReLU (Vaswani 2017).</param>
+    /// <param name="normPlacement">Whether each LayerNorm precedes its sublayer (the default) or follows
+    /// the residual sum. A paper's block must use the paper's placement: the two compute different functions.</param>
     public TransformerEncoderBlock(int hiddenSize, int numHeads, int ffnDim, double dropoutRate = 0.0,
-        IActivationFunction<T>? ffnActivation = null)
+        IActivationFunction<T>? ffnActivation = null,
+        TransformerNormPlacement normPlacement = TransformerNormPlacement.PreNorm)
         : base(new[] { hiddenSize }, new[] { hiddenSize })
     {
         if (hiddenSize <= 0)
@@ -119,6 +130,7 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
         _numHeads = numHeads;
         _ffnDim = ffnDim;
         _dropoutRate = dropoutRate;
+        _normPlacement = normPlacement;
 
         _attention = new MultiHeadAttentionLayer<T>(numHeads, hiddenSize / numHeads, activationFunction: new IdentityActivation<T>());
         // Size the norms eagerly (their featureSize is known = hiddenSize) so they are
@@ -216,6 +228,8 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
     public int FfnDim => _ffnDim;
     /// <summary>Dropout probability — persisted for deserialization.</summary>
     public double DropoutRate => _dropoutRate;
+    /// <summary>Where each LayerNorm sits relative to its residual connection — persisted for deserialization.</summary>
+    public TransformerNormPlacement NormPlacement => _normPlacement;
 
     /// <summary>
     /// Forward pass. All shape ops route through <see cref="LayerBase{T}.Engine"/> and every
@@ -229,9 +243,12 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
         // cleanly through depth and the model trains stably WITHOUT learning-rate warmup. The
         // original Post-LN ordering — Norm(x + Attn(x)) — converges far slower without warmup,
         // which is why every modern transformer uses Pre-LN.
-        var attnOut = _attention.Forward(_norm1.Forward(input));
+        // Post-LN instead normalizes each residual SUM: afterAttn = Norm(x + Attn(x)), out = Norm(afterAttn + FFN(afterAttn)).
+        bool postNorm = _normPlacement == TransformerNormPlacement.PostNorm;
+        var attnOut = _attention.Forward(postNorm ? input : _norm1.Forward(input));
         if (_attnDropout is not null) attnOut = _attnDropout.Forward(attnOut);
         var afterAttn = Engine.TensorAdd(input, attnOut);
+        if (postNorm) afterAttn = _norm1.Forward(afterAttn);
 
         // Sublayer 2: position-wise FFN with a PRE-norm residual — out = afterAttn + FFN(Norm(afterAttn)).
         // DenseLayer expects 2D [N, hiddenSize]; flatten the leading dims, run the FFN, reshape back.
@@ -240,7 +257,7 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
         int flatN = 1;
         for (int i = 0; i < rank - 1; i++) flatN *= afterAttn.Shape[i];
 
-        var normed2 = _norm2.Forward(afterAttn);
+        var normed2 = postNorm ? afterAttn : _norm2.Forward(afterAttn);
         var normed2Flat = Engine.Reshape(normed2, new[] { flatN, featureDim });
         var ffnUpOut = _ffnUp.Forward(normed2Flat);
         var ffnDownOut = _ffnDown.Forward(ffnUpOut);
@@ -248,7 +265,7 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
         if (_ffnDropout is not null) ffnReshaped = _ffnDropout.Forward(ffnReshaped);
 
         var output = Engine.TensorAdd(afterAttn, ffnReshaped);
-        return output;
+        return postNorm ? _norm2.Forward(output) : output;
     }
 
     /// <inheritdoc/>
@@ -327,6 +344,7 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
         metadata["NumHeads"] = _numHeads.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["FfnDim"] = _ffnDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["DropoutRate"] = _dropoutRate.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["NormPlacement"] = _normPlacement.ToString();
         // Persist the FFN inner activation so the deserialized block rebuilds the
         // same FFN (BERT GELU vs Vaswani ReLU); without this a cloned block always
         // fell back to the constructor default and diverged from the original.

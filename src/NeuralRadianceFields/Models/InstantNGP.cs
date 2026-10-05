@@ -182,6 +182,9 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
     private int _trainingStep;
 
     // Hash tables for multiresolution encoding
+    // Instant-NGP's main parameters (one table per resolution level); declared trainable so every training
+    // path steps them and serialization, cloning and ParameterCount include them.
+    [AiDotNet.Attributes.TrainableParameter]
     private readonly Dictionary<int, Tensor<T>> _hashTables;
 
     private readonly List<DenseLayer<T>> _densityLayers = [];
@@ -717,7 +720,27 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
         var normalizedPositions = NormalizePositionsToUnit(positions);
 
         // Use vectorized Engine implementation for CPU/GPU acceleration
-        return Engine.MultiresolutionHashEncoding(normalizedPositions, hashTablesArray, resolutions, _featuresPerLevel);
+        var features = Engine.MultiresolutionHashEncoding(normalizedPositions, hashTablesArray, resolutions, _featuresPerLevel);
+
+        // The engine op is not tape-recorded, so without this no loss gradient reaches the tables, which
+        // are Instant-NGP's main parameters (Müller et al. 2022, Sec. 3). Route the feature gradient to
+        // every level's table; the positions are sample points, not parameters.
+        int featuresPerLevel = _featuresPerLevel;
+        AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.RecordIfActive(
+            "InstantNGPHashEncoding",
+            features,
+            hashTablesArray,
+            (gradOutput, inputs, _, _, engine, grads) =>
+            {
+                var tableGradients = engine.MultiresolutionHashEncodingBackward(
+                    normalizedPositions, inputs, resolutions, featuresPerLevel, gradOutput);
+                for (int level = 0; level < inputs.Length; level++)
+                {
+                    AiDotNet.Tensors.Engines.Autodiff.DifferentiableOps.AccumulateGrad(
+                        grads, inputs[level], tableGradients[level], engine);
+                }
+            });
+        return features;
     }
 
     /// <summary>
@@ -816,9 +839,6 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
             SampleRaysWithOccupancy(rayOrigins, rayDirections, numSamples, nearBound, farBound);
 
         int totalSamples = numRays * numSamples;
-        var rgbAll = new T[totalSamples * 3];
-        var densityAll = new T[totalSamples];
-
         var occupiedIndices = new List<int>();
         for (int i = 0; i < totalSamples; i++)
         {
@@ -828,47 +848,35 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
             }
         }
 
-        if (occupiedIndices.Count > 0)
+        // Only occupied samples query the field; empty space contributes zero color and zero density.
+        // The field outputs are spread back to every sample with one engine gather (empty samples read
+        // an appended zero row), so the rendered color stays on the gradient tape. Copying them into
+        // host arrays, as before, cut the photometric gradient off from the hash grid and the MLPs.
+        if (occupiedIndices.Count == 0)
         {
-            var occPositions = new T[occupiedIndices.Count * 3];
-            var occDirections = new T[occupiedIndices.Count * 3];
-            var posData = samplePositions.Data.Span;
-            var dirData = sampleDirections.Data.Span;
-
-            for (int i = 0; i < occupiedIndices.Count; i++)
-            {
-                int src = occupiedIndices[i] * 3;
-                int dst = i * 3;
-                occPositions[dst] = posData[src];
-                occPositions[dst + 1] = posData[src + 1];
-                occPositions[dst + 2] = posData[src + 2];
-
-                occDirections[dst] = dirData[src];
-                occDirections[dst + 1] = dirData[src + 1];
-                occDirections[dst + 2] = dirData[src + 2];
-            }
-
-            var occPosTensor = new Tensor<T>(occPositions, [occupiedIndices.Count, 3]);
-            var occDirTensor = new Tensor<T>(occDirections, [occupiedIndices.Count, 3]);
-            var (rgbOcc, densityOcc) = QueryField(occPosTensor, occDirTensor);
-
-            var rgbOccData = rgbOcc.Data.Span;
-            var densityOccData = densityOcc.Data.Span;
-
-            for (int i = 0; i < occupiedIndices.Count; i++)
-            {
-                int dstSample = occupiedIndices[i];
-                int dstRgb = dstSample * 3;
-                int srcRgb = i * 3;
-                rgbAll[dstRgb] = rgbOccData[srcRgb];
-                rgbAll[dstRgb + 1] = rgbOccData[srcRgb + 1];
-                rgbAll[dstRgb + 2] = rgbOccData[srcRgb + 2];
-                densityAll[dstSample] = densityOccData[i];
-            }
+            return new Tensor<T>(new[] { numRays, 3 });
         }
 
-        var rgbTensor = new Tensor<T>(rgbAll, [totalSamples, 3]);
-        var densityTensor = new Tensor<T>(densityAll, [totalSamples, 1]);
+        var occupied = new Tensor<int>(occupiedIndices.ToArray(), new[] { occupiedIndices.Count });
+        var occPosTensor = Engine.TensorIndexSelect(Engine.Reshape(samplePositions, new[] { totalSamples, 3 }), occupied, 0);
+        var occDirTensor = Engine.TensorIndexSelect(Engine.Reshape(sampleDirections, new[] { totalSamples, 3 }), occupied, 0);
+        var (rgbOcc, densityOcc) = QueryField(occPosTensor, occDirTensor);
+
+        var spread = new int[totalSamples];
+        for (int i = 0; i < totalSamples; i++) spread[i] = occupiedIndices.Count;
+        for (int i = 0; i < occupiedIndices.Count; i++) spread[occupiedIndices[i]] = i;
+        var spreadIndex = new Tensor<int>(spread, new[] { totalSamples });
+
+        var rgbWithEmpty = Engine.TensorConcatenate(new[]
+        {
+            Engine.Reshape(rgbOcc, new[] { occupiedIndices.Count, 3 }), new Tensor<T>(new[] { 1, 3 })
+        }, axis: 0);
+        var densityWithEmpty = Engine.TensorConcatenate(new[]
+        {
+            Engine.Reshape(densityOcc, new[] { occupiedIndices.Count, 1 }), new Tensor<T>(new[] { 1, 1 })
+        }, axis: 0);
+        var rgbTensor = Engine.TensorIndexSelect(rgbWithEmpty, spreadIndex, 0);
+        var densityTensor = Engine.TensorIndexSelect(densityWithEmpty, spreadIndex, 0);
 
         return VolumeRendering(rgbTensor, densityTensor, numRays, numSamples, rayNear, rayFar, sampleTs);
     }
@@ -1487,76 +1495,8 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
         double[] rayNear,
         double[] rayFar,
         double[]? sampleTs = null)
-    {
-        var colors = new T[numRays * 3];
-        var rgbData = rgb.Data.Span;
-        var densityData = density.Data.Span;
-
-        for (int r = 0; r < numRays; r++)
-        {
-            double transmittance = 1.0;
-            double accumR = 0.0;
-            double accumG = 0.0;
-            double accumB = 0.0;
-            double uniformDeltaT = numSamples > 0 ? (rayFar[r] - rayNear[r]) / numSamples : 0.0;
-
-            if (uniformDeltaT < 0.0)
-            {
-                uniformDeltaT = 0.0;
-            }
-
-            for (int s = 0; s < numSamples; s++)
-            {
-                int idx = r * numSamples + s;
-                double deltaT = uniformDeltaT;
-                if (sampleTs != null)
-                {
-                    double t0 = sampleTs[idx];
-                    double t1 = s + 1 < numSamples ? sampleTs[idx + 1] : rayFar[r];
-                    if (t1 <= 0.0 || t1 < t0)
-                    {
-                        t1 = rayFar[r];
-                    }
-
-                    deltaT = t1 - t0;
-                    if (deltaT < 0.0)
-                    {
-                        deltaT = 0.0;
-                    }
-                }
-
-                double sigma = NumOps.ToDouble(densityData[idx]);
-                double alpha = 1.0 - Math.Exp(-sigma * deltaT);
-
-                if (alpha <= 0.0)
-                {
-                    continue;
-                }
-
-                int rgbIdx = idx * 3;
-                double rVal = NumOps.ToDouble(rgbData[rgbIdx]);
-                double gVal = NumOps.ToDouble(rgbData[rgbIdx + 1]);
-                double bVal = NumOps.ToDouble(rgbData[rgbIdx + 2]);
-
-                accumR += transmittance * alpha * rVal;
-                accumG += transmittance * alpha * gVal;
-                accumB += transmittance * alpha * bVal;
-
-                transmittance *= (1.0 - alpha);
-                if (transmittance < 1e-4)
-                {
-                    break;
-                }
-            }
-
-            int outIdx = r * 3;
-            colors[outIdx] = NumOps.FromDouble(accumR);
-            colors[outIdx + 1] = NumOps.FromDouble(accumG);
-            colors[outIdx + 2] = NumOps.FromDouble(accumB);
-        }
-
-        return new Tensor<T>(colors, [numRays, 3]);
-    }
+        => NeuralRadianceFields.Helpers.VolumeRenderer<T>.Render(
+            Engine, rgb, density, numRays, numSamples, rayNear, rayFar, sampleTs);
 
     public override Tensor<T> ForwardWithMemory(Tensor<T> input)
     {
@@ -1680,7 +1620,6 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     public override ModelMetadata<T> GetModelMetadata()
     {
-        int hashParameterCount = _numLevels * _hashTableSize * _featuresPerLevel;
 
         return new ModelMetadata<T>
         {
@@ -1710,7 +1649,7 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
                 { "SceneBoundsMin", new[] { _sceneMin[0], _sceneMin[1], _sceneMin[2] } },
                 { "SceneBoundsMax", new[] { _sceneMax[0], _sceneMax[1], _sceneMax[2] } },
                 { "LayerCount", Layers.Count },
-                { "TotalParameters", ParameterCount + hashParameterCount }
+                { "TotalParameters", ParameterCount }
             },
             // License-safe metadata bytes — see NeRF.GetModelMetadata for the
             // same rationale. Fixes #1826.
