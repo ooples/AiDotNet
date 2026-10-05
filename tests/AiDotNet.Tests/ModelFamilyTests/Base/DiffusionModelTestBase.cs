@@ -210,14 +210,25 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
     {
         int? previous = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed;
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = FixtureInitializationSeed;
+        IDiffusionModel<TNum> model;
         try
         {
-            return CreateModel();
+            model = CreateModel();
         }
         finally
         {
             AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = previous;
         }
+
+        ConfigureFixtureModel(model);
+        return model;
+    }
+
+    /// <summary>
+    /// Adjusts a freshly built fixture model to the data this family's tests feed it. The default changes nothing.
+    /// </summary>
+    protected virtual void ConfigureFixtureModel(IDiffusionModel<TNum> model)
+    {
     }
 
     /// <summary>

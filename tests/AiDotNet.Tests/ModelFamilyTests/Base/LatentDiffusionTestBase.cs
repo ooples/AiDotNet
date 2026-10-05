@@ -65,6 +65,16 @@ public abstract class LatentDiffusionTestBase : DiffusionModelTestBase
 
     private int[] DerivedLatentShape => DerivedLatentShapes.GetOrAdd(GetType(), _ => ProbeLatentShape());
 
+    /// <summary>
+    /// The fixtures here are latents, so the model is told so: its default is to treat a training sample as an
+    /// image and encode it, which would shrink a 16x16 fixture latent by the VAE's downsample factor.
+    /// </summary>
+    protected override void ConfigureFixtureModel(IDiffusionModel<double> model)
+    {
+        if (model is LatentDiffusionModelBase<double> latent)
+            latent.TrainingSampleSpace = AiDotNet.Enums.DiffusionTrainingSampleSpace.Latent;
+    }
+
     private int[] ProbeLatentShape()
     {
         using var probe = CreateDeterministicModel();

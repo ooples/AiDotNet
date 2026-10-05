@@ -1,5 +1,7 @@
 using System;
 using AiDotNet.Diffusion.StyleTransfer;
+using AiDotNet.Enums;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -30,7 +32,7 @@ public class LatentDiffusionTrainingSampleTests
     private static Tensor<double> Random(int[] shape, int seed)
     {
         var t = new Tensor<double>(shape);
-        var rng = new Random(seed);
+        var rng = RandomHelper.CreateSeededRandom(seed);
         for (int i = 0; i < t.Length; i++) t[i] = (rng.NextDouble() * 2.0) - 1.0;
         return t;
     }
@@ -49,14 +51,79 @@ public class LatentDiffusionTrainingSampleTests
     }
 
     [Fact]
-    public void Train_OnALatent_UsesItAsItIs()
+    public void ImageIsTheDefaultSampleSpace()
     {
         using var model = new ProbeModel();
+
+        Assert.Equal(DiffusionTrainingSampleSpace.Image, model.TrainingSampleSpace);
+    }
+
+    [Fact]
+    public void Train_OnALatent_UsesItAsItIs()
+    {
+        using var model = new ProbeModel { TrainingSampleSpace = DiffusionTrainingSampleSpace.Latent };
         int factor = model.VAE.DownsampleFactor;
         var latent = Random(new[] { 1, model.LatentChannels, 64 / factor, 64 / factor }, 2);
 
         model.Train(latent, latent);
 
         Assert.Equal(latent.Shape.ToArray(), model.NoisedShape);
+    }
+
+    /// <summary>
+    /// The case a channel-count guess got wrong: image and latent of equal depth. Stated as an image, the sample
+    /// is still encoded, so the denoiser trains at the latent resolution Generate samples at.
+    /// </summary>
+    [Fact]
+    public void Train_OnAnImage_WhoseDepthEqualsTheLatentDepth_StillEncodesIt()
+    {
+        using var model = new ImagenProbeModel();
+        Assert.Equal(model.VAE.InputChannels, model.LatentChannels);
+        int factor = model.VAE.DownsampleFactor;
+        Assert.True(factor > 1);
+        var image = Random(new[] { 1, model.VAE.InputChannels, 64, 64 }, 3);
+
+        model.Train(image, image);
+
+        Assert.Equal(new[] { 1, model.LatentChannels, 64 / factor, 64 / factor }, model.NoisedShape);
+    }
+
+    [Fact]
+    public void Train_OnAnImage_WithTheWrongDepth_IsRefused()
+    {
+        using var model = new ProbeModel();
+        var notAnImage = Random(new[] { 1, model.VAE.InputChannels + 1, 64, 64 }, 4);
+
+        var error = Assert.Throws<ArgumentException>(() => model.Train(notAnImage, notAnImage));
+        Assert.Contains(nameof(DiffusionTrainingSampleSpace.Latent), error.Message);
+    }
+
+    /// <summary>Records the sample the denoiser is trained on, for a model whose image and latent depths match.</summary>
+    private sealed class ImagenProbeModel : AiDotNet.Diffusion.TextToImage.ImagenModel<double>
+    {
+        // Imagen's own topology at test width: its pixel-depth VAE (three channels in and out, downsampling by
+        // four) and a small base U-Net, so the case runs in a unit test.
+        public ImagenProbeModel()
+            : base(
+                baseUnet: SmallUnet(), superRes1Unet: SmallUnet(),
+                vae: new AiDotNet.Diffusion.VAE.StandardVAE<double>(
+                    inputChannels: 3, latentChannels: 3, baseChannels: 8, channelMultipliers: [1, 2, 4],
+                    numResBlocksPerLevel: 1, latentScaleFactor: 1.0, seed: 42),
+                seed: 42)
+        {
+        }
+
+        private static AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<double> SmallUnet() => new(
+            inputChannels: 3, outputChannels: 3, baseChannels: 8, channelMultipliers: [1, 2],
+            numResBlocks: 1, attentionResolutions: [], contextDim: 16, seed: 42);
+
+        public int[]? NoisedShape { get; private set; }
+
+        protected override Tensor<double> PredictTrainingNoise(
+            Tensor<double> noisySample, int[] timesteps, bool isBatched, Tensor<double> input, Tensor<double> expectedOutput)
+        {
+            NoisedShape = noisySample.Shape.ToArray();
+            return base.PredictTrainingNoise(noisySample, timesteps, isBatched, input, expectedOutput);
+        }
     }
 }
