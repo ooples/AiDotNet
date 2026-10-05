@@ -40,6 +40,7 @@ internal static class LayerStructureInitializationAnalysis
         private readonly HashSet<ISymbol> _exceptionContracts = new(SymbolEqualityComparer.Default);
         private readonly IPropertySymbol? _memberName;
         private readonly INamedTypeSymbol? _runtimeType;
+        private readonly INamedTypeSymbol _owner;
         private readonly Dictionary<ISymbol, HashSet<ulong>> _visited = new(SymbolEqualityComparer.Default);
         private IMethodSymbol? _currentMethod;
         private ulong _knownNullParameters;
@@ -49,6 +50,7 @@ internal static class LayerStructureInitializationAnalysis
         internal Proof(Compilation compilation, INamedTypeSymbol owner, IEnumerable<IFieldSymbol> children)
         {
             _compilation = compilation;
+            _owner = owner;
             _memberName = compilation.GetTypeByMetadataName("System.Reflection.MemberInfo")?
                 .GetMembers(nameof(System.Reflection.MemberInfo.Name)).OfType<IPropertySymbol>().SingleOrDefault();
             _runtimeType = compilation.GetTypeByMetadataName("System.Type");
@@ -86,6 +88,29 @@ internal static class LayerStructureInitializationAnalysis
             })
                 if (compilation.GetTypeByMetadataName(metadataName) is { } exception)
                     _exceptionContracts.Add(exception);
+        }
+
+        /// <summary>
+        /// The implementation a virtual <paramref name="method"/> called on <c>this</c> runs for an instance whose
+        /// runtime type is exactly the owner: the owner's override, else the nearest base type's, else the method
+        /// itself. Null when that implementation is abstract or cannot be located.
+        /// </summary>
+        private IMethodSymbol? ExactOwnerImplementation(IMethodSymbol method)
+        {
+            var target = method.OriginalDefinition;
+            for (var type = _owner; type is not null && type.SpecialType != SpecialType.System_Object; type = type.BaseType)
+            {
+                foreach (var candidate in type.GetMembers(method.Name).OfType<IMethodSymbol>())
+                {
+                    for (IMethodSymbol? overridden = candidate; overridden is not null; overridden = overridden.OverriddenMethod)
+                    {
+                        if (SymbolEqualityComparer.Default.Equals(overridden.OriginalDefinition, target))
+                            return candidate.IsAbstract ? null : candidate;
+                    }
+                }
+            }
+
+            return null;
         }
 
         internal bool VisitMethod(IMethodSymbol method, ulong knownNullParameters = 0)
@@ -232,7 +257,16 @@ internal static class LayerStructureInitializationAnalysis
                 bool explicitBase = operation.Syntax is InvocationExpressionSyntax
                     { Expression: MemberAccessExpressionSyntax { Expression: BaseExpressionSyntax } };
                 if (!explicitBase && !method.IsSealed && (method.IsVirtual || method.IsOverride || method.IsAbstract))
-                    _independent = false;
+                {
+                    // The proof only ever lets the EXACT owner type skip initialization (the generated
+                    // NeedsDeclaredSubLayerInitialization compares GetType() with it), and for that runtime
+                    // type a virtual call on 	his dispatches to the owner's most-derived implementation,
+                    // which is known here. Follow it; give up only when none is found.
+                    if (ExactOwnerImplementation(method) is { } implementation)
+                        VisitMethod(implementation, NullArguments(operation));
+                    else
+                        _independent = false;
+                }
                 else
                     VisitMethod(method, NullArguments(operation));
             }
@@ -257,7 +291,23 @@ internal static class LayerStructureInitializationAnalysis
                 || operation.Property.IsStatic && _ownerTypes.Contains(operation.Property.ContainingType.OriginalDefinition))
             {
                 var property = operation.Property;
-                if (!property.IsSealed && (property.IsVirtual || property.IsOverride || property.IsAbstract))
+                if (!property.IsSealed && (property.IsVirtual || property.IsOverride || property.IsAbstract)
+                    && !operation.Property.IsStatic)
+                {
+                    // Same exact-type dispatch as a method call: resolve each accessor to the owner's
+                    // most-derived implementation.
+                    var getterImplementation = property.GetMethod is { } virtualGetter ? ExactOwnerImplementation(virtualGetter) : null;
+                    var setterImplementation = property.SetMethod is { } virtualSetter ? ExactOwnerImplementation(virtualSetter) : null;
+                    if ((property.GetMethod is not null && getterImplementation is null)
+                        || (property.SetMethod is not null && setterImplementation is null))
+                        _independent = false;
+                    else
+                    {
+                        if (getterImplementation is not null) VisitMethod(getterImplementation);
+                        if (setterImplementation is not null) VisitMethod(setterImplementation);
+                    }
+                }
+                else if (!property.IsSealed && (property.IsVirtual || property.IsOverride || property.IsAbstract))
                     _independent = false;
                 else
                 {
