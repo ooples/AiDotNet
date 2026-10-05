@@ -45,6 +45,26 @@ public abstract class VarianceAdaptorTtsModelBase<T> : TtsModelBase<T>
     /// <summary>The optimizer training steps use; null for the base default.</summary>
     protected abstract IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer { get; }
 
+    /// <summary>
+    /// Weight on each variance reconstruction loss (duration, pitch, energy): 1 for FastSpeech 2, whose paper sums them
+    /// unweighted; ProDiff sets all three to 0.1 (Huang et al. 2022 §4.5).
+    /// </summary>
+    protected virtual double VarianceLossWeight => 1.0;
+
+    /// <summary>
+    /// The mel term of the objective for the expanded (length-regulated) hidden sequence: by default the decoder layers
+    /// scored with mean absolute or squared error per <see cref="UsesL1MelLoss"/>. A model whose decoder is not a
+    /// feed-forward stack (ProDiff's diffusion denoiser) supplies its own term.
+    /// </summary>
+    /// <param name="expanded">Variance-adaptor output, <c>[frames, hidden]</c>.</param>
+    /// <param name="decoderCondition">The decoder condition, if the model has acoustic conditioning.</param>
+    /// <param name="mel">Target mel spectrogram, <c>[frames, melChannels]</c>.</param>
+    protected virtual Tensor<T> MelObjective(Tensor<T> expanded, Tensor<T>? decoderCondition, Tensor<T> mel)
+    {
+        var predictedMel = RunDecoderLayers(expanded, decoderCondition);
+        return UsesL1MelLoss ? MeanAbsoluteError(predictedMel, mel) : MeanSquaredError(predictedMel, mel);
+    }
+
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
@@ -211,20 +231,21 @@ public abstract class VarianceAdaptorTtsModelBase<T> : TtsModelBase<T>
         {
             var conditioned = ConditionForTraining(RunEncoder(tokens), sample, mel, durations);
             var adapted = VarianceAdaptor.Adapt(conditioned.Hidden, adaptorTargets);
-            var predictedMel = RunDecoderLayers(adapted.Expanded, conditioned.DecoderCondition);
 
-            var loss = UsesL1MelLoss ? MeanAbsoluteError(predictedMel, mel) : MeanSquaredError(predictedMel, mel);
+            var loss = MelObjective(adapted.Expanded, conditioned.DecoderCondition, mel);
             if (conditioned.AuxiliaryLoss is not null)
                 loss = Engine.TensorAdd(loss, conditioned.AuxiliaryLoss);
-            loss = Engine.TensorAdd(loss, MeanSquaredError(adapted.LogDuration, logDurationTarget));
+            var variance = MeanSquaredError(adapted.LogDuration, logDurationTarget);
             if (adapted.PitchSpectrogram is not null && adapted.PitchStatistics is not null)
             {
-                loss = Engine.TensorAdd(loss, MeanSquaredError(adapted.PitchSpectrogram, pitchTarget!));
-                loss = Engine.TensorAdd(loss, MeanSquaredError(adapted.PitchStatistics, statisticsTarget!));
+                variance = Engine.TensorAdd(variance, MeanSquaredError(adapted.PitchSpectrogram, pitchTarget!));
+                variance = Engine.TensorAdd(variance, MeanSquaredError(adapted.PitchStatistics, statisticsTarget!));
             }
             if (adapted.Energy is not null)
-                loss = Engine.TensorAdd(loss, MeanSquaredError(adapted.Energy, energyTarget!));
-            return loss;
+                variance = Engine.TensorAdd(variance, MeanSquaredError(adapted.Energy, energyTarget!));
+            return Engine.TensorAdd(loss, VarianceLossWeight == 1.0
+                ? variance
+                : Engine.TensorMultiplyScalar(variance, NumOps.FromDouble(VarianceLossWeight)));
         }
 
         return (sample.Tokens, targets.Mel, Objective);

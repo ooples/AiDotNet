@@ -37,6 +37,12 @@ public sealed class TtsTrainingSample<T>
     /// <summary>Frames per token from a forced alignment; the values sum to the number of mel frames.</summary>
     public int[]? Durations { get; init; }
 
+    /// <summary>
+    /// Tokens per word, in order, summing to the token count, for models that align at the word level (PortaSpeech).
+    /// When absent such a model splits the tokens at spaces, each space its own boundary word.
+    /// </summary>
+    public int[]? WordLengths { get; init; }
+
     /// <summary>F0 per mel frame in Hz, 0 where unvoiced. Derived from <see cref="Audio"/> when absent.</summary>
     public double[]? Pitch { get; init; }
 
@@ -48,6 +54,9 @@ public sealed class TtsTrainingSample<T>
 
     /// <summary>Index of the speaker in a multi-speaker model's speaker table.</summary>
     public int? SpeakerId { get; init; }
+
+    /// <summary>Index of the language in a multilingual model's language table.</summary>
+    public int? LanguageId { get; init; }
 
     /// <summary>Discrete codec tokens of the recording, <c>[frames, codebooks]</c>.</summary>
     public Tensor<T>? CodecTokens { get; init; }

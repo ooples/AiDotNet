@@ -195,7 +195,8 @@ public partial class AdaSpeech<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMod
                             InitialLearningRate = _options.LearningRate,
                             Beta1 = 0.9,
                             Beta2 = 0.98,
-                            Epsilon = 1e-9
+                            Epsilon = 1e-9,
+                            UseAdaptiveBetas = false,
                         }));
                 _phaseOptimizers[TrainingPhaseKey] = optimizer;
             }

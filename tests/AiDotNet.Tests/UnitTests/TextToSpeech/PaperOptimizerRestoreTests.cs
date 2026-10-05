@@ -42,11 +42,27 @@ public sealed class PaperOptimizerRestoreTests
             target.Deserialize(source.Serialize());
         }
 
-        object optimizer = GetPrivateMember(target, "_optimizer");
+        object optimizer = GetPaperOptimizer(target);
         object optimizerOptions = GetPrivateMember(optimizer, "_options");
         var rateProperty = optimizerOptions.GetType().GetProperty("InitialLearningRate")
             ?? throw new InvalidOperationException("AdamW options do not expose InitialLearningRate.");
         Assert.Equal(learningRate, Assert.IsType<double>(rateProperty.GetValue(optimizerOptions)), 12);
+    }
+
+    /// <summary>
+    /// The optimizer a model builds from its options: the generator optimizer of a VITS-family model (which keeps one
+    /// per training group and builds it on first use), otherwise the model's <c>_optimizer</c>.
+    /// </summary>
+    private static object GetPaperOptimizer(object model)
+    {
+        for (Type? type = model.GetType(); type is not null; type = type.BaseType)
+        {
+            MethodInfo? method = type.GetMethod("OptimizerFor", BindingFlags.Instance | BindingFlags.NonPublic, null, new[] { typeof(string) }, null);
+            if (method is not null)
+                return method.Invoke(model, new object[] { "generator" })
+                    ?? throw new InvalidOperationException("OptimizerFor returned null.");
+        }
+        return GetPrivateMember(model, "_optimizer");
     }
 
     private static NeuralNetworkArchitecture<double> CreateArchitecture()

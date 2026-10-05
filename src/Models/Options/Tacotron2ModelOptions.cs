@@ -43,7 +43,12 @@ public class Tacotron2ModelOptions : AudioNeuralNetworkOptions
         PostnetEmbeddingDim = 512;
         NumEncoderConvLayers = 3;
         NumPostnetConvLayers = 5;
-        NumMelsPerFrame = 2;
+        NumMelsPerFrame = 1;
+        PrenetDropout = 0.5;
+        ZoneoutProbability = 0.1;
+        ConvolutionDropout = 0.5;
+        AttentionKernelSize = 31;
+        SamplingSeed = 0;
     }
 
 
@@ -146,6 +151,21 @@ public class Tacotron2ModelOptions : AudioNeuralNetworkOptions
     /// Gets or sets the num mels per frame.
     /// </summary>
     public int NumMelsPerFrame { get; set; }
+
+    /// <summary>Gets or sets the decoder pre-net's dropout, applied in training and at inference (0.5, Shen et al. 2018 §2.2).</summary>
+    public double PrenetDropout { get; set; }
+
+    /// <summary>Gets or sets the decoder LSTMs' zoneout probability (0.1, §2.2).</summary>
+    public double ZoneoutProbability { get; set; }
+
+    /// <summary>Gets or sets the dropout after every encoder and post-net convolution (0.5, §2.2).</summary>
+    public double ConvolutionDropout { get; set; }
+
+    /// <summary>Gets or sets the location convolution's odd filter length (31, §2.2).</summary>
+    public int AttentionKernelSize { get; set; }
+
+    /// <summary>Gets or sets the seed of the inference pre-net dropout, so the same text synthesizes the same output.</summary>
+    public int SamplingSeed { get; set; }
 
     /// <summary>
     /// Throws if a value this model requires has been left unset or is not positive.

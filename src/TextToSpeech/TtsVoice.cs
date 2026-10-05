@@ -23,4 +23,19 @@ public sealed class TtsVoice<T>
 
     /// <summary>A reference recording of the speaker as a mel spectrogram, <c>[frames, melChannels]</c>.</summary>
     public Tensor<T>? Reference { get; init; }
+
+    /// <summary>
+    /// The transcript of <see cref="Reference"/> as the model's text tokens, for models that continue a prompt from its
+    /// text (E2 TTS, F5-TTS prefix it to the text to synthesize and take the speaking rate from the pair).
+    /// </summary>
+    public Tensor<T>? ReferenceTokens { get; init; }
+
+    /// <summary>
+    /// A reference recording of the speaker as a waveform, <c>[samples]</c> at the model's sample rate, for models whose
+    /// speaker encoder reads audio (YourTTS's H/ASP speaker encoder).
+    /// </summary>
+    public Tensor<T>? ReferenceAudio { get; init; }
+
+    /// <summary>Index of the language in a multilingual model's language table.</summary>
+    public int? LanguageId { get; init; }
 }

@@ -24,4 +24,13 @@ public enum TtsSupervision
     /// network predicts the linear-frequency spectrogram (Wang et al. 2017, §3.4).
     /// </summary>
     Recording = 8,
+
+    /// <summary>The language's index in a multilingual model's language table (YourTTS, Casanova et al. 2022).</summary>
+    LanguageId = 16,
+
+    /// <summary>
+    /// A reference recording as a waveform, for models whose speaker encoder reads audio rather than the model's own
+    /// spectrogram (YourTTS's H/ASP speaker encoder).
+    /// </summary>
+    ReferenceRecording = 32,
 }

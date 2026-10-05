@@ -117,7 +117,7 @@ public partial class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         // Adam with default parameters at a base rate of 0.002, gradients clipped to norm 1 (§4.3).
         _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
             new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate }));
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate, UseAdaptiveBetas = false }));
         MaxGradNorm = NumOps.FromDouble(_options.GradientClipNorm);
         InitializeLayers();
     }

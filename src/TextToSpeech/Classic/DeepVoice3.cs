@@ -106,7 +106,7 @@ public partial class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
         base.HiddenDim = _options.HiddenDim;
         _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
             new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate }));
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate, UseAdaptiveBetas = false }));
         MaxGradNorm = NumOps.FromDouble(_options.MaxGradientNorm);
         InitializeLayers();
     }

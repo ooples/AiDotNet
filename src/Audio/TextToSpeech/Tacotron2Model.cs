@@ -110,40 +110,12 @@ public partial class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeec
 
     #region Native Mode Fields
 
-    /// <summary>
-    /// Character/phoneme embedding layer.
-    /// </summary>
-    private ILayer<T>? _embedding;
 
-    /// <summary>
-    /// Encoder convolutional layers.
-    /// </summary>
-    private readonly List<ILayer<T>> _encoderConvLayers = [];
 
-    /// <summary>
-    /// Encoder LSTM layer.
-    /// </summary>
-    private ILayer<T>? _encoderLstm;
 
-    /// <summary>
-    /// Attention layers.
-    /// </summary>
-    private readonly List<ILayer<T>> _attentionLayers = [];
 
-    /// <summary>
-    /// Decoder LSTM layers.
-    /// </summary>
-    private readonly List<ILayer<T>> _decoderLstmLayers = [];
 
-    /// <summary>
-    /// Post-net layers for mel refinement.
-    /// </summary>
-    private readonly List<ILayer<T>> _postNetLayers = [];
 
-    /// <summary>
-    /// Stop token prediction layer.
-    /// </summary>
-    private ILayer<T>? _stopTokenLayer;
 
     /// <summary>
     /// Griffin-Lim vocoder fallback.
@@ -520,7 +492,13 @@ public partial class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeec
             beta1: 0.9,
             beta2: 0.999,
             epsilon: 1e-6,
-            l2RegularizationStrength: 1e-6);
+            l2RegularizationStrength: 1e-6,
+            // §3.1: 1e-3 "exponentially decaying to 1e-5 starting after 50,000 iterations". The paper gives no rate;
+            // halving every 50k steps to the 1e-5 floor is Rayhane-mamah/Tacotron-2's reading of the same sentence.
+            learningRateScheduler: new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(1e-3,
+                step => step < 50000 ? 1.0 : Math.Max(1e-2, Math.Pow(0.5, (step - 50000) / 50000.0))),
+            // Gradient-norm clip 1 (NVIDIA tacotron2 grad_clip_thresh).
+            maxGradientNorm: 1.0);
 
         InitializeNativeLayers();
     }
@@ -537,171 +515,9 @@ public partial class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeec
         // ONNX mode - no native layers needed
     }
 
-    /// <summary>
-    /// Initializes layers for native training mode.
-    /// </summary>
-    private void InitializeNativeLayers()
-    {
-        List<ILayer<T>> layers;
-        bool builtDefaultLayers = false;
-        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
-        {
-            layers = Architecture.Layers.ToList();
-            // First layer should be embedding if present
-            if (layers.Count > 0 && layers[0] is EmbeddingLayer<T> emb)
-            {
-                _embedding = emb;
-                layers.RemoveAt(0);
-                Layers.Add(_embedding);
-            }
-        }
-        else
-        {
-            builtDefaultLayers = true;
-            _embedding = new EmbeddingLayer<T>(_vocabSize, _embeddingDim);
-            Layers.Add(_embedding);
 
-            layers = LayerHelper<T>.CreateTacotron2Layers(
-                vocabSize: _vocabSize, embeddingDim: _embeddingDim, encoderDim: _encoderDim,
-                decoderDim: _decoderDim, attentionDim: _attentionDim,
-                attentionFilters: _attentionFilters, prenetDim: _prenetDim,
-                numMels: NumMels, numMelsPerFrame: _numMelsPerFrame,
-                numEncoderConvLayers: _numEncoderConvLayers,
-                numPostnetConvLayers: _numPostnetConvLayers,
-                postnetEmbeddingDim: _postnetEmbeddingDim).ToList();
-        }
 
-        _encoderConvLayers.Clear();
-        _attentionLayers.Clear();
-        _decoderLstmLayers.Clear();
-        _postNetLayers.Clear();
-        Layers.AddRange(layers);
 
-        BindNativeLayersFromPublishedList();
-        if (builtDefaultLayers)
-            ResolveDefaultLayerShapes();
-    }
-
-    /// <summary>
-    /// Rebinds the private paper-component views to the framework-visible
-    /// <see cref="Layers"/> instances.
-    /// </summary>
-    /// <remarks>
-    /// Base deserialization replaces every element in <see cref="Layers"/>.
-    /// Keeping the constructor-created objects in these private lists made
-    /// Predict bypass the restored/trained weights even though GetParameters
-    /// correctly reported them. The native forward and all framework services
-    /// must reference the same layer instances.
-    /// </remarks>
-    private void BindNativeLayersFromPublishedList()
-    {
-        _embedding = null;
-        _encoderLstm = null;
-        _stopTokenLayer = null;
-        _encoderConvLayers.Clear();
-        _attentionLayers.Clear();
-        _decoderLstmLayers.Clear();
-        _postNetLayers.Clear();
-
-        // Distribute to internal sub-lists for forward pass
-        int idx = 0;
-        if (idx < Layers.Count && Layers[idx] is EmbeddingLayer<T> embedding)
-            _embedding = embedding;
-        if (_embedding is not null)
-            idx++;
-
-        for (int i = 0; i < _numEncoderConvLayers && idx < Layers.Count; i++)
-            _encoderConvLayers.Add(Layers[idx++]);
-        if (idx < Layers.Count)
-            _encoderLstm = Layers[idx++];
-        for (int i = 0; i < 4 && idx < Layers.Count; i++)
-            _attentionLayers.Add(Layers[idx++]);
-        for (int i = 0; i < 5 && idx < Layers.Count; i++) // prenet(2) + recurrent projections(2) + mel(1)
-            _decoderLstmLayers.Add(Layers[idx++]);
-        if (idx < Layers.Count)
-            _stopTokenLayer = Layers[idx++];
-        while (idx < Layers.Count)
-            _postNetLayers.Add(Layers[idx++]);
-    }
-
-    /// <summary>
-    /// Resolves every default layer's input width up front instead of letting it be inferred from
-    /// whatever tensor happens to arrive first.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <c>DenseLayer</c> is always lazy: it carries a -1 input placeholder and resolves the real width
-    /// on its first forward. That is fine while a model stays in memory, but a deserialized model has
-    /// not run a forward pass yet, so its layers are still unresolved, report a parameter count of 0,
-    /// and <c>SetParameters</c> skips them without complaint — the trained weights are dropped on the
-    /// floor and a clone predicts differently from the model it was copied from. This is the #1221
-    /// lazy-layer class of failure.
-    /// </para>
-    /// <para>
-    /// Every width here is already fixed by the constructor arguments, so none of it needs to be
-    /// discovered at runtime. The pairs that are not simply "previous layer's output" come from the
-    /// two concatenations in the decoder loop: the decoder LSTM consumes pre-net output joined to the
-    /// attention context, and both the mel projection and the stop-token head consume the decoder
-    /// state joined to that same context.
-    /// </para>
-    /// <para>
-    /// Only the layers this class builds are resolved. A caller supplying its own
-    /// <c>Architecture.Layers</c> may use entirely different widths, so those are left to resolve
-    /// themselves as before.
-    /// </para>
-    /// </remarks>
-    private void ResolveDefaultLayerShapes()
-    {
-        int encoderOut = _encoderDim * 2;
-        int decoderIn = _prenetDim + encoderOut;
-        int contextIn = _decoderDim + encoderOut;
-
-        foreach (var conv in _encoderConvLayers)
-        {
-            ResolveLayerInput(conv, _embeddingDim);
-        }
-
-        ResolveLayerInput(_encoderLstm, _embeddingDim);
-
-        if (_attentionLayers.Count >= 4)
-        {
-            ResolveLayerInput(_attentionLayers[0], _decoderDim);       // query projection
-            ResolveLayerInput(_attentionLayers[1], encoderOut);        // key projection
-            ResolveLayerInput(_attentionLayers[2], _attentionFilters); // location projection
-            ResolveLayerInput(_attentionLayers[3], _attentionDim);     // energy projection
-        }
-
-        if (_decoderLstmLayers.Count >= 5)
-        {
-            ResolveLayerInput(_decoderLstmLayers[0], NumMels * _numMelsPerFrame);
-            ResolveLayerInput(_decoderLstmLayers[1], _prenetDim);
-            ResolveLayerInput(_decoderLstmLayers[2], decoderIn);
-            ResolveLayerInput(_decoderLstmLayers[3], _decoderDim);
-            ResolveLayerInput(_decoderLstmLayers[4], contextIn); // mel projection
-        }
-
-        ResolveLayerInput(_stopTokenLayer, contextIn);
-
-        for (int i = 0; i < _postNetLayers.Count; i++)
-        {
-            // The post-net refines the mel spectrogram, so it starts at NumMels and stays at the
-            // post-net width until the last layer projects back down.
-            ResolveLayerInput(_postNetLayers[i], i == 0 ? NumMels : _postnetEmbeddingDim);
-        }
-    }
-
-    /// <summary>
-    /// Pins one layer's input width. ResolveShapesOnly is declared on <see cref="LayerBase{T}"/>
-    /// rather than on ILayer, and it deliberately resolves shapes WITHOUT allocating weights, so the
-    /// first real forward still initializes them from the same RNG draw as before.
-    /// </summary>
-    private static void ResolveLayerInput(ILayer<T>? layer, int inputWidth)
-    {
-        if (layer is LayerBase<T> resolvable && inputWidth > 0)
-        {
-            resolvable.ResolveShapesOnly(new[] { inputWidth });
-        }
-    }
 
     private static IReadOnlyList<VoiceInfo<T>> GetDefaultVoices()
     {
@@ -867,16 +683,6 @@ public partial class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeec
         }
     }
 
-    /// <summary>
-    /// Mean squared difference between two mel tensors, as a recorded scalar the tape can follow.
-    /// </summary>
-    private Tensor<T> MeanSquaredDifference(Tensor<T> predicted, Tensor<T> target)
-    {
-        var diff = Engine.TensorSubtract(predicted, target);
-        var squared = Engine.TensorMultiply(diff, diff);
-        var allAxes = System.Linq.Enumerable.Range(0, squared.Shape.Length).ToArray();
-        return Engine.ReduceMean(squared, allAxes, keepDims: false);
-    }
 
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
 
@@ -895,74 +701,9 @@ public partial class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeec
     /// Trains the model on input data.
     /// </summary>
     // Stored target for teacher forcing during ForwardForTraining
-    [Scratch]
-    private Tensor<T>? _teacherForcingTarget;
 
-    /// <summary>
-    /// The decoder's mel output BEFORE the post-net residual, captured on the teacher-forced forward
-    /// so the loss can supervise it directly alongside the refined output.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastPrePostnetMel;
 
-    /// <summary>
-    /// Overrides ForwardForTraining to use teacher forcing when target is available.
-    /// Teacher forcing feeds ground-truth previous outputs to the decoder instead of
-    /// the model's own predictions — industry standard for autoregressive training.
-    /// </summary>
-    public override Tensor<T> ForwardForTraining(Tensor<T> input)
-    {
-        if (_teacherForcingTarget is not null)
-            return ForwardNativeWithTeacherForcing(input, _teacherForcingTarget);
-        return base.ForwardForTraining(input);
-    }
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Cannot train in ONNX inference mode.");
-        }
-
-        if (expectedOutput is null)
-            throw new ArgumentException("expectedOutput cannot be null for teacher-forced training.", nameof(expectedOutput));
-        if (expectedOutput.Shape.Length < 2)
-            throw new ArgumentException($"expectedOutput must have at least rank 2 [batch, time*mels], got rank {expectedOutput.Shape.Length}.", nameof(expectedOutput));
-        if (expectedOutput.Shape[^1] % NumMels != 0)
-            throw new ArgumentException($"expectedOutput last dimension ({expectedOutput.Shape[^1]}) must be divisible by NumMels ({NumMels}).", nameof(expectedOutput));
-        int melFrameCount = MelFrameCount(expectedOutput);
-        if (melFrameCount == 0)
-            throw new ArgumentException($"expectedOutput has {expectedOutput.Shape[^1]} mel values in its last axis but NumMels is {NumMels}, resulting in zero frames.", nameof(expectedOutput));
-
-        _teacherForcingTarget = expectedOutput;
-        try
-        {
-            SetTrainingMode(true);
-            // Pass the configured optimizer through. The two-argument overload left the optimizer
-            // built in the constructor assigned but never read, so training silently fell back to the
-            // framework default and the memorization loss came back byte-identical between step 1 and
-            // step 100 (0.371638 both times) — the model was not learning at all.
-            // Paper objective (Shen et al. 2018, sec. 3): "summed mean squared error (MSE) from
-            // before and after the post-net". Only the refined output was supervised before, so the
-            // decoder got a gradient solely THROUGH the post-net and never directly — which is the
-            // convergence role the paper gives the pre-post-net term.
-            TrainWithCustomLoss(
-                input,
-                refined =>
-                {
-                    var afterPostnet = MeanSquaredDifference(refined, expectedOutput);
-                    if (_lastPrePostnetMel is null) return afterPostnet;
-                    return Engine.TensorAdd(
-                        afterPostnet, MeanSquaredDifference(_lastPrePostnetMel, expectedOutput));
-                },
-                _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-            _teacherForcingTarget = null;
-        }
-    }
 
     /// <summary>
     /// Gets metadata about the model.
@@ -1008,183 +749,8 @@ public partial class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeec
         return tensor;
     }
 
-    private Tensor<T> ForwardNative(Tensor<T> phonemes)
-    {
-        // Embed phonemes
-        var embedded = _embedding?.Forward(phonemes) ?? phonemes;
 
-        // Encoder conv layers
-        var encoderInput = embedded;
-        foreach (var conv in _encoderConvLayers)
-        {
-            encoderInput = conv.Forward(encoderInput);
-        }
 
-        // Encoder LSTM
-        var encoderOutput = _encoderLstm?.Forward(encoderInput) ?? encoderInput;
-
-        // Autoregressive decoding
-        var melFrames = new List<Tensor<T>>();
-        // NVIDIA Tacotron2's pre-net consumes n_mel_channels *
-        // n_frames_per_step values (the grouped previous decoder output).
-        var prevMel = new Tensor<T>([1, NumMels * _numMelsPerFrame]);
-        var attentionWeights = new Tensor<T>([1, phonemes.Shape[^1]]);
-        var decoderState = new Tensor<T>([1, _decoderDim]);
-
-        for (int step = 0; step < _maxDecoderSteps; step++)
-        {
-            // Pre-net
-            var prenetOut = prevMel;
-            for (int i = 0; i < 2 && i < _decoderLstmLayers.Count; i++)
-            {
-                prenetOut = _decoderLstmLayers[i].Forward(prenetOut);
-            }
-
-            // Attention (location-sensitive: feeds back updated weights each step)
-            var (context, updatedWeights) = ComputeAttention(decoderState, encoderOutput, attentionWeights);
-            attentionWeights = updatedWeights;
-
-            // Decoder LSTM
-            var lstmInput = ConcatenateTensors(prenetOut, context);
-            for (int i = 2; i < _decoderLstmLayers.Count - 1; i++)
-            {
-                lstmInput = _decoderLstmLayers[i].Forward(lstmInput);
-            }
-            decoderState = lstmInput;
-
-            // Mel output
-            var decoderContext = ConcatenateTensors(decoderState, context);
-            var melOutput = _decoderLstmLayers[^1].Forward(decoderContext);
-            melFrames.Add(melOutput);
-
-            // Stop token
-            var stopToken = _stopTokenLayer?.Forward(decoderContext);
-            if (stopToken is not null && NumOps.ToDouble(stopToken[0, 0]) > _stopThreshold)
-            {
-                break;
-            }
-
-            // Update previous mel for next step
-            prevMel = melOutput;
-        }
-
-        // Combine mel frames
-        var melSpectrogram = CombineMelFrames(melFrames);
-
-        // Post-net refinement
-        var residual = melSpectrogram;
-        foreach (var postConv in _postNetLayers)
-        {
-            residual = postConv.Forward(residual);
-        }
-
-        // Add residual via engine op (tape-tracked)
-        return Engine.TensorAdd(melSpectrogram, residual);
-    }
-
-    private Tensor<T> ForwardNativeWithTeacherForcing(Tensor<T> phonemes, Tensor<T> targetMel)
-    {
-        // Similar to ForwardNative but uses target mel frames as input
-        var embedded = _embedding?.Forward(phonemes) ?? phonemes;
-
-        var encoderInput = embedded;
-        foreach (var conv in _encoderConvLayers)
-        {
-            encoderInput = conv.Forward(encoderInput);
-        }
-
-        var encoderOutput = _encoderLstm?.Forward(encoderInput) ?? encoderInput;
-
-        int numFrames = MelFrameCount(targetMel);
-        var melFrames = new List<Tensor<T>>();
-        var attentionWeights = new Tensor<T>([1, phonemes.Shape[^1]]);
-        var decoderState = new Tensor<T>([1, _decoderDim]);
-
-        int decoderSteps = (numFrames + _numMelsPerFrame - 1) / _numMelsPerFrame;
-        for (int step = 0; step < decoderSteps; step++)
-        {
-            // Teacher forcing: step 0 gets GO frame (zeros), step>0 gets previous ground-truth
-            Tensor<T> prevMel;
-            if (step == 0)
-            {
-                prevMel = new Tensor<T>(new[] { 1, NumMels * _numMelsPerFrame });
-            }
-            else
-            {
-                prevMel = ExtractMelFrameGroup(targetMel, (step - 1) * _numMelsPerFrame);
-            }
-
-            var prenetOut = prevMel;
-            for (int i = 0; i < 2 && i < _decoderLstmLayers.Count; i++)
-            {
-                prenetOut = _decoderLstmLayers[i].Forward(prenetOut);
-            }
-
-            var (context, updatedWeights) = ComputeAttention(decoderState, encoderOutput, attentionWeights);
-            attentionWeights = updatedWeights;
-            var lstmInput = ConcatenateTensors(prenetOut, context);
-
-            for (int i = 2; i < _decoderLstmLayers.Count - 1; i++)
-            {
-                lstmInput = _decoderLstmLayers[i].Forward(lstmInput);
-            }
-            decoderState = lstmInput;
-
-            var decoderContext = ConcatenateTensors(decoderState, context);
-            var melOutput = _decoderLstmLayers[^1].Forward(decoderContext);
-            melFrames.Add(melOutput);
-        }
-
-        var melSpectrogram = CombineMelFramesTapeSafe(melFrames);
-
-        var residual = melSpectrogram;
-        foreach (var postConv in _postNetLayers)
-        {
-            residual = postConv.Forward(residual);
-        }
-
-        // Recorded add, matching the inference path. Writing the sum element by element produced a
-        // tensor with no history on the autodiff tape, which detached the ENTIRE forward pass: no
-        // gradient reached the post-net, decoder, attention or encoder, so no parameter ever moved and
-        // the memorization loss came back byte-identical at step 1 and step 100 (0.325832 both times).
-        // Keep the pre-post-net mel: the paper minimizes the SUMMED MSE from before AND after
-        // the post-net, so both have to reach the loss (see Train).
-        _lastPrePostnetMel = melSpectrogram;
-        return Engine.TensorAdd(melSpectrogram, residual);
-    }
-
-    /// <summary>
-    /// Assembles the decoder's per-step mel outputs into [1, steps * numMelsPerFrame, numMels] using
-    /// recorded reshape/concatenate ops, so gradients flow back through every decoder step.
-    /// <see cref="CombineMelFrames"/> is the fallback for a decoder that emits a different width; it
-    /// is ALSO tape-safe, building its result from <c>Engine.TensorNarrow</c> and
-    /// <c>Engine.TensorStack</c>. This comment used to say it assigned elements one at a time and so
-    /// could not be differentiated through -- that described an implementation removed when the
-    /// detached-tape bug was fixed, and left the fallback looking like a gradient-losing path when it
-    /// is not.
-    /// </summary>
-    private Tensor<T> CombineMelFramesTapeSafe(List<Tensor<T>> frames)
-    {
-        int perFrame = _numMelsPerFrame * NumMels;
-        foreach (var frame in frames)
-        {
-            // Reshape needs an exact element count. If a decoder ever emits a different width, fall
-            // back to the element-wise builder rather than throwing — inference still works there,
-            // and the assembly stays correct.
-            if (frame.Length != perFrame)
-            {
-                return CombineMelFrames(frames);
-            }
-        }
-
-        var reshaped = new Tensor<T>[frames.Count];
-        for (int i = 0; i < frames.Count; i++)
-        {
-            reshaped[i] = Engine.Reshape(frames[i], new[] { 1, _numMelsPerFrame, NumMels });
-        }
-
-        return reshaped.Length == 1 ? reshaped[0] : Engine.TensorConcatenate(reshaped, axis: 1);
-    }
 
     private Tensor<T> ForwardOnnx(Tensor<T> phonemes)
     {
@@ -1194,146 +760,10 @@ public partial class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeec
         return _acousticModel.Run(phonemes);
     }
 
-    private (Tensor<T> context, Tensor<T> updatedWeights) ComputeAttention(
-        Tensor<T> query, Tensor<T> keys, Tensor<T> attentionWeights)
-    {
-        if (_attentionLayers.Count < 4)
-        {
-            // Fallback: mean-pool over sequence dimension to get [1, hiddenDim] context
-            var fallbackContext = Engine.ReduceMean(keys, new[] { 1 }, keepDims: false);
-            return (fallbackContext, attentionWeights);
-        }
 
-        // Location-sensitive attention (Chorowski et al.):
-        // e_i = v^T * tanh(W_s * s + V_h * h_j + U_f * f_j + b)
-        // where f = F * α_{i-1} (location features from previous alignment)
 
-        // [0] Query projection: W_s * s → [1, attDim]
-        var projQuery = _attentionLayers[0].Forward(query);
 
-        // [1] Key projection: V_h * h → [1, seqLen, attDim]
-        var projKeys = _attentionLayers[1].Forward(keys);
 
-        // [2] Location feature projection: U_f * f → [1, attDim]
-        // In full Tacotron2 this would be Conv1D(attWeights) → DenseLayer.
-        // Our architecture uses DenseLayer(attentionFilters, attentionDim) as a simplified
-        // location projection. We create a fixed-size location feature from the attention weights
-        // by truncating/padding to attentionFilters dimensions.
-        int locDim = _attentionFilters;
-        int seqLen = attentionWeights.Shape[^1];
-        var locFeatures = new Tensor<T>([1, locDim]);
-        int copyLen = Math.Min(seqLen, locDim);
-        for (int j = 0; j < copyLen; j++)
-        {
-            locFeatures[0, j] = attentionWeights.Rank >= 2 ? attentionWeights[0, j] : attentionWeights[j];
-        }
-        var projLocation = _attentionLayers[2].Forward(locFeatures); // [1, attDim]
-
-        // Combine: tanh(projQuery + projKeys + projLocation)
-        // Broadcast query and location across sequence dimension
-        var queryBroadcast = Engine.TensorAdd(projKeys, projQuery); // [1, seqLen, attDim]
-        var combined = Engine.TensorAdd(queryBroadcast, projLocation); // [1, seqLen, attDim]
-        var tanhScores = Engine.Tanh(combined); // [1, seqLen, attDim]
-
-        // [3] Energy projection: v^T * tanh(...) → scalar per position
-        // _attentionLayers[3] is DenseLayer(attentionDim, 1) applied per position
-        // Reshape to [seqLen, attDim], project to [seqLen, 1], reshape back to [1, seqLen]
-        var tanhFlat = Engine.Reshape(tanhScores, new[] { tanhScores.Shape[1], tanhScores.Shape[2] });
-        var energyFlat = _attentionLayers[3].Forward(tanhFlat); // [seqLen, 1]
-        var scores = Engine.Reshape(energyFlat, new[] { 1, tanhScores.Shape[1] }); // [1, seqLen]
-
-        // Softmax over sequence dimension for attention weights
-        var attWeights = Engine.TensorSoftmax(scores, axis: 1); // [1, seqLen]
-
-        // Weighted sum: context = sum_t(attWeights[t] * keys[0, t, :])
-        var weightsExpanded = Engine.TensorExpandDims(attWeights, 2); // [1, seqLen, 1]
-        var weighted = Engine.TensorMultiply(keys, weightsExpanded); // [1, seqLen, hiddenDim]
-        var context = Engine.ReduceSum(weighted, new[] { 1 }, keepDims: false); // [1, hiddenDim]
-
-        return (context, attWeights);
-    }
-
-    private Tensor<T> ConcatenateTensors(Tensor<T> a, Tensor<T> b)
-    {
-        // Ensure both tensors are 2D [1, dim] for concatenation along last axis
-        var a2d = a.Rank == 1 ? Engine.Reshape(a, new[] { 1, a.Shape[0] }) : a;
-        var b2d = b.Rank == 1 ? Engine.Reshape(b, new[] { 1, b.Shape[0] }) : b;
-        return Engine.TensorConcatenate(new[] { a2d, b2d }, axis: 1);
-    }
-
-    /// <summary>
-    /// The number of mel frames in a teacher-forcing target, under either supported layout.
-    /// </summary>
-    /// <remarks>
-    /// ONE PLACE THAT DECIDES THIS. There are two accepted layouts and they put the frame axis
-    /// somewhere different:
-    /// <list type="bullet">
-    /// <item>rank 3, <c>[batch, frames, mels]</c> -- the frame count is <c>Shape[^2]</c>;</item>
-    /// <item>rank 2, <c>[batch, frames*mels]</c> -- the frames are FLATTENED INTO the last axis, so
-    /// the count is <c>Shape[^1] / NumMels</c> and <c>Shape[^2]</c> is the batch.</item>
-    /// </list>
-    /// Reading <c>Shape[^2]</c> for both is what went wrong: on a rank-2 target the frame count came
-    /// back as the batch size, so <c>decoderSteps</c> collapsed to 1 for a target of any length and
-    /// the loss compared a single decoder step against the whole utterance. It produced a finite,
-    /// decreasing loss the whole time -- nothing about it looked like a failure.
-    /// </remarks>
-    private int MelFrameCount(Tensor<T> mel)
-    {
-        if (mel.Rank >= 3) return mel.Shape[^2];
-        if (mel.Rank == 2) return mel.Shape[^1] / NumMels;
-        return 0;
-    }
-
-    private Tensor<T> ExtractMelFrameGroup(Tensor<T> mel, int firstFrame)
-    {
-        var group = new Tensor<T>([1, NumMels * _numMelsPerFrame]);
-        int availableFrames = MelFrameCount(mel);
-        for (int f = 0; f < _numMelsPerFrame; f++)
-        {
-            int frame = firstFrame + f;
-            if (frame >= availableFrames)
-                break;
-            for (int m = 0; m < NumMels; m++)
-            {
-                // Rank 2 is [batch, frames*mels], so the frame's mels are a contiguous NumMels-wide
-                // run inside the last axis -- NOT mel[frame, m], which indexed the batch axis by a
-                // frame number and read whatever row happened to be there.
-                group[0, f * NumMels + m] = mel.Rank >= 3
-                    ? mel[0, frame, m]
-                    : mel[0, frame * NumMels + m];
-            }
-        }
-        return group;
-    }
-
-    private Tensor<T> CombineMelFrames(List<Tensor<T>> frames)
-    {
-        if (frames.Count == 0)
-            return new Tensor<T>([1, 0, NumMels]);
-
-        // Keep decoder outputs connected to the gradient tape. The old manual
-        // element copy created a fresh leaf tensor, so the mel loss had no path
-        // back to any decoder/encoder parameter and every Train call was a no-op.
-        var melFrames = new List<Tensor<T>>(frames.Count * _numMelsPerFrame);
-        foreach (var groupedOutput in frames)
-        {
-            for (int f = 0; f < _numMelsPerFrame; f++)
-            {
-                int start = f * NumMels;
-                if (start + NumMels <= groupedOutput.Shape[^1])
-                    melFrames.Add(Engine.TensorNarrow(groupedOutput, groupedOutput.Rank - 1, start, NumMels));
-            }
-        }
-        // A NON-EMPTY `frames` CAN STILL YIELD NO SLICES. The narrow above is conditional, so if every
-        // grouped output is narrower than NumMels the list stays empty and TensorStack is handed a
-        // zero-length array. The early return only covers `frames` being empty, which is a different
-        // condition. Return the same empty mel the caller already handles rather than failing inside
-        // the engine on a shape it cannot explain.
-        if (melFrames.Count == 0)
-            return new Tensor<T>([1, 0, NumMels]);
-
-        return Engine.TensorStack(melFrames.ToArray(), axis: 1);
-    }
 
     private Tensor<T> ModifyDuration(Tensor<T> melSpectrogram, double factor)
     {

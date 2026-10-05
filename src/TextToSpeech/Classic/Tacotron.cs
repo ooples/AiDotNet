@@ -124,6 +124,7 @@ public partial class Tacotron<T> : TtsModelBase<T>, IAcousticModel<T>
                     InitialLearningRate = baseRate,
                     LearningRateScheduler = new LambdaLRScheduler(baseRate,
                         step => step < 500_000 ? 1.0 : step < 1_000_000 ? 0.5 : step < 2_000_000 ? 0.3 : 0.1),
+                    UseAdaptiveBetas = false,
                 }));
         InitializeLayers();
     }

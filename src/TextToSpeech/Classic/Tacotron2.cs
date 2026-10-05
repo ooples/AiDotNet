@@ -64,6 +64,8 @@ public partial class Tacotron2<T> : AiDotNet.Audio.TextToSpeech.Tacotron2Model<T
                 EmbeddingDim = options.EncoderDim,
                 EncoderDim = options.EncoderDim,
                 DecoderDim = options.DecoderRnnDim,
+                ZoneoutProbability = 0.1,
+                PrenetDropout = 0.5,
                 AttentionDim = options.AttentionDimension,
                 AttentionFilters = options.AttentionLocationChannels,
                 PrenetDim = options.PrenetDim,

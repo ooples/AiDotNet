@@ -1,44 +1,53 @@
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.TextToSpeech.Interfaces;
-using AiDotNet.Tokenization;
-using AiDotNet.Tokenization.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.ActivationFunctions;
 
 namespace AiDotNet.TextToSpeech.Classic;
 
+/// <summary>The two training stages of <see cref="ProDiff{T}"/>.</summary>
+public enum ProDiffTrainingPhase
+{
+    /// <summary>The generator-based teacher with <see cref="ProDiffOptions.TeacherDiffusionSteps"/> steps learns to
+    /// predict the clean spectrogram (§4.2, Eq. 9).</summary>
+    Teacher = 0,
+
+    /// <summary>The student, initialized from the teacher, learns to match two DDIM steps of the frozen teacher with one
+    /// of its own (§4.3, Algorithm 1).</summary>
+    Distillation = 1,
+}
+
 /// <summary>
-/// ProDiff: progressive fast diffusion model for high-quality TTS with knowledge distillation.
+/// ProDiff: a progressive fast diffusion model that synthesizes a mel spectrogram in two denoising steps by predicting
+/// the clean spectrogram directly and distilling a 4-step teacher.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "ProDiff: Progressive Fast Diffusion Model for High-Quality Text-to-Speech" (Huang et al., 2022)</item></list></para>
-/// <para><b>For Beginners:</b> ProDiff is a diffusion-based text-to-speech model that converts text input into speech audio output.</para>
-/// <example>
-/// <code>
-/// // Create a ProDiff model for progressive fast diffusion TTS
-/// // with knowledge distillation for high-quality generation
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new ProDiff&lt;double&gt;(architecture, "prodiff.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new ProDiff&lt;double&gt;(architecture, new ProDiffOptions());
-/// </code>
-/// </example>
+/// <para><b>References:</b> "ProDiff: Progressive Fast Diffusion Model for High-Quality Text-to-Speech" (Huang et al.,
+/// ACM MM 2022) and its reference implementation (Rongjiehuang/ProDiff) for what the paper leaves unstated.</para>
+/// <para>
+/// The phoneme encoder and variance adaptor are FastSpeech 2's (§4.4): a pre-net, FFT blocks and a linear projection,
+/// then duration, pitch-spectrogram and energy predictors with a length regulator. The spectrogram denoiser
+/// f_θ(x_t | t, c) is a non-causal WaveNet conditioned on the adaptor output (<c>ProDiffDenoiser</c>). Diffusion uses a
+/// cosine schedule with α_t = √ᾱ_t and σ_t = √(1 − ᾱ_t). The teacher (<see cref="ProDiffTrainingPhase.Teacher"/>)
+/// minimizes ‖f_θ(α_t x₀ + σ_t ε) − x₀‖² plus 1 − SSIM (Eq. 9, 11) with T₁ = 4 steps; the distillation phase
+/// (Algorithm 1) samples t ∈ S·{1..T₂}, S = T₁/T₂, runs two DDIM steps of the frozen teacher from x_t to x_{t−S},
+/// solves for the target x̂₀ that one student step would need, and minimizes ‖f_θ(x_t) − x̂₀‖² + 1 − SSIM (Eq. 10, 11).
+/// Both add the variance reconstruction losses with weight 0.1 (Eq. 12). Sampling (Algorithm 2) starts from N(0, I)
+/// and alternates x̂₀ = f_θ(x_t) with a draw from the posterior q(x_{t−S} | x_t, x̂₀).
+/// </para>
+/// <para><b>For Beginners:</b> Diffusion models usually clean up a noisy spectrogram over hundreds of small steps.
+/// ProDiff predicts the clean spectrogram outright and learns from a slower teacher, so two steps suffice.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -53,16 +62,18 @@ namespace AiDotNet.TextToSpeech.Classic;
 )]
 [PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-9,
                 ReferenceBatchSize = 64,
-                Source = "Huang et al. 2022, Sec. 4.1: the Adam optimizer with beta1 0.9, beta2 0.98 "
+                Source = "Huang et al. 2022, Sec. 6.1: the Adam optimizer with beta1 0.9, beta2 0.98 "
                         + "and epsilon 1e-9, trained for 200,000 steps at a batch size of 64 sentences.")]
-public partial class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
+public partial class ProDiff<T> : VarianceAdaptorTtsModelBase<T>, IAcousticModel<T>
 {
     private readonly ProDiffOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly bool _usesDefaultOptimizer;
-    private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
     private bool _disposed;
+    private Random _trainingRandom;
+    private ProDiffDenoiser<T>? _denoiser;
+    private ProDiffDenoiser<T>? _teacher;
+    private TrainingDraw? _pendingDraw;
 
     public override ModelOptions GetOptions() => _options;
 
@@ -71,11 +82,12 @@ public partial class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
         string modelPath,
         ProDiffOptions? options = null
     )
-        : base(architecture, new MeanAbsoluteErrorLoss<T>())
+        : base(architecture)
     {
         _options = options ?? new ProDiffOptions();
         ValidateOptions(_options);
         _useNativeMode = false;
+        _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -86,7 +98,6 @@ public partial class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options.ModelPath = modelPath;
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
 
@@ -95,18 +106,19 @@ public partial class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
         ProDiffOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
     )
-        : base(architecture, new MeanAbsoluteErrorLoss<T>())
+        : base(architecture)
     {
         _options = options ?? new ProDiffOptions();
         ValidateOptions(_options);
         _useNativeMode = true;
-        _usesDefaultOptimizer = optimizer is null;
-        _optimizer = optimizer ?? CreateDefaultOptimizer();
+        _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
         base.HiddenDim = _options.HiddenDim;
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        if (_options.MaxGradientNorm > 0)
+            MaxGradNorm = NumOps.FromDouble(_options.MaxGradientNorm);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         InitializeLayers();
     }
 
@@ -117,70 +129,61 @@ public partial class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
     public int FftSize => _options.FftSize;
 
     /// <summary>
-    /// Synthesizes mel-spectrogram using ProDiff's progressive diffusion pipeline.
-    /// Per the paper (Huang et al., 2022):
-    /// (1) Text encoder + duration predictor (same as FastSpeech 2 backbone),
-    /// (2) Diffusion denoiser with progressive knowledge distillation:
-    ///     - Teacher trained with N steps, student distilled to N/2, repeat until 2-4 steps,
-    /// (3) Each distillation halves steps while maintaining quality via parameterized diffusion,
-    /// (4) Generator-guided diffusion prevents quality degradation at low step counts.
+    /// The training stage: <see cref="ProDiffTrainingPhase.Teacher"/> until the teacher converges, then
+    /// <see cref="BeginDistillation()"/>. Synthesis uses the teacher's T₁ steps in the teacher phase and the student's T₂
+    /// steps once distillation has begun.
     /// </summary>
-    public override Tensor<T> Synthesize(string text)
+    public ProDiffTrainingPhase CurrentPhase { get; private set; } = ProDiffTrainingPhase.Teacher;
+
+    /// <summary>Generates a mel spectrogram from text (the paper pairs it with HiFi-GAN).</summary>
+    public Tensor<T> TextToMel(string text) => Synthesize(text);
+
+    /// <summary>
+    /// Starts distillation from this model's own trained teacher: the student keeps the current parameters ("we first
+    /// initialize ProDiff with a copy of the teacher", §4.3) and a frozen copy of the denoiser becomes the teacher.
+    /// </summary>
+    public void BeginDistillation()
     {
         ThrowIfDisposed();
-        var tokens = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(tokens);
-
-        var encoded = RunEncoder(tokens);
-
-        int seqLen = encoded.Length;
-        int totalFrames = 0;
-        var durations = new int[seqLen];
-        for (int i = 0; i < seqLen; i++)
-        {
-            double val = Math.Abs(NumOps.ToDouble(encoded[i % encoded.Length]));
-            int dur = Math.Max(1, (int)Math.Round(1.0 + val * 3.0));
-            durations[i] = Math.Min(dur, 15);
-            totalFrames += durations[i];
-        }
-
-        int melLen = Math.Min(totalFrames, _options.MaxMelLength);
-        // Expand + reverse diffusion with progressive distilled steps
-        double[] mu = new double[melLen];
-        int fi = 0;
-        for (int i = 0; i < seqLen && fi < melLen; i++)
-        {
-            for (int d = 0; d < durations[i] && fi < melLen; d++)
-            {
-                mu[fi] = NumOps.ToDouble(encoded[i % encoded.Length]);
-                fi++;
-            }
-        }
-
-        double[] x = new double[melLen];
-        for (int i = 0; i < melLen; i++)
-            x[i] = mu[i] + Math.Sin(i * 0.4) * 0.3;
-
-        int steps = _options.NumDiffusionSteps; // 2-4 steps after progressive distillation
-        for (int t = steps; t > 0; t--)
-        {
-            double alpha = (double)t / steps;
-            for (int i = 0; i < melLen; i++)
-            {
-                double score = -(x[i] - mu[i]) * alpha;
-                x[i] = x[i] + score * (1.0 / steps);
-            }
-        }
-
-        var output = new Tensor<T>([melLen]);
-        for (int i = 0; i < melLen; i++)
-            output[i] = NumOps.FromDouble(x[i]);
-        output = RunDecoder(output);
-        return output;
+        if (_denoiser is null)
+            throw new NotSupportedException("Distillation needs the paper's denoiser; this model was built from caller-supplied layers.");
+        _teacher = CreateDenoiser();
+        CopyParameters(_denoiser, _teacher);
+        CurrentPhase = ProDiffTrainingPhase.Distillation;
     }
 
-    public Tensor<T> TextToMel(string text) => Synthesize(text);
+    /// <summary>
+    /// Starts distillation from a separately trained teacher: this model is initialized with a copy of the teacher's
+    /// parameters (§4.3) and the teacher's denoiser is frozen as the distillation target.
+    /// </summary>
+    public void BeginDistillation(ProDiff<T> teacher)
+    {
+        Guard.NotNull(teacher);
+        ThrowIfDisposed();
+        if (teacher._denoiser is null || _denoiser is null)
+            throw new NotSupportedException("Distillation needs the paper's denoiser on both models.");
+        SetParameters(teacher.GetParameters());
+        BeginDistillation();
+    }
+
+    private ProDiffDenoiser<T> CreateDenoiser()
+        => new(Engine, _options.MelChannels, _options.HiddenDim, _options.DenoiserChannels, _options.DenoiserLayers,
+            _options.DenoiserDilationCycle);
+
+    // Copies a denoiser's parameters layer by layer; one dummy forward first sizes any lazily built layer of either.
+    private void CopyParameters(ProDiffDenoiser<T> from, ProDiffDenoiser<T> to)
+    {
+        using (new NoGradScope<T>())
+        {
+            var x = new Tensor<T>(new[] { 4, _options.MelChannels });
+            var condition = new Tensor<T>(new[] { 4, _options.HiddenDim });
+            from.Predict(x, 1, condition);
+            to.Predict(x, 1, condition);
+        }
+        for (int i = 0; i < from.Layers.Count; i++)
+            if (from.Layers[i].ParameterCount > 0)
+                to.Layers[i].SetParameters(from.Layers[i].GetParameters());
+    }
 
     protected override void InitializeLayers()
     {
@@ -189,208 +192,271 @@ public partial class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             AddUnsplitLayers(Architecture.Layers);
+            return;
         }
-        else
+
+        var o = _options;
+        // Encoder (§4.4, Table 4): embedding, a 3-layer pre-net, FFT blocks and a final linear projection.
+        var encoder = new List<ILayer<T>>
         {
-            AddEncoderDecoderLayers(
-                LayerHelper<T>.CreateDefaultAcousticEncoderLayers(
-                    _options.EncoderDim, _options.HiddenDim, _options.NumEncoderLayers, _options.NumHeads, _options.DropoutRate, _options.VocabSize),
-                LayerHelper<T>.CreateDefaultAcousticDecoderLayers(
-                    _options.DecoderDim, _options.HiddenDim, _options.NumDecoderLayers, _options.NumHeads, _options.DropoutRate));
-        }
+            new EmbeddingLayer<T>(o.VocabSize, o.EncoderDim),
+            new ResidualConvReluNormLayer<T>(o.EncoderDim, o.PrenetKernelSize, o.PrenetLayers, o.DropoutRate),
+            new PositionalEncodingLayer<T>(o.MaxTextLength, o.EncoderDim),
+        };
+        for (int i = 0; i < o.NumEncoderLayers; i++)
+            encoder.Add(new FeedForwardTransformerBlock<T>(o.EncoderDim, o.NumHeads, o.FftFilterSize, o.FftKernelSizes[0],
+                o.FftKernelSizes[1], o.DropoutRate));
+        encoder.Add(new DenseLayer<T>(o.HiddenDim, new IdentityActivation<T>() as IActivationFunction<T>));
+
+        var adaptor = new VarianceAdaptorLayer<T>(o.HiddenDim, o.VariancePredictorFilterSize, o.VariancePredictorKernelSize,
+            o.VariancePredictorDropout, o.NumPitchBins, o.PitchMinHz, o.PitchMaxHz, o.NumEnergyBins,
+            energyMin: 0.0, energyMax: VarianceAdaptorLayer<T>.MaxStftEnergy(o.FftSize));
+        AddEncoderDecoderLayers(encoder, new ILayer<T>[] { adaptor });
+        _denoiser = CreateDenoiser();
+        ComponentLayers.AddRange(_denoiser.Layers);
     }
 
+    private bool HasPaperLayers => _denoiser is not null;
 
-    protected override Tensor<T> PreprocessText(string text)
+    /// <inheritdoc />
+    protected override bool UsesL1MelLoss => false;
+
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+
+    /// <inheritdoc />
+    protected override double VarianceLossWeight => _options.VarianceLossWeight;
+
+    // ---------------------------------------------------------------- noise schedule
+
+    /// <summary>ᾱ_t for t = 0..T₁ under the cosine schedule (Nichol and Dhariwal 2021, §4.4): ᾱ_t = f(t)/f(0) with
+    /// f(t) = cos²(((t/T₁) + s)/(1 + s) · π/2), each β_t clipped to 0.999.</summary>
+    private double[] CumulativeAlphas()
     {
-        if (_tokenizer is null)
-            throw new InvalidOperationException("Tokenizer not initialized.");
-        var enc = _tokenizer.Encode(text);
-        int sl = Math.Min(enc.TokenIds.Count, _options.MaxTextLength);
-        var t = new Tensor<T>([sl]);
-        for (int i = 0; i < sl; i++)
-            t[i] = NumOps.FromDouble(enc.TokenIds[i]);
+        int steps = _options.TeacherDiffusionSteps;
+        double s = _options.CosineScheduleOffset;
+        double F(double t) => Math.Pow(Math.Cos((t / steps + s) / (1 + s) * Math.PI * 0.5), 2);
+        var alphaBar = new double[steps + 1];
+        alphaBar[0] = 1.0;
+        for (int t = 1; t <= steps; t++)
+        {
+            double beta = Math.Min(1.0 - F(t) / F(t - 1), 0.999);
+            alphaBar[t] = alphaBar[t - 1] * (1.0 - beta);
+        }
+        return alphaBar;
+    }
+
+    private (double Alpha, double Sigma) Schedule(int t)
+    {
+        double alphaBar = CumulativeAlphas()[t];
+        return (Math.Sqrt(alphaBar), Math.Sqrt(1.0 - alphaBar));
+    }
+
+    private int StepStride => CurrentPhase == ProDiffTrainingPhase.Distillation
+        ? _options.TeacherDiffusionSteps / _options.NumDiffusionSteps
+        : 1;
+
+    private Tensor<T> Gaussian(int[] shape, Random random)
+    {
+        var t = new Tensor<T>(shape);
+        for (int i = 0; i < t.Length; i++)
+        {
+            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
+            t[i] = NumOps.FromDouble(Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
+        }
         return t;
     }
 
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
+    // ---------------------------------------------------------------- training
 
+    private sealed record TrainingDraw(int Step, Random Noise);
+
+    // t ~ S · Unif{1..T/S} (Algorithm 1 line 4; S = 1 for the teacher), and the source of ε.
+    private TrainingDraw Draw(Random random)
+    {
+        int stride = StepStride, count = _options.TeacherDiffusionSteps / stride;
+        return new TrainingDraw(stride * (1 + random.Next(count)), random);
+    }
+
+    /// <inheritdoc />
+    protected override T TrainOnSample(TtsTrainingSample<T> sample)
+    {
+        ThrowIfDisposed();
+        if (!HasPaperLayers)
+            throw new NotSupportedException("The paper objective needs the paper's denoiser; this model was built from caller-supplied layers.");
+        _pendingDraw = Draw(_trainingRandom);
+        try
+        {
+            return base.TrainOnSample(sample);
+        }
+        finally
+        {
+            _pendingDraw = null;
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The step and the noise are fixed by the sampling seed so the same parameters always score the same.</remarks>
+    public override T EvaluateTrainingObjective(TtsTrainingSample<T> sample)
+    {
+        ThrowIfDisposed();
+        if (!HasPaperLayers)
+            throw new NotSupportedException("The paper objective needs the paper's denoiser; this model was built from caller-supplied layers.");
+        _pendingDraw = Draw(AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed));
+        try
+        {
+            using var _ = new NoGradScope<T>();
+            return base.EvaluateTrainingObjective(sample);
+        }
+        finally
+        {
+            _pendingDraw = null;
+        }
+    }
+
+    /// <summary>
+    /// The sample reconstruction and SSIM losses (Eq. 9–11) for the adaptor output: x_t = α_t x₀ + σ_t ε, and the
+    /// denoiser's prediction scored against x₀ (teacher) or against the target x̂₀ that reproduces two DDIM steps of the
+    /// frozen teacher (Algorithm 1 lines 6–9).
+    /// </summary>
+    protected override Tensor<T> MelObjective(Tensor<T> expanded, Tensor<T>? decoderCondition, Tensor<T> mel)
+    {
+        var draw = _pendingDraw ?? throw new InvalidOperationException("ProDiff's objective runs inside a training or evaluation call.");
+        int t = draw.Step;
+        var (alpha, sigma) = Schedule(t);
+        var noise = Gaussian(mel._shape, draw.Noise);
+        var xt = Engine.TensorAdd(Engine.TensorMultiplyScalar(mel, NumOps.FromDouble(alpha)), Engine.TensorMultiplyScalar(noise, NumOps.FromDouble(sigma)));
+
+        Tensor<T> target = mel;
+        if (CurrentPhase == ProDiffTrainingPhase.Distillation)
+        {
+            int stride = StepStride;
+            var (alpha1, sigma1) = Schedule(t - stride / 2);
+            var (alpha2, sigma2) = Schedule(t - stride);
+            using (new NoGradScope<T>())
+            {
+                var condition = new Tensor<T>(expanded._shape, expanded.ToVector());
+                var f = _teacher!.Predict(xt, t, condition);
+                var x1 = DdimStep(f, xt, alpha, sigma, alpha1, sigma1);
+                var f1 = _teacher.Predict(x1, t - stride / 2, condition);
+                var x2 = DdimStep(f1, x1, alpha1, sigma1, alpha2, sigma2);
+                double ratio = sigma2 / sigma;
+                var solved = Engine.TensorMultiplyScalar(Engine.TensorSubtract(x2, Engine.TensorMultiplyScalar(xt, NumOps.FromDouble(ratio))),
+                    NumOps.FromDouble(1.0 / (alpha2 - ratio * alpha)));
+                target = new Tensor<T>(solved._shape, solved.ToVector());
+            }
+        }
+
+        var predicted = _denoiser!.Predict(xt, t, expanded);
+        var reconstruction = MeanSquaredError(predicted, target);
+        var dissimilarity = Engine.TensorAddScalar(Engine.TensorNegate(SpectrogramSsim.Ssim(Engine, predicted, target)), NumOps.One);
+        return Engine.TensorAdd(reconstruction, dissimilarity);
+    }
+
+    // DDIM: x_s = α_s f + (σ_s / σ_t)(x_t − α_t f).
+    private Tensor<T> DdimStep(Tensor<T> f, Tensor<T> xt, double alphaT, double sigmaT, double alphaS, double sigmaS)
+        => Engine.TensorAdd(Engine.TensorMultiplyScalar(f, NumOps.FromDouble(alphaS)),
+            Engine.TensorMultiplyScalar(Engine.TensorSubtract(xt, Engine.TensorMultiplyScalar(f, NumOps.FromDouble(alphaT))),
+                NumOps.FromDouble(sigmaS / sigmaT)));
+
+    // ---------------------------------------------------------------- inference
+
+    /// <inheritdoc />
+    /// <remarks>Algorithm 2: encode and adapt with the predicted durations, pitch and energy, then from x ~ N(0, I) at
+    /// the last step alternate x̂₀ = f_θ(x_t | t, c) with a draw from q(x_{t−S} | x_t, x̂₀); the final step returns x̂₀.</remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
         SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
+        if (!HasPaperLayers)
+            return base.PredictCore(input);
+        if (input.Rank == 2 && input.Shape[0] == 1)
+            input = Engine.Reshape(input, new[] { input.Shape[1] });
+        if (input.Rank != 1)
+            throw new ArgumentException($"Expected tokens [tokens], got [{string.Join(", ", input.Shape)}].", nameof(input));
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
+        using var _ = new NoGradScope<T>();
+        var condition = input;
+        foreach (var layer in Layers) condition = layer.Forward(condition);       // encoder + variance adaptor
+        int frames = condition.Shape[0];
+        var alphaBar = CumulativeAlphas();
+        int stride = StepStride;
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
+        var x = Gaussian(new[] { frames, _options.MelChannels }, random);
+        for (int t = _options.TeacherDiffusionSteps; t > 0; t -= stride)
         {
-            // Honor the optimizer selected by the public constructor. The
-            // two-argument overload creates a generic fallback and silently
-            // ignores ProDiff's configured Adam + rsqrt schedule.
-            TrainWithTape(input, expected, _optimizer);
+            var predicted = _denoiser!.Predict(x, t, condition);
+            int previous = t - stride;
+            if (previous == 0)
+                return predicted;
+            // q(x_s | x_t, x̂₀) for s = t − S: mean (√ᾱ_s β / (1 − ᾱ_t)) x̂₀ + (√a (1 − ᾱ_s) / (1 − ᾱ_t)) x_t with
+            // a = ᾱ_t / ᾱ_s, β = 1 − a, and variance β (1 − ᾱ_s) / (1 − ᾱ_t).
+            double a = alphaBar[t] / alphaBar[previous], beta = 1 - a;
+            double c0 = Math.Sqrt(alphaBar[previous]) * beta / (1 - alphaBar[t]);
+            double ct = Math.Sqrt(a) * (1 - alphaBar[previous]) / (1 - alphaBar[t]);
+            double std = Math.Sqrt(beta * (1 - alphaBar[previous]) / (1 - alphaBar[t]));
+            x = Engine.TensorAdd(Engine.TensorAdd(
+                    Engine.TensorMultiplyScalar(predicted, NumOps.FromDouble(c0)),
+                    Engine.TensorMultiplyScalar(x, NumOps.FromDouble(ct))),
+                Engine.TensorMultiplyScalar(Gaussian(x._shape, random), NumOps.FromDouble(std)));
         }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        return x;
     }
 
-    /// <summary>
-    /// Refuses parameter work on a disposed model, on every entry point rather than one.
-    /// </summary>
-    /// <remarks>
-    /// This check used to live inside UpdateParameters, which meant ParameterCount, GetParameters
-    /// and SetParameters reached a disposed model unguarded. The base calls this hook from all of
-    /// them, so moving it here widens the guard and lets the hand-written UpdateParameters -- whose
-    /// only other content was a walk the base already performs -- be deleted.
-    /// </remarks>
-    protected override void EnsureParametersReady()
-    {
-        ThrowIfDisposed();
-        base.EnsureParametersReady();
-    }
+    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
-    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
+
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "ProDiff-Native" : "ProDiff-ONNX",
-            Description =
-                "ProDiff: Progressive Fast Diffusion Model for High-Quality TTS (Huang et al., 2022)",
+            Description = "ProDiff: Progressive Fast Diffusion Model for High-Quality TTS (Huang et al., 2022)",
             FeatureCount = _options.HiddenDim,
-            Complexity = _options.NumEncoderLayers + _options.NumDiffusionSteps,
+            Complexity = _options.NumEncoderLayers + _options.DenoiserLayers,
         };
         m.AdditionalInfo["Architecture"] = "ProDiff";
+        m.AdditionalInfo["Phase"] = CurrentPhase.ToString();
         return m;
     }
 
-
-
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
     {
-        var scheduler = new NoamSchedule(
-            modelDimension: _options.HiddenDim,
-            warmupSteps: _options.WarmupSteps,
+        // The reference schedule (rsqrt): lr · min(s / w, 1) · max(w, s)^-0.5 · d^-0.5, the Noam form.
+        var scheduler = new NoamSchedule(modelDimension: _options.HiddenDim, warmupSteps: _options.WarmupSteps,
             factor: _options.LearningRate);
-        bool clipGradients = _options.MaxGradientNorm > 0.0;
-        double maxGradientNorm = clipGradients ? _options.MaxGradientNorm : 1.0;
-
-        if (_options.WeightDecay > 0.0)
-        {
-            return PaperOptimizerFactory.VerifyHandBuilt(this,
-            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-                    this,
-                    new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-                    {
-                        InitialLearningRate = scheduler.CurrentLearningRate,
-                        Beta1 = _options.OptimizerBeta1,
-                        Beta2 = _options.OptimizerBeta2,
-                        Epsilon = _options.OptimizerEpsilon,
-                        WeightDecay = _options.WeightDecay,
-                        EnableGradientClipping = clipGradients,
-                        MaxGradientNorm = maxGradientNorm,
-                        UseAdaptiveLearningRate = false,
-                        UseAdaptiveBetas = false,
-                        UseAMSGrad = false,
-                        LearningRateScheduler = scheduler,
-                        SchedulerStepMode = SchedulerStepMode.StepPerBatch,
-                    }));
-        }
-
-        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
+        return PaperOptimizerFactory.VerifyHandBuilt(this, new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = scheduler.CurrentLearningRate,
                 Beta1 = _options.OptimizerBeta1,
                 Beta2 = _options.OptimizerBeta2,
                 Epsilon = _options.OptimizerEpsilon,
-                EnableGradientClipping = clipGradients,
-                MaxGradientNorm = maxGradientNorm,
                 UseAdaptiveLearningRate = false,
                 UseAdaptiveBetas = false,
                 UseAMSGrad = false,
                 LearningRateScheduler = scheduler,
                 SchedulerStepMode = SchedulerStepMode.StepPerBatch,
-            });
+            }));
     }
 
-    private static AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> CloneAdamOptions(
-        AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> options)
+    private static void ValidateOptions(ProDiffOptions options)
     {
-        var clone = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>(options)
-        {
-            SchedulerStepMode = options.SchedulerStepMode,
-            LearningRateScheduler = CloneScheduler(options.LearningRateScheduler),
-        };
-        return clone;
-    }
-
-    private static AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> CloneAdamWOptions(
-        AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> options)
-    {
-        var clone = new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>(options)
-        {
-            SchedulerStepMode = options.SchedulerStepMode,
-            LearningRateScheduler = CloneScheduler(options.LearningRateScheduler),
-        };
-        return clone;
-    }
-
-    private static ILearningRateScheduler? CloneScheduler(ILearningRateScheduler? scheduler)
-    {
-        return scheduler switch
-        {
-            NoamSchedule noam => new NoamSchedule(
-                noam.ModelDimension,
-                noam.WarmupSteps,
-                noam.Factor),
-            _ => null,
-        };
-    }
-
-    private static void ValidateOptions(ProDiffOptions opts)
-    {
-        if (opts.SampleRate <= 0)
-            throw new ArgumentOutOfRangeException(nameof(opts), "SampleRate must be positive.");
-        if (opts.MelChannels <= 0)
-            throw new ArgumentOutOfRangeException(nameof(opts), "MelChannels must be positive.");
-        if (opts.NumDiffusionSteps <= 0)
-            throw new ArgumentOutOfRangeException(
-                nameof(opts),
-                "NumDiffusionSteps must be positive."
-            );
-        if (opts.MaxTextLength <= 0)
-            throw new ArgumentOutOfRangeException(nameof(opts), "MaxTextLength must be positive.");
-        if (opts.HiddenDim <= 0)
-            throw new ArgumentOutOfRangeException(nameof(opts), "HiddenDim must be positive.");
-        if (opts.WarmupSteps <= 0)
-            throw new ArgumentOutOfRangeException(nameof(opts), "WarmupSteps must be positive.");
-        if (opts.LearningRate <= 0.0)
-            throw new ArgumentOutOfRangeException(nameof(opts), "LearningRate factor must be positive.");
-        if (opts.WeightDecay < 0.0)
-            throw new ArgumentOutOfRangeException(nameof(opts), "WeightDecay cannot be negative.");
-        if (opts.OptimizerBeta1 is < 0.0 or >= 1.0)
-            throw new ArgumentOutOfRangeException(nameof(opts), "OptimizerBeta1 must be in [0, 1).");
-        if (opts.OptimizerBeta2 is < 0.0 or >= 1.0)
-            throw new ArgumentOutOfRangeException(nameof(opts), "OptimizerBeta2 must be in [0, 1).");
-        if (opts.OptimizerEpsilon <= 0.0)
-            throw new ArgumentOutOfRangeException(nameof(opts), "OptimizerEpsilon must be positive.");
-        if (opts.MaxGradientNorm < 0.0)
-            throw new ArgumentOutOfRangeException(nameof(opts), "MaxGradientNorm cannot be negative.");
+        if (options.NumDiffusionSteps <= 0 || options.TeacherDiffusionSteps <= 0
+            || options.TeacherDiffusionSteps % options.NumDiffusionSteps != 0
+            || (options.TeacherDiffusionSteps / options.NumDiffusionSteps) % 2 != 0 && options.TeacherDiffusionSteps != options.NumDiffusionSteps)
+            throw new ArgumentException(
+                $"The teacher's steps ({options.TeacherDiffusionSteps}) must be an even multiple of the student's ({options.NumDiffusionSteps}).",
+                nameof(options));
+        if (options.FftKernelSizes is not { Length: 2 })
+            throw new ArgumentException("FftKernelSizes must hold the two FFT-block kernels.", nameof(options));
     }
 
     private void ThrowIfDisposed()
