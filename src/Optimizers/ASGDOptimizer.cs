@@ -81,7 +81,7 @@ public partial class ASGDOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// want the averaging to actually engage.</para>
     /// </remarks>
     public ASGDOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         ASGDOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
@@ -113,9 +113,9 @@ public partial class ASGDOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.ASGD,
-            (float)GetCurrentLearningRate(),
+            GetCurrentLearningRate(),
             0f, 0f, 0f,
-            (float)_options.WeightDecay, schedule)
+            _options.WeightDecay, schedule)
         {
             Extras = new Tensors.Engines.Compilation.FusedOptimizerExtras
             {
@@ -155,6 +155,15 @@ public partial class ASGDOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         eta = gamma0 / Math.Pow(1.0 + _options.Lambda * gamma0 * step, _options.Alpha);
         mu = 1.0 / Math.Max(1.0, step - _options.T0);
     }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Off for ASGD. The model step can run the network's FUSED plan, which advances the compiled optimizer's own
+    /// state and never calls <see cref="Step(TapeStepContext{T})"/> - the only place <c>_tapeAx</c>/<c>_tapeStep</c>
+    /// advance. The averaged iterate, which is the result ASGD exists to produce, would then never be promoted. The
+    /// flat path always runs Step, so averaging stays exact.
+    /// </remarks>
+    protected override bool SupportsModelOwnStep => false;
 
     /// <summary>
     /// Performs the optimization process using the ASGD algorithm.
@@ -201,6 +210,7 @@ public partial class ASGDOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
                 // Note: _t is incremented inside UpdateParameters, not here.
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;   // the network's own step; see GradientBasedOptimizerBase
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
                 var newSolution = UpdateSolution(currentSolution, gradient);
                 currentSolution = newSolution;
@@ -243,14 +253,55 @@ public partial class ASGDOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         OptimizationInputData<T, TInput, TOutput> inputData,
         ref OptimizationStepData<T, TInput, TOutput> bestStepData)
     {
-        if (_ax == null || _t <= _options.T0)
+        var averaged = AveragedParametersFor(currentSolution);
+        if (averaged == null)
         {
             return;
         }
 
-        var averagedSolution = InterfaceGuard.Parameterizable(currentSolution).WithParameters(_ax);
+        var averagedSolution = InterfaceGuard.Parameterizable(currentSolution).WithParameters(averaged);
         var averagedStepData = EvaluateSolution(averagedSolution, inputData);
         UpdateBestSolution(averagedStepData, ref bestStepData);
+    }
+
+    /// <summary>
+    /// The averaged iterate for <paramref name="solution"/>, flattened the way the solution flattens its own
+    /// parameters, or null while averaging has not started (t &lt;= t0).
+    /// </summary>
+    /// <remarks>
+    /// A network never advances the flat-path state: both its facade model step and its flat path
+    /// (UpdateSolution -> Step) run the tape step, which keeps the average per parameter tensor in
+    /// <c>_tapeAx</c> and counts in <c>_tapeStep</c>. Reading <c>_t</c>/<c>_ax</c> for a network therefore
+    /// never promoted the average at all. The tape average is flattened by writing it into the live tensors,
+    /// reading the network's own parameter vector (so the ordering is the network's, not a guess), and
+    /// restoring the live values, all through the same TensorCopy write path Step uses.
+    /// </remarks>
+    private Vector<T>? AveragedParametersFor(IFullModel<T, TInput, TOutput> solution)
+    {
+        if (solution is not AiDotNet.Interfaces.INeuralNetwork<T>)
+            return _ax != null && _t > _options.T0 ? _ax : null;
+
+        if (_tapeAx.IsEmpty || _tapeStep <= _options.T0)
+            return null;
+
+        var restore = new List<(Tensor<T> Live, Tensor<T> Saved)>(_tapeAx.Count);
+        try
+        {
+            foreach (var entry in _tapeAx)
+            {
+                var saved = new Tensor<T>(entry.Key._shape);
+                Engine.TensorCopy(entry.Key, saved);
+                restore.Add((entry.Key, saved));
+                Engine.TensorCopy(entry.Value, entry.Key);
+            }
+
+            return InterfaceGuard.Parameterizable(solution).GetParameters().Clone();
+        }
+        finally
+        {
+            foreach (var (live, saved) in restore)
+                Engine.TensorCopy(saved, live);
+        }
     }
 
     /// <summary>

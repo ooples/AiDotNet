@@ -56,6 +56,9 @@ public class ModelInputMeetsFirstLayerTests
     /// </remarks>
     private static readonly TimeSpan ConstructionTimeout = TimeSpan.FromSeconds(10);
 
+    /// <summary>How long a timed-out construction may run on before the sweep abandons it.</summary>
+    private static readonly TimeSpan ConstructionDrain = TimeSpan.FromSeconds(120);
+
     /// <summary>Above this, a model is named in the report as a contributor to the sweep's wall clock.</summary>
     private static readonly TimeSpan SlowModelThreshold = TimeSpan.FromSeconds(1);
 
@@ -159,12 +162,13 @@ public class ModelInputMeetsFirstLayerTests
                 }
 
                 var first = FirstLayer(model);
-                if (first is null) { skipped.Add($"{open.Name}: no layers"); continue; }
+                if (first is null) { skipped.Add($"{open.Name}: no layers"); log?.WriteLine($"[skipped] {open.Name}: no layers"); continue; }
 
                 var layerRanks = AcceptedRanks(first.GetType());
                 if (layerRanks.Count == 0) { layerUndeclared++; continue; }
 
                 checkedCount++;
+                log?.WriteLine($"[checked] {open.Name}: {boundaryName} [{Fmt(boundaryRanks)}], first layer {first.GetType().Name} [{Fmt(layerRanks)}]");
                 if (boundaryRanks.Overlaps(layerRanks)) continue;
 
                 // Written to the log AS FOUND, not only in the summary below: the findings are the
@@ -175,10 +179,20 @@ public class ModelInputMeetsFirstLayerTests
                 mismatched.Add(finding);
                 log?.WriteLine($"MISMATCH {finding}");
             }
-            catch (Exception ex) { skipped.Add($"{open.Name}: {Unwrap(ex).GetType().Name}"); }
+            catch (Exception ex)
+            {
+                skipped.Add($"{open.Name}: {Unwrap(ex).GetType().Name}");
+                log?.WriteLine($"[skipped] {open.Name}: {Unwrap(ex).GetType().Name}: {Unwrap(ex).Message}");
+            }
             finally
             {
                 (model as IDisposable)?.Dispose();
+                model = null;
+                // Return each model's memory before the next is built. Hundreds of paper-scale models are constructed
+                // here; without this the host's peak is the sum of whatever the collector has not yet reclaimed.
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
 
                 // In the FINALLY so every path is measured - including the `continue`s above and a
                 // throwing constructor. Timing only the happy path would have understated exactly the
@@ -329,17 +343,24 @@ public class ModelInputMeetsFirstLayerTests
             InputType.ThreeDimensional, NeuralNetworkTaskType.Regression,
             inputDepth: 3, inputHeight: Extent, inputWidth: Extent, outputSize: 4);
 
-        var pars = ctor.GetParameters();
-        var args = new object?[pars.Length];
-        args[0] = architecture;
-        for (int i = 1; i < pars.Length; i++) args[i] = pars[i].DefaultValue;
+        var args = ModelSweepConstruction.Arguments(ctor.GetParameters(), architecture);
 
         object? built = null;
         var task = System.Threading.Tasks.Task.Run(() => built = ctor.Invoke(args));
         if (!task.Wait(ConstructionTimeout))
         {
-            task.Wait(TimeSpan.FromSeconds(20));
-            failure = $"construction exceeded {ConstructionTimeout.TotalSeconds:0}s";
+            // Task.Wait does not cancel the construction, so it keeps running and allocating. Waiting for it and
+            // disposing what it built keeps a slow constructor from piling its model on top of the next ones; left
+            // running, they stacked until the test host exceeded the 16 GB runner and took it down (Unassigned - 01).
+            // The drain is bounded: a constructor that deadlocks must not hang the whole sweep. Only a construction
+            // that finished inside the drain is read and disposed; one that did not is reported, never read, since
+            // `built` is written by the other thread and only a completed wait orders that write before this read.
+            bool drained;
+            try { drained = task.Wait(ConstructionDrain); } catch (AggregateException) { drained = true; }
+            if (drained) (built as IDisposable)?.Dispose();
+            failure = drained
+                ? $"construction exceeded {ConstructionTimeout.TotalSeconds:0}s"
+                : $"construction exceeded {ConstructionTimeout.TotalSeconds:0}s and did not finish within a further {ConstructionDrain.TotalSeconds:0}s, so it was abandoned undisposed";
             return false;
         }
 

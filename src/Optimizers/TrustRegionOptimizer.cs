@@ -65,7 +65,7 @@ public partial class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOpt
 
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.TrustRegion,
-            (float)GetCurrentLearningRate(),
+            GetCurrentLearningRate(),
             0f, 0f, 0f, 0f, schedule)
         {
             Extras = new Tensors.Engines.Compilation.FusedOptimizerExtras
@@ -125,7 +125,7 @@ public partial class TrustRegionOptimizer<T, TInput, TOutput> : GradientBasedOpt
     /// <param name="options">Options for configuring the Trust Region optimizer.</param>
     /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     public TrustRegionOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         TrustRegionOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using System.Collections.Concurrent;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -47,8 +47,8 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.AdaDelta,
-            (float)GetCurrentLearningRate(),
-            0f, (float)_options.Rho, (float)_options.Epsilon, 0f, schedule);
+            GetCurrentLearningRate(),
+            0f, _options.Rho, _options.Epsilon, 0f, schedule);
         return true;
     }
 
@@ -145,7 +145,7 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
     /// </para>
     /// </remarks>
     public AdaDeltaOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         AdaDeltaOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())
@@ -203,6 +203,9 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
         base.InitializeAdaptiveParameters();
         CurrentLearningRate = NumOps.FromDouble(_options.InitialLearningRate);
     }
+
+    /// <inheritdoc/>
+    protected override bool SupportsModelOwnStep => true;
 
     /// <summary>
     /// Performs the optimization process using the AdaDelta algorithm.
@@ -263,6 +266,7 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
 
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;   // the network's own step; see GradientBasedOptimizerBase
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
                 var newSolution = UpdateSolution(currentSolution, gradient);
                 currentSolution = newSolution;

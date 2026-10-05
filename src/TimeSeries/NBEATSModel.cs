@@ -245,7 +245,9 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
                 thetaSizeBackcast,
                 thetaSizeForecast,
                 _options.UseInterpretableBasis,
-                _options.PolynomialDegree
+                _options.PolynomialDegree,
+                // Distinct per block: a shared seed gave every block identical initial weights.
+                seed: SeedOr(42) + i
             );
             _blocks.Add(block);
         }
@@ -342,7 +344,7 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
         var allBlocks = _blocks.Cast<Interfaces.ILayer<T>>().ToList();
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(allBlocks, -1);
 
-        var random = RandomHelper.CreateSeededRandom(42);
+        var random = RandomHelper.CreateSeededRandom(SeedOr(42));
         _lastRunEpochLosses = new List<double>();
 
         // Mini-batch training per Oreshkin et al. 2019 §3.3: for each mini-
@@ -664,7 +666,7 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
 
         _lastRunEpochLosses = new List<double>();
 
-        var random = RandomHelper.CreateSeededRandom(42);
+        var random = RandomHelper.CreateSeededRandom(SeedOr(42));
         bool fusedEngaged = false;
         bool diverged = false;
         double firstStepLoss = double.NaN;

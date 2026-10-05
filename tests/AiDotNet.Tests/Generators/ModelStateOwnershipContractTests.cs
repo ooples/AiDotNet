@@ -131,6 +131,37 @@ public sealed class ModelStateOwnershipContractTests
     }
 
     [Fact]
+    public void APartialTypeWhoseDeclarationsEachNameABaseIsEmittedOnce()
+    {
+        // A type may declare an interface in a second partial file with its own base list. The
+        // generator emitted state once per such declaration, and the second AddSource of the same hint
+        // name failed the generator for the whole compilation.
+        const string source = """
+            using AiDotNet.Enums;
+            using AiDotNet.LossFunctions;
+            using AiDotNet.NeuralNetworks;
+            using AiDotNet.Tensors.LinearAlgebra;
+            namespace AiDotNet.Tests.GeneratedOwnership;
+            public interface ISecondFacet { int Facet { get; } }
+            public partial class SplitStateNetwork : NeuralNetworkBase<float>
+            {
+                [AiDotNet.Attributes.TrainableParameter] private Tensor<float> _tensor = new(new[] { 3 });
+                public SplitStateNetwork() : base(new NeuralNetworkArchitecture<float>(
+                    inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
+                    inputSize: 4, outputSize: 1), new MeanSquaredErrorLoss<float>()) { }
+                protected override void InitializeLayers() { }
+                public override AiDotNet.Models.ModelMetadata<float> GetModelMetadata() => new() { Name = nameof(SplitStateNetwork) };
+            }
+            public partial class SplitStateNetwork : ISecondFacet
+            {
+                public int Facet => 1;
+            }
+            """;
+        var (_, generated) = CompileSource(source);
+        Assert.Contains("SplitStateNetwork._tensor", generated, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void NeuralStateGenerationLeavesRegisteredParameterComponentsToTheParameterRegistry()
     {
         // StableVideoSR registers its diffusion core as a parameter component. Carrying that
@@ -256,10 +287,10 @@ public sealed class ModelStateOwnershipContractTests
         var trusted = AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES") as string;
         if (trusted is not null)
             foreach (string path in trusted.Split(Path.PathSeparator))
-                if (paths.Add(path)) references.Add(MetadataReference.CreateFromFile(path));
+                if (paths.Add(path)) references.Add(global::AiDotNet.Tests.Generators.CachedMetadataReference.FromFile(path));
         foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
             if (!assembly.IsDynamic && !string.IsNullOrEmpty(assembly.Location) && paths.Add(assembly.Location))
-                references.Add(MetadataReference.CreateFromFile(assembly.Location));
+                references.Add(global::AiDotNet.Tests.Generators.CachedMetadataReference.FromFile(assembly.Location));
         // Generated in-library models use internal ownership helpers. Reuse the repository's
         // existing test-friend identity without changing or widening that production boundary.
         var compilation = CSharpCompilation.Create("AiDotNetTestConsole",
@@ -270,6 +301,10 @@ public sealed class ModelStateOwnershipContractTests
             new AiDotNet.Generators.ModelParameterGenerator().AsSourceGenerator(), stateGenerator);
         driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out var output, out var generatorDiagnostics);
         Assert.Empty(generatorDiagnostics.Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
+        // A generator that throws is reported only as warning CS8785 here and contributes nothing, so
+        // a probe would silently test a compilation the generator never reached.
+        Assert.All(driver.GetRunResult().Results, result => Assert.True(result.Exception is null,
+            $"{result.Generator.GetGeneratorType().Name} threw: {result.Exception}"));
         Assert.Empty(output.GetDiagnostics().Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error));
         using var stream = new MemoryStream();
         var emitted = output.Emit(stream);

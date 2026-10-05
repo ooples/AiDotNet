@@ -148,7 +148,7 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         if (_options.NumAttentionHeads <= 0)
             throw new ArgumentException("NumAttentionHeads must be positive.", nameof(options));
 
-        _random = RandomHelper.CreateSeededRandom(42);
+        _random = RandomHelper.CreateSeededRandom(SeedOr(42));
         _encoderLayers = new List<InformerEncoderLayerTensor<T>>();
         _distillingLayers = new List<DistillingConvTensor<T>>();
         _decoderLayers = new List<InformerDecoderLayerTensor<T>>();
@@ -167,7 +167,7 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
     private void InitializeModel()
     {
         double stddev = Math.Sqrt(2.0 / _options.EmbeddingDim);
-        var random = RandomHelper.CreateSeededRandom(42);
+        var random = RandomHelper.CreateSeededRandom(SeedOr(42));
 
         // Idempotent: TryTrainGpuResident re-invokes this on a rejected resident run
         // to reset to a clean init, so clear any existing layers before rebuilding —
@@ -195,7 +195,7 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
                 _options.NumAttentionHeads,
                 SparsityFactor,
                 _options.DropoutRate,
-                42 + i));
+                SeedOr(42) + i));
 
             // Add distilling layer (except after the last encoder layer)
             if (i < _options.NumEncoderLayers - 1)
@@ -204,7 +204,7 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
                     _options.EmbeddingDim,
                     currentSeqLen,
                     _options.DistillingFactor,
-                    42 + i));
+                    SeedOr(42) + i));
                 currentSeqLen = (currentSeqLen + _options.DistillingFactor - 1) / _options.DistillingFactor;
             }
         }
@@ -217,7 +217,7 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
                 _options.NumAttentionHeads,
                 SparsityFactor,
                 _options.DropoutRate,
-                42 + _options.NumEncoderLayers + i));
+                SeedOr(42) + _options.NumEncoderLayers + i));
         }
 
         // Learnable decoder start token
@@ -497,7 +497,7 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         AiDotNet.Training.CompiledTapeTrainingStep<T>.Invalidate(this);
         AiDotNet.Training.CompiledTapeTrainingStep<T>.ResetFusedStepCount(this);
 
-        var random = RandomHelper.CreateSeededRandom(42);
+        var random = RandomHelper.CreateSeededRandom(SeedOr(42));
         int maxEpochs = _options.Epochs;
         bool fusedEngaged = false;
         bool diverged = false;
@@ -994,7 +994,7 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
                 _options.NumAttentionHeads,
                 SparsityFactor,
                 _options.DropoutRate,
-                42 + i));
+                SeedOr(42) + i));
 
             if (i < encCount - 1)
             {
@@ -1002,7 +1002,7 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
                     _options.EmbeddingDim,
                     currentSeqLen,
                     _options.DistillingFactor,
-                    42 + i));
+                    SeedOr(42) + i));
                 currentSeqLen = (currentSeqLen + _options.DistillingFactor - 1) / _options.DistillingFactor;
             }
         }
@@ -1014,7 +1014,7 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
                 _options.NumAttentionHeads,
                 SparsityFactor,
                 _options.DropoutRate,
-                42 + encCount + i));
+                SeedOr(42) + encCount + i));
         }
 
         // Deserialize encoder layer weights (overwrite the initialized values)

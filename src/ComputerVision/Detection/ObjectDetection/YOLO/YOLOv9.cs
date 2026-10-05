@@ -13,21 +13,19 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO;
 
 /// <summary>
-/// YOLOv9 object detector with Programmable Gradient Information (PGI).
+/// YOLOv9 object detector: the GELAN architecture with Programmable Gradient Information (PGI).
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// <para><b>For Beginners:</b> YOLOv9 introduces Programmable Gradient Information (PGI)
-/// and Generalized Efficient Layer Aggregation Network (GELAN) to address information
-/// loss during feature transformation, achieving state-of-the-art performance.</para>
-///
-/// <para>Key features:
-/// - PGI: Programmable Gradient Information for better gradient flow
-/// - GELAN: Generalized ELAN for efficient feature aggregation
-/// - Auxiliary reversible branch for improved training
-/// - Better information preservation through the network
+/// <para><b>For Beginners:</b> YOLOv9 builds its network from GELAN blocks (RepNCSPELAN4) and adds, only while
+/// training, an auxiliary branch with its own detection head. That branch feeds the main network reliable
+/// gradients (the paper's "programmable gradient information") and is dropped at inference, so it costs
+/// nothing at test time.</para>
+/// <para>
+/// Each <see cref="ModelSize"/> is its own paper configuration: Nano = t, Small = s, Medium = m, Large = c and
+/// XLarge = e. See <see cref="YOLOv9Backbone{T}"/> for the per-size PGI branches. This model previously ran a
+/// YOLOv4/v5 CSPDarknet with a residual 3x3 convolution per level, and had no auxiliary branch.
 /// </para>
-///
 /// <para>Reference: Wang et al., "YOLOv9: Learning What You Want to Learn Using Programmable Gradient Information", 2024</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Vision)]
@@ -41,15 +39,18 @@ namespace AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO;
     Authors = "Chien-Yao Wang, I-Hau Yeh, Hong-Yuan Mark Liao")]
 public partial class YOLOv9<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
 {
+    /// <summary>Weight of the auxiliary (PGI) head's loss relative to the main head (utils/loss_tal_dual.py).</summary>
+    internal const double AuxiliaryLossWeight = 0.25;
+
     private readonly AiDotNet.ComputerVision.Detection.Losses.TaskAlignedDetectionLoss<T> _detectionLoss;
     private readonly YOLOv8Head<T> _head;
+    private readonly YOLOv8Head<T> _auxHead; // PGI's auxiliary head: trained jointly, dropped at inference.
     private readonly int[] _strides;
-    private readonly List<Conv2D<T>> _gelanBlocks;
     private readonly NMS<T> _nms;
+    private bool _auxHeadShapesResolved;
 
     /// <inheritdoc/>
     public override string Name => $"YOLOv9-{Options.Size}";
-
     /// <summary>
     /// Creates a new YOLOv9 detector with default options derived from the architecture.
     /// </summary>
@@ -70,34 +71,16 @@ public partial class YOLOv9<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<
     }
 
     /// <summary>
-    /// Creates a new YOLOv9 detector.
+    /// Creates a new YOLOv9 detector with the specified options.
     /// </summary>
-    /// <param name="options">Detection options.</param>
+    /// <param name="options">Detection options; <see cref="ObjectDetectionOptions{T}.Size"/> selects t/s/m/c/e.</param>
     public YOLOv9(ObjectDetectionOptions<T> options) : base(options)
     {
-        var (depth, width) = GetSizeConfig(options.Size);
-
-        // Initialize backbone with higher capacity for PGI
-        Backbone = new CSPDarknet<T>(options: new CSPDarknetOptions { Depth = depth * 1.2, WidthMultiplier = width });
-
-        // Initialize GELAN-enhanced neck
-        Neck = new PANet<T>(Backbone.OutputChannels.ToArray(), outputChannels: (int)(256 * width));
-
-        // GELAN additional blocks for feature enhancement
-        _gelanBlocks = new List<Conv2D<T>>();
-        for (int i = 0; i < Neck.NumLevels; i++)
-        {
-            _gelanBlocks.Add(new Conv2D<T>(
-                inChannels: Neck.OutputChannels,
-                outChannels: Neck.OutputChannels,
-                kernelSize: 3,
-                padding: 1
-            ));
-        }
-
-        // Initialize detection head
-        var neckChannels = Enumerable.Repeat(Neck.OutputChannels, Neck.NumLevels).ToArray();
-        _head = new YOLOv8Head<T>(neckChannels, options.NumClasses);
+        var backbone = new YOLOv9Backbone<T>(new YoloBackboneOptions { Size = options.Size });
+        Backbone = backbone;
+        Neck = new YOLOv9Neck<T>(options.Size);
+        _head = new YOLOv8Head<T>(Neck.LevelChannels.ToArray(), options.NumClasses);
+        _auxHead = new YOLOv8Head<T>(backbone.AuxiliaryChannels.ToArray(), options.NumClasses);
 
         _strides = Backbone.Strides.ToArray();
         _detectionLoss = new AiDotNet.ComputerVision.Detection.Losses.TaskAlignedDetectionLoss<T>(options.NumClasses,
@@ -105,32 +88,60 @@ public partial class YOLOv9<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<
         _nms = new NMS<T>();
     }
 
-    private static (double depth, double width) GetSizeConfig(ModelSize size) => size switch
-    {
-        ModelSize.Nano => (0.33, 0.25),
-        ModelSize.Small => (0.50, 0.50),
-        ModelSize.Medium => (0.75, 0.75),
-        ModelSize.Large => (1.00, 1.00),
-        ModelSize.XLarge => (1.25, 1.25),
-        _ => (0.75, 0.75)
-    };
+    private YOLOv9Backbone<T> EnsureYoloV9Backbone => EnsureBackbone as YOLOv9Backbone<T>
+        ?? throw new InvalidOperationException("YOLOv9 requires its own YOLOv9Backbone.");
 
-    /// <summary>Trains the head with task-aligned assignment, BCE classification, CIoU and distribution focal loss.</summary>
+    /// <summary>Trains both heads with task-aligned assignment, BCE classification, CIoU and distribution focal loss.</summary>
     /// <remarks>
-    /// Box/class/DFL gains default to 7.5/0.5/1.5 (YOLOv9 Table 1) with task-aligned assignment (alpha 0.5,
-    /// beta 6, top-10); override them with <see cref="ObjectDetectionOptions{T}.TaskAlignedLoss"/>. This
-    /// architecture has no auxiliary reversible branch, so PGI's auxiliary loss is not claimed. Inputs are
-    /// model-ready NCHW tensors, as for Predict, and targets are normalized against that input size.
+    /// The loss is the main head's plus 0.25 x the auxiliary head's, as in the reference dual loss
+    /// (utils/loss_tal_dual.py); box/class/DFL gains default to 7.5/0.5/1.5 and can be overridden with
+    /// <see cref="ObjectDetectionOptions{T}.TaskAlignedLoss"/>. Inputs are model-ready NCHW tensors, as for
+    /// Predict, and targets are normalized against that input size.
     /// </remarks>
     public void TrainDetections(Tensor<T> input, DetectionTrainingBatch<T> targets)
     {
         YoloDetectionTraining.Validate(input, targets, Options.NumClasses, "YOLOv9");
         int height = input.Shape[2];
         int width = input.Shape[3];
-        TrainWithTargets(input, targets, (heads, batch) => YoloDetectionTraining.HeadLoss(
-            _detectionLoss, heads, 0, _strides.Length, _strides, height, width, batch, _detectionLoss.TopK));
+        int levels = _strides.Length;
+        TrainWithTargets(input, targets, ForwardTrainingHeads, (heads, batch) => Engine.TensorAdd(
+            YoloDetectionTraining.HeadLoss(_detectionLoss, heads, 0, levels, _strides, height, width, batch, _detectionLoss.TopK),
+            Engine.TensorMultiplyScalar(
+                YoloDetectionTraining.HeadLoss(_detectionLoss, heads, 2 * levels, levels, _strides, height, width, batch, _detectionLoss.TopK),
+                NumOps.FromDouble(AuxiliaryLossWeight))));
     }
 
+    /// <inheritdoc/>
+    /// <remarks>The generic tensor objective supervises both heads, with the same 0.25 weight on the auxiliary one.</remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (expectedOutput is null) throw new ArgumentNullException(nameof(expectedOutput));
+        TrainWithTargets(input, expectedOutput, ForwardTrainingHeads, (heads, target) =>
+        {
+            int half = heads.Count / 2;
+            return Engine.TensorAdd(
+                TensorModelTrainer<T>.MeanSquaredError(CvTensorOps<T>.ConcatenateOutputs(heads.GetRange(0, half)), target),
+                Engine.TensorMultiplyScalar(
+                    TensorModelTrainer<T>.MeanSquaredError(CvTensorOps<T>.ConcatenateOutputs(heads.GetRange(half, half)), target),
+                    NumOps.FromDouble(AuxiliaryLossWeight)));
+        });
+    }
+
+    /// <summary>Main head outputs (class then distribution per level), followed by the auxiliary head's.</summary>
+    internal List<Tensor<T>> ForwardTrainingHeads(Tensor<T> input)
+    {
+        var (main, auxiliary) = EnsureYoloV9Backbone.ExtractWithAuxiliary(input);
+        var (mainClasses, mainDistributions) = _head.Forward(EnsureNeck.Forward(main));
+        var (auxClasses, auxDistributions) = _auxHead.Forward(auxiliary);
+        _auxHeadShapesResolved = true;
+        var outputs = new List<Tensor<T>>();
+        outputs.AddRange(mainClasses);
+        outputs.AddRange(mainDistributions);
+        outputs.AddRange(auxClasses);
+        outputs.AddRange(auxDistributions);
+        return outputs;
+    }
     /// <inheritdoc/>
     public override DetectionResult<T> Detect(Tensor<T> image, double confidenceThreshold, double nmsThreshold)
     {
@@ -155,33 +166,19 @@ public partial class YOLOv9<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<
     /// <inheritdoc/>
     protected override List<Tensor<T>> Forward(Tensor<T> input)
     {
-        // Backbone feature extraction
-        var backboneFeatures = EnsureBackbone.ExtractFeatures(input);
-
-        // Neck feature fusion
-        var neckFeatures = EnsureNeck.Forward(backboneFeatures);
-
-        // Apply GELAN enhancement blocks
-        var gelanFeatures = new List<Tensor<T>>();
-        for (int i = 0; i < neckFeatures.Count; i++)
+        if (!_auxHeadShapesResolved)
         {
-            var enhanced = _gelanBlocks[i].Forward(neckFeatures[i]);
-            enhanced = ApplySiLU(enhanced);
-            // Add residual connection
-            enhanced = AddTensors(enhanced, neckFeatures[i]);
-            gelanFeatures.Add(enhanced);
+            // The auxiliary head trains only, but its lazily sized convolutions must exist whenever the
+            // parameters are enumerated, saved or cloned; size them on the first forward.
+            ForwardTrainingHeads(input);
         }
 
-        // Detection head
-        var (clsOutputs, regOutputs) = _head.Forward(gelanFeatures);
-
+        var (clsOutputs, regOutputs) = _head.Forward(EnsureNeck.Forward(EnsureBackbone.ExtractFeatures(input)));
         var outputs = new List<Tensor<T>>();
         outputs.AddRange(clsOutputs);
         outputs.AddRange(regOutputs);
-
         return outputs;
     }
-
     /// <inheritdoc/>
     protected override List<Detection<T>> PostProcess(
         List<Tensor<T>> outputs,
@@ -235,32 +232,7 @@ public partial class YOLOv9<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<
     }
 
     /// <inheritdoc/>
-    protected override long GetHeadParameterCount()
-    {
-        long count = _head.GetParameterCount();
-        // Add GELAN block parameters
-        for (int i = 0; i < _gelanBlocks.Count; i++)
-        {
-            count += _gelanBlocks[i].GetParameterCount();
-        }
-        return count;
-    }
-
-    /// <summary>
-    /// Elementwise Swish, delegated to the engine.
-    /// </summary>
-    /// <remarks>
-    /// This was a scalar loop that read each element out to <c>double</c> and wrote a fresh
-    /// tensor. Arithmetically identical, but it severed the autodiff tape: the gradient chain
-    /// stopped here, so every trainable layer UPSTREAM of this call received no gradient and
-    /// silently never trained. The engine op records itself on the tape.
-    /// </remarks>
-    private Tensor<T> ApplySiLU(Tensor<T> x) => Engine.Swish(x);
-
-    private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
-    {
-        return Engine.TensorAdd(a, b);
-    }
+    protected override long GetHeadParameterCount() => _head.GetParameterCount() + _auxHead.GetParameterCount();
 
     /// <inheritdoc/>
     public override Task LoadWeightsAsync(string pathOrUrl, CancellationToken cancellationToken = default)
@@ -270,46 +242,29 @@ public partial class YOLOv9<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<
         using var stream = File.OpenRead(pathOrUrl);
         using var reader = new BinaryReader(stream);
 
-        // Read and verify magic number and version
         int magic = reader.ReadInt32();
         if (magic != 0x594F4C4F) // "YOLO" in ASCII
         {
             throw new InvalidDataException("Invalid weight file format: incorrect magic number.");
         }
 
+        // Version 2: the GELAN/PGI architecture; version 1 stored the old CSPDarknet with per-level GELAN convs.
         int version = reader.ReadInt32();
-        if (version != 1)
+        if (version != 2)
         {
             throw new InvalidDataException($"Unsupported weight file version: {version}.");
         }
 
-        // Read model configuration
         string modelName = reader.ReadString();
         if (!modelName.StartsWith("YOLOv9"))
         {
             throw new InvalidDataException($"Weight file is for {modelName}, not YOLOv9.");
         }
 
-        // Read backbone parameters
         EnsureBackbone.ReadParameters(reader);
-
-        // Read neck parameters
         EnsureNeck.ReadParameters(reader);
-
-        // Read GELAN block parameters
-        int gelanCount = reader.ReadInt32();
-        if (gelanCount != _gelanBlocks.Count)
-        {
-            throw new InvalidDataException($"GELAN block count mismatch: expected {_gelanBlocks.Count}, got {gelanCount}.");
-        }
-        foreach (var block in _gelanBlocks)
-        {
-            block.ReadParameters(reader);
-        }
-
-        // Read head parameters
         _head.ReadParameters(reader);
-
+        _auxHead.ReadParameters(reader);
         return Task.CompletedTask;
     }
 
@@ -318,28 +273,12 @@ public partial class YOLOv9<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<
     {
         using var stream = File.Create(path);
         using var writer = new BinaryWriter(stream);
-
-        // Write magic number and version for identification
         writer.Write(0x594F4C4F); // "YOLO" in ASCII
-        writer.Write(1); // Version 1
-
-        // Write model configuration
+        writer.Write(2); // Version 2
         writer.Write(Name);
-
-        // Write backbone parameters
         EnsureBackbone.WriteParameters(writer);
-
-        // Write neck parameters
         EnsureNeck.WriteParameters(writer);
-
-        // Write GELAN block parameters
-        writer.Write(_gelanBlocks.Count);
-        foreach (var block in _gelanBlocks)
-        {
-            block.WriteParameters(writer);
-        }
-
-        // Write head parameters
         _head.WriteParameters(writer);
+        _auxHead.WriteParameters(writer);
     }
 }

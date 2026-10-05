@@ -61,7 +61,7 @@ public partial class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBa
     /// </para>
     /// </remarks>
     public ConjugateGradientOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         ConjugateGradientOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

@@ -83,7 +83,8 @@ public partial class SceneTextReader<T> : ModelBase<T, Tensor<T>, Tensor<T>>
                 TextDetectionModel.DBNet => TextDetectionArchitecture.DBNet,
                 _ => TextDetectionArchitecture.DBNet
             },
-            ConfidenceThreshold = options.ConfidenceThreshold
+            ConfidenceThreshold = options.ConfidenceThreshold,
+            RandomSeed = options.RandomSeed
         };
 
         _detector = options.DetectionModel switch

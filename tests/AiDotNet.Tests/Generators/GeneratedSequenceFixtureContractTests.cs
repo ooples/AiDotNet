@@ -94,7 +94,7 @@ public sealed class GeneratedSequenceFixtureContractTests
             .Concat(new[] { typeof(NeuralNetworkBase<>).Assembly, typeof(Tensor<>).Assembly });
         var references = assemblies.Where(assembly => !assembly.IsDynamic && !string.IsNullOrEmpty(assembly.Location))
             .Select(assembly => assembly.Location).Distinct(StringComparer.Ordinal)
-            .Select(path => MetadataReference.CreateFromFile(path)).ToImmutableArray<MetadataReference>();
+            .Select(path => global::AiDotNet.Tests.Generators.CachedMetadataReference.FromFile(path)).ToImmutableArray<MetadataReference>();
         // The emitted GLA factories use the internal seed scope available to the real test
         // assembly. Reuse that existing friend identity rather than widening a production API.
         var compilation = CSharpCompilation.Create("AiDotNetTests",
@@ -221,7 +221,7 @@ public sealed class GeneratedSequenceFixtureContractTests
                 && (name == "mscorlib" || name == "netstandard" || name == "System"
                     || name.StartsWith("System.", StringComparison.Ordinal)))
             .Select(assembly => assembly.Location).Distinct(StringComparer.Ordinal)
-            .Select(path => MetadataReference.CreateFromFile(path)).ToImmutableArray<MetadataReference>();
+            .Select(path => global::AiDotNet.Tests.Generators.CachedMetadataReference.FromFile(path)).ToImmutableArray<MetadataReference>();
         var compilation = CSharpCompilation.Create("AiDotNetTests",
             new[] { CSharpSyntaxTree.ParseText(models) }, references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));

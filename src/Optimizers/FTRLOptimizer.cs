@@ -82,7 +82,7 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
 
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.FTRL,
-            (float)_options.Alpha,
+            _options.Alpha,
             0f, 0f, 0f, 0f, schedule)
         {
             Extras = new Tensors.Engines.Compilation.FusedOptimizerExtras
@@ -92,6 +92,8 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
                 FtrlBeta = (float)_options.Beta,
                 LrPower = -0.5f,
             },
+            // The L1 term holds a weight at exactly zero while |z| <= lambda1, so a step can change nothing.
+            UpdateCanBeExactlyZero = _options.Lambda1 > 0.0,
         };
         return true;
     }
@@ -145,7 +147,7 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <param name="options">The options for configuring the FTRL algorithm.</param>
     /// <param name="engine">The computation engine (CPU or GPU) for vectorized operations.</param>
     public FTRLOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         FTRLOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())
@@ -389,6 +391,9 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         }
     }
 
+    /// <inheritdoc/>
+    protected override bool SupportsModelOwnStep => true;
+
     /// <summary>
     /// Performs the main optimization process using the FTRL algorithm.
     /// </summary>
@@ -433,6 +438,7 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
                 _t++;
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;   // the network's own step; see GradientBasedOptimizerBase
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
                 currentSolution = UpdateSolution(currentSolution, gradient);
             }

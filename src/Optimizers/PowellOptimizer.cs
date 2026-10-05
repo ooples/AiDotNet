@@ -120,7 +120,7 @@ public partial class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInp
     /// </para>
     /// </remarks>
     public PowellOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         PowellOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())
@@ -525,7 +525,7 @@ public partial class PowellOptimizer<T, TInput, TOutput> : OptimizerBase<T, TInp
     public Vector<T> Minimize(
         Vector<T> initialParameters, Func<Vector<T>, T> objective, int maxIterations, T tolerance)
     {
-        ValidateMinimizeArguments(initialParameters, objective, maxIterations);
+        ValidateMinimizeArguments(initialParameters, objective, maxIterations, tolerance);
 
         var search = new DerivativeFreeSearch(objective, NumOps, initialParameters);
 

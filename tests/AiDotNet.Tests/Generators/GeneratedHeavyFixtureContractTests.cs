@@ -223,7 +223,7 @@ public sealed class GeneratedHeavyFixtureContractTests
                 && (assemblyName == "mscorlib" || assemblyName == "netstandard"
                     || assemblyName == "System" || assemblyName.StartsWith("System.", StringComparison.Ordinal)))
             .Select(assembly => assembly.Location).Distinct(StringComparer.Ordinal)
-            .Select(path => MetadataReference.CreateFromFile(path)).ToImmutableArray<MetadataReference>();
+            .Select(path => global::AiDotNet.Tests.Generators.CachedMetadataReference.FromFile(path)).ToImmutableArray<MetadataReference>();
         CSharpCompilation compilation = CSharpCompilation.Create("AiDotNetTests",
             new[] { CSharpSyntaxTree.ParseText(models) }, references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));

@@ -122,7 +122,7 @@ public sealed class CloneConstructorOwnerBindingTests
         foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
         {
             if (assembly.IsDynamic || string.IsNullOrEmpty(assembly.Location) || !seen.Add(assembly.Location)) continue;
-            references.Add(MetadataReference.CreateFromFile(assembly.Location));
+            references.Add(global::AiDotNet.Tests.Generators.CachedMetadataReference.FromFile(assembly.Location));
         }
         return references;
     }

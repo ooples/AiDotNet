@@ -1,5 +1,7 @@
 using System.IO;
 using AiDotNet.ComputerVision.Detection.Backbones;
+using AiDotNet.Interfaces;
+using AiDotNet.Models.Parameters;
 using AiDotNet.Tensors;
 
 namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
@@ -20,173 +22,87 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 /// - Configurable mask resolution
 /// </para>
 /// </remarks>
-public class MaskHead<T>
+public class MaskHead<T> : IParameterSource<T>, IParameterChunkSource<T>, IParameterLayoutSource
 {
-    private readonly INumericOperations<T> _numOps;
     private readonly Conv2D<T> _conv1;
     private readonly Conv2D<T> _conv2;
     private readonly Conv2D<T> _conv3;
     private readonly Conv2D<T> _conv4;
-    private readonly Conv2D<T> _deconv;
+    private readonly ConvTranspose2D<T> _deconv;
     private readonly Conv2D<T> _predictor;
     private readonly int _numClasses;
     private readonly int _maskResolution;
 
     /// <summary>
-    /// Creates a new mask head.
+    /// Creates the Mask R-CNN mask head (He et al. 2017, FPN variant): four 3x3 convolutions of width
+    /// 256, a 2x2 stride-2 transposed convolution that doubles the RoI resolution (14 to 28), then a
+    /// 1x1 convolution giving one mask logit map per class. ReLU follows every layer but the last.
     /// </summary>
-    /// <param name="inChannels">Number of input channels from RoI features.</param>
-    /// <param name="numClasses">Number of classes to predict.</param>
-    /// <param name="maskResolution">Output mask resolution.</param>
+    /// <param name="inChannels">Channels of the pooled RoI features (256 for FPN).</param>
+    /// <param name="numClasses">Foreground classes; one mask is predicted per class.</param>
+    /// <param name="maskResolution">Output mask side, twice the pooled RoI side (28 in the paper).</param>
     public MaskHead(int inChannels, int numClasses, int maskResolution = 28)
     {
-        _numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        if (inChannels <= 0) throw new ArgumentOutOfRangeException(nameof(inChannels));
+        if (numClasses <= 0) throw new ArgumentOutOfRangeException(nameof(numClasses));
+        if (maskResolution <= 0 || maskResolution % 2 != 0)
+            throw new ArgumentOutOfRangeException(nameof(maskResolution),
+                "The mask side must be a positive even number: the head doubles the pooled RoI side.");
         _numClasses = numClasses;
         _maskResolution = maskResolution;
 
-        // Feature processing layers
         _conv1 = new Conv2D<T>(inChannels, 256, kernelSize: 3, padding: 1);
         _conv2 = new Conv2D<T>(256, 256, kernelSize: 3, padding: 1);
         _conv3 = new Conv2D<T>(256, 256, kernelSize: 3, padding: 1);
         _conv4 = new Conv2D<T>(256, 256, kernelSize: 3, padding: 1);
-
-        // Upsampling layer (2x)
-        _deconv = new Conv2D<T>(256, 256, kernelSize: 2, stride: 1);
-
-        // Mask predictor
+        _deconv = new ConvTranspose2D<T>(256, 256, kernelSize: 2, stride: 2);
         _predictor = new Conv2D<T>(256, numClasses, kernelSize: 1);
     }
 
+    /// <summary>The side of the pooled RoI features this head reads: half the mask side (14).</summary>
+    public int RoiSize => _maskResolution / 2;
+
+    /// <summary>The side of the predicted masks (28).</summary>
+    public int MaskResolution => _maskResolution;
+
     /// <summary>
-    /// Forward pass to predict masks from RoI features.
+    /// Predicts per-class mask logits on the tape.
     /// </summary>
-    /// <param name="roiFeatures">RoI-pooled features [num_rois, channels, height, width].</param>
-    /// <returns>Mask predictions [num_rois, num_classes, mask_h, mask_w].</returns>
+    /// <param name="roiFeatures">Pooled RoI features [rois, channels, RoiSize, RoiSize].</param>
+    /// <returns>Mask logits [rois, numClasses, MaskResolution, MaskResolution].</returns>
     public Tensor<T> Forward(Tensor<T> roiFeatures)
     {
-        // Apply conv layers with ReLU
-        var x = ApplyConvReLU(_conv1, roiFeatures);
-        x = ApplyConvReLU(_conv2, x);
-        x = ApplyConvReLU(_conv3, x);
-        x = ApplyConvReLU(_conv4, x);
-
-        // Upsample
-        x = Upsample2x(x);
-        x = ApplyConvReLU(_deconv, x);
-
-        // Predict masks
-        var masks = _predictor.Forward(x);
-
-        return masks;
+        if (roiFeatures is null) throw new ArgumentNullException(nameof(roiFeatures));
+        var engine = AiDotNetEngine.Current;
+        var x = engine.ReLU(_conv1.Forward(roiFeatures));
+        x = engine.ReLU(_conv2.Forward(x));
+        x = engine.ReLU(_conv3.Forward(x));
+        x = engine.ReLU(_conv4.Forward(x));
+        x = engine.ReLU(_deconv.Forward(x));
+        return _predictor.Forward(x);
     }
 
     /// <summary>
-    /// Predicts mask for a single RoI and class.
+    /// Predicts the mask of one class for one RoI, as probabilities.
     /// </summary>
-    /// <param name="roiFeatures">Features for single RoI [1, channels, h, w].</param>
-    /// <param name="classId">Class ID to predict mask for.</param>
-    /// <returns>Binary mask [mask_h, mask_w].</returns>
+    /// <param name="roiFeatures">Features for a single RoI [1, channels, RoiSize, RoiSize].</param>
+    /// <param name="classId">Foreground class whose mask to return.</param>
+    /// <returns>Mask probabilities [MaskResolution, MaskResolution].</returns>
     public Tensor<T> PredictMask(Tensor<T> roiFeatures, int classId)
     {
-        var allMasks = Forward(roiFeatures);
-
-        // Extract mask for specific class
-        int height = allMasks.Shape[2];
-        int width = allMasks.Shape[3];
-
-        var mask = new Tensor<T>(new[] { height, width });
-
-        for (int h = 0; h < height; h++)
-        {
-            for (int w = 0; w < width; w++)
-            {
-                double val = _numOps.ToDouble(allMasks[0, classId, h, w]);
-                // Apply sigmoid
-                mask[h, w] = _numOps.FromDouble(1.0 / (1.0 + Math.Exp(-val)));
-            }
-        }
-
-        return mask;
+        if (classId < 0 || classId >= _numClasses) throw new ArgumentOutOfRangeException(nameof(classId));
+        var logits = Forward(roiFeatures);
+        int height = logits.Shape[2];
+        int width = logits.Shape[3];
+        var engine = AiDotNetEngine.Current;
+        var classMap = CvTensorOps<T>.Select(logits, new[] { classId }, 1);
+        return engine.Reshape(engine.Sigmoid(classMap), new[] { height, width });
     }
 
-    private Tensor<T> ApplyConvReLU(Conv2D<T> conv, Tensor<T> input)
-    {
-        var output = conv.Forward(input);
+    /// <summary>Gets the total parameter count.</summary>
+    public long GetParameterCount() => Parameters.ParameterCount;
 
-        for (int i = 0; i < output.Length; i++)
-        {
-            double val = _numOps.ToDouble(output[i]);
-            output[i] = _numOps.FromDouble(Math.Max(0, val));
-        }
-
-        return output;
-    }
-
-    private Tensor<T> Upsample2x(Tensor<T> input)
-    {
-        int batch = input.Shape[0];
-        int channels = input.Shape[1];
-        int height = input.Shape[2];
-        int width = input.Shape[3];
-
-        int newH = height * 2;
-        int newW = width * 2;
-
-        var output = new Tensor<T>(new[] { batch, channels, newH, newW });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < newH; h++)
-                {
-                    for (int w = 0; w < newW; w++)
-                    {
-                        // Bilinear interpolation
-                        double srcY = (double)h / newH * height;
-                        double srcX = (double)w / newW * width;
-
-                        int y0 = (int)Math.Floor(srcY);
-                        int x0 = (int)Math.Floor(srcX);
-                        int y1 = Math.Min(y0 + 1, height - 1);
-                        int x1 = Math.Min(x0 + 1, width - 1);
-
-                        double wy1 = srcY - y0;
-                        double wy0 = 1.0 - wy1;
-                        double wx1 = srcX - x0;
-                        double wx0 = 1.0 - wx1;
-
-                        double v00 = _numOps.ToDouble(input[b, c, y0, x0]);
-                        double v01 = _numOps.ToDouble(input[b, c, y0, x1]);
-                        double v10 = _numOps.ToDouble(input[b, c, y1, x0]);
-                        double v11 = _numOps.ToDouble(input[b, c, y1, x1]);
-
-                        double val = wy0 * (wx0 * v00 + wx1 * v01) + wy1 * (wx0 * v10 + wx1 * v11);
-                        output[b, c, h, w] = _numOps.FromDouble(val);
-                    }
-                }
-            }
-        }
-
-        return output;
-    }
-
-    /// <summary>
-    /// Gets the total parameter count.
-    /// </summary>
-    public long GetParameterCount()
-    {
-        return _conv1.GetParameterCount() +
-               _conv2.GetParameterCount() +
-               _conv3.GetParameterCount() +
-               _conv4.GetParameterCount() +
-               _deconv.GetParameterCount() +
-               _predictor.GetParameterCount();
-    }
-
-    /// <summary>
-    /// Writes parameters to binary writer.
-    /// </summary>
+    /// <summary>Writes the parameters to a binary stream.</summary>
     public void WriteParameters(BinaryWriter writer)
     {
         writer.Write(_numClasses);
@@ -199,9 +115,7 @@ public class MaskHead<T>
         _predictor.WriteParameters(writer);
     }
 
-    /// <summary>
-    /// Reads parameters from binary reader.
-    /// </summary>
+    /// <summary>Reads the parameters from a binary stream.</summary>
     public void ReadParameters(BinaryReader reader)
     {
         int numClasses = reader.ReadInt32();
@@ -219,6 +133,30 @@ public class MaskHead<T>
         _deconv.ReadParameters(reader);
         _predictor.ReadParameters(reader);
     }
+
+    // MaskHead is public, so it forwards the parameter interfaces to an internal module, as RPN does.
+    // Before this the model registry could not see inside the mask head: it was never trained,
+    // counted only through a hand-written sum, and dropped by SetParameters and cloning.
+    private DelegatingCvParameterModule<T>? _parameters;
+
+    private DelegatingCvParameterModule<T> Parameters
+        => _parameters ??= new DelegatingCvParameterModule<T>(
+            () => new IParameterSource<T>?[] { _conv1, _conv2, _conv3, _conv4, _deconv, _predictor });
+
+    /// <inheritdoc />
+    long IParameterSource<T>.ParameterCount => Parameters.ParameterCount;
+
+    /// <inheritdoc />
+    IReadOnlyList<ParameterSlotDescriptor> IParameterLayoutSource.GetParameterLayout() => Parameters.GetParameterLayout();
+
+    /// <inheritdoc />
+    Vector<T> IParameterSource<T>.GetParameters() => Parameters.GetParameters();
+
+    /// <inheritdoc />
+    void IParameterSource<T>.SetParameters(Vector<T> parameters) => Parameters.SetParameters(parameters);
+
+    /// <inheritdoc />
+    IEnumerable<ParameterChunk<T>> IParameterChunkSource<T>.GetParameterStateChunks() => Parameters.GetParameterStateChunks();
 }
 
 /// <summary>
@@ -230,7 +168,7 @@ public class MaskHead<T>
 /// prototype-based methods predict a set of prototype masks and per-instance coefficients.
 /// The final mask is a linear combination of prototypes weighted by coefficients.</para>
 /// </remarks>
-public class PrototypeMaskHead<T>
+public class PrototypeMaskHead<T> : IParameterSource<T>, IParameterChunkSource<T>, IParameterLayoutSource
 {
     private readonly INumericOperations<T> _numOps;
     private readonly Conv2D<T> _protoConv1;
@@ -309,61 +247,15 @@ public class PrototypeMaskHead<T>
         return mask;
     }
 
-    private Tensor<T> ApplyConvReLU(Conv2D<T> conv, Tensor<T> input)
-    {
-        var output = conv.Forward(input);
+    private static Tensor<T> ApplyConvReLU(Conv2D<T> conv, Tensor<T> input)
+        => AiDotNetEngine.Current.ReLU(conv.Forward(input));
 
-        for (int i = 0; i < output.Length; i++)
-        {
-            double val = _numOps.ToDouble(output[i]);
-            output[i] = _numOps.FromDouble(Math.Max(0, val));
-        }
+    // Nearest-neighbour 2x upsampling, through the engine so the step stays on the gradient tape.
+    private static Tensor<T> Upsample2x(Tensor<T> input)
+        => AiDotNetEngine.Current.Interpolate(
+            input, new[] { input.Shape[2] * 2, input.Shape[3] * 2 }, InterpolateMode.Nearest, alignCorners: false);
 
-        return output;
-    }
-
-    private Tensor<T> Upsample2x(Tensor<T> input)
-    {
-        int batch = input.Shape[0];
-        int channels = input.Shape[1];
-        int height = input.Shape[2];
-        int width = input.Shape[3];
-
-        int newH = height * 2;
-        int newW = width * 2;
-
-        var output = new Tensor<T>(new[] { batch, channels, newH, newW });
-
-        for (int b = 0; b < batch; b++)
-        {
-            for (int c = 0; c < channels; c++)
-            {
-                for (int h = 0; h < newH; h++)
-                {
-                    for (int w = 0; w < newW; w++)
-                    {
-                        // Nearest neighbor upsampling for speed
-                        int srcH = h / 2;
-                        int srcW = w / 2;
-                        output[b, c, h, w] = input[b, c, srcH, srcW];
-                    }
-                }
-            }
-        }
-
-        return output;
-    }
-
-    /// <summary>
-    /// Gets the total parameter count.
-    /// </summary>
-    public long GetParameterCount()
-    {
-        return _protoConv1.GetParameterCount() +
-               _protoConv2.GetParameterCount() +
-               _protoConv3.GetParameterCount() +
-               _protoOut.GetParameterCount();
-    }
+    public long GetParameterCount() => Parameters.ParameterCount;
 
     /// <summary>
     /// Writes parameters to binary writer.
@@ -393,4 +285,25 @@ public class PrototypeMaskHead<T>
         _protoConv3.ReadParameters(reader);
         _protoOut.ReadParameters(reader);
     }
+
+    private DelegatingCvParameterModule<T>? _parameters;
+
+    private DelegatingCvParameterModule<T> Parameters
+        => _parameters ??= new DelegatingCvParameterModule<T>(
+            () => new IParameterSource<T>?[] { _protoConv1, _protoConv2, _protoConv3, _protoOut });
+
+    /// <inheritdoc />
+    long IParameterSource<T>.ParameterCount => Parameters.ParameterCount;
+
+    /// <inheritdoc />
+    IReadOnlyList<ParameterSlotDescriptor> IParameterLayoutSource.GetParameterLayout() => Parameters.GetParameterLayout();
+
+    /// <inheritdoc />
+    Vector<T> IParameterSource<T>.GetParameters() => Parameters.GetParameters();
+
+    /// <inheritdoc />
+    void IParameterSource<T>.SetParameters(Vector<T> parameters) => Parameters.SetParameters(parameters);
+
+    /// <inheritdoc />
+    IEnumerable<ParameterChunk<T>> IParameterChunkSource<T>.GetParameterStateChunks() => Parameters.GetParameterStateChunks();
 }

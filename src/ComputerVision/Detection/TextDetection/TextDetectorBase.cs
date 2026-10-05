@@ -190,6 +190,13 @@ public class TextDetectionOptions<T>
     /// URL for pretrained weights.
     /// </summary>
     public string? WeightsUrl { get; set; }
+
+    /// <summary>
+    /// Seed for weight initialization, so two models built from equal options start from equal weights.
+    /// Default: 42, matching <see cref="AiDotNet.Models.Options.ObjectDetectionOptions{T}.RandomSeed"/>.
+    /// Null leaves initialization unseeded.
+    /// </summary>
+    public int? RandomSeed { get; set; } = 42;
 }
 
 /// <summary>
@@ -209,7 +216,7 @@ public enum TextDetectionArchitecture
 /// Base class for text detection models.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tensor<T>>
+public abstract partial class TextDetectorBase<T> : VisionTaskModelBase<T>, AiDotNet.Interfaces.ITextDetectionTrainingModel<T>
 {
     // NumOps inherited from ModelBase
     protected readonly TextDetectionOptions<T> Options;
@@ -246,19 +253,80 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
     protected TextDetectorBase(TextDetectionOptions<T> options)
     {
         Options = options;
+        // Arm the per-layer initialization seed scope before the derived constructor builds any layer
+        // (the same root-model contract DiffusionModelBase follows). Every layer, the BackboneLayerShims
+        // adapters' inner layers, and the necks and query tables that draw from the scope then take a
+        // deterministic seed, so two models built from equal options start from equal weights (#2201).
+        // A null seed leaves the scope unarmed and initialization stays unseeded.
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(options.RandomSeed);
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.OfferSeedToNestedBackbone();
     }
 
     /// <summary>
-    /// Detects text regions in an image.
+    /// Detects text regions in one image.
     /// </summary>
-    /// <param name="image">Input image tensor [batch, channels, height, width].</param>
+    /// <param name="image">Input image tensor [1, channels, height, width].</param>
     /// <returns>Text detection result.</returns>
-    public abstract TextDetectionResult<T> Detect(Tensor<T> image);
+    public virtual TextDetectionResult<T> Detect(Tensor<T> image)
+        => Detect(image, NumOps.ToDouble(Options.ConfidenceThreshold));
 
     /// <summary>
-    /// Detects text regions with custom threshold.
+    /// Detects text regions in one image with a custom confidence threshold.
     /// </summary>
-    public abstract TextDetectionResult<T> Detect(Tensor<T> image, double confidenceThreshold);
+    /// <exception cref="ArgumentException">The tensor holds more than one image; use <see cref="DetectBatch(Tensor{T}, double)"/>.</exception>
+    public virtual TextDetectionResult<T> Detect(Tensor<T> image, double confidenceThreshold)
+    {
+        if (image is null) throw new ArgumentNullException(nameof(image));
+        // A single result cannot describe several images. Every detector used to decode batch position 0
+        // of a batched forward and return it as the whole answer, silently dropping the rest.
+        if (image.Rank == 4 && image.Shape[0] != 1)
+            throw new ArgumentException(
+                $"Detect takes one image but got a batch of {image.Shape[0]}; use DetectBatch for several images.",
+                nameof(image));
+
+        return DetectBatch(image, confidenceThreshold)[0];
+    }
+
+    /// <summary>
+    /// Detects text regions in every image of a batch, with one forward pass.
+    /// </summary>
+    /// <param name="images">Input image tensor [batch, channels, height, width].</param>
+    /// <returns>One result per image, in batch order.</returns>
+    public virtual IReadOnlyList<TextDetectionResult<T>> DetectBatch(Tensor<T> images)
+        => DetectBatch(images, NumOps.ToDouble(Options.ConfidenceThreshold));
+
+    /// <summary>
+    /// Detects text regions in every image of a batch with a custom confidence threshold.
+    /// </summary>
+    public virtual IReadOnlyList<TextDetectionResult<T>> DetectBatch(Tensor<T> images, double confidenceThreshold)
+    {
+        if (images is null) throw new ArgumentNullException(nameof(images));
+        if (images.Rank != 4)
+            throw new ArgumentException($"Expected [batch, channels, height, width], got rank {images.Rank}.", nameof(images));
+
+        var startTime = DateTime.UtcNow;
+        int batchSize = images.Shape[0];
+        int originalHeight = images.Shape[2];
+        int originalWidth = images.Shape[3];
+
+        var batchOutputs = Forward(Preprocess(images));
+        var results = new List<TextDetectionResult<T>>(batchSize);
+        for (int i = 0; i < batchSize; i++)
+        {
+            var itemOutputs = DetectionOutputBatching<T>.SliceItem(batchOutputs, i);
+            results.Add(new TextDetectionResult<T>
+            {
+                TextRegions = PostProcess(itemOutputs, originalWidth, originalHeight, confidenceThreshold),
+                ImageWidth = originalWidth,
+                ImageHeight = originalHeight
+            });
+        }
+
+        // One forward serves the whole batch, so each image reports the batch's time.
+        var elapsed = DateTime.UtcNow - startTime;
+        foreach (var result in results) result.InferenceTime = elapsed;
+        return results;
+    }
 
     /// <summary>
     /// Preprocesses the input image.
@@ -442,166 +510,98 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
         return CvTensorOps<T>.ConcatenateOutputs(Forward(Preprocess(input)));
     }
 
-    /// <inheritdoc />
-    /// <summary>
-    /// Gets the step size used by <see cref="Train"/>.
-    /// </summary>
-    /// <remarks>
-    /// Detection losses are large early in training, so this is deliberately conservative.
-    /// Override it to match a paper recipe.
-    /// </remarks>
-    protected virtual double TrainingLearningRate => 0.001;
-
-    /// <summary>
-    /// Runs one training step against the model's public prediction.
-    /// </summary>
-    /// <param name="input">The training image.</param>
-    /// <param name="expectedOutput">The desired output, shaped like <see cref="Predict"/>.</param>
-    /// <remarks>
-    /// Previously an empty method, so text detectors ignored training entirely. See
-    /// <c>ObjectDetectorBase.Train</c> for the mechanism and its limits.
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (input is null)
-        {
-            throw new ArgumentNullException(nameof(input));
-        }
-
-        if (expectedOutput is null)
-        {
-            throw new ArgumentNullException(nameof(expectedOutput));
-        }
-
-        bool wasTraining = IsTrainingMode;
-        SetTrainingMode(true);
-        try
-        {
-            RecordTrainingLoss(TensorModelTrainer<T>.Step(
-                this, input, expectedOutput, NumOps.FromDouble(TrainingLearningRate), Predict));
-        }
-        finally
-        {
-            SetTrainingMode(wasTraining);
-        }
-    }
-
-    /// <inheritdoc />
-    public override ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
-
-    /// <inheritdoc />
-    public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters)
-    {
-        var copy = DeepCopy();
-        ((IParameterizable<T, Tensor<T>, Tensor<T>>)copy).SetParameters(parameters);
-        return copy;
-    }
-
-    /// <inheritdoc />
-    // See the note on ObjectDetectorBase: MemberwiseClone gave a shallow copy that shared
-    // weights with the original. ModelBase's rebuild-and-reload DeepCopy is correct here.
-
     #endregion
 
     /// <summary>
-    /// The shape of the first input this model's forward pass ran on. Its lazily-shaped layers sized
-    /// their weights from it, so replaying it on a rebuilt copy reproduces the same parameter
-    /// topology. Scratch: never persisted, and rebuilt copies record their own.
+    /// One training step on page images and their text polygons. The model's paper target assignment and
+    /// loss come from <see cref="TextDetectionLoss"/>.
     /// </summary>
-    [AiDotNet.Attributes.Scratch]
-    private int[]? _resolvedInputShape;
-
-    /// <summary>Records the input shape on the first forward pass.</summary>
-    private void NoteResolvedInput(Tensor<T> input)
+    /// <param name="images">The page images, <c>[batch, channels, height, width]</c> or one <c>[channels, height, width]</c>.</param>
+    /// <param name="targets">The text polygons of each image, in that image's pixel coordinates.</param>
+    public void TrainTextDetections(Tensor<T> images, TextDetectionTrainingBatch targets)
     {
-        if (_resolvedInputShape is not null || input is null)
-        {
-            return;
-        }
-
-        var shape = new int[input.Shape.Length];
-        for (int i = 0; i < shape.Length; i++)
-        {
-            shape[i] = input.Shape[i];
-        }
-
-        _resolvedInputShape = shape;
+        if (images is null) throw new ArgumentNullException(nameof(images));
+        if (targets is null) throw new ArgumentNullException(nameof(targets));
+        if (images.Rank is not (3 or 4))
+            throw new ArgumentException($"Images must be [C, H, W] or [B, C, H, W]; got rank {images.Rank}.", nameof(images));
+        int batch = images.Rank == 4 ? images.Shape[0] : 1;
+        if (targets.ImageCount != batch)
+            throw new ArgumentException($"{targets.ImageCount} target lists for a batch of {batch} images.", nameof(targets));
+        int height = images.Shape[images.Rank - 2], width = images.Shape[images.Rank - 1];
+        TrainWithTargets<List<Tensor<T>>, TextDetectionTrainingBatch>(images, targets,
+            input => Forward(Preprocess(input)),
+            (outputs, batchTargets) => TextDetectionLoss(outputs, batchTargets, width, height));
     }
 
+    /// <summary>
+    /// The model's paper loss over its training heads <paramref name="outputs"/>. Targets are built from the
+    /// polygons, which are given in <paramref name="imageWidth"/> x <paramref name="imageHeight"/> source pixels.
+    /// The result must be a scalar on the gradient tape.
+    /// </summary>
+    protected abstract Tensor<T> TextDetectionLoss(List<Tensor<T>> outputs, TextDetectionTrainingBatch targets,
+        int imageWidth, int imageHeight);
+
+    /// <summary>A polygon in source pixels, mapped onto a <paramref name="mapWidth"/> x <paramref name="mapHeight"/> output map.</summary>
+    /// <remarks>Every image is resized to the network input as a whole, so each output map spans the whole source image.</remarks>
+    protected static (double X, double Y)[] ToMap(TextPolygonTarget target, int imageWidth, int imageHeight, int mapWidth, int mapHeight)
+        => TextTargetGeometry.Scale(target.Points, (double)mapWidth / imageWidth, (double)mapHeight / imageHeight);
+
+    /// <summary>Per-image target maps <c>[h, w]</c> stacked into a constant <c>[batch, channels, h, w]</c> tensor.</summary>
+    protected Tensor<T> MapTensor(IReadOnlyList<double[][,]> perImageChannels)
+    {
+        int batch = perImageChannels.Count, channels = perImageChannels[0].Length;
+        int height = perImageChannels[0][0].GetLength(0), width = perImageChannels[0][0].GetLength(1);
+        var tensor = new Tensor<T>(new[] { batch, channels, height, width });
+        for (int b = 0; b < batch; b++)
+            for (int ch = 0; ch < channels; ch++)
+                for (int y = 0; y < height; y++)
+                    for (int x = 0; x < width; x++)
+                        tensor[b, ch, y, x] = NumOps.FromDouble(perImageChannels[b][ch][y, x]);
+        return tensor;
+    }
+
+    /// <summary>Elementwise binary cross-entropy of probabilities <paramref name="p"/> against <paramref name="y"/>, clamped away from 0 and 1.</summary>
+    protected Tensor<T> BinaryCrossEntropyMap(Tensor<T> p, Tensor<T> y)
+    {
+        var clamped = Engine.TensorClamp(p, NumOps.FromDouble(1e-6), NumOps.FromDouble(1 - 1e-6));
+        var ones = Engine.TensorAddScalar(Engine.TensorMultiplyScalar(y, NumOps.Zero), NumOps.One);
+        var positive = Engine.TensorMultiply(y, Engine.TensorLog(clamped));
+        var negative = Engine.TensorMultiply(Engine.TensorSubtract(ones, y), Engine.TensorLog(Engine.TensorSubtract(ones, clamped)));
+        return Engine.TensorMultiplyScalar(Engine.TensorAdd(positive, negative), NumOps.FromDouble(-1.0));
+    }
+
+    /// <summary>
+    /// <c>sum(values * weights) / sum(weights)</c>. The weights are constants, which can be a mask or a
+    /// per-pixel weighting. Zero when the weights sum to zero.
+    /// </summary>
+    protected Tensor<T> WeightedMean(Tensor<T> values, Tensor<T> weights)
+    {
+        double total = 0;
+        for (int i = 0; i < weights.Length; i++) total += NumOps.ToDouble(weights[i]);
+        var sum = Engine.ReduceSum(Engine.TensorMultiply(values, weights), null);
+        return Engine.TensorMultiplyScalar(sum, NumOps.FromDouble(total > 0 ? 1.0 / total : 0.0));
+    }
+
+    /// <summary>Dice loss <c>1 - 2 sum(p y m) / (sum(p m) + sum(y m) + eps)</c> over the masked pixels.</summary>
+    protected Tensor<T> DiceLoss(Tensor<T> p, Tensor<T> y, Tensor<T> mask)
+    {
+        var intersection = Engine.ReduceSum(Engine.TensorMultiply(Engine.TensorMultiply(p, y), mask), null);
+        var union = Engine.TensorAddScalar(Engine.TensorAdd(
+            Engine.ReduceSum(Engine.TensorMultiply(p, mask), null),
+            Engine.ReduceSum(Engine.TensorMultiply(y, mask), null)), NumOps.FromDouble(1e-6));
+        return Engine.TensorSubtract(
+            Engine.TensorAddScalar(Engine.TensorMultiplyScalar(intersection, NumOps.Zero), NumOps.One),
+            Engine.TensorMultiplyScalar(Engine.TensorDivide(intersection, union), NumOps.FromDouble(2.0)));
+    }
     /// <inheritdoc />
-    /// <remarks>
-    /// Runs the copy once on a zero input of the shape this model has already processed, so its
-    /// lazily-shaped layers (the convolutions behind the Conv2D adapter, the backbone's lazy layers)
-    /// size their weights exactly as this model's did before its state is loaded into them.
-    /// </remarks>
-    protected override void PrepareCopyForStateRestore(ModelBase<T, Tensor<T>, Tensor<T>> copy)
+    protected override int[] DeferredParameterProbeShape
     {
-        if (_resolvedInputShape is not null && copy is TextDetectorBase<T> rebuilt)
+        get
         {
-            var shape = (int[])_resolvedInputShape.Clone();
-            shape[0] = 1;
-            rebuilt.Predict(new Tensor<T>(shape));
+            var (height, width) = GetValidatedInputSize();
+            return new[] { 1, InputChannels, height, width };
         }
     }
-
-    /// <summary>
-    /// Gets the number of channels in the images this model reads.
-    /// </summary>
-    /// <remarks>RGB unless a model overrides it; every backbone here is built for three channels.</remarks>
-    protected virtual int InputChannels => 3;
-
-    /// <summary>
-    /// Gives a model that has never run a concrete parameter topology, so its state can be captured.
-    /// </summary>
-    /// <remarks>
-    /// Several layers size their weights on their first forward pass. Until then the model reports
-    /// its parameters as shape-deferred, which is correct for a parameter query but made
-    /// <see cref="Serialize"/> - and therefore <c>Clone</c> - throw on a freshly constructed model.
-    /// Running the network once on a zero image of the configured input size resolves exactly the
-    /// shapes the first real image would, because every image is resized to that size first.
-    /// </remarks>
-    private void ResolveDeferredParameters()
-    {
-        if (_resolvedInputShape is not null)
-        {
-            return;
-        }
-
-        var (height, width) = GetValidatedInputSize();
-        Predict(new Tensor<T>(new[] { 1, InputChannels, height, width }));
-    }
-
-    /// <inheritdoc />
-    /// <remarks>Resolves shape-deferred layers first; see <see cref="ResolveDeferredParameters"/>.</remarks>
-    public override byte[] Serialize()
-    {
-        ResolveDeferredParameters();
-        return base.Serialize();
-    }
-
-    /// <summary>
-    /// The loss of the most recent <see cref="Train"/> call, measured before its update.
-    /// </summary>
-    [AiDotNet.Attributes.Scratch]
-    private T _lastTrainingLoss = MathHelper.GetNumericOperations<T>().Zero;
-
-    /// <summary>
-    /// Gets the loss of the most recent <see cref="Train"/> call, measured on that call's input before
-    /// its update (zero before the first call).
-    /// </summary>
-    /// <returns>The training objective's value: mean squared error, or the model's own loss where it
-    /// has one.</returns>
-    /// <remarks>Same contract as <c>INeuralNetwork&lt;T&gt;.GetLastLoss</c>.</remarks>
-    public T GetLastLoss() => _lastTrainingLoss;
-
-    /// <summary>Records the loss a training step reported.</summary>
-    /// <param name="loss">The step's loss.</param>
-    protected void RecordTrainingLoss(T loss) => _lastTrainingLoss = loss;
-
-    /// <summary>
-    /// Whether the model is in training mode.
-    /// </summary>
-    protected bool IsTrainingMode;
 
     /// <summary>
     /// Sets the model to training or inference mode.
@@ -614,9 +614,9 @@ public abstract partial class TextDetectorBase<T> : ModelBase<T, Tensor<T>, Tens
     /// unlike the object detectors, which have always switched theirs. Override to forward the mode to
     /// head modules that depend on it, calling the base.
     /// </remarks>
-    public virtual void SetTrainingMode(bool training)
+    public override void SetTrainingMode(bool training)
     {
-        IsTrainingMode = training;
+        base.SetTrainingMode(training);
         Backbone?.SetTrainingMode(training);
     }
 }

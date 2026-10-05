@@ -278,7 +278,7 @@ public class CategoricalCrossEntropyTapeIssue1191Tests
         const int trials = 5;
         // Multi-trial pass criterion: at least 4/5 trials must satisfy
         // every guard. Each trial now has its own fixed init seed (see
-        // ArchitectureForTrial); a single seeded run can still be unlucky even when
+        // ArchitectureFor); a single seeded run can still be unlucky even when
         // the fix is correct. Across 5 trials we tolerate 1 unlucky
         // run while still rejecting any genuine regression — the pre-
         // fix 1/V bug fails *every* trial because it's deterministic
@@ -288,9 +288,14 @@ public class CategoricalCrossEntropyTapeIssue1191Tests
         float lnV = (float)Math.Log(vocabSize);   // 2.0794
         float lnVOverV = lnV / vocabSize;          // 0.2599
 
-        // One fixed seed per trial: still five independent initializations, but no longer drawn from the
-        // process-wide random stream, whose position depends on which tests ran earlier in the same process.
-        TransformerArchitecture<float> ArchitectureForTrial(int trial) => new(
+        // Each trial gets its OWN explicit seed. The trials are meant to be independent weight inits, but a
+        // default-seeded architecture falls back to the process-wide NeuralNetworkArchitecture.
+        // DefaultRandomSeedOverride, which determinism-pinning tests set and leave behind (the model-family
+        // base, GpuTransformerWeightParityTests, ...). After one of them every "independent" trial was the SAME
+        // init - measured: five identical initial losses of 0.996351 in-suite - so one unlucky draw failed all
+        // five and the test failed only when run with others. Explicit seeds keep the trials independent AND
+        // make the test reproducible instead of depending on whatever ran before it.
+        TransformerArchitecture<float> ArchitectureFor(int trialIndex) => new(
             inputType: InputType.TwoDimensional,
             taskType: NeuralNetworkTaskType.SequenceClassification,
             numEncoderLayers: 1,
@@ -302,7 +307,7 @@ public class CategoricalCrossEntropyTapeIssue1191Tests
             outputSize: vocabSize,
             maxSequenceLength: seqLen,
             vocabularySize: vocabSize,
-            randomSeed: 1191 + trial);
+            randomSeed: 1191 + 7919 * trialIndex);
 
         // Build the identity dataset once: input [k,k,k,k] → class k.
         var inputs = new Tensor<float>[numFacts];
@@ -339,7 +344,7 @@ public class CategoricalCrossEntropyTapeIssue1191Tests
             };
             var optimizer = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null, optimizerOptions);
             var transformer = new Transformer<float>(
-                ArchitectureForTrial(trial),
+                ArchitectureFor(trial),
                 lossFunction: new CategoricalCrossEntropyLoss<float>(),
                 optimizer: optimizer);
 

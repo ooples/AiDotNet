@@ -104,8 +104,12 @@ public static class CompiledTapeTrainingStep<T>
         internal Tensor<T>? persistentInput;
         internal Tensor<T>? persistentTarget;
         internal object? configuredPlan;
-        internal (int OptType, float Lr, float B1, float B2, float Eps, float Wd)? configuredOptimizerConfig;
+        internal (int OptType, double Lr, double B1, double B2, double Eps, double Wd)? configuredOptimizerConfig;
+        internal double configuredL2;
         internal long fusedStepCount;
+        // The configured plan's optimizer step (1-based after its first Step), counted from configuration; -1 when it
+        // is unknown (an imported checkpoint set it, or the last fused step ran a different plan).
+        internal int planOptimizerStep = -1;
         internal System.Collections.Generic.HashSet<AiDotNet.Tensors.Engines.Compilation.OptimizerType>? fusedUnavailableTypes;
         internal System.Exception? lastFallbackException;
         internal object? mpPlan;
@@ -117,6 +121,9 @@ public static class CompiledTapeTrainingStep<T>
         internal object? mpScaler;
         internal object? mpGenericPlan;
         internal int[]? mpGenericKey;
+        internal List<(Tensor<T> Input, Tensor<T> Target)>? persistentByShape;
+        internal object? shapeSwitchFrom;
+        internal CompiledModelCache<T>? retiringCache;
     }
 
     /// <summary>
@@ -303,6 +310,46 @@ public static class CompiledTapeTrainingStep<T>
     private static Tensor<T>? _persistentTarget { get => CurrentState.persistentTarget; set => CurrentState.persistentTarget = value; }
 
     /// <summary>
+    /// One persistent input/target pair per batch shape seen since the last full invalidation, so a loop that
+    /// alternates shapes - full batches and the short last batch of every epoch - keeps each shape's compiled plan
+    /// (whose graph leaves point at that pair) instead of recompiling twice an epoch. Bounded by
+    /// <see cref="MaxBatchShapesPerLifecycle"/>. Per owner and layer set like every other lifecycle field: a
+    /// thread-static list let two models on one thread swap persistent pairs, and lost the pending switch when a
+    /// step resumed on another pool thread.
+    /// </summary>
+    private static List<(Tensor<T> Input, Tensor<T> Target)>? _persistentByShape { get => CurrentState.persistentByShape; set => CurrentState.persistentByShape = value; }
+
+    /// <summary>
+    /// The configured plan to continue the optimizer from when a batch-shape change switches plans, set on the switch
+    /// and consumed by the configure step. Null when no switch is pending.
+    /// </summary>
+    private static object? _shapeSwitchFrom { get => CurrentState.shapeSwitchFrom; set => CurrentState.shapeSwitchFrom = value; }
+
+    /// <summary>
+    /// A plan cache retired by a shape change past <see cref="MaxBatchShapesPerLifecycle"/>. Kept alive until the new
+    /// plan has continued the optimizer from the retired cache's plan, then invalidated.
+    /// </summary>
+    private static CompiledModelCache<T>? _retiringCache { get => CurrentState.retiringCache; set => CurrentState.retiringCache = value; }
+
+    private const int MaxBatchShapesPerLifecycle = 4;
+
+    // Reflection-cached ICompiledTrainingPlan<T>.ContinueOptimizerFrom (Tensors 973dcff): lets a plan compiled for a new
+    // batch shape continue the configured plan's optimizer. Absent on older Tensors builds, where a shape change still
+    // invalidates and restarts the fused optimizer.
+    private static System.Reflection.MethodInfo? s_continueOptimizerMethod;
+    private static bool s_continueOptimizerProbed;
+    private static bool PlanSupportsContinueOptimizer()
+    {
+        if (!s_continueOptimizerProbed)
+        {
+            s_continueOptimizerMethod = typeof(ICompiledTrainingPlan<T>).GetMethod(
+                "ContinueOptimizerFrom", new[] { typeof(ICompiledTrainingPlan<T>) });
+            s_continueOptimizerProbed = true;
+        }
+        return s_continueOptimizerMethod is not null;
+    }
+
+    /// <summary>
     /// The single plan that has been configured with an optimizer on this
     /// thread. <b>Strict single-plan semantics</b>: Adam/AdamW/SGD moment
     /// buffers live INSIDE the compiled plan (via
@@ -326,7 +373,10 @@ public static class CompiledTapeTrainingStep<T>
     /// reset m/v buffers and silently corrupt training, so on drift we
     /// also return <c>false</c>.
     /// </summary>
-    private static (int OptType, float Lr, float B1, float B2, float Eps, float Wd)? _configuredOptimizerConfig { get => CurrentState.configuredOptimizerConfig; set => CurrentState.configuredOptimizerConfig = value; }
+    private static (int OptType, double Lr, double B1, double B2, double Eps, double Wd)? _configuredOptimizerConfig { get => CurrentState.configuredOptimizerConfig; set => CurrentState.configuredOptimizerConfig = value; }
+
+    /// <summary>The L2 regularization strength the configured plan applies before clipping (0 = none).</summary>
+    private static double _configuredL2 { get => CurrentState.configuredL2; set => CurrentState.configuredL2 = value; }
 
     /// <summary>
     /// Counter of successful fused-step executions on this thread. Exposed
@@ -348,6 +398,46 @@ public static class CompiledTapeTrainingStep<T>
 
     /// <summary>Gets the count of successful fused-step executions on the calling thread.</summary>
     public static long GetFusedStepCount() => _fusedStepCount;
+
+    /// <summary>
+    /// The optimizer step the configured plan applied most recently, the index its learning-rate schedule was evaluated
+    /// at (1 for its first step). False when it is not known: a checkpoint import set the plan's step, or the last
+    /// fused step ran a mixed-precision plan instead.
+    /// </summary>
+    internal static bool TryGetPlanOptimizerStep(out int step)
+    {
+        step = CurrentState.planOptimizerStep;
+        return step >= 0;
+    }
+
+    /// <summary>
+    /// Whether the plan that ran the last fused step updates only tensors in <paramref name="liveParameters"/>, by
+    /// reference, as the plan itself reports them (AiDotNet.Tensors plan introspection). False is proof the plan has
+    /// come loose from the model (ooples/AiDotNet#1822). Null when that cannot be read: no configured plan ran the
+    /// last step (a mixed-precision plan, or none), or the plan does not report its parameters.
+    /// </summary>
+    internal static bool? ConfiguredPlanTrainsLiveParameters(IEnumerable<Tensor<T>> liveParameters)
+    {
+        if (CurrentState.planOptimizerStep < 0) return null;
+        if (_configuredPlan is not AiDotNet.Tensors.Engines.Compilation.ICompiledTrainingPlanIntrospection<T> plan) return null;
+        var live = new HashSet<Tensor<T>>(liveParameters, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        foreach (var parameter in plan.OptimizedParameters)
+        {
+            if (!live.Contains(parameter)) return false;
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// The learning-rate schedules the plan that ran the last fused step evaluates, as the plan reports them
+    /// (AiDotNet.Tensors plan introspection). Null when no configured plan ran the last step or the plan does not
+    /// report them.
+    /// </summary>
+    internal static IReadOnlyList<AiDotNet.Tensors.Engines.Compilation.LrSchedule>? ConfiguredPlanLearningRateSchedules()
+    {
+        if (CurrentState.planOptimizerStep < 0) return null;
+        return (_configuredPlan as AiDotNet.Tensors.Engines.Compilation.ICompiledTrainingPlanIntrospection<T>)?.LearningRateSchedules;
+    }
 
     /// <summary>Resets the fused-step counter on the calling thread to zero.</summary>
     public static void ResetFusedStepCount() { _fusedStepCount = 0; }
@@ -404,6 +494,41 @@ public static class CompiledTapeTrainingStep<T>
     // keep AiDotNet building against any 0.8x AiDotNet.Tensors NuGet.
     private static System.Reflection.MethodInfo? s_setMaxGradNormMethod;
     private static bool s_setMaxGradNormProbed;
+
+    // Reflection-cached ICompiledTrainingPlan<T>.SetL2Regularization(double) (the pre-clip L2 the optimizers apply to
+    // a flat gradient). Unlike the clip shim this one is NOT tolerant: a plan that cannot apply the configured L2 would
+    // train a different objective, so its absence makes the fused path decline and the eager path (which applies it)
+    // run instead.
+    private static System.Reflection.MethodInfo? s_setL2Method;
+
+    /// <summary>
+    /// Invokes a plan method found by reflection, rethrowing whatever the method itself threw rather than the
+    /// TargetInvocationException wrapper, so callers classify the real exception.
+    /// </summary>
+    private static void InvokePlanMethod(System.Reflection.MethodInfo? method, string name, object plan, object argument)
+    {
+        if (method is null)
+            throw new MissingMethodException(plan.GetType().FullName, name);
+        try
+        {
+            method.Invoke(plan, new[] { argument });
+        }
+        catch (System.Reflection.TargetInvocationException tie) when (tie.InnerException is not null)
+        {
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(tie.InnerException).Throw();
+            throw;
+        }
+    }
+    private static bool s_setL2Probed;
+    private static bool PlanSupportsL2Regularization()
+    {
+        if (!s_setL2Probed)
+        {
+            s_setL2Method = typeof(ICompiledTrainingPlan<T>).GetMethod("SetL2Regularization", new[] { typeof(double) });
+            s_setL2Probed = true;
+        }
+        return s_setL2Method is not null;
+    }
 
     private static void TrySetPlanMaxGradNorm(ICompiledTrainingPlan<T> plan, double maxGradNorm)
     {
@@ -684,6 +809,37 @@ public static class CompiledTapeTrainingStep<T>
         _cachedSelectionIdentities = selection?.ToArray();
     }
 
+    /// <summary>
+    /// Points the persistent input/target at the pair for this batch shape, creating it on first sight, and marks the
+    /// configured plan as the one the next configure step continues the optimizer from. Past
+    /// <see cref="MaxBatchShapesPerLifecycle"/> shapes the plan cache is retired (after that continuation) so
+    /// variable-shape training does not accumulate compiled plans without bound.
+    /// </summary>
+    private static void SwitchPersistentShape(int[] inputShape, int[] targetShape)
+    {
+        _shapeSwitchFrom = _configuredPlan;
+        var shapes = _persistentByShape ??= new List<(Tensor<T>, Tensor<T>)>();
+        foreach (var (pairInput, pairTarget) in shapes)
+        {
+            if (ShapesEqual(pairInput._shape, inputShape) && ShapesEqual(pairTarget._shape, targetShape))
+            {
+                _persistentInput = pairInput;
+                _persistentTarget = pairTarget;
+                return;
+            }
+        }
+        if (shapes.Count >= MaxBatchShapesPerLifecycle)
+        {
+            _retiringCache?.Invalidate();
+            _retiringCache = _cache;
+            _cache = null;
+            shapes.Clear();
+        }
+        _persistentInput = new Tensor<T>(inputShape);
+        _persistentTarget = new Tensor<T>(targetShape);
+        shapes.Add((_persistentInput, _persistentTarget));
+    }
+
     public static void Invalidate()
     {
         _cache?.Invalidate();
@@ -693,6 +849,7 @@ public static class CompiledTapeTrainingStep<T>
         _cachedUsesExplicitSelection = false;
         _configuredPlan = null;
         _configuredOptimizerConfig = null;
+        _configuredL2 = 0.0;
         // AiDotNet#1331: drop the persistent input/target tensors so the next
         // call traces a fresh plan with new captured leaves. Forgetting this
         // would re-use the old tensors with whatever shape they had — a
@@ -700,6 +857,10 @@ public static class CompiledTapeTrainingStep<T>
         // and throw, masking what is really a model-structure change.
         _persistentInput = null;
         _persistentTarget = null;
+        _persistentByShape = null;
+        _shapeSwitchFrom = null;
+        _retiringCache?.Invalidate();
+        _retiringCache = null;
         // Drop ALL mixed-precision plans (SGD/Adam/generic) on explicit Invalidate,
         // matching InvalidateIfLayerSetChanged — a model-structure change must not
         // leave any stale FP16 plan capturing the old layer set's tensors (#558).
@@ -802,11 +963,11 @@ public static class CompiledTapeTrainingStep<T>
         Func<Tensor<T>, Tensor<T>> forward,
         Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss,
         AiDotNet.Tensors.Engines.Compilation.OptimizerType optimizerType,
-        float learningRate,
-        float beta1,
-        float beta2,
-        float epsilon,
-        float weightDecay,
+        double learningRate,
+        double beta1,
+        double beta2,
+        double epsilon,
+        double weightDecay,
         out T lossValue,
         double maxGradNorm = 0.0,
         AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule = null,
@@ -825,7 +986,10 @@ public static class CompiledTapeTrainingStep<T>
         IReadOnlyCollection<Tensor<T>>? trainableSelection = null,
         // The model the step trains. Its compiled plan and optimizer moments are kept per owner, not per
         // thread; null uses the first layer, which belongs to exactly one model.
-        object? owner = null)
+        object? owner = null,
+        // L2 regularization strength applied to each parameter gradient BEFORE clipping (the optimizer's configured
+        // L2Regularization; 0 = none). Declines when the linked Tensors plan cannot apply it.
+        double l2Regularization = 0.0)
     {
         if (layers is null) throw new ArgumentNullException(nameof(layers));
         // A model whose whole training surface is raw extra tensors passes no layers; its first extra tensor then
@@ -845,7 +1009,7 @@ public static class CompiledTapeTrainingStep<T>
         try
         {
             _currentState = state;
-            return TryStepWithFusedOptimizerCore(layers: layers, input: input, target: target, forward: forward, computeLoss: computeLoss, optimizerType: optimizerType, learningRate: learningRate, beta1: beta1, beta2: beta2, epsilon: epsilon, weightDecay: weightDecay, lossValue: out lossValue, maxGradNorm: maxGradNorm, lrSchedule: lrSchedule, eagerOptimizer: eagerOptimizer, useBf16Moments: useBf16Moments, extraTensors: extraTensors, fusedExtras: fusedExtras, onGradients: onGradients, trainableSelection: trainableSelection);
+            return TryStepWithFusedOptimizerCore(layers: layers, input: input, target: target, forward: forward, computeLoss: computeLoss, optimizerType: optimizerType, learningRate: learningRate, beta1: beta1, beta2: beta2, epsilon: epsilon, weightDecay: weightDecay, lossValue: out lossValue, maxGradNorm: maxGradNorm, lrSchedule: lrSchedule, eagerOptimizer: eagerOptimizer, useBf16Moments: useBf16Moments, extraTensors: extraTensors, fusedExtras: fusedExtras, onGradients: onGradients, trainableSelection: trainableSelection, l2Regularization: l2Regularization);
         }
         finally
         {
@@ -861,11 +1025,11 @@ public static class CompiledTapeTrainingStep<T>
         Func<Tensor<T>, Tensor<T>> forward,
         Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss,
         AiDotNet.Tensors.Engines.Compilation.OptimizerType optimizerType,
-        float learningRate,
-        float beta1,
-        float beta2,
-        float epsilon,
-        float weightDecay,
+        double learningRate,
+        double beta1,
+        double beta2,
+        double epsilon,
+        double weightDecay,
         out T lossValue,
         double maxGradNorm = 0.0,
         AiDotNet.Tensors.Engines.Compilation.LrSchedule? lrSchedule = null,
@@ -881,7 +1045,8 @@ public static class CompiledTapeTrainingStep<T>
         // The subset of layer/extra tensors the model's published recipe actually optimizes
         // (see NeuralNetworkBase.SelectTrainableParametersForTraining). Null = optimize
         // everything, which is what all but the partial-freeze models want.
-        IReadOnlyCollection<Tensor<T>>? trainableSelection = null)
+        IReadOnlyCollection<Tensor<T>>? trainableSelection = null,
+        double l2Regularization = 0.0)
     {
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
         // AiDotNet#1395: clear the previous-call's exception buffer so the
@@ -922,7 +1087,10 @@ public static class CompiledTapeTrainingStep<T>
             or AiDotNet.Tensors.Engines.Compilation.OptimizerType.Rprop
             or AiDotNet.Tensors.Engines.Compilation.OptimizerType.HypergradientSGD
             or AiDotNet.Tensors.Engines.Compilation.OptimizerType.ScheduleFreeSGD
-            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.DAdaptationSGD))
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.DAdaptationSGD
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.ProximalL1
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.TrustRegion
+            or AiDotNet.Tensors.Engines.Compilation.OptimizerType.LBFGS))
             { Fd($"optimizerType {optimizerType} not in allowlist"); return false; }
 
         // If a prior fused step already proved this thread's Tensors build can't
@@ -931,7 +1099,10 @@ public static class CompiledTapeTrainingStep<T>
         // warn, turning a one-time capability gap into per-step exception/log churn.
         if (_fusedUnavailableTypes is not null && _fusedUnavailableTypes.Contains(optimizerType))
             { Fd($"optimizerType {optimizerType} latched-unavailable"); return false; }
+        if (l2Regularization > 0.0 && !PlanSupportsL2Regularization())
+            { Fd("L2 regularization configured but the linked Tensors plan has no SetL2Regularization"); return false; }
 
+        AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>? restoredStateAwaitingStep = null;
         try
         {
             // AiDotNet#1406: drop the cached compiled plan + parameter array
@@ -947,8 +1118,6 @@ public static class CompiledTapeTrainingStep<T>
             // Cached optimizer state is tied to the exact ordered tensor subset, not merely
             // its size. A same-cardinality stage switch must compile a fresh plan.
             InvalidateIfSelectionChanged(trainableSelection);
-            using var firstCompiledStepAllocations =
-                FirstCompiledStepAllocationScope.Enter(_configuredPlan is null);
             var cache = _cache ??= new CompiledModelCache<T>();
 
             // AiDotNet#1331: ensure the persistent input/target tensors exist
@@ -962,12 +1131,34 @@ public static class CompiledTapeTrainingStep<T>
                 || _persistentTarget is null
                 || !ShapesEqual(_persistentTarget._shape, target._shape))
             {
-                Invalidate();
-                _persistentInput = new Tensor<T>(input._shape);
-                _persistentTarget = new Tensor<T>(target._shape);
-                // Re-acquire the cache reference after Invalidate cleared it.
-                cache = _cache ??= new CompiledModelCache<T>();
+                if (_configuredPlan is not null && _persistentInput is not null && PlanSupportsContinueOptimizer()
+                    && _configuredOptimizerConfig is not null
+                    && _configuredOptimizerConfig.Value.Equals(((int)optimizerType, lrSchedule is null ? learningRate : 0f, beta1, beta2, epsilon, weightDecay))
+                    && _configuredL2.Equals(l2Regularization))
+                {
+                    // A batch-shape change on a configured lifecycle - typically the short last batch of an epoch.
+                    // Switch to this shape's plan and let it continue the optimizer (moments, step count) from the
+                    // configured one; invalidating here restarted fused Adam from zero moments twice an epoch.
+                    SwitchPersistentShape(input._shape, target._shape);
+                    cache = _cache ??= new CompiledModelCache<T>();
+                }
+                else
+                {
+                    Invalidate();
+                    _persistentInput = new Tensor<T>(input._shape);
+                    _persistentTarget = new Tensor<T>(target._shape);
+                    _persistentByShape = new List<(Tensor<T>, Tensor<T>)> { (_persistentInput, _persistentTarget) };
+                    // Re-acquire the cache reference after Invalidate cleared it.
+                    cache = _cache ??= new CompiledModelCache<T>();
+                }
             }
+
+            // Fresh allocations whenever this call can compile: a new lifecycle (including one Invalidate just
+            // reset) or a batch-shape switch, which keeps _configuredPlan non-null but compiles a plan for the new
+            // shape. Deciding this before the shape check let the switch path - the short last batch of every
+            // epoch - trace its new plan on pooled, unwritten scratch, which the compiled actions then keep.
+            using var firstCompiledStepAllocations =
+                FirstCompiledStepAllocationScope.Enter(_configuredPlan is null || _shapeSwitchFrom is not null);
 
             // Copy the caller's fresh per-call data into the persistent
             // tensors BEFORE compilation or replay. The compiled plan's
@@ -1122,6 +1313,7 @@ public static class CompiledTapeTrainingStep<T>
                     (double)epsilon, (double)weightDecay, scaler);
                 lossValue = (T)(object)lossF32;
                 _fusedStepCount++;
+                CurrentState.planOptimizerStep = -1;   // a mixed-precision plan ran, not the configured one
                 return true;
             }
 
@@ -1188,6 +1380,7 @@ public static class CompiledTapeTrainingStep<T>
                     eagerOptimizer.Step(ctx);
                 }
                 _fusedStepCount++;
+                CurrentState.planOptimizerStep = -1;   // a mixed-precision plan ran, not the configured one
                 return true;
             }
 
@@ -1198,6 +1391,7 @@ public static class CompiledTapeTrainingStep<T>
             // routes to the separate, capture-incompatible MixedPrecisionCompiledPlan handled above. The scope
             // is active only during the (once-per-shape) trace+compile; Step() replays without it.
             ICompiledTrainingPlan<T> plan;
+            bool compiledThisCall = false;
             {
                 using var _fp16Capture =
                     (typeof(T) == typeof(float) && Environment.GetEnvironmentVariable("AIDOTNET_FP16_CAPTURE") == "1")
@@ -1207,6 +1401,7 @@ public static class CompiledTapeTrainingStep<T>
                     compositeKey,
                     () =>
                     {
+                        compiledThisCall = true;
                         // Trace through the persistent tensors so plan.Step()
                         // reads from the same refs we update each call.
                         var predicted = forward(_persistentInput!);
@@ -1230,9 +1425,27 @@ public static class CompiledTapeTrainingStep<T>
             //
             // Drift on the SAME plan (LR or beta change between steps) also
             // returns false — reconfiguring would reset m/v.
-            var currentConfig = ((int)optimizerType, learningRate, beta1, beta2, epsilon, weightDecay);
+            // With a schedule the plan evaluates the learning rate itself, per step, so the rate passed in is the host's view of
+            // the current step and moves every step. Comparing it would report every scheduled step as drift and refuse the
+            // committed plan; only a constant rate is part of the configuration.
+            var currentConfig = ((int)optimizerType, lrSchedule is null ? learningRate : 0f, beta1, beta2, epsilon, weightDecay);
 
             bool isFirstStepForConfiguredPlan = _configuredPlan is null;
+            if (_shapeSwitchFrom is ICompiledTrainingPlan<T> switchedFrom
+                && !ReferenceEquals(switchedFrom, plan)
+                && _configuredOptimizerConfig is not null
+                && _configuredOptimizerConfig.Value.Equals(currentConfig)
+                && _configuredL2.Equals(l2Regularization))
+            {
+                // Same optimizer, new batch shape: this shape's plan takes over the optimizer state (and the clip
+                // and L2 it was configured with). A plan compiled just now used its trace's stochastic draw.
+                InvokePlanMethod(s_continueOptimizerMethod, "ContinueOptimizerFrom", plan, switchedFrom);
+                _configuredPlan = plan;
+                isFirstStepForConfiguredPlan = compiledThisCall;
+            }
+            _shapeSwitchFrom = null;
+            _retiringCache?.Invalidate();
+            _retiringCache = null;
             if (_configuredPlan is null)
             {
                 // #1745: request bf16 moment storage BEFORE ConfigureOptimizer so the
@@ -1272,6 +1485,7 @@ public static class CompiledTapeTrainingStep<T>
                         fusedExtras);
                 }
                 _configuredPlan = plan;
+                CurrentState.planOptimizerStep = 0;
                 _configuredOptimizerConfig = currentConfig;
                 // Apply the global gradient-norm clip threshold to the plan
                 // when the underlying ICompiledTrainingPlan<T> exposes
@@ -1287,6 +1501,10 @@ public static class CompiledTapeTrainingStep<T>
                 // fused. Pass 0 to disable.
                 if (maxGradNorm > 0.0)
                     TrySetPlanMaxGradNorm(plan, maxGradNorm);
+                if (l2Regularization > 0.0)
+                    InvokePlanMethod(s_setL2Method, "SetL2Regularization", plan, l2Regularization);
+                _configuredL2 = l2Regularization;
+                restoredStateAwaitingStep = LinkFusedOptimizerState(plan, eagerOptimizer);
             }
             else if (!ReferenceEquals(_configuredPlan, plan))
             {
@@ -1298,7 +1516,8 @@ public static class CompiledTapeTrainingStep<T>
                 return false;
             }
             else if (_configuredOptimizerConfig is null
-                || !_configuredOptimizerConfig.Value.Equals(currentConfig))
+                || !_configuredOptimizerConfig.Value.Equals(currentConfig)
+                || !_configuredL2.Equals(l2Regularization))
             {
                 // Same plan, drifted hyperparameters between steps. Refuse
                 // to re-configure (would reset m/v) and let the caller
@@ -1341,6 +1560,11 @@ public static class CompiledTapeTrainingStep<T>
             // assert the compiled path actually ran — distinguishing it from
             // a silent fallback to the eager path.
             _fusedStepCount++;
+            if (CurrentState.planOptimizerStep >= 0) CurrentState.planOptimizerStep++;
+            // Only now has the restored checkpoint state been carried through a whole fused step. Until here a failure
+            // drops the plan, and the state must still be pending: the next attempt re-imports it, and the eager
+            // fallback refuses to run rather than silently restart the optimizer.
+            restoredStateAwaitingStep?.MarkPendingFusedOptimizerStateInstalled();
             return true;
         }
         catch (Exception ex)
@@ -1369,7 +1593,10 @@ public static class CompiledTapeTrainingStep<T>
             // back THIS step but NOT permanently disable fused for the type on this thread, since a
             // later unrelated model could engage it fine (AiDotNet#1469 review). Generalized from the
             // original AMSGrad-only latch.
-            if (ex is NotSupportedException or MissingMethodException or TypeLoadException
+            // Classify the real failure: a reflected plan call surfaces as TargetInvocationException, which would
+            // otherwise never latch and turn a permanent capability gap into a reconfigure-from-zero every switch.
+            var cause = ex is System.Reflection.TargetInvocationException { InnerException: { } inner } ? inner : ex;
+            if (cause is NotSupportedException or MissingMethodException or TypeLoadException
                 or EntryPointNotFoundException or DllNotFoundException)
             {
                 (_fusedUnavailableTypes ??= new System.Collections.Generic.HashSet<AiDotNet.Tensors.Engines.Compilation.OptimizerType>())
@@ -1377,8 +1604,71 @@ public static class CompiledTapeTrainingStep<T>
             }
             _configuredPlan = null;
             _configuredOptimizerConfig = null;
+            CurrentState.planOptimizerStep = -1;
+            _configuredL2 = 0.0;
             return false;
         }
+    }
+
+    /// <summary>
+    /// Connects a freshly configured plan to the optimizer whose update it runs. A fused optimizer's moments, step
+    /// counter and schedule position live inside the plan, so the optimizer must be able to read them when it is
+    /// serialized, and a state restored from a checkpoint must be installed into the plan before its first step.
+    /// </summary>
+    /// <returns>The optimizer whose restored checkpoint state was imported, to be marked installed once the first fused
+    /// step succeeds; <c>null</c> when there was none.</returns>
+    private static AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>? LinkFusedOptimizerState(
+        ICompiledTrainingPlan<T> plan,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? eagerOptimizer)
+    {
+        if (eagerOptimizer is not AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> optimizer)
+            return null;
+
+        AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>? imported = null;
+        if (optimizer.PeekPendingFusedOptimizerState() is { } restored)
+        {
+            // Reconfigures the plan's optimizer from the checkpoint (hyperparameters, schedule position, step and
+            // moments), so the next Step continues the checkpointed trajectory exactly. NOT marked installed here: the
+            // caller marks it once the whole fused step has succeeded, so a failure in the import, the step or the
+            // gradient publication leaves it pending and the eager fallback still refuses to run.
+            plan.ImportOptimizerState(restored);
+            imported = optimizer;
+            // The import carried the checkpoint's step; the plan reports it (AiDotNet.Tensors plan introspection), so a
+            // schedule evaluated after a resume uses the resumed step rather than an unknown one.
+            CurrentState.planOptimizerStep = plan is AiDotNet.Tensors.Engines.Compilation.ICompiledTrainingPlanIntrospection<T> resumed
+                ? resumed.OptimizerStep
+                : -1;
+            // The import rebuilt the plan's schedules. A per-epoch schedule is external: hand the optimizer the restored
+            // instance so its epoch-end rate changes keep reaching the plan.
+            if (plan is AiDotNet.Tensors.Engines.Compilation.ICompiledTrainingPlanIntrospection<T> withSchedules)
+            {
+                foreach (var schedule in withSchedules.LearningRateSchedules)
+                {
+                    if (schedule is AiDotNet.Tensors.Engines.Compilation.ExternalLrSchedule external)
+                        optimizer.AdoptRestoredFusedLrSchedule(external);
+                }
+            }
+        }
+        else
+        {
+            optimizer.EnsureRestoredStateUsableByFusedPlan();
+        }
+
+        var state = CurrentState;
+        optimizer.AttachFusedOptimizerState(new AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>.FusedOptimizerStateLink(
+            export: () => ReferenceEquals(state.configuredPlan, plan) ? plan.ExportOptimizerState() : null,
+            release: () =>
+            {
+                var previous = _currentState;
+                _currentState = state;
+                try
+                {
+                    if (ReferenceEquals(state.configuredPlan, plan))
+                        Invalidate();
+                }
+                finally { _currentState = previous; }
+            }));
+        return imported;
     }
 
     private static void RefreshCompiledStochasticState(IReadOnlyList<ITrainableLayer<T>> layers)
@@ -1507,7 +1797,7 @@ public static class CompiledTapeTrainingStep<T>
         System.Collections.Generic.IReadOnlyList<Tensor<float>> parameters,
         Tensor<float> input,
         Tensor<float> target,
-        float learningRate,
+        double learningRate,
         Func<Tensor<float>, Tensor<float>> forwardF,
         Func<Tensor<float>, Tensor<float>, Tensor<float>> lossF,
         int[] key)
@@ -1544,7 +1834,8 @@ public static class CompiledTapeTrainingStep<T>
         // one scaler (dynamic loss scale + skip-on-overflow handled inside Step) — matching the
         // Adam/generic paths above, which already pass _mpScaler.
         _mpScaler ??= MixedPrecisionReflection.CreateGradScaler(1024f);
-        return MixedPrecisionReflection.StepSgd(plan, parameters, learningRate, _mpScaler);
+        // The mixed-precision plan is an FP32 master copy updated in float, so the rate narrows here and only here.
+        return MixedPrecisionReflection.StepSgd(plan, parameters, (float)learningRate, _mpScaler);
     }
 
     /// <summary>

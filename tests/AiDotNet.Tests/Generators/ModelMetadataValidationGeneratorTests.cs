@@ -71,7 +71,7 @@ namespace SampleModels
                 continue;
             try
             {
-                refs.Add(MetadataReference.CreateFromFile(loc));
+                refs.Add(global::AiDotNet.Tests.Generators.CachedMetadataReference.FromFile(loc));
             }
             catch
             {

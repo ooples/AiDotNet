@@ -18,10 +18,8 @@ namespace AiDotNet.Training;
 /// <para>Use pattern (mirrors <c>NeuralNetworkBase.TrainWithFusedStep</c>):</para>
 /// <code>
 /// if (CanTrainOnGpu && trainableLayers.Count > 0
-///     &amp;&amp; GpuResidentFusedStep&lt;T&gt;.TryResolveOptimizerConfig(_optimizer, out var t, out var lr, out var b1, out var b2, out var eps, out var wd)
-///     &amp;&amp; CompiledTapeTrainingStep&lt;T&gt;.TryStepWithFusedOptimizer(
-///         trainableLayers, input, target, Forward, loss.ComputeTapeLoss,
-///         t, lr, b1, b2, eps, wd, out T fusedLoss))
+///     &amp;&amp; GpuResidentFusedStep&lt;T&gt;.TryStep(
+///         trainableLayers, input, target, Forward, loss.ComputeTapeLoss, _optimizer, out T fusedLoss))
 /// {
 ///     LastLoss = fusedLoss;
 ///     return;
@@ -33,62 +31,20 @@ namespace AiDotNet.Training;
 internal static class GpuResidentFusedStep<T>
 {
     /// <summary>
-    /// Maps the runtime optimizer instance to the fused-plan optimizer enum + hyperparameters.
-    /// Recognises Adam / AdamW / SGD by class name (case-insensitive). Reads the learning rate
-    /// from the optimizer's <c>Options.InitialLearningRate</c> via reflection; falls back to
-    /// standard defaults if the property isn't available. Returns false for optimizers the fused
-    /// path can't handle so callers cleanly fall through to the eager tape+optimizer route.
+    /// Asks the optimizer itself how it maps onto the fused kernel (<see cref="Optimizers.Fused.IFusedOptimizerSpec"/>),
+    /// the same mapping <c>NeuralNetworkBase</c>'s fused step uses. Returns false - eager fallback - for an
+    /// optimizer that has no fused equivalent or declines in its current configuration.
     /// </summary>
-    public static bool TryResolveOptimizerConfig(
-        object? optimizer,
-        out OptimizerType type,
-        out float learningRate,
-        out float beta1, out float beta2,
-        out float epsilon, out float weightDecay)
+    /// <remarks>
+    /// This used to match the optimizer's CLASS NAME ("Adam" / "AdamW" / "SGD" substrings) and read
+    /// <c>Options.InitialLearningRate</c> by reflection. AdaMax, Nadam and RAdam all contain "adam", so they -
+    /// and Adam with UseAMSGrad, momentum SGD and every scheduled or masked configuration - silently trained
+    /// as plain Adam/SGD at the initial learning rate.
+    /// </remarks>
+    public static bool TryResolveOptimizerConfig(object? optimizer, out Optimizers.Fused.FusedOptimizerConfig config)
     {
-        // Sensible defaults matching AiDotNet's AdamOptimizerOptions.
-        type = OptimizerType.Adam;
-        learningRate = 1e-3f;
-        beta1 = 0.9f; beta2 = 0.999f; epsilon = 1e-8f; weightDecay = 0f;
-
-        if (optimizer is null) return false;
-        var name = optimizer.GetType().Name;
-        if (name.IndexOf("AdamW", StringComparison.OrdinalIgnoreCase) >= 0)
-            type = OptimizerType.AdamW;
-        else if (name.IndexOf("Adam", StringComparison.OrdinalIgnoreCase) >= 0)
-            type = OptimizerType.Adam;
-        else if (name.IndexOf("SGD", StringComparison.OrdinalIgnoreCase) >= 0)
-            type = OptimizerType.SGD;
-        else
-            return false; // Unsupported optimizer — let the caller's eager path handle it.
-
-        // Best-effort hyperparameter extraction from Options.InitialLearningRate /
-        // Options.Beta1 / .Beta2 / .Epsilon / .WeightDecay. Any missing property keeps the default.
-        try
-        {
-            var flags = System.Reflection.BindingFlags.Instance
-                | System.Reflection.BindingFlags.Public
-                | System.Reflection.BindingFlags.NonPublic;
-            var optsProp = optimizer.GetType().GetProperty("Options", flags);
-            var opts = optsProp?.GetValue(optimizer);
-            if (opts is null) return true;
-            var optsType = opts.GetType();
-            var lrVal = optsType.GetProperty("InitialLearningRate")?.GetValue(opts);
-            if (lrVal is not null) learningRate = Convert.ToSingle(lrVal);
-            var b1Val = optsType.GetProperty("Beta1")?.GetValue(opts);
-            if (b1Val is not null) beta1 = Convert.ToSingle(b1Val);
-            var b2Val = optsType.GetProperty("Beta2")?.GetValue(opts);
-            if (b2Val is not null) beta2 = Convert.ToSingle(b2Val);
-            var epsVal = optsType.GetProperty("Epsilon")?.GetValue(opts);
-            if (epsVal is not null) epsilon = Convert.ToSingle(epsVal);
-            var wdVal = optsType.GetProperty("WeightDecay")?.GetValue(opts);
-            if (wdVal is not null) weightDecay = Convert.ToSingle(wdVal);
-        }
-        catch
-        {
-            // Keep defaults on any reflection failure.
-        }
-        return true;
+        config = default;
+        return optimizer is Optimizers.Fused.IFusedOptimizerSpec spec && spec.TryGetFusedOptimizerConfig(out config);
     }
 
     /// <summary>
@@ -116,14 +72,20 @@ internal static class GpuResidentFusedStep<T>
         // whose whole training surface is raw trainable tensors (learned scalars).
         if ((layers is null || layers.Count == 0) && (extraTensors is null || extraTensors.Count == 0))
             return false;
-        if (!TryResolveOptimizerConfig(optimizer, out var type, out var lr, out var b1, out var b2, out var eps, out var wd))
+        if (!TryResolveOptimizerConfig(optimizer, out var cfg))
             return false;
         return CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
             layers ?? System.Array.Empty<ITrainableLayer<T>>(),
             input, target, forward, computeLoss,
-            type, lr, b1, b2, eps, wd, out lossValue,
+            cfg.Type, cfg.LearningRate, cfg.Beta1, cfg.Beta2, cfg.Epsilon, cfg.WeightDecay, out lossValue,
             maxGradNorm: maxGradNorm,
+            lrSchedule: cfg.Schedule,
+            // The optimizer INSTANCE, not just its hyperparameters: its moments live in the compiled plan, and the
+            // plan links itself to this instance so a checkpoint of the optimizer carries them.
+            eagerOptimizer: optimizer as IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>,
+            useBf16Moments: cfg.UseBf16Moments,
             extraTensors: extraTensors,
+            fusedExtras: cfg.Extras,
             onGradients: onGradients,
             owner: owner);
     }

@@ -126,7 +126,7 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
         _options = options;
         Options = _options;
         _stacks = new List<NHiTSStackTensor<T>>();
-        _random = RandomHelper.CreateSeededRandom(42);
+        _random = RandomHelper.CreateSeededRandom(SeedOr(42));
 
         ValidateNHiTSOptions();
         InitializeStacks();
@@ -181,7 +181,7 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
                 _options.NumHiddenLayers,
                 _options.NumBlocksPerStack,
                 poolingSize,
-                seed: 42 + i * 1000
+                seed: SeedOr(42) + i * 1000
             );
 
             _stacks.Add(stack);
@@ -560,7 +560,7 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
         AiDotNet.Training.CompiledTapeTrainingStep<T>.Invalidate(this);
         AiDotNet.Training.CompiledTapeTrainingStep<T>.ResetFusedStepCount(this);
 
-        var random = RandomHelper.CreateSeededRandom(42);
+        var random = RandomHelper.CreateSeededRandom(SeedOr(42));
         int maxEpochs = _options.Epochs;
         bool fusedEngaged = false;
         bool diverged = false;

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using System.Collections.Concurrent;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -48,8 +48,8 @@ public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.Lion,
-            (float)GetCurrentLearningRate(),
-            (float)_options.Beta1, (float)_options.Beta2, 0f, (float)_options.WeightDecay, schedule);
+            GetCurrentLearningRate(),
+            _options.Beta1, _options.Beta2, 0f, _options.WeightDecay, schedule);
         return true;
     }
 
@@ -145,6 +145,9 @@ public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         _currentBeta2 = NumOps.FromDouble(_options.Beta2);
     }
 
+    /// <inheritdoc/>
+    protected override bool SupportsModelOwnStep => true;
+
     /// <summary>
     /// Performs the optimization process using the Lion algorithm.
     /// </summary>
@@ -180,6 +183,7 @@ public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
                 _t++;
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;   // the network's own step; see GradientBasedOptimizerBase
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
                 var newSolution = UpdateSolution(currentSolution, gradient);
                 currentSolution = newSolution;

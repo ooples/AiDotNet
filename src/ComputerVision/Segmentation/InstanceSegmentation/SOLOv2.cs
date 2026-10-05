@@ -34,7 +34,7 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("SOLOv2: Dynamic and Fast Instance Segmentation", "https://arxiv.org/abs/2003.10152", Year = 2020, Authors = "Wang et al.")]
-public class SOLOv2<T> : InstanceSegmenterBase<T>
+public partial class SOLOv2<T> : InstanceSegmenterBase<T>
 {
     private readonly ResNet<T> _backbone;
     private readonly FPN<T> _fpn;
@@ -69,6 +69,20 @@ public class SOLOv2<T> : InstanceSegmenterBase<T>
 
         // Mask feature branch
         _maskBranch = new Conv2D<T>(256, _kernelDim, kernelSize: 3, padding: 1);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Heads, in order: the mask features from P2, then each pyramid level's category predictions,
+    /// then each level's kernel predictions.
+    /// </remarks>
+    protected override List<Tensor<T>> Forward(Tensor<T> input)
+    {
+        var fpnFeatures = _fpn.Forward(_backbone.ExtractFeatures(input));
+        var heads = new List<Tensor<T>> { _maskBranch.Forward(fpnFeatures[0]) };
+        heads.AddRange(fpnFeatures.Select(level => _categoryHead.Forward(level)));
+        heads.AddRange(fpnFeatures.Select(level => _kernelHead.Forward(level)));
+        return heads;
     }
 
     /// <inheritdoc/>

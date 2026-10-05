@@ -67,7 +67,7 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
     /// </para>
     /// </remarks>
     public AMSGradOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         AMSGradOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())
@@ -128,8 +128,8 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.AMSGrad,
-            (float)GetCurrentLearningRate(),
-            (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
+            GetCurrentLearningRate(),
+            _options.Beta1, _options.Beta2, _options.Epsilon,
             0f, schedule);
         return true;
     }
@@ -173,6 +173,9 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         // Learning rate is now set by base class from options.InitialLearningRate
         _t = 0;
     }
+
+    /// <inheritdoc/>
+    protected override bool SupportsModelOwnStep => true;
 
     /// <summary>
     /// Performs the optimization process using the AMSGrad algorithm.
@@ -224,6 +227,7 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
                 // Note: _t is incremented inside UpdateParameters, not here
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;   // the network's own step; see GradientBasedOptimizerBase
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
                 var newSolution = UpdateSolution(currentSolution, gradient);
                 currentSolution = newSolution;
@@ -494,7 +498,7 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         var biasCorrection1Vec = Vector<T>.CreateDefault(_m.Length, biasCorrection1);
         var mHat = (Vector<T>)Engine.Divide(_m, biasCorrection1Vec);
 
-        // Recalculate the update: update = (lr * mHat) / (sqrt(vHat) + epsilon)
+        // Recalculate the update: update = (lr * mHat) / (sqrt(vHat / bc2) + epsilon), bc2 = 1 for the paper variant
         var currentLrVec = Vector<T>.CreateDefault(_m.Length, CurrentLearningRate);
         var lrTimesMHat = (Vector<T>)Engine.Multiply(currentLrVec, mHat);
 

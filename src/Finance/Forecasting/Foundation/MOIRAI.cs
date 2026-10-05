@@ -1,4 +1,4 @@
-using AiDotNet.LearningRateSchedulers;
+﻿using AiDotNet.LearningRateSchedulers;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;

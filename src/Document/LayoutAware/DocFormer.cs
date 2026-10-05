@@ -86,15 +86,7 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
     private readonly int _numClasses;
     private readonly int _spatialDim;
 
-    // Native mode layers
-    private readonly List<ILayer<T>> _textEncoderLayers = [];
-    private readonly List<ILayer<T>> _visualEncoderLayers = [];
-    private readonly List<ILayer<T>> _multiModalLayers = [];
-    private readonly List<ILayer<T>> _outputLayers = [];
 
-    // The spatial X/Y tables used to be model fields here. They are now inside the
-    // LayoutEmbeddingLayer that fronts the text stream, where the forward pass reads them --
-    // see LayerHelper.CreateDefaultDocFormerLayers.
 
     #endregion
 
@@ -290,14 +282,35 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
             return;
         }
 
-        Layers.AddRange(LayerHelper<T>.CreateDefaultDocFormerLayers(
-            hiddenDim: _hiddenDim,
-            numLayers: _numLayers,
-            numHeads: _numHeads,
-            vocabSize: _vocabSize,
-            imageSize: ImageSize,
-            spatialDim: _spatialDim,
-            numClasses: _numClasses));
+        // Streams (Appalaraju et al. 2021; reference ExtractFeatures + DocFormerEncoder), each a branch root:
+        // text word embeddings, the text and visual spatial embeddings, the ResNet-50 visual trunk, then the
+        // multi-modal encoder and the token classifier.
+        IActivationFunction<T> identity = new IdentityActivation<T>();
+        _textEmbeddingIndex = Layers.Count;
+        Layers.Add(LayerGraphContract.FromExternalInput(new EmbeddingLayer<T>(_vocabSize, _hiddenDim)));
+        _textSpatialIndex = Layers.Count;
+        Layers.Add(LayerGraphContract.FromDerivedInput(new DocFormerSpatialEmbeddingLayer<T>(_hiddenDim, MaxPosition2D), "boxes"));
+        _visualSpatialIndex = Layers.Count;
+        Layers.Add(LayerGraphContract.FromDerivedInput(new DocFormerSpatialEmbeddingLayer<T>(_hiddenDim, MaxPosition2D), "boxes"));
+        _visualStart = Layers.Count;
+        bool first = true;
+        foreach (var layer in LayerHelper<T>.CreateResNetBottleneckEncoderLayers(3, ImageSize, ImageSize,
+                     new[] { 256, 512, 1024, 2048 }, new[] { 3, 4, 6, 3 }))
+        {
+            Layers.Add(first ? LayerGraphContract.FromExternalInput(layer) : layer);
+            first = false;
+        }
+        // Conv1x1(2048 -> hidden) + ReLU, then Linear over the flattened spatial grid to MaxSequenceLength tokens.
+        _visualProjectionIndex = Layers.Count;
+        Layers.Add(new ConvolutionalLayer<T>(_hiddenDim, 1, 1, 0, (IActivationFunction<T>)new ReLUActivation<T>()));
+        _visualTokenIndex = Layers.Count;
+        Layers.Add(new DenseLayer<T>(MaxSequenceLength, identity));
+        _encoderIndex = Layers.Count;
+        Layers.Add(LayerGraphContract.FromDerivedInput(
+            new DocFormerEncoderLayer<T>(_hiddenDim, _numHeads, 4 * _hiddenDim, _options.MaxRelativePositions, _numLayers), "text"));
+        _headIndex = Layers.Count;
+        Layers.Add(new DenseLayer<T>(_numClasses, identity));
+        _defaultStack = true;
     }
 
     #endregion
@@ -543,119 +556,151 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
         return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
     }
 
-    // Layer roles in CreateDefaultDocFormerLayers order: [0..VisualEncoderLayerCount) = ResNet visual
-    // backbone (convs/BN/pool ending in a C->hidden projection Dense), then the text embeddings, then
-    // the shared spatial-encoding + multimodal transformer + head. DocFormer (Appalaraju et al. 2021)
-    // reads BOTH a document image and its text; this native forward is modality-robust and routes by
-    // input rank so a token-only input runs the text stream and an image runs the visual backbone, both
-    // feeding the shared stack. Without it the base linear walk sends the rank-1 token vector into the
-    // rank-4-only Conv backbone and throws ("ConvolutionalLayer expects rank-3/rank-4 input; got rank 1").
-    private const int VisualEncoderLayerCount = 8;
+    // Positions of each component in Layers, set by InitializeLayers for the default DocFormer stack.
+    private const int MaxPosition2D = 1024;
+    private bool _defaultStack;
+    private int _textEmbeddingIndex;
+    private int _textSpatialIndex;
+    private int _visualSpatialIndex;
+    private int _visualStart;
+    private int _visualProjectionIndex;
+    private int _visualTokenIndex;
+    private int _encoderIndex;
+    private int _headIndex;
 
-    // One, not two: the token EmbeddingLayer and the sinusoidal PositionalEncodingLayer that used to
-    // sit here are now a single LayoutEmbeddingLayer, which also carries the 2D layout terms and uses
-    // LEARNED positions (BERT's, which DocFormer inherits) rather than fixed sinusoids.
-    private const int TextEncoderLayerCount = 1;
-
-    private Tensor<T> RunModalityForward(Tensor<T> input)
+    /// <summary>
+    /// The DocFormer forward. Text rows are padded with token 0 and a zero box to MaxSequenceLength (the
+    /// reference always runs at max_position_embeddings, because the visual stream has exactly that many
+    /// tokens). The first <paramref name="keep"/> rows of token logits <c>[keep, numClasses]</c> are returned.
+    /// </summary>
+    private Tensor<T> RunDocFormer(int[] tokens, double[][] boxes, Tensor<T>? pageImage, int keep, IDictionary<string, Tensor<T>>? activations = null)
     {
-        Tensor<T> feats;
-        if (input.Rank <= 2)
+        int l = MaxSequenceLength;
+        var ids = new Tensor<T>(new[] { l });
+        var boxTensor = new Tensor<T>(new[] { l, 4 });
+        for (int i = 0; i < Math.Min(tokens.Length, l); i++)
         {
-            // Token/text stream: word embeddings + positional encodings; skip the visual backbone.
-            feats = input;
-            for (int i = VisualEncoderLayerCount; i < VisualEncoderLayerCount + TextEncoderLayerCount && i < Layers.Count; i++)
-                feats = Layers[i].Forward(feats);
+            ids[i] = NumOps.FromDouble(Math.Min(Math.Max(tokens[i], 0), _vocabSize - 1));
+            for (int c = 0; c < 4; c++) boxTensor[i, c] = NumOps.FromDouble(boxes[i][c]);
+        }
+
+        var text = Layers[_textEmbeddingIndex].Forward(ids);
+        var textSpatial = Layers[_textSpatialIndex].Forward(boxTensor);
+        var visualSpatial = Layers[_visualSpatialIndex].Forward(boxTensor);
+        Tensor<T> visual;
+        if (pageImage is null)
+        {
+            visual = new Tensor<T>(new[] { l, _hiddenDim });
         }
         else
         {
-            // Visual stream: conv backbone -> flatten spatial grid to tokens -> channel projection Dense.
-            feats = input;
-            int projIndex = VisualEncoderLayerCount - 1;
-            for (int i = 0; i < projIndex && i < Layers.Count; i++)
-                feats = Layers[i].Forward(feats);
-            feats = FlattenSpatialToTokens(feats);
-            if (projIndex >= 0 && projIndex < Layers.Count)
-                feats = Layers[projIndex].Forward(feats);
+            var image = pageImage.Rank == 3
+                ? Engine.Reshape(pageImage, new[] { 1, pageImage.Shape[0], pageImage.Shape[1], pageImage.Shape[2] })
+                : pageImage;
+            var features = image;
+            for (int i = _visualStart; i <= _visualProjectionIndex; i++) features = Layers[i].Forward(features);
+            int spatial = features.Shape[2] * features.Shape[3];
+            var grid = Engine.Reshape(features, new[] { _hiddenDim, spatial });                 // [hidden, h*w]
+            visual = Engine.TensorPermute(Layers[_visualTokenIndex].Forward(grid), new[] { 1, 0 });  // [L, hidden]
         }
-        // Shared spatial-encoding + multimodal transformer + head.
-        for (int i = VisualEncoderLayerCount + TextEncoderLayerCount; i < Layers.Count; i++)
-            feats = Layers[i].Forward(feats);
-        return feats;
+        if (activations is not null)
+        {
+            activations["text_embedding"] = text;
+            activations["text_spatial"] = textSpatial;
+            activations["visual_spatial"] = visualSpatial;
+            activations["visual_tokens"] = visual;
+        }
+
+        var encoded = ((DocFormerEncoderLayer<T>)Layers[_encoderIndex]).Forward(text, visual, textSpatial, visualSpatial);
+        var logits = Layers[_headIndex].Forward(encoded);
+        if (activations is not null) activations["encoder"] = encoded;
+        return keep == l ? logits : Engine.TensorSlice(logits, new[] { 0, 0 }, new[] { keep, _numClasses });
     }
 
-    // [C, H, W] -> [H*W, C]; [B, C, H, W] -> [B, H*W, C]. Puts channels last so each spatial location
-    // becomes a token whose feature vector the projection Dense maps to the hidden dim.
-    private Tensor<T> FlattenSpatialToTokens(Tensor<T> feat)
+    /// <summary>
+    /// Routes a public input:
+    /// <list type="bullet">
+    /// <item>Packed <c>[S, 5]</c> rows (token id, x0, y0, x1, y1).</item>
+    /// <item>Token ids <c>[S]</c>, with zero boxes.</item>
+    /// <item>A page image <c>[3, H, W]</c>, with an all-padding text stream; all MaxSequenceLength rows are
+    /// returned.</item>
+    /// </list>
+    /// </summary>
+    private Tensor<T> RouteDocFormer(Tensor<T> input, IDictionary<string, Tensor<T>>? activations = null)
     {
-        if (feat.Rank == 4)
+        if (input.Rank >= 3)
+            return RunDocFormer(Array.Empty<int>(), Array.Empty<double[]>(), input, MaxSequenceLength, activations);
+        int s = input.Shape[0];
+        if (s > MaxSequenceLength)
+            throw new ArgumentException($"DocFormer takes at most {MaxSequenceLength} tokens; got {s}.", nameof(input));
+        bool packed = input.Rank == 2 && input.Shape[1] == 5;
+        if (input.Rank == 2 && !packed && input.Shape[1] != 1)
+            throw new ArgumentException("DocFormer expects packed rows [S, 5] (token, x0, y0, x1, y1), token ids [S], or a page image.", nameof(input));
+        var tokens = new int[s];
+        var boxes = new double[s][];
+        for (int i = 0; i < s; i++)
         {
-            int b = feat.Shape[0], c = feat.Shape[1], n = feat.Shape[2] * feat.Shape[3];
-            return Engine.TensorPermute(Engine.Reshape(feat, new[] { b, c, n }), new[] { 0, 2, 1 });
+            tokens[i] = (int)Math.Round(NumOps.ToDouble(input.Rank == 1 ? input[i] : input[i, 0]));
+            boxes[i] = packed
+                ? new[] { NumOps.ToDouble(input[i, 1]), NumOps.ToDouble(input[i, 2]), NumOps.ToDouble(input[i, 3]), NumOps.ToDouble(input[i, 4]) }
+                : new double[4];
         }
-        if (feat.Rank == 3)
-        {
-            int c = feat.Shape[0], n = feat.Shape[1] * feat.Shape[2];
-            return Engine.TensorPermute(Engine.Reshape(feat, new[] { c, n }), new[] { 1, 0 });
-        }
-        return feat;
+        return RunDocFormer(tokens, boxes, null, s, activations);
     }
+
+    /// <summary>
+    /// Token logits <c>[S, numClasses]</c> for packed rows <c>[S, 5]</c> (token id, x0, y0, x1, y1) and the page
+    /// image <c>[3, H, W]</c>, which drives the ResNet-50 visual stream.
+    /// </summary>
+    public Tensor<T> PredictDocument(Tensor<T> packedTokens, Tensor<T> pageImage)
+    {
+        if (packedTokens is null) throw new ArgumentNullException(nameof(packedTokens));
+        if (pageImage is null) throw new ArgumentNullException(nameof(pageImage));
+        if (!_useNativeMode) throw new NotSupportedException("PredictDocument needs the native model.");
+        if (packedTokens.Rank != 2 || packedTokens.Shape[1] != 5)
+            throw new ArgumentException("PredictDocument expects packed rows [S, 5] (token, x0, y0, x1, y1).", nameof(packedTokens));
+        SetTrainingMode(false);
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        int s = packedTokens.Shape[0];
+        var tokens = new int[s];
+        var boxes = new double[s][];
+        for (int i = 0; i < s; i++)
+        {
+            tokens[i] = (int)Math.Round(NumOps.ToDouble(packedTokens[i, 0]));
+            boxes[i] = new[] { NumOps.ToDouble(packedTokens[i, 1]), NumOps.ToDouble(packedTokens[i, 2]), NumOps.ToDouble(packedTokens[i, 3]), NumOps.ToDouble(packedTokens[i, 4]) };
+        }
+        return RunDocFormer(tokens, boxes, PreprocessDocument(pageImage), s);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>Packed rows hold token ids and box coordinates on the 0-1023 grid; one bound covers both (token ids above the vocabulary are clamped).</remarks>
+    public override LayerInputDomain GetInputDomain(int[]? inputShape)
+        => _useNativeMode && _defaultStack && inputShape is { Length: 2 } && inputShape[1] == 5
+            ? LayerInputDomain.Indices(Math.Max(_vocabSize, MaxPosition2D))
+            : base.GetInputDomain(inputShape);
 
     /// <inheritdoc/>
     protected override Tensor<T> Forward(Tensor<T> input)
-        => _useNativeMode ? RunModalityForward(input) : base.Forward(input);
+        => _useNativeMode && _defaultStack ? RouteDocFormer(input) : base.Forward(input);
 
     /// <inheritdoc/>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
-        => _useNativeMode ? RunModalityForward(input) : base.ForwardForTraining(input);
+        => _useNativeMode && _defaultStack ? RouteDocFormer(input) : base.ForwardForTraining(input);
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// Diagnostic counterpart of the modality routing in <see cref="RunModalityForward"/>: the base
-    /// implementation walks <c>Layers</c> from index 0, sending a token-only input into the rank-4-only
-    /// Conv backbone and throwing before it records anything. Record only the layers that actually fire.
-    /// </remarks>
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
 
-        if (!_useNativeMode)
+        if (!_useNativeMode || !_defaultStack)
             return base.GetNamedLayerActivations(input);
 
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         var activations = new Dictionary<string, Tensor<T>>();
-        var current = input;
-        if (input.Rank <= 2)
-        {
-            for (int i = VisualEncoderLayerCount; i < VisualEncoderLayerCount + TextEncoderLayerCount && i < Layers.Count; i++)
-            {
-                current = Layers[i].Forward(current);
-                activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
-            }
-        }
-        else
-        {
-            int projIndex = VisualEncoderLayerCount - 1;
-            for (int i = 0; i < projIndex && i < Layers.Count; i++)
-            {
-                current = Layers[i].Forward(current);
-                activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
-            }
-            current = FlattenSpatialToTokens(current);
-            if (projIndex >= 0 && projIndex < Layers.Count)
-            {
-                current = Layers[projIndex].Forward(current);
-                activations[$"Layer_{projIndex}_{Layers[projIndex].GetType().Name}"] = current.Clone();
-            }
-        }
-        for (int i = VisualEncoderLayerCount + TextEncoderLayerCount; i < Layers.Count; i++)
-        {
-            current = Layers[i].Forward(current);
-            activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone();
-        }
+        activations["output"] = RouteDocFormer(input, activations);
         return activations;
     }
-
     /// <inheritdoc/>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {

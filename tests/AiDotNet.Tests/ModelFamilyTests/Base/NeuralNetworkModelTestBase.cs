@@ -1326,11 +1326,14 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         string regime = string.Empty;
         if (untrained is not null)
         {
-            AdoptBatchNormalizationStatistics(
-                (AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)untrained,
-                (AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)network);
+            // Each network is judged under BatchNorm statistics re-estimated for its OWN weights (see
+            // RecalibrateBatchNormalization); sharing the trained network's trailing average favoured whichever
+            // weights that average happened to lag behind.
+            RecalibrateBatchNormalization((AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)untrained, input);
+            RecalibrateBatchNormalization((AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)network, input);
             initialLoss = MeasureLoss(untrained, input, untrained.Predict(input), target);
-            regime = " (both measured in eval mode under the trained BatchNorm running statistics)";
+            finalLoss = MeasureLoss(network, input, network.Predict(input), target);
+            regime = " (both measured in eval mode under BatchNorm statistics recalibrated for their own weights)";
         }
 
         if (!double.IsNaN(initialLoss) && !double.IsNaN(finalLoss))
@@ -1384,19 +1387,46 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     }
 
     /// <summary>
-    /// Installs the running statistics of each of <paramref name="source"/>'s BatchNorm layers into the
-    /// matching layer of <paramref name="destination"/> (a clone of the same network, so the depth-first order
-    /// pairs them), through the same copy-on-write buffer adoption the clone path uses.
+    /// Re-estimates every BatchNorm layer's running statistics for <paramref name="network"/>'s CURRENT weights from
+    /// one forward over <paramref name="input"/>, as PyTorch's <c>update_bn</c> does after SWA.
     /// </summary>
-    private static void AdoptBatchNormalizationStatistics(
-        AiDotNet.NeuralNetworks.NeuralNetworkBase<T> destination, AiDotNet.NeuralNetworks.NeuralNetworkBase<T> source)
+    /// <remarks>
+    /// <para>
+    /// A model trained on one sample normalizes with that sample's batch statistics, and its running statistics are a
+    /// momentum average that trails the weights. After a short run the trailing average still describes earlier
+    /// weights, so an eval-mode loss judges the weights under statistics that do not belong to them. Measured on
+    /// WavLMSpeaker over 10 steps: the training-mode loss fell every step (0.3306 to 0.3260) while the eval loss fell
+    /// to 0.713 and then rose to 0.746 as the average chased the shifting activations. That is not a training defect,
+    /// and before BatchNorm normalized a single sample over its spatial positions it could not show at all, because
+    /// batch-1 training never touched the running statistics.
+    /// </para>
+    /// <para>
+    /// Every layer stays in eval mode, so dropout is off and the pass is deterministic; the BatchNorm layers'
+    /// OverwriteRunningStatistics flag makes them normalize with the batch statistics anyway, so later layers see
+    /// exactly what they saw in training and every layer's statistics are those of the current weights. No layer's
+    /// mode is changed, so a PredictCore that forces evaluation mode cannot undo the recalibration.
+    /// </para>
+    /// </remarks>
+    private static void RecalibrateBatchNormalization(AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network, Tensor<T> input)
     {
-        var to = BatchNormalizationLayers(destination.LayersIncludingComponents()).ToList();
-        var from = BatchNormalizationLayers(source.LayersIncludingComponents()).ToList();
-        Assert.True(to.Count == from.Count,
-            $"The untrained clone has {to.Count} BatchNorm layers but the trained network has {from.Count}.");
-        for (int i = 0; i < to.Count; i++)
-            to[i].AdoptRegisteredBuffersFrom(from[i]);
+        var batchNorms = BatchNormalizationLayers(network.LayersIncludingComponents()).ToList();
+        if (batchNorms.Count == 0) return;
+        network.SetTrainingMode(false);
+        try
+        {
+            // The overwrite flag makes BatchNorm use batch statistics whatever its training mode, so no layer's
+            // mode is touched: a PredictCore that forces evaluation mode (NeuralVaR does, unconditionally) would
+            // otherwise reset per-layer training modes mid-pass and leave the statistics stale.
+            foreach (var batchNorm in batchNorms) batchNorm.OverwriteRunningStatistics = true;
+            // Through Predict, so the model's own input preparation runs (a raw forward bypassed it and fed
+            // ContextNet's transpose the wrong rank).
+            using var _ = network.Predict(input);
+        }
+        finally
+        {
+            foreach (var batchNorm in batchNorms) batchNorm.OverwriteRunningStatistics = false;
+            network.SetTrainingMode(false);
+        }
     }
 
     /// <summary>
@@ -2744,26 +2774,23 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // initial), and what Google's ML Test Score recommends — assert on behaviour AFTER a
         // training budget, never per-step monotonicity. It is transient-immune by construction, so
         // it needs no per-model knowledge of where a given architecture stops oscillating.
+        // BatchNorm: measure both ends under statistics re-estimated for the weights being measured (see
+        // RecalibrateBatchNormalization). Without it the untrained loss used the initial mean-0 / variance-1
+        // statistics and the trained one a momentum average of the run, so the comparison mixed the weights'
+        // change with the statistics' change. Training normalizes with batch statistics, so calibrating the
+        // untrained model first does not alter the trajectory.
+        var batchNormNetwork = network1 is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nnBase
+            && ContainsBatchNormalization(nnBase.LayersIncludingComponents())
+                ? nnBase
+                : null;
+        if (batchNormNetwork is not null) RecalibrateBatchNormalization(batchNormNetwork, input);
         double lossUntrained = MeasureLoss(network1, input, network1.Predict(input), target);
 
-        // An evaluation reads BatchNorm through its running statistics, which training moves: the trained model would
-        // be measured under different normalization than the untrained baseline. Keep the untrained weights and, at the
-        // end, re-measure them under the final statistics, exactly as Training_ShouldReduceLoss does.
-        using var untrained = network1 is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> moreDataNet
-            && ContainsBatchNormalization(moreDataNet.LayersIncludingComponents())
-                ? (INeuralNetworkModel<T>)network1.Clone()
-                : null;
 
         for (int i = 0; i < longIters; i++)
             TrainOn(network1, input, target);
+        if (batchNormNetwork is not null) RecalibrateBatchNormalization(batchNormNetwork, input);
         double lossTrained = MeasureLoss(network1, input, network1.Predict(input), target);
-        if (untrained is not null)
-        {
-            AdoptBatchNormalizationStatistics(
-                (AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)untrained,
-                (AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)network1);
-            lossUntrained = MeasureLoss(untrained, input, untrained.Predict(input), target);
-        }
 
         double lossLong = lossTrained;
 
@@ -3763,11 +3790,32 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// The loss the memorization probe compares, honouring
     /// <see cref="MemorizationTaskUsesDeterministicEvalLoss"/>.
     /// </summary>
+    /// <remarks>
+    /// When the evaluation loss is used, BatchNorm statistics are recalibrated for the current weights first (see
+    /// RecalibrateBatchNormalization) so the evaluation judges the weights, not a trailing average. The choice stays
+    /// per model: switching every dropout network to the evaluation loss was tried and failed five others
+    /// (OpenVoice, MOIRAI, KyutaiMoshi, LayoutGraph, BiaffineNER), whose evaluation loss descends less cleanly than
+    /// the objective they train.
+    /// </remarks>
     private double MemorizationProbeLoss(
         INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> target)
-        => MemorizationTaskUsesDeterministicEvalLoss
-            ? MeasureLoss(network, input, network.Predict(input), target)
-            : ConvertToDouble(network.GetLastLoss());
+    {
+        // A denoising-diffusion learner is judged on its declared objective - a deterministic
+        // quadrature over (timestep, noise) - and nothing else. GetLastLoss() is one random draw of that
+        // objective, and the recalibrated-Predict path below is worse for these models: recalibrating
+        // BatchNorm through Predict runs the reverse sampler, so the statistics come from sampler rows at
+        // the last reverse step and the quadrature over EVERY step is then scored under them. CCDM (whose
+        // score network batch-normalizes) failed this probe that way in a full shard (1.2016 -> 1.1975
+        // over 200 steps) after recalibration was introduced, and passed it rerun alone. Measuring the
+        // objective directly in evaluation mode is what the probe did before recalibration existed, minus
+        // a reverse-sampler run whose output the objective never reads.
+        if (network is ITrainingObjectiveProvider<T> { TrainingObjectiveKind: TrainingObjectiveKind.DiffusionDenoising } diffusion)
+            return MeasureDeclaredTrainingObjective(network, diffusion, input, target);
+        if (!MemorizationTaskUsesDeterministicEvalLoss)
+            return ConvertToDouble(network.GetLastLoss());
+        if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nnBase) RecalibrateBatchNormalization(nnBase, input);
+        return MeasureLoss(network, input, network.Predict(input), target);
+    }
 
     /// <summary>
     /// Absolute-loss floor under which the memorization invariant
@@ -3816,15 +3864,6 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         TrainOn(network, input, target);
         double lossStep1 = MemorizationProbeLoss(network, input, target);
 
-        // A deterministic evaluation reads BatchNorm through its running statistics, which keep moving while the
-        // probe trains: two evaluations taken at different steps would compare different normalizations as well as
-        // different weights. Keep the step-1 weights and, at the end, re-measure them under the final statistics,
-        // exactly as Training_ShouldReduceLoss does.
-        using var afterStep1 = MemorizationTaskUsesDeterministicEvalLoss
-            && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> memorizationNet
-            && ContainsBatchNormalization(memorizationNet.LayersIncludingComponents())
-                ? (INeuralNetworkModel<T>)network.Clone()
-                : null;
 
         // Run up to the configured number of follow-on steps. The 120-second training budget leaves
         // one minute of the 180-second test timeout for construction, target preparation, final
@@ -3840,13 +3879,6 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         }
         double lossFinal = MemorizationProbeLoss(network, input, target);
         int completedSteps = completedFollowOnSteps + 1;
-        if (afterStep1 is not null)
-        {
-            AdoptBatchNormalizationStatistics(
-                (AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)afterStep1,
-                (AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)network);
-            lossStep1 = MemorizationProbeLoss(afterStep1, input, target);
-        }
 
         Assert.False(double.IsNaN(lossStep1) || double.IsInfinity(lossStep1),
             $"Loss after step 1 is non-finite: {lossStep1}");
@@ -4458,6 +4490,19 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// output. This mirrors the legal-label handling the NER/CRF test bases already do for their
     /// type-constrained targets. Non-CE models keep their (MSE-appropriate) raw target unchanged.
     /// </summary>
+    /// <summary>
+    /// True for a loss that reads its target as a per-element probability in [0, 1]: binary cross-entropy
+    /// (with or without logits), focal and dice, and a logit composite of them (SAM's focal + dice mask loss).
+    /// A target outside [0, 1] makes these objectives ill-posed - negative cross-entropy, or log of a
+    /// negative focal p_t - so fixtures project into that range and validation rejects anything outside it.
+    /// </summary>
+    private static bool TargetIsProbability(AiDotNet.Interfaces.ILossFunction<T>? loss)
+        => loss is AiDotNet.LossFunctions.BinaryCrossEntropyWithLogitsLoss<T>
+            or AiDotNet.LossFunctions.BinaryCrossEntropyLoss<T>
+            or AiDotNet.LossFunctions.CompositeLossWithLogits<T>
+            or AiDotNet.LossFunctions.FocalLoss<T>
+            or AiDotNet.LossFunctions.DiceLoss<T>;
+
     protected Tensor<T> MakeTargetWellPosedForLoss(INeuralNetworkModel<T> network, Tensor<T> target, Random rng)
     {
         if (network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> ctcNetwork
@@ -4564,10 +4609,15 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // PyTorch documents binary_cross_entropy_with_logits targets as probabilities between 0 and
         // 1, so clamping into that range is what makes the objective the one the loss is defined for.
         // Same treatment, same reason, as the CrossEntropyWithLogitsLoss branch below.
+        //
+        // The same holds for every loss that reads its target as a probability (TargetIsProbability).
+        // MEASURED on SAM, whose mask loss is focal + dice on sigmoid(logits): the random target spanned
+        // [-0.93, 0.98], so focal's p_t = t*p + (1-t)*(1-p) went negative for any p away from 0.5 and
+        // log(p_t) was NaN. While BatchNorm left single-sample activations unnormalized, SAM's logits sat
+        // near 0 (p ~ 0.5, where p_t = 0.5 for ANY t) and hid the ill-posed target; normalized ones did not.
         if (target.Length > 0
             && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> binary
-            && (binary.DefaultLossFunction is AiDotNet.LossFunctions.BinaryCrossEntropyWithLogitsLoss<T>
-                || binary.DefaultLossFunction is AiDotNet.LossFunctions.BinaryCrossEntropyLoss<T>))
+            && TargetIsProbability(binary.DefaultLossFunction))
         {
             var projected = new Tensor<T>(target.Shape.ToArray());
             var zero = NumOps.Zero;
@@ -4720,9 +4770,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             return;
         }
 
-        bool binaryCrossEntropy =
-            nn.DefaultLossFunction is AiDotNet.LossFunctions.BinaryCrossEntropyWithLogitsLoss<T>
-            || nn.DefaultLossFunction is AiDotNet.LossFunctions.BinaryCrossEntropyLoss<T>;
+        bool targetIsProbability = TargetIsProbability(nn.DefaultLossFunction);
         bool bornRule = nn.DefaultLossFunction is AiDotNet.LossFunctions.BornRuleMseLoss<T>;
         double totalMass = 0.0;
 
@@ -4748,7 +4796,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 continue;
             }
 
-            if (binaryCrossEntropy)
+            if (targetIsProbability)
             {
                 if ((value < 0.0 || value > 1.0) && outOfRangeIndex < 0)
                 {
@@ -4766,7 +4814,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         Assert.True(nonFiniteIndex < 0,
             $"Loss-compatible target[{nonFiniteIndex}] is non-finite: {nonFiniteValue:G17}.");
         Assert.True(outOfRangeIndex < 0,
-            $"Binary-cross-entropy target[{outOfRangeIndex}] must lie in [0, 1]; got "
+            $"Probability-valued target[{outOfRangeIndex}] must lie in [0, 1]; got "
             + $"{outOfRangeValue:G17}.");
         Assert.True(negativeIndex < 0,
             $"Born-rule target[{negativeIndex}] must be non-negative; got {negativeValue:G17}.");

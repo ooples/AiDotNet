@@ -1,4 +1,4 @@
-﻿using AiDotNet.Tensors.Engines.DirectGpu;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using System.Collections.Concurrent;
 using AiDotNet.Tensors.Engines.Autodiff;
 using Newtonsoft.Json;
@@ -185,18 +185,46 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         // the compiled kernel would decay every parameter including the ones the mask exempts. Decline
         // rather than diverge from the eager path.
         if (_options.WeightDecayMask is not null) return false;
+        // The eager tape step clips before the update. The compiled plan can reproduce a global-norm
+        // clip (carried below) but not a per-element value clip, so a value-clipped run stays eager.
+        bool clips = GradientOptions.EnableGradientClipping;
+        if (clips && GradientOptions.GradientClippingMethod == GradientClippingMethod.ByValue) return false;
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
-        // AdamW + AMSGrad uses the same max-second-moment kernel; decoupled weight
-        // decay is carried in WeightDecay and applied by the AdamW update path.
+        // AdamW + AMSGrad runs the max-second-moment kernel with its decay switched to decoupled via Extras.
         config = new Fused.FusedOptimizerConfig(
             _options.UseAMSGrad
                 ? Tensors.Engines.Compilation.OptimizerType.AMSGrad
                 : Tensors.Engines.Compilation.OptimizerType.AdamW,
-            (float)GetCurrentLearningRate(),
-            (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
-            (float)_options.WeightDecay, schedule);
+            GetCurrentLearningRate(),
+            _options.Beta1, _options.Beta2, _options.Epsilon,
+            _options.WeightDecay, schedule)
+        {
+            // The AMSGrad kernel's own decay is Adam's L2 (g += wd*p); AdamW's is decoupled, so say so -
+            // otherwise the fused step silently ran L2-regularized AMSGrad instead of AdamW + AMSGrad.
+            Extras = _options.UseAMSGrad
+                ? new Tensors.Engines.Compilation.FusedOptimizerExtras { DecoupledWeightDecay = true }
+                : null,
+        };
         return true;
     }
+
+    /// <inheritdoc/>
+    internal override double TapeStepGradientClipNorm =>
+        !GradientOptions.EnableGradientClipping ? 0.0
+        : GradientOptions.GradientClippingMethod == GradientClippingMethod.ByNorm
+            ? Math.Max(GradientOptions.MaxGradientNorm, 0.0)
+        : GradientOptions.GradientClippingMethod == GradientClippingMethod.ByValue ? double.NaN
+        : 0.0;
+
+    /// <inheritdoc/>
+    internal override double TapeStepGradientClipValue =>
+        GradientOptions.EnableGradientClipping
+            && GradientOptions.GradientClippingMethod == GradientClippingMethod.ByValue
+            ? GradientOptions.MaxGradientValue
+            : 0.0;
+
+    /// <inheritdoc/>
+    protected override bool SupportsModelOwnStep => true;
 
     /// <summary>
     /// Performs the optimization process using the AdamW algorithm.
@@ -249,6 +277,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             {
                 _t++;
                 // Calculate gradient on the batch
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;   // the network's own step; see GradientBasedOptimizerBase
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
 
                 // Update solution using AdamW algorithm
@@ -377,9 +406,10 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         Vector<T> vHatEffective;
         if (_options.UseAMSGrad && _vMax != null)
         {
-            // Update vMax = max(vMax, vHat) using vectorized operation
-            _vMax = (Vector<T>)Engine.Max(_vMax, vHat);
-            vHatEffective = _vMax;
+            // vMax = max(vMax, v) over the RAW second moment, bias-corrected at use - PyTorch
+            // AdamW(amsgrad=True) and the fused AMSGrad kernel this optimizer dispatches to.
+            _vMax = (Vector<T>)Engine.Max(_vMax, _v);
+            vHatEffective = (Vector<T>)Engine.Divide(_vMax, biasCorrection2);
         }
         else
         {
@@ -520,9 +550,10 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
 
             if (amsGrad)
             {
-                // Preserve Engine.Max(vMax, vHat) operand order, including its NaN behavior.
-                vHat = NumOps.GreaterThan(vMaxSpan[i], vHat) ? vMaxSpan[i] : vHat;
-                vMaxSpan[i] = vHat;
+                // Running max of the RAW v, bias-corrected at use (PyTorch AdamW(amsgrad=True)).
+                T vMax = NumOps.GreaterThan(vMaxSpan[i], v) ? vMaxSpan[i] : v;
+                vMaxSpan[i] = vMax;
+                vHat = NumOps.Divide(vMax, biasCorrection2);
             }
 
             T adamUpdate = NumOps.Divide(mHat, NumOps.Add(NumOps.Sqrt(vHat), epsilon));
@@ -621,6 +652,15 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         // Bias correction
         var mHat = (Vector<T>)Engine.Divide(_m, biasCorrection1);
         var vHat = (Vector<T>)Engine.Divide(_v, biasCorrection2);
+
+        // AMSGrad: this path allocated _vMax under UseAMSGrad but never applied it, so a Matrix-parameter
+        // AdamW silently ran without AMSGrad. Running max of the RAW v, bias-corrected at use.
+        if (_options.UseAMSGrad)
+        {
+            if (_vMax is null || _vMax.Length != _v.Length) _vMax = new Vector<T>(_v.Length);
+            _vMax = (Vector<T>)Engine.Max(_vMax, _v);
+            vHat = (Vector<T>)Engine.Divide(_vMax, biasCorrection2);
+        }
 
         // Compute update
         var vHatSqrt = (Vector<T>)Engine.Sqrt(vHat);
@@ -790,9 +830,9 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                     vMax = new Tensor<T>(param._shape);
                     _tapeVMax[param] = vMax;
                 }
-                var vMaxNew = Engine.TensorMax(vMax, vHat);
+                var vMaxNew = Engine.TensorMax(vMax, v);   // max of the RAW v (PyTorch), corrected at use
                 Engine.TensorCopy(vMaxNew, vMax);
-                vHatEffective = vMax;
+                vHatEffective = Engine.TensorDivideScalar(vMax, biasCorrection2);
             }
             else
             {

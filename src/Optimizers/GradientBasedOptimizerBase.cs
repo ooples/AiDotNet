@@ -1,4 +1,4 @@
-using AiDotNet.Helpers;
+﻿using AiDotNet.Helpers;
 using AiDotNet.Caching;
 using AiDotNet.Attributes;
 using AiDotNet.Deployment.Configuration;
@@ -109,6 +109,72 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
     private const string TapeStateExtensionMarker = "AiDotNet.GradientTapeOptimizerState.v1";
     private const string SchedulerStateExtensionMarker = "AiDotNet.LearningRateSchedulerState.v1";
+    private const string FusedPlanStateExtensionMarker = "AiDotNet.FusedPlanOptimizerState.v1";
+
+    /// <summary>
+    /// The compiled training plan currently running this optimizer's update, when training takes the fused path.
+    /// A fused optimizer keeps its moments and step counter inside that plan, not in this object, so serializing
+    /// only this object would record an empty state and a resumed run would restart the optimizer.
+    /// </summary>
+    private FusedOptimizerStateLink? _fusedStateLink;
+
+    /// <summary>
+    /// Fused-plan state read from a checkpoint and not yet installed: the next fused step imports it into its
+    /// freshly configured plan. While it is pending, an eager step would silently restart the optimizer, so the
+    /// eager path refuses to run instead.
+    /// </summary>
+    private byte[]? _pendingFusedPlanState;
+
+    /// <summary>
+    /// Set when a checkpoint restored optimizer moments for the EAGER path (a tape step counter or tape tensor
+    /// state) but no fused-plan state. A fused plan cannot use the eager moments, so the first fused step refuses
+    /// instead of silently restarting the optimizer; the first eager step clears it.
+    /// </summary>
+    private bool _restoredEagerStateAwaitingEagerPath;
+
+    /// <summary>How the compiled plan running this optimizer exports its state and is released.</summary>
+    internal sealed class FusedOptimizerStateLink
+    {
+        internal FusedOptimizerStateLink(Func<byte[]?> export, Action release)
+        {
+            Export = export ?? throw new ArgumentNullException(nameof(export));
+            Release = release ?? throw new ArgumentNullException(nameof(release));
+        }
+
+        /// <summary>The plan's optimizer state, or <c>null</c> when that plan is no longer the live one.</summary>
+        internal Func<byte[]?> Export { get; }
+
+        /// <summary>Drops the plan so the next fused step configures (and imports into) a fresh one.</summary>
+        internal Action Release { get; }
+    }
+
+    /// <summary>Records the compiled plan that now runs this optimizer's update.</summary>
+    internal void AttachFusedOptimizerState(FusedOptimizerStateLink link)
+        => _fusedStateLink = link ?? throw new ArgumentNullException(nameof(link));
+
+    /// <summary>The fused-plan state restored from a checkpoint and not yet installed, if any.</summary>
+    internal byte[]? PeekPendingFusedOptimizerState() => _pendingFusedPlanState;
+
+    /// <summary>
+    /// Records that the pending fused-plan state is now installed in a plan. Called only after the import
+    /// succeeded, so a failed import leaves the state pending and the eager-path guard still refuses to restart.
+    /// </summary>
+    internal void MarkPendingFusedOptimizerStateInstalled() => _pendingFusedPlanState = null;
+
+    /// <summary>
+    /// Throws when this optimizer holds eager-path moments from a checkpoint that a fused plan would discard.
+    /// </summary>
+    internal void EnsureRestoredStateUsableByFusedPlan()
+    {
+        if (_restoredEagerStateAwaitingEagerPath)
+        {
+            throw new InvalidOperationException(
+                $"{GetType().Name} was restored from a checkpoint written on the eager path, whose optimizer moments " +
+                "live in the optimizer itself, but training is now taking the fused compiled path, which cannot use " +
+                "them. Continuing would silently restart the optimizer. Resume with the same configuration so the " +
+                "eager path is taken, or restore from a checkpoint written during fused training.");
+        }
+    }
 
     private readonly ConcurrentDictionary<Tensor<T>, int> _tapeParameterIndices =
         new(TensorReferenceComparer<Tensor<T>>.Instance);
@@ -186,7 +252,28 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     {
         Guard.NotNull(regularization);
         Regularization = regularization;
+        RegularizationExplicitlyConfigured = true;
     }
+
+    /// <summary>
+    /// True when the regularization was chosen by the caller (options or <see cref="SetRegularization"/>) rather than
+    /// left at the options' default. See <c>GradientBasedOptimizerOptions.RegularizationExplicitlySet</c>.
+    /// </summary>
+    internal bool RegularizationExplicitlyConfigured { get; private set; }
+
+    /// <summary>
+    /// The global-norm threshold this optimizer's own tape step clips gradients to, on top of whatever the network
+    /// clips: 0 when its tape step does not clip, NaN when it clips in a form a compiled plan cannot reproduce
+    /// (by value). The fused path must apply the same clip, or fused and eager training take different steps.
+    /// </summary>
+    internal virtual double TapeStepGradientClipNorm => 0.0;
+
+    /// <summary>
+    /// The per-element bound this optimizer's own tape step clamps gradients to when it clips by value (the case
+    /// <see cref="TapeStepGradientClipNorm"/> reports as NaN), or 0 when it does not. Streaming training applies it
+    /// gradient by gradient, since a clamp needs no global norm.
+    /// </summary>
+    internal virtual double TapeStepGradientClipValue => 0.0;
 
     /// <summary>
     /// The active regularization applied during gradient updates. Set
@@ -201,6 +288,13 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// the configured regularization without reflection.
     /// </remarks>
     public IRegularization<T, TInput, TOutput> ActiveRegularization => Regularization;
+
+    /// <summary>
+    /// True when this optimizer applies its regularization inside its own update, as a proximal step does, rather
+    /// than leaving it to be added to the gradient. A network's training step then neither adds the term to the
+    /// gradient (which would apply it twice) nor refuses the fused path over it (the fused kernel applies it too).
+    /// </summary>
+    internal virtual bool AppliesRegularizationInStep => false;
 
     /// <summary>
     /// Mixed-precision training context (null if mixed-precision is disabled).
@@ -239,6 +333,23 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </para>
     /// </remarks>
     protected SchedulerStepMode _schedulerStepMode;
+
+    // The fused plan's view of a per-epoch schedule (see TryGetFusedLrSchedule). SetLearningRate keeps it at the rate
+    // the host scheduler holds, and the plan reads it on every step.
+    private Tensors.Engines.Compilation.ExternalLrSchedule? _epochLrSchedule;
+
+    /// <summary>
+    /// Drives the external schedule a plan restored from a checkpoint reads. <c>ImportOptimizerState</c> rebuilds the
+    /// plan's schedules, so the instance this optimizer handed out no longer reaches the plan; without this, a resumed
+    /// run kept its epoch-end rate changes on the host while the plan stayed at the checkpointed rate.
+    /// </summary>
+    internal void AdoptRestoredFusedLrSchedule(Tensors.Engines.Compilation.ExternalLrSchedule restored)
+    {
+        if (restored is null) throw new ArgumentNullException(nameof(restored));
+        if (_epochLrSchedule is null) return;
+        _epochLrSchedule = restored;
+        restored.LearningRate = _currentLearningRate;
+    }
 
     /// <summary>
     /// Puts the model into training mode at the start of an Optimize run.
@@ -320,11 +431,14 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// <see cref="Fused.IFusedOptimizerSpec"/> implementations. Shared so the
     /// per-optimizer specs don't each repeat the mapping.
     /// <para>
-    /// Returns <c>false</c> only for an UNKNOWN scheduler type (so a configured
-    /// schedule is never silently dropped — the caller falls back to eager). A
-    /// null scheduler or a constant scheduler yields <c>true</c> with
-    /// <paramref name="schedule"/> = null (constant LR; the spec's
-    /// <c>GetCurrentLearningRate</c> supplies the rate). The supported set mirrors
+    /// Returns <c>false</c> for a per-batch scheduler of an UNKNOWN type and for
+    /// <see cref="SchedulerStepMode.WarmupThenEpoch"/> (so a configured schedule is
+    /// never silently dropped — the caller falls back to eager). A null scheduler or
+    /// a constant scheduler yields <c>true</c> with <paramref name="schedule"/> = null
+    /// (constant LR; the spec's <c>GetCurrentLearningRate</c> supplies the rate). A
+    /// per-epoch scheduler of any type yields an external schedule that holds the
+    /// optimizer's current rate (SetLearningRate keeps it there) and that a checkpointed
+    /// plan can restore. The per-batch set mirrors
     /// the fused kernel's implemented schedule shapes; new shapes are added here
     /// alongside their kernel support.
     /// </para>
@@ -332,11 +446,24 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     protected bool TryGetFusedLrSchedule(out Tensors.Engines.Compilation.LrSchedule? schedule)
     {
         schedule = null;
+        if (_learningRateScheduler is null or LearningRateSchedulers.ConstantLRScheduler)
+            return true;
+
+
+        // The plan evaluates its schedule once per optimizer step, which is StepPerBatch. StepPerEpoch (the default)
+        // holds the rate for the whole epoch, so the plan reads the rate the scheduler holds instead of advancing a
+        // mapped shape every batch. WarmupThenEpoch steps per batch during warmup, and a fused step does not advance
+        // the host scheduler, so it stays on the eager tape.
+        if (_schedulerStepMode == SchedulerStepMode.StepPerEpoch)
+        {
+            schedule = _epochLrSchedule ??= Tensors.Engines.Compilation.LrSchedule.External(GetCurrentLearningRate());
+            return true;
+        }
+        if (_schedulerStepMode != SchedulerStepMode.StepPerBatch)
+            return false;
+
         switch (_learningRateScheduler)
         {
-            case null:
-            case LearningRateSchedulers.ConstantLRScheduler:
-                return true;
             case LearningRateSchedulers.CosineAnnealingLRScheduler cosine:
                 // Denominator reconciliation: eager CosineAnnealing uses
                 // cos(π·(N-1)/tMax) on batch N, but the fused CosineLr uses
@@ -445,6 +572,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         LossFunction = options.LossFunction;
         GradientCache = options.GradientCache;
         Regularization = options.Regularization;
+        RegularizationExplicitlyConfigured = options.RegularizationExplicitlySet;
 
         // Initialize learning rate scheduler from options.
         //
@@ -561,6 +689,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     {
         _currentLearningRate = learningRate;
         CurrentLearningRate = NumOps.FromDouble(learningRate);
+        if (_epochLrSchedule is not null) _epochLrSchedule.LearningRate = learningRate;
     }
 
     #region DataLoader Integration
@@ -1732,6 +1861,87 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// indicated by the gradient, hopefully improving the model's performance.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// True for optimizers whose facade batch loop has been verified to be equivalent under
+    /// <see cref="TryModelOwnStep"/>: nothing between CalculateGradient and UpdateSolution reads the flat gradient,
+    /// and nothing after UpdateSolution except taking the (unchanged) solution. Opt-in per optimizer.
+    /// </summary>
+    protected virtual bool SupportsModelOwnStep => false;
+
+    private int _suppressModelBatchEnd;
+
+    /// <summary>How many facade batches ran as the network's own step (diagnostics and tests).</summary>
+    internal int ModelOwnStepCount { get; private set; }
+
+    /// <summary>
+    /// Set by a wrapper that reads <see cref="LastComputedGradients"/> after each optimize (the sharded / DDP
+    /// optimizers synchronize those gradients across replicas).
+    /// </summary>
+    /// <remarks>
+    /// The model step does not produce that vector: the flat path stores the regularized, clipped gradient, while the
+    /// network publishes its raw tape gradient. Republishing one as the other would synchronize a different quantity,
+    /// and publishing nothing let the wrapper skip synchronization silently, so the model step is declined instead.
+    /// </remarks>
+    internal bool FlatGradientsConsumed { get; set; }
+
+    /// <summary>Why the most recent facade batch did not run as the network's own step, or null if it did.</summary>
+    internal string? LastModelStepDeclineReason { get; private set; }
+
+    private bool Decline(string reason)
+    {
+        LastModelStepDeclineReason = reason;
+        return false;
+    }
+
+    /// <summary>
+    /// Runs one facade batch as the NETWORK'S OWN training step with this optimizer - the compiled fused step (device
+    /// optimizer, CUDA-graph capture) when eligible, otherwise the tape plus <c>Step</c> on the parameter tensors -
+    /// instead of the flat round trip (tape gradients scattered into a host vector, clipped on the host, copied back
+    /// into host tensors, updated, re-uploaded). Returns false, changing nothing, whenever that could change the result.
+    /// </summary>
+    /// <remarks>
+    /// Measured (1024-3x1024-10 MLP, batch 256, GPU): the flat path read back ~35 MB per step and ran 150-300x slower
+    /// than PyTorch on the same network. The network already adopts this optimizer (SetModel ->
+    /// AdoptConfiguredOptimizer), and <c>UpdateSolution</c> already applies the SAME <c>Step</c> to network solutions
+    /// ("one update implementation per optimizer"), so this only removes the host round trip around it.
+    /// Declines for: optimizers not verified (<see cref="SupportsModelOwnStep"/>), non-network solutions, non-tensor
+    /// batches, a flat-vector regularization, mixed-precision loss scaling, and an explicitly configured loss that is
+    /// not the network's own. <c>AIDOTNET_FACADE_MODEL_STEP=0</c> turns it off.
+    /// </remarks>
+    protected bool TryModelOwnStep(IFullModel<T, TInput, TOutput> solution, TInput x, TOutput y)
+    {
+        if (!SupportsModelOwnStep) return Decline("optimizer not verified for the model step");
+        if (solution is not NeuralNetworks.NeuralNetworkBase<T> network) return Decline("solution is not a NeuralNetworkBase");
+        if (x is not Tensor<T> xTensor || y is not Tensor<T> yTensor) return Decline("batch is not tensors");
+        if (this is not IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> self) return Decline("optimizer is not a tensor optimizer");
+        // L2 is applied identically by the network's step (before clipping, fused or eager); other regularizers keep the
+        // flat path for now.
+        if (Regularization is not null && Regularization is not RegularizationNs.NoRegularization<T, TInput, TOutput>
+            && Regularization is not RegularizationNs.L2Regularization<T, TInput, TOutput>)
+            return Decline("regularization " + Regularization.GetType().Name + " has no model-step form yet");
+        if (_mixedPrecisionContext is not null) return Decline("mixed-precision loss scaling");
+        if (FlatGradientsConsumed) return Decline("a wrapper synchronizes LastComputedGradients, which only the flat path produces");
+        if (GradientOptions.LossFunctionExplicitlySet && !ReferenceEquals(LossFunction, network.DefaultLossFunction)) return Decline("explicit loss differs from the network's");
+        // The network's fused step clips by the NETWORK's global-norm threshold; the flat path clipped by this
+        // optimizer's. Take the model step only when the two agree (both default to 1.0), so the update is identical.
+        double optimizerClip = !GradientOptions.EnableGradientClipping ? 0.0
+            : GradientOptions.GradientClippingMethod == GradientClippingMethod.ByNorm ? GradientOptions.MaxGradientNorm
+            : double.NaN;
+        if (double.IsNaN(optimizerClip) || Math.Abs(optimizerClip - network.MaxGradNormValue) > 1e-12) return Decline($"clip differs: optimizer {optimizerClip} vs network {network.MaxGradNormValue}");
+        if (Environment.GetEnvironmentVariable("AIDOTNET_FACADE_MODEL_STEP") == "0") return Decline("AIDOTNET_FACADE_MODEL_STEP=0");
+
+        _suppressModelBatchEnd++;
+        try
+        {
+            if (!network.TryTrainStepWithOptimizer(xTensor, yTensor, self, out string? networkDeclineReason))
+                return Decline(networkDeclineReason ?? "network " + network.GetType().Name + " declined the model step");
+        }
+        finally { _suppressModelBatchEnd--; }
+        ModelOwnStepCount++;
+        LastModelStepDeclineReason = null;
+        return true;
+    }
+
     protected virtual IFullModel<T, TInput, TOutput> UpdateSolution(
         IFullModel<T, TInput, TOutput> currentSolution,
         Vector<T> gradient)
@@ -2118,6 +2328,15 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         GradientCache.ClearCache();
         ClearSerializedTapeState();
 
+        // Fused training keeps this optimizer's moments inside the compiled plan, and a restored checkpoint may still
+        // be waiting to be imported into the next plan. A reset must clear both: release the live plan so the next
+        // fused step configures a fresh one, and drop the pending and eager-restore state so that plan starts from
+        // zero instead of importing the checkpoint the caller just reset away.
+        _fusedStateLink?.Release();
+        _fusedStateLink = null;
+        _pendingFusedPlanState = null;
+        _restoredEagerStateAwaitingEagerPath = false;
+
         // Reset learning rate scheduler state
         _learningRateScheduler?.Reset();
         _currentStep = 0;
@@ -2266,6 +2485,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </remarks>
     public virtual void OnBatchEnd()
     {
+        // The model's own training step (TryModelOwnStep) ends by calling OnBatchEnd itself; the facade loop decides
+        // whether a batch end is counted, exactly as it did before the model step existed, so that call is ignored.
+        if (_suppressModelBatchEnd > 0) return;
         _currentStep++;
 
         if (_learningRateScheduler != null)
@@ -2428,6 +2650,17 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     protected void PrepareTapeState(TapeStepContext<T> context)
     {
         Guard.NotNull(context);
+        if (_pendingFusedPlanState is not null)
+        {
+            throw new InvalidOperationException(
+                $"{GetType().Name} was restored from a checkpoint written during fused compiled training, whose " +
+                "optimizer state lives in the compiled plan, but this step is running on the eager path, which " +
+                "cannot use it. Continuing would silently restart the optimizer. Resume with the same model, " +
+                "optimizer and device so the fused path engages, or restore from a checkpoint written on the eager path.");
+        }
+
+        // The eager path is consuming the restored eager moments, which is exactly what they are for.
+        _restoredEagerStateAwaitingEagerPath = false;
 
         lock (_tapeStateSync)
         {
@@ -2882,105 +3115,49 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 LearningRateSchedulerCheckpointFactory.CaptureState(_learningRateScheduler)));
         }
         writer.Write((int)_schedulerStepMode);
+
+        // The fused plan's own state (moments, step counter, schedule position). A checkpoint restored but not yet
+        // installed is carried forward unchanged, so saving again before the first resumed step loses nothing.
+        byte[]? liveFusedState = _fusedStateLink?.Export();
+        if (_fusedStateLink is not null && liveFusedState is null)
+        {
+            // The linked plan is no longer live (invalidated, or dropped after a fused-path failure, from which the
+            // eager path took over with its own state). Detach it so this optimizer no longer claims a live plan.
+            _fusedStateLink = null;
+        }
+
+        byte[]? fusedState = liveFusedState ?? _pendingFusedPlanState;
+        writer.Write(FusedPlanStateExtensionMarker);
+        writer.Write(fusedState is not null);
+        if (fusedState is not null)
+        {
+            writer.Write(fusedState.Length);
+            writer.Write(fusedState);
+        }
     }
 
     /// <inheritdoc />
-    private protected override void DeserializeExtensionData(BinaryReader reader)
+    private protected override Action StageExtensionData(BinaryReader reader, out bool hasFallibleCommit)
     {
+        hasFallibleCommit = false;
         if (reader.BaseStream.Position >= reader.BaseStream.Length)
         {
-            return;
+            return () => { };
         }
 
-        // Checkpoints can be untrusted or partially written; a truncated payload makes ReadString/
-        // ReadInt32 throw a low-level EndOfStream/IO exception mid-parse. Translate those into a
-        // deterministic "corrupt optimizer checkpoint" error so callers get a clear, catchable failure
-        // instead of a leaked stream exception. (The marker-mismatch InvalidOperationException below is
-        // NOT an IO exception, so the filter lets it propagate unchanged.)
+        // Transactional: the whole extension payload is parsed and validated into locals first, and live state is
+        // changed only after all of it has been read. An invalid marker, count or length, or a truncated payload,
+        // used to throw after tape fields, pending moments, the scheduler or the fused link had already changed,
+        // leaving the optimizer half-restored with its previous state gone.
+        //
+        // Checkpoints can be untrusted or partially written; a truncated payload makes ReadString/ReadInt32 throw a
+        // low-level EndOfStream/IO exception mid-parse. Translate those into a deterministic "corrupt optimizer
+        // checkpoint" error. (The InvalidOperationExceptions below are NOT IO exceptions, so the filter lets them
+        // propagate unchanged.)
+        ParsedExtensionPayload parsed;
         try
         {
-            string marker = reader.ReadString();
-            if (!string.Equals(marker, TapeStateExtensionMarker, StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException($"Unknown optimizer extension payload '{marker}'.");
-            }
-
-            ClearSerializedTapeState();
-
-            // Validate the declared table sizes against what the writer can
-            // legally emit BEFORE looping/allocating, so a truncated or hostile
-            // checkpoint is rejected up front rather than driving a huge/negative
-            // loop count or a bad allocation. The writer emits at most one
-            // '_tapeStep' field (it throws on field shadowing), and a non-negative
-            // number of tensor-state fields.
-            int tapeStepFieldCount = reader.ReadInt32();
-            if (tapeStepFieldCount < 0 || tapeStepFieldCount > 1)
-            {
-                throw new InvalidOperationException(
-                    $"Optimizer checkpoint declares an invalid tape-step field count {tapeStepFieldCount} " +
-                    "(expected 0 or 1).");
-            }
-            for (int i = 0; i < tapeStepFieldCount; i++)
-            {
-                string fieldName = reader.ReadString();
-                int value = reader.ReadInt32();
-                var field = EnumerateOptimizerFields()
-                    .FirstOrDefault(candidate => candidate.Name == fieldName && candidate.FieldType == typeof(int));
-                field?.SetValue(this, value);
-            }
-
-            int tensorStateFieldCount = reader.ReadInt32();
-            if (tensorStateFieldCount < 0)
-            {
-                throw new InvalidOperationException(
-                    $"Optimizer checkpoint declares a negative tensor-state field count {tensorStateFieldCount}.");
-            }
-            lock (_tapeStateSync)
-            {
-                for (int i = 0; i < tensorStateFieldCount; i++)
-                {
-                    string fieldName = reader.ReadString();
-                    _pendingTapeTensorStates[fieldName] = ReadTapeTensorStateDictionary(reader);
-                }
-            }
-            if (reader.BaseStream.Position < reader.BaseStream.Length)
-            {
-                string schedulerMarker = reader.ReadString();
-                if (!string.Equals(schedulerMarker, SchedulerStateExtensionMarker, StringComparison.Ordinal))
-                {
-                    throw new InvalidOperationException(
-                        $"Unknown learning-rate scheduler extension payload '{schedulerMarker}'.");
-                }
-
-                bool hasScheduler = reader.ReadBoolean();
-                if (hasScheduler)
-                {
-                    string schedulerTypeName = reader.ReadString();
-                    string schedulerStateJson = reader.ReadString();
-                    RestoreLearningRateScheduler(schedulerTypeName, schedulerStateJson);
-                }
-                else
-                {
-                    _learningRateScheduler = null;
-                    GradientOptions.LearningRateScheduler = null;
-                }
-
-                // Older v1 payloads ended after the scheduler state. Preserve that compatibility,
-                // while new checkpoints also retain whether the restored schedule advances per
-                // batch or per epoch. The mode lives on the optimizer, not in scheduler.GetState().
-                if (reader.BaseStream.Position < reader.BaseStream.Length)
-                {
-                    int serializedStepMode = reader.ReadInt32();
-                    if (!Enum.IsDefined(typeof(SchedulerStepMode), serializedStepMode))
-                    {
-                        throw new InvalidOperationException(
-                            $"Optimizer checkpoint has invalid scheduler step mode {serializedStepMode}.");
-                    }
-
-                    _schedulerStepMode = (SchedulerStepMode)serializedStepMode;
-                    GradientOptions.SchedulerStepMode = _schedulerStepMode;
-                }
-            }
+            parsed = ParseExtensionPayload(reader);
         }
         catch (Exception ex) when (ex is System.IO.EndOfStreamException or System.IO.IOException)
         {
@@ -2988,9 +3165,183 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 "Optimizer tape-state extension payload is truncated or corrupted (unexpected end of the " +
                 "checkpoint stream while reading optimizer state).", ex);
         }
+
+        // A same-typed custom scheduler cannot be rebuilt from an untrusted type name, so its state is loaded into the
+        // configured instance at commit, which can throw. Everything else commits by assignment.
+        hasFallibleCommit = parsed.Scheduler?.PendingState is not null;
+        return () => CommitExtensionPayload(parsed);
     }
 
-    private void RestoreLearningRateScheduler(string schedulerTypeName, string stateJson)
+    /// <summary>Everything the extension payload restores, read and validated but not yet applied.</summary>
+    private sealed class ParsedExtensionPayload
+    {
+        public (string Name, int Value)? TapeStep;
+        public readonly List<(string FieldName, Dictionary<int, Tensor<T>> Entries)> TensorStates = new();
+        public bool HasSchedulerSection;
+        public PreparedScheduler? Scheduler;
+        public SchedulerStepMode? StepMode;
+        public byte[]? FusedPlanState;
+        public bool RestoredEagerMoments;
+    }
+
+    private ParsedExtensionPayload ParseExtensionPayload(BinaryReader reader)
+    {
+        var parsed = new ParsedExtensionPayload();
+        string marker = reader.ReadString();
+        if (!string.Equals(marker, TapeStateExtensionMarker, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Unknown optimizer extension payload '{marker}'.");
+        }
+
+        // Validate the declared table sizes against what the writer can legally emit BEFORE looping/allocating, so
+        // a truncated or hostile checkpoint is rejected up front rather than driving a huge/negative loop count or a
+        // bad allocation. The writer emits at most one '_tapeStep' field (it throws on field shadowing), and a
+        // non-negative number of tensor-state fields.
+        int tapeStepFieldCount = reader.ReadInt32();
+        if (tapeStepFieldCount < 0 || tapeStepFieldCount > 1)
+        {
+            throw new InvalidOperationException(
+                $"Optimizer checkpoint declares an invalid tape-step field count {tapeStepFieldCount} " +
+                "(expected 0 or 1).");
+        }
+        for (int i = 0; i < tapeStepFieldCount; i++)
+        {
+            string fieldName = reader.ReadString();
+            int value = reader.ReadInt32();
+            parsed.RestoredEagerMoments |= value > 0;
+            parsed.TapeStep = (fieldName, value);
+        }
+
+        int tensorStateFieldCount = reader.ReadInt32();
+        if (tensorStateFieldCount < 0)
+        {
+            throw new InvalidOperationException(
+                $"Optimizer checkpoint declares a negative tensor-state field count {tensorStateFieldCount}.");
+        }
+        for (int i = 0; i < tensorStateFieldCount; i++)
+        {
+            string fieldName = reader.ReadString();
+            var entries = ReadTapeTensorStateDictionary(reader);
+            parsed.RestoredEagerMoments |= entries.Count > 0;
+            parsed.TensorStates.Add((fieldName, entries));
+        }
+
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            string schedulerMarker = reader.ReadString();
+            if (!string.Equals(schedulerMarker, SchedulerStateExtensionMarker, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException(
+                    $"Unknown learning-rate scheduler extension payload '{schedulerMarker}'.");
+            }
+
+            parsed.HasSchedulerSection = true;
+            if (reader.ReadBoolean())
+            {
+                string schedulerTypeName = reader.ReadString();
+                string schedulerStateJson = reader.ReadString();
+                parsed.Scheduler = PrepareLearningRateScheduler(schedulerTypeName, schedulerStateJson);
+            }
+
+            // Older v1 payloads ended after the scheduler state. Preserve that compatibility, while new checkpoints
+            // also retain whether the restored schedule advances per batch or per epoch. The mode lives on the
+            // optimizer, not in scheduler.GetState().
+            if (reader.BaseStream.Position < reader.BaseStream.Length)
+            {
+                int serializedStepMode = reader.ReadInt32();
+                if (!Enum.IsDefined(typeof(SchedulerStepMode), serializedStepMode))
+                {
+                    throw new InvalidOperationException(
+                        $"Optimizer checkpoint has invalid scheduler step mode {serializedStepMode}.");
+                }
+                parsed.StepMode = (SchedulerStepMode)serializedStepMode;
+            }
+        }
+
+        if (reader.BaseStream.Position < reader.BaseStream.Length)
+        {
+            string fusedMarker = reader.ReadString();
+            if (!string.Equals(fusedMarker, FusedPlanStateExtensionMarker, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException($"Unknown optimizer extension payload '{fusedMarker}'.");
+            }
+
+            if (reader.ReadBoolean())
+            {
+                int length = reader.ReadInt32();
+                long remaining = reader.BaseStream.Length - reader.BaseStream.Position;
+                if (length <= 0 || length > remaining)
+                {
+                    throw new InvalidOperationException(
+                        $"Optimizer checkpoint declares a fused-plan state of {length} bytes but only {remaining} remain.");
+                }
+
+                parsed.FusedPlanState = reader.ReadBytes(length);
+            }
+        }
+
+        return parsed;
+    }
+
+    private void CommitExtensionPayload(ParsedExtensionPayload parsed)
+    {
+        // The scheduler goes first: loading a same-typed custom scheduler's state into the configured instance is the
+        // one step that can still fail, and nothing else has changed yet if it does.
+        if (parsed.HasSchedulerSection)
+        {
+            if (parsed.Scheduler is { } prepared) ApplyLearningRateScheduler(prepared);
+            else
+            {
+                _learningRateScheduler = null;
+                GradientOptions.LearningRateScheduler = null;
+            }
+
+            if (parsed.StepMode is { } mode)
+            {
+                _schedulerStepMode = mode;
+                GradientOptions.SchedulerStepMode = mode;
+            }
+        }
+
+        ClearSerializedTapeState();
+        if (parsed.TapeStep is { } tapeStep)
+        {
+            var field = EnumerateOptimizerFields()
+                .FirstOrDefault(candidate => candidate.Name == tapeStep.Name && candidate.FieldType == typeof(int));
+            field?.SetValue(this, tapeStep.Value);
+        }
+        lock (_tapeStateSync)
+        {
+            foreach (var (fieldName, entries) in parsed.TensorStates)
+                _pendingTapeTensorStates[fieldName] = entries;
+        }
+
+        // Whatever plan was running this optimizer is now out of date: release it, so the next fused step configures
+        // a fresh plan and installs the restored state into it.
+        _fusedStateLink?.Release();
+        _fusedStateLink = null;
+        _pendingFusedPlanState = parsed.FusedPlanState;
+
+        _restoredEagerStateAwaitingEagerPath = parsed.RestoredEagerMoments && _pendingFusedPlanState is null;
+    }
+    /// <summary>
+    /// A scheduler restored from a checkpoint but not yet installed. A built-in scheduler is fully rebuilt with its
+    /// state loaded; a same-typed custom scheduler cannot be rebuilt from an untrusted type name, so its state is loaded
+    /// into the configured instance at install time.
+    /// </summary>
+    private sealed class PreparedScheduler
+    {
+        public PreparedScheduler(ILearningRateScheduler scheduler, Dictionary<string, object>? pendingState)
+        {
+            Scheduler = scheduler;
+            PendingState = pendingState;
+        }
+
+        public ILearningRateScheduler Scheduler { get; }
+        public Dictionary<string, object>? PendingState { get; }
+    }
+
+    private PreparedScheduler PrepareLearningRateScheduler(string schedulerTypeName, string stateJson)
     {
         var state = JsonConvert.DeserializeObject<Dictionary<string, object>>(stateJson)
             ?? throw new InvalidOperationException("Learning-rate scheduler state is missing or invalid.");
@@ -2999,31 +3350,35 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // discriminator; do not ask the runtime to resolve or load an arbitrary named assembly.
         string serializedTypeName = schedulerTypeName.Split(',')[0].Trim();
 
-        ILearningRateScheduler scheduler;
         if (LearningRateSchedulerCheckpointFactory.TryCreateBuiltInScheduler(
             serializedTypeName, state, out var builtInScheduler))
         {
             // Always reconstruct built-ins from their serialized recipe. Reusing a same-typed
             // target is insufficient because LoadState restores progress, not immutable settings.
-            scheduler = builtInScheduler;
+            // A fresh instance, so loading its state here changes nothing live.
+            builtInScheduler.LoadState(state);
+            return new PreparedScheduler(builtInScheduler, pendingState: null);
         }
-        else if (_learningRateScheduler is not null
+
+        if (_learningRateScheduler is not null
             && string.Equals(_learningRateScheduler.GetType().FullName, serializedTypeName, StringComparison.Ordinal))
         {
             // Custom schedulers (including LambdaLR delegates) cannot be instantiated safely from
             // untrusted type names. They remain restorable when the caller explicitly configures
             // an instance of the same type on the target optimizer.
-            scheduler = _learningRateScheduler;
-        }
-        else
-        {
-            throw new InvalidOperationException(
-                $"Cannot reconstruct learning-rate scheduler type '{serializedTypeName}'. " +
-                "Restore into an optimizer configured with the same scheduler type, or use a built-in " +
-                "scheduler with a serializable construction recipe.");
+            return new PreparedScheduler(_learningRateScheduler, state);
         }
 
-        scheduler.LoadState(state);
+        throw new InvalidOperationException(
+            $"Cannot reconstruct learning-rate scheduler type '{serializedTypeName}'. " +
+            "Restore into an optimizer configured with the same scheduler type, or use a built-in " +
+            "scheduler with a serializable construction recipe.");
+    }
+
+    private void ApplyLearningRateScheduler(PreparedScheduler prepared)
+    {
+        var scheduler = prepared.Scheduler;
+        if (prepared.PendingState is { } state) scheduler.LoadState(state);
         _learningRateScheduler = scheduler;
         // The per-fitness cadence belongs to the auto-installed adaptive scheduler only. A target built with
         // UseAdaptiveLearningRate that restores any other scheduler must step it on its SchedulerStepMode cadence,
@@ -3032,7 +3387,6 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         GradientOptions.LearningRateScheduler = scheduler;
         SetLearningRate(scheduler.CurrentLearningRate);
     }
-
     private void WriteTapeTensorStateDictionary(BinaryWriter writer, FieldInfo field)
     {
         var entries = new SortedDictionary<int, Tensor<T>>();
@@ -3285,8 +3639,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// in the tape step's <see cref="TapeStepContext{T}.Gradients"/> dictionary.
     /// Mirrors <c>torch.nn.utils.clip_grad_norm_(params, max_norm)</c>:
     /// computes <c>sqrt(Σ_p ‖grad_p‖²)</c>; if it exceeds <paramref name="maxNorm"/>,
-    /// scales every gradient by <c>maxNorm / globalNorm</c> in place so the
-    /// post-clip global norm is exactly <paramref name="maxNorm"/>. Without
+    /// scales every gradient by <c>maxNorm / (globalNorm + 1e-6)</c> (PyTorch clip_grad_norm_) in place so the
+    /// post-clip global norm is <paramref name="maxNorm"/> to within that 1e-6. Without
     /// clipping, randomly-initialised classifiers paired with CrossEntropyLoss
     /// and non-distribution targets diverge in a few iterations (ODISE: initial
     /// MSE 0.24 → final 184.69, 770× explosion). Pre-clipping every tape-path
@@ -3320,7 +3674,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             || double.IsNaN(globalNorm) || double.IsInfinity(globalNorm))
             return;
 
-        double scale = maxNorm / globalNorm;
+        // PyTorch's clip_grad_norm_ coefficient, the same one the network clip and the fused plan apply.
+        double scale = maxNorm / (globalNorm + 1e-6);
         foreach (var kvp in context.Gradients)
         {
             var grad = kvp.Value;

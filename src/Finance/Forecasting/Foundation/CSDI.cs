@@ -69,6 +69,21 @@ namespace AiDotNet.Finance.Forecasting.Foundation;
                 Source = "Tashiro et al. 2021, hyperparameters: Adam at learning rate 0.001 decayed to 0.0001 and 0.00001 at 75% and 90% of the total epochs, batch size 16, 200 epochs. The decay points are kept as the fractions the paper states rather than transcribed into the step numbers of a 200-epoch run, which would be wrong at any other length.")]
 public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObjectiveProvider<T>
 {
+    // Held across Train calls. The fused plan owns the optimizer state, so a step object built per call
+    // re-traced and recompiled every call and restarted the optimizer at t = 1 (Adam ~ lr*sign(g)).
+    private AiDotNet.Training.MultiSlotFusedStep<T>? _fusedMultiSlotStep;
+
+    /// <inheritdoc/>
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _fusedMultiSlotStep?.Dispose();
+            _fusedMultiSlotStep = null;
+        }
+        base.Dispose(disposing);
+    }
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -309,7 +324,7 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
 
         var loss = LossFunction;
 
-        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
+        var trainableParams = CollectModelTrainableTensors().ToArray();
 
         // One draw of (t, epsilon) feeds whichever path runs below. Hoisting it out of the
         // fused branch is what lets the eager path reuse DenoiserForwardFromSlots, so the two
@@ -336,10 +351,9 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
             if (trainableParams.Length > 0
                 && NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
                     _optimizer,
-                    out var mfsOptType, out var mfsLr, out var mfsB1, out var mfsB2,
-                    out var mfsEps, out var mfsWd, out _, out _))
+                    out var mfsCfg))
             {
-                using var multiSlotStep = new AiDotNet.Training.MultiSlotFusedStep<T>();
+                var multiSlotStep = _fusedMultiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>();
                 Tensor<T> ForwardFromSlots(IReadOnlyList<Tensor<T>> s) => DenoiserForwardFromSlots(s);
                 Tensor<T> ComputeLossFromSlots(Tensor<T> pred, IReadOnlyList<Tensor<T>> s)
                 {
@@ -348,17 +362,19 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
                     return loss.ComputeTapeLoss(pred, s[1]);
                 }
                 if (multiSlotStep.TryStep(
-                        parameters: trainableParams,
+                        parameterProvider: CollectModelTrainableTensors,
                         zeroGradAction: null,
                         freshSlotData: slots,
                         forward: ForwardFromSlots,
                         computeLoss: ComputeLossFromSlots,
-                        optimizerType: mfsOptType,
-                        learningRate: mfsLr,
-                        beta1: mfsB1,
-                        beta2: mfsB2,
-                        epsilon: mfsEps,
-                        weightDecay: mfsWd,
+                        optimizerType: mfsCfg.Type,
+                        learningRate: mfsCfg.LearningRate,
+                        beta1: mfsCfg.Beta1,
+                        beta2: mfsCfg.Beta2,
+                        epsilon: mfsCfg.Epsilon,
+                        weightDecay: mfsCfg.WeightDecay,
+                        lrSchedule: mfsCfg.Schedule,
+                        extras: mfsCfg.Extras,
                         out T fusedLoss))
                 {
                     LastLoss = fusedLoss;
@@ -452,16 +468,9 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
         int targetLen = target.Length;
         if (targetLen <= 0) return NumOps.Zero;
 
-        var sqrtAlphaBar = new Vector<T>(_numDiffusionSteps);
-        var sqrtOneMinus = new Vector<T>(_numDiffusionSteps);
-        for (int t = 0; t < _numDiffusionSteps; t++)
-        {
-            sqrtAlphaBar[t] = NumOps.Sqrt(_alphasCumprod[t]);
-            sqrtOneMinus[t] = NumOps.Sqrt(NumOps.Subtract(NumOps.One, _alphasCumprod[t]));
-        }
-
+        // The schedule ComputeNoiseSchedule already holds; only the timesteps and noise are taken from the batch.
         var (_, noise, timesteps) = BuildDeterministicDenoisingBatch(
-            target, targetLen, _numDiffusionSteps, sqrtAlphaBar, sqrtOneMinus);
+            target, targetLen, _numDiffusionSteps, _sqrtAlphasCumprod, _sqrtOneMinusAlphasCumprod);
 
         bool wasTraining = IsTrainingMode;
         SetTrainingMode(false);

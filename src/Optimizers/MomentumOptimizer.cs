@@ -57,8 +57,8 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
 
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.SGDMomentum,
-            (float)GetCurrentLearningRate(),
-            (float)Convert.ToDouble(CurrentMomentum),   // Beta1 carries the momentum coefficient
+            GetCurrentLearningRate(),
+            Convert.ToDouble(CurrentMomentum),   // Beta1 carries the momentum coefficient
             0f, 0f, 0f, schedule);
         return true;
     }
@@ -114,7 +114,7 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
     /// </para>
     /// </remarks>
     public MomentumOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         MomentumOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
@@ -169,6 +169,9 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
         CurrentMomentum = NumOps.FromDouble(_options.InitialMomentum);
     }
 
+    /// <inheritdoc/>
+    protected override bool SupportsModelOwnStep => true;
+
     /// <summary>
     /// Performs the optimization process using the Momentum algorithm.
     /// </summary>
@@ -218,6 +221,7 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
             foreach (var (xBatch, yBatch, batchIndices) in batcher.GetBatches())
             {
                 // Calculate gradient on the batch
+                if (TryModelOwnStep(currentSolution, xBatch, yBatch)) continue;   // the network's own step; see GradientBasedOptimizerBase
                 var gradient = CalculateGradient(currentSolution, xBatch, yBatch);
 
                 IFullModel<T, TInput, TOutput> newSolution;
