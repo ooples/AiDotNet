@@ -14890,12 +14890,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // FastSpeech2 (#2093) diverged once (9.66 -> 15.63) and a 1-step probe cannot see a trajectory.
                     // Measured on a fixed (input, target) pair, seed 11: 11.88, 6.16, 6.10, 7.19, 5.50, then
                     // 5.12 at step 10 and 1.30 at step 40. Twelve steps clear the step-4 bump with a wide margin.
-                    int ttsSmokeIterations = model.ClassName == "FastSpeech" ? 1
-                                           : model.ClassName == "FastSpeech2" || naturalSpeechWarmup ? 12 : 2;
+                    const int FastSpeechSmokeIterations = 1;
+                    const int PastWarmupTtsIterations = 12;
+                    const int DefaultTtsSmokeIterations = 2;
+                    const int E2TtsMemorizationIterations = 15;
+                    int ttsSmokeIterations = model.ClassName == "FastSpeech" ? FastSpeechSmokeIterations
+                                           : model.ClassName == "FastSpeech2" || naturalSpeechWarmup
+                                               ? PastWarmupTtsIterations : DefaultTtsSmokeIterations;
                     sb.AppendLine($"    protected override int TrainingIterations => {ttsSmokeIterations};");
                     sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
                     sb.AppendLine($"    protected override int MoreDataLongIterations => {ttsSmokeIterations};");
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "E2TTS" ? 15 : naturalSpeechWarmup ? 12 : 2)};");
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "E2TTS" ? E2TtsMemorizationIterations : naturalSpeechWarmup ? PastWarmupTtsIterations : DefaultTtsSmokeIterations)};");
                     if (naturalSpeechWarmup)
                     {
                         // NaturalSpeech's TRAINING forward is stochastic (DropoutRate = 0.1), so
