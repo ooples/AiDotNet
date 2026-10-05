@@ -1529,6 +1529,8 @@ public static class DeserializationHelper
             int stride = TryGetInt(additionalParams, "Stride") ?? 1;
             int padding = TryGetInt(additionalParams, "Padding") ?? ((kernelSize - 1) * dilation / 2);
             int? inputChannels = TryGetInt(additionalParams, "InputChannels");
+            // Absent in layers saved before grouped convolution existed, all of which were dense.
+            int groups = TryGetInt(additionalParams, "Groups") ?? 1;
 
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             object? activation = TryCreateActivationInstance(additionalParams, "ScalarActivationType", activationFuncType);
@@ -1536,8 +1538,8 @@ public static class DeserializationHelper
                 throw new InvalidOperationException($"Failed to deserialize activation function of type '{additionalParams["ScalarActivationType"]}' for Conv1DLayer.");
 
             instance = (inputChannels.HasValue && inputChannels.Value > 0)
-                ? new Conv1DLayer<T>(inputChannels.Value, outputChannels, kernelSize, dilation, stride, padding, activation as IActivationFunction<T>)
-                : new Conv1DLayer<T>(outputChannels, kernelSize, dilation, stride, padding, activation as IActivationFunction<T>);
+                ? new Conv1DLayer<T>(inputChannels.Value, outputChannels, kernelSize, dilation, stride, padding, activation as IActivationFunction<T>, groups: groups)
+                : new Conv1DLayer<T>(outputChannels, kernelSize, dilation, stride, padding, activation as IActivationFunction<T>, groups: groups);
         }
         else if (genericDef == typeof(Conv1DTransposeLayer<>))
         {
@@ -2700,6 +2702,15 @@ public static class DeserializationHelper
             int ffTeb = TryGetInt(additionalParams, "FfnDim")
                 ?? throw new InvalidOperationException($"{genericDef.Name} requires 'FfnDim' metadata.");
             double drTeb = TryGetDouble(additionalParams, "DropoutRate") ?? 0.0;
+            // A block saved before NormPlacement was persisted was always Pre-LN. A value that is present but not a
+            // placement is corrupt metadata: rebuilding it with the other placement would compute a different function.
+            var placementTeb = AiDotNet.Enums.TransformerNormPlacement.PreNorm;
+            string? placementTextTeb = TryGetString(additionalParams, "NormPlacement");
+            if (placementTextTeb is not null
+                && (!Enum.TryParse(placementTextTeb, ignoreCase: false, out placementTeb)
+                    || !Enum.IsDefined(typeof(AiDotNet.Enums.TransformerNormPlacement), placementTeb)))
+                throw new InvalidOperationException(
+                    $"{genericDef.Name} metadata is corrupt: NormPlacement '{placementTextTeb}' is not a TransformerNormPlacement.");
             // Validate positivity BEFORE the modulo: a corrupt numHeads of 0 would make
             // (hsTeb % nhTeb) throw DivideByZeroException, and a negative value would pass the
             // modulo (C# % takes the dividend's sign) yet yield a negative per-head dimension.
@@ -2733,6 +2744,7 @@ public static class DeserializationHelper
                     // null falls back to the ctor default (ReLU) for blocks that did
                     // not persist one.
                     (_, "ffnactivation") => ffnActivationTeb,
+                    (_, "normplacement") => placementTeb,
                     _ => p.HasDefaultValue ? p.DefaultValue : null,
                 };
             }

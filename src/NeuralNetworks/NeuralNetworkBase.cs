@@ -6441,8 +6441,41 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     protected Tensor<T> ApplyCompositeObjective(Tensor<T> lossTensor, Tensor<T> input)
     {
-        if (this is not ICompositeLoss<T> composite) return lossTensor;
+        var objective = ComposeDeclaredObjective(lossTensor, input);
 
+        // A training-time regularizer the forward produced (a mask-sparsity penalty, a commitment
+        // term). It is added here, the funnel every tape-loss path shares, so it reaches the gradient
+        // in all of them; a scalar returned outside the tape would be reported and never trained on.
+        var auxiliary = ConsumeAuxiliaryTapeLoss();
+        if (auxiliary is null) return objective;
+        if (auxiliary.Length != 1)
+            throw new InvalidOperationException(
+                $"ConsumeAuxiliaryTapeLoss must return a scalar loss; {GetType().Name} returned {auxiliary.Length} values.");
+        return Engine.TensorAdd(objective, Engine.Reshape(auxiliary, objective._shape));
+    }
+
+    /// <summary>
+    /// The auxiliary training loss the most recent training forward produced, as a tape-connected
+    /// scalar, or null when there is none. The base adds it to the objective on every tape-loss path.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Override to contribute a regularizer that is a function of intermediate activations rather than
+    /// of the prediction, such as MIA-VSR's mask-sparsity penalty. Compute it with engine operations
+    /// inside <see cref="ForwardForTraining"/>, hold it, and return it here once: return the held
+    /// tensor and clear it, so a later step never re-adds a stale term from an earlier graph.
+    /// </para>
+    /// <para>
+    /// The term must belong to the forward being trained on. Fused compiled training traces it with the rest
+    /// of the objective, so a replay recomputes it from the replayed forward; anything inside that forward that
+    /// must change per step (noise, data-dependent indices) has to be a replay-time node, as MIA-VSR's are.
+    /// </para>
+    /// </remarks>
+    protected virtual Tensor<T>? ConsumeAuxiliaryTapeLoss() => null;
+
+    private Tensor<T> ComposeDeclaredObjective(Tensor<T> lossTensor, Tensor<T> input)
+    {
+        if (this is not ICompositeLoss<T> composite) return lossTensor;
         var specs = composite.DeclaredOutputs;
         if (specs is null || specs.Count == 0) return lossTensor;
 
@@ -7383,7 +7416,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 fullParams, avgGrads, avgLoss,
                 input, target,
                 (inp, tgt) => ForwardForTraining(inp),
-                (pred, tgt) => loss.ComputeTapeLoss(pred, tgt),
+                (pred, tgt) => ApplyCompositeObjective(loss.ComputeTapeLoss(pred, tgt), pred),
                 parameterBuffer: null);
             // Past the point of no return: weights are about to be written in place (#1624 OOM-retry gate).
             MarkTrainMutationStarted();

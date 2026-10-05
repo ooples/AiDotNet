@@ -411,7 +411,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.Video.Enhancement.IART<T>",
             "AiDotNet.Video.Enhancement.IconVSR<T>",
             "AiDotNet.Video.Enhancement.MGLDVSR<T>",
-            "AiDotNet.Video.Enhancement.MIAVSR<T>",
             "AiDotNet.Video.Enhancement.PSRT<T>",
             "AiDotNet.Video.Enhancement.RealBasicVSR<T>",
             "AiDotNet.Video.Enhancement.RealBasicVSRSharp<T>",
