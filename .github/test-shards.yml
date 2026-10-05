@@ -25,7 +25,7 @@ shard:
   - name: Unit - 03a Diffusion Core/Schedulers/Encoding
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
-    filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~UnitTests.Encoding|FullyQualifiedName~UnitTests.Diffusion.AudioProcessingTests|FullyQualifiedName~UnitTests.Diffusion.MemoryManagementTests|FullyQualifiedName~UnitTests.Diffusion.SchedulerTests|FullyQualifiedName~UnitTests.Diffusion.Conditioning|FullyQualifiedName~UnitTests.Diffusion.Schedulers)'
+    filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&(FullyQualifiedName~UnitTests.Encoding|FullyQualifiedName~UnitTests.Diffusion.AudioProcessingTests|FullyQualifiedName~UnitTests.Diffusion.MemoryManagementTests|FullyQualifiedName~UnitTests.Diffusion.SchedulerTests|FullyQualifiedName~UnitTests.Diffusion.Conditioning|FullyQualifiedName~UnitTests.Diffusion.Schedulers|FullyQualifiedName~UnitTests.Diffusion.LatentDiffusionTrainingSampleTests.)'
   - name: Unit - 03b1 Diffusion Preprocessors
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1522,6 +1522,8 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.QuantizationAwareTrainingTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.TemporalVAEDecodeChannelTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.ArchitectureLayerAgreementTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.OptionsSeedReassignmentTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.CallerBuiltLayerSeedingTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.ArchitectureSharingGuardTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.AudioVisualCorrespondenceExecutionTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.BertEmbeddingLayerTests.|
