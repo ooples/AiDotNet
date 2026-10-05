@@ -354,11 +354,31 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
     /// </remarks>
     /// <exception cref="ArgumentException">An image sample is not laid out with the VAE's input channels, or a
     /// latent sample does not have <see cref="LatentChannels"/> channels.</exception>
+    /// <exception cref="InvalidOperationException"><see cref="TrainingSampleSpace"/> holds a value that is not a
+    /// <see cref="DiffusionTrainingSampleSpace"/>.</exception>
     protected override Tensor<T> PrepareTrainingSample(Tensor<T> input, Tensor<T> expectedOutput)
     {
         var sample = base.PrepareTrainingSample(input, expectedOutput);
-        if (TrainingSampleSpace == DiffusionTrainingSampleSpace.Latent)
+        var space = TrainingSampleSpace;
+        if (space != DiffusionTrainingSampleSpace.Image && space != DiffusionTrainingSampleSpace.Latent)
+            throw new InvalidOperationException(
+                $"{nameof(TrainingSampleSpace)} is {(int)space}, which is not a {nameof(DiffusionTrainingSampleSpace)}.");
+
+        if (space == DiffusionTrainingSampleSpace.Latent)
         {
+            // A flattened latent ([B, C*H*W] or one [C*H*W] row) is reshaped per row by the noise predictor's
+            // EnsureLatentShape, as it was before the space was stated, so it is accepted when it splits into
+            // LatentChannels evenly.
+            if (sample.Rank <= 2)
+            {
+                int width = sample.Shape[sample.Rank - 1];
+                if (width <= 0 || width % LatentChannels != 0)
+                    throw new ArgumentException(
+                        $"A flattened latent training sample needs a width divisible by {LatentChannels} (LatentChannels); got {width}.",
+                        nameof(input));
+                return sample;
+            }
+
             RequireChannels(sample, LatentChannels, "a latent", "LatentChannels",
                 $"or set {nameof(TrainingSampleSpace)} to {nameof(DiffusionTrainingSampleSpace.Image)} to train on images");
             return sample;
@@ -388,6 +408,7 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
                 $"A training sample for {what} needs {channels} channels ({source}); got {found}. Pass {what} {remedy}.",
                 nameof(sample));
     }
+
     /// <inheritdoc />
     public virtual Tensor<T> DecodeFromLatent(Tensor<T> latent)
     {

@@ -7609,7 +7609,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (!visited.Add(layer) || layer is not Layers.LayerBase<T> baseLayer)
             return;
 
-        bool seededHere = _layersSeededAtConstruction?.Contains(layer) == true;
+        bool seededHere = _layersSeededAtConstruction is not null && _layersSeededAtConstruction.Contains(layer);
         if (baseLayer.RandomSeed is null || baseLayer.RandomSeedCameFromConstructionScope || seededHere)
         {
             int? seed = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextSeedOrNull();

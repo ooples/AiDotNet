@@ -102,6 +102,28 @@ public class LatentDiffusionTrainingSampleTests
     }
 
     [Fact]
+    public void Train_OnAFlattenedLatent_UsesItAsItIs()
+    {
+        using var model = new ProbeModel { TrainingSampleSpace = DiffusionTrainingSampleSpace.Latent };
+        int factor = model.VAE.DownsampleFactor;
+        int side = 64 / factor;
+        var flattened = Random(new[] { 1, model.LatentChannels * side * side }, 5);
+
+        model.Train(flattened, flattened);
+
+        Assert.Equal(new[] { 1, model.LatentChannels * side * side }, model.NoisedShape);
+    }
+
+    [Fact]
+    public void Train_WithAnUndefinedSampleSpace_IsRefused()
+    {
+        using var model = new ProbeModel { TrainingSampleSpace = (DiffusionTrainingSampleSpace)7 };
+        var image = Random(new[] { 1, model.VAE.InputChannels, 64, 64 }, 6);
+
+        Assert.Throws<InvalidOperationException>(() => model.Train(image, image));
+    }
+
+    [Fact]
     public void Train_OnAnImage_WithTheWrongDepth_IsRefused()
     {
         using var model = new ProbeModel();
