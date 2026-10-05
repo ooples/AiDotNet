@@ -1,38 +1,41 @@
-﻿using AiDotNet.Attributes;
-using AiDotNet.Helpers;
+using AiDotNet.Enums;
+using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
-using AiDotNet.Optimizers;
-using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.TextToSpeech.EndToEnd;
 
-/// <summary>VITS2: improved VITS with duration discriminator, transformed prior, and speaker-conditional normalizing flow.</summary>
+/// <summary>
+/// VITS2: single-stage text-to-speech that improves VITS with an adversarially trained stochastic duration predictor,
+/// noise-scaled monotonic alignment search, a Transformer block in the normalizing flows and a speaker-conditioned text
+/// encoder.
+/// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "VITS2: Improving Quality and Efficiency of Single-Stage Text-to-Speech with Adversarial Learning and Architecture Design" (Kong et al., 2023)</item></list></para><para><b>For Beginners:</b> VITS2: improved VITS with duration discriminator, transformed prior, and speaker-conditional normalizing flow.. This model converts text input into speech audio output.</para></remarks>
-/// <example>
-/// <code>
-/// // Create a VITS2 model for improved end-to-end TTS
-/// // with duration discriminator and speaker-conditional normalizing flow
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new VITS2&lt;double&gt;(architecture, "vits2.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new VITS2&lt;double&gt;(architecture, new VITS2Options());
-/// </code>
-/// </example>
+/// <remarks>
+/// <para><b>References:</b> "VITS2: Improving Quality and Efficiency of Single-Stage Text-to-Speech with Adversarial
+/// Learning and Architecture Design" (Kong et al., Interspeech 2023). The paper has no official code; what it leaves open
+/// follows the community reference implementation (p0p4k/vits2_pytorch), as listed on <see cref="VITS2Options"/>.</para>
+/// <para>
+/// Training first fits the waveform networks as VITS does, without its duration model: the reconstruction, KL,
+/// adversarial and feature-matching losses, with Gaussian noise ε = std(P) · N(0, 1) · s on the alignment scores while
+/// s = 0.01 − 2·10⁻⁶ · step is positive (§2.2), the mel spectrogram as the posterior encoder's input and a Transformer
+/// block in every flow coupling (§2.3). After <see cref="VITS2Options.AcousticTrainingSteps"/> steps the duration
+/// predictor G(z_d, h_text) trains on its own (§2.1, "separately trained as the last training step") against the
+/// alignment's log-durations d with L_mse (Eq. 3) + L_adv(G) (Eq. 2), and the time-step-wise discriminator
+/// D(d, h_text) with L_adv(D) (Eq. 1). With several speakers the speaker embedding also enters the text encoder before its
+/// third block (§2.4). Synthesis draws z_d, predicts log-durations, expands the prior, samples it and inverts the flow.
+/// </para>
+/// <para><b>For Beginners:</b> VITS2 goes straight from text to a waveform like VITS, but learns how long each sound
+/// lasts by competing against a judge that tells real durations from predicted ones, which makes speech sound more
+/// natural.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
     "VITS2: Improving Quality and Efficiency of Single-Stage Text-to-Speech with Adversarial Learning and Architecture Design",
@@ -40,272 +43,145 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
     Year = 2023,
     Authors = "Kong et al."
 )]
-public partial class VITS2<T> : TtsModelBase<T>, IEndToEndTts<T>
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-4, Beta1 = 0.8, Beta2 = 0.99, Epsilon = 1e-9, WeightDecay = 0.01,
+                DecayRate = 0.999875, ReferenceBatchSize = 256,
+                Source = "Kong et al. 2023, Sec. 3: AdamW with beta1 0.8, beta2 0.99 and weight decay 0.01, an initial "
+                        + "learning rate of 2e-4 decayed by 0.999^(1/8) every epoch, 256 training instances per step.")]
+public partial class VITS2<T> : VitsTtsModelBase<T>
 {
-    private readonly VITS2Options _options;
+    private Vits2DurationPredictor<T>? _durationPredictor;
+    private Vits2DurationDiscriminator<T>? _durationDiscriminator;
 
-    public override ModelOptions GetOptions() => _options;
-
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    [Scratch]
-    private readonly bool _usesDefaultOptimizer;
-
-    private bool _useNativeMode;
-    private bool _disposed;
-
-    public VITS2(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        VITS2Options? options = null
-    )
-        : base(architecture)
+    /// <summary>Creates a VITS2 model that runs an exported ONNX graph.</summary>
+    public VITS2(NeuralNetworkArchitecture<T> architecture, string modelPath, VITS2Options? options = null)
+        : base(architecture, modelPath, options ?? new VITS2Options())
     {
-        _options = options ?? new VITS2Options();
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
     }
 
-    public VITS2(
-        NeuralNetworkArchitecture<T> architecture,
-        VITS2Options? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
+    /// <summary>Creates a trainable VITS2 model.</summary>
+    public VITS2(NeuralNetworkArchitecture<T> architecture, VITS2Options? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture, options ?? new VITS2Options(), optimizer)
     {
-        _options = options ?? new VITS2Options();
-        _useNativeMode = true;
-        _usesDefaultOptimizer = optimizer is null;
-        _optimizer = optimizer ?? CreatePaperOptimizer();
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        InitializeLayers();
     }
 
-    int ITtsModel<T>.SampleRate => _options.SampleRate;
-    public int MaxTextLength => _options.MaxTextLength;
-    public new int HiddenDim => _options.HiddenDim;
-    public int NumFlowSteps => _options.NumFlowSteps;
+    private VITS2Options PaperOptions => (VITS2Options)VitsOptions;
 
-    /// <summary>
-    /// Synthesizes speech using VITS2's improved architecture.
-    /// Per the paper (Kong et al., 2023): Key improvements over VITS:
-    /// (1) Duration discriminator: adversarial training for duration predictor (replaces MSE),
-    /// (2) Transformed prior: Gaussian mixture prior instead of single Gaussian for richer latent,
-    /// (3) Speaker-conditional normalizing flow: speaker embedding conditions flow transformations,
-    /// (4) Monotonic alignment search with learned prior.
-    /// </summary>
-    public override Tensor<T> Synthesize(string text)
-    {
-        ThrowIfDisposed();
-        var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        int textLen = Math.Min(text.Length, _options.MaxTextLength);
-        int hiddenDim = _options.HiddenDim;
-        // (1) Text encoder with relative positional encoding
-        double[] textHidden = new double[textLen * hiddenDim];
-        for (int t = 0; t < textLen; t++)
-        for (int d = 0; d < hiddenDim; d++)
-        {
-            double charEmb = (text[t] % 128) / 128.0 - 0.5;
-            double relPos = Math.Sin((t + 1.0) / Math.Pow(10000, 2.0 * d / hiddenDim));
-            textHidden[t * hiddenDim + d] = charEmb * 0.5 + relPos * 0.3;
-        }
-        // (2) Duration predictor with adversarial training (duration discriminator)
-        int[] durations = new int[textLen];
-        for (int t = 0; t < textLen; t++)
-        {
-            double durLogit = 0;
-            for (int d = 0; d < hiddenDim; d++)
-                durLogit += textHidden[t * hiddenDim + d] * 0.01;
-            durations[t] = Math.Max(1, (int)(Math.Exp(durLogit + 1.5) * 2));
-        }
-        int totalFrames = 0;
-        for (int t = 0; t < textLen; t++)
-            totalFrames += durations[t];
-        // (3) Expand and apply transformed prior (Gaussian mixture)
-        double[] z = new double[totalFrames * hiddenDim];
-        int fi = 0;
-        for (int t = 0; t < textLen; t++)
-        for (int r = 0; r < durations[t]; r++)
-        {
-            if (fi >= totalFrames)
-                break;
-            for (int d = 0; d < hiddenDim; d++)
-            {
-                double h = textHidden[t * hiddenDim + d];
-                // Gaussian mixture prior: weighted sum of K components
-                double mixture = 0;
-                for (int k = 0; k < _options.NumMixtureComponents; k++)
-                {
-                    double mu = h * (0.3 + k * 0.1);
-                    double sigma = 0.5 + k * 0.1;
-                    mixture +=
-                        Math.Exp(-0.5 * Math.Pow((h - mu) / sigma, 2))
-                        / _options.NumMixtureComponents;
-                }
-                z[fi * hiddenDim + d] = h * mixture * 2.0;
-            }
-            fi++;
-        }
-        // (4) Speaker-conditional normalizing flow
-        for (int f = 0; f < totalFrames; f++)
-        for (int d = 0; d < hiddenDim; d++)
-        {
-            double val = z[f * hiddenDim + d];
-            double s = Math.Tanh(val * 0.25) * 0.5;
-            z[f * hiddenDim + d] = val * Math.Exp(s) + val * 0.1;
-        }
-        // (5) HiFi-GAN decoder
-        int waveLen = totalFrames * _options.HopSize;
-        var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            int melFrame = Math.Min(i / _options.HopSize, totalFrames - 1);
-            double sample = 0;
-            for (int d = 0; d < Math.Min(hiddenDim, 16); d++)
-            {
-                double latent = z[melFrame * hiddenDim + d];
-                sample += Math.Tanh(latent) * Math.Sin(i * (d + 1) * 0.01 + latent) / 16.0;
-            }
-            waveform[i] = NumOps.FromDouble(Math.Tanh(sample));
-        }
-        return waveform;
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
-    }
-
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    /// <summary>
-    /// Builds the optimizer the paper prescribes: AdamW at the configured learning rate with
-    /// beta = (Beta1, Beta2) and decoupled weight decay. Kong et al. 2023 keeps VITS's optimizer recipe.
-    /// </summary>
-    /// <remarks>
-    /// Constructing AdamW with no options at all took the library defaults -- lr 1e-3 and
-    /// beta = (0.9, 0.999) -- rather than the published recipe, and the resulting steps drove the
-    /// loss UP on this stack across the conformance budget. Every coefficient stays a caller-visible
-    /// option, and passing an explicit optimizer still bypasses this entirely.
-    /// </remarks>
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
-        => new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                Beta1 = _options.Beta1,
-                Beta2 = _options.Beta2,
-                Epsilon = _options.Epsilon,
-                WeightDecay = _options.WeightDecay,
-                UseAMSGrad = false,
-                UseAdaptiveBetas = false,
-            });
+    /// <summary>Whether the next training step trains the duration predictor (after the waveform networks).</summary>
+    public bool TrainsDurationPredictor => TrainingSteps >= PaperOptions.AcousticTrainingSteps;
 
     /// <inheritdoc />
-    protected override void OnMutableConstructorConfigurationRestored()
+    protected override bool PosteriorReadsMel => true;
+
+    /// <inheritdoc />
+    protected override double AlignmentNoiseScale(long step)
+        => Math.Max(0.0, PaperOptions.AlignmentNoiseScale - PaperOptions.AlignmentNoiseDecay * step);
+
+    /// <inheritdoc />
+    protected override int SpeakerConditionedEncoderBlock => PaperOptions.SpeakerConditionedEncoderBlock;
+
+    /// <inheritdoc />
+    protected override (int Layers, int Heads, int KernelSize, double Dropout) FlowTransformer
+        => (PaperOptions.FlowTransformerLayers, PaperOptions.FlowTransformerHeads, PaperOptions.FlowTransformerKernelSize, PaperOptions.FlowTransformerDropout);
+
+    /// <inheritdoc />
+    protected override IEnumerable<LayerBase<T>> CreateDurationModel(int hidden, int speakerChannels, int languageChannels)
     {
-        base.OnMutableConstructorConfigurationRestored();
-        if (_useNativeMode && _usesDefaultOptimizer)
-            _optimizer = CreatePaperOptimizer();
+        var o = PaperOptions;
+        _durationPredictor = new Vits2DurationPredictor<T>(Engine, hidden, o.DurationPredictorFilterChannels,
+            o.DurationPredictorKernelSize, o.DurationPredictorDropout, speakerChannels, languageChannels);
+        _durationDiscriminator = new Vits2DurationDiscriminator<T>(Engine, hidden, hidden, o.DurationDiscriminatorKernelSize);
+        return _durationPredictor.Layers.Concat(_durationDiscriminator.Layers);
     }
 
-    protected override void InitializeLayers()
+    /// <inheritdoc />
+    /// <remarks>None: the duration predictor trains after the waveform networks.</remarks>
+    protected override IEnumerable<LayerBase<T>> JointDurationLayers => Array.Empty<LayerBase<T>>();
+
+    /// <inheritdoc />
+    protected override Tensor<T>? JointDurationLoss(Tensor<T> hidden, Tensor<T>? speaker, Tensor<T>? language, int[] durations, Random random) => null;
+
+    /// <inheritdoc />
+    protected override double[] PredictDurations(Tensor<T> hidden, Tensor<T>? speaker, Tensor<T>? language, Random random)
     {
-        if (!_useNativeMode)
+        var noise = Gaussian(new[] { 1, 1, hidden.Shape[2] }, random, PaperOptions.DurationNoiseScale);
+        var logDurations = _durationPredictor!.Forward(hidden, speaker, language, noise);
+        var durations = new double[logDurations.Length];
+        for (int i = 0; i < durations.Length; i++) durations[i] = Math.Exp(NumOps.ToDouble(logDurations[i]));
+        return durations;
+    }
+
+    /// <inheritdoc />
+    protected override void TrainUtterance(VitsUtterance data, VitsTrainingDraw draw)
+    {
+        if (!TrainsDurationPredictor)
+        {
+            TrainAcoustic(data, draw);
             return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultVITSLayers(
-                    _options.HiddenDim,
-                    _options.InterChannels,
-                    _options.FilterChannels,
-                    _options.NumEncoderLayers,
-                    _options.NumFlowSteps,
-                    _options.NumDecoderLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate,
-                    inputFeatures: _options.MelChannels
-                )
-            );
-    }
+        }
+        var target = DurationTarget(data, draw);
 
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
+        Tensor<T> generated;
+        using (new NoGradScope<T>())
+        {
+            var g = _durationPredictor!.Forward(target.Hidden, target.Speaker, target.Language, target.Noise);
+            generated = new Tensor<T>(g._shape, g.ToVector());
+        }
+        TrainLayers(_durationDiscriminator!.Layers.Cast<ILayer<T>>().ToList(), data, () =>
+        {
+            var features = _durationDiscriminator.Encode(target.Hidden);
+            return LeastSquaresDiscriminatorLoss(_durationDiscriminator.Score(features, target.LogDurations),
+                _durationDiscriminator.Score(features, generated));
+        }, "durationDiscriminator");
+        TrainLayers(_durationPredictor.Layers.Cast<ILayer<T>>().ToList(), data, () => DurationGeneratorLoss(target, adversarial: true), "duration");
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <remarks>Before the duration phase, the reconstruction and KL terms; in it, L_mse (Eq. 3) — the adversarial term
+    /// is measured against a discriminator trained at the same time.</remarks>
+    protected override Tensor<T> Objective(VitsUtterance data, VitsTrainingDraw draw)
+        => TrainsDurationPredictor ? DurationGeneratorLoss(DurationTarget(data, draw), adversarial: false) : base.Objective(data, draw);
+
+    private sealed record DurationTraining(Tensor<T> Hidden, Tensor<T>? Speaker, Tensor<T>? Language, Tensor<T> LogDurations, Tensor<T> Noise);
+
+    // The stop-gradient text encoding and speaker, the alignment's log-durations log(d + 1e-6) and the noise z_d.
+    private DurationTraining DurationTarget(VitsUtterance data, VitsTrainingDraw draw)
+    {
+        VitsAlignment alignment;
+        using (new NoGradScope<T>()) alignment = Align(data, draw, training: true);
+        int tokens = alignment.Durations.Length;
+        var logDurations = new Tensor<T>(new[] { 1, 1, tokens });
+        for (int i = 0; i < tokens; i++) logDurations[0, 0, i] = NumOps.FromDouble(Math.Log(alignment.Durations[i] + 1e-6));
+        var hidden = new Tensor<T>(alignment.Hidden._shape, alignment.Hidden.ToVector());
+        var speaker = alignment.Speaker is null ? null : new Tensor<T>(alignment.Speaker._shape, alignment.Speaker.ToVector());
+        var language = alignment.Language is null ? null : new Tensor<T>(alignment.Language._shape, alignment.Language.ToVector());
+        var noise = Gaussian(new[] { 1, 1, tokens }, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(draw.DurationSeed));
+        return new DurationTraining(hidden, speaker, language, logDurations, noise);
+    }
+
+    // L_mse (Eq. 3) + L_adv(G) (Eq. 2) for the duration predictor.
+    private Tensor<T> DurationGeneratorLoss(DurationTraining target, bool adversarial)
+    {
+        var predicted = _durationPredictor!.Forward(target.Hidden, target.Speaker, target.Language, target.Noise);
+        var error = Engine.TensorSubtract(predicted, target.LogDurations);
+        var loss = Mean(Engine.TensorMultiply(error, error));
+        if (!adversarial) return loss;
+        var score = _durationDiscriminator!.Score(_durationDiscriminator.Encode(target.Hidden), predicted);
+        return Engine.TensorAdd(loss, LeastSquaresGeneratorLoss(score));
+    }
+
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var m = new ModelMetadata<T>
         {
-            Name = _useNativeMode ? "VITS2-Native" : "VITS2-ONNX",
-            Description = "VITS2: Improved Single-Stage TTS (Kong et al., 2023)",
-            FeatureCount = _options.HiddenDim,
-            AdditionalInfo = new Dictionary<string, object>
-            {
-                ["HiddenDim"] = _options.HiddenDim,
-                ["Mode"] = _useNativeMode ? "Native" : "ONNX",
-            },
+            Name = IsOnnxMode ? "VITS2-ONNX" : "VITS2-Native",
+            Description = "VITS2: Single-Stage TTS with Adversarial Learning and Architecture Design (Kong et al., 2023)",
+            FeatureCount = PaperOptions.HiddenDim,
+            Complexity = PaperOptions.NumEncoderLayers + PaperOptions.NumFlowSteps,
         };
-    }
-
-
-
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(VITS2<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
+        m.AdditionalInfo["Architecture"] = "VITS2";
+        m.AdditionalInfo["SampleRate"] = PaperOptions.SampleRate.ToString();
+        return m;
     }
 }

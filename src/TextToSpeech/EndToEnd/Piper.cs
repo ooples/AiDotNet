@@ -1,34 +1,25 @@
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
-using AiDotNet.Optimizers;
-using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.EndToEnd;
 
-/// <summary>Piper: lightweight local TTS system based on VITS optimized for edge/embedded deployment with fast inference.</summary>
+/// <summary>Piper: a fast, local neural text-to-speech system — VITS trained with Rhasspy's recipe and model sizes.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Project: "Piper: A fast, local neural text to speech system" (Rhasspy, 2023)</item></list></para><para><b>For Beginners:</b> Piper: lightweight local TTS system based on VITS optimized for edge/embedded deployment with fast inference.. This model converts text input into speech audio output.</para></remarks>
-/// <example>
-/// <code>
-/// // Create a Piper model for lightweight edge-optimized TTS
-/// // based on VITS architecture with fast CPU inference
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new Piper&lt;double&gt;(architecture, "piper.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new Piper&lt;double&gt;(architecture, new PiperOptions());
-/// </code>
-/// </example>
+/// <remarks>
+/// <para><b>References:</b> rhasspy/piper (<c>piper_train</c>, 2023), which trains VITS (Kim et al. 2021) unchanged;
+/// see <see cref="PiperOptions"/> for the sizes and framing it sets.</para>
+/// <para>
+/// The network, its training and its synthesis are VITS's (<see cref="VITS{T}"/>, with the same stochastic duration
+/// predictor). Piper reads phoneme ids framed as
+/// piper-phonemize frames them — beginning-of-sentence, then every id followed by the padding id, then end-of-sentence
+/// (<c>^ _ p₁ _ p₂ _ … pₙ _ $</c>) — and its medium and x-low voices decode with a lighter HiFi-GAN.
+/// </para>
+/// <para><b>For Beginners:</b> Piper is a small, fast VITS voice meant to run on ordinary computers and devices; it turns
+/// phonemes straight into audio.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
@@ -38,236 +29,60 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
     "Piper: A Fast Local Neural Text-to-Speech System",
     "https://github.com/rhasspy/piper"
 )]
-public partial class Piper<T> : TtsModelBase<T>, IEndToEndTts<T>
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-4, Beta1 = 0.8, Beta2 = 0.99, Epsilon = 1e-9, WeightDecay = 0.01,
+                DecayRate = 0.999875, ReferenceBatchSize = 32,
+                Source = "rhasspy/piper piper_train: AdamW (betas 0.8, 0.99, eps 1e-9, PyTorch default weight decay 0.01) at "
+                        + "2e-4 with ExponentialLR 0.999875 per epoch; TRAINING.md trains with batch size 32.")]
+public partial class Piper<T> : StochasticDurationVitsBase<T>
 {
-    private readonly PiperOptions _options;
-
-    public override ModelOptions GetOptions() => _options;
-
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-
-    public Piper(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        PiperOptions? options = null
-    )
-        : base(architecture)
+    /// <summary>Creates a Piper model that runs an exported ONNX voice.</summary>
+    public Piper(NeuralNetworkArchitecture<T> architecture, string modelPath, PiperOptions? options = null)
+        : base(architecture, modelPath, options ?? new PiperOptions())
     {
-        _options = options ?? new PiperOptions();
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
     }
 
-    public Piper(
-        NeuralNetworkArchitecture<T> architecture,
-        PiperOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
+    /// <summary>Creates a trainable Piper model.</summary>
+    public Piper(NeuralNetworkArchitecture<T> architecture, PiperOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture, options ?? new PiperOptions(), optimizer)
     {
-        _options = options ?? new PiperOptions();
-        _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                Beta1 = _options.OptimizerBeta1,
-                Beta2 = _options.OptimizerBeta2,
-                Epsilon = _options.OptimizerEpsilon,
-                WeightDecay = _options.WeightDecay,
-                UseAdaptiveBetas = false,
-                UseAMSGrad = false,
-            });
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        InitializeLayers();
     }
 
-    int ITtsModel<T>.SampleRate => _options.SampleRate;
-    public int MaxTextLength => _options.MaxTextLength;
-    public new int HiddenDim => _options.HiddenDim;
-    public int NumFlowSteps => _options.NumFlowSteps;
+    private PiperOptions PaperOptions => (PiperOptions)VitsOptions;
 
-    /// <summary>
-    /// Synthesizes speech using Piper's lightweight VITS architecture.
-    /// Piper uses a streamlined VITS pipeline optimized for speed:
-    /// (1) eSpeak-NG phonemizer: text → IPA phonemes (external),
-    /// (2) Lightweight text encoder: fewer layers/heads than full VITS,
-    /// (3) Duration predictor + MAS alignment,
-    /// (4) Compact normalizing flow (fewer steps),
-    /// (5) HiFi-GAN decoder with reduced channel count.
-    /// Supports 30+ languages with quality levels: x_low, low, medium, high.
-    /// </summary>
-    public override Tensor<T> Synthesize(string text)
+    /// <inheritdoc />
+    /// <remarks>piper-phonemize's framing: <c>^ _ p₁ _ … pₙ _ $</c> (the padding only when
+    /// <see cref="PiperOptions.InterspersePad"/>).</remarks>
+    protected override Tensor<T> PrepareTokens(Tensor<T> tokens)
     {
-        ThrowIfDisposed();
-        var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        int textLen = Math.Min(text.Length, _options.MaxTextLength);
-        int hiddenDim = _options.HiddenDim;
-        // Lightweight text encoder (fewer layers for speed)
-        double[] textHidden = new double[textLen * hiddenDim];
-        for (int t = 0; t < textLen; t++)
-        for (int d = 0; d < hiddenDim; d++)
+        var o = PaperOptions;
+        int step = o.InterspersePad ? 2 : 1;
+        var ids = new Tensor<T>(new[] { step * (tokens.Length + 1) + 1 });
+        int k = 0;
+        ids[k++] = NumOps.FromDouble(o.BosId);
+        if (o.InterspersePad) ids[k++] = NumOps.FromDouble(o.PadId);
+        for (int i = 0; i < tokens.Length; i++)
         {
-            double charEmb = (text[t] % 128) / 128.0 - 0.5;
-            double posEnc = Math.Sin((t + 1.0) / Math.Pow(10000, 2.0 * d / hiddenDim));
-            textHidden[t * hiddenDim + d] = charEmb * 0.5 + posEnc * 0.3;
+            ids[k++] = tokens[i];
+            if (o.InterspersePad) ids[k++] = NumOps.FromDouble(o.PadId);
         }
-        // Duration predictor (compact)
-        int[] durations = new int[textLen];
-        for (int t = 0; t < textLen; t++)
-        {
-            double durLogit = 0;
-            for (int d = 0; d < hiddenDim; d++)
-                durLogit += textHidden[t * hiddenDim + d] * 0.01;
-            durations[t] = Math.Max(1, (int)(Math.Exp(durLogit + 1.5) * _options.LengthScale));
-        }
-        int totalFrames = 0;
-        for (int t = 0; t < textLen; t++)
-            totalFrames += durations[t];
-        // Expand + compact flow
-        double[] z = new double[totalFrames * hiddenDim];
-        int fi = 0;
-        for (int t = 0; t < textLen; t++)
-        for (int r = 0; r < durations[t]; r++)
-        {
-            if (fi >= totalFrames)
-                break;
-            for (int d = 0; d < hiddenDim; d++)
-            {
-                double h = textHidden[t * hiddenDim + d];
-                z[fi * hiddenDim + d] = h * 1.1 + Math.Tanh(h * 0.3) * 0.2;
-            }
-            fi++;
-        }
-        // HiFi-GAN decoder (reduced channels)
-        int waveLen = totalFrames * _options.HopSize;
-        var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            int melFrame = Math.Min(i / _options.HopSize, totalFrames - 1);
-            double sample = 0;
-            for (int d = 0; d < Math.Min(hiddenDim, 16); d++)
-            {
-                double latent = z[melFrame * hiddenDim + d];
-                sample += Math.Tanh(latent) * Math.Sin(i * (d + 1) * 0.01 + latent) / 16.0;
-            }
-            waveform[i] = NumOps.FromDouble(Math.Tanh(sample));
-        }
-        return waveform;
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
-    }
-
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultVITSLayers(
-                    _options.HiddenDim,
-                    _options.InterChannels,
-                    _options.FilterChannels,
-                    _options.NumEncoderLayers,
-                    _options.NumFlowSteps,
-                    _options.NumDecoderLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate,
-                    inputFeatures: _options.MelChannels
-                )
-            );
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        ids[k] = NumOps.FromDouble(o.EosId);
+        return ids;
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var o = PaperOptions;
+        var m = new ModelMetadata<T>
         {
-            Name = _useNativeMode ? "Piper-Native" : "Piper-ONNX",
-            Description = "Piper: Fast Local Neural TTS (Rhasspy, 2023)",
-            FeatureCount = _options.HiddenDim,
-            AdditionalInfo = new Dictionary<string, object>
-            {
-                ["HiddenDim"] = _options.HiddenDim,
-                ["Mode"] = _useNativeMode ? "Native" : "ONNX",
-            },
+            Name = IsOnnxMode ? "Piper-ONNX" : "Piper-Native",
+            Description = "Piper: a fast, local neural text-to-speech system (VITS, Rhasspy)",
+            FeatureCount = o.HiddenDim,
+            Complexity = o.NumEncoderLayers + o.NumFlowSteps,
         };
-    }
-
-
-
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(Piper<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
+        m.AdditionalInfo["Architecture"] = "Piper";
+        m.AdditionalInfo["SampleRate"] = o.SampleRate.ToString();
+        return m;
     }
 }
