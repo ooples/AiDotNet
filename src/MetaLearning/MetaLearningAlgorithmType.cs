@@ -1444,5 +1444,19 @@ public enum MetaLearningAlgorithmType
     /// Meta-learning enables rapid 3D scene reconstruction from minimal observations.
     /// <para><b>Use When:</b> You need few-shot 3D reconstruction with neural radiance fields.</para>
     /// </remarks>
-    HyperNeRFMeta
+    HyperNeRFMeta,
+
+    /// <summary>
+    /// AWGIM - Attentive Weights Generation for few-shot learning via Information Maximization
+    /// (Guo &amp; Cheung, CVPR 2020).
+    /// </summary>
+    /// <remarks>
+    /// <b>Key Idea:</b> Generate a linear classifier for every query in one pass: a contextual path
+    /// (self-attention over the support set) and an attentive path (the query attending to the support
+    /// set) are decoded into the classifier's weights, and two reconstruction losses maximize the
+    /// mutual information between those weights and the data.
+    /// <para><b>Use When:</b> You want LEO-style generated classifiers without an inner optimization
+    /// loop, and the best support examples differ from query to query.</para>
+    /// </remarks>
+    AWGIM
 }
