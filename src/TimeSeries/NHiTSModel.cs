@@ -375,13 +375,17 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
                     }
 
                     var pooledInput = new Tensor<T>(new[] { effectiveBatch, pooledLen }, new Vector<T>(pooledData));
-                    var stackForecast = stack.ForwardTape(pooledInput); // [B, H]
+                    // Summed column-major ([H, B]) and transposed once below: see ForwardTapeColumns.
+                    var stackForecast = stack.ForwardTapeColumns(pooledInput);
                     aggregatedForecast = aggregatedForecast is null
                         ? stackForecast
                         : Engine.TensorAdd(aggregatedForecast, stackForecast);
                 }
 
-                var batchLoss = trainingLoss.ComputeTapeLoss(aggregatedForecast!, batchTarget);
+                if (aggregatedForecast is null)
+                    throw new InvalidOperationException("N-HiTS has no stacks to run; the model was not initialized.");
+                var batchLoss = trainingLoss.ComputeTapeLoss(
+                    Engine.TensorPermute(aggregatedForecast, new[] { 1, 0 }), batchTarget);
 
                 var allGrads = tape.ComputeGradients(batchLoss, sources: null);
                 var grads = new Dictionary<Tensor<T>, Tensor<T>>(
@@ -463,19 +467,20 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
     /// size doesn't divide the lookback cleanly (fused path unsupported for that
     /// config; caller falls back to eager).
     /// </summary>
-    private Tensor<T>? RunForwardBatched(Tensor<T> input)
+    internal Tensor<T>? RunForwardBatched(Tensor<T> input)
     {
         Tensor<T>? aggregated = null;
         foreach (var stack in _stacks)
         {
             var pooled = PoolBatchedTape(input, stack.PoolingSize);
             if (pooled is null) return null;
-            var forecast = stack.ForwardTape(pooled);
+            // Summed column-major ([H, B]) and transposed once below: see ForwardTapeColumns.
+            var forecast = stack.ForwardTapeColumns(pooled);
             aggregated = aggregated is null
                 ? forecast
                 : Engine.TensorAdd(aggregated, forecast);
         }
-        return aggregated;
+        return aggregated is null ? null : Engine.TensorPermute(aggregated, new[] { 1, 0 });
     }
 
     /// <summary>
@@ -1024,7 +1029,22 @@ internal partial class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>,
     /// <see cref="ForwardInternal"/> used at inference — both read the same weight tensors, so
     /// Adam updates applied to the registered tensors are visible to inference immediately.
     /// </summary>
+    /// <remarks>
+    /// The result is a permuted view. A caller that sums several stacks' forecasts should use
+    /// <see cref="ForwardTapeColumns"/> and transpose the sum once: adding permuted views of
+    /// device-resident results gave a wrong sum on the DirectGpu engine (#1804,
+    /// AiDotNet.Tensors#1090), and costs a strided permute per stack either way.
+    /// </remarks>
     public Tensor<T> ForwardTape(Tensor<T> input)
+        => Engine.TensorPermute(ForwardTapeColumns(input), new[] { 1, 0 });
+
+    /// <summary>
+    /// Tape-tracked forward pass over a batched, already-pooled input <c>[B, inputLength]</c>,
+    /// returning the stack forecast column-major, <c>[outputLength, B]</c>: the layout the stack
+    /// computes in (weight <c>[out, in]</c> @ x <c>[in, B]</c>), so forecasts from several stacks
+    /// sum as dense tensors.
+    /// </summary>
+    internal Tensor<T> ForwardTapeColumns(Tensor<T> input)
     {
         // [B, in] -> [in, B] so weight[out, in] @ x[in, B] = [out, B].
         var x = Engine.TensorPermute(input, new[] { 1, 0 });
@@ -1040,7 +1060,6 @@ internal partial class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>,
             x = layer < _weights.Count - 1 ? Engine.ReLU(linear) : linear;
         }
 
-        // [outputLength, B] -> [B, outputLength]
-        return Engine.TensorPermute(x, new[] { 1, 0 });
+        return x; // [outputLength, B]
     }
 }

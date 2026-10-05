@@ -108,11 +108,19 @@ internal abstract class DeepARDistributionHead<T> : NeuralNetworks.Layers.LayerB
         return NumOps.Log(NumOps.Add(NumOps.One, NumOps.Exp(v)));
     }
 
-    /// <summary>Concatenates per-step <c>[1, B]</c> slices into <c>[L, B]</c> then permutes to <c>[B, L]</c>.</summary>
+    /// <summary>Stacks per-step <c>[1, B]</c> slices into a dense <c>[B, L]</c>.</summary>
+    /// <remarks>
+    /// Each <c>[1, B]</c> step is reshaped (same data order) to a <c>[B, 1]</c> column and the columns are
+    /// concatenated along axis 1. The previous concatenate-to-<c>[L, B]</c>-then-permute returned a strided
+    /// view, which the DirectGpu engine's eager elementwise and raw-upload paths read in the source layout
+    /// (#1804, AiDotNet.Tensors#1090), so the head's loss compared the wrong elements on a GPU.
+    /// </remarks>
     protected Tensor<T> StackStepsToBL(Tensor<T>[] steps)
     {
-        var lb = Engine.TensorConcatenate(steps, axis: 0);
-        return Engine.TensorPermute(lb, new[] { 1, 0 });
+        var columns = new Tensor<T>[steps.Length];
+        for (int i = 0; i < steps.Length; i++)
+            columns[i] = Engine.Reshape(steps[i], new[] { steps[i].Length, 1 });
+        return Engine.TensorConcatenate(columns, axis: 1);
     }
 
     // --- LayerBase plumbing (uniform over the registered projection tensors) ------------------------
