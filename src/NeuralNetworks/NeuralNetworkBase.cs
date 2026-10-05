@@ -297,7 +297,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         set
         {
             _modelOptions = value;
-            ApplyOptionsSeed(value?.Seed);
+            // Only while no layer exists yet: restarting the construction scope after layers were built
+            // would hand later layers the seeds earlier ones already used, so they would initialise alike.
+            if (_layers is null || _layers.Count == 0)
+                ApplyOptionsSeed(value?.Seed);
         }
     }
 
@@ -7560,10 +7563,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (seed is not int value || Architecture is { HasExplicitRandomSeed: true })
             return;
 
-        // Re-assigning options that carry the seed already applied must not restart the scope: layers built after
-        // it would draw the per-layer seeds the earlier layers already used, and initialise identically.
-        if (_optionsSeed == value)
-            return;
         _optionsSeed = value;
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(value);
         SeedCallerBuiltLayers();

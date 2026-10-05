@@ -1564,6 +1564,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.HybridBlockSchedulerTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.Mamba2BlockSSDEquivalenceTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.MambaBlockTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.SsmLateSeedInitializationTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.MambaLanguageModelTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.RealGatedLinearRecurrenceLayerTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.SSM.RWKV7LanguageModelTests.|
