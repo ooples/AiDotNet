@@ -92,7 +92,7 @@ public partial class RpropOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// 0.5, first step 0.1). Those defaults are well tested and rarely worth changing.</para>
     /// </remarks>
     public RpropOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         RpropOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
@@ -470,6 +470,14 @@ public partial class RpropOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     protected override void UpdateAdaptiveParameters(OptimizationStepData<T, TInput, TOutput> currentStepData, OptimizationStepData<T, TInput, TOutput> previousStepData)
     {
         base.UpdateAdaptiveParameters(currentStepData, previousStepData);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>Rejects invalid hyperparameters from a checkpoint before any of it is installed.</remarks>
+    protected override void ValidateRestoredOptions(OptimizationAlgorithmOptions<T, TInput, TOutput> options)
+    {
+        if (options is RpropOptimizerOptions<T, TInput, TOutput> rpropOptions)
+            ValidateHyperparameters(rpropOptions);
     }
 
     /// <summary>

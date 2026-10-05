@@ -126,7 +126,7 @@ public sealed class GeneratedVisionLanguageFixtureContractTests
                     || name.StartsWith("System.", StringComparison.Ordinal)
                     || (includeModels && (name == "AiDotNet" || name == "AiDotNet.Tensors"))))
             .Select(assembly => assembly.Location).Distinct(StringComparer.Ordinal)
-            .Select(path => MetadataReference.CreateFromFile(path)).ToImmutableArray<MetadataReference>();
+            .Select(path => global::AiDotNet.Tests.Generators.CachedMetadataReference.FromFile(path)).ToImmutableArray<MetadataReference>();
     }
 
     private static void AssertAssignment(ObjectCreationExpressionSyntax options, string property, int expected)

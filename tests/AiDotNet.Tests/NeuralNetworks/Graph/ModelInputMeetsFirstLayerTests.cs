@@ -343,21 +343,7 @@ public class ModelInputMeetsFirstLayerTests
             InputType.ThreeDimensional, NeuralNetworkTaskType.Regression,
             inputDepth: 3, inputHeight: Extent, inputWidth: Extent, outputSize: 4);
 
-        var pars = ctor.GetParameters();
-        var args = new object?[pars.Length];
-        args[0] = architecture;
-        // Options are built size-bounded (ModelTestScale, the generated bound the clone sweep uses) instead of at
-        // their paper defaults. The first layer's TYPE, which is all this test reads, does not depend on width or
-        // depth, but a paper-scale LLM's weights do: ZambaLanguageModel, Zamba2LanguageModel and FireRedASRLLM took
-        // 119 s, 55 s and 22 s to construct and drove this test host to 50.9 GB, which killed the 16 GB runner
-        // the Unassigned - 01 shard runs on. An options type the generator cannot bound keeps its default.
-        for (int i = 1; i < pars.Length; i++)
-        {
-            var parameterType = Nullable.GetUnderlyingType(pars[i].ParameterType) ?? pars[i].ParameterType;
-            args[i] = parameterType.IsClass && parameterType != typeof(string)
-                ? AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(parameterType) ?? pars[i].DefaultValue
-                : pars[i].DefaultValue;
-        }
+        var args = ModelSweepConstruction.Arguments(ctor.GetParameters(), architecture);
 
         object? built = null;
         var task = System.Threading.Tasks.Task.Run(() => built = ctor.Invoke(args));

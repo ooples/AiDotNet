@@ -264,7 +264,7 @@ public sealed class GeneratedObjectDetectionPositiveFixtureTests
         paths.Add(typeof(ModelBase<,,>).Assembly.Location);
         paths.Add(typeof(Tensor<>).Assembly.Location);
         if (!includeTestAssembly) paths.Remove(typeof(GeneratedObjectDetectionPositiveFixtureTests).Assembly.Location);
-        return paths.Select(path => MetadataReference.CreateFromFile(path));
+        return paths.Select(path => global::AiDotNet.Tests.Generators.CachedMetadataReference.FromFile(path));
     }
 
     private static Type ModelType(DetectorKind kind) => kind switch

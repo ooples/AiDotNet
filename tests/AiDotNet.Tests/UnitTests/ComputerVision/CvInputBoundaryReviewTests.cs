@@ -369,6 +369,9 @@ public sealed class CvInputBoundaryReviewTests
     {
         public TextDetectorProbe(TextDetectionOptions<double> options) : base(options) { }
         public override string Name => nameof(TextDetectorProbe);
+        protected override Tensor<double> TextDetectionLoss(List<Tensor<double>> outputs,
+            AiDotNet.ComputerVision.Detection.TextDetection.TextDetectionTrainingBatch targets, int imageWidth, int imageHeight) =>
+            throw new NotSupportedException();
         public int ForwardCalls { get; private set; }
         public int[] LastInputShape { get; private set; } = Array.Empty<int>();
         public Tensor<double> Prepare(Tensor<double> image) => Preprocess(image);

@@ -33,6 +33,78 @@ public abstract class OCRTestBase<T> : DetectionModelTestBase<T>
     /// </summary>
     protected OCRBase<T> CreateRecognizer() => (OCRBase<T>)CreateModel();
 
+    /// <summary>Training steps the overfit test may take before the transcription must be exact.</summary>
+    protected virtual int OverfitStepBudget => 800;
+
+    /// <summary>
+    /// The paper objective has to fit: trained through <c>TrainRecognition</c> on one rendered word, the
+    /// recogniser must come to read it exactly (CER 0) from a start that misreads it. A CTC alignment or
+    /// teacher-forcing shift that is wrong, or labels mapped through the wrong character table, leaves CER above
+    /// zero however long it trains. CER is measured on the decoded text, not on the loss.
+    /// </summary>
+    [Fact(Timeout = 300000)]
+    public async Task TrainRecognition_OverfitsOneWord_ToZeroCharacterErrorRate()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        using var recognizer = CreateRecognizer();
+        const string word = "TILE";
+        Assert.All(word, ch => Assert.True(recognizer.CharacterSet.IndexOf(ch) >= 0,
+            $"'{ch}' is not in {recognizer.GetType().Name}'s character set, so it cannot be a training target."));
+        var image = new Tensor<T>(InputShape);
+        SyntheticTextImages.Draw(image, 0, word, 4, 5, 3);
+        var transcription = new[] { word };
+
+        double CharacterErrorRate()
+        {
+            recognizer.SetTrainingMode(false);
+            // update_bn: eval-mode statistics for the current weights, not the momentum average of earlier ones.
+            BatchNormRecalibration.Recalibrate<T>(recognizer, () => recognizer.Predict(image));
+            return AiDotNet.Metrics.TextRecognitionMetrics.CharacterErrorRate(word, recognizer.RecognizeText(image).text);
+        }
+
+        double initial = CharacterErrorRate();
+        var trajectory = new List<string> { $"0: cer {initial:F3}" };
+        double final = initial;
+        for (int step = 1; step <= OverfitStepBudget && final > 0; step++)
+        {
+            recognizer.TrainRecognition(image, transcription);
+            double loss = ToD(recognizer.GetLastLoss());
+            Assert.False(double.IsNaN(loss) || double.IsInfinity(loss), $"Step {step} reported a non-finite loss {loss}.");
+            if (step % 5 == 0 || step == OverfitStepBudget)
+            {
+                final = CharacterErrorRate();
+                trajectory.Add($"{step}: loss {loss:G4} cer {final:F3} '{recognizer.RecognizeText(image).text}'");
+            }
+        }
+
+        Assert.True(initial > 0, $"The untrained recogniser already reads '{word}', so this fixture cannot show learning.");
+        Assert.True(final == 0, $"After {OverfitStepBudget} steps CER is {final:F3}. " + string.Join("; ", trajectory));
+    }
+    /// <summary>
+    /// <c>RecognizeText</c> is what the end-to-end readers call with raw crops, so it must prepare the crop
+    /// exactly as <c>Recognize</c> and training do. A recogniser that encoded the raw pixels instead read images
+    /// unlike any it was trained on.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task RecognizeText_PreparesTheCropAsRecognizeDoes()
+    {
+        await Task.Yield();
+        using var _arena = TensorArena.Create();
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        using var recognizer = CreateRecognizer();
+        var image = CreateRandomImage(rng);
+        for (int i = 0; i < image.Length; i++) image[i] = ToT(ToD(image[i]) * 255.0);
+
+        var whole = recognizer.Recognize(image);
+        var (text, confidence) = recognizer.RecognizeText(image);
+
+        Assert.Equal(whole.FullText, text);
+        // Recognize reports no region for empty text, so the confidences are comparable only when one was read.
+        if (text.Length > 0)
+            Assert.Equal(ToD(Assert.Single(whole.TextRegions).Confidence), ToD(confidence), 10);
+    }
+
     [Fact(Timeout = 120000)]
     public async Task Recognize_ShouldReturnAWellFormedResult()
     {

@@ -566,7 +566,7 @@ public partial class SynapticPlasticityLayer<T> : LayerBase<T>, IShapeContract
         _traceDecay = traceDecay;
 
         // Initialize weights with small random values
-        _weights = Tensor<T>.CreateRandom([size, size]);
+        _weights = Tensor<T>.CreateRandom(Random, [size, size]);
 
         // Initialize trace and spike tensors
         _presynapticTraces = new Tensor<T>([size]);

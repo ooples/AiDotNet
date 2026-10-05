@@ -34,7 +34,7 @@ namespace AiDotNet.ComputerVision.Segmentation.InstanceSegmentation;
 [ModelComplexity(ModelComplexity.Medium)]
 [ResearchPaper("YOLOv8", "https://github.com/ultralytics/ultralytics")]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-public class YOLOSeg<T> : InstanceSegmenterBase<T>
+public partial class YOLOSeg<T> : InstanceSegmenterBase<T>
 {
     private readonly CSPDarknet<T> _backbone;
     private readonly PANet<T> _neck;
@@ -68,6 +68,20 @@ public class YOLOSeg<T> : InstanceSegmenterBase<T>
         // Coefficient prediction head (one set per detection)
         _coeffHead = new Dense<T>(256 * 5 * 5, _numPrototypes);
     }
+
+    /// <inheritdoc/>
+    /// <remarks>Heads, in order: the mask prototypes from P3, then the detection head's per-level predictions.</remarks>
+    protected override List<Tensor<T>> Forward(Tensor<T> input)
+    {
+        var neckFeatures = _neck.Forward(_backbone.ExtractFeatures(input));
+        var heads = new List<Tensor<T>> { _protoHead.GeneratePrototypes(neckFeatures[0]) };
+        heads.AddRange(_detectionHead.Forward(neckFeatures));
+        return heads;
+    }
+
+    /// <inheritdoc/>
+    protected override void MaterializeAuxiliaryHeads()
+        => _coeffHead.Forward(new Tensor<T>(new[] { 1, _coeffHead.InputSize }));
 
     /// <inheritdoc/>
     public override InstanceSegmentationResult<T> Segment(Tensor<T> image)

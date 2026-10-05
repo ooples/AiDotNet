@@ -74,7 +74,7 @@ public partial class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
     /// <param name="model">The model to optimize.</param>
     /// <param name="options">The Nelder-Mead-specific optimization options.</param>
     public NelderMeadOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         NelderMeadOptimizerOptions<T, TInput, TOutput>? options = null)
         : base(model, options ?? new())
     {
@@ -178,23 +178,7 @@ public partial class NelderMeadOptimizer<T, TInput, TOutput> : OptimizerBase<T, 
         int maxIterations,
         T tolerance)
     {
-        Guard.NotNull(initialParameters);
-        Guard.NotNull(objective);
-
-        int n = initialParameters.Length;
-        if (n == 0)
-        {
-            throw new ArgumentException(
-                "Initial parameters must contain at least one element.",
-                nameof(initialParameters));
-        }
-
-        if (maxIterations <= 0)
-        {
-            throw new ArgumentException(
-                $"Maximum iterations must be positive, got {maxIterations}.",
-                nameof(maxIterations));
-        }
+        ValidateMinimizeArguments(initialParameters, objective, maxIterations, tolerance);
 
         InitializeAdaptiveParameters();
 

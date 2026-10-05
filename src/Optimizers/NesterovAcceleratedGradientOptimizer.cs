@@ -59,8 +59,8 @@ public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : 
 
         config = new Fused.FusedOptimizerConfig(
             Tensors.Engines.Compilation.OptimizerType.SGDMomentum,
-            (float)GetCurrentLearningRate(),
-            (float)NumOps.ToDouble(CurrentMomentum),   // Beta1 carries the momentum coefficient
+            GetCurrentLearningRate(),
+            NumOps.ToDouble(CurrentMomentum),   // Beta1 carries the momentum coefficient
             0f, 0f, 0f, schedule)
         {
             Extras = new Tensors.Engines.Compilation.FusedOptimizerExtras { Nesterov = true },
@@ -102,7 +102,7 @@ public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : 
     /// <param name="modelCache">The model cache to use.</param>
     /// <param name="gradientCache">The gradient cache to use.</param>
     public NesterovAcceleratedGradientOptimizer(
-        IFullModel<T, TInput, TOutput> model,
+        IFullModel<T, TInput, TOutput>? model,
         NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>? options = null,
         IEngine? engine = null)
         : base(model, options ?? new())

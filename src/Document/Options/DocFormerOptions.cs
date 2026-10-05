@@ -31,14 +31,22 @@ public class DocFormerOptions : DocumentNeuralNetworkOptions
         NumLayers = 12;
         NumHeads = 12;
         VocabSize = 30522;
-        SpatialDim = 128;
+        SpatialDim = 96;
+        MaxRelativePositions = 8;
     }
 
 
     /// <summary>
-    /// Gets or sets the spatial dim.
+    /// Gets or sets the width of each spatial lookup table. DocFormer concatenates eight tables per axis
+    /// (two edges, the extent, and five distances to the previous token), so this must be HiddenDim / 8.
+    /// DocFormer-base: 96.
     /// </summary>
     public int SpatialDim { get; set; }
+
+    /// <summary>
+    /// Gets or sets the clip distance of the relative 1-D position tables in multi-modal attention. Reference: 8.
+    /// </summary>
+    public int MaxRelativePositions { get; set; }
 
     /// <summary>
     /// Throws if a value this model requires has been left unset or is not positive.
@@ -52,6 +60,9 @@ public class DocFormerOptions : DocumentNeuralNetworkOptions
         // cannot require this: 15 of the 29 document models work from text and layout
         // coordinates and have no image at all.
         Require(ImageSize, nameof(ImageSize));
+        Require(MaxRelativePositions, nameof(MaxRelativePositions));
+        if (SpatialDim * 8 != HiddenDim)
+            throw new ArgumentException($"SpatialDim ({SpatialDim}) must be HiddenDim / 8 ({HiddenDim} / 8): DocFormer concatenates eight spatial tables per axis.", nameof(SpatialDim));
         ValidateCore();
     }
 }

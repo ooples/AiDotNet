@@ -90,8 +90,12 @@ jobs:
       # ```cs block precisely so this step would skip it — 1209 examples were published that way against
       # 367 verified ones. The generator now labels every example ```csharp, so they are all checked, and
       # the counts below are ratcheted the same way as the XML pass.
+      #
+      # 1703 -> 1702 (#2269): the OCR audit deleted nine duplicated model copies (Document/OCR and
+      # VisionLanguage/Document), and their generated wiki pages took one compiling example with them.
+      # Every remaining example still compiles (--max-fail 0); nothing broke.
       - name: Compile-check doc + wiki snippets
-        run: dotnet run --project tools/DocSnippetVerify $TOOL_ARGS -- website --min-pass 1703 --max-fail 0
+        run: dotnet run --project tools/DocSnippetVerify $TOOL_ARGS -- website --min-pass 1702 --max-fail 0
 
       # Compile-check the <example> blocks in the source XML doc comments. These are the examples a user
       # sees in IntelliSense and on the API reference pages, and they were never gated: this step's

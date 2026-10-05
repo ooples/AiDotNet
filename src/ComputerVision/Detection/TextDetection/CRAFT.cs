@@ -56,20 +56,22 @@ public partial class CRAFT<T> : TextDetectorBase<T>
     {
         _hiddenDim = GetHiddenDim(options.Size);
 
-        // VGG16-based backbone
-        Backbone = new ResNet<T>(options: new ResNetBackboneOptions { Variant = ResNetVariant.ResNet50 });
+        // The paper's backbone is VGG-16 with batch norm (Baek et al. 2019, section 3.1). This was a
+        // ResNet-50 under a comment that said VGG16. Its five taps are relu2_2..relu5_3 plus fc7.
+        Backbone = new VGG16BNBackbone<T>();
 
-        // Upsampling convolutions for feature fusion
+        // U-Net decoder of the reference: upconv1 reads fc7 concatenated with relu5_3 (same stride), then
+        // each merge upsamples and concatenates the next finer tap, ending at relu2_2 (stride 2).
         var stageChannels = Backbone.OutputChannels;
-        _upConv1 = new Conv2D<T>(stageChannels[^1], _hiddenDim, kernelSize: 3, padding: 1);
+        _upConv1 = new Conv2D<T>(stageChannels[^1] + stageChannels[^2], _hiddenDim, kernelSize: 3, padding: 1);
         // Each merge conv receives the upsampled decoder map CONCATENATED with a raw backbone
         // stage, so its input width is the decoder width plus that stage's channel count. These were
         // declared as twice the decoder width, which matches no backbone stage, so the first merge
         // threw on a channel mismatch (e.g. ResNet-50's C4: 256 + 1024 = 1280 channels into a conv
         // built for 512) and the model could not run a forward pass at all.
-        _upConv2 = new Conv2D<T>(_hiddenDim + stageChannels[^2], _hiddenDim, kernelSize: 3, padding: 1);
-        _upConv3 = new Conv2D<T>(_hiddenDim + stageChannels[^3], _hiddenDim, kernelSize: 3, padding: 1);
-        _upConv4 = new Conv2D<T>(_hiddenDim + stageChannels[^4], _hiddenDim, kernelSize: 3, padding: 1);
+        _upConv2 = new Conv2D<T>(_hiddenDim + stageChannels[^3], _hiddenDim, kernelSize: 3, padding: 1);
+        _upConv3 = new Conv2D<T>(_hiddenDim + stageChannels[^4], _hiddenDim, kernelSize: 3, padding: 1);
+        _upConv4 = new Conv2D<T>(_hiddenDim + stageChannels[^5], _hiddenDim, kernelSize: 3, padding: 1);
 
         // Prediction heads: region score and affinity score
         _regionHead = new Conv2D<T>(_hiddenDim, 1, kernelSize: 1);
@@ -83,68 +85,26 @@ public partial class CRAFT<T> : TextDetectorBase<T>
         ModelSize.Medium => 256,
         ModelSize.Large => 384,
         ModelSize.XLarge => 512,
-        _ => 256
+        _ => throw new ArgumentOutOfRangeException(nameof(size), size, "CRAFT has no decoder width for this model size."),
     };
-
-    /// <inheritdoc/>
-    public override TextDetectionResult<T> Detect(Tensor<T> image)
-    {
-        return Detect(image, NumOps.ToDouble(Options.ConfidenceThreshold));
-    }
-
-    /// <inheritdoc/>
-    public override TextDetectionResult<T> Detect(Tensor<T> image, double confidenceThreshold)
-    {
-        var startTime = DateTime.UtcNow;
-
-        int originalHeight = image.Shape[2];
-        int originalWidth = image.Shape[3];
-
-        var input = Preprocess(image);
-        var outputs = Forward(input);
-        var textRegions = PostProcess(outputs, originalWidth, originalHeight, confidenceThreshold);
-
-        return new TextDetectionResult<T>
-        {
-            TextRegions = textRegions,
-            InferenceTime = DateTime.UtcNow - startTime,
-            ImageWidth = originalWidth,
-            ImageHeight = originalHeight
-        };
-    }
 
     /// <inheritdoc/>
     protected override List<Tensor<T>> Forward(Tensor<T> input)
     {
         // Extract multi-scale backbone features
         var features = EnsureBackbone.ExtractFeatures(input);
+        // The decoder reads five taps (fc7, relu5_3, relu4_3, relu3_3, relu2_2). Checked here rather than in the
+        // constructor because Backbone is a protected field a derived detector can replace afterwards.
+        if (features.Count < 5)
+            throw new InvalidOperationException(
+                $"CRAFT's decoder needs five backbone feature maps, but {Backbone?.GetType().Name ?? "the backbone"} "
+                + $"returned {features.Count}.");
 
-        // U-Net style upsampling with skip connections
-        // Start from deepest features
-        var x = _upConv1.Forward(features[^1]);
-        x = ApplyReLU(x);
-
-        // Upsample and concatenate with skip features
-        if (features.Count > 1)
-        {
-            x = UpsampleAndConcat(x, features[^2]);
-            x = _upConv2.Forward(x);
-            x = ApplyReLU(x);
-        }
-
-        if (features.Count > 2)
-        {
-            x = UpsampleAndConcat(x, features[^3]);
-            x = _upConv3.Forward(x);
-            x = ApplyReLU(x);
-        }
-
-        if (features.Count > 3)
-        {
-            x = UpsampleAndConcat(x, features[^4]);
-            x = _upConv4.Forward(x);
-            x = ApplyReLU(x);
-        }
+        // U-Net decoder: fc7 with relu5_3 (both stride 16), then relu4_3, relu3_3 and relu2_2.
+        var x = ApplyReLU(_upConv1.Forward(UpsampleAndConcat(features[^1], features[^2])));
+        x = ApplyReLU(_upConv2.Forward(UpsampleAndConcat(x, features[^3])));
+        x = ApplyReLU(_upConv3.Forward(UpsampleAndConcat(x, features[^4])));
+        x = ApplyReLU(_upConv4.Forward(UpsampleAndConcat(x, features[^5])));
 
         // Predict region and affinity scores
         var regionScore = _regionHead.Forward(x);
@@ -157,6 +117,110 @@ public partial class CRAFT<T> : TextDetectorBase<T>
     }
 
     /// <inheritdoc/>
+    /// <summary>Reference low-text threshold on the region score (Baek et al. 2019).</summary>
+    internal const double LowTextThreshold = 0.4;
+
+    /// <summary>The reference optimizer (CRAFT-pytorch training code; the paper names none): Adam at learning rate 1e-4.</summary>
+    protected override AiDotNet.Interfaces.IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateTrainingOptimizer() => PaperAdam(1e-4);
+
+    /// <summary>
+    /// CRAFT's objective (Baek et al. 2019, Eq. 1): <c>L = sum_p S_c(p) (|S_r(p) - S_r*(p)|^2 + |S_a(p) - S_a*(p)|^2)</c>,
+    /// averaged over pixels. The targets are Gaussian heatmaps from <see cref="BuildTargets"/>. The confidence
+    /// <c>S_c</c> is 1 because the targets come from annotated boxes, not from an interim model's pseudo-labels.
+    /// </summary>
+    protected override Tensor<T> TextDetectionLoss(List<Tensor<T>> outputs, TextDetectionTrainingBatch targets,
+        int imageWidth, int imageHeight)
+    {
+        var region = outputs[0];
+        var affinity = outputs[1];
+        int batch = region.Shape[0], mapHeight = region.Shape[2], mapWidth = region.Shape[3];
+        var regions = new List<double[][,]>();
+        var affinities = new List<double[][,]>();
+        for (int b = 0; b < batch; b++)
+        {
+            var (regionTarget, affinityTarget) = BuildTargets(targets[b], imageWidth, imageHeight, mapWidth, mapHeight);
+            regions.Add(new[] { regionTarget });
+            affinities.Add(new[] { affinityTarget });
+        }
+        var regionError = Engine.TensorSquare(Engine.TensorSubtract(region, MapTensor(regions)));
+        var affinityError = Engine.TensorSquare(Engine.TensorSubtract(affinity, MapTensor(affinities)));
+        return Engine.TensorMultiplyScalar(Engine.ReduceSum(Engine.TensorAdd(regionError, affinityError), null), NumOps.FromDouble(1.0 / region.Length));
+    }
+
+    /// <summary>
+    /// CRAFT's ground truth for one image (Baek et al. 2019, Section 3.1, Fig. 3), in map pixels:
+    /// <list type="bullet">
+    /// <item>Each word quad is split along its reading direction into character boxes. The number of boxes is
+    /// the transcription's non-space length, or the quad's aspect ratio when there is no transcription,
+    /// following the paper's length-based weak-supervision split.</item>
+    /// <item>The region map has a Gaussian warped into each character box.</item>
+    /// <item>The affinity map has a Gaussian in the box joining the upper and lower triangle centres of each
+    /// pair of adjacent characters, the triangles being cut by the character box's diagonals.</item>
+    /// </list>
+    /// </summary>
+    internal static (double[,] Region, double[,] Affinity) BuildTargets(IReadOnlyList<TextPolygonTarget> polygons,
+        int imageWidth, int imageHeight, int mapWidth, int mapHeight)
+    {
+        var region = new double[mapHeight, mapWidth];
+        var affinity = new double[mapHeight, mapWidth];
+        foreach (var target in polygons)
+        {
+            var polygon = ToMap(target, imageWidth, imageHeight, mapWidth, mapHeight);
+            if (TextTargetGeometry.Area(polygon) < 1.0) continue;
+            var quad = ReadingOrderQuad(polygon.Length == 4 ? polygon : TextTargetGeometry.MinAreaRectangle(polygon));
+            var (tl, tr, br, bl) = (quad[0], quad[1], quad[2], quad[3]);
+            double length = Distance(tl, tr), thickness = Distance(tl, bl);
+            int count = target.Transcription is { } text && text.Any(ch => !char.IsWhiteSpace(ch))
+                ? text.Count(ch => !char.IsWhiteSpace(ch))
+                : Math.Max(1, (int)Math.Round(length / Math.Max(thickness, 1e-6)));
+
+            (double X, double Y) Lerp((double X, double Y) a, (double X, double Y) b, double t) => (a.X + ((b.X - a.X) * t), a.Y + ((b.Y - a.Y) * t));
+            var characters = Enumerable.Range(0, count).Select(k => new[]
+            {
+                Lerp(tl, tr, (double)k / count), Lerp(tl, tr, (double)(k + 1) / count),
+                Lerp(bl, br, (double)(k + 1) / count), Lerp(bl, br, (double)k / count),
+            }).ToArray();
+            foreach (var character in characters) TextTargetGeometry.SplatGaussian(region, character);
+
+            for (int k = 0; k + 1 < characters.Length; k++)
+            {
+                var (upperA, lowerA) = TriangleCentres(characters[k]);
+                var (upperB, lowerB) = TriangleCentres(characters[k + 1]);
+                TextTargetGeometry.SplatGaussian(affinity, new[] { upperA, upperB, lowerB, lowerA });
+            }
+        }
+        return (region, affinity);
+    }
+
+    private static double Distance((double X, double Y) a, (double X, double Y) b)
+        => Math.Sqrt(((b.X - a.X) * (b.X - a.X)) + ((b.Y - a.Y) * (b.Y - a.Y)));
+
+    /// <summary>
+    /// Orders a quad clockwise on screen from its top-left corner, then rotates the order so the first edge is
+    /// the longer side, which is the reading direction for horizontal and rotated words alike.
+    /// </summary>
+    private static (double X, double Y)[] ReadingOrderQuad(IReadOnlyList<(double X, double Y)> quad)
+    {
+        var points = quad.ToArray();
+        // y grows downwards, so a clockwise-on-screen quad has positive shoelace area.
+        if (TextTargetGeometry.SignedArea(points) < 0) Array.Reverse(points);
+        int start = 0;
+        for (int i = 1; i < 4; i++) if (points[i].X + points[i].Y < points[start].X + points[start].Y) start = i;
+        if (Distance(points[start], points[(start + 1) % 4]) < Distance(points[start], points[(start + 3) % 4]))
+            start = (start + 3) % 4;
+        return Enumerable.Range(0, 4).Select(i => points[(start + i) % 4]).ToArray();
+    }
+
+    /// <summary>The centres of the triangles above and below the intersection of a character box's diagonals.</summary>
+    private static ((double X, double Y) Upper, (double X, double Y) Lower) TriangleCentres(IReadOnlyList<(double X, double Y)> box)
+    {
+        double cx = box.Average(p => p.X), cy = box.Average(p => p.Y);
+        return (((box[0].X + box[1].X + cx) / 3, (box[0].Y + box[1].Y + cy) / 3),
+                ((box[2].X + box[3].X + cx) / 3, (box[2].Y + box[3].Y + cy) / 3));
+    }
+    /// <summary>Reference link threshold on the affinity score.</summary>
+    internal const double LinkThreshold = 0.4;
+
     protected override List<TextRegion<T>> PostProcess(
         List<Tensor<T>> outputs,
         int imageWidth,
@@ -173,19 +237,20 @@ public partial class CRAFT<T> : TextDetectorBase<T>
         double scaleX = (double)imageWidth / scoreW;
         double scaleY = (double)imageHeight / scoreH;
 
-        // Find connected components in the combined score map
+        // The reference decoder (Baek et al. 2019, getDetBoxes) uses three thresholds: a pixel belongs to
+        // text when its region score exceeds low_text (0.4) or its affinity exceeds link (0.4); a component
+        // survives only if its PEAK region score reaches the text threshold (0.7, here the caller's
+        // confidence threshold). One shared threshold on both maps, as before, is none of these.
         var textMask = new bool[scoreH, scoreW];
-        double threshold = NumOps.ToDouble(Options.BinaryThreshold);
-
+        var linkOnly = new bool[scoreH, scoreW];
         for (int h = 0; h < scoreH; h++)
         {
             for (int w = 0; w < scoreW; w++)
             {
-                double region = NumOps.ToDouble(regionScore[0, 0, h, w]);
-                double affinity = NumOps.ToDouble(affinityScore[0, 0, h, w]);
-
-                // Text pixel if either region or affinity is high enough
-                textMask[h, w] = region > threshold || affinity > threshold;
+                bool text = NumOps.ToDouble(regionScore[0, 0, h, w]) > LowTextThreshold;
+                bool link = NumOps.ToDouble(affinityScore[0, 0, h, w]) > LinkThreshold;
+                textMask[h, w] = text || link;
+                linkOnly[h, w] = link && !text;
             }
         }
 
@@ -200,15 +265,27 @@ public partial class CRAFT<T> : TextDetectorBase<T>
             if (component.Count < 10) // Filter very small regions
                 continue;
 
-            // Get bounding box and confidence
-            var (minX, minY, maxX, maxY, avgConfidence) = GetComponentStats(
+            // The reported confidence is the component's mean region score.
+            var (_, _, _, _, avgConfidence) = GetComponentStats(
                 component, regionScore, scaleX, scaleY);
 
-            if (avgConfidence < confidenceThreshold)
+            double peak = component.Max(p => NumOps.ToDouble(regionScore[0, 0, p.H, p.W]));
+            if (peak < confidenceThreshold)
                 continue;
 
-            // Create polygon from component boundary
-            var polygon = GetComponentBoundary(component, scaleX, scaleY);
+            // The reference boxes the component minus its link-only pixels, dilated by a size-dependent
+            // square kernel of side 1 + niter, niter = int(sqrt(size * min(w, h) / (w * h)) * 2), and then
+            // takes the minimum-area rectangle; a dilation of side k grows each side by floor(k / 2).
+            var character = component.Where(p => !linkOnly[p.H, p.W]).ToList();
+            int boxW = component.Max(p => p.W) - component.Min(p => p.W) + 1;
+            int boxH = component.Max(p => p.H) - component.Min(p => p.H) + 1;
+            int niter = (int)(Math.Sqrt(component.Count * (double)Math.Min(boxW, boxH) / (boxW * boxH)) * 2);
+            int dilationPixels = (1 + niter) / 2; // floor((1 + niter) / 2) whole pixels, as the reference
+            double dilation = dilationPixels;
+            var polygon = TextBoxGeometry.MinAreaRectangle(character.Count > 0 ? character : component, (_, _) => dilation)
+                .Select(p => (X: Math.Min(Math.Max(p.X * scaleX, 0.0), imageWidth),
+                              Y: Math.Min(Math.Max(p.Y * scaleY, 0.0), imageHeight)))
+                .ToList();
 
             if (polygon.Count >= 4)
             {
@@ -271,9 +348,9 @@ public partial class CRAFT<T> : TextDetectorBase<T>
         }
 
         int version = reader.ReadInt32();
-        if (version != 1)
+        if (version != 2)
         {
-            throw new InvalidDataException($"Unsupported CRAFT model version: {version}");
+            throw new InvalidDataException($"Unsupported CRAFT model version: {version}. Version 1 files use the former ResNet backbone layout, which cannot be read as the current one; re-save or re-export the weights with this version.");
         }
 
         string name = reader.ReadString();
@@ -309,7 +386,7 @@ public partial class CRAFT<T> : TextDetectorBase<T>
 
         // Write header
         writer.Write(0x43524146); // "CRAF" in ASCII
-        writer.Write(1); // Version 1
+        writer.Write(2); // Version 2: VGG16-BN backbone and the revised decoder
         writer.Write(Name);
         writer.Write(_hiddenDim);
 
@@ -437,23 +514,4 @@ public partial class CRAFT<T> : TextDetectorBase<T>
         return (minX, minY, maxX, maxY, sumConf / component.Count);
     }
 
-    private List<(double X, double Y)> GetComponentBoundary(
-        List<(int H, int W)> component,
-        double scaleX,
-        double scaleY)
-    {
-        // Simple approach: get convex hull of component points
-        var points = component.Select(p => (X: p.W * scaleX, Y: p.H * scaleY)).ToList();
-
-        // Sort by angle from centroid
-        double cx = points.Average(p => p.X);
-        double cy = points.Average(p => p.Y);
-
-        var boundary = points
-            .OrderBy(p => Math.Atan2(p.Y - cy, p.X - cx))
-            .ToList();
-
-        // Simplify polygon
-        return SimplifyPolygon(boundary, Options.PolygonSimplificationEpsilon * Math.Max(scaleX, scaleY));
-    }
 }

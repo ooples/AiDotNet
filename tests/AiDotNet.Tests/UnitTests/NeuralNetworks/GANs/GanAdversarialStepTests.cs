@@ -240,6 +240,99 @@ public class GanAdversarialStepTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task ConditionalGAN_DiscriminatorStep_IsTheMinimaxBinaryCrossEntropy()
+    {
+        await Task.Yield();
+        // Mirza and Osindero 2014, eq. 2: the discriminator's loss is -log D(x|y) - log(1 - D(G(z|y)|y)),
+        // taken in ONE step. It used to be two Discriminator.Train calls, real then fake, each with the
+        // discriminator network's own configured loss, so the reported loss and the update were neither.
+        using var cgan = new ConditionalGAN<double>(
+            new NeuralNetworkArchitecture<double>(
+                InputType.OneDimensional, NeuralNetworkTaskType.Generative, NetworkComplexity.Simple,
+                inputSize: 32, outputSize: 64),
+            new NeuralNetworkArchitecture<double>(
+                InputType.OneDimensional, NeuralNetworkTaskType.BinaryClassification, NetworkComplexity.Simple,
+                inputSize: 64, outputSize: 1),
+            numConditionClasses: 10,
+            InputType.OneDimensional);
+        var real = Random(4, 64, 81);
+        var conditions = OneHot(4, 10, 5);
+        var noise = Random(4, 22, 82);
+        Snapshot(cgan.Generator);
+        Snapshot(cgan.Discriminator);
+
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var generator = (NeuralNetworkBase<double>)cgan.Generator;
+        var discriminator = (NeuralNetworkBase<double>)cgan.Discriminator;
+        generator.SetTrainingMode(true);
+        discriminator.SetTrainingMode(true);
+        // The oracle follows TrainStep's own paths: the generator per sample (ConditionalGAN.PredictBatched slices
+        // a [B, N] batch and stacks the rows) and the discriminator through ForwardForTraining, the forward it
+        // scores with. Predict would run the inference forward, which differs once a layer behaves differently in
+        // training (dropout, batch normalization).
+        var generatorInput = engine.TensorConcatenate(new[] { noise, conditions }, axis: 1);
+        var fakeRows = new Tensor<double>[generatorInput.Shape[0]];
+        for (int b = 0; b < fakeRows.Length; b++) fakeRows[b] = generator.Predict(generatorInput.GetSlice(b));
+        var fake = Tensor<double>.Stack(fakeRows);
+        var realScores = discriminator.ForwardForTraining(engine.TensorConcatenate(new[] { real, conditions }, axis: 1));
+        var fakeScores = discriminator.ForwardForTraining(engine.TensorConcatenate(new[] { fake, conditions }, axis: 1));
+
+        bool probabilities = discriminator.FinalLayerEmitsProbabilities();
+        double Bce(Tensor<double> scores, bool targetIsReal)
+        {
+            double sum = 0;
+            for (int i = 0; i < scores.Length; i++)
+            {
+                double s = scores[i];
+                if (probabilities)
+                {
+                    double p = Math.Min(Math.Max(s, 1e-7), 1 - 1e-7);
+                    sum += -Math.Log(targetIsReal ? p : 1 - p);
+                }
+                else
+                {
+                    double x = targetIsReal ? -s : s;
+                    sum += Math.Max(x, 0) + Math.Log(1 + Math.Exp(-Math.Abs(x)));
+                }
+            }
+            return sum / scores.Length;
+        }
+
+        double expected = Bce(realScores, targetIsReal: true) + Bce(fakeScores, targetIsReal: false);
+        var (discriminatorLoss, _) = cgan.TrainStep(real, conditions, noise);
+
+        Assert.Equal(expected, discriminatorLoss, 9);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task ConditionalGAN_TrainStep_RestoresBothNetworksModesWhenItThrows()
+    {
+        await Task.Yield();
+        using var cgan = new ConditionalGAN<double>(
+            new NeuralNetworkArchitecture<double>(
+                InputType.OneDimensional, NeuralNetworkTaskType.Generative, NetworkComplexity.Simple,
+                inputSize: 32, outputSize: 64),
+            new NeuralNetworkArchitecture<double>(
+                InputType.OneDimensional, NeuralNetworkTaskType.BinaryClassification, NetworkComplexity.Simple,
+                inputSize: 64, outputSize: 1),
+            numConditionClasses: 10,
+            InputType.OneDimensional);
+        var generator = (NeuralNetworkBase<double>)cgan.Generator;
+        var discriminator = (NeuralNetworkBase<double>)cgan.Discriminator;
+        // Different starting modes, so each network's saved mode is checked on its own.
+        generator.SetTrainingMode(true);
+        discriminator.SetTrainingMode(false);
+
+        // The batch sizes agree, so the guard passes; the 7-wide conditions make a 29-wide generator
+        // input, which the generator rejects as a shape mismatch inside the step, after both modes were switched on.
+        Assert.Throws<AiDotNet.Exceptions.TensorShapeMismatchException>(
+            () => cgan.TrainStep(Random(4, 64, 91), OneHot(4, 7, 2), Random(4, 22, 92)));
+
+        Assert.True(generator.IsTrainingMode, "the generator's prior training mode was not restored");
+        Assert.False(discriminator.IsTrainingMode, "the discriminator was left in training mode by a step that threw");
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task CycleGAN_TrainStep_TrainsBothGeneratorsAndBothDiscriminators()
     {
         await Task.Yield();

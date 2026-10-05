@@ -65,7 +65,10 @@ public static class CohereModelBuilder<T>
 
         var finalNorm = new LayerNormalizationLayer<T>(hidden, normEps);
         layers.Add(finalNorm);
-        var lmHead = new DenseLayer<T>(vocab, activationFunction: new IdentityActivation<T>());
+        // Cohere multiplies the logits by logit_scale. A tied head applies it at runtime, as Hugging Face does; baking it
+        // into the weights would scale the shared embedding table too.
+        double logitScale = config.LogitScale ?? 1.0;
+        var lmHead = LlamaModelBuilder<T>.CreateLmHead(embedding, config.TieWordEmbeddings, vocab, logitScale);
         layers.Add(lmHead);
 
         var architecture = new NeuralNetworkArchitecture<T>(
@@ -98,19 +101,7 @@ public static class CohereModelBuilder<T>
 
         WriteGamma(finalNorm, LlamaModelBuilder<T>.ReadTensor(weights, "model.norm.weight", hidden));
 
-        // Tied, logit_scale-multiplied LM head: load embed transposed to [hidden, vocab] and scale.
-        string headName = LlamaModelBuilder<T>.HasTensor(weights, LlamaModelBuilder<T>.LmHeadName)
-            ? LlamaModelBuilder<T>.LmHeadName : LlamaModelBuilder<T>.EmbedName;
-        double logitScale = config.LogitScale ?? 1.0;
-        var headInOut = LlamaModelBuilder<T>.TransposeOutInToInOut(weights, headName, outDim: vocab, inDim: hidden);
-        if (logitScale != 1.0)
-        {
-            var s = NumOps.FromDouble(logitScale);
-            for (int k = 0; k < headInOut.Length; k++) headInOut[k] = NumOps.Multiply(headInOut[k], s);
-        }
-        var full = new T[headInOut.Length + vocab]; // + zero bias
-        Array.Copy(headInOut, full, headInOut.Length);
-        lmHead.SetParameters(new Vector<T>(full));
+        LlamaModelBuilder<T>.LoadLmHead(lmHead, weights, vocab, hidden, logitScale);
 
         return network;
     }

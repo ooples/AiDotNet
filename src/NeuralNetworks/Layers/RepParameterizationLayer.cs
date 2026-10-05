@@ -295,7 +295,7 @@ public partial class RepParameterizationLayer<T> : LayerBase<T>, IShapeContract
         // Generate random epsilon during training; use zero epsilon for deterministic inference
         if (IsTrainingMode)
         {
-            _lastEpsilon = Tensor<T>.CreateRandom(batchSize, latentSize);
+            _lastEpsilon = Tensor<T>.CreateRandom(Random, batchSize, latentSize);
         }
         else
         {

@@ -144,9 +144,24 @@ public class PixelToSequenceDocumentTests
     #region Donut Tests
 
     [Fact(Timeout = 120000)]
+    public async Task Donut_Predict_UnbatchedPage_ReturnsOneDecoderStep()
+    {
+        await Task.Yield();
+        // An unbatched [C, H, W] page is the generated suite's input. Pins which shape it produces, since the
+        // generated scaffold's OutputShape must state the same one.
+        using var model = CreateDonut();
+        using var batched = CreateSmallImage();
+        using var page = batched.Reshape(batched.Shape[1], batched.Shape[2], batched.Shape[3]);
+        using var output = model.Predict(page);
+        Assert.Equal(new[] { 1, 1, 256 }, output.Shape.ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task Donut_Predict_ReturnsOutput()
     {
-        AssertPredictReturnsOutput(CreateDonut(), 1, 4, 256);
+        // Predict runs the encoder and then the decoder's first step from BOS (VisionEncoderDecoderLayer), so the
+        // output is [batch, 1, vocab]; [1, 4, 256] was the encoder-only shape before the decoder was wired in.
+        AssertPredictReturnsOutput(CreateDonut(), 1, 1, 256);
     }
 
     [Fact(Timeout = 120000)]

@@ -147,14 +147,11 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         PSENetOptions? options = null)
-        // PSENet's kernel-prediction heads output per-pixel maps that the paper trains with
-        // binary cross-entropy on the SIGMOID of the logits. PredictCore returns the raw linear
-        // conv output (no sigmoid), so a plain BinaryCrossEntropyLoss (which expects [0,1]
-        // probabilities) explodes as the logits drift during training (memorization loss
-        // 0.38 -> 18582). BinaryCrossEntropyWithLogitsLoss fuses the sigmoid into a numerically
-        // stable loss over raw logits — the paper-correct objective — keeping training bounded
-        // while leaving PredictCore's linear-logit output contract unchanged.
-        : base(architecture, lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>(), 1.0)
+        // PSENet trains with Dice, not cross-entropy (Wang et al. 2019, Eq. 5): 0.7 x OHEM Dice on the complete
+        // map plus 0.3 x Dice on the shrunk kernels inside the predicted text region. PSENetLoss applies the
+        // sigmoid itself, so PredictCore keeps returning raw logits. The previous default (BCE with logits),
+        // documented here as the paper's objective, was not.
+        : base(architecture, lossFunction ?? new PSENetLoss<T>(), 1.0)
     {
         _options = options ?? new PSENetOptions();
         Options = _options;
@@ -169,9 +166,11 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         _featureChannels = _options.FeatureChannels;
         _numKernels = _options.NumKernels;
         // The rate the options publish. It defaults to 1e-4 rather than Adam's 1e-3 because the
-        // detector's multi-million-parameter ResNet/FPN stack needs a bounded fine-tuning step --
-        // the generic first step overshoots the BCE-with-logits objective. That reasoning now
-        // lives on PSENetOptions.LearningRate, where a caller can see and change it.
+        // detector's multi-million-parameter ResNet/FPN stack needs a bounded fine-tuning step;
+        // the generic first step overshoots. (That was measured under the former BCE objective;
+        // the Dice objective (PSENetLoss) is bounded in [0, 1] per term, and the native training
+        // tests confirm it still converges at 1e-4.) The rate lives on PSENetOptions.LearningRate,
+        // where a caller can see and change it.
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
@@ -202,14 +201,11 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         PSENetOptions? options = null)
-        // PSENet's kernel-prediction heads output per-pixel maps that the paper trains with
-        // binary cross-entropy on the SIGMOID of the logits. PredictCore returns the raw linear
-        // conv output (no sigmoid), so a plain BinaryCrossEntropyLoss (which expects [0,1]
-        // probabilities) explodes as the logits drift during training (memorization loss
-        // 0.38 -> 18582). BinaryCrossEntropyWithLogitsLoss fuses the sigmoid into a numerically
-        // stable loss over raw logits — the paper-correct objective — keeping training bounded
-        // while leaving PredictCore's linear-logit output contract unchanged.
-        : base(architecture, lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>(), 1.0)
+        // PSENet trains with Dice, not cross-entropy (Wang et al. 2019, Eq. 5): 0.7 x OHEM Dice on the complete
+        // map plus 0.3 x Dice on the shrunk kernels inside the predicted text region. PSENetLoss applies the
+        // sigmoid itself, so PredictCore keeps returning raw logits. The previous default (BCE with logits),
+        // documented here as the paper's objective, was not.
+        : base(architecture, lossFunction ?? new PSENetLoss<T>(), 1.0)
     {
         _options = options ?? new PSENetOptions();
         Options = _options;
@@ -633,15 +629,22 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
             throw new NotSupportedException("Training not supported in ONNX mode.");
 
         SetTrainingMode(true);
-        // TrainWithTape runs forward+backward, applies global-norm gradient clipping
-        // (NeuralNetworkBase.ApplyGradientClipping) and then the optimizer step. The prior
-        // code ALSO called UpdateParameters(CollectGradients()) afterward — a second, raw,
-        // UNCLIPPED SGD step (params -= grads * 1e-4) on top of the already-applied optimizer
-        // update. That double/unclipped update diverged training on the deep ResNet+FPN stack
-        // (memorization loss 0.38 -> 18615). TrainWithTape owns the whole clipped optimizer
-        // step, matching every other native model (e.g. the Finance forecasting transformers).
-        TrainWithTape(input, expectedOutput, _optimizer);
-        SetTrainingMode(false);
+        try
+        {
+            // TrainWithTape runs forward+backward, applies global-norm gradient clipping
+            // (NeuralNetworkBase.ApplyGradientClipping) and then the optimizer step. The prior
+            // code ALSO called UpdateParameters(CollectGradients()) afterward — a second, raw,
+            // UNCLIPPED SGD step (params -= grads * 1e-4) on top of the already-applied optimizer
+            // update. That double/unclipped update diverged training on the deep ResNet+FPN stack
+            // (memorization loss 0.38 -> 18615). TrainWithTape owns the whole clipped optimizer
+            // step, matching every other native model (e.g. the Finance forecasting transformers).
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            // A throwing step must not leave dropout and batch norm in training mode.
+            SetTrainingMode(false);
+        }
     }
 
     // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
