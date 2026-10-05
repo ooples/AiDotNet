@@ -69,6 +69,10 @@ public abstract class LatentDiffusionTestBase : DiffusionModelTestBase
     /// The fixtures here are latents, so the model is told so: its default is to treat a training sample as an
     /// image and encode it, which would shrink a 16x16 fixture latent by the VAE's downsample factor.
     /// </summary>
+    /// <remarks>
+    /// Unconditional rather than the base's shape test: this family's InputShape is derived by building a model,
+    /// so reading it while configuring one would recurse.
+    /// </remarks>
     protected override void ConfigureFixtureModel(IDiffusionModel<double> model)
     {
         if (model is LatentDiffusionModelBase<double> latent)

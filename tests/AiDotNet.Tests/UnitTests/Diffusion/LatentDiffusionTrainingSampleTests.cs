@@ -17,7 +17,20 @@ public class LatentDiffusionTrainingSampleTests
     /// <summary>Records the sample the denoiser is trained on.</summary>
     private sealed class ProbeModel : UniVSTModel<double>
     {
-        public ProbeModel() : base(seed: 42) { }
+        // UniVST's own topology at test width: a 3 -> 4 channel VAE downsampling by eight, as the paper-scale one
+        // does, and a small latent U-Net. At paper scale (U-Net width 320, VAE width 128) this class peaked at 26 GB
+        // and killed the 16 GB CI runner of the shard it runs in.
+        public ProbeModel()
+            : base(
+                predictor: new AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<double>(
+                    inputChannels: 4, outputChannels: 4, baseChannels: 8, channelMultipliers: [1, 2],
+                    numResBlocks: 1, attentionResolutions: [], contextDim: 16, seed: 42),
+                vae: new AiDotNet.Diffusion.VAE.StandardVAE<double>(
+                    inputChannels: 3, latentChannels: 4, baseChannels: 8, channelMultipliers: [1, 2, 4, 4],
+                    numResBlocksPerLevel: 1, seed: 42),
+                seed: 42)
+        {
+        }
 
         public int[]? NoisedShape { get; private set; }
 
