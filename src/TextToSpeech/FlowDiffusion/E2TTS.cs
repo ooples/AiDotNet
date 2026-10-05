@@ -1,4 +1,3 @@
-using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
@@ -6,74 +5,74 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.FlowDiffusion;
 
-/// <summary>E2 TTS: fully non-autoregressive flow-matching TTS with character-level text input.</summary>
+/// <summary>
+/// E2 TTS ("Embarrassingly Easy"): fully non-autoregressive text-to-speech by flow-matching speech infilling over
+/// characters padded with filler tokens to the speech length, with a flat U-Net Transformer.
+/// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Embarrassingly Easy Text-to-Speech" (Eskimez et al., 2024)</item></list></para><para><b>For Beginners:</b> E2 TTS: fully non-autoregressive flow-matching TTS with character-level text input.. This model converts text input into speech audio output.</para></remarks>
-/// <example>
-/// <code>
-/// // Create an E2 TTS model for flow-matching speech synthesis
-/// // with character-level text input and non-autoregressive generation
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new E2TTS&lt;double&gt;(architecture, "e2tts.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new E2TTS&lt;double&gt;(architecture, new E2TTSOptions());
-/// </code>
-/// </example>
+/// <remarks>
+/// <para><b>References:</b> "E2 TTS: Embarrassingly Easy Fully Non-Autoregressive Zero-Shot TTS" (Eskimez et al., SLT
+/// 2024); the paper has no public code, so the details it leaves out follow the reproduction in F5-TTS (Chen et al. 2024,
+/// SWivid/F5-TTS <c>UNetT</c>).</para>
+/// <para>
+/// The character sequence, padded with the filler token to the frame count, is embedded at the mel width and
+/// concatenated with the noisy mel and the masked mel condition; a projection and a convolutional position embedding feed
+/// a Transformer whose layers i and depth − 1 − i are joined by U-Net skip connections (concatenated and projected), with
+/// the flow-step embedding prepended as a token, RMSNorm pre-normalization, rotary self-attention and GELU feed-forward.
+/// Training and sampling are <see cref="FlowMatchingTtsModelBase{T}"/>'s.
+/// </para>
+/// <para><b>For Beginners:</b> E2 TTS learns to fill in masked parts of a spectrogram from the text alone — no phoneme
+/// alignment, no duration model — and to speak it fills in everything after a voice prompt.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.Audio)]
-[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.Diffusion)]
 [ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
-    // Title corrected to the published form; the arXiv id was already right.
     "E2 TTS: Embarrassingly Easy Fully Non-Autoregressive Zero-Shot TTS",
     "https://arxiv.org/abs/2406.18009",
     Year = 2024,
     Authors = "Eskimez et al."
 )]
-[PaperOptimizer(OptimizerKind.Unspecified, LearningRate = 7.5e-5, WarmupSteps = 20000,
-                MinLearningRate = 0, Schedule = LearningRateSchedulerType.LinearWarmup,
-                PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
-                Source = "Eskimez et al. 2024, Sec. 3: a linear decay learning rate schedule with a "
-                        + "peak learning rate of 7.5e-5 and a warm-up phase over the initial 20,000 "
-                        + "updates. The optimizer is left unspecified because the paper does not name "
-                        + "one.")]
-public partial class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 7.5e-5, WarmupSteps = 20000, ReferenceBatchSize = 307200,
+                Provenance = RecipeProvenance.DerivedFromCitedWork,
+                Source = "The reproduction in F5-TTS (Chen et al. 2024, Sec. 4), whose E2 TTS shares its recipe: AdamW at "
+                        + "a peak 7.5e-5, linear warmup over 20K updates then linear decay, gradient clip 1.")]
+public partial class E2TTS<T> : FlowMatchingTtsModelBase<T>, IAcousticModel<T>
 {
     private readonly E2TTSOptions _options;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private readonly bool _useNativeMode;
+    private bool _disposed;
+
+    private FlowTimestepEmbedding<T>? _time;
+    private FlowTextEmbedding<T>? _text;
+    private FlowInputEmbedding<T>? _input;
+    private readonly List<(BiasFreeLinearLayer<T>? SkipProjection, RMSNormalizationLayer<T> AttentionNorm, FlowSelfAttention<T> Attention,
+        RMSNormalizationLayer<T> FeedForwardNorm, FlowFeedForward<T> FeedForward)> _layers = new();
+    private RMSNormalizationLayer<T>? _finalNorm;
+    private DenseLayer<T>? _projection;
 
     public override ModelOptions GetOptions() => _options;
 
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-
-    public E2TTS(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        E2TTSOptions? options = null
-    )
+    public E2TTS(NeuralNetworkArchitecture<T> architecture, string modelPath, E2TTSOptions? options = null)
         : base(architecture)
     {
         _options = options ?? new E2TTSOptions();
-        ValidateOptions(_options);
         _useNativeMode = false;
+        SeedTraining(_options.SamplingSeed);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.LLMDim;
+        base.HiddenDim = _options.HiddenDim;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path required.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -86,198 +85,133 @@ public partial class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
     public E2TTS(
         NeuralNetworkArchitecture<T> architecture,
         E2TTSOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture)
     {
         _options = options ?? new E2TTSOptions();
-        ValidateOptions(_options);
+        if (_options.NumLayers % 2 != 0)
+            throw new ArgumentException("The U-Net Transformer pairs its layers; NumLayers must be even.", nameof(options));
         _useNativeMode = true;
-        _optimizer = optimizer ?? CreateDefaultOptimizer();
+        SeedTraining(_options.SamplingSeed);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.LLMDim;
+        base.HiddenDim = _options.HiddenDim;
+        if (_options.MaxGradientNorm > 0)
+            MaxGradNorm = NumOps.FromDouble(_options.MaxGradientNorm);
+        _optimizer = optimizer ?? CreateDefaultOptimizer();
         InitializeLayers();
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
     public int MaxTextLength => _options.MaxTextLength;
-    public int NumCodebooks => _options.NumCodebooks;
-    public int CodebookSize => _options.CodebookSize;
-    public int CodecFrameRate => _options.CodecFrameRate;
+    public new int MelChannels => _options.MelChannels;
+    public new int HopSize => _options.HopSize;
+    public int FftSize => _options.FftSize;
 
-    /// <summary>Synthesizes speech. E2 TTS: character-level text -> masked mel prediction via flow matching -> vocoder.</summary>
-    public override Tensor<T> Synthesize(string text)
-    {
-        ThrowIfDisposed();
-        if (string.IsNullOrEmpty(text))
-            throw new ArgumentException("Text cannot be null or empty.", nameof(text));
-        var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return PostprocessAudio(OnnxModel.Run(input));
-        var output = Predict(input);
-        return PostprocessAudio(output);
-    }
+    /// <summary>Generates a mel spectrogram from text (paired with a Vocos vocoder in the reproduction).</summary>
+    public Tensor<T> TextToMel(string text) => Synthesize(text);
 
-    /// <summary>Encodes audio to codec tokens. In native mode, runs through full layer stack as encoder/decoder separation requires model-specific codec weights.</summary>
-    public Tensor<T> EncodeToTokens(Tensor<T> audio)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(audio);
-        return Predict(audio);
-    }
+    protected override FlowMatchingSettings Settings => new(_options.VocabSize, _options.MelChannels, _options.MaskFractionMin,
+        _options.MaskFractionMax, _options.AudioDropProbability, _options.ConditionDropProbability,
+        _options.NumFunctionEvaluations, _options.CfgStrength, _options.SwayCoefficient, _options.FramesPerCharacter,
+        _options.Speed, _options.SamplingSeed);
 
-    /// <summary>Decodes codec tokens to audio. In native mode, runs through full layer stack as encoder/decoder separation requires model-specific codec weights.</summary>
-    public Tensor<T> DecodeFromTokens(Tensor<T> tokens)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(tokens);
-        return Predict(tokens);
-    }
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
-    }
-
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
+    protected override bool HasPaperBackbone => _time is not null;
 
     protected override void InitializeLayers()
     {
         if (!_useNativeMode)
             return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultCodecLMLayers(
-                    _options.TextEncoderDim,
-                    _options.LLMDim,
-                    _options.MelChannels,
-                    _options.NumEncoderLayers,
-                    _options.NumLLMLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate,
-                    _options.VocabSize
-                )
-            );
+        {
+            AddUnsplitLayers(Architecture.Layers);
+            return;
+        }
+
+        var o = _options;
+        var layers = new List<LayerBase<T>>();
+        _time = new FlowTimestepEmbedding<T>(Engine, layers, o.HiddenDim);
+        // E2 embeds the characters at the mel width with no text encoder.
+        _text = new FlowTextEmbedding<T>(Engine, layers, o.VocabSize, o.MelChannels, 0, 2);
+        _input = new FlowInputEmbedding<T>(Engine, layers, o.HiddenDim);
+        for (int i = 0; i < o.NumLayers; i++)
+        {
+            bool laterHalf = i >= o.NumLayers / 2;
+            // Later-half layers join the mirrored earlier layer: concatenate, then a bias-free projection (reference skip_proj).
+            BiasFreeLinearLayer<T>? skip = laterHalf ? FlowMatchingTts.Own(layers, new BiasFreeLinearLayer<T>(2 * o.HiddenDim, o.HiddenDim)) : null;
+            var attentionNorm = FlowMatchingTts.Own(layers, new RMSNormalizationLayer<T>(o.HiddenDim));
+            var attention = new FlowSelfAttention<T>(Engine, layers, o.HiddenDim, o.NumHeads, o.HeadDim, o.DropoutRate, o.RotaryHeads);
+            var feedForwardNorm = FlowMatchingTts.Own(layers, new RMSNormalizationLayer<T>(o.HiddenDim));
+            var feedForward = new FlowFeedForward<T>(Engine, layers, o.HiddenDim, o.HiddenDim * o.FeedForwardMultiplier, o.DropoutRate);
+            _layers.Add((skip, attentionNorm, attention, feedForwardNorm, feedForward));
+        }
+        _finalNorm = FlowMatchingTts.Own(layers, new RMSNormalizationLayer<T>(o.HiddenDim));
+        _projection = FlowMatchingTts.Linear(layers, o.MelChannels);
+        AddEncoderDecoderLayers(new ILayer<T>[] { _text.Embedding }, Array.Empty<ILayer<T>>());
+        ComponentLayers.AddRange(layers.Where(layer => !ReferenceEquals(layer, _text.Embedding)));
     }
 
-    protected override Tensor<T> PredictCore(Tensor<T> input)
+    /// <inheritdoc />
+    protected override Tensor<T> PredictFlow(Tensor<T> noisy, Tensor<T> condition, Tensor<T> tokens, double t, bool dropAudio, bool dropText)
     {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        // Force eval mode so Dropout (DropoutRate=0.1 default) doesn't fire
-        // fresh randomness on every Predict call — required for the
-        // SpeakerConsistency invariant. PyTorch / TF idiom: inference disables
-        // training-mode randomization regardless of caller's prior state.
-        bool prev = IsTrainingMode;
-        SetTrainingMode(false);
-        try
+        int frames = noisy.Shape[0];
+        var time = _time!.Forward(t);
+        var text = _text!.Forward(tokens, frames, dropText);
+        var cond = dropAudio ? new Tensor<T>(condition._shape) : condition;
+        // The flow-step embedding is prepended as a token (reference UNetT: torch.cat([t, x])).
+        var x = Engine.TensorConcatenate(new[] { time, _input!.Forward(noisy, cond, text) }, 0);
+        var skips = new Stack<Tensor<T>>();
+        for (int i = 0; i < _layers.Count; i++)
         {
-            var c = input;
-            foreach (var l in Layers)
-                c = l.Forward(c);
-            return c;
+            var (skipProjection, attentionNorm, attention, feedForwardNorm, feedForward) = _layers[i];
+            if (skipProjection is null)
+                skips.Push(x);
+            else
+                x = skipProjection.Forward(Engine.TensorConcatenate(new[] { x, skips.Pop() }, 1));
+            x = Engine.TensorAdd(attention.Forward(attentionNorm.Forward(x)), x);
+            x = Engine.TensorAdd(feedForward.Forward(feedForwardNorm.Forward(x)), x);
         }
-        finally
-        {
-            SetTrainingMode(prev);
-        }
+        x = _finalNorm!.Forward(x);
+        return _projection!.Forward(Engine.TensorSlice(x, new[] { 1, 0 }, new[] { frames, _options.HiddenDim }));
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
     {
-        ThrowIfDisposed();
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        if (_optimizer is null)
-            throw new InvalidOperationException("Optimizer is required for training.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        int warmup = Math.Max(1, _options.WarmupSteps), total = Math.Max(warmup + 1, _options.TotalSteps);
+        var scheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(_options.LearningRate,
+            step => step < warmup ? (step + 1.0) / warmup : Math.Max(0.0, (double)(total - step) / (total - warmup)));
+        return PaperOptimizerFactory.VerifyHandBuilt(this, new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay,
+                LearningRateScheduler = scheduler,
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+            }));
     }
 
-    /// <summary>
-    /// Refuses parameter work on a disposed model, on every entry point rather than one.
-    /// </summary>
-    /// <remarks>
-    /// This check used to live inside UpdateParameters, which meant ParameterCount, GetParameters
-    /// and SetParameters reached a disposed model unguarded. The base calls this hook from all of
-    /// them, so moving it here widens the guard and lets the hand-written UpdateParameters -- whose
-    /// only other content was a walk the base already performs -- be deleted.
-    /// </remarks>
-    protected override void EnsureParametersReady()
-    {
-        ThrowIfDisposed();
-        base.EnsureParametersReady();
-    }
+    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
-    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
+    /// <inheritdoc />
+    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
+    /// write on every parameter surface, so the guard is stated once here instead of being
+    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override bool SupportsParameterMutation => _useNativeMode;
+
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "E2TTS-Native" : "E2TTS-ONNX",
-            Description =
-                "E2 TTS: fully non-autoregressive flow-matching TTS with character-level text input.",
-            FeatureCount = _options.LLMDim,
+            Description = "E2 TTS: flow-matching speech infilling with a U-Net Transformer (Eskimez et al., 2024)",
+            FeatureCount = _options.HiddenDim,
+            Complexity = _options.NumLayers,
         };
         m.AdditionalInfo["Architecture"] = "E2TTS";
-        m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
-        m.AdditionalInfo["HiddenDim"] = base.HiddenDim;
-        m.AdditionalInfo["SampleRate"] = base.SampleRate;
-        m.AdditionalInfo["MelChannels"] = base.MelChannels;
-        m.AdditionalInfo["HopSize"] = base.HopSize;
         return m;
-    }
-
-
-
-
-
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
-        => PaperOptimizerFactory.VerifyHandBuilt(this,
-            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-                this,
-                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-                {
-                    InitialLearningRate = _options.LearningRate,
-                    WeightDecay = _options.WeightDecay
-                }));
-
-    private static void ValidateOptions(E2TTSOptions opts)
-    {
-        if (opts.SampleRate <= 0)
-            throw new ArgumentOutOfRangeException(nameof(opts), "SampleRate must be positive.");
-        if (opts.MaxTextLength <= 0)
-            throw new ArgumentOutOfRangeException(nameof(opts), "MaxTextLength must be positive.");
-        if (opts.NumCodebooks <= 0)
-            throw new ArgumentOutOfRangeException(nameof(opts), "NumCodebooks must be positive.");
-        if (opts.CodebookSize <= 0)
-            throw new ArgumentOutOfRangeException(nameof(opts), "CodebookSize must be positive.");
-        if (opts.LLMDim <= 0)
-            throw new ArgumentOutOfRangeException(nameof(opts), "LLMDim must be positive.");
-    }
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(E2TTS<T>));
     }
 
     protected override void Dispose(bool disposing)
