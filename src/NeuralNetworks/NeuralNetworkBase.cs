@@ -7274,6 +7274,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             return;
         }
 
+        var accumulatedPair = PrepareTrainingPair(input, target, _trainingPairDraws++);
+        input = accumulatedPair.Input;
+        target = accumulatedPair.Target ?? throw new InvalidOperationException(
+            $"{GetType().Name}.{nameof(PrepareTrainingPair)} returned no target for a training step.");
+
         if (input.Shape[0] != target.Shape[0])
         {
             throw new ArgumentException(
@@ -11364,6 +11369,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // training saw different tensors: Document models normalize in Predict via PreprocessDocument but
         // trained on the raw page, and Donut fed a rank-3 page into a patch embedding that indexes NCHW.
         // A model whose ForwardForTraining or PredictCore owns its input convention gets the input unchanged.
+        var pair = PrepareTrainingPair(input, expected, _trainingPairDraws++);
+        input = pair.Input;
+        expected = pair.Target ?? throw new InvalidOperationException(
+            $"{GetType().Name}.{nameof(PrepareTrainingPair)} returned no target for a training step.");
         input = ForwardForTrainingOwnsPublicInputPreparation() ? input : PrepareInputForTraining(input);
 
         var configuredOptimizer = optimizer ?? _baseTrainOptimizer;
@@ -18860,6 +18869,31 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     {
     }
 
+    // Training steps that have drawn a pair so far; see PrepareTrainingPair.
+    private long _trainingPairDraws;
+
+    /// <summary>
+    /// Turns the caller's (input, target) into the pair this model actually trains on.
+    /// </summary>
+    /// <param name="input">The caller's input.</param>
+    /// <param name="target">The caller's target, or null for a training forward that has none (a shape or
+    /// contract probe); a model then pairs against a zero clean sample.</param>
+    /// <param name="draw">The index of this training step's random draw. Training advances it once per step; the
+    /// gradient-check entry points pass the current value without advancing, so repeated evaluations of one
+    /// objective see the same draw. Derive every random choice from it (and the model's seed), never from a
+    /// shared stream.</param>
+    /// <returns>The input and target the step trains on. The default returns them unchanged.</returns>
+    /// <remarks>
+    /// A denoising diffusion model does not train on (context, future): it trains its noise predictor on
+    /// (context, x_k, k) against the noise eps, where x_k = sqrt(alphaBar_k) x_0 + sqrt(1 - alphaBar_k) eps is
+    /// drawn from the target x_0 at a sampled step k (Ho et al. 2020). The draw happens outside the parameter
+    /// graph, so it is done here, once, for every path that trains - the plain, fused, streaming and
+    /// gradient-accumulation steps and the gradient-check objective - and the training forward stays a pure
+    /// function of the paired input, which a compiled plan can replay.
+    /// </remarks>
+    protected virtual (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
+        => (input, target);
+
     /// <summary>
     /// Converts a public model input into the tensor consumed by the trainable layer graph.
     /// </summary>
@@ -18933,9 +18967,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// generated test assembly can observe the exact objective-output contract without exposing a
     /// second production API.
     /// </remarks>
-    internal Tensor<T> ForwardPreparedForTraining(Tensor<T> input)
+    internal Tensor<T> ForwardPreparedForTraining(Tensor<T> input) => ForwardPreparedForTraining(input, pairTransformed: false);
+
+    private Tensor<T> ForwardPreparedForTraining(Tensor<T> input, bool pairTransformed)
     {
         SetTrainingMode(true);
+        if (!pairTransformed)
+            input = PrepareTrainingPair(input, null, _trainingPairDraws).Input;
         var trainingInput = ForwardForTrainingOwnsPublicInputPreparation()
             ? input
             : PrepareInputForTraining(input);
@@ -18965,8 +19003,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // training contract here so trainable layers, autodiff, and streaming storage all see a
         // consistent mode. In particular, an inference-first model may have read-only quantized
         // streaming snapshots that must be promoted before its weights participate in backward.
-        var prediction = ForwardPreparedForTraining(input);
-        return ComputeObjectiveFromPrediction(input, prediction, target, lossFunction);
+        var pair = PrepareTrainingPair(input, target, _trainingPairDraws);
+        var pairedTarget = pair.Target ?? target;
+        var prediction = ForwardPreparedForTraining(pair.Input, pairTransformed: true);
+        return ComputeObjectiveFromPrediction(pair.Input, prediction, pairedTarget, lossFunction);
     }
 
     /// <summary>
@@ -19002,11 +19042,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         ILossFunction<T>? lossFunction = null)
     {
         using var _ = new NoGradScope<T>();
+        var pair = PrepareTrainingPair(input, target, _trainingPairDraws);
+        var pairedTarget = pair.Target ?? target;
         var trainingInput = ForwardForTrainingOwnsPublicInputPreparation()
-            ? input
-            : PrepareInputForTraining(input);
+            ? pair.Input
+            : PrepareInputForTraining(pair.Input);
         var prediction = ForwardForTraining(trainingInput);
-        var objective = ComputeObjectiveFromPrediction(input, prediction, target, lossFunction);
+        var objective = ComputeObjectiveFromPrediction(pair.Input, prediction, pairedTarget, lossFunction);
         return objective.Length > 0 ? objective[0] : NumOps.Zero;
     }
 
