@@ -133,6 +133,7 @@
     <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="IntegrationTests\Clustering\ReferenceData\*.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Audio\Pitch\ReferenceData\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Audio\Codecs\ReferenceData\*.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="TextToSpeech\ReferenceData\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

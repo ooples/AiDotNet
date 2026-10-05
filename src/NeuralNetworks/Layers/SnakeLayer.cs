@@ -57,6 +57,17 @@ public partial class SnakeLayer<T> : LayerBase<T>
         return unbatched ? Engine.Reshape(y, input._shape) : y;
     }
 
+    /// <summary>The channels.</summary>
+    internal int Channels => _channels;
+
+    /// <summary>Loads α (a PyTorch Snake's <c>alpha</c>, one per channel).</summary>
+    internal void LoadAlpha(double[] alpha)
+    {
+        if (alpha.Length != _channels) throw new ArgumentException($"Expected {_channels} values, got {alpha.Length}.", nameof(alpha));
+        for (int c = 0; c < _channels; c++) _alpha[c] = NumOps.FromDouble(alpha[c]);
+        Engine.InvalidatePersistentTensor(_alpha);
+    }
+
     /// <inheritdoc />
     public override void ResetState()
     {

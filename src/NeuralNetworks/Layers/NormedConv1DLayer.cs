@@ -153,6 +153,65 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
 
+    /// <summary>The output channels.</summary>
+    internal int OutputChannels => _out;
+
+    /// <summary>Sets the bias to zero (references that initialize a convolution's bias with <c>nn.init.constant_(0)</c>).</summary>
+    internal void ZeroBias()
+    {
+        for (int i = 0; i < _bias.Length; i++) _bias[i] = NumOps.Zero;
+        Engine.InvalidatePersistentTensor(_bias);
+    }
+
+    /// <summary>The kernel's shape in PyTorch's layout: <c>[out, in / groups, k]</c> for a convolution, <c>[in, out, k]</c>
+    /// for a transposed one.</summary>
+    internal int[] TorchWeightShape => new[] { _direction.Shape[0], _direction.Shape[1], _kernel };
+
+    /// <summary>
+    /// Loads a PyTorch convolution's parameters: the weight in <see cref="TorchWeightShape"/> order (weight_norm's
+    /// <c>weight_v</c> when <paramref name="gain"/> is given), the weight-norm gain <c>weight_g</c> (one per row), and the
+    /// bias. Without a gain a weight-normalized layer takes the weight as its direction with gain ‖V‖, so W = V.
+    /// </summary>
+    internal void LoadTorchWeights(double[] weight, double[]? gain, double[] bias)
+    {
+        if (weight.Length != _direction.Length)
+            throw new ArgumentException($"Expected {_direction.Length} kernel values, got {weight.Length}.", nameof(weight));
+        if (bias.Length != _bias.Length)
+            throw new ArgumentException($"Expected {_bias.Length} bias values, got {bias.Length}.", nameof(bias));
+        if (gain is not null && _normalization != ConvolutionNormalization.Weight)
+            throw new InvalidOperationException("A weight-norm gain loads only into a weight-normalized convolution.");
+        if (_normalization == ConvolutionNormalization.Spectral)
+            throw new InvalidOperationException("Loading PyTorch weights into a spectrally normalized convolution is not supported.");
+        for (int i = 0; i < weight.Length; i++) _direction[i] = NumOps.FromDouble(weight[i]);
+        int rows = _direction.Shape[0], per = _direction.Length / rows;
+        if (gain is not null && gain.Length != rows)
+            throw new ArgumentException($"Expected {rows} gain values, got {gain.Length}.", nameof(gain));
+        for (int r = 0; r < rows; r++)
+        {
+            double g;
+            if (gain is not null)
+            {
+                g = gain[r];
+            }
+            else
+            {
+                double sum = 0;
+                for (int i = 0; i < per; i++) sum += weight[r * per + i] * weight[r * per + i];
+                g = Math.Sqrt(sum);
+            }
+            _gain[r] = NumOps.FromDouble(g);
+        }
+        for (int i = 0; i < bias.Length; i++)
+        {
+            if (!_useBias && bias[i] != 0)
+                throw new InvalidOperationException("The checkpoint has a bias but this convolution has none.");
+            _bias[i] = NumOps.FromDouble(bias[i]);
+        }
+        Engine.InvalidatePersistentTensor(_direction);
+        Engine.InvalidatePersistentTensor(_gain);
+        Engine.InvalidatePersistentTensor(_bias);
+    }
+
     /// <summary>
     /// Re-initializes the direction V from <paramref name="sample"/> (one call per element) and the bias to
     /// <paramref name="bias"/>, then resets the weight-norm gain to ‖V‖ so W = V — for models whose reference initializes

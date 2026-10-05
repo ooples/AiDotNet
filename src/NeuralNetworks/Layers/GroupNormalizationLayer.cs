@@ -135,6 +135,20 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
 
     public int NumGroups => _numGroups;
     public int NumChannels => _numChannels;
+
+    /// <summary>Loads the per-channel scale γ and shift β (PyTorch GroupNorm's <c>weight</c> and <c>bias</c>).</summary>
+    internal void LoadAffine(double[] gamma, double[] beta)
+    {
+        if (gamma.Length != _numChannels || beta.Length != _numChannels)
+            throw new ArgumentException($"Expected {_numChannels} scale and shift values, got {gamma.Length} and {beta.Length}.");
+        for (int c = 0; c < _numChannels; c++)
+        {
+            _gamma[c] = NumOps.FromDouble(gamma[c]);
+            _beta[c] = NumOps.FromDouble(beta[c]);
+        }
+        Engine.InvalidatePersistentTensor(_gamma);
+        Engine.InvalidatePersistentTensor(_beta);
+    }
     public Vector<T> GetGamma() => _gamma.ToVector();
     public Tensor<T> GetGammaTensor() => _gamma;
     public Vector<T> GetBeta() => _beta.ToVector();

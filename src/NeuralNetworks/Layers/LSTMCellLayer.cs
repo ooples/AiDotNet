@@ -67,6 +67,35 @@ public partial class LSTMCellLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>Width of the hidden and cell states.</summary>
     public int HiddenSize => _hiddenSize;
 
+    /// <summary>Width of the step input.</summary>
+    public int InputSize => _inputSize;
+
+    /// <summary>
+    /// Loads one layer of a PyTorch <c>nn.LSTM</c>: <c>weight_ih_l{k}</c> <c>[4H, input]</c>, <c>weight_hh_l{k}</c>
+    /// <c>[4H, H]</c> and the two biases <c>[4H]</c>, whose gates are ordered i, f, g, o as here; the two biases add.
+    /// </summary>
+    internal void LoadTorchWeights(double[] weightIh, double[] weightHh, double[] biasIh, double[] biasHh)
+    {
+        int gates = 4 * _hiddenSize;
+        if (weightIh.Length != gates * _inputSize || weightHh.Length != gates * _hiddenSize || biasIh.Length != gates || biasHh.Length != gates)
+            throw new ArgumentException($"Expected weights [{gates}, {_inputSize}] and [{gates}, {_hiddenSize}] and biases [{gates}].");
+        // The input projection sizes itself on its first forward; one zero step materializes it.
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            _input.Forward(new Tensor<T>(new[] { 1, _inputSize }));
+        var input = _input.GetWeights();                                                    // [input, 4H]
+        var bias = _input.GetBiases();
+        var recurrent = _recurrent.Weights;                                                 // [H, 4H]
+        for (int g = 0; g < gates; g++)
+        {
+            for (int i = 0; i < _inputSize; i++) input[i, g] = NumOps.FromDouble(weightIh[g * _inputSize + i]);
+            for (int h = 0; h < _hiddenSize; h++) recurrent[h, g] = NumOps.FromDouble(weightHh[g * _hiddenSize + h]);
+            bias[g] = NumOps.FromDouble(biasIh[g] + biasHh[g]);
+        }
+        Engine.InvalidatePersistentTensor(input);
+        Engine.InvalidatePersistentTensor(bias);
+        Engine.InvalidatePersistentTensor(recurrent);
+    }
+
     /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
         => inputRank == 2

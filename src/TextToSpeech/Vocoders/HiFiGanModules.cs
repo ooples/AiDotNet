@@ -155,6 +155,7 @@ internal sealed class HiFiGanGenerator<T>
 internal sealed class HiFiGanDiscriminators<T>
 {
     private readonly double _slope;
+    private readonly bool _padFullPeriod;
     private readonly IEngine _engine;
     private readonly List<LayerBase<T>> _layers = new();
     private readonly List<(int Period, List<NormedConv1DLayer<T>> Convs, NormedConv1DLayer<T> Post)> _periods = new();
@@ -169,10 +170,13 @@ internal sealed class HiFiGanDiscriminators<T>
     /// <param name="periodChannels">The period discriminators' widths: four stride-3 convolutions and a stride-1 one
     /// (HiFi-GAN 32, 128, 512, 1024, 1024; UnivNet 64, 128, 256, 512, 1024).</param>
     /// <param name="slope">The leaky ReLU slope (HiFi-GAN 0.1; UnivNet 0.2).</param>
+    /// <param name="padFullPeriod">Whether a length already divisible by the period still gets a full period of reflect
+    /// padding (DAC's reference pads <c>period − t mod period</c> unconditionally; HiFi-GAN pads only when needed).</param>
     public HiFiGanDiscriminators(IEngine engine, int[] periods, int scales, bool useScaleDiscriminator = true, int widthDivisor = 1,
-        bool spectralFirstScale = true, int[]? periodChannels = null, double slope = 0.1)
+        bool spectralFirstScale = true, int[]? periodChannels = null, double slope = 0.1, bool padFullPeriod = false)
     {
         _engine = engine;
+        _padFullPeriod = padFullPeriod;
         _slope = slope;
         int W(int c) => Math.Max(1, c / Math.Max(1, widthDivisor));
         var widths = periodChannels ?? new[] { 32, 128, 512, 1024, 1024 };
@@ -234,7 +238,7 @@ internal sealed class HiFiGanDiscriminators<T>
         {
             // Reflect-pad to a multiple of the period, fold to [period, 1, T/p]: each column is one sequence.
             var x = audio;
-            if (length % period != 0)
+            if (length % period != 0 || _padFullPeriod)
             {
                 int pad = period - length % period;
                 var index = new Tensor<int>(new[] { pad });
