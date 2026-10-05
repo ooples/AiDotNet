@@ -292,9 +292,14 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
             yNorm[i] = NumOps.Divide(NumOps.Subtract(y[i], yMean), yStd);
 
         // Create Adam optimizer (per Oreshkin et al. 2020)
+        // Global-norm gradient clipping at GradientClipNorm (see that option) is the optimizer's own:
+        // one engine reduction per step, shared with its anomaly guard.
         var adamOptions = new AdamOptimizerOptions<T, Matrix<T>, Vector<T>>
         {
-            InitialLearningRate = _options.LearningRate
+            InitialLearningRate = _options.LearningRate,
+            EnableGradientClipping = _options.GradientClipNorm > 0,
+            GradientClippingMethod = GradientClippingMethod.ByNorm,
+            MaxGradientNorm = _options.GradientClipNorm,
         };
         var optimizer = new AdamOptimizer<T, Matrix<T>, Vector<T>>(null, adamOptions);
 
@@ -459,25 +464,14 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
                 using var tape = new GradientTape<T>();
 
                 // Tape-tracked batched forward through the doubly-residual
-                // stack (paper §3.2). Each block's ForwardTape now accepts
-                // [B, L] and returns ([B, L] backcast, [B, H] forecast);
-                // the stack composes them with residual_i = residual_{i-1}
-                // - backcast_i and global forecast = Σ_i forecast_i.
-                var residual = batchInput;
-                Tensor<T>? aggregatedForecast = null;
-                for (int blockIdx = 0; blockIdx < _blocks.Count; blockIdx++)
-                {
-                    var (backcast, forecast) = _blocks[blockIdx].ForwardTape(residual);
-                    residual = Engine.TensorSubtract(residual, backcast);
-                    aggregatedForecast = aggregatedForecast is null
-                        ? forecast
-                        : Engine.TensorAdd(aggregatedForecast, forecast);
-                }
+                // stack (paper §3.2): residual_i = residual_{i-1} - backcast_i
+                // and global forecast = Σ_i forecast_i, [B, H].
+                var aggregatedForecast = RunForwardStack(batchInput);
 
                 // Full-horizon MAE over the whole batch — ReduceMean over
                 // both axes gives the per-element mean, which is what
                 // Oreshkin et al. 2019 §4 (MAE variant) trains against.
-                var batchLoss = trainingLoss.ComputeTapeLoss(aggregatedForecast!, batchTarget);
+                var batchLoss = trainingLoss.ComputeTapeLoss(aggregatedForecast, batchTarget);
 
                 if (batchLoss.Length > 0)
                 {
@@ -494,12 +488,11 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
                         grads[param] = grad;
                 }
 
-                // Global-norm gradient clipping (Oreshkin et al. 2020). WITHOUT it the deep doubly-residual stack's
-                // gradients explode on fat-tailed real series at the default LR: the normalized training loss
-                // DIVERGES upward (measured 1.20 -> 1.55 over 15 epochs on SPY daily log-returns) and inference
-                // predictions blow up to ~hundreds of times the target scale. Clip the whole gradient set to
-                // GradientClipNorm before the optimizer step so a single outlier batch can't send the weights flying.
-                ClipGradientsByGlobalNorm(grads.Values, _options.GradientClipNorm);
+                // Global-norm gradient clipping (Oreshkin et al. 2020) happens inside optimizer.Step at
+                // GradientClipNorm. WITHOUT it the deep doubly-residual stack's gradients explode on fat-tailed
+                // real series at the default LR: the normalized training loss DIVERGES upward (measured
+                // 1.20 -> 1.55 over 15 epochs on SPY daily log-returns). Clipping here as well, as before,
+                // repeated the same scaling with a host read per gradient tensor.
 
                 Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> tgt) => batchLoss;
                 Tensor<T> ComputeLoss(Tensor<T> pred, Tensor<T> tgt) =>
@@ -550,32 +543,6 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
         if (bestParamSnapshot is not null)
             for (int pi = 0; pi < trainableParams.Count; pi++)
                 Engine.TensorMultiplyScalarInto(trainableParams[pi], bestParamSnapshot[pi], NumOps.One);
-    }
-
-    /// <summary>
-    /// Scales every gradient in <paramref name="grads"/> in place so their combined L2 (global) norm does not
-    /// exceed <paramref name="maxNorm"/>. No-op when <paramref name="maxNorm"/> ≤ 0 or the norm is already under
-    /// it. This is the standard exploding-gradient guard N-BEATS needs on the eager tape path — see
-    /// <see cref="NBEATSModelOptions{T}.GradientClipNorm"/>.
-    /// </summary>
-    private void ClipGradientsByGlobalNorm(ICollection<Tensor<T>> grads, double maxNorm)
-    {
-        if (maxNorm <= 0.0) return;
-
-        // Global L2 norm = sqrt(Σ_p ||g_p||²). Per-tensor sum-of-squares runs on the vectorized engine
-        // (TensorSumOfSquares); the only cross-tensor accumulation is over the already-reduced per-tensor scalars.
-        T sumSq = NumOps.Zero;
-        foreach (var g in grads)
-            if (g is not null)
-                sumSq = NumOps.Add(sumSq, Engine.TensorSumOfSquares(g));
-
-        double totalNorm = Math.Sqrt(NumOps.ToDouble(sumSq));
-        if (totalNorm < 1e-12 || totalNorm <= maxNorm) return;
-
-        T scale = NumOps.FromDouble(maxNorm / totalNorm);
-        foreach (var g in grads)
-            if (g is not null)
-                Engine.TensorMultiplyScalarInPlace(g, scale);   // vectorized in-place scale
     }
 
     /// <summary>
@@ -793,19 +760,27 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
     /// tape-recordable Engine ops so the compiler can trace it into the resident
     /// graph. Shared by the resident training closure and the validation gate.
     /// </summary>
-    private Tensor<T> RunForwardStack(Tensor<T> input)
+    internal Tensor<T> RunForwardStack(Tensor<T> input)
     {
-        var residual = input;
+        if (_blocks.Count == 0)
+            throw new InvalidOperationException("N-BEATS has no blocks to run; the model was not initialized.");
+
+        // The stack runs column-major ([L, B] residual, [H, B] forecast sum), the layout each
+        // block computes in, so the input is transposed once here and the forecast once at the
+        // end. Threading [B, L] through ForwardTape instead costs two strided permutes per block
+        // per pass (plus their backward), and makes every residual subtract and forecast sum
+        // combine strided views.
+        var residual = Engine.TensorPermute(input, new[] { 1, 0 });
         Tensor<T>? aggregatedForecast = null;
         for (int blockIdx = 0; blockIdx < _blocks.Count; blockIdx++)
         {
-            var (backcast, forecast) = _blocks[blockIdx].ForwardTape(residual);
+            var (backcast, forecast) = _blocks[blockIdx].ForwardTapeColumns(residual);
             residual = Engine.TensorSubtract(residual, backcast);
             aggregatedForecast = aggregatedForecast is null
                 ? forecast
                 : Engine.TensorAdd(aggregatedForecast, forecast);
         }
-        return aggregatedForecast!;
+        return Engine.TensorPermute(aggregatedForecast ?? throw new InvalidOperationException("N-BEATS produced no forecast."), new[] { 1, 0 });
     }
 
     /// <summary>

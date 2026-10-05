@@ -857,7 +857,21 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             SparseEmbeddingOptimizerHelpers.MaterializeSparseIntoGradientsDict(context, Engine);
         }
 
-        if (ShouldRunAnomalyGuard() && AnyGradientIsAnomalous(context))
+        // The anomaly guard and global-norm clipping both need one number: the global squared norm of
+        // every gradient. It is reduced on the engine and read back once. A host walk of each gradient's
+        // Data, as before, forced every GPU-resident gradient to download separately, and on CPU cost a
+        // virtual ToDouble per element; together they were most of a small model's step (#1804).
+        bool guardActive = ShouldRunAnomalyGuard();
+        bool clipActive = GradientOptions.EnableGradientClipping
+            && GradientOptions.GradientClippingMethod == GradientClippingMethod.ByNorm
+            && GradientOptions.MaxGradientNorm > 0.0;
+        double globalNormSq = guardActive || clipActive ? GlobalGradientSquaredNorm(context) : 0.0;
+
+        // Any NaN or infinite gradient makes the sum of squares non-finite. NaN can only come from a NaN
+        // gradient; +Infinity can also be a finite gradient whose square overflowed T, so that case alone
+        // is settled by the exact element check.
+        if (guardActive && !IsFiniteDouble(globalNormSq)
+            && (double.IsNaN(globalNormSq) || AnyGradientIsAnomalous(context)))
         {
             return;
         }
@@ -906,10 +920,9 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         // over 10 iterations on default LR=1e-3 without clipping. With it
         // (or with the canonical PyTorch default MaxGradientNorm=1.0) the
         // first-step update is bounded and training converges.
-        if (GradientOptions.EnableGradientClipping &&
-            GradientOptions.GradientClippingMethod == GradientClippingMethod.ByNorm)
+        if (clipActive)
         {
-            ApplyGlobalNormGradientClipping(context, GradientOptions.MaxGradientNorm);
+            ApplyGlobalNormGradientClipping(context, GradientOptions.MaxGradientNorm, globalNormSq);
         }
 
         // PyTorch GradScaler-style anomaly guard is already enforced at the
@@ -926,9 +939,8 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         // cudaGraph-safety: the GPU-resident step is only host-read-free when NO
         // host-side gradient scan runs first. The anomaly guard
         // (ShouldRunAnomalyGuard -> AnyGradientIsAnomalous) and global-norm gradient
-        // clipping both walk grad.Data.Span on the host, so disable the GPU fast path
-        // whenever either is active — otherwise the step is still host-bound and not
-        // graph-capturable as advertised. (Those host scans run above this point.)
+        // clipping need the global gradient norm read back to the host (one scalar), so disable the GPU
+        // fast path whenever either is active — the step is not graph-capturable with that read in it.
         bool hostGradientScanActive = ShouldRunAnomalyGuard()
             || (GradientOptions.EnableGradientClipping
                 && GradientOptions.GradientClippingMethod == GradientClippingMethod.ByNorm);
@@ -1638,17 +1650,33 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         return false;
     }
 
-    private static void ApplyGlobalNormGradientClipping(
-        TapeStepContext<T> context,
-        double maxNorm)
+    /// <summary>
+    /// The squared L2 norm of every gradient together: one engine reduction per tensor, summed on the
+    /// engine, read back once.
+    /// </summary>
+    private double GlobalGradientSquaredNorm(TapeStepContext<T> context)
     {
-        if (maxNorm <= 0.0) return;
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        Tensor<T>? total = null;
+        foreach (var kvp in context.Gradients)
+        {
+            var grad = kvp.Value;
+            if (grad is null || grad.Length == 0) continue;
+            var squares = Engine.Reshape(Engine.ReduceSum(Engine.TensorMultiply(grad, grad), null), new[] { 1 });
+            total = total is null ? squares : Engine.TensorAdd(total, squares);
+        }
 
+        return total is null ? 0.0 : NumOps.ToDouble(total[0]);
+    }
+
+    /// <summary>
+    /// The squared global norm summed in double on the host: the exact fallback for a T-precision sum
+    /// that overflowed to infinity although every gradient is finite.
+    /// </summary>
+    private static double HostGlobalGradientSquaredNorm(TapeStepContext<T> context)
+    {
         var numOps = MathHelper.GetNumericOperations<T>();
-
-        // Pass 1: compute global L2 norm. Walk every gradient tensor and
-        // accumulate the squared sum across all elements.
-        double globalNormSq = 0.0;
+        double sum = 0.0;
         foreach (var kvp in context.Gradients)
         {
             var grad = kvp.Value;
@@ -1657,25 +1685,45 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             for (int i = 0; i < span.Length; i++)
             {
                 double v = numOps.ToDouble(span[i]);
-                globalNormSq += v * v;
+                sum += v * v;
             }
         }
+
+        return sum;
+    }
+
+    private static bool IsFiniteDouble(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+
+    /// <summary>
+    /// PyTorch clip_grad_norm_: scales every gradient by maxNorm / (‖g‖ + 1e-6) when the global norm exceeds
+    /// maxNorm, in place on the engine.
+    /// </summary>
+    private void ApplyGlobalNormGradientClipping(
+        TapeStepContext<T> context,
+        double maxNorm,
+        double globalNormSq)
+    {
+        if (maxNorm <= 0.0) return;
+
+        // A NaN norm means a NaN gradient: nothing meaningful to scale (the anomaly guard, when on, has
+        // already skipped the step). +Infinity may be T-precision overflow of finite gradients, so the
+        // norm is recomputed exactly in double before deciding.
+        if (double.IsNaN(globalNormSq)) return;
+        if (double.IsPositiveInfinity(globalNormSq)) globalNormSq = HostGlobalGradientSquaredNorm(context);
         double globalNorm = Math.Sqrt(globalNormSq);
 
-        // Below threshold: nothing to do.
-        if (globalNorm <= maxNorm || globalNorm == 0.0 || double.IsNaN(globalNorm) || double.IsInfinity(globalNorm))
+        if (globalNorm <= maxNorm || globalNorm == 0.0 || !IsFiniteDouble(globalNorm))
             return;
 
-        // Pass 2: scale every gradient in place by PyTorch's clip_grad_norm_ coefficient,
+        // Scale every gradient in place by PyTorch's clip_grad_norm_ coefficient,
         // max_norm / (total_norm + 1e-6), the same one the network clip and the fused plan apply.
-        double scale = maxNorm / (globalNorm + 1e-6);
+        T scale = NumOps.FromDouble(maxNorm / (globalNorm + 1e-6));
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
         foreach (var kvp in context.Gradients)
         {
             var grad = kvp.Value;
             if (grad is null) continue;
-            var span = grad.Data.Span;
-            for (int i = 0; i < span.Length; i++)
-                span[i] = numOps.FromDouble(numOps.ToDouble(span[i]) * scale);
+            Engine.TensorMultiplyScalarInPlace(grad, scale);
         }
     }
 
