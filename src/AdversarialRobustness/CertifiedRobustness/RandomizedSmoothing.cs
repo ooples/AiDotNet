@@ -58,7 +58,7 @@ public class RandomizedSmoothing<T, TInput, TOutput> : ICertifiedDefense<T, TInp
     /// <param name="options">The certified defense configuration options.</param>
     /// <remarks>
     /// <para>
-    /// If <see cref="CertifiedDefenseOptions{T}.RandomSeed"/> is set, the random number generator
+    /// If <see cref="CertifiedDefenseOptions{T}.Seed"/> is set, the random number generator
     /// is initialized with that seed for reproducible results. Otherwise, a non-deterministic
     /// random generator is used for proper statistical validity of the certification.
     /// </para>
