@@ -362,4 +362,11 @@
 	  <Using Include="AiDotNet.Initialization" />
 	</ItemGroup>
 
+	<!-- English G2P data, built by tools/reference-data/g2p_resources.py: the CMU Pronouncing Dictionary
+	     (BSD-2-Clause, see NOTICE) and the letter-to-sound rules of NRL Report 7948 (a US Government work). -->
+	<ItemGroup>
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\cmudict.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.cmudict.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\nrl_rules.tsv" LogicalName="AiDotNet.TextToSpeech.FrontEnd.nrl_rules.tsv" />
+	</ItemGroup>
+
 </Project>
