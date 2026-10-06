@@ -475,6 +475,13 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
         var ours0 = Network.Predict(input).ToVector().Select(v => (double)v).ToArray();
         Network.Train(input, labels);
         var trainLoss = Convert.ToDouble(Network.GetLastLoss());
+        if (Environment.GetEnvironmentVariable("AIDOTNET_PARITY_GRADS") == "1")
+        {
+            // Diagnostic: the published gradient surface after the step (compare CPU vs CUDA).
+            var grads = Network.GetParameterGradients();
+            double sumAbs = 0; for (var k = 0; k < grads.Length; k++) sumAbs += Math.Abs(Convert.ToDouble(grads[k]));
+            Console.WriteLine($"[step1] {name} grads n={grads.Length} sum|g|={sumAbs:E6} g[0..2]={Convert.ToDouble(grads[0]):E4},{Convert.ToDouble(grads[1]):E4},{Convert.ToDouble(grads[2]):E4}");
+        }
         // AIDOTNET_PARITY_TRAIN_STEPS=N (diagnostic): keep training on the same batch and print the loss, to tell "the
         // step never applies" from "step 1 is special". The step-1 comparison below is only meaningful at the default 1.
         if (int.TryParse(Environment.GetEnvironmentVariable("AIDOTNET_PARITY_TRAIN_STEPS"), out var extraSteps) && extraSteps > 1)
