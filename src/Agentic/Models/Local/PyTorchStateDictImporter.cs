@@ -55,7 +55,9 @@ public static class PyTorchStateDictImporter
         var parameterLayers = new List<LayerBase<T>>();
         foreach (var layer in model.Layers)
         {
-            if (layer is LayerBase<T> layerBase && layerBase.GetTrainableParameters().Count > 0)
+            // ParameterCount, not the layer's own trainable tensors: a composite block such as
+            // TransformerEncoderBlock holds all of its weights in registered sublayers.
+            if (layer is LayerBase<T> layerBase && layerBase.ParameterCount > 0)
                 parameterLayers.Add(layerBase);
         }
 
@@ -76,30 +78,56 @@ public static class PyTorchStateDictImporter
         int offset = 0;
         foreach (var layer in parameterLayers)
         {
-            foreach (var tensor in layer.GetTrainableParameters())
+            // The layer's own description of its flat slice (trainable tensors, buffers and sublayers in
+            // FillParameters order), so composites are walked exactly as GetParameters writes them.
+            var segments = new List<(Tensor<T>? Tensor, int Length, bool IsBuffer)>();
+            layer.AppendFlatParameterLayout(segments);
+            foreach (var (tensor, length, isBuffer) in segments)
             {
-                var existing = tensor.ToVector();
-                if (offset + existing.Length > flat.Length)
+                if (offset + length > flat.Length)
                     throw LayoutMismatch(layer);
 
-                // The flat layout must be the per-layer concatenation of trainable tensors; prove it on the
-                // current values before writing anything, so a layer whose GetParameters orders differently
-                // fails here instead of silently loading weights into the wrong slots.
-                for (int k = 0; k < existing.Length; k++)
+                if (tensor is null)
+                {
+                    if (!isBuffer && length > 0)
+                    {
+                        throw new NotSupportedException(
+                            $"{layer.GetType().Name} has {length} parameters not backed by a Tensor<{typeof(T).Name}>; " +
+                            "the PyTorch importer cannot address them.");
+                    }
+                    for (int k = 0; k < length; k++) flat[offset + k] = current[offset + k];
+                    offset += length;
+                    continue;
+                }
+
+                // Prove the layout on the current values before writing anything, so a layer whose
+                // GetParameters orders differently fails here instead of loading weights into the wrong slots.
+                var existing = tensor.ToVector();
+                if (existing.Length != length)
+                    throw LayoutMismatch(layer);
+                for (int k = 0; k < length; k++)
                 {
                     if (!numOps.Equals(existing[k], current[offset + k]))
                         throw LayoutMismatch(layer);
                 }
 
-                if (!values.TryGetValue(tensor, out var converted))
+                if (values.TryGetValue(tensor, out var converted))
+                {
+                    for (int k = 0; k < length; k++)
+                        flat[offset + k] = numOps.FromDouble(converted[k]);
+                }
+                else if (isBuffer)
+                {
+                    // A buffer this layer's conversion does not set (a statistic with no PyTorch counterpart
+                    // here) keeps its current value.
+                    for (int k = 0; k < length; k++) flat[offset + k] = current[offset + k];
+                }
+                else
                 {
                     throw new InvalidOperationException(
                         $"No PyTorch tensor was mapped to a [{ShapeText(tensor)}] parameter of {layer.GetType().Name}.");
                 }
-
-                for (int k = 0; k < converted.Length; k++)
-                    flat[offset + k] = numOps.FromDouble(converted[k]);
-                offset += converted.Length;
+                offset += length;
             }
         }
 

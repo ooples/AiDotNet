@@ -264,7 +264,12 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
 
     start_total = time.perf_counter()
     with ResourceMonitor(track_gpu=device.type == "cuda") as monitor:
-        for _ in range(epochs):
+        for epoch in range(epochs):
+            # PROFILE_RANGE=1: bracket the last epoch for `nsys --capture-range=cudaProfilerApi` (same as the C# side).
+            profile_epoch = os.environ.get("PROFILE_RANGE") == "1" and epoch == epochs - 1 and device.type == "cuda"
+            if profile_epoch:
+                synchronize(device)
+                torch.cuda.profiler.start()
             start_epoch = time.perf_counter()
             for x, y in pool:
 
@@ -285,6 +290,8 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
                 optimizer.step()
             synchronize(device)
             epoch_seconds.append(time.perf_counter() - start_epoch)
+            if profile_epoch:
+                torch.cuda.profiler.stop()
     total = time.perf_counter() - start_total
     # Steady state excludes epoch 0 (warmup), exactly as the AiDotNet twin does.
     steady_epochs = epoch_seconds[1:] if len(epoch_seconds) > 1 else epoch_seconds

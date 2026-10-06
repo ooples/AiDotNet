@@ -223,6 +223,10 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
 
         for (var epoch = 0; epoch < options.Epochs; epoch++)
         {
+            // PROFILE_RANGE=1 brackets the LAST epoch with cuProfilerStart/Stop, so
+            // `nsys profile --capture-range=cudaProfilerApi` records steady-state steps only (the twin does the same).
+            var profileEpoch = BenchStats.ProfileRangeRequested && epoch == options.Epochs - 1;
+            if (profileEpoch) { BenchStats.SynchronizeDevice(); BenchStats.ProfilerStart(); }
             var epochTimer = Stopwatch.StartNew();
             for (var batch = 0; batch < options.TrainBatches; batch++)
             {
@@ -238,6 +242,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             }
             BenchStats.SynchronizeDevice();
             epochTimer.Stop();
+            if (profileEpoch) BenchStats.ProfilerStop();
             epochSeconds.Add(epochTimer.Elapsed.TotalSeconds);
         }
 
@@ -418,6 +423,10 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
     /// <summary>The PyTorch twin's module prefix for each parameter-bearing layer, in layer order (benchmark.py names).</summary>
     protected abstract IReadOnlyList<string> PyTorchModulePrefixes { get; }
 
+    /// <summary>True when Predict returns class probabilities rather than logits (Transformer re-applies softmax when
+    /// its head emits logits); the step-1 check then compares in probability space.</summary>
+    protected virtual bool PredictReturnsProbabilities => false;
+
     /// <summary>
     /// Loads the twin's initial weights, then checks this network computes what PyTorch computed on the reference
     /// batch: the logits at the initial weights (forward + weights), and the change in logits after one Train step
@@ -426,6 +435,10 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
     /// </summary>
     public Step1Result VerifyStep1(string referenceDir, string name)
     {
+        // AIDOTNET_PARITY_LAYERS=1: list the layer stack, to pair it with the twin's module prefixes.
+        if (Environment.GetEnvironmentVariable("AIDOTNET_PARITY_LAYERS") == "1")
+            foreach (var layer in Network.Layers)
+                Console.WriteLine($"[step1] {name} layer {layer.GetType().Name.Split('`')[0]} tensors={(layer is AiDotNet.NeuralNetworks.Layers.LayerBase<float> lb ? lb.GetTrainableParameters().Count : -1)} params={layer.ParameterCount}");
         var weights = AiDotNet.Agentic.Models.Local.SafetensorsReader.Read(
             File.ReadAllBytes(Path.Combine(referenceDir, $"{name}.weights.safetensors")));
         AiDotNet.Agentic.Models.Local.PyTorchStateDictImporter.Import(Network, weights, PyTorchModulePrefixes);
@@ -442,6 +455,11 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
 
         var ref0 = reference.ReadAsDouble("logits0");
         var ref1 = reference.ReadAsDouble("logits1");
+        if (PredictReturnsProbabilities)
+        {
+            ref0 = SoftmaxRows(ref0, OutputClasses);
+            ref1 = SoftmaxRows(ref1, OutputClasses);
+        }
         var refLoss = reference.ReadAsDouble("loss0")[0];
 
         // Diagnostic A/B (AIDOTNET_PARITY_EAGER=1): run the step on the eager tape instead of the fused compiled
@@ -455,6 +473,16 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
         var ours0 = Network.Predict(input).ToVector().Select(v => (double)v).ToArray();
         Network.Train(input, labels);
         var trainLoss = Convert.ToDouble(Network.GetLastLoss());
+        // AIDOTNET_PARITY_TRAIN_STEPS=N (diagnostic): keep training on the same batch and print the loss, to tell "the
+        // step never applies" from "step 1 is special". The step-1 comparison below is only meaningful at the default 1.
+        if (int.TryParse(Environment.GetEnvironmentVariable("AIDOTNET_PARITY_TRAIN_STEPS"), out var extraSteps) && extraSteps > 1)
+        {
+            for (var s = 2; s <= extraSteps; s++)
+            {
+                Network.Train(input, labels);
+                Console.WriteLine($"[step1] {name} step {s} loss {Convert.ToDouble(Network.GetLastLoss()):F6}");
+            }
+        }
         var ours1 = Network.Predict(input).ToVector().Select(v => (double)v).ToArray();
 
         // Localize a step mismatch: load PyTorch's post-step weights through the same importer and compare each
@@ -492,7 +520,8 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
         }
 
         var forwardMaxAbs = ours0.Zip(ref0, (a, b) => Math.Abs(a - b)).Max();
-        var ourLoss = CrossEntropy(ours0, classes, OutputClasses);
+        // CrossEntropy log-softmaxes its input; log-softmax of log-probabilities is the identity, so log(p) is exact.
+        var ourLoss = CrossEntropy(PredictReturnsProbabilities ? ours0.Select(p => Math.Log(Math.Max(p, 1e-300))).ToArray() : ours0, classes, OutputClasses);
         var ourDelta = ours1.Zip(ours0, (a, b) => a - b).ToArray();
         var refDelta = ref1.Zip(ref0, (a, b) => a - b).ToArray();
         var dot = ourDelta.Zip(refDelta, (a, b) => a * b).Sum();
@@ -501,6 +530,20 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
         var cosine = dot / Math.Max(ourNorm * refNorm, double.Epsilon);
         var relError = Math.Sqrt(ourDelta.Zip(refDelta, (a, b) => (a - b) * (a - b)).Sum()) / Math.Max(refNorm, double.Epsilon);
         return new Step1Result(name, forwardMaxAbs, ourLoss, refLoss, cosine, relError, layerReport);
+    }
+
+    private static double[] SoftmaxRows(double[] logits, int numClasses)
+    {
+        var result = new double[logits.Length];
+        for (var row = 0; row < logits.Length / numClasses; row++)
+        {
+            var max = double.NegativeInfinity;
+            for (var c = 0; c < numClasses; c++) max = Math.Max(max, logits[row * numClasses + c]);
+            double sum = 0;
+            for (var c = 0; c < numClasses; c++) sum += result[row * numClasses + c] = Math.Exp(logits[row * numClasses + c] - max);
+            for (var c = 0; c < numClasses; c++) result[row * numClasses + c] /= sum;
+        }
+        return result;
     }
 
     private static double CrossEntropy(double[] logits, double[] classes, int numClasses)
@@ -711,6 +754,7 @@ internal sealed class AiDotNetTransformerModel : AiDotNetBenchmarkModel
     public AiDotNetTransformerModel(int seed) : base(seed) { }
     protected override int[] InputShapePerSample => new[] { 32, 32 };
     protected override int OutputClasses => 10;
+    protected override bool PredictReturnsProbabilities => true;
     protected override IReadOnlyList<string> PyTorchModulePrefixes => ["proj", "encoder.layers.0", "encoder.layers.1", "head"];
     protected override NeuralNetworkBase<float> BuildNetwork()
     {
@@ -851,6 +895,15 @@ internal static class BenchStats
         if (AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine gpu)
             gpu.SynchronizeStream();
     }
+
+    public static bool ProfileRangeRequested => Environment.GetEnvironmentVariable("PROFILE_RANGE") == "1";
+
+    // CUDA profiler capture range; a no-op on the CPU engine (nvcuda.dll may not even exist there).
+    public static void ProfilerStart() { if (DeviceName == "cuda") cuProfilerStart(); }
+    public static void ProfilerStop() { if (DeviceName == "cuda") cuProfilerStop(); }
+
+    [System.Runtime.InteropServices.DllImport("nvcuda.dll")] private static extern int cuProfilerStart();
+    [System.Runtime.InteropServices.DllImport("nvcuda.dll")] private static extern int cuProfilerStop();
 
     public static double Quantile(IReadOnlyList<double> sorted, double q)
     {

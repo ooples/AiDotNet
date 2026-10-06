@@ -7132,6 +7132,37 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     internal int ParameterVectorLength => FillParameters(null, 0);
 
     /// <summary>
+    /// Appends this layer's slice of the flat parameter vector as segments, in exactly the order
+    /// <see cref="FillParameters"/> writes them: own trainable tensors and buffers, then sublayers recursively,
+    /// frozen sublayers skipped. <c>Tensor</c> is null where the values are not backed by a <c>Tensor&lt;T&gt;</c>
+    /// (a low-precision buffer or a sublayer that is not a <see cref="LayerBase{T}"/>). Lets callers that address
+    /// weights by tensor (such as a checkpoint importer) place values without re-deriving the layout.
+    /// </summary>
+    internal void AppendFlatParameterLayout(List<(Tensor<T>? Tensor, int Length, bool IsBuffer)> segments)
+    {
+        var components = GetOrderedParameterComponents();
+        for (int i = 0; i < components.Length; i++)
+        {
+            var component = components[i];
+            if (component.Kind is DeclaredParameterComponentKind.Trainable
+                or DeclaredParameterComponentKind.Buffer)
+            {
+                segments.Add((component.LowPrecisionTensor is null ? component.Tensor : null,
+                    ParameterComponentScalarCount(component),
+                    component.Kind == DeclaredParameterComponentKind.Buffer));
+                continue;
+            }
+
+            var sub = component.Layer;
+            if (sub is null || IsSubLayerParameterFrozen(sub)) continue;
+            if (sub is LayerBase<T> layerBase)
+                layerBase.AppendFlatParameterLayout(segments);
+            else
+                segments.Add((null, sub.GetParameters().Length, false));
+        }
+    }
+
+    /// <summary>
     /// Enumerates live persistent parameter/buffer storage identities and mutation versions without
     /// producing parameter values, projected sparse payloads, or fp16 conversion snapshots.
     /// </summary>
@@ -7341,7 +7372,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </para>
     /// </remarks>
     private int FillParameterGradients(
-        Vector<T>? dest,
+        T[]? dest,
         int offset,
         IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads,
         ref int matched)
@@ -7367,8 +7398,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                     && gradient is not null
                     && TrainableScalarCount(gradient) == count)
                 {
-                    for (int j = 0; j < count; j++)
-                        dest[offset++] = ReadTrainableScalar(gradient, j);
+                    // One bulk copy for a dense contiguous gradient. The per-scalar read below went through
+                    // GetFlat's host-sync checks once per element: on a GPU MLP that loop was 32.5% of the
+                    // training step, on the CPU most of ~20%. Sparse payloads and strided views keep the
+                    // exact per-scalar path, so every value lands where it did before.
+                    if (gradient is not SparseTensor<T> && gradient.IsContiguous)
+                    {
+                        gradient.AsSpan().Slice(0, count).CopyTo(dest.AsSpan(offset, count));
+                        offset += count;
+                    }
+                    else
+                    {
+                        for (int j = 0; j < count; j++)
+                            dest[offset++] = ReadTrainableScalar(gradient, j);
+                    }
                     matched += count;
                 }
                 else
@@ -7433,7 +7476,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         int total = FillParameterGradients(null, 0, grads, ref ignored);
         if (total <= 0) return 0;
 
-        var filled = new Vector<T>(total);
+        var filled = new T[total];
         int matched = 0;
         FillParameterGradients(filled, 0, grads, ref matched);
 
@@ -7441,7 +7484,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // "never computed" rather than a vector of manufactured zeros.
         if (matched == 0) return 0;
 
-        ParameterGradients = filled;
+        ParameterGradients = new Vector<T>(filled);
         return matched;
     }
 
