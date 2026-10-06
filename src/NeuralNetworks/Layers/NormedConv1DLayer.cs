@@ -63,6 +63,8 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _bias;
     [Buffer]
     private Tensor<T> _u;
+    [Buffer]
+    private Tensor<T> _v;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -133,21 +135,28 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
             }
             _gain[r] = NumOps.FromDouble(Math.Sqrt(sum));
         }
-        // Spectral norm's u ~ N(0, 1), normalized (torch.nn.utils.spectral_norm).
-        _u = new Tensor<T>(new[] { rows });
-        double norm = 0;
-        for (int r = 0; r < rows; r++)
-        {
-            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
-            double g = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
-            _u[r] = NumOps.FromDouble(g);
-            norm += g * g;
-        }
-        for (int r = 0; r < rows; r++) _u[r] = NumOps.FromDouble(NumOps.ToDouble(_u[r]) / Math.Max(Math.Sqrt(norm), 1e-12));
+        // Spectral norm's u ~ N(0, 1) and v ~ N(0, 1), each normalized (torch.nn.utils.spectral_norm).
+        _u = NormalizedGaussian(rows, random);
+        _v = NormalizedGaussian(per, random);
 
         RegisterTrainableParameter(_direction, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_gain, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
+    }
+
+    private Tensor<T> NormalizedGaussian(int length, Random random)
+    {
+        var result = new Tensor<T>(new[] { length });
+        var values = new double[length];
+        double norm = 0;
+        for (int i = 0; i < length; i++)
+        {
+            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
+            values[i] = Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
+            norm += values[i] * values[i];
+        }
+        for (int i = 0; i < length; i++) result[i] = NumOps.FromDouble(values[i] / Math.Max(Math.Sqrt(norm), 1e-12));
+        return result;
     }
 
     /// <inheritdoc />
@@ -257,24 +266,27 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
             return Engine.Reshape(Engine.TensorMultiply(v, scale), _direction._shape);
         }
 
-        // One power iteration (training only, as torch does), then σ = uᵀ V v with u and v held constant.
-        var vHost = v.ToVector();
+        // Miyato et al. 2018, Algorithm 1 (torch.nn.utils.spectral_norm): in training, one power iteration
+        // v ← Vᵀu / ‖Vᵀu‖, then u ← V v / ‖V v‖, both kept; σ = uᵀ V v with u and v held constant. Evaluation uses the
+        // stored u and v unchanged.
         double[] uVec = new double[rows], vVec = new double[per];
         for (int r = 0; r < rows; r++) uVec[r] = NumOps.ToDouble(_u[r]);
-        void Normalize(double[] a)
-        {
-            double n = Math.Sqrt(a.Sum(x => x * x));
-            for (int i = 0; i < a.Length; i++) a[i] /= Math.Max(n, 1e-12);
-        }
-        for (int c = 0; c < per; c++)
-        {
-            double s = 0;
-            for (int r = 0; r < rows; r++) s += NumOps.ToDouble(vHost[r * per + c]) * uVec[r];
-            vVec[c] = s;
-        }
-        Normalize(vVec);
+        for (int c = 0; c < per; c++) vVec[c] = NumOps.ToDouble(_v[c]);
         if (IsTrainingMode)
         {
+            var vHost = v.ToVector();
+            void Normalize(double[] a)
+            {
+                double n = Math.Sqrt(a.Sum(x => x * x));
+                for (int i = 0; i < a.Length; i++) a[i] /= Math.Max(n, 1e-12);
+            }
+            for (int c = 0; c < per; c++)
+            {
+                double s = 0;
+                for (int r = 0; r < rows; r++) s += NumOps.ToDouble(vHost[r * per + c]) * uVec[r];
+                vVec[c] = s;
+            }
+            Normalize(vVec);
             for (int r = 0; r < rows; r++)
             {
                 double s = 0;
@@ -283,14 +295,9 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
             }
             Normalize(uVec);
             for (int r = 0; r < rows; r++) _u[r] = NumOps.FromDouble(uVec[r]);
+            for (int c = 0; c < per; c++) _v[c] = NumOps.FromDouble(vVec[c]);
             Engine.InvalidatePersistentTensor(_u);
-            for (int c = 0; c < per; c++)
-            {
-                double s = 0;
-                for (int r = 0; r < rows; r++) s += NumOps.ToDouble(vHost[r * per + c]) * uVec[r];
-                vVec[c] = s;
-            }
-            Normalize(vVec);
+            Engine.InvalidatePersistentTensor(_v);
         }
         var uT = new Tensor<T>(new[] { 1, rows });
         var vT = new Tensor<T>(new[] { per, 1 });

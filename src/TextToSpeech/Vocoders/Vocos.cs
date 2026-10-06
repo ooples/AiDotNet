@@ -67,6 +67,11 @@ public partial class Vocos<T> : GanVocoderBase<T>
     public override int UpsampleFactor => PaperOptions.HopSize;
 
     /// <inheritdoc />
+    /// <remarks>The ISTFT head uses the reference's <c>padding: center</c> (configs/vocos.yaml), so T mel frames give
+    /// <c>(T − 1) · hop</c> samples, the length of the clip they were computed from.</remarks>
+    protected override int WaveformLengthOffset => -UpsampleFactor;
+
+    /// <inheritdoc />
     protected override int SegmentSize => PaperOptions.SegmentSize;
 
     /// <inheritdoc />

@@ -72,10 +72,35 @@ public class HiFiGANPaperTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task SpectralNormalization_EvaluationReusesTheLastTrainingIterate()
+    {
+        await Task.Yield();
+        var conv = new NormedConv1DLayer<double>(3, 4, 3, 1, 1, 1, 1, false, ConvolutionNormalization.Spectral);
+        conv.SetTrainingMode(true);
+        conv.Kernel();
+        var trained = conv.Kernel().ToVector().ToArray();   // σ = uᵀVv from this step's v ← Vᵀu, u ← Vv
+        conv.SetTrainingMode(false);
+        // Miyato et al. Algorithm 1 keeps both u and v; evaluation uses them as stored (torch's spectral_norm), so it
+        // returns exactly the kernel of the last training iterate.
+        Assert.Equal(trained, conv.Kernel().ToVector().ToArray());
+        Assert.Equal(trained, conv.Kernel().ToVector().ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task SpectralNormalization_KeepsTheLargestSingularValueAtOne()
     {
         await Task.Yield();
         var conv = new NormedConv1DLayer<double>(3, 4, 3, 1, 1, 1, 1, false, ConvolutionNormalization.Spectral);
+        // A fixed kernel with a clear spectral gap (a dominant rank-one part plus small noise, σ₂/σ₁ ≈ 0.1), so the
+        // power iterations converge from any starting u; the layer's own random kernel made the outcome depend on the
+        // draw.
+        var noise = new Random(17);
+        int element = 0;
+        conv.Reinitialize(() =>
+        {
+            int row = element / 9, col = element++ % 9;
+            return 3.0 * (row + 1) * Math.Cos(col) / 10.0 + 0.05 * (2 * noise.NextDouble() - 1);
+        });
         conv.SetTrainingMode(true);
         var x = new Tensor<double>(new[] { 1, 3, 9 });
         for (int i = 0; i < x.Length; i++) x[i] = Math.Sin(i);

@@ -183,9 +183,12 @@ public abstract class CloudTtsClientBase<T> : ITtsModel<T>, IDisposable
                 if ((status == 429 || status >= 500) && attempt < Settings.MaxRetries)
                 {
                     var retryAfter = response.Headers.RetryAfter;
-                    int wait = retryAfter?.Delta is TimeSpan d ? (int)d.TotalMilliseconds
-                        : retryAfter?.Date is DateTimeOffset at ? (int)Math.Max(0, (at - DateTimeOffset.UtcNow).TotalMilliseconds)
+                    double requested = retryAfter?.Delta is TimeSpan d ? d.TotalMilliseconds
+                        : retryAfter?.Date is DateTimeOffset at ? (at - DateTimeOffset.UtcNow).TotalMilliseconds
                         : delay;
+                    // A server's Retry-After is honoured up to the request timeout: a longer one (or one past int's range)
+                    // would otherwise stall the call far beyond what the caller configured.
+                    int wait = (int)Math.Min(Math.Max(0, requested), Math.Min(Settings.TimeoutSeconds * 1000.0, int.MaxValue));
                     await Task.Delay(wait, cancellationToken).ConfigureAwait(false);
                     delay *= 2;
                     continue;

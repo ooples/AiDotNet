@@ -244,6 +244,22 @@ public class CloudTtsClientTests
     }
 
     [Fact(Timeout = 30000)]
+    public async Task RetryAfter_IsCappedAtTheRequestTimeout()
+    {
+        // A day-long Retry-After would otherwise hold the call for a day; it waits at most TimeoutSeconds.
+        var handler = new FakeHandler()
+            .Respond((HttpStatusCode)429, Encoding.UTF8.GetBytes("slow down"), "text/plain", TimeSpan.FromDays(1))
+            .Respond(HttpStatusCode.OK, Pcm16(16384), "audio/pcm");
+        using var client = new ElevenLabsTTS<double>(
+            new ElevenLabsTTSOptions { ApiKey = "k", InitialRetryDelayMs = 0, TimeoutSeconds = 0.5 }, new HttpClient(handler));
+        var watch = System.Diagnostics.Stopwatch.StartNew();
+        var wave = await client.SynthesizeAsync("Hello");
+        Assert.True(watch.Elapsed < TimeSpan.FromSeconds(20), $"The retry waited {watch.Elapsed}.");
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Equal(0.5, wave[0]);
+    }
+
+    [Fact(Timeout = 30000)]
     public async Task ClientErrors_AreReportedWithTheVendorsMessage()
     {
         var handler = new FakeHandler().Respond(HttpStatusCode.Unauthorized, Encoding.UTF8.GetBytes("{\"detail\":\"invalid api key\"}"), "application/json");

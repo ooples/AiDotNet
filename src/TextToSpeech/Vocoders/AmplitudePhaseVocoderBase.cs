@@ -65,6 +65,10 @@ public abstract partial class AmplitudePhaseVocoderBase<T> : GanVocoderBase<T>
     public override int UpsampleFactor => Settings.HopSize;
 
     /// <inheritdoc />
+    /// <remarks>The reference synthesizes with <c>torch.istft(center=True)</c>: T frames give <c>(T − 1) · hop</c> samples.</remarks>
+    protected override int WaveformLengthOffset => -UpsampleFactor;
+
+    /// <inheritdoc />
     protected override int SegmentSize => Settings.SegmentSize;
 
     /// <inheritdoc />
