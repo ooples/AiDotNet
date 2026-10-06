@@ -186,7 +186,11 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         //
         // Clamped at one so an all-ignored batch yields zero instead of dividing by zero; the
         // numerator is zero in that case regardless.
-        var safeCount = Engine.TensorClampMin(supervised, NumOps.One);
+        //
+        // The count depends only on the target, which carries no gradient, so it is detached: the backward then
+        // never walks Abs/ReduceSum/Sign/ClampMin. Differentiating them was wasted work every step, and SignBackward
+        // accumulates a host zero tensor whose upload aborted CUDA graph capture of every classifier's training step.
+        var safeCount = Engine.StopGradient(Engine.TensorClampMin(supervised, NumOps.One));
 
         return Engine.TensorNegate(Engine.TensorDivide(total, safeCount));
     }
