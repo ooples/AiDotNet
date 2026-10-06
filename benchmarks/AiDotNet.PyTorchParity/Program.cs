@@ -445,12 +445,11 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
         var refLoss = reference.ReadAsDouble("loss0")[0];
 
         // Diagnostic A/B (AIDOTNET_PARITY_EAGER=1): run the step on the eager tape instead of the fused compiled
-        // plan, to tell a fused-plan defect from a backward defect. The switch is protected, hence reflection.
+        // plan, to tell a fused-plan defect from a backward defect.
         if (Environment.GetEnvironmentVariable("AIDOTNET_PARITY_EAGER") == "1")
         {
-            typeof(NeuralNetworkBase<float>).GetProperty("IsFusedTrainingDisabled",
-                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-                ?.SetValue(Network, true);
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(
+                new AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions { EnableCompilation = false });
         }
         var init = Network.GetParameters().Select(v => (double)v).ToArray();
         var ours0 = Network.Predict(input).ToVector().Select(v => (double)v).ToArray();
@@ -695,9 +694,12 @@ internal sealed class AiDotNetLstmModel : AiDotNetBenchmarkModel
             new DenseLayer<float>(10, activationFunction: (IActivationFunction<float>?)null),
         };
         var arch = new NeuralNetworkArchitecture<float>(
-            inputType: InputType.OneDimensional,
+            // [sequence 32, features 32]: a OneDimensional/inputSize 32 architecture resolves the LSTM's shape contract
+            // from a rank-1 [32] input, declaring [1, 64] where the layer returns [B, 32, 64]; eager training rejects that.
+            inputType: InputType.TwoDimensional,
             taskType: NeuralNetworkTaskType.MultiClassClassification,
-            inputSize: 32,
+            inputHeight: 32,
+            inputWidth: 32,
             outputSize: 10,
             layers: layers);
         return new LSTMNeuralNetwork<float>(arch, lossFunction: new CrossEntropyWithLogitsLoss<float>(), outputActivation: (IActivationFunction<float>?)null);

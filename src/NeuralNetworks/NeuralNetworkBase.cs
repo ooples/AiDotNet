@@ -7406,6 +7406,34 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     internal int GetExpectedUnbatchedInputRankInternal() => GetExpectedUnbatchedInputRank();
 
+    private Type? _sequenceProbeLayerType;
+    private bool _sequenceProbeResult;
+
+    /// <summary>
+    /// Whether the first layer declares a <c>[Time, Features]</c> unbatched input layout (LSTM, GRU and the
+    /// other recurrent/sequence layers). Cached per first-layer type: this runs on every training step.
+    /// </summary>
+    private bool FirstLayerTakesUnbatchedSequence()
+    {
+        if (Layers.Count == 0) return false;
+        var type = Layers[0].GetType();
+        if (type == _sequenceProbeLayerType) return _sequenceProbeResult;
+
+        bool result = false;
+        foreach (var layout in ShapeInference.InputLayouts(type))
+        {
+            if (layout.Axes is [TensorAxis.Time, TensorAxis.Features])
+            {
+                result = true;
+                break;
+            }
+        }
+
+        _sequenceProbeResult = result;
+        _sequenceProbeLayerType = type;
+        return result;
+    }
+
     private int GetExpectedUnbatchedInputRank()
     {
         if (Architecture is null) return 0;
@@ -7420,6 +7448,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 && Architecture.InputHeight > 0
                 && Architecture.InputWidth > 0)
                 return 4;
+            // Sequence layers on a [seq, F] architecture: a TwoDimensional architecture fills InputHeight
+            // and InputWidth too, which the vision rule below reads as [C, H, W] -- so a batched
+            // [B, seq, F] training input looked unbatched and was promoted to [1, B, seq, F]. A first
+            // layer that declares a [Time, Features] unbatched input layout settles it: rank 2.
+            if (FirstLayerTakesUnbatchedSequence())
+                return 2;
             // Vision / spatial: InputHeight > 0 means [C, H, W] is the
             // unbatched layout (rank 3). InputDepth defaults to 1 when not
             // explicitly set on a TwoDimensional arch — paper-faithful CNN
