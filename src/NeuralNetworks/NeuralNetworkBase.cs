@@ -13838,7 +13838,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             foreach (var wtensor in Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion))
             {
-                if (updatedOnDevice && wtensor.IsGpuResident && wtensor.TryGetGpuBuffer() is not null)
+                // HasPendingGpuData, not IsGpuResident: IsGpuResident reads only the device tag, which an ordinary
+                // parameter whose device copy the plan just updated (and re-armed for a lazy host download) does not
+                // carry. Testing it invalidated every such parameter, dropping the device update: GPU training lost its
+                // first two updates whenever the weights were already resident at step 1 (one Predict was enough).
+                if (updatedOnDevice && wtensor.HasPendingGpuData && wtensor.TryGetGpuBuffer() is not null)
                     continue;
                 gpuForInvalidate.InvalidateResidentWeightBuffer(wtensor);
             }
