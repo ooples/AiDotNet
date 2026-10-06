@@ -310,7 +310,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 _parameterGradients = MaterializeParameterGradients(owned);
             }
             // Anything that reads the published vector may keep it, so the next publish must not refill it.
-            if (_parameterGradients is not null && ReferenceEquals(_parameterGradients, _scatterVector))
+            if (_parameterGradients is not null && (object)_parameterGradients == _scatterVector)
                 _scatterVectorHandedOut = true;
             return _parameterGradients;
         }

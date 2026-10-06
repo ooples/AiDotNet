@@ -68,7 +68,7 @@ public static class PyTorchStateDictImporter
                 "prefixes were given; pass exactly one PyTorch module prefix per parameter-bearing layer.");
         }
 
-        var values = new Dictionary<Tensor<T>, double[]>(new TensorIdentityComparer<T>());
+        var values = new Dictionary<Tensor<T>, double[]>(AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
         for (int i = 0; i < parameterLayers.Count; i++)
             ConvertLayer(parameterLayers[i], modulePrefixes[i], source, values);
 
@@ -303,13 +303,6 @@ public static class PyTorchStateDictImporter
     private static InvalidOperationException LayoutMismatch<T>(LayerBase<T> layer) =>
         new($"The model's flat parameter vector is not the per-layer concatenation of trainable tensors at " +
             $"{layer.GetType().Name}; the PyTorch importer cannot place its weights safely.");
-
-    // Keys are the layer's own tensor objects; value equality would conflate distinct parameters.
-    private sealed class TensorIdentityComparer<T> : IEqualityComparer<Tensor<T>>
-    {
-        public bool Equals(Tensor<T>? x, Tensor<T>? y) => ReferenceEquals(x, y);
-        public int GetHashCode(Tensor<T> obj) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
-    }
 
     private static string ShapeText<T>(Tensor<T> tensor)
     {
