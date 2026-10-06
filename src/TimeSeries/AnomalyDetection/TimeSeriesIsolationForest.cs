@@ -93,7 +93,7 @@ public partial class TimeSeriesIsolationForest<T> : TimeSeriesModelBase<T>
         : base(options ??= new TimeSeriesIsolationForestOptions<T>())
     {
         _options = options;
-        _random = RandomHelper.CreateSeededRandom(_options.RandomSeed ?? 42);
+        _random = RandomHelper.CreateSeededRandom(_options.Seed ?? 42);
         _featureMean = _numOps.Zero;
         _featureStd = _numOps.One;
     }

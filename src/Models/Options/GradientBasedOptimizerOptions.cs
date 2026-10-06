@@ -54,7 +54,7 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
         DataSampler = other.DataSampler;
         ShuffleData = other.ShuffleData;
         DropLastBatch = other.DropLastBatch;
-        RandomSeed = other.RandomSeed;
+        Seed = other.Seed;
         EnableGradientClipping = other.EnableGradientClipping;
         GradientClippingMethod = other.GradientClippingMethod;
         MaxGradientNorm = other.MaxGradientNorm;
@@ -140,7 +140,7 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
         DataSampler = other.DataSampler;
         ShuffleData = other.ShuffleData;
         DropLastBatch = other.DropLastBatch;
-        RandomSeed = other.RandomSeed;
+        Seed = other.Seed;
         EnableGradientClipping = other.EnableGradientClipping;
         GradientClippingMethod = other.GradientClippingMethod;
         MaxGradientNorm = other.MaxGradientNorm;
@@ -337,20 +337,6 @@ public class GradientBasedOptimizerOptions<T, TInput, TOutput> : OptimizationAlg
     /// </para>
     /// </remarks>
     public bool DropLastBatch { get; set; } = false;
-
-    /// <summary>
-    /// Gets or sets the random seed for reproducibility.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Setting a seed ensures the same random sequence is generated for shuffling and sampling,
-    /// making experiments reproducible.
-    /// </para>
-    /// <para><b>For Beginners:</b> Like a recipe, a seed lets you recreate the exact same training run.
-    /// This is useful for debugging and comparing different model configurations.
-    /// </para>
-    /// </remarks>
-    public int? RandomSeed { get; set; }
 
     /// <summary>
     /// Gets or sets whether gradient clipping is enabled.

@@ -158,7 +158,7 @@ public class RandomizedSmoothingTests
             NoiseSigma = 0.5,
             NumSamples = 100,
             ConfidenceLevel = 0.95,
-            RandomSeed = 42
+            Seed = 42
         };
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
         var model = new MockPredictiveModel();
@@ -212,7 +212,7 @@ public class RandomizedSmoothingTests
             NoiseSigma = 0.5,
             NumSamples = 100,
             ConfidenceLevel = 0.95,
-            RandomSeed = 42
+            Seed = 42
         };
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
@@ -237,7 +237,7 @@ public class RandomizedSmoothingTests
             NoiseSigma = 0.5,
             NumSamples = 100,
             ConfidenceLevel = 0.95,
-            RandomSeed = 42
+            Seed = 42
         };
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
@@ -263,7 +263,7 @@ public class RandomizedSmoothingTests
             NoiseSigma = 0.5,
             NumSamples = 100,
             ConfidenceLevel = 0.95,
-            RandomSeed = 42
+            Seed = 42
         };
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
@@ -291,7 +291,7 @@ public class RandomizedSmoothingTests
             NoiseSigma = sigma,
             NumSamples = 100,
             ConfidenceLevel = 0.95,
-            RandomSeed = 42
+            Seed = 42
         };
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
@@ -331,7 +331,7 @@ public class RandomizedSmoothingTests
             NoiseSigma = 0.5,
             NumSamples = 50,
             ConfidenceLevel = 0.95,
-            RandomSeed = 42
+            Seed = 42
         };
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var inputs = CreateInputs(5, 3, 0.5); // 5 samples, 3 features
@@ -362,7 +362,7 @@ public class RandomizedSmoothingTests
             NoiseSigma = 0.5,
             NumSamples = 100,
             ConfidenceLevel = 0.95,
-            RandomSeed = 42
+            Seed = 42
         };
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var input = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
@@ -445,7 +445,7 @@ public class RandomizedSmoothingTests
             NoiseSigma = 0.5,
             NumSamples = 50,
             ConfidenceLevel = 0.95,
-            RandomSeed = 42
+            Seed = 42
         };
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
 
@@ -477,7 +477,7 @@ public class RandomizedSmoothingTests
             NoiseSigma = 0.5,
             NumSamples = 50,
             ConfidenceLevel = 0.95,
-            RandomSeed = 42
+            Seed = 42
         };
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
 
@@ -602,7 +602,7 @@ public class RandomizedSmoothingTests
             NoiseSigma = 0.5,
             NumSamples = 50,
             ConfidenceLevel = 0.95,
-            RandomSeed = 42
+            Seed = 42
         };
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
 
@@ -628,7 +628,7 @@ public class RandomizedSmoothingTests
             NoiseSigma = 0.5,
             NumSamples = 50,
             ConfidenceLevel = 0.95,
-            RandomSeed = 42
+            Seed = 42
         };
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
 
@@ -657,7 +657,7 @@ public class RandomizedSmoothingTests
             NoiseSigma = 0.5,
             NumSamples = 100,
             ConfidenceLevel = 0.95,
-            RandomSeed = 42
+            Seed = 42
         };
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
         var model = new MockPredictiveModel(numClasses: 3, dominantClass: 0, dominantProbability: 0.95);

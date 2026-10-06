@@ -56,6 +56,7 @@ public class DiffusionModelOptions<T> : ModelOptions
         LossFunction = other.LossFunction;
         UseGpuExecutionGraph = other.UseGpuExecutionGraph;
         LatentChannels = other.LatentChannels;
+        TrainingSampleSpace = other.TrainingSampleSpace;
     }
 
     /// <summary>
@@ -136,6 +137,27 @@ public class DiffusionModelOptions<T> : ModelOptions
     /// </remarks>
     public int? LatentChannels { get; set; }
 
+    /// <summary>
+    /// Gets or sets what a latent diffusion model's training sample is: an image to encode, or a latent.
+    /// </summary>
+    /// <value>
+    /// <see cref="DiffusionTrainingSampleSpace.Image"/> by default: each sample is encoded by the VAE to the
+    /// scaled latent the denoiser trains on (Rombach et al. 2022, section 3.3).
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// The model is told rather than left to guess from the tensor. A guess from the channel count fails
+    /// whenever the image and the latent have the same depth (Imagen, DALL-E 2 and DeepFloyd IF use three of
+    /// each), and then images reach the denoiser as pixels while generation runs it on latents.
+    /// </para>
+    /// <para>
+    /// Set <see cref="DiffusionTrainingSampleSpace.Latent"/> when the training data is already encoded, for
+    /// example latents cached once to skip the VAE on every step. Ignored by models that diffuse in pixel space.
+    /// </para>
+    /// <para><b>For Beginners:</b> Leave this alone and train on your images. Change it only if you have
+    /// already run your images through the model's VAE yourself.</para>
+    /// </remarks>
+    public DiffusionTrainingSampleSpace TrainingSampleSpace { get; set; } = DiffusionTrainingSampleSpace.Image;
     /// <summary>
     /// Gets or sets the starting beta value (noise variance at t=0).
     /// </summary>

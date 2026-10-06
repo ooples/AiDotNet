@@ -130,7 +130,7 @@ public sealed class DetectionSeedingTests
     {
         "YOLOv8" => (new YOLOv8<double>(new ObjectDetectionOptions<double>
         {
-            InputSize = new[] { 64, 64 }, Size = ModelSize.Nano, NumClasses = 2, RandomSeed = seed
+            InputSize = new[] { 64, 64 }, Size = ModelSize.Nano, NumClasses = 2, Seed = seed
         }), Image(3, 64, 64)),
         "DBNet" => (new DBNet<double>(new TextDetectionOptions<double>
         {

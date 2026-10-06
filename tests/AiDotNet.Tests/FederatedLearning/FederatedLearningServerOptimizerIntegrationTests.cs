@@ -41,7 +41,7 @@ public class FederatedLearningServerOptimizerIntegrationTests
                 Beta2 = 0.999,
                 Epsilon = 1e-8
             },
-            RandomSeed = 123,
+            Seed = 123,
             MinRoundsBeforeConvergence = 100,
             ConvergenceThreshold = 0.0
         };

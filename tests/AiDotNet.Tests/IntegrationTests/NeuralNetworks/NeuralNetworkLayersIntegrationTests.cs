@@ -411,8 +411,10 @@ public class NeuralNetworkLayersIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task DropoutLayer_TrainingMode_AppliesDropout()
     {
-        // Arrange
-        var layer = new DropoutLayer<double>(0.5);
+        // Arrange. The seed is pinned: unseeded, the layer drew one from whatever construction scope an earlier
+        // test left armed on the thread, so the mask - and whether its zero count landed in the ~0.4% binomial
+        // tail outside the window below - depended on test order.
+        var layer = new DropoutLayer<double>(0.5) { RandomSeed = 2292 };
         layer.SetTrainingMode(true);
 
         var input = new Tensor<double>([1, 100]); // Larger tensor for statistical significance

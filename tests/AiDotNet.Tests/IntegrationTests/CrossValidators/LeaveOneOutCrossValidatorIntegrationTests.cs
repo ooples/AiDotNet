@@ -74,7 +74,7 @@ public class LeaveOneOutCrossValidatorIntegrationTests
         var options = new CrossValidationOptions
         {
             ShuffleData = false,
-            RandomSeed = 42
+            Seed = 42
         };
 
         // Act
@@ -293,7 +293,7 @@ public class LeaveOneOutCrossValidatorIntegrationTests
     {
         // Arrange
         var validator = new LeaveOneOutCrossValidator<double, Matrix<double>, Vector<double>>(
-            new CrossValidationOptions { ShuffleData = true, RandomSeed = 42 });
+            new CrossValidationOptions { ShuffleData = true, Seed = 42 });
         var model = CreateMockModel();
         var optimizer = new PassthroughOptimizer<double, Matrix<double>, Vector<double>>(model);
         int numSamples = 10;
@@ -327,7 +327,7 @@ public class LeaveOneOutCrossValidatorIntegrationTests
         var options = new CrossValidationOptions
         {
             ShuffleData = true,
-            RandomSeed = 42
+            Seed = 42
         };
 
         var model1 = CreateMockModel();

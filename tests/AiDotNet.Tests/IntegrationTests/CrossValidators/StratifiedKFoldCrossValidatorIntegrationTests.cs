@@ -80,7 +80,7 @@ public class StratifiedKFoldCrossValidatorIntegrationTests
         {
             NumberOfFolds = 3,
             ShuffleData = false,
-            RandomSeed = 42
+            Seed = 42
         };
 
         // Act
@@ -277,7 +277,7 @@ public class StratifiedKFoldCrossValidatorIntegrationTests
         {
             NumberOfFolds = 3,
             ShuffleData = true,
-            RandomSeed = 42
+            Seed = 42
         };
 
         var model1 = CreateMockModel();

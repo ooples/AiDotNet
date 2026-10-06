@@ -322,6 +322,93 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
         return VAE.ScaleLatent(latent);
     }
 
+    /// <summary>
+    /// What this model's training samples are: images its VAE encodes (the default), or latents already encoded.
+    /// </summary>
+    /// <remarks>
+    /// Reads and writes <see cref="DiffusionModelOptions{T}.TrainingSampleSpace"/> on the options this model was
+    /// built with, so a clone, which copies those options, keeps the setting.
+    /// </remarks>
+    public DiffusionTrainingSampleSpace TrainingSampleSpace
+    {
+        get => DiffusionOptions.TrainingSampleSpace;
+        set => DiffusionOptions.TrainingSampleSpace = value;
+    }
+
+    /// <summary>
+    /// Prepares the clean sample for a training step: the latent z = E(x) of an image, as latent
+    /// diffusion trains its denoiser (Rombach et al. 2022, section 3.3).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// With <see cref="TrainingSampleSpace"/> at <see cref="DiffusionTrainingSampleSpace.Image"/>, the sample
+    /// <c>[batch, VAE.InputChannels, height, width]</c> (or <c>[VAE.InputChannels, height, width]</c>) is encoded
+    /// by the frozen first stage with a posterior sample and scaled, exactly as <see cref="EncodeToLatent"/> does
+    /// for inference. At <see cref="DiffusionTrainingSampleSpace.Latent"/> it is noised as it is.
+    /// </para>
+    /// <para>
+    /// The space is stated, not inferred from the tensor: an image and a latent can have the same depth
+    /// (Imagen, DALL-E 2 and DeepFloyd IF use three channels for both), so a shape test would send those images
+    /// to the denoiser as pixels while <c>Generate</c> runs it on latents and decodes the result.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentException">An image sample is not laid out with the VAE's input channels, or a
+    /// latent sample does not have <see cref="LatentChannels"/> channels.</exception>
+    /// <exception cref="InvalidOperationException"><see cref="TrainingSampleSpace"/> holds a value that is not a
+    /// <see cref="DiffusionTrainingSampleSpace"/>.</exception>
+    protected override Tensor<T> PrepareTrainingSample(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        var sample = base.PrepareTrainingSample(input, expectedOutput);
+        var space = TrainingSampleSpace;
+        if (space != DiffusionTrainingSampleSpace.Image && space != DiffusionTrainingSampleSpace.Latent)
+            throw new InvalidOperationException(
+                $"{nameof(TrainingSampleSpace)} is {(int)space}, which is not a {nameof(DiffusionTrainingSampleSpace)}.");
+
+        if (space == DiffusionTrainingSampleSpace.Latent)
+        {
+            // A flattened latent ([B, C*H*W] or one [C*H*W] row) is reshaped per row by the noise predictor's
+            // EnsureLatentShape, as it was before the space was stated, so it is accepted when it splits into
+            // LatentChannels evenly.
+            if (sample.Rank <= 2)
+            {
+                int width = sample.Shape[sample.Rank - 1];
+                if (width <= 0 || width % LatentChannels != 0)
+                    throw new ArgumentException(
+                        $"A flattened latent training sample needs a width divisible by {LatentChannels} (LatentChannels); got {width}.",
+                        nameof(input));
+                return sample;
+            }
+
+            RequireChannels(sample, LatentChannels, "a latent", "LatentChannels",
+                $"or set {nameof(TrainingSampleSpace)} to {nameof(DiffusionTrainingSampleSpace.Image)} to train on images");
+            return sample;
+        }
+
+        var vae = VAE;
+        RequireChannels(sample, vae.InputChannels, "an image", "VAE.InputChannels",
+            $"or set {nameof(TrainingSampleSpace)} to {nameof(DiffusionTrainingSampleSpace.Latent)} if the samples are already encoded");
+        if (sample.Rank == 3)
+        {
+            var batched = EncodeToLatent(
+                Engine.Reshape(sample, new[] { 1, sample.Shape[0], sample.Shape[1], sample.Shape[2] }), sampleMode: true);
+            return Engine.Reshape(batched, new[] { batched.Shape[1], batched.Shape[2], batched.Shape[3] });
+        }
+
+        return EncodeToLatent(sample, sampleMode: true);
+    }
+
+    private static void RequireChannels(Tensor<T> sample, int channels, string what, string source, string remedy)
+    {
+        if (sample.Rank != 3 && sample.Rank != 4)
+            throw new ArgumentException(
+                $"A training sample for {what} must be [C, H, W] or [B, C, H, W]; got rank {sample.Rank}.", nameof(sample));
+        int found = sample.Shape[sample.Rank - 3];
+        if (found != channels)
+            throw new ArgumentException(
+                $"A training sample for {what} needs {channels} channels ({source}); got {found}. Pass {what} {remedy}.",
+                nameof(sample));
+    }
+
     /// <inheritdoc />
     public virtual Tensor<T> DecodeFromLatent(Tensor<T> latent)
     {

@@ -75,7 +75,7 @@ public class MonteCarloValidatorIntegrationTests
         {
             NumberOfFolds = 10,
             ValidationSize = 0.3,
-            RandomSeed = 42
+            Seed = 42
         };
 
         // Act
@@ -100,7 +100,7 @@ public class MonteCarloValidatorIntegrationTests
         {
             NumberOfFolds = numIterations,
             ValidationSize = 0.2,
-            RandomSeed = 42
+            Seed = 42
         };
         var validator = new MonteCarloValidator<double, Matrix<double>, Vector<double>>(options);
         var model = CreateMockModel();
@@ -130,7 +130,7 @@ public class MonteCarloValidatorIntegrationTests
         {
             NumberOfFolds = 3,
             ValidationSize = validationRatio,
-            RandomSeed = 42
+            Seed = 42
         };
         var validator = new MonteCarloValidator<double, Matrix<double>, Vector<double>>(options);
         var model = CreateMockModel();
@@ -162,7 +162,7 @@ public class MonteCarloValidatorIntegrationTests
         {
             NumberOfFolds = 3,
             ValidationSize = validationRatio,
-            RandomSeed = 42
+            Seed = 42
         };
         var validator = new MonteCarloValidator<double, Matrix<double>, Vector<double>>(options);
         var model = CreateMockModel();
@@ -193,7 +193,7 @@ public class MonteCarloValidatorIntegrationTests
         {
             NumberOfFolds = 5,
             ValidationSize = 0.2,
-            RandomSeed = 42
+            Seed = 42
         };
         var validator = new MonteCarloValidator<double, Matrix<double>, Vector<double>>(options);
         var model = CreateMockModel();
@@ -226,7 +226,7 @@ public class MonteCarloValidatorIntegrationTests
         {
             NumberOfFolds = 3,
             ValidationSize = 0.2,
-            RandomSeed = 42
+            Seed = 42
         };
         var validator = new MonteCarloValidator<double, Matrix<double>, Vector<double>>(options);
         var model = CreateMockModel();
@@ -260,7 +260,7 @@ public class MonteCarloValidatorIntegrationTests
         {
             NumberOfFolds = 5,
             ValidationSize = 0.2,
-            RandomSeed = 42
+            Seed = 42
         };
         var validator = new MonteCarloValidator<double, Matrix<double>, Vector<double>>(options);
         var model = CreateMockModel();
@@ -298,7 +298,7 @@ public class MonteCarloValidatorIntegrationTests
         {
             NumberOfFolds = 3,
             ValidationSize = 0.2,
-            RandomSeed = 42
+            Seed = 42
         };
 
         var model1 = CreateMockModel();
@@ -340,7 +340,7 @@ public class MonteCarloValidatorIntegrationTests
         {
             NumberOfFolds = 3,
             ValidationSize = 0.2,
-            RandomSeed = 42
+            Seed = 42
         };
         var validator = new MonteCarloValidator<double, Matrix<double>, Vector<double>>(options);
         var model = CreateMockModel();
@@ -377,7 +377,7 @@ public class MonteCarloValidatorIntegrationTests
         {
             NumberOfFolds = 10,  // Many iterations
             ValidationSize = 0.2,
-            RandomSeed = 42
+            Seed = 42
         };
         var validator = new MonteCarloValidator<double, Matrix<double>, Vector<double>>(options);
         var model = CreateMockModel();

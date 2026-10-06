@@ -29,7 +29,7 @@ public class FederatedLearningPrivacyAndSecureAggregationIntegrationTests
             ClientSelectionFraction = 1.0,
             LocalEpochs = 1,
             AggregationStrategy = FederatedAggregationStrategy.FedAvg,
-            RandomSeed = 123,
+            Seed = 123,
             UseDifferentialPrivacy = true,
             DifferentialPrivacyMode = DifferentialPrivacyMode.Central,
             DifferentialPrivacyClipNorm = 1.0,
@@ -75,7 +75,7 @@ public class FederatedLearningPrivacyAndSecureAggregationIntegrationTests
             ClientSelectionFraction = 1.0,
             LocalEpochs = 1,
             AggregationStrategy = FederatedAggregationStrategy.FedAvg,
-            RandomSeed = 7,
+            Seed = 7,
             UseSecureAggregation = true
         };
 
@@ -110,7 +110,7 @@ public class FederatedLearningPrivacyAndSecureAggregationIntegrationTests
             ClientSelectionFraction = 1.0,
             LocalEpochs = 1,
             AggregationStrategy = FederatedAggregationStrategy.FedAvg,
-            RandomSeed = 99,
+            Seed = 99,
             UseDifferentialPrivacy = true,
             DifferentialPrivacyMode = DifferentialPrivacyMode.LocalAndCentral,
             DifferentialPrivacyClipNorm = 1.0,

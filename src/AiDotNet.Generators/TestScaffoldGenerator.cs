@@ -841,7 +841,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // (verified: System.OutOfMemoryException in the train step) and even <float> can't fit the
         // ~150M-param forward+backward + AdamW moments in the 120s gate. Genuine foundation-scale
         // compute, not a correctness bug — deferred to the nightly heavy lane.
-        "TortoiseTTS", "FastSpeech", "FastSpeech2",
+        "TortoiseTTS", "FastSpeech",
+        // FastSpeech2 is NOT here (#2093): its training tests run in seconds, and the tag had hidden a
+        // diverging training loss from the PR gate while the nightly heavy lane was red.
         // MaskDINO: foundation-scale unified DETR detection+segmentation transformer (Li 2023, in the
         // Segmentation/Foundation namespace). The training invariants exceed the 120s per-test timeout
         // on CPU (verified: MoreData_ShouldNotDegrade times out). Genuine foundation-scale compute —
@@ -7665,6 +7667,36 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 10, outputSize: 4), " +
                     "new AiDotNet.Models.Options.NBEATSModelOptions<double> { LearningRate = 1e-6 })";
+            }
+            else if (model.ClassName == "TimeGrad" && model.TypeParameterCount == 1)
+            {
+                // TimeGrad (Rasul et al. 2021): production keeps the paper's defaults (2x40 LSTM, 8 residual
+                // blocks of 8 channels, N = 100 diffusion steps, 100 sample paths). Sampling runs
+                // horizon x N denoiser passes over every path, so the generated CPU fixture bounds the same
+                // architecture through the public options surface: a short context and horizon, 10 diffusion
+                // steps whose schedule still ends near pure noise (alphaBar_N ~ 0.07), and 4 sample paths.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 24, outputSize: 8), " +
+                    "new AiDotNet.Models.Options.TimeGradOptions<double> { ContextLength = 24, ForecastHorizon = 8, " +
+                    "HiddenDimension = 16, NumRnnLayers = 2, DropoutRate = 0.0, NumDiffusionSteps = 10, " +
+                    "BetaStart = 1e-4, BetaEnd = 0.5, NumSamples = 4, ResidualLayers = 2, ResidualChannels = 4, " +
+                    "DenoisingNetworkDim = 16, TimeEmbeddingDim = 8 })";
+            }
+            else if (model.ClassName == "DiffusionTS" && model.TypeParameterCount == 1)
+            {
+                // Diffusion-TS (Yuan & Qiao 2024): production keeps the reference configuration (d_model 64,
+                // 3 encoder / 2 decoder blocks, 500 cosine diffusion steps, 100 generated windows). Sampling
+                // runs one denoiser pass per diffusion step over every window, so the generated CPU fixture
+                // bounds the same architecture through the public options surface.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 16, outputSize: 8), " +
+                    "new AiDotNet.Models.Options.DiffusionTSOptions<double> { SequenceLength = 16, ForecastHorizon = 8, " +
+                    "NumFeatures = 1, HiddenDimension = 16, NumHeads = 2, NumEncoderLayers = 1, NumDecoderLayers = 1, " +
+                    "MlpHiddenTimes = 2, NumDiffusionSteps = 10, NumSamples = 2 })";
             }
             else if (model.ClassName == "Hippo" && model.TypeParameterCount == 1)
             {
@@ -14885,12 +14917,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // No tolerance is relaxed; only the measurement point moves past the hump, the
                     // same remedy E2TTS / SpeechT5 / AudioLM already use in this file.
                     bool naturalSpeechWarmup = model.ClassName == "NaturalSpeech";
-                    int ttsSmokeIterations = model.ClassName is "FastSpeech" or "FastSpeech2" ? 1
-                                           : naturalSpeechWarmup ? 12 : 2;
+                    // FastSpeech2 (#2093) diverged once (9.66 -> 15.63) and a 1-step probe cannot see a trajectory.
+                    // Measured on a fixed (input, target) pair, seed 11: 11.88, 6.16, 6.10, 7.19, 5.50, then
+                    // 5.12 at step 10 and 1.30 at step 40. Twelve steps clear the step-4 bump with a wide margin.
+                    const int FastSpeechSmokeIterations = 1;
+                    const int PastWarmupTtsIterations = 12;
+                    const int DefaultTtsSmokeIterations = 2;
+                    const int E2TtsMemorizationIterations = 15;
+                    int ttsSmokeIterations = model.ClassName == "FastSpeech" ? FastSpeechSmokeIterations
+                                           : model.ClassName == "FastSpeech2" || naturalSpeechWarmup
+                                               ? PastWarmupTtsIterations : DefaultTtsSmokeIterations;
                     sb.AppendLine($"    protected override int TrainingIterations => {ttsSmokeIterations};");
                     sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
                     sb.AppendLine($"    protected override int MoreDataLongIterations => {ttsSmokeIterations};");
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "E2TTS" ? 15 : naturalSpeechWarmup ? 12 : 2)};");
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "E2TTS" ? E2TtsMemorizationIterations : naturalSpeechWarmup ? PastWarmupTtsIterations : DefaultTtsSmokeIterations)};");
                     if (naturalSpeechWarmup)
                     {
                         // NaturalSpeech's TRAINING forward is stochastic (DropoutRate = 0.1), so
@@ -20655,7 +20695,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // keep the InputShape context in lockstep with that reduced ContextLength.
             "Kronos" => 64,
             "YingLong" => 1024,
-            "TimeGrad" => 168,
+            // TimeGrad is built at CI scale (ContextLength = 24) by its constructor special-case.
+            "TimeGrad" => 24,
+            // DiffusionTS is built at CI scale (SequenceLength = 16) by its constructor special-case.
+            "DiffusionTS" => 16,
             "TFC" => 200,
             // NBEATSFinance uses NBEATSModelOptions.LookbackWindow = 10 by
             // default. NBEATSFinance.Forward validates input length against
@@ -20746,8 +20789,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // Generated HiPPO CI factory uses ForecastHorizon=8; production remains 96.
             "Hippo" => "8",
 
-            // TimeGrad: forecast horizon (diffusion output is denoised target).
-            "TimeGrad" => "24",
+            // TimeGrad: forecast horizon of the CI-scale fixture (the mean of the sampled paths).
+            "TimeGrad" => "8",
+
+            // DiffusionTS: [horizon, features] for the unbatched univariate CI-scale fixture.
+            "DiffusionTS" => "8, 1",
 
             // TimesNet (Wu et al. 2023 ICLR): output is [B, T, M] with M =
             // TimesNetOptions.NumFeatures default 7. After

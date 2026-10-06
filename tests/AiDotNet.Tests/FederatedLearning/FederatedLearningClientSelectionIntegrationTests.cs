@@ -47,7 +47,7 @@ public class FederatedLearningClientSelectionIntegrationTests
             ClientSelection = selectionOptions,
             LocalEpochs = 1,
             AggregationStrategy = FederatedAggregationStrategy.FedAvg,
-            RandomSeed = 123,
+            Seed = 123,
             MinRoundsBeforeConvergence = 100,
             ConvergenceThreshold = 0.0
         };

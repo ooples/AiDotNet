@@ -53,7 +53,7 @@ var isolationForestOptions = new TimeSeriesIsolationForestOptions<double>
     UseTrendFeatures = true,     // Include derivative features
     UseSeasonalDecomposition = false,
     SeasonalPeriod = 7,          // Weekly pattern
-    RandomSeed = 42
+    Seed = 42
 };
 
 var isolationForest = new TimeSeriesIsolationForest<double>(isolationForestOptions);

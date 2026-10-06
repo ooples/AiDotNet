@@ -26,7 +26,7 @@ public class AdaptiveRandomForestClassifierTests : ClassificationModelTestBase
             GracePeriod = 4,
             WarningThreshold = 1.0,
             DriftThreshold = 1.5,
-            RandomSeed = 173,
+            Seed = 173,
         };
         var source = new AdaptiveRandomForestClassifier<double>(options);
 

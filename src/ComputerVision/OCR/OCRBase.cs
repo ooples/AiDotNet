@@ -159,7 +159,7 @@ public class OCROptions<T>
 
     /// <summary>
     /// Seed for weight initialization, so two models built from equal options start from equal weights.
-    /// Default: 42, matching <see cref="AiDotNet.Models.Options.ObjectDetectionOptions{T}.RandomSeed"/>.
+    /// Default: 42, matching <see cref="AiDotNet.Models.Options.ObjectDetectionOptions{T}.Seed"/>.
     /// Null leaves initialization unseeded.
     /// </summary>
     public int? RandomSeed { get; set; } = 42;

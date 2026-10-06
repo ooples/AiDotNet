@@ -148,7 +148,7 @@ public class BuildAsyncResidualModeCollapseTests
             MaxIterations = Epochs,
             BatchSize = BatchSize,
             UseAdaptiveLearningRate = false,
-            RandomSeed = Seed,
+            Seed = Seed,
             ShuffleData = true,
         };
         if (explicitLoss is not null)
@@ -539,7 +539,7 @@ public class BuildAsyncResidualModeCollapseTests
                 MaxIterations = 40,
                 BatchSize = BatchSize,
                 UseAdaptiveLearningRate = false,
-                RandomSeed = Seed,
+                Seed = Seed,
                 ShuffleData = true,
                 Tolerance = 0.0,
                 Regularization = new NoRegularization<float, Tensor<float>, Tensor<float>>(),

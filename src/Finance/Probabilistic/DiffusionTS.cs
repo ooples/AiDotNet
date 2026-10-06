@@ -1,4 +1,4 @@
-﻿using AiDotNet.LearningRateSchedulers;
+using AiDotNet.LearningRateSchedulers;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -39,16 +39,15 @@ namespace AiDotNet.Finance.Probabilistic;
 /// component separately and combining them.
 ///
 /// <b>How DiffusionTS Works:</b>
-/// 1. <b>Decomposition:</b> Split time series into trend, seasonal, and residual
-/// 2. <b>Component Diffusion:</b> Generate each component with specialized networks
-/// 3. <b>Reconstruction:</b> Combine components to form final forecast
-/// 4. <b>Interpretation:</b> Each component has clear meaning
+/// 1. <b>Window:</b> The history and the horizon form one window, standardised per series
+/// 2. <b>Denoiser:</b> A transformer predicts the clean window from a noisy one and the noise level
+/// 3. <b>Decomposition:</b> Its decoder writes each prediction as a trend (a low-order polynomial)
+///    plus seasonality (the strongest Fourier components) plus a residual
+/// 4. <b>Forecasting:</b> Starting from noise, each denoising step keeps the observed history
+///    in place, so the horizon is generated to continue it
 ///
-/// <b>DiffusionTS Architecture:</b>
-/// - Trend Network: Captures long-term movements (slow, smooth)
-/// - Seasonal Network: Captures periodic patterns (daily, weekly, yearly)
-/// - Residual Network: Captures irregular fluctuations
-/// - Fusion Module: Combines components coherently
+/// <b>Training:</b> The model learns to recover the clean window, with an extra loss on its
+/// Fourier coefficients so that periodic structure is learned explicitly.
 ///
 /// <b>Key Benefits:</b>
 /// - Interpretable decomposition of forecasts
@@ -57,7 +56,7 @@ namespace AiDotNet.Finance.Probabilistic;
 /// - Enables "what-if" analysis by modifying components
 /// </para>
 /// <para>
-/// <b>Reference:</b> Yuan and Qiu, "Diffusion-TS: Interpretable Diffusion for General Time Series Generation", 2024.
+/// <b>Reference:</b> Yuan and Qiao, "Diffusion-TS: Interpretable Diffusion for General Time Series Generation", 2024.
 /// https://arxiv.org/abs/2403.01742
 /// </para>
 /// </remarks>
@@ -90,50 +89,39 @@ namespace AiDotNet.Finance.Probabilistic;
                         + "diffusion noise schedule, not the learning rate.")]
 public partial class DiffusionTS<T> : ForecastingModelBase<T>
 {
-    #region Execution Mode
+    #region Fields
+
     private readonly bool _useNativeMode;
-    #endregion
+    // The denoiser; its layers are this model's Layers, bound by position before every forward.
+    private DiffusionTSNetwork<T>? _network;
 
-    
-    #region Native Mode Fields
-    private DenseLayer<T>? _trendInputLayer;
-    private DenseLayer<T>? _seasonalInputLayer;
-    private DenseLayer<T>? _residualInputLayer;
-    private DenseLayer<T>? _fusionLayer;
-    private DenseLayer<T>? _outputLayer;
-    private List<LayerNormalizationLayer<T>>? _layerNorms;
-    #endregion
-
-    #region Diffusion Fields
-    private readonly double[] _betas;
-    private readonly double[] _alphas;
-    private readonly double[] _alphasCumprod;
-    private readonly double[] _sqrtAlphasCumprod;
-    private readonly double[] _sqrtOneMinusAlphasCumprod;
-    private Random _random;
-    #endregion
-
-    #region Shared Fields
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly ILossFunction<T> _lossFunction;
     private readonly DiffusionTSOptions<T> _options;
 
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
+    private readonly int _sequenceLength;
+    private readonly int _forecastHorizon;
+    private readonly int _numFeatures;
+    private readonly int _numDiffusionSteps;
+    private readonly int _numSamples;
+    private readonly int? _seed;
 
-    private int _sequenceLength;
-    private int _forecastHorizon;
-    private int _numFeatures;
-    private int _hiddenDimension;
-    private int _trendHiddenDim;
-    private int _seasonalHiddenDim;
-    private int _numDiffusionSteps;
-    private int _numSamples;
-    private int _decompositionPeriod;
-    private int _trendKernelSize;
-    private bool _useTrendComponent;
-    private bool _useSeasonalComponent;
-    private string _betaSchedule;
+    // Seeds the training draws when no Seed is configured, fixed per instance (see PrepareTrainingPair).
+    private readonly int _unseededDrawBase = RandomHelper.CreateSecureRandom().Next();
+
+    private double[] _betas = Array.Empty<double>();
+    private double[] _alphasCumprod = Array.Empty<double>();
+    private double[] _sqrtAlphasCumprod = Array.Empty<double>();
+    private double[] _sqrtOneMinusAlphasCumprod = Array.Empty<double>();
+    private double[] _posteriorMeanClean = Array.Empty<double>();
+    private double[] _posteriorMeanNoisy = Array.Empty<double>();
+    private double[] _posteriorVariance = Array.Empty<double>();
+    private double[] _lossWeight = Array.Empty<double>();
+
+    private bool _lazyShapesProbed;
+    // True while the probe runs: toggling training mode builds the parameter layout, which calls back into the probe.
+    private bool _lazyShapesProbing;
+
     #endregion
 
     #region IForecastingModel Properties
@@ -159,443 +147,682 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
     /// <inheritdoc/>
     public override bool UseNativeMode => _useNativeMode;
 
-    /// <summary>
-    /// Gets the forecast horizon.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How many future steps to predict.
-    /// </para>
-    /// </remarks>
+    /// <summary>Gets the number of future steps forecast.</summary>
     public int ForecastHorizon => _forecastHorizon;
 
-    /// <summary>
-    /// Gets whether the model supports training (native mode only).
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> ONNX mode is inference-only.
-    /// Native mode supports both training and inference.
-    /// </para>
-    /// </remarks>
+    /// <inheritdoc/>
     public override bool SupportsTraining => _useNativeMode;
 
-    /// <summary>
-    /// Gets the number of diffusion steps.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> More steps = higher quality but slower.
-    /// </para>
-    /// </remarks>
+    /// <summary>Gets the number of diffusion steps T.</summary>
     public int NumDiffusionSteps => _numDiffusionSteps;
 
-    /// <summary>
-    /// Gets the number of samples for uncertainty estimation.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How many different forecasts to generate
-    /// for uncertainty quantification.
-    /// </para>
-    /// </remarks>
+    /// <summary>Gets how many generated windows a forecast averages.</summary>
     public int NumSamples => _numSamples;
 
-    /// <summary>
-    /// Gets the decomposition period for seasonal extraction.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The expected periodicity of seasonal patterns.
-    /// </para>
-    /// </remarks>
-    public int DecompositionPeriod => _decompositionPeriod;
-
-    /// <summary>
-    /// Gets whether trend component is used.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> When true, the model generates a separate
-    /// trend component for smooth long-term movements.
-    /// </para>
-    /// </remarks>
-    public bool UseTrendComponent => _useTrendComponent;
-
-    /// <summary>
-    /// Gets whether seasonal component is used.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> When true, the model generates a separate
-    /// seasonal component for periodic patterns.
-    /// </para>
-    /// </remarks>
-    public bool UseSeasonalComponent => _useSeasonalComponent;
+    // The model generates context and horizon as one window.
+    private int Window => _sequenceLength + _forecastHorizon;
+    private int WindowValues => Window * _numFeatures;
 
     #endregion
 
     #region Constructors
 
-    /// <summary>
-    /// Initializes a new instance of the DiffusionTS model in ONNX mode for inference.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="onnxModelPath">Path to a pretrained ONNX model file.</param>
-    /// <param name="options">DiffusionTS-specific options.</param>
-    /// <param name="optimizer">Optional optimizer for fine-tuning.</param>
-    /// <param name="lossFunction">Optional loss function.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Use this constructor to load a pretrained DiffusionTS model
-    /// for fast interpretable forecasting. The ONNX model encapsulates the trained
-    /// decomposition networks for trend, seasonal, and residual components.
-    /// </para>
-    /// </remarks>
+    /// <summary>Creates a DiffusionTS model that runs a pretrained ONNX graph.</summary>
     public DiffusionTS(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         DiffusionTSOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? DefaultLoss(options), 1.0)
     {
         if (string.IsNullOrWhiteSpace(onnxModelPath))
             throw new ArgumentNullException(nameof(onnxModelPath));
-        if (!System.IO.File.Exists(onnxModelPath))
-            throw new System.IO.FileNotFoundException($"ONNX model not found: {onnxModelPath}");
+        if (!File.Exists(onnxModelPath))
+            throw new FileNotFoundException($"ONNX model not found: {onnxModelPath}");
 
         _useNativeMode = false;
         OnnxModelPath = onnxModelPath;
         OnnxSession = new InferenceSession(onnxModelPath);
         _options = options ?? new DiffusionTSOptions<T>();
         Options = _options;
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _lossFunction = lossFunction ?? DefaultLoss(_options);
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-
-        _sequenceLength = _options.SequenceLength;
-        _forecastHorizon = _options.ForecastHorizon;
-        _numFeatures = _options.NumFeatures;
-        _hiddenDimension = _options.HiddenDimension;
-        _trendHiddenDim = _options.TrendHiddenDim;
-        _seasonalHiddenDim = _options.SeasonalHiddenDim;
-        _numDiffusionSteps = _options.NumDiffusionSteps;
-        _numSamples = _options.NumSamples;
-        _decompositionPeriod = _options.DecompositionPeriod;
-        _trendKernelSize = _options.TrendKernelSize;
-        _useTrendComponent = _options.UseTrendComponent;
-        _useSeasonalComponent = _options.UseSeasonalComponent;
-        _betaSchedule = _options.BetaSchedule;
-
-        (_betas, _alphas, _alphasCumprod, _sqrtAlphasCumprod, _sqrtOneMinusAlphasCumprod) =
-            InitializeDiffusionSchedule(_numDiffusionSteps, _options.BetaStart, _options.BetaEnd, _betaSchedule);
-        _random = CreateSamplingStream();
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        (_sequenceLength, _forecastHorizon, _numFeatures, _numDiffusionSteps, _numSamples, _seed) = ReadSizes(_options);
+        ComputeNoiseSchedule();
     }
 
-    /// <summary>
-    /// Initializes a new instance of the DiffusionTS model in native mode for training.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="options">DiffusionTS-specific options.</param>
-    /// <param name="optimizer">Optional optimizer for training.</param>
-    /// <param name="lossFunction">Optional loss function.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Use this constructor to create a DiffusionTS model
-    /// that can be trained on your data. The model learns separate networks for
-    /// generating trend, seasonal, and residual components, which are then combined.
-    /// </para>
-    /// </remarks>
+    /// <summary>Creates a native DiffusionTS model that can be trained.</summary>
     public DiffusionTS(
         NeuralNetworkArchitecture<T> architecture,
         DiffusionTSOptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
+        : base(architecture, lossFunction ?? DefaultLoss(options), 1.0)
     {
         _useNativeMode = true;
         _options = options ?? new DiffusionTSOptions<T>();
         Options = _options;
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
+        _lossFunction = lossFunction ?? DefaultLoss(_options);
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-
-        _sequenceLength = _options.SequenceLength;
-        _forecastHorizon = _options.ForecastHorizon;
-        _numFeatures = _options.NumFeatures;
-        _hiddenDimension = _options.HiddenDimension;
-        _trendHiddenDim = _options.TrendHiddenDim;
-        _seasonalHiddenDim = _options.SeasonalHiddenDim;
-        _numDiffusionSteps = _options.NumDiffusionSteps;
-        _numSamples = _options.NumSamples;
-        _decompositionPeriod = _options.DecompositionPeriod;
-        _trendKernelSize = _options.TrendKernelSize;
-        _useTrendComponent = _options.UseTrendComponent;
-        _useSeasonalComponent = _options.UseSeasonalComponent;
-        _betaSchedule = _options.BetaSchedule;
-
-        (_betas, _alphas, _alphasCumprod, _sqrtAlphasCumprod, _sqrtOneMinusAlphasCumprod) =
-            InitializeDiffusionSchedule(_numDiffusionSteps, _options.BetaStart, _options.BetaEnd, _betaSchedule);
-        _random = CreateSamplingStream();
-
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        (_sequenceLength, _forecastHorizon, _numFeatures, _numDiffusionSteps, _numSamples, _seed) = ReadSizes(_options);
+        ComputeNoiseSchedule();
         InitializeLayers();
     }
+
+    // The reference trains with L1 unless configured for L2; PrepareTrainingPair scales both sides to match.
+    private static ILossFunction<T> DefaultLoss(DiffusionTSOptions<T>? options)
+        => (options?.ReconstructionLoss ?? DiffusionReconstructionLoss.L1) == DiffusionReconstructionLoss.L2
+            ? new MeanSquaredErrorLoss<T>()
+            : new MeanAbsoluteErrorLoss<T>();
+
+    private static (int, int, int, int, int, int?) ReadSizes(DiffusionTSOptions<T> options)
+    {
+        if (options.SequenceLength <= 0) throw new ArgumentOutOfRangeException(nameof(options), "SequenceLength must be positive.");
+        if (options.ForecastHorizon <= 0) throw new ArgumentOutOfRangeException(nameof(options), "ForecastHorizon must be positive.");
+        if (options.NumFeatures <= 0) throw new ArgumentOutOfRangeException(nameof(options), "NumFeatures must be positive.");
+        if (options.NumDiffusionSteps <= 0) throw new ArgumentOutOfRangeException(nameof(options), "NumDiffusionSteps must be positive.");
+        return (options.SequenceLength, options.ForecastHorizon, options.NumFeatures, options.NumDiffusionSteps,
+            Math.Max(1, options.NumSamples), options.Seed);
+    }
+
+    #endregion
+
+    #region Diffusion Schedule
+
+    /// <summary>
+    /// The variance schedule (cosine in the paper) and what the forward process, the x_0-parameterised reverse step
+    /// and the reference's per-step loss reweighting read from it.
+    /// </summary>
+    private void ComputeNoiseSchedule()
+    {
+        int n = _numDiffusionSteps;
+        double start = _options.BetaStart, end = _options.BetaEnd;
+        _betas = new double[n];
+        for (int k = 0; k < n; k++)
+        {
+            double fraction = n > 1 ? (double)k / (n - 1) : 0.0;
+            _betas[k] = _options.BetaSchedule switch
+            {
+                BetaSchedule.Linear => start + (end - start) * fraction,
+                BetaSchedule.ScaledLinear => Math.Pow(Math.Sqrt(start) + (Math.Sqrt(end) - Math.Sqrt(start)) * fraction, 2),
+                BetaSchedule.SquaredCosine => Math.Min(1.0 - CosineAlphaBar((k + 1.0) / n) / CosineAlphaBar((double)k / n), 0.999),
+                _ => throw new ArgumentOutOfRangeException(nameof(_options), $"Unknown beta schedule {_options.BetaSchedule}.")
+            };
+            if (double.IsNaN(_betas[k]) || _betas[k] <= 0 || _betas[k] >= 1)
+                throw new ArgumentOutOfRangeException(nameof(_options), "Every beta must lie in (0, 1).");
+        }
+
+        _alphasCumprod = new double[n];
+        _sqrtAlphasCumprod = new double[n];
+        _sqrtOneMinusAlphasCumprod = new double[n];
+        _posteriorMeanClean = new double[n];
+        _posteriorMeanNoisy = new double[n];
+        _posteriorVariance = new double[n];
+        _lossWeight = new double[n];
+        double cumulative = 1.0;
+        for (int k = 0; k < n; k++)
+        {
+            double previous = cumulative;
+            double alpha = 1.0 - _betas[k];
+            cumulative *= alpha;
+            _alphasCumprod[k] = cumulative;
+            _sqrtAlphasCumprod[k] = Math.Sqrt(cumulative);
+            _sqrtOneMinusAlphasCumprod[k] = Math.Sqrt(1.0 - cumulative);
+            // q(x_{k-1} | x_k, x_0): mean = c0 x_0 + ck x_k, variance beta~_k (Ho et al. 2020, eq. 7).
+            _posteriorMeanClean[k] = _betas[k] * Math.Sqrt(previous) / (1.0 - cumulative);
+            _posteriorMeanNoisy[k] = (1.0 - previous) * Math.Sqrt(alpha) / (1.0 - cumulative);
+            _posteriorVariance[k] = _betas[k] * (1.0 - previous) / (1.0 - cumulative);
+            // The reference's loss_weight: sqrt(alpha_k) sqrt(1 - alphaBar_k) / beta_k / 100.
+            _lossWeight[k] = Math.Sqrt(alpha) * Math.Sqrt(1.0 - cumulative) / _betas[k] / 100.0;
+        }
+    }
+
+    // Nichol & Dhariwal 2021, s = 0.008.
+    private static double CosineAlphaBar(double t) => Math.Pow(Math.Cos((t + 0.008) / 1.008 * Math.PI / 2), 2);
 
     #endregion
 
     #region Initialization
 
     /// <summary>
-    /// Initializes all layers for the DiffusionTS model.
+    /// Publishes the denoiser through Layers. Caller-supplied layers are bound to the same roles by position; the
+    /// forward is not a sequential chain, so a list that does not match the layout is refused.
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This sets up three specialized sub-networks:
-    ///
-    /// <b>Layer Structure:</b>
-    /// 1. Trend Network: Smoothing layers for capturing long-term movements
-    /// 2. Seasonal Network: Periodic feature extractors with Fourier-like processing
-    /// 3. Residual Network: Dense layers for irregular fluctuations
-    /// 4. Fusion Module: Combines all component outputs
-    ///
-    /// Each network is designed for its specific purpose - trend networks have
-    /// smoothing behavior, seasonal networks capture periodicity, and residual
-    /// networks handle what's left over.
-    /// </para>
-    /// </remarks>
     protected override void InitializeLayers()
     {
+        if (!_useNativeMode) return;
+        var network = new DiffusionTSNetwork<T>(
+            _numFeatures, Window, _options.HiddenDimension, _options.NumHeads, _options.NumEncoderLayers,
+            _options.NumDecoderLayers, _options.MlpHiddenTimes, _options.DropoutRate, _options.FourierTopKFactor);
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
+            network.BindTo(Architecture.Layers);
             Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayersWithOwnershipRollback(Layers);
         }
-        else if (_useNativeMode)
+        else
         {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultDiffusionTSLayers(
-                Architecture,
-                _sequenceLength,
-                _forecastHorizon,
-                _numFeatures,
-                _hiddenDimension,
-                _trendHiddenDim,
-                _seasonalHiddenDim));
-
-            ExtractLayerReferences();
+            Layers.AddRange(network.Layers);
         }
+
+        _network = network;
     }
 
-    /// <summary>
-    /// Extracts references to key layers for efficient access during forward/backward passes.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Keeps direct references to the trend, seasonal,
-    /// and residual network layers. This allows the model to process each component
-    /// separately during generation and combine them in the fusion layer.
-    /// </para>
-    /// </remarks>
-    private void ExtractLayerReferences()
+    private DiffusionTSNetwork<T> BoundNetwork()
     {
-        var allDense = Layers.OfType<DenseLayer<T>>().ToList();
-        _layerNorms = Layers.OfType<LayerNormalizationLayer<T>>().ToList();
-
-        // Organize layers by component networks
-        if (allDense.Count >= 5)
-        {
-            _trendInputLayer = allDense[0];
-            _seasonalInputLayer = allDense.Count > 3 ? allDense[3] : null;
-            _residualInputLayer = allDense.Count > 6 ? allDense[6] : null;
-            _fusionLayer = allDense.Count > 9 ? allDense[9] : allDense[allDense.Count - 2];
-            _outputLayer = allDense[allDense.Count - 1];
-        }
+        var network = _network ?? throw new InvalidOperationException("DiffusionTS has no native network in ONNX mode.");
+        network.BindTo(Layers);
+        return network;
     }
 
-    /// <summary>
-    /// Initializes the diffusion noise schedule.
-    /// </summary>
-    /// <param name="numSteps">Number of diffusion steps.</param>
-    /// <param name="betaStart">Starting noise level.</param>
-    /// <param name="betaEnd">Ending noise level.</param>
-    /// <param name="schedule">Schedule type ("linear", "cosine", or "quadratic").</param>
-    /// <returns>Tuple of precomputed diffusion values for efficient computation.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The noise schedule controls how quickly noise is added
-    /// during forward diffusion and removed during reverse diffusion. Precomputing these
-    /// values makes the diffusion process more efficient. Linear schedules add noise
-    /// uniformly, cosine schedules are smoother, and quadratic schedules add more
-    /// noise toward the end.
-    /// </para>
-    /// </remarks>
-    private (double[] betas, double[] alphas, double[] alphasCumprod, double[] sqrtAlphasCumprod, double[] sqrtOneMinusAlphasCumprod)
-        InitializeDiffusionSchedule(int numSteps, double betaStart, double betaEnd, string schedule)
+    /// <inheritdoc/>
+    /// <remarks>The denoiser is not a sequential chain, so shapes resolve through one training forward on a zero row.</remarks>
+    protected override void ResolveLazyLayerShapes()
     {
-        var betas = new double[numSteps];
-
-        if (schedule == "linear")
+        if (!_useNativeMode || _lazyShapesProbed || _lazyShapesProbing) return;
+        _lazyShapesProbing = true;
+        bool wasTraining = IsTrainingMode;
+        try
         {
-            for (int i = 0; i < numSteps; i++)
+            if (wasTraining) SetTrainingMode(false);
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            _ = ForwardForTraining(new Tensor<T>(new[] { 1, PackedWidth }));
+            _lazyShapesProbed = true;
+        }
+        finally
+        {
+            try
             {
-                betas[i] = betaStart + (betaEnd - betaStart) * i / (numSteps - 1);
+                if (wasTraining) SetTrainingMode(true);
+            }
+            finally
+            {
+                _lazyShapesProbing = false;
             }
         }
-        else if (schedule == "cosine")
-        {
-            double s = 0.008;
-            for (int i = 0; i < numSteps; i++)
-            {
-                double t = (double)i / numSteps;
-                double alphaBar = Math.Cos((t + s) / (1 + s) * Math.PI / 2);
-                alphaBar = alphaBar * alphaBar;
-                betas[i] = Math.Min(1 - alphaBar, 0.999);
-            }
-        }
-        else // quadratic
-        {
-            for (int i = 0; i < numSteps; i++)
-            {
-                double t = (double)i / (numSteps - 1);
-                betas[i] = betaStart + (betaEnd - betaStart) * t * t;
-            }
-        }
-
-        var alphas = new double[numSteps];
-        var alphasCumprod = new double[numSteps];
-        var sqrtAlphasCumprod = new double[numSteps];
-        var sqrtOneMinusAlphasCumprod = new double[numSteps];
-
-        double cumprod = 1.0;
-        for (int i = 0; i < numSteps; i++)
-        {
-            alphas[i] = 1.0 - betas[i];
-            cumprod *= alphas[i];
-            alphasCumprod[i] = cumprod;
-            sqrtAlphasCumprod[i] = Math.Sqrt(cumprod);
-            sqrtOneMinusAlphasCumprod[i] = Math.Sqrt(1.0 - cumprod);
-        }
-
-        return (betas, alphas, alphasCumprod, sqrtAlphasCumprod, sqrtOneMinusAlphasCumprod);
-    }
-
-    /// <summary>
-    /// Validates custom layers provided by the user.
-    /// </summary>
-    /// <param name="layers">The list of custom layers to validate.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> When users provide their own layer configuration,
-    /// this ensures the layers form a valid DiffusionTS architecture with separate
-    /// trend, seasonal, and residual processing paths.
-    /// </para>
-    /// </remarks>
-    protected override void ValidateCustomLayers(List<ILayer<T>> layers)
-    {
-        base.ValidateCustomLayers(layers);
-
-        if (layers.Count < 5)
-            throw new ArgumentException("DiffusionTS requires at least 5 layers (trend, seasonal, residual, fusion, output).");
     }
 
     #endregion
 
-    #region NeuralNetworkBase Overrides
+    #region Training
 
-    /// <summary>
-    /// Creates a fresh sampling noise stream at the configured seed.
-    /// </summary>
-    /// <remarks>
-    /// Called at every public inference entry point, not inside the per-sample loop. Seeding
-    /// once in the constructor is not enough: one Random carried for the model's lifetime keeps
-    /// advancing, so Predict called twice on the same input drew different noise and returned a
-    /// different answer. Reseeding inside the per-sample loop would be the opposite mistake --
-    /// every one of the NumSamples paths would draw the same noise and the spread would collapse
-    /// to a point. Restarting the stream per CALL leaves the samples within a call distinct while
-    /// making the call itself reproducible. With Seed null the draw is secure and deliberately
-    /// not reproducible.
-    /// </remarks>
-    private Random CreateSamplingStream() =>
-        _options.Seed.HasValue
-            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
-            : RandomHelper.CreateSecureRandom();
+    // A training row: x_k over the window, then the step k, then the loss scale for that row.
+    private int PackedWidth => WindowValues + 2;
 
+    // The prediction and target are compared as [x_0 | Re F(x_0) | Im F(x_0)], each scaled per row.
+    private int ObjectiveWidth => (_options.UseFourierLoss ? 3 : 1) * WindowValues;
+
+    private double FourierWeight => _options.FourierLossWeight ?? Math.Sqrt(Window) / 5.0;
+
+    // What both sides of the Fourier terms are multiplied by so the loss weights them by FourierWeight: the weight itself
+    // under L1, whose distance is degree-1 homogeneous, and its square root under L2, which squares the factor.
+    private double FourierScale => _options.ReconstructionLoss == DiffusionReconstructionLoss.L2
+        ? Math.Sqrt(FourierWeight)
+        : FourierWeight;
     /// <summary>
-    /// Performs forward prediction on the input tensor.
+    /// Draws the Diffusion-TS training pair. The window is the context followed by the target horizon, normalised per
+    /// series by the context's mean and spread. A step k ~ U{1..T} and noise eps ~ N(0, I) give
+    /// x_k = sqrt(alphaBar_k) x_0 + sqrt(1 - alphaBar_k) eps; the network predicts x_0. The objective is the reference's:
+    /// the distance between predicted and true x_0, plus, with the Fourier loss on, sqrt(L) / 5 times the distance
+    /// between their Fourier coefficients (norm "forward"), each reweighted by the step's loss weight. The pair carries
+    /// those as [x_0 | w_F Re F x_0 | w_F Im F x_0] times a per-row scale, so the configured L1 (or L2) loss over the
+    /// row reproduces the reference sum.
     /// </summary>
-    /// <param name="input">Input tensor containing historical time series data.</param>
-    /// <returns>Output tensor containing the forecast with decomposed components.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This runs the interpretable diffusion process:
-    /// 1. Decomposes input into trend, seasonal, and residual
-    /// 2. Generates each component separately using diffusion
-    /// 3. Combines components for final forecast
-    /// The result is an interpretable forecast where you can see each component's contribution.
-    /// </para>
-    /// </remarks>
-    protected override Tensor<T> PredictCore(Tensor<T> input)
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
     {
-        _random = CreateSamplingStream();
-        return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
+        if (!_useNativeMode) return (input, target);
+        var context = ContextRows(input, out int batch);
+        var future = new double[batch, _forecastHorizon, _numFeatures];
+        if (target is not null)
+        {
+            if (target.Length != batch * _forecastHorizon * _numFeatures)
+                throw new ArgumentException(
+                    $"DiffusionTS's target holds {target.Length} values; [{batch}, {_forecastHorizon}, {_numFeatures}] needs " +
+                    $"{batch * _forecastHorizon * _numFeatures}.", nameof(target));
+            for (int b = 0; b < batch; b++)
+                for (int t = 0; t < _forecastHorizon; t++)
+                    for (int f = 0; f < _numFeatures; f++)
+                        future[b, t, f] = NumOps.ToDouble(target[(b * _forecastHorizon + t) * _numFeatures + f]);
+        }
+
+        var random = RandomHelper.CreateSeededRandom(DrawSeed(draw));
+        var packed = new Tensor<T>(new[] { batch, PackedWidth });
+        var objective = new Tensor<T>(new[] { batch, ObjectiveWidth });
+        var clean = new double[Window * _numFeatures];
+        bool l2 = _options.ReconstructionLoss == DiffusionReconstructionLoss.L2;
+        int terms = _options.UseFourierLoss ? 3 : 1;
+        for (int b = 0; b < batch; b++)
+        {
+            var (mean, spread) = Statistics(context, b);
+            for (int t = 0; t < Window; t++)
+                for (int f = 0; f < _numFeatures; f++)
+                {
+                    double raw = t < _sequenceLength ? context[b, t, f] : future[b, t - _sequenceLength, f];
+                    clean[t * _numFeatures + f] = (raw - mean[f]) / spread[f];
+                }
+
+            int k = random.Next(_numDiffusionSteps);
+            int row = b * PackedWidth;
+            for (int i = 0; i < WindowValues; i++)
+                packed[row + i] = NumOps.FromDouble(
+                    _sqrtAlphasCumprod[k] * clean[i] + _sqrtOneMinusAlphasCumprod[k] * StandardNormal(random));
+            packed[row + WindowValues] = NumOps.FromDouble(k);
+            // Both sides are multiplied by this scale, so the mean loss over the row is the reference's weighted mean.
+            double scale = l2 ? Math.Sqrt(terms * _lossWeight[k]) : terms * _lossWeight[k];
+            packed[row + WindowValues + 1] = NumOps.FromDouble(scale);
+
+            var targetRow = ObjectiveOf(clean, scale);
+            for (int i = 0; i < targetRow.Length; i++) objective[b * ObjectiveWidth + i] = NumOps.FromDouble(targetRow[i]);
+        }
+
+        return (packed, objective);
     }
 
     /// <summary>
-    /// Trains the DiffusionTS model on a batch of input-target pairs.
+    /// x_0-hat for a pair from <see cref="PrepareTrainingPair"/>, laid out as the objective row
+    /// [x_0-hat | w_F Re F x_0-hat | w_F Im F x_0-hat] times the row's scale. Every operation is recorded, so a compiled
+    /// replay recomputes it from the replayed row.
     /// </summary>
-    /// <param name="input">Input tensor containing the full time series for training.</param>
-    /// <param name="target">Target tensor (same as input for generation training).</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Training involves:
-    /// 1. Decompose target into trend, seasonal, and residual components
-    /// 2. Add noise to each component at a random timestep
-    /// 3. Predict the noise using the specialized denoising networks
-    /// 4. Minimize the difference between predicted and actual noise
-    ///
-    /// Each component network learns its specific role - trend networks learn
-    /// smooth patterns, seasonal networks learn periodic patterns, and residual
-    /// networks learn irregular fluctuations.
-    /// </para>
-    /// </remarks>
-    /// <summary>
-    /// Tape-aware training forward. Runs the existing Layers stack as a
-    /// deterministic supervised regression head so
-    /// <c>NeuralNetworkBase.TrainWithTape</c> can record the tape, compute
-    /// the user-injected loss, and step the optimizer.
-    /// </summary>
-    /// <remarks>
-    /// Same bug family as the Foundation diffusion models (CCDM, TimeDiff,
-    /// TimeGrad, TSDiff, MGTSD): the previous Train decomposed the target
-    /// into trend/seasonal/residual, hand-built DDPM noise perturbation on
-    /// each component, recombined them and fed the resulting tensor through
-    /// <see cref="Forward"/> (which flattens via raw <c>.Data.Span</c> copy,
-    /// breaking the tape chain), then called
-    /// <c>_optimizer.UpdateParameters(Layers)</c> without running backward.
-    /// Same "Backward pass must be called" failure mode. The DDPM reverse
-    /// process with trend/seasonal/residual sampling stays in
-    /// <see cref="ForecastNative"/> for probabilistic inference via
-    /// <see cref="Predict"/>/<see cref="Forecast"/>. Noise-prediction
-    /// training would need a decomposition-aware denoiser architecture and
-    /// is out of scope here.
-    /// </remarks>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
+        if (input.Rank != 2 || input.Shape[1] != PackedWidth)
+            throw new ArgumentException(
+                $"DiffusionTS trains on rows prepared by {nameof(PrepareTrainingPair)}: [B, {PackedWidth}] (the noisy window, " +
+                $"the step, the loss scale); got [{string.Join(", ", input.Shape.ToArray())}].", nameof(input));
 
-        // Reshape [B, T, F] → [B, T*F] so the first DenseLayer's last-dim
-        // matches its baked-in inputSize = sequenceLength * numFeatures.
-        // Tensor.Reshape on a leaf input is tape-neutral — the layer stack
-        // records its own tape entries.
-        var x = input;
-        if (x.Rank == 3)
-            x = x.Reshape(new[] { x.Shape[0], x.Shape[1] * x.Shape[2] });
-        else if (x.Rank == 1)
-            x = x.Reshape(new[] { 1, x.Length });
+        var network = BoundNetwork();
+        int batch = input.Shape[0];
+        var noisy = Engine.Reshape(Engine.TensorNarrow(input, 1, 0, WindowValues), new[] { batch, Window, _numFeatures });
+        var steps = Engine.TensorNarrow(input, 1, WindowValues, 1);
+        var scale = Engine.TensorNarrow(input, 1, WindowValues + 1, 1);
+        var predicted = network.PredictCleanWindow(Engine, noisy, steps);
 
-        foreach (var layer in Layers) x = layer.Forward(x);
-        return x;
+        var flat = Engine.Reshape(predicted, new[] { batch, WindowValues });
+        var parts = new List<Tensor<T>> { flat };
+        if (_options.UseFourierLoss)
+        {
+            // F along time for every feature: [B, L, F] -> [B * F, L] rows against the L x L "forward"-normalised basis.
+            var series = Engine.Reshape(Engine.TensorPermute(predicted, new[] { 0, 2, 1 }), new[] { batch * _numFeatures, Window });
+            var (cosine, sine) = FourierBasis();
+            T weight = NumOps.FromDouble(FourierScale);
+            parts.Add(Engine.TensorMultiplyScalar(Engine.Reshape(Engine.TensorMatMul(series, cosine), new[] { batch, WindowValues }), weight));
+            parts.Add(Engine.TensorMultiplyScalar(Engine.Reshape(Engine.TensorMatMul(series, sine), new[] { batch, WindowValues }), weight));
+        }
+
+        var row = parts.Count == 1 ? flat : Engine.TensorConcatenate(parts.ToArray(), axis: 1);
+        return Engine.TensorMultiply(row, Engine.TensorBroadcastTo(scale, new[] { batch, ObjectiveWidth }));
     }
 
-    // UpdateParameters was an empty override, silently dropping every restore. The base
-    // distributes the vector over the declared enumeration.
+    // The objective row of a clean window, in the same layout ForwardForTraining produces.
+    private double[] ObjectiveOf(double[] clean, double scale)
+    {
+        var row = new double[ObjectiveWidth];
+        for (int i = 0; i < WindowValues; i++) row[i] = scale * clean[i];
+        if (!_options.UseFourierLoss) return row;
+        double weight = FourierScale;
+        for (int f = 0; f < _numFeatures; f++)
+            for (int k = 0; k < Window; k++)
+            {
+                double real = 0, imaginary = 0;
+                for (int t = 0; t < Window; t++)
+                {
+                    double angle = 2.0 * Math.PI * k * t / Window;
+                    double value = clean[t * _numFeatures + f];
+                    real += value * Math.Cos(angle);
+                    imaginary -= value * Math.Sin(angle);
+                }
+
+                row[WindowValues + f * Window + k] = scale * weight * real / Window;
+                row[2 * WindowValues + f * Window + k] = scale * weight * imaginary / Window;
+            }
+
+        return row;
+    }
+
+    private (Tensor<T> Cosine, Tensor<T> Sine) FourierBasis()
+    {
+        var cosine = new Tensor<T>(new[] { Window, Window });
+        var sine = new Tensor<T>(new[] { Window, Window });
+        for (int t = 0; t < Window; t++)
+            for (int k = 0; k < Window; k++)
+            {
+                double angle = 2.0 * Math.PI * k * t / Window;
+                cosine[t * Window + k] = NumOps.FromDouble(Math.Cos(angle) / Window);
+                sine[t * Window + k] = NumOps.FromDouble(-Math.Sin(angle) / Window);
+            }
+
+        return (cosine, sine);
+    }
+
+    #endregion
+
+    #region Forecasting
+
+    /// <inheritdoc/>
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+        => _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
+
+    /// <inheritdoc/>
+    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
+    {
+        if (quantiles is not null && quantiles.Length > 0)
+        {
+            if (!_useNativeMode)
+                throw new NotSupportedException("Quantile forecasts sample the native model; an ONNX DiffusionTS returns its point forecast only.");
+            return ForecastQuantiles(historicalData, quantiles);
+        }
+
+        return _useNativeMode ? ForecastNative(historicalData) : ForecastOnnx(historicalData);
+    }
+
+    /// <summary>The forecast with a central prediction interval at <paramref name="confidenceLevel"/>.</summary>
+    public (Tensor<T> Forecast, Tensor<T> Lower, Tensor<T> Upper) ForecastWithIntervals(Tensor<T> input, double confidenceLevel = 0.95)
+    {
+        if (double.IsNaN(confidenceLevel) || confidenceLevel <= 0 || confidenceLevel >= 1)
+            throw new ArgumentOutOfRangeException(nameof(confidenceLevel));
+        double tail = (1.0 - confidenceLevel) / 2.0;
+        // One set of generated windows serves the mean and both bounds; each set costs NumDiffusionSteps denoiser passes.
+        var windows = SampleWindows(input, out int batch);
+        var bounds = QuantilesOf(windows, batch, new[] { tail, 1.0 - tail }, PointShape(input));
+        var lower = new Tensor<T>(PointShape(input));
+        var upper = new Tensor<T>(PointShape(input));
+        for (int i = 0; i < lower.Length; i++)
+        {
+            lower[i] = bounds[2 * i];
+            upper[i] = bounds[2 * i + 1];
+        }
+
+        return (MeanOf(windows, batch, input), lower, upper);
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
+    {
+        if (steps <= 0) throw new ArgumentOutOfRangeException(nameof(steps));
+        var predictions = new List<Tensor<T>>();
+        var current = input;
+        int remaining = steps;
+        while (remaining > 0)
+        {
+            var prediction = Forecast(current, null);
+            predictions.Add(prediction);
+            int used = Math.Min(_forecastHorizon, remaining);
+            remaining -= used;
+            if (remaining > 0) current = ShiftInputWithPredictions(current, prediction, used);
+        }
+
+        return ConcatenatePredictions(predictions, steps);
+    }
+
+    /// <summary>The point forecast: the mean horizon of <see cref="NumSamples"/> generated windows.</summary>
+    private Tensor<T> ForecastNative(Tensor<T> input)
+    {
+        var windows = SampleWindows(input, out int batch);
+        return MeanOf(windows, batch, input);
+    }
+
+    private Tensor<T> MeanOf(double[,,] windows, int batch, Tensor<T> input)
+    {
+        var mean = new Tensor<T>(new[] { batch, _forecastHorizon, _numFeatures });
+        int values = _forecastHorizon * _numFeatures;
+        for (int b = 0; b < batch; b++)
+            for (int i = 0; i < values; i++)
+            {
+                double sum = 0;
+                for (int s = 0; s < _numSamples; s++) sum += windows[s, b, i];
+                mean[b * values + i] = NumOps.FromDouble(sum / _numSamples);
+            }
+
+        return IsUnbatched(input) ? Engine.Reshape(mean, new[] { _forecastHorizon, _numFeatures }) : mean;
+    }
+
+    // Quantiles over the generated windows, as an extra last axis of the point forecast's shape.
+    private Tensor<T> ForecastQuantiles(Tensor<T> input, double[] quantiles)
+    {
+        foreach (double q in quantiles)
+            if (double.IsNaN(q) || q < 0 || q > 1)
+                throw new ArgumentOutOfRangeException(nameof(quantiles), $"Quantile {q} is outside [0, 1].");
+        var windows = SampleWindows(input, out int batch);
+        return QuantilesOf(windows, batch, quantiles, PointShape(input));
+    }
+
+    private Tensor<T> QuantilesOf(double[,,] windows, int batch, double[] quantiles, int[] pointShape)
+    {
+        int values = _forecastHorizon * _numFeatures;
+        var shape = pointShape.Concat(new[] { quantiles.Length }).ToArray();
+        var result = new Tensor<T>(shape);
+        var sorted = new double[_numSamples];
+        for (int b = 0; b < batch; b++)
+            for (int i = 0; i < values; i++)
+            {
+                for (int s = 0; s < _numSamples; s++) sorted[s] = windows[s, b, i];
+                Array.Sort(sorted);
+                for (int q = 0; q < quantiles.Length; q++)
+                {
+                    double position = quantiles[q] * (_numSamples - 1);
+                    int lower = (int)Math.Floor(position);
+                    int upper = Math.Min(lower + 1, _numSamples - 1);
+                    result[(b * values + i) * quantiles.Length + q] =
+                        NumOps.FromDouble(sorted[lower] + (position - lower) * (sorted[upper] - sorted[lower]));
+                }
+            }
+
+        return result;
+    }
+
     /// <summary>
-    /// Gets metadata about the DiffusionTS model.
+    /// Generates windows conditioned on the context, <c>[samples, batch, horizon x features]</c> in the series' own
+    /// scale. Every reverse step predicts x_0, samples x_{k-1} from the posterior q(x_{k-1} | x_k, x_0), and then puts
+    /// the observed context back at noise level k - 1, so the generated horizon is always denoised against the history; the
+    /// predicted x_0 is clamped to <see cref="DiffusionTSOptions{T}.DenoisedClip"/> first, as the reference clamps it
+    /// (the replacement step of the reference's conditional sampler). The reference can additionally take gradient steps
+    /// on x_k toward the observations; that guidance is not applied here.
     /// </summary>
-    /// <returns>ModelMetadata containing comprehensive model information.</returns>
+    private double[,,] SampleWindows(Tensor<T> input, out int batch)
+    {
+        var network = BoundNetwork();
+        var context = ContextRows(input, out batch);
+        int paths = batch * _numSamples;
+        var means = new double[batch][];
+        var spreads = new double[batch][];
+        for (int b = 0; b < batch; b++) (means[b], spreads[b]) = Statistics(context, b);
+
+        var random = _seed.HasValue ? RandomHelper.CreateSeededRandom(_seed.Value) : RandomHelper.CreateSecureRandom();
+        var x = new double[paths, Window, _numFeatures];
+        for (int p = 0; p < paths; p++)
+            for (int t = 0; t < Window; t++)
+                for (int f = 0; f < _numFeatures; f++)
+                    x[p, t, f] = StandardNormal(random);
+        ImposeContext(x, context, means, spreads, batch, _numDiffusionSteps - 1, random);
+
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            var noisy = new Tensor<T>(new[] { paths, Window, _numFeatures });
+            var steps = new Tensor<T>(new[] { paths, 1 });
+            for (int k = _numDiffusionSteps - 1; k >= 0; k--)
+            {
+                for (int p = 0; p < paths; p++)
+                {
+                    steps[p] = NumOps.FromDouble(k);
+                    for (int t = 0; t < Window; t++)
+                        for (int f = 0; f < _numFeatures; f++)
+                            noisy[(p * Window + t) * _numFeatures + f] = NumOps.FromDouble(x[p, t, f]);
+                }
+
+                var clean = network.PredictCleanWindow(Engine, noisy, steps);
+                double sigma = Math.Sqrt(_posteriorVariance[k]);
+                double bound = _options.DenoisedClip ?? double.PositiveInfinity;
+                for (int p = 0; p < paths; p++)
+                    for (int t = 0; t < Window; t++)
+                        for (int f = 0; f < _numFeatures; f++)
+                        {
+                            double predicted = Math.Max(-bound, Math.Min(bound, NumOps.ToDouble(clean[(p * Window + t) * _numFeatures + f])));
+                            x[p, t, f] = k > 0
+                                ? _posteriorMeanClean[k] * predicted + _posteriorMeanNoisy[k] * x[p, t, f] + sigma * StandardNormal(random)
+                                : predicted;
+                        }
+
+                ImposeContext(x, context, means, spreads, batch, k - 1, random);
+            }
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
+
+        var result = new double[_numSamples, batch, _forecastHorizon * _numFeatures];
+        for (int p = 0; p < paths; p++)
+        {
+            int s = p / batch, b = p % batch;
+            for (int t = 0; t < _forecastHorizon; t++)
+                for (int f = 0; f < _numFeatures; f++)
+                    result[s, b, t * _numFeatures + f] = x[p, _sequenceLength + t, f] * spreads[b][f] + means[b][f];
+        }
+
+        return result;
+    }
+
+    // Writes the normalised context into the context positions at noise level `level` (exactly, when level < 0).
+    private void ImposeContext(double[,,] x, double[,,] context, double[][] means, double[][] spreads, int batch, int level, Random random)
+    {
+        int paths = x.GetLength(0);
+        for (int p = 0; p < paths; p++)
+        {
+            int b = p % batch;
+            for (int t = 0; t < _sequenceLength; t++)
+                for (int f = 0; f < _numFeatures; f++)
+                {
+                    double clean = (context[b, t, f] - means[b][f]) / spreads[b][f];
+                    x[p, t, f] = level < 0
+                        ? clean
+                        : _sqrtAlphasCumprod[level] * clean + _sqrtOneMinusAlphasCumprod[level] * StandardNormal(random);
+                }
+        }
+    }
+
+    /// <summary>
+    /// The context as <c>[batch, SequenceLength, features]</c> from <c>[B, T, F]</c>, an unbatched <c>[T, F]</c>, or for a
+    /// univariate model <c>[B, T]</c> or <c>[T]</c>; a longer history keeps its most recent SequenceLength steps.
+    /// </summary>
+    private double[,,] ContextRows(Tensor<T> input, out int batch)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        int length;
+        switch (input.Rank)
+        {
+            case 3 when input.Shape[2] == _numFeatures: batch = input.Shape[0]; length = input.Shape[1]; break;
+            case 2 when IsUnbatched(input): batch = 1; length = input.Shape[0]; break;
+            case 2 when _numFeatures == 1: batch = input.Shape[0]; length = input.Shape[1]; break;
+            case 1 when _numFeatures == 1: batch = 1; length = input.Shape[0]; break;
+            default:
+                throw new ArgumentException(
+                    $"DiffusionTS takes [B, T, {_numFeatures}] or [T, {_numFeatures}]" +
+                    (_numFeatures == 1 ? ", [B, T] or [T]" : string.Empty) +
+                    $"; got [{string.Join(", ", input.Shape.ToArray())}].", nameof(input));
+        }
+
+        if (length < _sequenceLength)
+            throw new ArgumentException($"DiffusionTS needs at least {_sequenceLength} past steps; got {length}.", nameof(input));
+        var rows = new double[batch, _sequenceLength, _numFeatures];
+        int offset = length - _sequenceLength;
+        for (int b = 0; b < batch; b++)
+            for (int t = 0; t < _sequenceLength; t++)
+                for (int f = 0; f < _numFeatures; f++)
+                    rows[b, t, f] = NumOps.ToDouble(input[(b * length + offset + t) * _numFeatures + f]);
+        return rows;
+    }
+
+    // An unbatched [T, F] window: rank 2 whose last axis is the feature axis (for one feature, a [T, 1] column).
+    private bool IsUnbatched(Tensor<T> input)
+        => input.Rank == 1 || (input.Rank == 2 && input.Shape[1] == _numFeatures && (_numFeatures > 1 || input.Shape[0] >= _sequenceLength));
+
+    private int[] PointShape(Tensor<T> input)
+    {
+        ContextRows(input, out int batch);
+        return IsUnbatched(input) ? new[] { _forecastHorizon, _numFeatures } : new[] { batch, _forecastHorizon, _numFeatures };
+    }
+
+    /// <summary>
+    /// Each series' mean and spread over its context. Windows are standardised by them, so the denoiser sees series of
+    /// any level and scale on one footing; a flat feature keeps a spread of 1.
+    /// </summary>
+    private (double[] Mean, double[] Spread) Statistics(double[,,] context, int row)
+    {
+        var mean = new double[_numFeatures];
+        var spread = new double[_numFeatures];
+        for (int f = 0; f < _numFeatures; f++)
+        {
+            double sum = 0;
+            for (int t = 0; t < _sequenceLength; t++) sum += context[row, t, f];
+            mean[f] = sum / _sequenceLength;
+            double squares = 0;
+            for (int t = 0; t < _sequenceLength; t++) squares += Math.Pow(context[row, t, f] - mean[f], 2);
+            double deviation = Math.Sqrt(squares / _sequenceLength);
+            spread[f] = deviation > 1e-5 && !double.IsInfinity(deviation) ? deviation : 1.0;
+        }
+
+        return (mean, spread);
+    }
+
+    private int DrawSeed(long draw)
+    {
+        unchecked
+        {
+            ulong mixed = (ulong)(uint)(_seed ?? _unseededDrawBase) * 0x9E3779B97F4A7C15UL ^ (ulong)draw * 0xBF58476D1CE4E5B9UL;
+            mixed ^= mixed >> 31;
+            mixed *= 0x94D049BB133111EBUL;
+            mixed ^= mixed >> 29;
+            return (int)(mixed & 0x7FFFFFFF);
+        }
+    }
+
+    private static double StandardNormal(Random random)
+    {
+        double u1 = 1.0 - random.NextDouble();
+        double u2 = 1.0 - random.NextDouble();
+        return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Cos(2.0 * Math.PI * u2);
+    }
+
+    #endregion
+
+    #region Model Reporting
+
+    /// <inheritdoc/>
     /// <remarks>
-    /// <para><b>For Beginners:</b> Returns all configuration details about the model
-    /// including the decomposition settings, diffusion parameters, and training state.
-    /// </para>
+    /// The layers are not a sequential chain, so the family's fold over Layers does not describe the model. One training
+    /// forward on a target-less pair runs every layer in the order the model uses it, and that is what is recorded.
     /// </remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        var activations = new Dictionary<string, Tensor<T>>();
+        if (!_useNativeMode) return activations;
+
+        var pair = PrepareTrainingPair(input, null, 0);
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        using var trace = new AiDotNet.NeuralNetworks.Graph.LayerForwardObserver<T>();
+        _ = ForwardForTraining(pair.Input);
+        foreach (var (layer, _, output) in trace.Calls)
+        {
+            if (output is null) continue;
+            int index = Layers.IndexOf(layer);
+            if (index < 0) continue;
+            activations[$"Layer_{index}_{layer.GetType().Name}"] = output.Clone();
+        }
+
+        return activations;
+    }
+
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -606,145 +833,27 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
                 { "SequenceLength", _sequenceLength },
                 { "ForecastHorizon", _forecastHorizon },
                 { "NumFeatures", _numFeatures },
-                { "HiddenDimension", _hiddenDimension },
-                { "TrendHiddenDim", _trendHiddenDim },
-                { "SeasonalHiddenDim", _seasonalHiddenDim },
+                { "HiddenDimension", _options.HiddenDimension },
+                { "NumEncoderLayers", _options.NumEncoderLayers },
+                { "NumDecoderLayers", _options.NumDecoderLayers },
                 { "NumDiffusionSteps", _numDiffusionSteps },
                 { "NumSamples", _numSamples },
-                { "DecompositionPeriod", _decompositionPeriod },
-                { "TrendKernelSize", _trendKernelSize },
-                { "UseTrendComponent", _useTrendComponent },
-                { "UseSeasonalComponent", _useSeasonalComponent },
-                { "BetaSchedule", _betaSchedule },
                 { "UseNativeMode", _useNativeMode }
-            }
+            },
+            ModelDataProvider = () => _useNativeMode ? this.Serialize() : Array.Empty<byte>()
         };
     }
 
-    /// <summary>
-    /// Serializes DiffusionTS-specific data for model persistence.
-    /// </summary>
-    /// <param name="writer">The binary writer for serialization.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Saves all the model configuration so it can
-    /// be reconstructed later. This includes decomposition settings and
-    /// diffusion parameters.
-    /// </para>
-    /// </remarks>
-
-
-    /// <summary>
-    /// Deserializes DiffusionTS-specific data from a saved model.
-    /// </summary>
-    /// <param name="reader">The binary reader for deserialization.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Reads the saved model configuration to restore
-    /// all settings. The values are read but not assigned since they were set
-    /// in the constructor.
-    /// </para>
-    /// </remarks>
-
-
-    #endregion
-
-    #region IForecastingModel Implementation
-
-    /// <summary>
-    /// Generates forecasts for the given input time series.
-    /// </summary>
-    /// <param name="historicalData">Input tensor containing historical data (context).</param>
-    /// <param name="quantiles">Optional quantile levels for probabilistic forecasting (e.g., [0.1, 0.5, 0.9]).</param>
-    /// <returns>Forecast tensor with predicted values.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Runs interpretable diffusion to generate forecasts.
-    /// If quantiles are specified, generates multiple samples and computes percentiles.
-    /// The forecast is a sum of trend, seasonal, and residual components.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> Forecast(Tensor<T> historicalData, double[]? quantiles = null)
-    {
-        _random = CreateSamplingStream();
-        if (quantiles is not null && quantiles.Length > 0)
-        {
-            var samples = GenerateSamples(historicalData, _numSamples);
-            return ComputeQuantiles(samples, quantiles);
-        }
-
-        return _useNativeMode ? ForecastNative(historicalData) : ForecastOnnx(historicalData);
-    }
-
-    /// <summary>
-    /// Generates forecasts with prediction intervals.
-    /// </summary>
-    /// <param name="input">Input tensor containing historical data.</param>
-    /// <param name="confidenceLevel">Confidence level for intervals (e.g., 0.95 for 95%).</param>
-    /// <returns>Tuple of (forecast median, lower bound, upper bound).</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Generates multiple samples using different
-    /// random seeds and computes confidence intervals. Higher confidence levels
-    /// produce wider intervals.
-    /// </para>
-    /// </remarks>
-    public (Tensor<T> Forecast, Tensor<T> Lower, Tensor<T> Upper) ForecastWithIntervals(
-        Tensor<T> input,
-        double confidenceLevel = 0.95)
-    {
-        _random = CreateSamplingStream();
-        var samples = GenerateSamples(input, _numSamples);
-        return ComputePredictionIntervals(samples, confidenceLevel);
-    }
-
-    /// <summary>
-    /// Performs autoregressive forecasting for extended horizons.
-    /// </summary>
-    /// <param name="input">Initial input tensor.</param>
-    /// <param name="steps">Number of forecast steps to generate.</param>
-    /// <returns>Extended forecast tensor.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Generates forecasts iteratively by using
-    /// previous predictions as input for the next step. Useful for forecasting
-    /// further than the model's native horizon.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
-    {
-        var predictions = new List<Tensor<T>>();
-        var currentInput = input;
-
-        for (int i = 0; i < steps; i++)
-        {
-            var prediction = Forecast(currentInput, null);
-            predictions.Add(prediction);
-            currentInput = ShiftInputWindow(currentInput, prediction);
-        }
-
-        return ConcatenatePredictions(predictions);
-    }
-
-    /// <summary>
-    /// Evaluates forecast quality against actual values.
-    /// </summary>
-    /// <param name="predictions">Predicted values tensor.</param>
-    /// <param name="actuals">Actual values tensor for comparison.</param>
-    /// <returns>Dictionary of evaluation metrics (MSE, MAE, RMSE).</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Computes standard forecasting metrics:
-    /// - MSE: Mean Squared Error (penalizes large errors more)
-    /// - MAE: Mean Absolute Error (robust to outliers)
-    /// - RMSE: Root Mean Squared Error (same units as data)
-    /// </para>
-    /// </remarks>
+    /// <inheritdoc/>
     public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
     {
         var metrics = new Dictionary<string, T>();
-
         T mse = NumOps.Zero;
         T mae = NumOps.Zero;
-        int count = Math.Min(predictions.Data.Length, actuals.Data.Length);
-
+        int count = Math.Min(predictions.Length, actuals.Length);
         for (int i = 0; i < count; i++)
         {
-            T diff = NumOps.Subtract(predictions.Data.Span[i], actuals.Data.Span[i]);
+            T diff = NumOps.Subtract(predictions[i], actuals[i]);
             mse = NumOps.Add(mse, NumOps.Multiply(diff, diff));
             mae = NumOps.Add(mae, NumOps.Abs(diff));
         }
@@ -755,793 +864,65 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
             mae = NumOps.Divide(mae, NumOps.FromDouble(count));
         }
 
-        T rmse = NumOps.Sqrt(mse);
-
         metrics["MSE"] = mse;
         metrics["MAE"] = mae;
-        metrics["RMSE"] = rmse;
-
+        metrics["RMSE"] = NumOps.Sqrt(mse);
         return metrics;
     }
 
-    /// <summary>
-    /// Applies instance normalization (RevIN) to the input.
-    /// </summary>
-    /// <param name="input">Input tensor to normalize.</param>
-    /// <returns>Normalized tensor (identity for DiffusionTS).</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> DiffusionTS handles normalization internally
-    /// through the decomposition process, so this returns the input unchanged.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
-    {
-        return input;
-    }
+    /// <inheritdoc/>
+    /// <remarks>Windows are standardised per series inside the model (see <c>Statistics</c>), so the input is left as given.</remarks>
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input) => input;
 
-    /// <summary>
-    /// Gets financial-specific metrics for model evaluation.
-    /// </summary>
-    /// <returns>Dictionary of financial metrics.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Returns model statistics relevant for
-    /// financial forecasting applications.
-    /// </para>
-    /// </remarks>
+    /// <inheritdoc/>
     public override Dictionary<string, T> GetFinancialMetrics()
     {
         T lastLoss = LastLoss is not null ? LastLoss : NumOps.Zero;
-
         return new Dictionary<string, T>
         {
             ["LastLoss"] = lastLoss,
             ["SequenceLength"] = NumOps.FromDouble(_sequenceLength),
             ["ForecastHorizon"] = NumOps.FromDouble(_forecastHorizon),
             ["NumDiffusionSteps"] = NumOps.FromDouble(_numDiffusionSteps),
-            ["NumSamples"] = NumOps.FromDouble(_numSamples),
-            ["DecompositionPeriod"] = NumOps.FromDouble(_decompositionPeriod)
+            ["NumSamples"] = NumOps.FromDouble(_numSamples)
         };
     }
 
     #endregion
 
-    #region Forward/Backward Pass
+    #region ONNX
 
-    /// <summary>
-    /// Performs the forward pass through all layers.
-    /// </summary>
-    /// <param name="input">Input tensor (combined noisy components).</param>
-    /// <returns>Output tensor (predicted noise for all components).</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The forward pass processes the combined
-    /// noisy components through the specialized networks and predicts the
-    /// noise to be removed for each component.
-    /// </para>
-    /// </remarks>
-    public Tensor<T> Forward(Tensor<T> input)
-    {
-        var current = FlattenInput(input);
-
-        foreach (var layer in Layers)
-        {
-            current = layer.Forward(current);
-        }
-
-        return current;
-    }
-
-    /// <summary>
-    /// Flattens input tensor for dense layer processing.
-    /// </summary>
-    /// <param name="input">Multi-dimensional input tensor.</param>
-    /// <returns>Flattened 1D tensor.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Converts multi-dimensional time series data
-    /// into a flat vector that dense layers can process.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> FlattenInput(Tensor<T> input)
-    {
-        int totalSize = 1;
-        foreach (var dim in input._shape)
-        {
-            totalSize *= dim;
-        }
-
-        var flattened = new Tensor<T>(new[] { totalSize });
-        for (int i = 0; i < totalSize; i++)
-        {
-            flattened.Data.Span[i] = input.Data.Span[i];
-        }
-
-        return flattened;
-    }
-
-    #endregion
-
-    #region Decomposition Methods
-
-    /// <summary>
-    /// Decomposes a time series into trend, seasonal, and residual components.
-    /// </summary>
-    /// <param name="timeSeries">Input time series tensor.</param>
-    /// <returns>Tuple of (trend, seasonal, residual) component tensors.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Time series decomposition splits data into:
-    /// - Trend: The long-term direction (up, down, or flat)
-    /// - Seasonal: Repeating patterns (daily, weekly, yearly cycles)
-    /// - Residual: What's left after removing trend and seasonality
-    ///
-    /// This makes the model interpretable because each component has clear meaning.
-    /// </para>
-    /// </remarks>
-    private (Tensor<T> trend, Tensor<T> seasonal, Tensor<T> residual) DecomposeTimeSeries(Tensor<T> timeSeries)
-    {
-        var dataVec = timeSeries.ToVector();
-        int len = dataVec.Length;
-
-        var trendVec = new T[len];
-        var seasonalVec = new T[len];
-        var residualVec = new T[len];
-
-        // Extract trend using moving average
-        if (_useTrendComponent)
-        {
-            int halfKernel = _trendKernelSize / 2;
-            for (int i = 0; i < len; i++)
-            {
-                double sum = 0;
-                int count = 0;
-                for (int j = Math.Max(0, i - halfKernel); j <= Math.Min(len - 1, i + halfKernel); j++)
-                {
-                    sum += NumOps.ToDouble(dataVec[j]);
-                    count++;
-                }
-                trendVec[i] = NumOps.FromDouble(sum / count);
-            }
-        }
-        else
-        {
-            // No trend - use zeros
-            for (int i = 0; i < len; i++)
-            {
-                trendVec[i] = NumOps.Zero;
-            }
-        }
-
-        // Extract seasonal component
-        if (_useSeasonalComponent && _decompositionPeriod > 0 && len >= _decompositionPeriod)
-        {
-            // Compute seasonal averages for each position in the period
-            var seasonalAverages = new double[_decompositionPeriod];
-            var seasonalCounts = new int[_decompositionPeriod];
-
-            for (int i = 0; i < len; i++)
-            {
-                int pos = i % _decompositionPeriod;
-                double detrendedValue = NumOps.ToDouble(dataVec[i]) - NumOps.ToDouble(trendVec[i]);
-                seasonalAverages[pos] += detrendedValue;
-                seasonalCounts[pos]++;
-            }
-
-            // Normalize and center seasonal values
-            double seasonalMean = 0;
-            for (int i = 0; i < _decompositionPeriod; i++)
-            {
-                if (seasonalCounts[i] > 0)
-                {
-                    seasonalAverages[i] /= seasonalCounts[i];
-                    seasonalMean += seasonalAverages[i];
-                }
-            }
-            seasonalMean /= _decompositionPeriod;
-
-            for (int i = 0; i < _decompositionPeriod; i++)
-            {
-                seasonalAverages[i] -= seasonalMean;
-            }
-
-            // Apply seasonal pattern
-            for (int i = 0; i < len; i++)
-            {
-                int pos = i % _decompositionPeriod;
-                seasonalVec[i] = NumOps.FromDouble(seasonalAverages[pos]);
-            }
-        }
-        else
-        {
-            // No seasonality - use zeros
-            for (int i = 0; i < len; i++)
-            {
-                seasonalVec[i] = NumOps.Zero;
-            }
-        }
-
-        // Residual = original - trend - seasonal
-        for (int i = 0; i < len; i++)
-        {
-            double original = NumOps.ToDouble(dataVec[i]);
-            double trend = NumOps.ToDouble(trendVec[i]);
-            double seasonal = NumOps.ToDouble(seasonalVec[i]);
-            residualVec[i] = NumOps.FromDouble(original - trend - seasonal);
-        }
-
-        return (new Tensor<T>(timeSeries._shape, new Vector<T>(trendVec)),
-                new Tensor<T>(timeSeries._shape, new Vector<T>(seasonalVec)),
-                new Tensor<T>(timeSeries._shape, new Vector<T>(residualVec)));
-    }
-
-    /// <summary>
-    /// Combines trend, seasonal, and residual components into a single tensor.
-    /// </summary>
-    /// <param name="trend">Trend component tensor.</param>
-    /// <param name="seasonal">Seasonal component tensor.</param>
-    /// <param name="residual">Residual component tensor.</param>
-    /// <returns>Combined tensor with all three components.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Concatenates the three decomposition components
-    /// into a single tensor for processing. During reconstruction, these are
-    /// added back together to form the final forecast.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> CombineComponents(Tensor<T> trend, Tensor<T> seasonal, Tensor<T> residual)
-    {
-        var trendVec = trend.ToVector();
-        var seasonalVec = seasonal.ToVector();
-        var residualVec = residual.ToVector();
-
-        int len = trendVec.Length;
-        var combined = new T[len * 3];
-
-        for (int i = 0; i < len; i++)
-        {
-            combined[i] = trendVec[i];
-            combined[len + i] = seasonalVec[i];
-            combined[2 * len + i] = residualVec[i];
-        }
-
-        return new Tensor<T>(new[] { len * 3 }, new Vector<T>(combined));
-    }
-
-    /// <summary>
-    /// Reconstructs the time series from its decomposed components.
-    /// </summary>
-    /// <param name="trend">Trend component tensor.</param>
-    /// <param name="seasonal">Seasonal component tensor.</param>
-    /// <param name="residual">Residual component tensor.</param>
-    /// <returns>Reconstructed time series tensor.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Simply adds together the trend, seasonal,
-    /// and residual components to get the final forecast. This is the inverse
-    /// of decomposition.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ReconstructFromComponents(Tensor<T> trend, Tensor<T> seasonal, Tensor<T> residual)
-    {
-        var trendVec = trend.ToVector();
-        var seasonalVec = seasonal.ToVector();
-        var residualVec = residual.ToVector();
-
-        int len = Math.Min(Math.Min(trendVec.Length, seasonalVec.Length), residualVec.Length);
-        var reconstructed = new T[len];
-
-        for (int i = 0; i < len; i++)
-        {
-            double t = NumOps.ToDouble(trendVec[i]);
-            double s = NumOps.ToDouble(seasonalVec[i]);
-            double r = NumOps.ToDouble(residualVec[i]);
-            reconstructed[i] = NumOps.FromDouble(t + s + r);
-        }
-
-        return new Tensor<T>(new[] { len }, new Vector<T>(reconstructed));
-    }
-
-    #endregion
-
-    #region Diffusion Methods
-
-    /// <summary>
-    /// Performs native mode forecasting with interpretable diffusion.
-    /// </summary>
-    /// <param name="context">Input context tensor containing historical data.</param>
-    /// <returns>Forecast tensor with generated values.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Generates forecasts by:
-    /// 1. Decomposing input context to estimate component patterns
-    /// 2. Initializing noisy trend, seasonal, and residual
-    /// 3. Running reverse diffusion separately for each component
-    /// 4. Combining denoised components for final forecast
-    ///
-    /// The result is interpretable - you can see how much each component
-    /// contributes to the forecast.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ForecastNative(Tensor<T> context)
-    {
-        SetTrainingMode(false);
-
-        int forecastSize = _forecastHorizon * _numFeatures;
-
-        // Initialize each component with noise
-        var trendSample = GenerateNoise(forecastSize);
-        var seasonalSample = GenerateNoise(forecastSize);
-        var residualSample = GenerateNoise(forecastSize);
-
-        // Get context components for conditioning
-        var (contextTrend, contextSeasonal, contextResidual) = DecomposeTimeSeries(context);
-
-        // Reverse diffusion for each component
-        for (int t = _numDiffusionSteps - 1; t >= 0; t--)
-        {
-            // Combine all components
-            var combined = CombineComponents(trendSample, seasonalSample, residualSample);
-            var contextCombined = CombineComponents(contextTrend, contextSeasonal, contextResidual);
-            var fullInput = CombineTensors(contextCombined, combined);
-
-            // Predict noise
-            var predictedNoise = Forward(fullInput);
-
-            // Denoise each component
-            int componentSize = forecastSize;
-            var trendNoise = ExtractComponent(predictedNoise, 0, componentSize);
-            var seasonalNoise = ExtractComponent(predictedNoise, componentSize, componentSize);
-            var residualNoise = ExtractComponent(predictedNoise, 2 * componentSize, componentSize);
-
-            trendSample = DenoisingStep(trendSample, trendNoise, t);
-            seasonalSample = DenoisingStep(seasonalSample, seasonalNoise, t);
-            residualSample = DenoisingStep(residualSample, residualNoise, t);
-
-            // Apply smoothness constraint to trend
-            if (t > 0)
-            {
-                trendSample = ApplySmoothness(trendSample);
-            }
-        }
-
-        // Reconstruct final forecast
-        return ReconstructFromComponents(trendSample, seasonalSample, residualSample);
-    }
-
-    /// <summary>
-    /// Performs ONNX mode forecasting using a pretrained model.
-    /// </summary>
-    /// <param name="input">Input tensor containing historical data.</param>
-    /// <returns>Forecast tensor from ONNX inference.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Uses a pretrained ONNX model for fast inference.
-    /// The ONNX model contains the trained decomposition networks.
-    /// </para>
-    /// </remarks>
+    /// <inheritdoc/>
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (OnnxSession is null)
             throw new InvalidOperationException("ONNX session not initialized.");
-
-        var flatInput = FlattenInput(input);
-        var inputData = new float[flatInput.Data.Length];
-        for (int i = 0; i < flatInput.Data.Length; i++)
-        {
-            inputData[i] = Convert.ToSingle(NumOps.ToDouble(flatInput.Data.Span[i]));
-        }
-
-        var inputTensor = new OnnxTensors.DenseTensor<float>(
-            inputData,
-            new[] { 1, _sequenceLength, _numFeatures });
+        var context = ContextRows(input, out int batch);
+        var data = new float[batch * _sequenceLength * _numFeatures];
+        for (int b = 0; b < batch; b++)
+            for (int t = 0; t < _sequenceLength; t++)
+                for (int f = 0; f < _numFeatures; f++)
+                    data[(b * _sequenceLength + t) * _numFeatures + f] = (float)context[b, t, f];
 
         var inputs = new List<NamedOnnxValue>
         {
-            NamedOnnxValue.CreateFromTensor("input", inputTensor)
+            NamedOnnxValue.CreateFromTensor(
+                OnnxSession.InputMetadata.Keys.FirstOrDefault() ?? "input",
+                new OnnxTensors.DenseTensor<float>(data, new[] { batch, _sequenceLength, _numFeatures }))
         };
-
         using var results = OnnxSession.Run(inputs);
-        var outputTensor = results.First().AsTensor<float>();
-
-        var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-        {
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        }
-
-        return new Tensor<T>(new[] { _forecastHorizon }, new Vector<T>(outputData));
+        var output = results.First().AsTensor<float>();
+        var result = new Tensor<T>(output.Dimensions.ToArray());
+        for (int i = 0; i < result.Length; i++) result[i] = NumOps.FromDouble(output.GetValue(i));
+        return result;
     }
 
-    /// <summary>
-    /// Generates multiple forecast samples for uncertainty estimation.
-    /// </summary>
-    /// <param name="context">Input context tensor.</param>
-    /// <param name="numSamples">Number of samples to generate.</param>
-    /// <returns>List of forecast samples.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Diffusion is stochastic - different starting noise
-    /// leads to different forecasts. This diversity captures uncertainty in
-    /// each component (trend, seasonal, residual).
-    /// </para>
-    /// </remarks>
-    private List<Tensor<T>> GenerateSamples(Tensor<T> context, int numSamples)
-    {
-        var samples = new List<Tensor<T>>();
-        for (int i = 0; i < numSamples; i++)
-        {
-            samples.Add(ForecastNative(context));
-        }
-        return samples;
-    }
-
-    /// <summary>
-    /// Adds noise to data at a specific diffusion timestep.
-    /// </summary>
-    /// <param name="data">Clean data tensor.</param>
-    /// <param name="t">Diffusion timestep (0 = clean, max = pure noise).</param>
-    /// <returns>Tuple of (noisy data, noise added).</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The forward diffusion process adds Gaussian noise
-    /// according to the schedule. More noise at higher timesteps progressively
-    /// destroys the signal, which the model learns to reverse.
-    /// </para>
-    /// </remarks>
-    private (Tensor<T> noisy, Tensor<T> noise) AddNoise(Tensor<T> data, int t)
-    {
-        var dataVec = data.ToVector();
-        var noiseVec = new T[dataVec.Length];
-        var noisyVec = new T[dataVec.Length];
-
-        double sqrtAlpha = _sqrtAlphasCumprod[t];
-        double sqrtOneMinusAlpha = _sqrtOneMinusAlphasCumprod[t];
-
-        for (int i = 0; i < dataVec.Length; i++)
-        {
-            double u1 = _random.NextDouble();
-            double u2 = _random.NextDouble();
-            double noise = Math.Sqrt(-2.0 * Math.Log(Math.Max(u1, 1e-10))) * Math.Cos(2.0 * Math.PI * u2);
-            noiseVec[i] = NumOps.FromDouble(noise);
-
-            double dataVal = NumOps.ToDouble(dataVec[i]);
-            double noisyVal = sqrtAlpha * dataVal + sqrtOneMinusAlpha * noise;
-            noisyVec[i] = NumOps.FromDouble(noisyVal);
-        }
-
-        return (new Tensor<T>(data._shape, new Vector<T>(noisyVec)),
-                new Tensor<T>(data._shape, new Vector<T>(noiseVec)));
-    }
-
-    /// <summary>
-    /// Performs one step of the reverse diffusion process.
-    /// </summary>
-    /// <param name="current">Current noisy state tensor.</param>
-    /// <param name="predictedNoise">Predicted noise to remove.</param>
-    /// <param name="t">Current timestep.</param>
-    /// <returns>Denoised state tensor.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Each denoising step removes a bit of the predicted
-    /// noise, gradually revealing the clean signal. This is the core of diffusion
-    /// models - learning to reverse the noise-adding process.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> DenoisingStep(Tensor<T> current, Tensor<T> predictedNoise, int t)
-    {
-        var currentVec = current.ToVector();
-        var noiseVec = predictedNoise.ToVector();
-        var resultVec = new T[currentVec.Length];
-
-        double alpha = _alphas[t];
-        double sqrtAlpha = Math.Sqrt(alpha);
-        double sqrtOneMinusAlphaBar = _sqrtOneMinusAlphasCumprod[t];
-
-        double coeff = (1 - alpha) / sqrtOneMinusAlphaBar;
-        double sigma = t > 0 ? Math.Sqrt(_betas[t]) : 0;
-
-        for (int i = 0; i < currentVec.Length; i++)
-        {
-            double x_t = NumOps.ToDouble(currentVec[i]);
-            double eps = NumOps.ToDouble(noiseVec[i % noiseVec.Length]);
-
-            double mean = (x_t - coeff * eps) / sqrtAlpha;
-
-            double z = 0;
-            if (t > 0)
-            {
-                double u1 = _random.NextDouble();
-                double u2 = _random.NextDouble();
-                z = Math.Sqrt(-2.0 * Math.Log(Math.Max(u1, 1e-10))) * Math.Cos(2.0 * Math.PI * u2);
-            }
-
-            resultVec[i] = NumOps.FromDouble(mean + sigma * z);
-        }
-
-        return new Tensor<T>(current._shape, new Vector<T>(resultVec));
-    }
-
-    /// <summary>
-    /// Applies smoothness constraint to the trend component.
-    /// </summary>
-    /// <param name="trend">Trend tensor to smooth.</param>
-    /// <returns>Smoothed trend tensor.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Trends should be smooth by definition - they capture
-    /// long-term movements, not short-term fluctuations. This constraint helps
-    /// ensure the trend component stays interpretable.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ApplySmoothness(Tensor<T> trend)
-    {
-        var trendVec = trend.ToVector();
-        var smoothed = new T[trendVec.Length];
-
-        // Simple exponential smoothing
-        double alpha = 0.3;
-        smoothed[0] = trendVec[0];
-
-        for (int i = 1; i < trendVec.Length; i++)
-        {
-            double prev = NumOps.ToDouble(smoothed[i - 1]);
-            double curr = NumOps.ToDouble(trendVec[i]);
-            smoothed[i] = NumOps.FromDouble(alpha * curr + (1 - alpha) * prev);
-        }
-
-        return new Tensor<T>(trend._shape, new Vector<T>(smoothed));
-    }
-
-    /// <summary>
-    /// Generates random Gaussian noise for initialization.
-    /// </summary>
-    /// <param name="size">Size of noise vector.</param>
-    /// <returns>Noise tensor with standard normal values.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Diffusion starts from pure noise and gradually
-    /// transforms it into a coherent forecast. This generates the starting noise.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> GenerateNoise(int size)
-    {
-        var noiseVec = new T[size];
-
-        for (int i = 0; i < size; i++)
-        {
-            double u1 = _random.NextDouble();
-            double u2 = _random.NextDouble();
-            double noise = Math.Sqrt(-2.0 * Math.Log(Math.Max(u1, 1e-10))) * Math.Cos(2.0 * Math.PI * u2);
-            noiseVec[i] = NumOps.FromDouble(noise);
-        }
-
-        return new Tensor<T>(new[] { size }, new Vector<T>(noiseVec));
-    }
-
-    #endregion
-
-    #region Helper Methods
-
-    /// <summary>
-    /// Combines two tensors by concatenation.
-    /// </summary>
-    /// <param name="first">First tensor.</param>
-    /// <param name="second">Second tensor.</param>
-    /// <returns>Combined tensor.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Concatenates context and sample tensors
-    /// for joint processing through the network.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> CombineTensors(Tensor<T> first, Tensor<T> second)
-    {
-        var firstVec = first.ToVector();
-        var secondVec = second.ToVector();
-        var combined = new T[firstVec.Length + secondVec.Length];
-
-        for (int i = 0; i < firstVec.Length; i++)
-        {
-            combined[i] = firstVec[i];
-        }
-        for (int i = 0; i < secondVec.Length; i++)
-        {
-            combined[firstVec.Length + i] = secondVec[i];
-        }
-
-        return new Tensor<T>(new[] { combined.Length }, new Vector<T>(combined));
-    }
-
-    /// <summary>
-    /// Extracts a component from a combined tensor.
-    /// </summary>
-    /// <param name="combined">Combined tensor with all components.</param>
-    /// <param name="offset">Starting offset for extraction.</param>
-    /// <param name="length">Length of component to extract.</param>
-    /// <returns>Extracted component tensor.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> After the network processes combined components,
-    /// this extracts the predicted noise for each individual component.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ExtractComponent(Tensor<T> combined, int offset, int length)
-    {
-        var combinedVec = combined.ToVector();
-        var component = new T[length];
-
-        // If offset is beyond the combined vector, just return zeros
-        // This handles cases where the network output is smaller than expected
-        if (offset >= combinedVec.Length)
-        {
-            for (int i = 0; i < length; i++)
-            {
-                component[i] = NumOps.Zero;
-            }
-            return new Tensor<T>(new[] { length }, new Vector<T>(component));
-        }
-
-        // Calculate safe copy length
-        int availableLength = combinedVec.Length - offset;
-        int actualLength = Math.Min(length, availableLength);
-
-        for (int i = 0; i < actualLength; i++)
-        {
-            component[i] = combinedVec[offset + i];
-        }
-
-        // Fill remaining with zeros if needed
-        for (int i = actualLength; i < length; i++)
-        {
-            component[i] = NumOps.Zero;
-        }
-
-        return new Tensor<T>(new[] { length }, new Vector<T>(component));
-    }
-
-    /// <summary>
-    /// Shifts input window by appending new prediction.
-    /// </summary>
-    /// <param name="input">Current input tensor.</param>
-    /// <param name="prediction">New prediction to append.</param>
-    /// <returns>Shifted input tensor.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> For autoregressive forecasting, removes oldest
-    /// values and appends newest predictions to maintain the input window size.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ShiftInputWindow(Tensor<T> input, Tensor<T> prediction)
-    {
-        var inputVec = input.ToVector();
-        var predVec = prediction.ToVector();
-
-        int windowLen = (_sequenceLength - _forecastHorizon) * _numFeatures;
-        var shifted = new T[windowLen];
-
-        int shiftAmount = Math.Min(predVec.Length, windowLen);
-        for (int i = 0; i < windowLen - shiftAmount; i++)
-        {
-            shifted[i] = inputVec[i + shiftAmount];
-        }
-        for (int i = 0; i < shiftAmount; i++)
-        {
-            shifted[windowLen - shiftAmount + i] = predVec[i];
-        }
-
-        return new Tensor<T>(new[] { windowLen }, new Vector<T>(shifted));
-    }
-
-    /// <summary>
-    /// Concatenates multiple prediction tensors.
-    /// </summary>
-    /// <param name="predictions">List of prediction tensors.</param>
-    /// <returns>Concatenated tensor.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Combines multiple forecast steps into one
-    /// continuous forecast tensor.
-    /// </para>
-    /// </remarks>
-        protected Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions)
-    {
-        int totalLen = predictions.Sum(p => p.ToVector().Length);
-        var result = new T[totalLen];
-        int offset = 0;
-
-        foreach (var pred in predictions)
-        {
-            var predVec = pred.ToVector();
-            for (int i = 0; i < predVec.Length; i++)
-            {
-                result[offset + i] = predVec[i];
-            }
-            offset += predVec.Length;
-        }
-
-        return new Tensor<T>(new[] { totalLen }, new Vector<T>(result));
-    }
-
-    /// <summary>
-    /// Computes quantiles from multiple samples.
-    /// </summary>
-    /// <param name="samples">List of forecast samples.</param>
-    /// <param name="quantiles">Quantile levels to compute (e.g., [0.1, 0.5, 0.9]).</param>
-    /// <returns>Tensor with quantile values.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Sorts samples at each position and picks
-    /// the values at specified percentiles for uncertainty estimation.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ComputeQuantiles(List<Tensor<T>> samples, double[] quantiles)
-    {
-        if (samples.Count == 0)
-            return new Tensor<T>(new[] { 0 });
-
-        int len = samples[0].ToVector().Length;
-        var result = new T[len * quantiles.Length];
-
-        for (int pos = 0; pos < len; pos++)
-        {
-            var values = samples.Select(s => NumOps.ToDouble(s.ToVector()[pos])).OrderBy(v => v).ToList();
-
-            for (int q = 0; q < quantiles.Length; q++)
-            {
-                int idx = (int)(quantiles[q] * (values.Count - 1));
-                result[q * len + pos] = NumOps.FromDouble(values[idx]);
-            }
-        }
-
-        return new Tensor<T>(new[] { quantiles.Length, len }, new Vector<T>(result));
-    }
-
-    /// <summary>
-    /// Computes prediction intervals from multiple samples.
-    /// </summary>
-    /// <param name="samples">List of forecast samples.</param>
-    /// <param name="confidenceLevel">Confidence level (e.g., 0.95).</param>
-    /// <returns>Tuple of (median forecast, lower bound, upper bound).</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Uses the sample distribution to compute
-    /// confidence intervals. A 95% interval means 95% of samples fall within bounds.
-    /// </para>
-    /// </remarks>
-    private (Tensor<T> Forecast, Tensor<T> Lower, Tensor<T> Upper) ComputePredictionIntervals(
-        List<Tensor<T>> samples,
-        double confidenceLevel)
-    {
-        double alpha = 1 - confidenceLevel;
-        double[] quantiles = { alpha / 2, 0.5, 1 - alpha / 2 };
-
-        var quantileResult = ComputeQuantiles(samples, quantiles);
-        var resultVec = quantileResult.ToVector();
-
-        int len = samples[0].ToVector().Length;
-        var lowerVec = new T[len];
-        var medianVec = new T[len];
-        var upperVec = new T[len];
-
-        for (int i = 0; i < len; i++)
-        {
-            lowerVec[i] = resultVec[i];
-            medianVec[i] = resultVec[len + i];
-            upperVec[i] = resultVec[2 * len + i];
-        }
-
-        var shape = new[] { len };
-        return (new Tensor<T>(shape, new Vector<T>(medianVec)),
-                new Tensor<T>(shape, new Vector<T>(lowerVec)),
-                new Tensor<T>(shape, new Vector<T>(upperVec)));
-    }
-
-    #endregion
-
-    #region IDisposable
-
-    /// <summary>
-    /// Disposes of managed and unmanaged resources.
-    /// </summary>
-    /// <param name="disposing">Whether to dispose managed resources.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Releases the ONNX session and other resources
-    /// when the model is no longer needed.
-    /// </para>
-    /// </remarks>
+    /// <inheritdoc/>
     protected override void Dispose(bool disposing)
     {
-        if (disposing)
-        {
-            OnnxSession?.Dispose();
-        }
+        if (disposing) OnnxSession?.Dispose();
         base.Dispose(disposing);
     }
 
     #endregion
 }
-
-
-
