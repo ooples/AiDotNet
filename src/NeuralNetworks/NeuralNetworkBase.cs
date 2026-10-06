@@ -7636,11 +7636,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 (_layersSeededAtConstruction ??= new HashSet<ILayer<T>>(Helpers.TensorReferenceComparer<ILayer<T>>.Instance))
                     .Add(layer);
             }
-            else if (seededHere)
+            else if (_layersSeededAtConstruction is { } seededLayers && seededLayers.Remove(layer))
             {
                 // The model has no seed any more, so the seed it gave this layer goes too.
                 baseLayer.RandomSeed = null;
-                _layersSeededAtConstruction?.Remove(layer);
             }
         }
 
