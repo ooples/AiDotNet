@@ -753,13 +753,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // (MaskGCT), and the mixture-of-Gaussians generative net (MoG). Paper defaults intact + customizable.
         "MARS5TTS", "LlamaOmni", "MinMo", "MaskGCT",
         // #1789 J-M mid-tier classes that still OOM or time out on the forward/training even at <float>
-        // (verified locally): Mask2Former (segmentation foundation), LLMTime (LLM-forecasting), MelGAN
-        // (vocoder), MedicalASR / MedSegDiffV2 (medical ASR / seg-diffusion), MemFlow (optical flow — its
+        // (verified locally): Mask2Former (segmentation foundation), LLMTime (LLM-forecasting),
+        // MedicalASR / MedSegDiffV2 (medical ASR / seg-diffusion), MemFlow (optical flow — its
         // existing smoke cap was still insufficient), LegalBERTNER (long-sequence NER), and KMaXDeepLab (its
         // k-means-attention memorization task overran even the fp32 blame-hang). A CI-smoke constructorExpr
         // could rescue several, but that per-model work is deferred; for now they run at full scale in the
         // nightly HeavyTimeout lane. Paper defaults intact and user-customizable.
-        "MelGAN", "MemFlow", "LegalBERTNER", "KMaXDeepLab",
+        "MemFlow", "LegalBERTNER", "KMaXDeepLab",
         // Generated A-M shard foundation-scale training timeouts (#1719): DPT-Large depth, 768-dim VLMs.
         "MiDaS", "METER", "DocPedia", "LXMERT",
         // Shard M MedS-Meta. These three exhausted the float -> cap -> shrink ladder, each rung
@@ -778,13 +778,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Excluded from PR shards under the same rule as the entries above; they continue to run
         // nightly, where the 45-minute job cap does not apply.
         "MedSAM", "MedSAM2", "MetaCLIP",
-        // MelBandRoFormer / MelGAN: same ladder, same outcome. Both are already <float>, and both
-        // already receive MoreDataShort/LongIterations (MelBandRoFormer also MoreDataTolerance) from
-        // their audio family branch, so HeavyTrainingTimeoutClassNames would re-emit those members and
-        // fail the build with CS0102 — the cap rung is closed. Their remaining failures are the
-        // memorization / training probes at the 180 s gate, not MoreData, so the existing caps do not
-        // reach them. Excluded from PR shards; they continue to run nightly.
-        "MelBandRoFormer", "MelGAN",
+        // MelBandRoFormer: same ladder, same outcome. It is already <float> and already receives
+        // MoreDataShort/LongIterations and MoreDataTolerance from its audio family branch, so
+        // HeavyTrainingTimeoutClassNames would re-emit those members and fail the build with CS0102 — the
+        // cap rung is closed. Its remaining failures are the memorization / training probes at the 180 s
+        // gate, not MoreData, so the existing caps do not reach it. Excluded from PR shards; it continues to
+        // run nightly.
+        // MelGAN was listed here and above, and runs in the default lane now: the paper-faithful rewrite's
+        // fixture (ngf 4, discriminators at a sixteenth) runs its 37 invariants in 113 s on net10.0 Release,
+        // the slowest (LossStrictlyDecreasesOnMemorizationTask) in 48 s against the 120 s gate. The tag hid
+        // its training from the PR gate, the way it hid FastSpeech2's (#2093).
+        "MelBandRoFormer",
         // InternViT: InternViT-6B vision encoder — default config is EmbeddingDim 3200, 48 transformer
         // layers, 25 heads (Chen et al. 2024, InternVL). A single fp32 CPU forward over 112px/14px = 64
         // patch tokens through 48 layers of 3200-dim O(n^2) attention inherently exceeds the 120s per-test
