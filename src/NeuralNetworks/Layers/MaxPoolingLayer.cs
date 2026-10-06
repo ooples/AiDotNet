@@ -129,7 +129,9 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
     /// <b>For Beginners:</b> This keeps track of which input value was the maximum in each pooling window.
     /// We need this information during the backward pass to know where to send the gradients.
     /// </remarks>
-    private int[,,,,]? _maxIndices;
+    // Device-resident argmax (MaxPool2DWithTensorIndices). The int[,,,,] form forced a download of the indices on every
+    // GPU forward, a host read that also aborted CUDA graph capture of every CNN training step.
+    private Tensor<int>? _maxIndices;
 
     /// <summary>
     /// Stores GPU-resident pooling indices for backward pass.
@@ -369,7 +371,8 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
         var strideArr = new[] { Stride, Stride };
 
         // Use Engine operation (expects 4D); final output shape will match the original input rank
-        var output4D = Engine.MaxPool2DWithIndices(input4D, poolSizeArr, strideArr, out _maxIndices);
+        var output4D = Engine.MaxPool2DWithTensorIndices(input4D, poolSizeArr, strideArr, out var maxIndices);
+        _maxIndices = maxIndices;
 
         // Return with matching dimensions to preserve original tensor rank
         if (_originalInputShape.Length > 4)
