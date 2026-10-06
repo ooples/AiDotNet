@@ -44,33 +44,16 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class DiffusionTSOptions<T> : TimeSeriesRegressionOptions<T>
 {
-    /// <summary>
-    /// Initializes a new instance of the <see cref="DiffusionTSOptions{T}"/> class with default values.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Creates a default DiffusionTS configuration optimized for
-    /// interpretable time series forecasting with decomposition.
-    /// </para>
-    /// </remarks>
+    /// <summary>Creates options with the paper's defaults.</summary>
     public DiffusionTSOptions()
     {
         // Seed is INHERITED from ModelOptions and set here rather than shadowed with `new`,
-        // which would leave anything holding a ModelOptions reference reading null.
-        //
-        // Defaulted so repeated predictions agree. This does not collapse the sampling: the
-        // NumSamples paths still differ from one another, so the spread stays a real estimate
-        // and the intervals the paper reports remain meaningful. It fixes only that Predict
-        // called twice on the same input returns the same answer - the sampler equivalent of
-        // seeding a generator before inference, not of switching sampling off. Set it to
-        // another value for a different sample set, or vary it per call for independent draws.
+        // so every ModelOptions reader sees the same value. A default makes sampling reproducible
+        // out of the box; callers who want fresh draws per call can set it back to null.
         Seed = 1;
     }
 
-    /// <summary>
-    /// Initializes a new instance by copying from another instance.
-    /// </summary>
-    /// <param name="other">The options instance to copy from.</param>
-    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    /// <summary>Copies every setting of <paramref name="other"/>.</summary>
     public DiffusionTSOptions(DiffusionTSOptions<T> other)
     {
         if (other == null)
@@ -80,183 +63,91 @@ public class DiffusionTSOptions<T> : TimeSeriesRegressionOptions<T>
         // written from the local declarations alone misses it. Losing it on a clone silently
         // changes deterministic initialization.
         Seed = other.Seed;
+        NumFeatures = other.NumFeatures;
         SequenceLength = other.SequenceLength;
         ForecastHorizon = other.ForecastHorizon;
-        NumFeatures = other.NumFeatures;
         HiddenDimension = other.HiddenDimension;
-        TrendHiddenDim = other.TrendHiddenDim;
-        SeasonalHiddenDim = other.SeasonalHiddenDim;
+        NumHeads = other.NumHeads;
+        NumEncoderLayers = other.NumEncoderLayers;
+        NumDecoderLayers = other.NumDecoderLayers;
+        MlpHiddenTimes = other.MlpHiddenTimes;
+        DropoutRate = other.DropoutRate;
         NumDiffusionSteps = other.NumDiffusionSteps;
+        BetaSchedule = other.BetaSchedule;
         BetaStart = other.BetaStart;
         BetaEnd = other.BetaEnd;
-        BetaSchedule = other.BetaSchedule;
+        ReconstructionLoss = other.ReconstructionLoss;
+        UseFourierLoss = other.UseFourierLoss;
+        FourierLossWeight = other.FourierLossWeight;
+        FourierTopKFactor = other.FourierTopKFactor;
+        DenoisedClip = other.DenoisedClip;
         NumSamples = other.NumSamples;
-        DecompositionPeriod = other.DecompositionPeriod;
-        TrendKernelSize = other.TrendKernelSize;
-        UseSeasonalComponent = other.UseSeasonalComponent;
-        UseTrendComponent = other.UseTrendComponent;
-        DropoutRate = other.DropoutRate;
     }
 
-    /// <summary>
-    /// Gets or sets the sequence length (input length).
-    /// </summary>
-    /// <value>The sequence length, defaulting to 168.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How many past time steps the model uses.
-    /// Default of 168 corresponds to one week of hourly data.
-    /// </para>
-    /// </remarks>
+    /// <summary>Gets or sets the number of past steps the forecast is conditioned on.</summary>
     public int SequenceLength { get; set; } = 168;
 
-    /// <summary>
-    /// Gets or sets the forecast horizon.
-    /// </summary>
-    /// <value>The forecast horizon, defaulting to 24.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How far into the future to predict.
-    /// Default of 24 corresponds to one day ahead for hourly data.
-    /// </para>
-    /// </remarks>
+    /// <summary>Gets or sets the number of future steps to forecast. The model generates context and horizon as one window.</summary>
     public int ForecastHorizon { get; set; } = 24;
 
-
-    /// <summary>
-    /// Gets or sets the main hidden dimension.
-    /// </summary>
-    /// <value>The hidden dimension, defaulting to 64.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The base internal representation size.
-    /// </para>
-    /// </remarks>
+    /// <summary>Gets or sets the transformer width d_model (64 in the reference configurations).</summary>
     public int HiddenDimension { get; set; } = 64;
 
-    /// <summary>
-    /// Gets or sets the hidden dimension for the trend network.
-    /// </summary>
-    /// <value>The trend hidden dimension, defaulting to 32.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Trend is typically smooth, so needs less capacity.
-    /// Smaller networks prevent overfitting to noise.
-    /// </para>
-    /// </remarks>
-    public int TrendHiddenDim { get; set; } = 32;
+    /// <summary>Gets or sets the number of attention heads (4 in the reference configurations).</summary>
+    public int NumHeads { get; set; } = 4;
 
-    /// <summary>
-    /// Gets or sets the hidden dimension for the seasonal network.
-    /// </summary>
-    /// <value>The seasonal hidden dimension, defaulting to 48.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Seasonality needs moderate capacity to capture
-    /// periodic patterns without overfitting.
-    /// </para>
-    /// </remarks>
-    public int SeasonalHiddenDim { get; set; } = 48;
+    /// <summary>Gets or sets the number of encoder blocks (3 in the reference ETTh configuration).</summary>
+    public int NumEncoderLayers { get; set; } = 3;
 
-    /// <summary>
-    /// Gets or sets the number of diffusion steps.
-    /// </summary>
-    /// <value>The number of diffusion steps, defaulting to 100.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> More steps = higher quality but slower.
-    /// </para>
-    /// </remarks>
-    public int NumDiffusionSteps { get; set; } = 100;
+    /// <summary>Gets or sets the number of decoder blocks, each with its own trend and seasonal output (2 in the reference ETTh configuration).</summary>
+    public int NumDecoderLayers { get; set; } = 2;
 
-    /// <summary>
-    /// Gets or sets the starting noise level.
-    /// </summary>
-    /// <value>The starting beta, defaulting to 0.0001.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Initial noise variance in forward diffusion.
-    /// </para>
-    /// </remarks>
+    /// <summary>Gets or sets the MLP expansion of each block (4 in the reference).</summary>
+    public int MlpHiddenTimes { get; set; } = 4;
+
+    /// <summary>Gets or sets the residual and embedding dropout (0 in the reference configurations).</summary>
+    public double DropoutRate { get; set; } = 0.0;
+
+    /// <summary>Gets or sets the number of diffusion steps T (500 in the reference configurations).</summary>
+    public int NumDiffusionSteps { get; set; } = 500;
+
+    /// <summary>Gets or sets the noise schedule (cosine, Nichol &amp; Dhariwal 2021, in the paper).</summary>
+    public AiDotNet.Enums.BetaSchedule BetaSchedule { get; set; } = AiDotNet.Enums.BetaSchedule.SquaredCosine;
+
+    /// <summary>Gets or sets the first noise variance, used by the linear and scaled-linear schedules.</summary>
     public double BetaStart { get; set; } = 0.0001;
 
-    /// <summary>
-    /// Gets or sets the ending noise level.
-    /// </summary>
-    /// <value>The ending beta, defaulting to 0.02.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Final noise variance.
-    /// </para>
-    /// </remarks>
+    /// <summary>Gets or sets the last noise variance, used by the linear and scaled-linear schedules.</summary>
     public double BetaEnd { get; set; } = 0.02;
 
-    /// <summary>
-    /// Gets or sets the noise schedule type.
-    /// </summary>
-    /// <value>The beta schedule, defaulting to "linear".</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How noise increases across steps.
-    /// "linear" works well for most time series tasks.
-    /// </para>
-    /// </remarks>
-    public string BetaSchedule { get; set; } = "linear";
+    /// <summary>Gets or sets the distance between the predicted and the true clean window (L1 in the reference).</summary>
+    public AiDotNet.Enums.DiffusionReconstructionLoss ReconstructionLoss { get; set; } = AiDotNet.Enums.DiffusionReconstructionLoss.L1;
+
+    /// <summary>Gets or sets whether the Fourier-based loss term is added (on in the paper).</summary>
+    public bool UseFourierLoss { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets the number of samples for uncertainty estimation.
+    /// Gets or sets the weight of the Fourier loss term; null uses the reference value sqrt(window length) / 5.
     /// </summary>
-    /// <value>The number of samples, defaulting to 100.</value>
+    public double? FourierLossWeight { get; set; }
+
+    /// <summary>
+    /// Gets or sets the factor of the seasonal block's frequency count: it keeps int(factor x ln K) of the K
+    /// retained frequencies (1 in the reference).
+    /// </summary>
+    public int FourierTopKFactor { get; set; } = 1;
+
+    /// <summary>
+    /// Gets or sets the bound, in standard deviations of the context, that each predicted clean window is clamped to
+    /// during sampling; null disables it.
+    /// </summary>
     /// <remarks>
-    /// <para><b>For Beginners:</b> How many forecasts to generate for intervals.
-    /// </para>
+    /// The reference clamps the predicted x_0 to its data range [-1, 1] at every reverse step, which keeps an imperfect
+    /// prediction from compounding through the chain. This model standardises each series by its context instead, so the
+    /// analogous bound is a number of standard deviations; 5 leaves room for a horizon that moves well beyond the context.
     /// </remarks>
+    public double? DenoisedClip { get; set; } = 5.0;
+
+    /// <summary>Gets or sets how many generated windows a forecast averages (and quantile forecasts summarize).</summary>
     public int NumSamples { get; set; } = 100;
-
-    /// <summary>
-    /// Gets or sets the decomposition period for seasonal-trend separation.
-    /// </summary>
-    /// <value>The decomposition period, defaulting to 24 (daily for hourly data).</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The expected periodicity of seasonal patterns
-    /// used in the interpretable decomposition. This controls how the model
-    /// separates trend from seasonal components.
-    /// For hourly data: 24 (daily), 168 (weekly), 8760 (yearly).
-    /// For daily data: 7 (weekly), 365 (yearly).
-    /// </para>
-    /// </remarks>
-    public int DecompositionPeriod { get; set; } = 24;
-
-    /// <summary>
-    /// Gets or sets the kernel size for trend extraction.
-    /// </summary>
-    /// <value>The trend kernel size, defaulting to 25.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Moving average window size for extracting trend.
-    /// Larger values give smoother trends but may miss shorter-term changes.
-    /// Should be odd number for symmetric averaging.
-    /// </para>
-    /// </remarks>
-    public int TrendKernelSize { get; set; } = 25;
-
-    /// <summary>
-    /// Gets or sets whether to model seasonal component.
-    /// </summary>
-    /// <value>True to model seasonality; false otherwise. Default: true.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Disable if your data has no clear periodic patterns.
-    /// </para>
-    /// </remarks>
-    public bool UseSeasonalComponent { get; set; } = true;
-
-    /// <summary>
-    /// Gets or sets whether to model trend component.
-    /// </summary>
-    /// <value>True to model trend; false otherwise. Default: true.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Disable if your data has no long-term trend.
-    /// </para>
-    /// </remarks>
-    public bool UseTrendComponent { get; set; } = true;
-
-    /// <summary>
-    /// Gets or sets the dropout rate.
-    /// </summary>
-    /// <value>The dropout rate, defaulting to 0.1.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Regularization to prevent overfitting.
-    /// </para>
-    /// </remarks>
-    public double DropoutRate { get; set; } = 0.1;
 }

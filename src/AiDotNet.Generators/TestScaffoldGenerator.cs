@@ -7684,6 +7684,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "BetaStart = 1e-4, BetaEnd = 0.5, NumSamples = 4, ResidualLayers = 2, ResidualChannels = 4, " +
                     "DenoisingNetworkDim = 16, TimeEmbeddingDim = 8 })";
             }
+            else if (model.ClassName == "DiffusionTS" && model.TypeParameterCount == 1)
+            {
+                // Diffusion-TS (Yuan & Qiao 2024): production keeps the reference configuration (d_model 64,
+                // 3 encoder / 2 decoder blocks, 500 cosine diffusion steps, 100 generated windows). Sampling
+                // runs one denoiser pass per diffusion step over every window, so the generated CPU fixture
+                // bounds the same architecture through the public options surface.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 16, outputSize: 8), " +
+                    "new AiDotNet.Models.Options.DiffusionTSOptions<double> { SequenceLength = 16, ForecastHorizon = 8, " +
+                    "NumFeatures = 1, HiddenDimension = 16, NumHeads = 2, NumEncoderLayers = 1, NumDecoderLayers = 1, " +
+                    "MlpHiddenTimes = 2, NumDiffusionSteps = 10, NumSamples = 2 })";
+            }
             else if (model.ClassName == "Hippo" && model.TypeParameterCount == 1)
             {
                 // HiPPO (Gu et al. 2020): the production defaults remain the official LSICell
@@ -20683,6 +20697,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "YingLong" => 1024,
             // TimeGrad is built at CI scale (ContextLength = 24) by its constructor special-case.
             "TimeGrad" => 24,
+            // DiffusionTS is built at CI scale (SequenceLength = 16) by its constructor special-case.
+            "DiffusionTS" => 16,
             "TFC" => 200,
             // NBEATSFinance uses NBEATSModelOptions.LookbackWindow = 10 by
             // default. NBEATSFinance.Forward validates input length against
@@ -20775,6 +20791,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
             // TimeGrad: forecast horizon of the CI-scale fixture (the mean of the sampled paths).
             "TimeGrad" => "8",
+
+            // DiffusionTS: [horizon, features] for the unbatched univariate CI-scale fixture.
+            "DiffusionTS" => "8, 1",
 
             // TimesNet (Wu et al. 2023 ICLR): output is [B, T, M] with M =
             // TimesNetOptions.NumFeatures default 7. After
