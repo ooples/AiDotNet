@@ -1103,13 +1103,6 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
         _biasGradients = null;
     }
 
-    public override Vector<T> GetParameterGradients()
-    {
-        var kGrad = _kernelGradients != null ? new Vector<T>(_kernelGradients.ToArray()) : new Vector<T>(_kernels.Length);
-        var bGrad = _biasGradients != null ? new Vector<T>(_biasGradients.ToArray()) : new Vector<T>(_biases.Length);
-        return Vector<T>.Concatenate(kGrad, bGrad);
-    }
-
     public override void ClearGradients()
     {
         _kernelGradients = null;

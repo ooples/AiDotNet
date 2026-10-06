@@ -4109,7 +4109,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// which uses them to update the parameters in a way that reduces errors.
     /// </para>
     /// </remarks>
-    public virtual Vector<T> GetParameterGradients()
+    public Vector<T> GetParameterGradients()
     {
         // EMPTY MEANS "NEVER COMPUTED", AND MUST NOT BE FAKED. This used to allocate a fresh zero
         // vector on read, so a gradient that was never written was indistinguishable from one that
@@ -7581,13 +7581,6 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     internal void ClearScatteredParameterGradients() => ParameterGradients = null;
 
-    /// <summary>
-    /// True when the last backward pass published this layer's gradients to the base surface (the tape-based training
-    /// every model now uses). A <see cref="GetParameterGradients"/> override that still reads legacy per-layer gradient
-    /// fields must return the base surface when this is set: those fields are only written by the old manual backward,
-    /// so reading them after tape training returns manufactured zeros.
-    /// </summary>
-    protected bool HasPublishedParameterGradients => _pendingDeviceGradients is not null || _parameterGradients is not null;
 
     public int ScatterParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
     {

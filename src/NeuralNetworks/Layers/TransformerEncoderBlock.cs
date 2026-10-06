@@ -297,14 +297,6 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients() =>
-        Vector<T>.Concatenate(
-            Vector<T>.Concatenate(
-                Vector<T>.Concatenate(_attention.GetParameterGradients(), _norm1.GetParameterGradients()),
-                Vector<T>.Concatenate(_ffnUp.GetParameterGradients(), _ffnDown.GetParameterGradients())),
-            _norm2.GetParameterGradients());
-
-    /// <inheritdoc/>
     public override void ClearGradients()
     {
         base.ClearGradients();

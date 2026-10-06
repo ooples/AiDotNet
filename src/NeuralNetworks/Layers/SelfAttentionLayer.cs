@@ -1096,42 +1096,6 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         }
     }
 
-    /// <summary>
-    /// Resets the internal state of the self-attention layer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method resets the internal state of the self-attention layer, including the cached inputs, outputs,
-    /// attention scores from the forward pass, and the gradients from the backward pass. This is useful when
-    /// starting to process a new batch of data.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
-    /// 
-    /// When resetting the state:
-    /// - Stored inputs, outputs, and attention scores from previous calculations are cleared
-    /// - Calculated gradients for all weights and biases are cleared
-    /// - The layer forgets any information from previous batches
-    /// 
-    /// This is important for:
-    /// - Processing a new, unrelated batch of data
-    /// - Preventing information from one batch affecting another
-    /// - Managing memory usage efficiently
-    /// 
-    /// Since the self-attention layer caches quite a bit of information during the forward
-    /// and backward passes, resetting the state helps prevent memory leaks and ensures
-    /// each new sequence is processed independently.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null)
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeightsGradient.ToArray()),
-            new Vector<T>(_keyWeightsGradient.ToArray()),
-            new Vector<T>(_valueWeightsGradient.ToArray()));
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

@@ -486,18 +486,6 @@ public partial class VideoGigaGANGeneratorLayer<T> : LayerBase<T>, IShapeContrac
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        var values = new List<T>((int)ParameterCount);
-        foreach (var layer in OrderedLayers())
-        {
-            var gradients = layer.GetParameterGradients();
-            for (int i = 0; i < gradients.Length; i++) values.Add(gradients[i]);
-        }
-        return new Vector<T>(values.ToArray());
-    }
-
-    /// <inheritdoc/>
     public override void ClearGradients()
     {
         base.ClearGradients();

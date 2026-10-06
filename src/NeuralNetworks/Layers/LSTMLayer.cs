@@ -2382,29 +2382,6 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         InvalidateCpuStackedWeights();
     }
 
-    public override Vector<T> GetParameterGradients()
-    {
-        if (Gradients == null || Gradients.Count == 0)
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-
-        Tensor<T> Get(string key) => Gradients.TryGetValue(key, out var t) ? t : new Tensor<T>([0]);
-
-        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
-        return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(Get("weightsFi").Data),
-            Vector<T>.FromMemory(Get("weightsIi").Data),
-            Vector<T>.FromMemory(Get("weightsCi").Data),
-            Vector<T>.FromMemory(Get("weightsOi").Data),
-            Vector<T>.FromMemory(Get("weightsFh").Data),
-            Vector<T>.FromMemory(Get("weightsIh").Data),
-            Vector<T>.FromMemory(Get("weightsCh").Data),
-            Vector<T>.FromMemory(Get("weightsOh").Data),
-            Vector<T>.FromMemory(Get("biasF").Data),
-            Vector<T>.FromMemory(Get("biasI").Data),
-            Vector<T>.FromMemory(Get("biasC").Data),
-            Vector<T>.FromMemory(Get("biasO").Data)
-        );
-    }
 
     /// <inheritdoc />
     /// <remarks>

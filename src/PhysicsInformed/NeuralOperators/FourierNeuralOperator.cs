@@ -991,14 +991,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             return _activation.Activate(combined);
         }
 
-        public override Vector<T> GetParameterGradients()
-        {
-            // Tape-based training computes gradients through GradientTape<T> on
-            // each forward call and applies them immediately — no persistent
-            // gradient buffers are maintained here.
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        }
-
         public override void ClearGradients()
         {
             // No-op: see GetParameterGradients — no persistent gradient buffers.

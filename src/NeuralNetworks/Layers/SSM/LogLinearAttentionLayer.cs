@@ -562,24 +562,6 @@ public partial class LogLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
         _outputProjectionWeights, _outputProjectionBias
     ];
 
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_queryWeightsGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_queryBiasGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_keyWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_keyBiasGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_valueWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_valueBiasGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_levelMixWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_compressionWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_outputGateWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_outputGateBiasGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? Array.Empty<T>()));
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

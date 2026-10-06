@@ -349,42 +349,6 @@ public partial class FeatureTransformerLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Gets the parameter gradients from the last backward pass.
-    /// </summary>
-    public override Vector<T> GetParameterGradients()
-    {
-        var allGrads = new List<T>();
-
-        foreach (var fc in _sharedFCLayers)
-        {
-            var g = fc.GetParameterGradients();
-            for (int i = 0; i < g.Length; i++) allGrads.Add(g[i]);
-        }
-        foreach (var bn in _sharedBNLayers)
-        {
-            var g = bn.GetParameterGradients();
-            for (int i = 0; i < g.Length; i++) allGrads.Add(g[i]);
-        }
-        foreach (var fc in _stepFCLayers)
-        {
-            var g = fc.GetParameterGradients();
-            for (int i = 0; i < g.Length; i++) allGrads.Add(g[i]);
-        }
-        foreach (var bn in _stepBNLayers)
-        {
-            var g = bn.GetParameterGradients();
-            for (int i = 0; i < g.Length; i++) allGrads.Add(g[i]);
-        }
-
-        var result = new Vector<T>(allGrads.Count);
-        for (int i = 0; i < allGrads.Count; i++)
-        {
-            result[i] = allGrads[i];
-        }
-        return result;
-    }
-
-    /// <summary>
     /// Gets the input shape for this layer.
     /// </summary>
     public override int[] GetInputShape() => [_inputDim];

@@ -1932,32 +1932,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         _biasesGradient = null;
     }
 
-    /// </summary>
-    /// <returns>A vector containing all parameter gradients (kernel gradients followed by bias gradients).</returns>
-    public override Vector<T> GetParameterGradients()
-    {
-        // If gradients haven't been computed yet, return zero gradients without
-        // forcing initialization — ParameterCount already computes the correct
-        // size from constructor-time shapes when the layer is uninitialized,
-        // so there's no need to allocate/randomize the full weight tensors
-        // just to return a zero vector.
-        if (_kernelsGradient == null || (UseBias && _biasesGradient == null))
-        {
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        }
-        EnsureInitialized();
-
-        // Bulk copy from contiguous tensor storage — replaces 4-nested scalar loops
-        // The gradient surface must mirror the parameter surface exactly. With no bias there is
-        // no bias slot to fill, and appending one would shift every consumer's offsets.
-        if (!UseBias || _biasesGradient is null)
-            return Vector<T>.FromMemory(_kernelsGradient.Data);
-
-        return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_kernelsGradient.Data),
-            Vector<T>.FromMemory(_biasesGradient.Data));
-    }
-
     /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>

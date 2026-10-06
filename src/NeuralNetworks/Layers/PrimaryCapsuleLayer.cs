@@ -913,40 +913,6 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>, IShapeContract
         Engine.TensorSubtractInPlace(_convBias, scaledBiasGrad);
     }
 
-    /// <summary>
-    /// Sets the trainable parameters for the primary capsule layer.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets all trainable parameters of the layer from a single vector. It extracts the appropriate
-    /// portions of the input vector for each parameter (convolution weights and biases). This is useful for
-    /// loading saved model weights or for implementing optimization algorithms that operate on all parameters at once.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the learnable values in the layer.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with the correct length
-    /// - The method extracts portions for each weight matrix and bias vector
-    /// - It places each value in its correct position
-    /// 
-    /// This is useful for:
-    /// - Loading a previously saved model
-    /// - Transferring parameters from another model
-    /// - Testing different parameter values
-    /// 
-    /// An error is thrown if the input vector doesn't have the expected number of parameters,
-    /// ensuring that all matrices and vectors maintain their correct dimensions.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        var wGrad = _convWeightsGradient != null ? new Vector<T>(_convWeightsGradient.ToArray()) : new Vector<T>(_convWeights.Length);
-        var bGrad = _convBiasGradient != null ? new Vector<T>(_convBiasGradient.ToArray()) : new Vector<T>(_convBias.Length);
-        return Vector<T>.Concatenate(wGrad, bGrad);
-    }
-
     internal override Dictionary<string, string> GetMetadata()
     {
         var metadata = base.GetMetadata();

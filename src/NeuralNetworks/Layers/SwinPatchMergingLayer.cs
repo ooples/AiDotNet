@@ -235,19 +235,6 @@ public partial class SwinPatchMergingLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        var normGrads = _norm.GetParameterGradients();
-        var reductionGrads = _reduction.GetParameterGradients();
-
-        var result = new T[normGrads.Length + reductionGrads.Length];
-        normGrads.AsSpan().CopyTo(result.AsSpan(0, normGrads.Length));
-        reductionGrads.AsSpan().CopyTo(result.AsSpan(normGrads.Length, reductionGrads.Length));
-
-        return new Vector<T>(result);
-    }
-
-    /// <inheritdoc/>
     public override void ClearGradients()
     {
         base.ClearGradients();

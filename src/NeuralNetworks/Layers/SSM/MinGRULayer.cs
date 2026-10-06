@@ -424,20 +424,6 @@ public partial class MinGRULayer<T> : LayerBase<T>, IShapeContract
         _outputProjectionWeights, _outputProjectionBias
     ];
 
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_inputProjectionWeightsGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        return Vector<T>.Concatenate(
-            new Vector<T>(_inputProjectionWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_inputProjectionBiasGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_gateWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_gateBiasGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_candidateWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_candidateBiasGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? Array.Empty<T>()));
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

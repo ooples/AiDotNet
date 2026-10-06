@@ -1523,31 +1523,6 @@ public partial class RWKV7Block<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameterGradients()
-    {
-        var allParams = GetAllParameterTensors();
-        var allGrads = GetAllGradientTensors();
-        var result = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int index = 0;
-
-        for (int i = 0; i < allParams.Length; i++)
-        {
-            var grad = allGrads[i];
-            if (grad != null)
-            {
-                for (int j = 0; j < grad.Length; j++)
-                    result[index++] = grad[j];
-            }
-            else
-            {
-                index += allParams[i].Length;
-            }
-        }
-
-        return result;
-    }
-
-    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

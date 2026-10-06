@@ -891,43 +891,6 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>, IShapeContract
         Engine.InvalidatePersistentTensor(_biases);
     }
 
-    /// <summary>
-    /// Sets the trainable parameters of the layer.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets all the weights and biases of the layer from a single vector of parameters.
-    /// The vector must have the correct length to match the total number of parameters in the layer.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the learnable values in the layer.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with the correct length
-    /// - The values are distributed to all the weights and biases in the correct order
-    /// - Throws an error if the input doesn't match the expected number of parameters
-    /// 
-    /// This is useful for:
-    /// - Loading a previously saved model
-    /// - Transferring parameters from another model
-    /// - Setting specific parameter values for testing
-    /// 
-    /// For locally connected layers, this vector needs to be very large to account for
-    /// all the unique filters at each spatial location.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        var wGrad = _weightGradients != null
-            ? new Vector<T>(_weightGradients.ToArray())
-            : new Vector<T>(_weights.Length);
-        var bGrad = _biasGradients != null
-            ? new Vector<T>(_biasGradients.ToArray())
-            : new Vector<T>(_biases.Length);
-        return Vector<T>.Concatenate(wGrad, bGrad);
-    }
-
     public override void ClearGradients()
     {
         _weightGradients = null;

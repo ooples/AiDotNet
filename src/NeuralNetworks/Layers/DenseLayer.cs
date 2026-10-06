@@ -1726,29 +1726,6 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     }
 
     /// <summary>
-    /// Gets the gradients of all trainable parameters in this layer.
-    /// </summary>
-    public override Vector<T> GetParameterGradients()
-    {
-        // Tape training publishes to the base surface and never writes _weightsGradient/_biasesGradient, so the legacy
-        // fields below were either null (a manufactured zero vector) or stale from an old manual backward.
-        if (HasPublishedParameterGradients) return base.GetParameterGradients();
-        // Nothing computed by either path: an honest empty vector, as the base reports, not manufactured zeros.
-        if (_weightsGradient == null || (UseBias && _biasesGradient == null))
-        {
-            return base.GetParameterGradients();
-        }
-
-        if (!UseBias || _biasesGradient is null)
-            return Vector<T>.FromMemory(_weightsGradient.Data).Clone();
-
-        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
-        return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_weightsGradient.Data),
-            Vector<T>.FromMemory(_biasesGradient.Data));
-    }
-
-    /// <summary>
     /// Clears stored gradients for weights and biases.
     /// </summary>
     public override void ClearGradients()

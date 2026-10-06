@@ -1272,48 +1272,6 @@ public partial class ConditionalRandomFieldLayer<T> : LayerBase<T>, IShapeContra
         return sub;
     }
 
-    /// <summary>
-    /// Sets the trainable parameters for the layer.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets the trainable parameters for the layer (transition matrix, start scores, and end scores)
-    /// from a single vector. This is useful for loading saved model weights or for implementing optimization
-    /// algorithms that operate on all parameters at once.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the learnable values in the layer.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with the correct length
-    /// - The first part is used for the transition matrix
-    /// - The next part is used for the start scores
-    /// - The final part is used for the end scores
-    /// 
-    /// This is useful for:
-    /// - Loading a previously saved model
-    /// - Transferring parameters from another model
-    /// - Testing different parameter values
-    /// 
-    /// An error is thrown if the input vector doesn't have the expected number of parameters.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        var flatTrans = _transitionMatrixGradient != null
-            ? new Vector<T>(_transitionMatrixGradient.ToArray())
-            : new Vector<T>(_numClasses * _numClasses);
-        var flatStart = _startScoresGradient != null
-            ? new Vector<T>(_startScoresGradient.ToArray())
-            : new Vector<T>(_numClasses);
-        var flatEnd = _endScoresGradient != null
-            ? new Vector<T>(_endScoresGradient.ToArray())
-            : new Vector<T>(_numClasses);
-
-        return Vector<T>.Concatenate(Vector<T>.Concatenate(flatTrans, flatStart), flatEnd);
-    }
-
     public override void ClearGradients()
     {
         _transitionMatrixGradient = null;

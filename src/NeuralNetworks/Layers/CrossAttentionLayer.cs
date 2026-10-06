@@ -950,17 +950,6 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
-    public override Vector<T> GetParameterGradients()
-    {
-        return Vector<T>.Concatenate(
-            _queryWeightsGradient != null ? new Vector<T>(_queryWeightsGradient.ToArray()) : new Vector<T>(_queryWeights.Length),
-            _keyWeightsGradient != null ? new Vector<T>(_keyWeightsGradient.ToArray()) : new Vector<T>(_keyWeights.Length),
-            _valueWeightsGradient != null ? new Vector<T>(_valueWeightsGradient.ToArray()) : new Vector<T>(_valueWeights.Length),
-            _outputWeightsGradient != null ? new Vector<T>(_outputWeightsGradient.ToArray()) : new Vector<T>(_outputWeights.Length),
-            _outputBiasGradient != null ? new Vector<T>(_outputBiasGradient.ToArray()) : new Vector<T>(_outputBias.Length)
-        );
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

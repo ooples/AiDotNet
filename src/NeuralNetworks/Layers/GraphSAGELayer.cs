@@ -645,22 +645,6 @@ public partial class GraphSAGELayer<T> : LayerBase<T>, IGraphConvolutionLayer<T>
             Engine.TensorMultiplyScalar(_biasGradient, learningRate));
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        var selfGrad = _selfWeightsGradient != null
-            ? new Vector<T>(_selfWeightsGradient.ToArray())
-            : new Vector<T>(_selfWeights.Length);
-        var neighborGrad = _neighborWeightsGradient != null
-            ? new Vector<T>(_neighborWeightsGradient.ToArray())
-            : new Vector<T>(_neighborWeights.Length);
-        var biasGrad = _biasGradient != null
-            ? new Vector<T>(_biasGradient.ToArray())
-            : new Vector<T>(_bias.Length);
-
-        return Vector<T>.Concatenate(selfGrad, neighborGrad, biasGrad);
-    }
-
     /// <summary>
     /// Returns layer-specific metadata for serialization (aggregatorType, normalize).
     /// </summary>

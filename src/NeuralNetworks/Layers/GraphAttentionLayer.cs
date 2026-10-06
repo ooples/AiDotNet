@@ -878,22 +878,6 @@ public partial class GraphAttentionLayer<T> : LayerBase<T>, IGraphConvolutionLay
         Engine.InvalidatePersistentTensor(_bias);
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        var weightsGrad = _weightsGradient != null
-            ? new Vector<T>(_weightsGradient.ToArray())
-            : new Vector<T>(_weights.Length);
-        var attnGrad = _attentionWeightsGradient != null
-            ? new Vector<T>(_attentionWeightsGradient.ToArray())
-            : new Vector<T>(_attentionWeights.Length);
-        var biasGrad = _biasGradient != null
-            ? new Vector<T>(_biasGradient.ToArray())
-            : new Vector<T>(_bias.Length);
-
-        return Vector<T>.Concatenate(weightsGrad, attnGrad, biasGrad);
-    }
-
     /// <summary>
     /// Returns layer-specific metadata for serialization (numHeads, alpha, dropoutRate).
     /// </summary>

@@ -341,48 +341,6 @@ public partial class SoftTreeLayer<T> : LayerBase<T>, IShapeContract
         Engine.InvalidatePersistentTensor(_leafValues);
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        int totalParams = ParameterCountHelper.ToFlatVectorSize(ParameterCount);
-        var gradients = new Vector<T>(totalParams);
-        int idx = 0;
-
-        if (_splitWeightsGrad != null)
-        {
-            for (int i = 0; i < _splitWeightsGrad.Length; i++)
-            {
-                gradients[idx++] = _splitWeightsGrad[i];
-            }
-        }
-        else
-        {
-            idx += _splitWeights.Length;
-        }
-
-        if (_splitBiasesGrad != null)
-        {
-            for (int i = 0; i < _splitBiasesGrad.Length; i++)
-            {
-                gradients[idx++] = _splitBiasesGrad[i];
-            }
-        }
-        else
-        {
-            idx += _splitBiases.Length;
-        }
-
-        if (_leafValuesGrad != null)
-        {
-            for (int i = 0; i < _leafValuesGrad.Length; i++)
-            {
-                gradients[idx++] = _leafValuesGrad[i];
-            }
-        }
-
-        return gradients;
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

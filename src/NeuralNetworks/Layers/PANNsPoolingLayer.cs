@@ -80,8 +80,5 @@ public sealed partial class PANNsPoolingLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients() => Vector<T>.Empty();
-
-    /// <inheritdoc/>
     public override void ResetState() { }
 }
