@@ -309,6 +309,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 _pendingDeviceGradients = null;
                 _parameterGradients = MaterializeParameterGradients(owned);
             }
+            // Anything that reads the published vector may keep it, so the next publish must not refill it.
+            if (_parameterGradients is not null && ReferenceEquals(_parameterGradients, _scatterVector))
+                _scatterVectorHandedOut = true;
             return _parameterGradients;
         }
         set
@@ -319,6 +322,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     }
 
     private Vector<T>? _parameterGradients;
+
+    // CPU gradient publish reuses ONE layer-owned buffer across steps instead of allocating two arrays per layer per
+    // step (new T[total], then Vector<T>(IEnumerable) copying it again). For a 784x256 dense layer each was an
+    // 800 KB large-object-heap allocation every step. A published vector that has been read is never refilled:
+    // the next publish allocates a fresh buffer, so a caller's snapshot of an earlier step stays unchanged.
+    private T[]? _scatterBuffer;
+    private Vector<T>? _scatterVector;
+    private bool _scatterVectorHandedOut;
 
     // On a GPU engine a training step's gradients live on the device. Publishing them used to download every one,
     // every step (one sync per tensor: 35 per LSTM step, 65 per Transformer step). The layer now keeps OWNED device
@@ -7570,6 +7581,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     internal void ClearScatteredParameterGradients() => ParameterGradients = null;
 
+    /// <summary>
+    /// True when the last backward pass published this layer's gradients to the base surface (the tape-based training
+    /// every model now uses). A <see cref="GetParameterGradients"/> override that still reads legacy per-layer gradient
+    /// fields must return the base surface when this is set: those fields are only written by the old manual backward,
+    /// so reading them after tape training returns manufactured zeros.
+    /// </summary>
+    protected bool HasPublishedParameterGradients => _pendingDeviceGradients is not null || _parameterGradients is not null;
+
     public int ScatterParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
     {
         if (grads is null || grads.Count == 0) return 0;
@@ -7581,7 +7600,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         int total = FillParameterGradients(null, 0, grads, ref ignored);
         if (total <= 0) return 0;
 
-        var filled = new T[total];
+        bool reuse = !_scatterVectorHandedOut && _scatterBuffer is { } owned && owned.Length == total;
+        var filled = reuse && _scatterBuffer is { } buffer ? buffer : new T[total];
+        // Slots with no gradient this step must read as zero, exactly as in a fresh array.
+        if (reuse) Array.Clear(filled, 0, total);
         int matched = 0;
         FillParameterGradients(filled, 0, grads, ref matched);
 
@@ -7589,7 +7611,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // "never computed" rather than a vector of manufactured zeros.
         if (matched == 0) return 0;
 
-        ParameterGradients = new Vector<T>(filled);
+        if (!reuse || _scatterVector is null)
+        {
+            _scatterBuffer = filled;
+            _scatterVector = Vector<T>.FromMemory(new Memory<T>(filled));
+        }
+        _scatterVectorHandedOut = false;
+        ParameterGradients = _scatterVector;
         return matched;
     }
 
