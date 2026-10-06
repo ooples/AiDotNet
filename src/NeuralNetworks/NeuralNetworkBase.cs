@@ -11228,7 +11228,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // A model whose ForwardForTraining or PredictCore owns its input convention gets the input unchanged.
         input = ForwardForTrainingOwnsPublicInputPreparation() ? input : PrepareInputForTraining(input);
 
-        var configuredOptimizer = optimizer ?? _baseTrainOptimizer;
+        // An explicit SetBaseTrainOptimizer call wins over the optimizer a model's Train override passes in, which is
+        // its constructor default: the contract AdoptConfiguredOptimizer documents. ~616 models call
+        // TrainWithTape(input, expected, _optimizer), so before this an explicitly configured optimizer was silently
+        // ignored on all of them; the PyTorch parity MLP asked for AdamW and trained FeedForwardNeuralNetwork's
+        // AMSGrad-Adam default instead (a step-1 check cannot tell them apart).
+        var configuredOptimizer = _baseTrainOptimizerExplicitlyConfigured && _baseTrainOptimizer is not null
+            ? _baseTrainOptimizer
+            : optimizer ?? _baseTrainOptimizer;
         bool useStreamingDefaults = configuredOptimizer is null;
         var resolvedOptimizer = configuredOptimizer ?? GetOrCreateBaseOptimizer();
 
