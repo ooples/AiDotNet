@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using AiDotNet.Diffusion.StyleTransfer;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
@@ -33,6 +34,14 @@ public class LatentDiffusionTrainingSampleTests
         }
 
         public int[]? NoisedShape { get; private set; }
+
+        public List<int[]> NoisePredictionShapes { get; } = new();
+
+        public override Tensor<double> PredictNoise(Tensor<double> noisySample, int timestep)
+        {
+            NoisePredictionShapes.Add(noisySample.Shape.ToArray());
+            return base.PredictNoise(noisySample, timestep);
+        }
 
         protected override Tensor<double> PredictTrainingNoise(
             Tensor<double> noisySample, int[] timesteps, bool isBatched, Tensor<double> input, Tensor<double> expectedOutput)
@@ -114,6 +123,24 @@ public class LatentDiffusionTrainingSampleTests
         Assert.Equal(new[] { 1, model.LatentChannels * side * side }, model.NoisedShape);
     }
 
+    /// <summary>
+    /// A flattened batch stays [B, C*H*W] for the scheduler, and the batched predictor hands each row to the denoiser on
+    /// its own as [1, C*H*W], which the latent model reshapes to a latent per row.
+    /// </summary>
+    [Fact]
+    public void Train_OnTwoFlattenedLatents_PredictsEachRowOnItsOwn()
+    {
+        using var model = new ProbeModel { TrainingSampleSpace = DiffusionTrainingSampleSpace.Latent };
+        int side = 64 / model.VAE.DownsampleFactor;
+        int width = model.LatentChannels * side * side;
+        var flattened = Random(new[] { 2, width }, 7);
+
+        model.Train(flattened, flattened);
+
+        Assert.Equal(new[] { 2, width }, model.NoisedShape);
+        Assert.Equal(2, model.NoisePredictionShapes.Count);
+        Assert.All(model.NoisePredictionShapes, shape => Assert.Equal(new[] { 1, width }, shape));
+    }
     [Fact]
     public void Train_WithAnUndefinedSampleSpace_IsRefused()
     {

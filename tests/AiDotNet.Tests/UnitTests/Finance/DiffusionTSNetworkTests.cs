@@ -39,18 +39,53 @@ public class DiffusionTSNetworkTests
         for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], seasonal[i], 9);
     }
 
-    [Fact]
-    public void Denoiser_PredictsAWindowOfTheInputShape()
+    private static Tensor<double> Window12(int seed)
     {
+        var noisy = new Tensor<double>(new[] { 1, 12, 2 });
+        for (int i = 0; i < noisy.Length; i++) noisy[i] = Math.Sin(0.37 * i + seed);
+        return noisy;
+    }
+
+    private static Tensor<double> Step(double k)
+    {
+        var steps = new Tensor<double>(new[] { 1, 1 });
+        steps[0] = k;
+        return steps;
+    }
+
+    /// <summary>Attention mixes time steps, never rows: a window is denoised the same alone or within a batch.</summary>
+    [Fact]
+    public void Denoiser_PredictsEachRowIndependentlyOfTheBatch()
+    {
+        var engine = AiDotNetEngine.Current;
         var network = new DiffusionTSNetwork<double>(2, 12, 8, 2, 1, 1, 2, 0.0, 1);
-        var noisy = new Tensor<double>(new[] { 3, 12, 2 });
-        for (int i = 0; i < noisy.Length; i++) noisy[i] = Math.Sin(0.37 * i);
+        var rows = new[] { Window12(0), Window12(1), Window12(2) };
+        var batch = engine.TensorConcatenate(rows, axis: 0);
         var steps = new Tensor<double>(new[] { 3, 1 });
-        for (int i = 0; i < 3; i++) steps[i] = i;
+        for (int i = 0; i < 3; i++) steps[i] = 2 * i + 1;
 
-        var clean = network.PredictCleanWindow(AiDotNetEngine.Current, noisy, steps);
+        var together = network.PredictCleanWindow(engine, batch, steps);
 
-        Assert.Equal(new[] { 3, 12, 2 }, clean.Shape.ToArray());
-        for (int i = 0; i < clean.Length; i++) Assert.False(double.IsNaN(clean[i]) || double.IsInfinity(clean[i]));
+        for (int r = 0; r < 3; r++)
+        {
+            var alone = network.PredictCleanWindow(engine, rows[r], Step(2 * r + 1));
+            for (int i = 0; i < alone.Length; i++) Assert.Equal(alone[i], together[r * alone.Length + i], 10);
+        }
+    }
+
+    /// <summary>The diffusion step reaches the prediction through AdaLN: one window at two noise levels gives two answers.</summary>
+    [Fact]
+    public void Denoiser_IsConditionedOnTheDiffusionStep()
+    {
+        var engine = AiDotNetEngine.Current;
+        var network = new DiffusionTSNetwork<double>(2, 12, 8, 2, 1, 1, 2, 0.0, 1);
+        var window = Window12(3);
+
+        var early = network.PredictCleanWindow(engine, window, Step(1));
+        var late = network.PredictCleanWindow(engine, window, Step(9));
+
+        double difference = 0;
+        for (int i = 0; i < early.Length; i++) difference = Math.Max(difference, Math.Abs(early[i] - late[i]));
+        Assert.True(difference > 1e-6, $"The prediction ignored the diffusion step (max difference {difference:G3}).");
     }
 }
