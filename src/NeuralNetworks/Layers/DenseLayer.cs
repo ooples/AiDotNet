@@ -762,15 +762,13 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             // after this forward downcasts them to _weightsHalf, dropping the fp32 reference actually
             // lets the GC reclaim it (AllocateLazyWeight would still GC-allocate when streaming is off,
             // but bypass it here so the fp32 master is never registered with the streaming pool).
-            if (LowPrecisionResident)
-            {
-                _weights = new Tensor<T>(wShape);
-            }
-            else
-            {
-                _weights = AllocateLazyWeight(wShape);
-            }
-            _biases = UseBias ? AllocateLazyWeight(bShape) : new Tensor<T>([0]);
+            // Allocate both before assigning either. Assigning the weights first left a half-allocated layer when
+            // the bias allocation failed (an out-of-memory on a foundation-scale model): the next EnsureInitialized
+            // read the allocated weights as a PARTIAL restore and threw a shape error that hid the real failure.
+            var weights = LowPrecisionResident ? new Tensor<T>(wShape) : AllocateLazyWeight(wShape);
+            var biases = UseBias ? AllocateLazyWeight(bShape) : new Tensor<T>([0]);
+            _weights = weights;
+            _biases = biases;
 
             // Initialize using strategy or default. Skip strategies that only
             // advertise the LAZY deferral contract (IsLazy): their InitializeWeights
