@@ -21,7 +21,7 @@ namespace AiDotNet.Tests.Audio;
 /// Before this change DAC was a stack of generic layers with a magnitude-bucketing "quantizer"; it had no Snake
 /// activations, no factorized codebooks, no discriminators and trained by regression.
 /// <c>ReferenceData/dac_official_layout_reference.json</c> holds a tiny Hugging Face DacModel with random weights
-/// (generator: tts-paper-specs/drafts/codecs/dac_parity_ref.py) in the layout of descript/dac_44khz, with the latent,
+/// (generator: tools/reference-data/dac_reference.py) in the layout of descript/dac_44khz, with the latent,
 /// codes and decoded audio of a fixed input.
 /// </remarks>
 public class DACPaperTests

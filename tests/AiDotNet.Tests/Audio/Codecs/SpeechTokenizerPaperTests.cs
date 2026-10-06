@@ -18,7 +18,7 @@ namespace AiDotNet.Tests.Audio;
 /// <remarks>
 /// <c>ReferenceData/speechtokenizer_official_layout_reference.json</c> holds a tiny model built from the reference
 /// implementation (ZhangXInFD/SpeechTokenizer) with random weights and codebooks, saved with <c>torch.save</c> like the
-/// released <c>SpeechTokenizer.pt</c> (generator: tts-paper-specs/drafts/codecs/speechtokenizer_parity_ref.py), with the
+/// released <c>SpeechTokenizer.pt</c> (generator: tools/reference-data/speechtokenizer_reference.py), with the
 /// latent, codes and decoded audio of a fixed input.
 /// </remarks>
 public class SpeechTokenizerPaperTests

@@ -23,7 +23,7 @@ namespace AiDotNet.Tests.Audio;
 /// Before this change EnCodec was a stack of generic layers whose "residual vector quantization" bucketed each latent
 /// value into a code by its magnitude; it had no codebooks, no discriminator and trained by regression.
 /// <c>ReferenceData/encodec_official_layout_reference.json</c> holds two tiny Hugging Face EncodecModel instances with
-/// random weights (generator: tts-paper-specs/drafts/codecs/encodec_parity_ref.py, transformers EncodecModel), saved under
+/// random weights (generator: tools/reference-data/encodec_reference.py, transformers EncodecModel), saved under
 /// the released checkpoints' tensor names, with the latent, codes and decoded audio of a fixed input.
 /// </remarks>
 public class EnCodecPaperTests
