@@ -1363,55 +1363,34 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         currentH.Fill(NumOps.Zero);
         currentC.Fill(NumOps.Zero);
 
-        // Pre-transpose weights for efficiency
-        var WfiT = Engine.TensorTranspose(_weightsFi);
-        var WiiT = Engine.TensorTranspose(_weightsIi);
-        var WciT = Engine.TensorTranspose(_weightsCi);
-        var WoiT = Engine.TensorTranspose(_weightsOi);
+        // Input projections hoisted out of the recurrence: for each gate, x * W_gi + b_g over ALL timesteps in one GEMM
+        // (as cuDNN's LSTM does), so each step does one hidden GEMM per gate instead of an input GEMM, a hidden GEMM,
+        // an add and a bias add. Kept per gate rather than packed [B, 4H]: splitting a packed gate tensor costs four
+        // last-axis slices (and their scatters in backward) per step, which the CPU engine pays heavily.
+        int inputFeatures = input3D.Shape[2];
+        var flatInput = Engine.Reshape(input3D, [batchSize * timeSteps, inputFeatures]);
+        Tensor<T> Project(Tensor<T> weights, Tensor<T> bias)
+            => Engine.Reshape(
+                Engine.TensorAdd(Engine.TensorMatMul(flatInput, Engine.TensorTranspose(weights)),
+                    Engine.Reshape(bias, [1, _hiddenSize])),
+                [batchSize, timeSteps, _hiddenSize]);
+        var projF = Project(_weightsFi, _biasF);
+        var projI = Project(_weightsIi, _biasI);
+        var projC = Project(_weightsCi, _biasC);
+        var projO = Project(_weightsOi, _biasO);
         var WfhT = Engine.TensorTranspose(_weightsFh);
         var WihT = Engine.TensorTranspose(_weightsIh);
         var WchT = Engine.TensorTranspose(_weightsCh);
         var WohT = Engine.TensorTranspose(_weightsOh);
-        var biasF2D = Engine.Reshape(_biasF, [1, _hiddenSize]);
-        var biasI2D = Engine.Reshape(_biasI, [1, _hiddenSize]);
-        var biasC2D = Engine.Reshape(_biasC, [1, _hiddenSize]);
-        var biasO2D = Engine.Reshape(_biasO, [1, _hiddenSize]);
 
         for (int t = 0; t < timeSteps; t++)
         {
-            // Slice along the time dimension (dim 1), keeping batch dimension.
-            // For input [batchSize, timeSteps, inputSize], this returns [batchSize, inputSize].
-            // Use the tape-tracked Engine.TensorSliceAxis (NOT the raw Tensor.GetSliceAlongDimension):
-            // the raw slice is not an autodiff node, so gradient never flowed from xt back into
-            // input3D — severing every trainable layer UPSTREAM of the LSTM (embeddings, char
-            // encoder, stacked lower BiLSTMs). Routing the per-timestep slice through the tape lets
-            // the LSTM propagate gradient to its input, so upstream layers train end-to-end.
-            var xt = Engine.TensorSliceAxis(input3D, axis: 1, index: t);
-
-            // Forget Gate - using TensorAdd for bias (supports [batch, hidden] + [hidden] broadcasting)
-            var f = Engine.TensorMatMul(xt, WfiT);
-            f = Engine.TensorAdd(f, Engine.TensorMatMul(currentH, WfhT));
-            f = Engine.TensorAdd(f, biasF2D);
-            f = Engine.Sigmoid(f);
-
-            // Input Gate
-            var i = Engine.TensorMatMul(xt, WiiT);
-            i = Engine.TensorAdd(i, Engine.TensorMatMul(currentH, WihT));
-            i = Engine.TensorAdd(i, biasI2D);
-            i = Engine.Sigmoid(i);
-
-            // Cell Candidate
-            var c_tilde = Engine.TensorMatMul(xt, WciT);
-            c_tilde = Engine.TensorAdd(c_tilde, Engine.TensorMatMul(currentH, WchT));
-            c_tilde = Engine.TensorAdd(c_tilde, biasC2D);
-            c_tilde = Engine.Tanh(c_tilde);
-
-            // Output Gate
-            var o = Engine.TensorMatMul(xt, WoiT);
-            o = Engine.TensorAdd(o, Engine.TensorMatMul(currentH, WohT));
-            o = Engine.TensorAdd(o, biasO2D);
-            o = Engine.Sigmoid(o);
-
+            // Tape-tracked slices: gradient flows back into input3D through the projections, so layers upstream of
+            // the LSTM (embeddings, stacked LSTMs) still train end-to-end.
+            var f = Engine.Sigmoid(Engine.TensorAdd(Engine.TensorSliceAxis(projF, axis: 1, index: t), Engine.TensorMatMul(currentH, WfhT)));
+            var i = Engine.Sigmoid(Engine.TensorAdd(Engine.TensorSliceAxis(projI, axis: 1, index: t), Engine.TensorMatMul(currentH, WihT)));
+            var c_tilde = Engine.Tanh(Engine.TensorAdd(Engine.TensorSliceAxis(projC, axis: 1, index: t), Engine.TensorMatMul(currentH, WchT)));
+            var o = Engine.Sigmoid(Engine.TensorAdd(Engine.TensorSliceAxis(projO, axis: 1, index: t), Engine.TensorMatMul(currentH, WohT)));
             // Update Cell State
             var f_prevC = Engine.TensorMultiply(f, currentC);
             var i_cTilde = Engine.TensorMultiply(i, c_tilde);
@@ -1420,7 +1399,6 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
             // Update Hidden State
             var tanhC = Engine.Tanh(currentC);
             currentH = Engine.TensorMultiply(o, tanhC);
-
             // Collect the hidden state for the tape-connected output concat below.
             hiddenStatesList.Add(Engine.Reshape(currentH, new[] { batchSize, 1, _hiddenSize }));
             // Caches for the manual backward path (not on the tape).
