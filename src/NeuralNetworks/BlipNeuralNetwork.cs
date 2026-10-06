@@ -1073,14 +1073,11 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
         var imageFeatures = GetImageFeaturesNative(image);
         var textFeatures = GetTextFeaturesNative(text);
 
-        // Apply cross-attention
+        // The image-grounded text encoder (Li et al. 2022, §3.1): bidirectional self-attention over the text and
+        // cross-attention to the image patches in every block.
         Tensor<T> fused = textFeatures;
         foreach (var layer in _crossAttentionLayers)
-        {
-            // Simple implementation: just use text features
-            // Full implementation would use cross-attention between image and text
-            fused = layer.Forward(fused);
-        }
+            fused = AttendToImage(layer, fused, imageFeatures);
 
         // Apply ITM head
         if (_itmHead is not null)
@@ -1100,8 +1097,16 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
             return NumOps.Divide(exp1, sum); // Return probability of match
         }
 
-        return NumOps.FromDouble(0.5);
+        throw new InvalidOperationException("BLIP's native image-text matching needs its ITM head, which this model has not built.");
     }
+
+    /// <summary>Runs one image-grounded block: self-attention over <paramref name="text"/>, then cross-attention from the
+    /// text to the image patches <paramref name="image"/> <c>[batch, patches, hidden]</c>.</summary>
+    private static Tensor<T> AttendToImage(ILayer<T> layer, Tensor<T> text, Tensor<T> image)
+        => layer is TransformerDecoderLayer<T> block
+            ? block.Forward(text, image)
+            : throw new InvalidOperationException(
+                $"BLIP's image-grounded blocks must be {nameof(TransformerDecoderLayer<T>)}s, which cross-attend to the image; got {layer.GetType().Name}.");
 
     /// <summary>
     /// Answers a question using native layers.
@@ -1150,7 +1155,7 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
     /// <summary>
     /// Gets image features without final projection (for cross-attention).
     /// </summary>
-    private Tensor<T> GetImageFeaturesNative(Tensor<T> image)
+    internal Tensor<T> GetImageFeaturesNative(Tensor<T> image)
     {
         Tensor<T> batchedImage = image.Shape.Length == 3
             ? Engine.TensorExpandDims(image, 0)
@@ -1248,7 +1253,7 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
     /// <summary>
     /// Forward pass through decoder with image conditioning.
     /// </summary>
-    private Tensor<T> ForwardDecoderNative(Tensor<T> input, Tensor<T> imageFeatures)
+    internal Tensor<T> ForwardDecoderNative(Tensor<T> input, Tensor<T> imageFeatures)
     {
         // Get embeddings
         Tensor<T> hidden = input;
@@ -1268,11 +1273,10 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
             hidden = Engine.TensorAdd<T>(hidden, posExpanded);
         }
 
-        // Process through decoder layers
+        // The image-grounded text decoder (Li et al. 2022, §3.1): causal self-attention and cross-attention to the
+        // image patches in every block.
         foreach (var layer in _textDecoderLayers)
-        {
-            hidden = layer.Forward(hidden);
-        }
+            hidden = AttendToImage(layer, hidden, imageFeatures);
 
         // Project hidden states to vocabulary logits using the language model head
         if (_lmHead is not null)

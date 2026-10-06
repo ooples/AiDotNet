@@ -33054,9 +33054,10 @@ public static partial class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
             yield return new TransformerDecoderLayer<T>(numHeads, mlpDim, ffnActivation: null);
 
-        // Cross-attention layers (6) — decoder layer surfaces self + cross attention.
+        // Image-grounded text encoder for ITM (6 blocks): self-attention over the text, which is bidirectional in an
+        // encoder (Li et al. 2022, §3.1), and cross-attention to the image patches.
         for (int i = 0; i < 6; i++)
-            yield return new TransformerDecoderLayer<T>(numHeads, mlpDim, ffnActivation: null);
+            yield return new TransformerDecoderLayer<T>(numHeads, mlpDim, ffnActivation: null, causal: false);
 
         // ITM head + LM head
         yield return new DenseLayer<T>(2, (IActivationFunction<T>?)null);
