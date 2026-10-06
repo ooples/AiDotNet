@@ -73,12 +73,19 @@ def export(name: str, out: Path, seed: int) -> None:
     loss0 = criterion(logits0, y)
     optimizer.zero_grad(set_to_none=True)
     loss0.backward()
+    # Gradients BEFORE clipping, shaped like the state_dict (frozen parameters get zeros), so the AiDotNet side can
+    # load them through the same importer and compare per tensor. A step-1 parameter/logit check cannot see a
+    # uniformly scaled gradient: Adam's first step is ~lr*sign(g).
+    grads = {k: (dict(model.named_parameters())[k].grad.clone() if k in dict(model.named_parameters())
+                 and dict(model.named_parameters())[k].grad is not None else torch.zeros_like(v))
+             for k, v in model.state_dict().items()}
     grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
     optimizer.step()
     with torch.no_grad():
         logits1 = model(x)
 
     write_safetensors(out / f"{name}.weights.safetensors", weights)
+    write_safetensors(out / f"{name}.grads.safetensors", grads)
     write_safetensors(out / f"{name}.weights1.safetensors", {k: v.clone() for k, v in model.state_dict().items()})
     write_safetensors(out / f"{name}.reference.safetensors", {
         "x": x,

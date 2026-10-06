@@ -481,6 +481,20 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
             var grads = Network.GetParameterGradients();
             double sumAbs = 0; for (var k = 0; k < grads.Length; k++) sumAbs += Math.Abs(Convert.ToDouble(grads[k]));
             Console.WriteLine($"[step1] {name} grads n={grads.Length} sum|g|={sumAbs:E6} g[0..2]={Convert.ToDouble(grads[0]):E4},{Convert.ToDouble(grads[1]):E4},{Convert.ToDouble(grads[2]):E4}");
+            foreach (var segment in AiDotNet.Agentic.Models.Local.ModelParameterMap.Build(Network))
+            {
+                double s = 0; for (var k = segment.Offset; k < segment.Offset + segment.Length && k < grads.Length; k++) s += Math.Abs(Convert.ToDouble(grads[k]));
+                Console.WriteLine($"[step1] {name}   {segment.Name}[{segment.Length}] sum|g|={s:E6}");
+            }
+            var flatSegments = new List<(Tensor<float>? Tensor, int Length, bool IsBuffer)>();
+            foreach (var layer in Network.Layers.OfType<AiDotNet.NeuralNetworks.Layers.LayerBase<float>>()) layer.AppendFlatParameterLayout(flatSegments);
+            var at = 0;
+            foreach (var (_, length, _) in flatSegments)
+            {
+                double s = 0; for (var k = at; k < at + length && k < grads.Length; k++) s += Math.Abs(Convert.ToDouble(grads[k]));
+                Console.WriteLine($"[step1] {name}     tensor@{at}[{length}] sum|g|={s:E6}");
+                at += length;
+            }
         }
         // AIDOTNET_PARITY_TRAIN_STEPS=N (diagnostic): keep training on the same batch and print the loss, to tell "the
         // step never applies" from "step 1 is special". The step-1 comparison below is only meaningful at the default 1.
@@ -497,6 +511,45 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
         // Localize a step mismatch: load PyTorch's post-step weights through the same importer and compare each
         // layer's parameter update (ours - init vs theirs - init) by direction and relative error.
         var oursAfter = Network.GetParameters().Select(v => (double)v).ToArray();
+        // Gradient check: PyTorch's pre-clip gradients, loaded through the same importer so they land in this
+        // network's layout, against the gradients this step published. Sees gradient SCALE, which the step-1
+        // update cannot (Adam's first step is ~lr*sign(g)).
+        var gradReport = new List<string>();
+        double gradCos = double.NaN, gradRatio = double.NaN;
+        var gradsPath = Path.Combine(referenceDir, $"{name}.grads.safetensors");
+        if (File.Exists(gradsPath))
+        {
+            var oursGrad = Network.GetParameterGradients().Select(v => (double)v).ToArray();
+            AiDotNet.Agentic.Models.Local.PyTorchStateDictImporter.Import(Network,
+                AiDotNet.Agentic.Models.Local.SafetensorsReader.Read(File.ReadAllBytes(gradsPath)), PyTorchModulePrefixes);
+            var theirsGrad = Network.GetParameters().Select(v => (double)v).ToArray();
+            Network.SetParameters(new Vector<float>(oursAfter.Select(v => (float)v).ToArray()));
+            static (double Cos, double Ratio) Compare(double[] a, double[] b, int from, int count)
+            {
+                double dot = 0, na = 0, nb = 0;
+                for (var k = from; k < from + count; k++) { dot += a[k] * b[k]; na += a[k] * a[k]; nb += b[k] * b[k]; }
+                return (dot / Math.Max(Math.Sqrt(na * nb), double.Epsilon), Math.Sqrt(na) / Math.Max(Math.Sqrt(nb), double.Epsilon));
+            }
+            if (oursGrad.Length == theirsGrad.Length)
+            {
+                var (cos, ratio) = Compare(oursGrad, theirsGrad, 0, oursGrad.Length);
+                gradCos = cos; gradRatio = ratio;
+                gradReport.Add($"grad cos={cos:F6} |ours|/|torch|={ratio:F4}");
+                var layout = new List<(Tensor<float>? Tensor, int Length, bool IsBuffer)>();
+                foreach (var layer in Network.Layers.OfType<AiDotNet.NeuralNetworks.Layers.LayerBase<float>>()) layer.AppendFlatParameterLayout(layout);
+                var at = 0;
+                foreach (var (_, length, _) in layout)
+                {
+                    var (c, r) = Compare(oursGrad, theirsGrad, at, length);
+                    gradReport.Add($"grad tensor@{at}[{length}] cos={c:F5} ratio={r:F4}");
+                    at += length;
+                }
+            }
+            else
+            {
+                gradReport.Add($"grad length mismatch: ours {oursGrad.Length}, torch {theirsGrad.Length}");
+            }
+        }
         AiDotNet.Agentic.Models.Local.PyTorchStateDictImporter.Import(Network, AiDotNet.Agentic.Models.Local.SafetensorsReader.Read(
             File.ReadAllBytes(Path.Combine(referenceDir, $"{name}.weights1.safetensors"))), PyTorchModulePrefixes);
         var theirsAfter = Network.GetParameters().Select(v => (double)v).ToArray();
@@ -515,6 +568,7 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
             }
         }
         layerReport.Add($"train-path loss {trainLoss:F6}");
+        layerReport.AddRange(gradReport);
         foreach (var segment in tensorSegments)
         {
             double d = 0, on = 0, tn = 0, en = 0;
@@ -538,7 +592,10 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
         var refNorm = Math.Sqrt(refDelta.Sum(v => v * v));
         var cosine = dot / Math.Max(ourNorm * refNorm, double.Epsilon);
         var relError = Math.Sqrt(ourDelta.Zip(refDelta, (a, b) => (a - b) * (a - b)).Sum()) / Math.Max(refNorm, double.Epsilon);
-        return new Step1Result(name, forwardMaxAbs, ourLoss, refLoss, cosine, relError, layerReport);
+        // The published gradients are post-clip: expected |ours|/|torch| = min(1, maxNorm / preClipNorm), maxNorm 1.
+        var preClipNorm = reference.TensorNames.Contains("grad_norm") ? reference.ReadAsDouble("grad_norm")[0] : double.NaN;
+        var expectedRatio = double.IsNaN(preClipNorm) ? double.NaN : Math.Min(1.0, 1.0 / preClipNorm);
+        return new Step1Result(name, forwardMaxAbs, ourLoss, refLoss, cosine, relError, layerReport, gradCos, gradRatio, expectedRatio);
     }
 
     private static double[] SoftmaxRows(double[] logits, int numClasses)
@@ -984,12 +1041,16 @@ internal static class JsonOptions
 /// (cosine >= 0.999) with at most 1% relative error.
 /// </summary>
 internal sealed record Step1Result(string Model, double ForwardMaxAbs, double OurLoss, double ReferenceLoss,
-    double StepDeltaCosine, double StepDeltaRelError, IReadOnlyList<string> LayerUpdates)
+    double StepDeltaCosine, double StepDeltaRelError, IReadOnlyList<string> LayerUpdates,
+    double GradCosine = double.NaN, double GradRatio = double.NaN, double ExpectedGradRatio = double.NaN)
 {
-    public bool Pass => ForwardMaxAbs <= 1e-4 && StepDeltaCosine >= 0.999 && StepDeltaRelError <= 0.01;
+    // The gradient check is what sees SCALE: Adam's first step (~lr*sign(g)) hides a uniformly scaled gradient.
+    public bool Pass => ForwardMaxAbs <= 1e-4 && StepDeltaCosine >= 0.999 && StepDeltaRelError <= 0.01
+        && (double.IsNaN(GradCosine) || (GradCosine >= 0.9999
+            && (double.IsNaN(ExpectedGradRatio) || Math.Abs(GradRatio - ExpectedGradRatio) <= 1e-3 * Math.Max(1.0, ExpectedGradRatio))));
 
     public override string ToString() =>
         $"{Model}: {(Pass ? "PASS" : "FAIL")}  forward max|dlogit|={ForwardMaxAbs:E2}  loss {OurLoss:F6} vs {ReferenceLoss:F6}  " +
-        $"step delta cos={StepDeltaCosine:F6} relErr={StepDeltaRelError:E2}" +
+        $"step delta cos={StepDeltaCosine:F6} relErr={StepDeltaRelError:E2}  grad cos={GradCosine:F6} ratio={GradRatio:F4} (expect {ExpectedGradRatio:F4})" +
         string.Concat(LayerUpdates.Select(l => $"{Environment.NewLine}         update {l}"));
 }
