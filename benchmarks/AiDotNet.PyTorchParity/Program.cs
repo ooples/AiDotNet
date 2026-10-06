@@ -471,6 +471,19 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
             AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(
                 new AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions { EnableCompilation = false });
         }
+        if (Environment.GetEnvironmentVariable("AIDOTNET_PARITY_LAYERWISE") == "1")
+        {
+            // Diagnostic: per-layer output checksum of an inference forward, to compare CPU against CUDA.
+            Network.SetTrainingMode(false);
+            var activation = input;
+            foreach (var layer in Network.Layers)
+            {
+                activation = layer.Forward(activation);
+                var values = activation.ToArray();
+                double s = 0, sa = 0; foreach (var v in values) { s += v; sa += Math.Abs(v); }
+                Console.WriteLine($"[step1] {name} layer {layer.GetType().Name.Split('`')[0]} [{string.Join("x", activation.Shape.ToArray())}] sum={s:E8} sum|.|={sa:E8}");
+            }
+        }
         var init = Network.GetParameters().Select(v => (double)v).ToArray();
         var ours0 = Network.Predict(input).ToVector().Select(v => (double)v).ToArray();
         Network.Train(input, labels);
@@ -504,6 +517,12 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
             {
                 Network.Train(input, labels);
                 Console.WriteLine($"[step1] {name} step {s} loss {Convert.ToDouble(Network.GetLastLoss()):F6}");
+                if (Environment.GetEnvironmentVariable("AIDOTNET_PARITY_GRADS") == "1")
+                {
+                    var g = Network.GetParameterGradients();
+                    double gs = 0; for (var k = 0; k < g.Length; k++) gs += Math.Abs(Convert.ToDouble(g[k]));
+                    Console.WriteLine($"[step1] {name} step {s} sum|g|={gs:E6}");
+                }
             }
         }
         var ours1 = Network.Predict(input).ToVector().Select(v => (double)v).ToArray();

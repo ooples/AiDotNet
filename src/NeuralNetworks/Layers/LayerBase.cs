@@ -7438,7 +7438,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 if (!grads.TryGetValue(tensor, out var gradient) || gradient is null
                     || TrainableScalarCount(gradient) != count)
                     continue;
-                if (gradient is SparseTensor<T> || !gradient.IsContiguous || !gradient.HasPendingGpuData) return false;
+                if (gradient is SparseTensor<T> || !gradient.IsContiguous || !gradient.HasPendingGpuData)
+                {
+                    if (System.Environment.GetEnvironmentVariable("AIDOTNET_PUBLISH_TRACE") == "1")
+                        System.Console.WriteLine($"[publish] {GetType().Name} declined: sparse={gradient is SparseTensor<T>} contiguous={gradient.IsContiguous} pendingGpu={gradient.HasPendingGpuData} gpuBuffer={gradient.TryGetGpuBuffer() is not null} len={gradient.Length}");
+                    return false;
+                }
                 sources.Add((tensor, gradient));
                 continue;
             }

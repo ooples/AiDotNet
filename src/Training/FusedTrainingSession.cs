@@ -337,16 +337,21 @@ internal sealed class FusedTrainingSession<T>
             || config.Schedule.GetLr(step) != 0.0;
     }
 
+    // Reduced on the engine to ONE scalar, like AnySampleChanged: reading each gradient on the host downloaded the
+    // whole gradient set every probed step (on a GPU MLP, most of the per-step device-to-host copies).
     private static bool AnyGradientNonZero(IReadOnlyDictionary<Tensor<T>, Tensor<T>> gradients)
     {
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        Tensor<T>? total = null;
         foreach (var gradient in gradients.Values)
         {
-            if (gradient is null) continue;
-            var span = gradient.AsSpan();
-            for (int i = 0; i < span.Length; i++)
-                if (!NumOps.Equals(span[i], NumOps.Zero)) return true;
+            if (gradient is null || gradient.Length == 0) continue;
+            var squares = engine.Reshape(engine.ReduceSum(engine.TensorMultiply(gradient, gradient), null), new[] { 1 });
+            total = total is null ? squares : engine.TensorAdd(total, squares);
         }
-        return false;
+        // NaN counts as non-zero: the gradient reached the parameters (as non-finite values the plan's guard handles).
+        return total is not null && NumOps.ToDouble(total[0]) != 0.0;
     }
 
     private static IEnumerable<Tensor<T>> EnumerateLiveParameters(FusedTrainingStepRequest<T> request)
