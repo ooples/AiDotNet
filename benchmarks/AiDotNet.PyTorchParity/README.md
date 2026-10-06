@@ -49,10 +49,12 @@ python benchmark.py --models mlp,cnn,lstm,transformer --device cpu \
     --threads 8 --output ../results/pytorch.json
 ```
 
-PyTorch runs **eager** here (no `torch.compile`) on purpose: the AiDotNet side
-runs its own compiled/fused path, and pitting it against a separately compiled
-PyTorch compares two compilation stacks rather than the kernels. Pin both sides
-to the same thread count (`--threads` ↔ `AIDOTNET_BLAS_THREADS`).
+By default PyTorch runs **eager** (no `torch.compile`, PyTorch's default AdamW):
+the kernel-vs-kernel comparison. `--compile` (with `--compile-backend` /
+`--compile-mode`) and `--optimizer-impl fused` select the other modes; the
+scoreboard below runs all of them and scores against the fastest. Pin both sides
+to the same thread count (`--threads` ↔ `AIDOTNET_BLAS_THREADS`) for a
+kernel-level comparison.
 
 ## 3. Compare
 
@@ -64,6 +66,55 @@ python compare.py ../results/aidotnet.json ../results/pytorch.json
 Prints a per-model / per-batch table with the latency ratio and verdict. The
 gate (from AIsEval `Reporting/findings.md`) is **p95(AiDotNet) < mean(PyTorch)**:
 our worst-of-95% steady-state latency still beats their average.
+
+## 4. Scoreboard: every family × device vs the best PyTorch mode
+
+`pytorch/scoreboard.py` is the trustworthy training number: AiDotNet vs PyTorch,
+training **ms/step**, for MLP / CNN / LSTM / Transformer on **cpu and cuda**, with
+PyTorch in its **fastest mode for each cell**. It writes `results/scoreboard.md`
+and `results/scoreboard.json` (every raw run, the mode-selection table, skipped
+modes with reasons, machine + DLL provenance). These two files are the one
+deliberate exception to `results/` being git-ignored: commit them when you
+refresh the scoreboard so the history shows how the gap moves.
+
+```powershell
+# From benchmarks/AiDotNet.PyTorchParity/pytorch, with a python that has torch (+CUDA) and psutil.
+# --ours-bin is a BUILT harness directory: the shared baseline, a perf track's B side, or
+# benchmarks/AiDotNet.PyTorchParity/bin/Release/net10.0 after `dotnet build -c Release`.
+python scoreboard.py --ours-bin C:\Users\yolan\source\repos\_bench\baseline-bin
+# Subsets while iterating (same protocol, fewer cells):
+python scoreboard.py --ours-bin <dir> --models cnn,lstm --devices cpu
+```
+
+Protocol:
+
+- **One run = one fresh process**: 5 epochs × 20 steps × batch 64 (epoch 0 is
+  warmup); the run's value is the median steady-state epoch / steps, i.e. the
+  same training row `compare.py` prints. AiDotNet runs with one inference
+  iteration (the C# harness has no training-only switch); PyTorch runs with
+  `--skip-inference`.
+- **Every run holds `Global\AiDotNetBenchLock`** (the mutex `_bench/bench.ps1`
+  takes) for its own duration only, so other benchmark tracks interleave between
+  runs and no two timed runs ever overlap. Builds do not take the lock, so a
+  heavy concurrent build still adds noise; the medians and IQRs are the defence.
+- **Mode selection**: every PyTorch mode available on the device runs 3× —
+  `eager`, `compile[inductor]` (CPU needs MSVC `cl.exe`; found via vswhere /
+  `--vcvars`; GPU needs `triton-windows`), and on CUDA
+  `compile[inductor/reduce-overhead]` (CUDA graphs) and `compile[cudagraphs]`
+  (CUDA graphs without Inductor), each with PyTorch's default AdamW and with
+  `fused` AdamW. Unavailable or failing modes are listed with the reason.
+  `max-autotune` and `aot_eager` are not run (reasons in the output).
+- **Scoring**: AiDotNet, the 2 best selection modes and eager each run **9×**,
+  interleaved round by round; the finalist with the lowest median is the bar.
+  Re-measuring from scratch keeps a lucky selection run from biasing it.
+- **Verdict** as in `compare.py`: `WIN`/`LOSE` only when the p25–p75 ranges of
+  the 9 runs do not overlap; lowercase means the medians differ within noise.
+
+Flags: `--runs` (9), `--select-runs` (3), `--finalists` (2), `--modes` (subset of
+mode labels; eager is always included), `--epochs` (5), `--threads` (0 = each side
+at its default; N pins torch `--threads` and `AIDOTNET_BLAS_THREADS`), `--python`,
+`--vcvars`, `--output-dir` (`results/`). Windows only (the lock is a Win32 named
+mutex).
 
 ## CLI options (both sides)
 
@@ -78,12 +129,18 @@ our worst-of-95% steady-state latency still beats their average.
 | `--seed` | `1234` | RNG seed |
 | `--output` | `results/{aidotnet,pytorch}.json` | report path |
 | `--threads` (PyTorch) | `0` (all cores) | pin CPU threads; match `AIDOTNET_BLAS_THREADS` |
+| `--compile` (PyTorch) | off | wrap the model in `torch.compile` |
+| `--compile-backend` (PyTorch) | `inductor` | `inductor`, `cudagraphs` (no triton), `aot_eager` |
+| `--compile-mode` (PyTorch) | `default` | `reduce-overhead` (CUDA graphs), `max-autotune`, `max-autotune-no-cudagraphs` |
+| `--optimizer-impl` (PyTorch) | `default` | AdamW implementation: `default`, `foreach`, `fused` |
+| `--skip-inference` (PyTorch) | off | training rows only |
 
 Inference is measured at batch sizes **1, 8, 32, 128** on both sides.
 
 ## Notes
 
-- `results/` is git-ignored (machine-specific timings don't belong in version control).
+- `results/` is git-ignored (machine-specific timings don't belong in version control),
+  except the committed `results/scoreboard.{md,json}` (section 4).
 - `mlp-fused` is an AiDotNet-only primitive variant (direct `MlpForward`); the
   PyTorch side maps it to the same `MLP` so a shared `--models` list won't error.
 - This project is excluded from `dotnet test` (`IsTestProject=false`); it's a

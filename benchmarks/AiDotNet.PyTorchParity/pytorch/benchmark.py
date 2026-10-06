@@ -5,10 +5,13 @@ Twin of the C# harness (../Program.cs): same four reference models
 training + multi-batch inference measurement loop, and the same JSON schema,
 so the two reports compare directly via compare.py.
 
-IMPORTANT (fair comparison): PyTorch here runs EAGER (no torch.compile). The
-AiDotNet side runs its own compiled/fused path; pitting it against a separately
-torch.compile'd PyTorch would compare two different compilation stacks rather
-than the kernels. Pin both sides to the same CPU thread count:
+By default PyTorch runs EAGER (no torch.compile) with its default AdamW
+implementation: the kernel-vs-kernel comparison. scoreboard.py additionally runs
+the other modes a PyTorch user would reach for -- torch.compile (TorchInductor,
+optionally with CUDA graphs via --compile-mode reduce-overhead, or the
+triton-free --compile-backend cudagraphs) and the single-kernel AdamW
+(--optimizer-impl fused) -- and scores AiDotNet against the BEST of them per
+device. Pin both sides to the same CPU thread count for a kernel-level comparison:
     python benchmark.py --threads 8 ...
     dotnet run ... (set AIDOTNET_BLAS_THREADS=8)
 
@@ -246,9 +249,23 @@ def synthetic_batch(batch_size: int, shape: tuple[int, ...], device: torch.devic
     return x, y
 
 
-def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.device, epochs: int, batches: int, batch_size: int, breakdown: bool = False) -> TrainingResult:
+def make_optimizer(parameters, impl: str) -> torch.optim.Optimizer:
+    """AdamW(lr=1e-3), the twin of AiDotNet's default Adam step. impl picks PyTorch's implementation:
+    'default' lets PyTorch choose (foreach on CUDA, for-loop on CPU), 'foreach' forces the multi-tensor
+    path, 'fused' the single-kernel path (CPU and CUDA). All three compute the same update."""
+    params = list(parameters)
+    if impl == "default":
+        return torch.optim.AdamW(params, lr=1e-3)
+    if impl == "foreach":
+        return torch.optim.AdamW(params, lr=1e-3, foreach=True)
+    if impl == "fused":
+        return torch.optim.AdamW(params, lr=1e-3, fused=True)
+    raise ValueError(f"Unknown optimizer impl: {impl}")
+
+
+def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.device, epochs: int, batches: int, batch_size: int, breakdown: bool = False, optimizer_impl: str = "default") -> TrainingResult:
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+    optimizer = make_optimizer(model.parameters(), optimizer_impl)
     epoch_seconds: list[float] = []
     gradient_seconds: list[float] = []
     data_seconds: list[float] = []
@@ -372,12 +389,23 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         model.to(device)
         parameters = sum(parameter.numel() for parameter in model.parameters())
         if args.compile:
-            # torch.compile (TorchInductor) — the "PyTorch compiled" comparison.
-            # Counts params BEFORE compile (the wrapper hides .parameters()).
-            model = torch.compile(model)
-        training = benchmark_training(model, shape, device, args.epochs, args.train_batches, args.batch_size, args.breakdown)
-        model.eval()
-        inference = benchmark_inference(model, shape, device, args.inference_iterations, args.warmup_iterations)
+            # torch.compile — the "PyTorch compiled" comparison. Counts params BEFORE compile
+            # (the wrapper hides .parameters()). The default backend is TorchInductor; mode
+            # "reduce-overhead" adds CUDA graphs; backend "cudagraphs" graphs the eager kernels
+            # without Inductor (no triton needed).
+            compile_kwargs: dict[str, object] = {"backend": args.compile_backend}
+            if args.compile_mode != "default":
+                compile_kwargs["mode"] = args.compile_mode
+            model = torch.compile(model, **compile_kwargs)
+        training = benchmark_training(model, shape, device, args.epochs, args.train_batches, args.batch_size, args.breakdown,
+                                      args.optimizer_impl)
+        if args.skip_inference:
+            # Training-only runs (the scoreboard): a compiled model would otherwise recompile for
+            # eval mode and every inference batch size, time that belongs to no training number.
+            inference: list[InferenceBatchResult] = []
+        else:
+            model.eval()
+            inference = benchmark_inference(model, shape, device, args.inference_iterations, args.warmup_iterations)
         model_results.append(ModelResult(name, str(device), parameters, training, inference))
 
     return {
@@ -385,10 +413,23 @@ def run(args: argparse.Namespace) -> dict[str, object]:
         "python": platform.python_version(),
         "torch": torch.__version__,
         "device": str(device),
+        "mode": describe_mode(args),
         "torch_num_threads": torch.get_num_threads(),
         "cuda_available": torch.cuda.is_available(),
         "results": [asdict(result) for result in model_results],
     }
+
+
+def describe_mode(args: argparse.Namespace) -> str:
+    """Stable label for the PyTorch execution mode, e.g. 'eager', 'eager+fused-adamw',
+    'compile[inductor/reduce-overhead]+fused-adamw'. The scoreboard keys its rows on it."""
+    if args.compile:
+        label = f"compile[{args.compile_backend}" + ("" if args.compile_mode == "default" else f"/{args.compile_mode}") + "]"
+    else:
+        label = "eager"
+    if args.optimizer_impl != "default":
+        label += f"+{args.optimizer_impl}-adamw"
+    return label
 
 
 def main() -> None:
@@ -408,6 +449,15 @@ def main() -> None:
                              "Match the AiDotNet side's AIDOTNET_BLAS_THREADS for a fair comparison.")
     parser.add_argument("--compile", action="store_true",
                         help="Wrap each model in torch.compile (TorchInductor) — the 'PyTorch compiled' head-to-head.")
+    parser.add_argument("--compile-backend", default="inductor", choices=["inductor", "cudagraphs", "aot_eager"],
+                        help="torch.compile backend (with --compile). 'cudagraphs' needs no triton (CUDA only).")
+    parser.add_argument("--compile-mode", default="default",
+                        choices=["default", "reduce-overhead", "max-autotune", "max-autotune-no-cudagraphs"],
+                        help="torch.compile mode (with --compile and the inductor backend).")
+    parser.add_argument("--optimizer-impl", default="default", choices=["default", "foreach", "fused"],
+                        help="AdamW implementation: PyTorch's default choice, forced foreach, or the fused single kernel.")
+    parser.add_argument("--skip-inference", action="store_true",
+                        help="Measure training only (no inference rows); the scoreboard uses this.")
     parser.add_argument("--output", type=Path, default=Path("../results/pytorch.json"))
     args = parser.parse_args()
 

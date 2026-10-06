@@ -1,5 +1,8 @@
-# Machine-specific benchmark outputs — never commit timing JSON.
-results/
+# Machine-specific benchmark outputs — never commit ad-hoc timing JSON. The one exception is the
+# scoreboard (pytorch/scoreboard.py), committed deliberately as the dated reference table.
+results/*
+!results/scoreboard.md
+!results/scoreboard.json
 # Python side
 pytorch/__pycache__/
 pytorch/.venv/
