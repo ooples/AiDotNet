@@ -127,12 +127,9 @@ internal static class DefectBaselines
             "global::AiDotNet.SpeechRecognition.ConformerFamily.EBranchformer<T>",
             "global::AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>",
             "global::AiDotNet.TextToSpeech.CodecBased.AudioLM<T>",
-            "global::AiDotNet.TextToSpeech.CodecBased.CosyVoice2<T>",
             "global::AiDotNet.TextToSpeech.CodecBased.FishSpeech<T>",
             "global::AiDotNet.TextToSpeech.CodecBased.VALLE<T>",
             "global::AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>",
-            "global::AiDotNet.TextToSpeech.FlowDiffusion.MatchaTTS<T>",
-            "global::AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T>",
             "global::AiDotNet.TextToSpeech.Vocoders.WaveNet<T>",
             "global::AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>",
         };

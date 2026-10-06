@@ -418,9 +418,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             { "FishSpeech", "AiDotNet.Audio.Generation." },
             { "VALLE", "AiDotNet.Audio.Generation." },
             { "VoiceCraft", "AiDotNet.Audio.Generation." },
-            { "CosyVoice2", "AiDotNet.Audio.TextToSpeech." },
-            { "MatchaTTS", "AiDotNet.Audio.TextToSpeech." },
-            { "StyleTTS2", "AiDotNet.Audio.TextToSpeech." },
             { "DINO", "AiDotNet.ComputerVision.Detection.ObjectDetection.DETR." },
             { "GroundedSAM2", "AiDotNet.ComputerVision.Segmentation.OpenVocabulary." },
             { "CSDI", "AiDotNet.Finance.Forecasting.Foundation." },
@@ -6450,6 +6447,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.TextToSpeech.Classic.GlowTTSOptions { EncoderDim = 32, HiddenDim = 32, NumHeads = 2, " +
                     "NumEncoderLayers = 1, FilterChannels = 64, DurationPredictorFilterChannels = 32, NumFlowBlocks = 2, " +
                     "DecoderHiddenChannels = 32, CouplingLayers = 2, MelChannels = 16 })";
+            }
+            else if (model.ClassName == "MatchaTTS" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.TextToSpeech.FlowDiffusion.", System.StringComparison.Ordinal))
+            {
+                // Matcha-TTS's paper model is the 192-wide, 6-layer RoPE encoder and a (256, 256) U-Net decoder with
+                // Transformer blocks; keep that topology (pre-net, encoder, duration predictor, MAS, OT-CFM U-Net) with
+                // one encoder layer, one mid block, a 16-wide flow and three Euler steps.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 8, outputSize: 16), " +
+                    "new AiDotNet.TextToSpeech.FlowDiffusion.MatchaTTSOptions { HiddenDim = 16, NumHeads = 2, NumEncoderLayers = 1, " +
+                    "FilterChannels = 32, DurationPredictorFilterChannels = 16, FlowDim = 16, DecoderHeads = 2, DecoderHeadDim = 8, " +
+                    "DecoderMidBlocks = 1, MelChannels = 16, NumFlowSteps = 3 })";
             }
             else if (model.ClassName == "TransformerTTS" && model.TypeParameterCount == 1)
             {
@@ -15362,7 +15373,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     bool sixteenBins = model.ClassName is "FastSpeech" or "AdaSpeech" or "AdaSpeech2" or "SpeedySpeech"
                         or "Tacotron" or "TransformerTTS" or "GlowTTS" or "GradTTS" or "DeepVoice3" or "ForwardTacotron"
                         or "NonAttentiveTacotron" or "PortaSpeech" or "ProDiff" or "CoMoSpeech" or "VoiceFlow" or "E2TTS"
-                        or "F5TTS";
+                        or "F5TTS" or "MatchaTTS";
                     sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 8, {(sixteenBins ? 16 : 80)} }};");
                 }
                 sb.AppendLine();
@@ -21039,6 +21050,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "F5TTS" => true,
             "GlowTTS" => true,
             "GradTTS" => true,
+            "MatchaTTS" => true,
             // Codec / flow-matching TTS (E2 TTS, etc.) use CreateDefaultCodecLMLayers.
             "E2TTS" => true,
             // Mega-TTS 2 consumes text/prosody tokens and predicts acoustic mel frames.
