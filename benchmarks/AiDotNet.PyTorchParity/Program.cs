@@ -27,6 +27,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.PyTorchParity;
 using AiDotNet.Tensors.LinearAlgebra;
 using System.Diagnostics;
 using System.Text.Json;
@@ -41,8 +42,21 @@ using System.Text.Json;
 // pins the CPU engine so this harness compares CPU-vs-CPU. (AIDOTNET_DISABLE_GPU=1
 // is the documented before-startup opt-out; this in-code reset also covers the
 // published-DLL path where launchSettings env vars don't apply.)
-AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
-Console.WriteLine($"[bench] engine pinned to CPU: {AiDotNet.Tensors.Engines.AiDotNetEngine.Current.GetType().Name}");
+// `--device cuda` instead adopts the DirectGpu engine and refuses to run if it is not
+// adopted: a CUDA row measured on the CPU engine would be compared against PyTorch-CUDA.
+if (BenchmarkDeviceArg.Parse(args) == BenchmarkDevice.Cuda)
+{
+    AiDotNet.Tensors.Engines.AiDotNetEngine.AutoDetectAndConfigureGpu(verbose: true);
+    if (AiDotNet.Tensors.Engines.AiDotNetEngine.Current is not AiDotNet.Tensors.Engines.DirectGpuTensorEngine)
+        throw new InvalidOperationException(
+            $"--device cuda requested but the engine is {AiDotNet.Tensors.Engines.AiDotNetEngine.Current.GetType().Name}; " +
+            "is AIDOTNET_DISABLE_GPU set in the environment?");
+}
+else
+{
+    AiDotNet.Tensors.Engines.AiDotNetEngine.ResetToCpu();
+}
+Console.WriteLine($"[bench] engine: {AiDotNet.Tensors.Engines.AiDotNetEngine.Current.GetType().Name} ({BenchStats.DeviceName})");
 
 // Opt-in (AIDOTNET_FUSED_DIAG=1): surface whether the compiled fused-optimizer
 // training path actually runs (Hit) or silently falls back to the eager tape
@@ -151,7 +165,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             var inference = BenchmarkInference(model);
             modelStart.Stop();
             Console.WriteLine($"[bench] {modelName}: complete in {modelStart.Elapsed.TotalSeconds:F2}s");
-            results.Add(new ModelReport(modelName, "AiDotNetNeuralNetwork", model.ParameterCount, training, inference));
+            results.Add(new ModelReport(modelName, "AiDotNetNeuralNetwork", BenchStats.DeviceName, model.ParameterCount, training, inference));
         }
 
         return new BenchmarkReport(
@@ -172,15 +186,25 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
         var total = Stopwatch.StartNew();
         using var monitor = ResourceMonitor.Start();
 
+        // Batches are generated BEFORE the timed epochs (the PyTorch twin does the same) so epoch
+        // time is pure training: our managed CPU RNG and their on-device randn cost very different
+        // amounts, and that difference says nothing about either framework's training step.
+        var batches = new List<(Tensor<float> Input, Tensor<float> Label)>(options.TrainBatches);
+        for (var batch = 0; batch < options.TrainBatches; batch++)
+        {
+            var dataTimer = Stopwatch.StartNew();
+            model.LoadSyntheticBatch(options.BatchSize);
+            dataTimer.Stop();
+            dataSeconds.Add(dataTimer.Elapsed.TotalSeconds);
+            batches.Add(model.CurrentBatch);
+        }
+
         for (var epoch = 0; epoch < options.Epochs; epoch++)
         {
             var epochTimer = Stopwatch.StartNew();
             for (var batch = 0; batch < options.TrainBatches; batch++)
             {
-                var dataTimer = Stopwatch.StartNew();
-                model.LoadSyntheticBatch(options.BatchSize);
-                dataTimer.Stop();
-                dataSeconds.Add(dataTimer.Elapsed.TotalSeconds);
+                model.CurrentBatch = batches[batch];
 
                 // One training step = one forward + backward + optimizer update (Train), exactly what the
                 // PyTorch twin times. A separate Predict here made every AiDotNet step do two forwards.
@@ -190,6 +214,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
                 gradientSeconds.Add(gradientTimer.Elapsed.TotalSeconds);
                 model.Step();
             }
+            BenchStats.SynchronizeDevice();
             epochTimer.Stop();
             epochSeconds.Add(epochTimer.Elapsed.TotalSeconds);
         }
@@ -198,10 +223,15 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
         // Steady-state training time excludes epoch 0 (JIT/autotune warmup). With a
         // single epoch there is no steady state to report, so fall back to it.
         var steadyEpochs = epochSeconds.Count > 1 ? epochSeconds.Skip(1).ToList() : epochSeconds;
+        var steadySorted = steadyEpochs.OrderBy(x => x).ToList();
         return new TrainingReport(
             epochSeconds.Select(Round6).ToArray(),
             Round6(total.Elapsed.TotalSeconds),
             Round6(steadyEpochs.Count == 0 ? 0 : steadyEpochs.Average()),
+            Round6(BenchStats.Quantile(steadySorted, 0.5)),
+            Round6(BenchStats.Quantile(steadySorted, 0.25)),
+            Round6(BenchStats.Quantile(steadySorted, 0.75)),
+            options.TrainBatches,
             Round6(gradientSeconds.Count == 0 ? 0 : gradientSeconds.Average()),
             Round6(dataSeconds.Count == 0 ? 0 : dataSeconds.Average()),
             monitor.Summary());
@@ -224,6 +254,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             {
                 var timer = Stopwatch.StartNew();
                 model.Forward();
+                BenchStats.SynchronizeDevice();
                 timer.Stop();
                 warmup.Add(timer.Elapsed.TotalSeconds);
             }
@@ -246,6 +277,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             {
                 var timer = Stopwatch.StartNew();
                 model.Forward();
+                BenchStats.SynchronizeDevice();
                 timer.Stop();
                 steady.Add(timer.Elapsed.TotalSeconds);
             }
@@ -262,6 +294,9 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
                 Round6(warmup.Average()),
                 Math.Round(steady.Average() * 1000d, 3),
                 Math.Round(steadySorted[p95Idx] * 1000d, 3),
+                Math.Round(BenchStats.Quantile(steadySorted, 0.5) * 1000d, 3),
+                Math.Round(BenchStats.Quantile(steadySorted, 0.25) * 1000d, 3),
+                Math.Round(BenchStats.Quantile(steadySorted, 0.75) * 1000d, 3),
                 Math.Round(options.InferenceIterations * batchSize / totalSteady, 3),
                 Math.Round(peak, 3)));
         }
@@ -278,6 +313,8 @@ internal interface IBenchmarkModel
     void Forward();
     void Backward();
     void Step();
+    /// <summary>The batch the next Forward/Backward consumes; settable so the training loop can replay pre-generated batches.</summary>
+    (Tensor<float> Input, Tensor<float> Label) CurrentBatch { get; set; }
 }
 
 internal sealed class AiDotNetTensorBackend(int seed)
@@ -319,6 +356,12 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
     protected readonly NeuralNetworkBase<float> Network;
     protected Tensor<float> Input = Tensor<float>.Empty();
     protected Tensor<float> Label = Tensor<float>.Empty();
+
+    public (Tensor<float> Input, Tensor<float> Label) CurrentBatch
+    {
+        get => (Input, Label);
+        set => (Input, Label) = value;
+    }
 
     protected AiDotNetBenchmarkModel(int seed)
     {
@@ -428,6 +471,13 @@ internal sealed class AiDotNetMlpFusedModel : IBenchmarkModel
     private readonly Tensor<float>[] _weights;
     private readonly Tensor<float>?[] _biases;
     private Tensor<float> _input = Tensor<float>.Empty();
+
+    // Forward-only model: the label half is unused.
+    public (Tensor<float> Input, Tensor<float> Label) CurrentBatch
+    {
+        get => (_input, Tensor<float>.Empty());
+        set => _input = value.Input;
+    }
 
     public AiDotNetMlpFusedModel(int seed)
     {
@@ -654,6 +704,34 @@ internal static class AiDotNetProbe
     }
 }
 
+/// <summary>
+/// Device barrier + the shared statistics both harnesses report. The PyTorch twin calls
+/// torch.cuda.synchronize after every timed inference forward and at every epoch end; without
+/// the same barrier here, an asynchronous GPU engine would time only kernel ENQUEUE and read
+/// impossibly fast. Quantile() uses linear interpolation between order statistics — numpy's
+/// default and the same function the Python twin implements — so median/IQR are like-for-like.
+/// </summary>
+internal static class BenchStats
+{
+    public static string DeviceName =>
+        AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine ? "cuda" : "cpu";
+
+    public static void SynchronizeDevice()
+    {
+        if (AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine gpu)
+            gpu.SynchronizeStream();
+    }
+
+    public static double Quantile(IReadOnlyList<double> sorted, double q)
+    {
+        if (sorted.Count == 0) return 0;
+        var pos = q * (sorted.Count - 1);
+        var lo = (int)Math.Floor(pos);
+        var hi = Math.Min(lo + 1, sorted.Count - 1);
+        return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+    }
+}
+
 internal static class RunEnvironmentProbe
 {
     // ThreadCount is a SNAPSHOT taken at probe time, not a stable environment
@@ -679,14 +757,16 @@ internal static class RunEnvironmentProbe
 }
 
 internal sealed record BenchmarkReport(string Framework, string DotNetRuntime, RunEnvironment Environment, object AiDotNet, List<ModelReport> Results);
-internal sealed record ModelReport(string Model, string Backend, long Parameters, TrainingReport Training, List<InferenceReport> Inference);
+internal sealed record ModelReport(string Model, string Backend, string Device, long Parameters, TrainingReport Training, List<InferenceReport> Inference);
 // SteadyStateEpochSecondsAvg excludes the first epoch (issue #1566 item 4): the
 // AiDotNet first epoch is dominated by JIT + autotune warmup (~2.1 s) and drops to
 // ~0.36 s thereafter, so TotalSeconds/EpochSeconds[0] are warmup-skewed; the
 // steady-state average is the apples-to-apples training number vs PyTorch.
-internal sealed record TrainingReport(double[] EpochSeconds, double TotalSeconds, double SteadyStateEpochSecondsAvg, double GradientSecondsAvg, double DataLoadingSecondsAvg, ResourceReport Resources);
+internal sealed record TrainingReport(double[] EpochSeconds, double TotalSeconds, double SteadyStateEpochSecondsAvg,
+    double SteadyStateEpochSecondsMedian, double SteadyStateEpochSecondsP25, double SteadyStateEpochSecondsP75, int StepsPerEpoch, double GradientSecondsAvg, double DataLoadingSecondsAvg, ResourceReport Resources);
 internal sealed record ResourceReport(double ProcessRssMbPeak, double ProcessRssMbHwm, string? NvidiaSmiSample);
-internal sealed record InferenceReport(int BatchSize, double WarmupSecondsAvg, double SteadyStateLatencyMsAvg, double SteadyStateLatencyMsP95, double ThroughputSamplesPerSecond, double MemoryMbPeak);
+internal sealed record InferenceReport(int BatchSize, double WarmupSecondsAvg, double SteadyStateLatencyMsAvg, double SteadyStateLatencyMsP95,
+    double SteadyStateLatencyMsMedian, double SteadyStateLatencyMsP25, double SteadyStateLatencyMsP75, double ThroughputSamplesPerSecond, double MemoryMbPeak);
 
 // Device / thread / GC metadata so a run is verifiably same-hardware as the
 // PyTorch baseline (issue #1566 item 3 — "record device/thread-count fields

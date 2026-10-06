@@ -27,7 +27,35 @@ internal static class GpuDisableBootstrap
     [ModuleInitializer]
     internal static void DisableGpuForCpuParity()
     {
+        // `--device cuda` is the GPU-vs-PyTorch-CUDA run: leave auto-detect alone so the
+        // DirectGpu engine is adopted. Read from the raw command line because this runs
+        // before Main, so BenchmarkOptions has not been parsed yet.
+        if (BenchmarkDeviceArg.Parse(Environment.GetCommandLineArgs()) == BenchmarkDevice.Cuda)
+            return;
         if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_DISABLE_GPU")))
             Environment.SetEnvironmentVariable("AIDOTNET_DISABLE_GPU", "1");
+    }
+}
+
+/// <summary>The device a parity run measures; matches the PyTorch twin's --device.</summary>
+internal enum BenchmarkDevice
+{
+    Cpu,
+    Cuda,
+}
+
+internal static class BenchmarkDeviceArg
+{
+    /// <summary>Reads `--device cpu|cuda` (default cpu); any other value is an error, not a silent CPU run.</summary>
+    public static BenchmarkDevice Parse(string[] args)
+    {
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if (!string.Equals(args[i], "--device", StringComparison.OrdinalIgnoreCase)) continue;
+            return Enum.TryParse<BenchmarkDevice>(args[i + 1], ignoreCase: true, out var device)
+                ? device
+                : throw new ArgumentException($"--device must be cpu or cuda, got '{args[i + 1]}'.");
+        }
+        return BenchmarkDevice.Cpu;
     }
 }
