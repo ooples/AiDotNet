@@ -10537,7 +10537,8 @@ public static partial class LayerHelper<T>
             yield return new TransformerEncoderLayer<T>(numHeads, hiddenDim * 4, hiddenDim);
         }
 
-        // Transformer decoder with object queries
+        // Transformer decoder with object queries. DETR decodes its queries in parallel, so their self-attention is
+        // bidirectional (Carion et al. 2020, §3.2).
         IActivationFunction<T>? nullActivation = null;
         for (int i = 0; i < numDecoderLayers; i++)
         {
@@ -10545,7 +10546,8 @@ public static partial class LayerHelper<T>
                 numHeads,
                 hiddenDim * 4,
                 numQueries,
-                nullActivation);
+                nullActivation,
+                causal: false);
         }
 
         // Detection head: 4 bbox coords + num_classes logits, per query. LINEAR
@@ -12143,9 +12145,9 @@ public static partial class LayerHelper<T>
             yield return new TransformerEncoderLayer<T>( numHeads, feedForwardDim);
 
             // Cross-attention from queries to vision features (decoder layer with
-            // self+cross attention).
+            // self+cross attention). The queries attend to each other bidirectionally (Li et al. 2023, §3.1).
             yield return new TransformerDecoderLayer<T>(
-                numHeads, feedForwardDim, ffnActivation: null);
+                numHeads, feedForwardDim, ffnActivation: null, causal: false);
 
             // Feed-forward
             yield return new DenseLayer<T>(qformerHiddenDim, (IActivationFunction<T>?)null);
@@ -33284,9 +33286,10 @@ public static partial class LayerHelper<T>
         {
             // Self-attention for queries
             yield return new TransformerEncoderLayer<T>( numHeads, feedForwardDim);
-            // Cross-attention from queries to vision features (decoder block).
+            // Cross-attention from queries to vision features (decoder block). The queries attend to each other
+            // bidirectionally (Li et al. 2023, §3.1).
             yield return new TransformerDecoderLayer<T>(
-                numHeads, feedForwardDim, ffnActivation: null);
+                numHeads, feedForwardDim, ffnActivation: null, causal: false);
             yield return new DenseLayer<T>(qformerHiddenDim, (IActivationFunction<T>?)null);
         }
 

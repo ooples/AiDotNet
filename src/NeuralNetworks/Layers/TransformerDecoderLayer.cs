@@ -560,7 +560,8 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         [LayerState] int feedForwardDim,
         [LayerState] int sequenceLength = 512,
         IActivationFunction<T>? ffnActivation = null,
-        [LayerState] double dropoutRate = 0.0)
+        [LayerState] double dropoutRate = 0.0,
+        [LayerState] bool causal = true)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, -1 })
     {
         if (numHeads <= 0)
@@ -576,6 +577,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         if (dropoutRate < 0 || dropoutRate >= 1)
             throw new ArgumentOutOfRangeException(nameof(dropoutRate), "dropoutRate must be in [0, 1).");
         _dropoutRate = dropoutRate;
+        _causal = causal;
 
         _selfAttention = null!;
         _norm1 = null!;
@@ -605,6 +607,15 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
     /// <summary>Dropout probability on each sublayer output.</summary>
     public double DropoutRate => _dropoutRate;
+
+    /// <summary>Whether the self-attention is masked so position i sees only positions ≤ i.</summary>
+    /// <remarks>True for an autoregressive decoder (Vaswani et al. 2017, §3.1). A block that attends among a set of
+    /// learned queries is bidirectional and passes false: DETR's object queries (Carion et al. 2020, §3.2) and BLIP-2's
+    /// Q-Former queries (Li et al. 2023, §3.1).</remarks>
+    private readonly bool _causal;
+
+    /// <summary>Whether the self-attention is causal.</summary>
+    public bool IsCausal => _causal;
 
     /// <summary>
     /// Resolves <see cref="_embeddingSize"/> from <c>input.Shape[^1]</c>.
@@ -668,11 +679,11 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 var activation = _lazyFfnActivation ?? new GELUActivation<T>();
 
                 // The attention sublayers are linear (Vaswani et al. 2017, §3.2.2: the heads' concatenation is projected
-                // by W^O with no nonlinearity); the FFN activation used to be applied to them as well. The decoder's
-                // self-attention is masked so position i only sees positions <= i (§3.1); it was not masked at all.
+                // by W^O with no nonlinearity); the FFN activation used to be applied to them as well. An autoregressive
+                // decoder's self-attention is masked so position i only sees positions <= i (§3.1); see IsCausal.
                 _selfAttention = new MultiHeadAttentionLayer<T>(_numHeads, _embeddingSize / _numHeads, new IdentityActivation<T>() as IActivationFunction<T>)
                 {
-                    UseCausalMask = true,
+                    UseCausalMask = _causal,
                 };
                 _norm1 = new LayerNormalizationLayer<T>();
                 _crossAttention = new MultiHeadAttentionLayer<T>(_numHeads, _embeddingSize / _numHeads, new IdentityActivation<T>() as IActivationFunction<T>);
@@ -1237,6 +1248,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         metadata["FeedForwardDim"] = _feedForwardDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["SequenceLength"] = _sequenceLength.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["DropoutRate"] = _dropoutRate.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+        metadata["Causal"] = _causal ? "true" : "false";
 
         // Persist the FFN activation type so DeserializationHelper can
         // re-instantiate it via TryCreateActivationInstance. Without this,
