@@ -19081,8 +19081,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         bool usesCompositeObjective = this is ICompositeLoss<T> && _compositeTargetsAreReal;
         if (resolved is LossFunctions.MeanSquaredErrorLoss<T> && !usesCompositeObjective)
         {
-            var prediction = ForwardPreparedForTraining(input);
-            target = AlignTargetToOutputShape(prediction, target);
+            // The same pair BuildTrainingObjective differentiates (the current draw, not a new one), so the finite
+            // difference measures the objective the analytic gradient is taken of.
+            var pair = PrepareTrainingPair(input, target, _trainingPairDraws);
+            var prediction = ForwardPreparedForTraining(pair.Input, pairTransformed: true);
+            target = AlignTargetToOutputShape(prediction, pair.Target ?? target);
             if (prediction.Length == 0) return 0.0;
 
             // Neumaier summation also keeps the double reference stable when the squared residuals
