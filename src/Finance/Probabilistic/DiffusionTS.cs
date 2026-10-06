@@ -253,7 +253,7 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
                 BetaSchedule.SquaredCosine => Math.Min(1.0 - CosineAlphaBar((k + 1.0) / n) / CosineAlphaBar((double)k / n), 0.999),
                 _ => throw new ArgumentOutOfRangeException(nameof(_options), $"Unknown beta schedule {_options.BetaSchedule}.")
             };
-            if (!(_betas[k] > 0) || _betas[k] >= 1)
+            if (double.IsNaN(_betas[k]) || _betas[k] <= 0 || _betas[k] >= 1)
                 throw new ArgumentOutOfRangeException(nameof(_options), "Every beta must lie in (0, 1).");
         }
 
@@ -358,6 +358,11 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
 
     private double FourierWeight => _options.FourierLossWeight ?? Math.Sqrt(Window) / 5.0;
 
+    // What both sides of the Fourier terms are multiplied by so the loss weights them by FourierWeight: the weight itself
+    // under L1, whose distance is degree-1 homogeneous, and its square root under L2, which squares the factor.
+    private double FourierScale => _options.ReconstructionLoss == DiffusionReconstructionLoss.L2
+        ? Math.Sqrt(FourierWeight)
+        : FourierWeight;
     /// <summary>
     /// Draws the Diffusion-TS training pair. The window is the context followed by the target horizon, normalised per
     /// series by the context's mean and spread. A step k ~ U{1..T} and noise eps ~ N(0, I) give
@@ -445,7 +450,7 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
             // F along time for every feature: [B, L, F] -> [B * F, L] rows against the L x L "forward"-normalised basis.
             var series = Engine.Reshape(Engine.TensorPermute(predicted, new[] { 0, 2, 1 }), new[] { batch * _numFeatures, Window });
             var (cosine, sine) = FourierBasis();
-            T weight = NumOps.FromDouble(FourierWeight);
+            T weight = NumOps.FromDouble(FourierScale);
             parts.Add(Engine.TensorMultiplyScalar(Engine.Reshape(Engine.TensorMatMul(series, cosine), new[] { batch, WindowValues }), weight));
             parts.Add(Engine.TensorMultiplyScalar(Engine.Reshape(Engine.TensorMatMul(series, sine), new[] { batch, WindowValues }), weight));
         }
@@ -460,7 +465,7 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
         var row = new double[ObjectiveWidth];
         for (int i = 0; i < WindowValues; i++) row[i] = scale * clean[i];
         if (!_options.UseFourierLoss) return row;
-        double weight = FourierWeight;
+        double weight = FourierScale;
         for (int f = 0; f < _numFeatures; f++)
             for (int k = 0; k < Window; k++)
             {
@@ -522,7 +527,9 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
         if (double.IsNaN(confidenceLevel) || confidenceLevel <= 0 || confidenceLevel >= 1)
             throw new ArgumentOutOfRangeException(nameof(confidenceLevel));
         double tail = (1.0 - confidenceLevel) / 2.0;
-        var bounds = ForecastQuantiles(input, new[] { tail, 1.0 - tail });
+        // One set of generated windows serves the mean and both bounds; each set costs NumDiffusionSteps denoiser passes.
+        var windows = SampleWindows(input, out int batch);
+        var bounds = QuantilesOf(windows, batch, new[] { tail, 1.0 - tail }, PointShape(input));
         var lower = new Tensor<T>(PointShape(input));
         var upper = new Tensor<T>(PointShape(input));
         for (int i = 0; i < lower.Length; i++)
@@ -531,7 +538,7 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
             upper[i] = bounds[2 * i + 1];
         }
 
-        return (ForecastNative(input), lower, upper);
+        return (MeanOf(windows, batch, input), lower, upper);
     }
 
     /// <inheritdoc/>
@@ -557,6 +564,11 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
     private Tensor<T> ForecastNative(Tensor<T> input)
     {
         var windows = SampleWindows(input, out int batch);
+        return MeanOf(windows, batch, input);
+    }
+
+    private Tensor<T> MeanOf(double[,,] windows, int batch, Tensor<T> input)
+    {
         var mean = new Tensor<T>(new[] { batch, _forecastHorizon, _numFeatures });
         int values = _forecastHorizon * _numFeatures;
         for (int b = 0; b < batch; b++)
@@ -577,8 +589,13 @@ public partial class DiffusionTS<T> : ForecastingModelBase<T>
             if (double.IsNaN(q) || q < 0 || q > 1)
                 throw new ArgumentOutOfRangeException(nameof(quantiles), $"Quantile {q} is outside [0, 1].");
         var windows = SampleWindows(input, out int batch);
+        return QuantilesOf(windows, batch, quantiles, PointShape(input));
+    }
+
+    private Tensor<T> QuantilesOf(double[,,] windows, int batch, double[] quantiles, int[] pointShape)
+    {
         int values = _forecastHorizon * _numFeatures;
-        var shape = PointShape(input).Concat(new[] { quantiles.Length }).ToArray();
+        var shape = pointShape.Concat(new[] { quantiles.Length }).ToArray();
         var result = new Tensor<T>(shape);
         var sorted = new double[_numSamples];
         for (int b = 0; b < batch; b++)
