@@ -227,8 +227,11 @@ public class AudioPaperTrainingRecipeTests
         Assert.False(optimizerOptions.UseAdaptiveMomentum);
         Assert.False(optimizerOptions.UseAdaptiveBetas);
         Assert.False(optimizerOptions.UseAMSGrad);
-        Assert.False(optimizerOptions.EnableGradientClipping);
-        Assert.Null(optimizerOptions.LearningRateScheduler);
+        // §3.1: 1e-3 "exponentially decaying to 1e-5 starting after 50,000 iterations" (the halving rate is
+        // Rayhane-mamah/Tacotron-2's reading); gradient norms clipped at 1 (NVIDIA tacotron2 grad_clip_thresh).
+        Assert.True(optimizerOptions.EnableGradientClipping);
+        Assert.Equal(1.0, optimizerOptions.MaxGradientNorm, 15);
+        Assert.NotNull(optimizerOptions.LearningRateScheduler);
         var regularization = Assert.IsType<L2Regularization<double, Tensor<double>, Tensor<double>>>(
             optimizerOptions.Regularization);
         Assert.Equal(1e-6, regularization.GetOptions().Strength, 15);
