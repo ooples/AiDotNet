@@ -73,6 +73,8 @@ namespace AiDotNet.NeuralNetworks.Layers
     {
         protected virtual void EnsureInitialized() { }
         protected virtual bool NeedsDeclaredSubLayerInitialization => true;
+        protected virtual bool ParametersAreConstructionSized => DeclaredSubLayerShapesCoverEveryChild();
+        protected virtual bool DeclaredSubLayerShapesCoverEveryChild() => false;
         protected AiDotNet.Tensors.LinearAlgebra.Vector<T> Parameters = new();
         public virtual AiDotNet.Tensors.LinearAlgebra.Vector<T> GetParameters() => Parameters;
         protected void RegisterTrainableParameter(

@@ -291,7 +291,19 @@ internal static class LayerStructureInitializationAnalysis
                 || operation.Property.IsStatic && _ownerTypes.Contains(operation.Property.ContainingType.OriginalDefinition))
             {
                 var property = operation.Property;
-                if (!property.IsSealed && (property.IsVirtual || property.IsOverride || property.IsAbstract)
+                // base.P runs the base's own accessors (a non-virtual call), not the exact owner's override.
+                bool explicitBaseProperty = operation.Syntax is MemberAccessExpressionSyntax { Expression: BaseExpressionSyntax };
+                if (explicitBaseProperty)
+                {
+                    if (property.IsAbstract)
+                        _independent = false;
+                    else
+                    {
+                        if (property.GetMethod is { } baseGetter) VisitMethod(baseGetter);
+                        if (property.SetMethod is { } baseSetter) VisitMethod(baseSetter);
+                    }
+                }
+                else if (!property.IsSealed && (property.IsVirtual || property.IsOverride || property.IsAbstract)
                     && !operation.Property.IsStatic)
                 {
                     // Same exact-type dispatch as a method call: resolve each accessor to the owner's
