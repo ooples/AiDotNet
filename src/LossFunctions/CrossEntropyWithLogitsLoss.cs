@@ -198,25 +198,12 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         if (normalizedAxis < 0 || normalizedAxis >= rank)
             throw new ArgumentOutOfRangeException(nameof(classAxis), $"Class axis {classAxis} is outside logits rank {rank}.");
 
-        // TensorLogSoftmax currently has a correct forward value, but some
-        // tape paths do not propagate the full softmax(target)-one_hot
-        // gradient across every class channel. Use primitive reductions and
-        // broadcasts for the gradient, then add a detached correction so the
-        // forward value remains the stable engine LogSoftmax result.
-        var stableForward = Engine.TensorLogSoftmax(logits, axis: normalizedAxis);
-        // The maximum is only a numerical-stability shift. Log-softmax is invariant to that shift,
-        // so differentiating through ReduceMax adds a discontinuous argmax path that must cancel
-        // algebraically and can instead contaminate the entire backward pass at ties. Detaching it is
-        // the standard stable log-sum-exp construction and leaves the exact softmax-target gradient.
-        var reducedMax = Engine.ReduceMax(logits, new[] { normalizedAxis }, keepDims: true, out _);
-        var maxLogit = Engine.StopGradient(reducedMax);
-        var shifted = Engine.TensorAdd(logits, Engine.TensorNegate(maxLogit));
-        var expShifted = Engine.TensorExp(shifted);
-        var sumExp = Engine.ReduceSum(expShifted, new[] { normalizedAxis }, keepDims: true);
-        var logSumExp = Engine.TensorLog(sumExp);
-        var primitiveGradient = Engine.TensorAdd(shifted, Engine.TensorNegate(logSumExp));
-        var detachedForwardCorrection = Engine.StopGradient(Engine.TensorSubtract(stableForward, primitiveGradient));
-        return Engine.TensorAdd(primitiveGradient, detachedForwardCorrection);
+        // One fused, numerically stable log-softmax: its recorded backward is the exact softmax(x) - target
+        // gradient. This replaced a second, primitive log-softmax (detached ReduceMax, exp, sum, log, a detached
+        // forward correction): about ten extra ops per step, and its ReduceMax recorded a host-only argmax closure
+        // that broke CUDA graph capture of every classifier's training step. The PyTorch step-1 equivalence check
+        // (benchmarks/AiDotNet.PyTorchParity --verify-step1) covers the gradient on CPU and CUDA.
+        return Engine.TensorLogSoftmax(logits, axis: normalizedAxis);
     }
 
     /// <summary>

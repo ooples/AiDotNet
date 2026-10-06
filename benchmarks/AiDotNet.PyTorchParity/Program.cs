@@ -69,6 +69,8 @@ Console.WriteLine($"[bench] engine: {AiDotNet.Tensors.Engines.AiDotNetEngine.Cur
 var fusedDiag = Environment.GetEnvironmentVariable("AIDOTNET_FUSED_DIAG") == "1";
 if (fusedDiag)
 {
+    // Engine warnings (a failed CUDA graph capture, a GPU kernel fallback) go to Trace; show them here.
+    System.Diagnostics.Trace.Listeners.Add(new System.Diagnostics.TextWriterTraceListener(Console.Out));
     AiDotNet.Configuration.TrainingDiagnosticsConfig.Level =
         AiDotNet.Configuration.TrainingDiagnosticLevel.PerStep;
     AiDotNet.Training.CompiledTapeTrainingStep<float>.ResetFusedStepCount();
