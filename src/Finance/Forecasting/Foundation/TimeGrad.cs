@@ -207,7 +207,7 @@ public partial class TimeGrad<T> : TimeSeriesFoundationModelBase<T>
     {
         int n = _numDiffusionSteps;
         double start = options.BetaStart, end = options.BetaEnd;
-        if (!(start > 0) || !(end > 0) || end >= 1 || start > end)
+        if (double.IsNaN(start) || double.IsNaN(end) || start <= 0 || end <= 0 || end >= 1 || start > end)
             throw new ArgumentOutOfRangeException(nameof(options), "BetaStart and BetaEnd must satisfy 0 < BetaStart <= BetaEnd < 1.");
 
         _betas = new double[n];
