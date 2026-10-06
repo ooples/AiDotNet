@@ -4744,7 +4744,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             }
             else
             {
-                clientPartitions = CreateFederatedClientPartitions(XTrain, yTrain, flOptions.NumberOfClients, flOptions.RandomSeed);
+                clientPartitions = CreateFederatedClientPartitions(XTrain, yTrain, flOptions.NumberOfClients, flOptions.Seed);
                 effectiveClientCount = clientPartitions.Count;
             }
 
@@ -4761,7 +4761,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             var trainer = new AiDotNet.FederatedLearning.Trainers.InMemoryFederatedTrainer<T, TInput, TOutput>(
                 optimizerPrototype: finalOptimizer,
                 learningRateOverride: flOptions.LearningRate,
-                randomSeed: flOptions.RandomSeed,
+                randomSeed: flOptions.Seed,
                 convergenceThreshold: flOptions.ConvergenceThreshold,
                 minRoundsBeforeConvergence: flOptions.MinRoundsBeforeConvergence,
                 federatedLearningOptions: flOptions,

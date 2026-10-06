@@ -168,7 +168,7 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
         int width = input.Shape[3];
         var gold = targets[0].Select(target => TwoStageTargets.PixelCorners(target, width, height)).ToList();
         var goldClasses = targets[0].Select(target => target.ClassId).ToList();
-        var random = _trainingRandom ??= Options.RandomSeed is int seed
+        var random = _trainingRandom ??= Options.Seed is int seed
             ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed)
             : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
         List<BoundingBox<T>> anchors = new();

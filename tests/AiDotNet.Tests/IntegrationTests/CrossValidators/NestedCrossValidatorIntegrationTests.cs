@@ -93,7 +93,7 @@ public class NestedCrossValidatorIntegrationTests
             new CrossValidationOptions { NumberOfFolds = 3 });
         var innerValidator = new KFoldCrossValidator<double, Matrix<double>, Vector<double>>(
             new CrossValidationOptions { NumberOfFolds = 2 });
-        var nestedOptions = new CrossValidationOptions { RandomSeed = 42 };
+        var nestedOptions = new CrossValidationOptions { Seed = 42 };
 
         // Act
         var nestedValidator = new NestedCrossValidator<double, Matrix<double>, Vector<double>>(

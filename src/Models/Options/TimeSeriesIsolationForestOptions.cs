@@ -32,6 +32,7 @@ public class TimeSeriesIsolationForestOptions<T> : TimeSeriesRegressionOptions<T
     /// </summary>
     public TimeSeriesIsolationForestOptions()
     {
+        Seed = 42;
         // Override base class default (0) with a sensible default for time series
         SeasonalPeriod = 24; // Default to hourly data with daily patterns
     }
@@ -55,7 +56,7 @@ public class TimeSeriesIsolationForestOptions<T> : TimeSeriesRegressionOptions<T
         UseSeasonalDecomposition = other.UseSeasonalDecomposition;
         SeasonalPeriod = other.SeasonalPeriod;
         UseTrendFeatures = other.UseTrendFeatures;
-        RandomSeed = other.RandomSeed;
+        Seed = other.Seed;
     }
 
     /// <summary>
@@ -144,8 +145,4 @@ public class TimeSeriesIsolationForestOptions<T> : TimeSeriesRegressionOptions<T
     /// </remarks>
     public bool UseTrendFeatures { get; set; } = true;
 
-    /// <summary>
-    /// Gets or sets the random seed for reproducibility.
-    /// </summary>
-    public int? RandomSeed { get; set; } = 42;
 }

@@ -41,11 +41,4 @@ public class MiniRocketOptions<T> : TimeSeriesClassifierOptions<T>
     /// </remarks>
     public int NumBiasesPerDilation { get; set; } = 9;
 
-    /// <summary>
-    /// Gets or sets the random seed for reproducible results.
-    /// </summary>
-    /// <remarks>
-    /// <para>Default: null (non-deterministic)</para>
-    /// </remarks>
-    public int? RandomSeed { get; set; }
 }

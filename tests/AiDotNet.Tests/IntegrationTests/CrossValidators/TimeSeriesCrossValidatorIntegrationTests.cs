@@ -74,7 +74,7 @@ public class TimeSeriesCrossValidatorIntegrationTests
     public async Task Constructor_WithCustomOptions_CreatesValidator()
     {
         // Arrange
-        var options = new CrossValidationOptions { RandomSeed = 42 };
+        var options = new CrossValidationOptions { Seed = 42 };
 
         // Act
         var validator = new TimeSeriesCrossValidator<double, Matrix<double>, Vector<double>>(

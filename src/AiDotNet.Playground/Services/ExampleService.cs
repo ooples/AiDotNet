@@ -1991,7 +1991,7 @@ var options = new TimeSeriesIsolationForestOptions<double>
     LagFeatures = 5,
     RollingWindowSize = 10,
     UseTrendFeatures = true,
-    RandomSeed = 42
+    Seed = 42
 };
 
 // Create model and train using AiModelBuilder facade pattern
@@ -3880,7 +3880,7 @@ var nasOptions = new NASOptions<double>
     SpatialSize = 28,
     NumClasses = 10,
     Verbose = true,
-    RandomSeed = 42
+    Seed = 42
 };
 
 // Configure AutoML with NAS strategy

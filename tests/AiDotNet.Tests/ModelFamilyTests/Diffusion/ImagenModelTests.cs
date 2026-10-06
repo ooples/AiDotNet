@@ -16,8 +16,10 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 [Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
 public class ImagenModelTests : DiffusionModelTestBase<float>
 {
-    protected override int[] InputShape => [1, 4, 64, 64];
-    protected override int[] OutputShape => [1, 4, 64, 64];
+    // Imagen's latent is pixel-depth (3 channels, LatentChannels), as its image is. Four channels matched neither,
+    // so the fixture fed its 3-channel base U-Net a tensor it was never built for.
+    protected override int[] InputShape => [1, 3, 64, 64];
+    protected override int[] OutputShape => [1, 3, 64, 64];
 
     protected override IDiffusionModel<float> CreateModel()
         => new ImagenModel<float>(seed: 42);

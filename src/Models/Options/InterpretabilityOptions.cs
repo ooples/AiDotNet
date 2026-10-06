@@ -307,16 +307,6 @@ public class InterpretabilityOptions : ModelOptions
     public bool EnableTreeSHAP { get; set; } = false;
 
     /// <summary>
-    /// Gets or sets the random seed for reproducible explanations.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Many explanation methods use randomness. Setting a seed
-    /// ensures you get the same results each time you run the explanation, which is useful
-    /// for testing and debugging.</para>
-    /// </remarks>
-    public int? RandomSeed { get; set; }
-
-    /// <summary>
     /// Gets or sets the maximum number of background samples for SHAP baseline calculation.
     /// </summary>
     /// <remarks>

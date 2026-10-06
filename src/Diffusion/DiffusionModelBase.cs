@@ -177,6 +177,9 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     /// </summary>
     protected ModelOptions Options => _options;
 
+    /// <summary>The diffusion options this model was built with, typed.</summary>
+    protected DiffusionModelOptions<T> DiffusionOptions => _options;
+
     /// <inheritdoc/>
     public virtual ModelOptions GetOptions() => _options;
 

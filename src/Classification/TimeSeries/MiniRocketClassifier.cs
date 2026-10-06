@@ -119,8 +119,8 @@ public partial class MiniRocketClassifier<T> : ClassifierBase<T>, ITimeSeriesCla
         : base(options)
     {
         _options = options ?? new MiniRocketOptions<T>();
-        _random = _options.RandomSeed.HasValue
-            ? RandomHelper.CreateSeededRandom(_options.RandomSeed.Value)
+        _random = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
     }
 

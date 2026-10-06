@@ -139,8 +139,8 @@ public partial class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineC
         : base(options)
     {
         _options = options ?? new OnlineNaiveBayesOptions<T>();
-        _random = _options.RandomSeed.HasValue
-            ? RandomHelper.CreateSeededRandom(_options.RandomSeed.Value)
+        _random = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
         _knownClasses = new List<T>();
         _classStats = new Dictionary<int, ClassStatistics>();

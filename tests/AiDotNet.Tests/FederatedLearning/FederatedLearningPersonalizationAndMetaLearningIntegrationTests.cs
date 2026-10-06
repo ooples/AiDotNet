@@ -26,7 +26,7 @@ public class FederatedLearningPersonalizationAndMetaLearningIntegrationTests
             ClientSelectionFraction = 1.0,
             LocalEpochs = 1,
             AggregationStrategy = FederatedAggregationStrategy.FedAvg,
-            RandomSeed = 7,
+            Seed = 7,
             MinRoundsBeforeConvergence = 100,
             ConvergenceThreshold = 0.0,
             Personalization = new FederatedPersonalizationOptions
@@ -82,7 +82,7 @@ public class FederatedLearningPersonalizationAndMetaLearningIntegrationTests
             ClientSelectionFraction = 1.0,
             LocalEpochs = 1,
             AggregationStrategy = FederatedAggregationStrategy.FedAvg,
-            RandomSeed = 11,
+            Seed = 11,
             MinRoundsBeforeConvergence = 100,
             ConvergenceThreshold = 0.0,
             MetaLearning = new FederatedMetaLearningOptions

@@ -112,6 +112,10 @@ public partial class GraphAttentionPortfolio<T> : PortfolioOptimizerBase<T>
         Attention = new GraphAttentionLayerCore<T>(options.LeakyReLUSlope);
         Objective = new SharpeRatioPortfolioObjective<T>();
 
+        // Assigning Options applies Options.Seed (#2290). It must come right before the layers are built:
+        // constructing the helpers above can start another model construction, which resets the
+        // thread's initialisation seed scope.
+        Options = options;
         InitializeLayers();
     }
 

@@ -684,11 +684,32 @@ internal static class FinanceModelTestFactory
                 && type.Namespace.StartsWith(FinanceNamespacePrefix, StringComparison.Ordinal));
     }
 
-    private static object CreateNativeModel<T>(Type closedModelType)
+    /// <summary>
+    /// Builds a finance model through its native constructor with small test dimensions.
+    /// </summary>
+    /// <param name="closedModelType">The closed model type, for example <c>PatchTST&lt;double&gt;</c>.</param>
+    /// <param name="configureOptions">Adjusts the options after the test dimensions are applied.</param>
+    /// <param name="configureArchitecture">Adjusts the architecture before the model is constructed.</param>
+    internal static object CreateNativeModel<T>(
+        Type closedModelType,
+        Action<object>? configureOptions = null,
+        Action<object>? configureArchitecture = null)
     {
         var architectureType = typeof(NeuralNetworkArchitecture<>).MakeGenericType(typeof(T));
         var constructor = SelectNativeConstructor(closedModelType, architectureType)
             ?? SelectOptionsConstructor(closedModelType);
+
+        // A caller that configures the options needs a constructor that takes them. Some models (the
+        // portfolio optimizers) also have a parameterless one, which the selection above prefers, and
+        // which builds its own options that the caller then cannot reach.
+        if (configureOptions != null && !constructor.GetParameters().Any(p => IsOptionsType(p.ParameterType)))
+        {
+            constructor = closedModelType.GetConstructors()
+                .Where(ctor => ctor.GetParameters().Any(p => IsOptionsType(p.ParameterType))
+                    && ctor.GetParameters().All(p => p.ParameterType != typeof(string)))
+                .OrderBy(CountRequiredParameters)
+                .FirstOrDefault() ?? constructor;
+        }
 
         var parameters = constructor.GetParameters();
         object? optionsInstance = CreateOptionsInstance(parameters);
@@ -696,11 +717,13 @@ internal static class FinanceModelTestFactory
         if (optionsInstance != null)
         {
             NormalizeOptions(optionsInstance);
+            configureOptions?.Invoke(optionsInstance);
         }
 
         int inputSize = GetInputSizeFromOptions(optionsInstance) ?? 4;
         int outputSize = GetOutputSizeFromOptions(optionsInstance) ?? Math.Max(1, inputSize);
         var architecture = FinanceTestHelpers.CreateArchitecture<T>(inputSize, outputSize);
+        configureArchitecture?.Invoke(architecture);
 
         if (optionsInstance != null)
         {

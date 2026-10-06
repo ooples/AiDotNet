@@ -63,7 +63,7 @@ public class LeafBenchmarkingIntegrationTests
                 ClientSelectionFraction = 1.0,
                 LocalEpochs = 1,
                 AggregationStrategy = FederatedAggregationStrategy.FedAvg,
-                RandomSeed = 123,
+                Seed = 123,
                 MinRoundsBeforeConvergence = 0,
                 ConvergenceThreshold = 0.0
             };
@@ -139,7 +139,7 @@ public class LeafBenchmarkingIntegrationTests
                 ClientSelectionFraction = 1.0,
                 LocalEpochs = 1,
                 AggregationStrategy = FederatedAggregationStrategy.FedAvg,
-                RandomSeed = 123,
+                Seed = 123,
                 MinRoundsBeforeConvergence = 0,
                 ConvergenceThreshold = 0.0
             };

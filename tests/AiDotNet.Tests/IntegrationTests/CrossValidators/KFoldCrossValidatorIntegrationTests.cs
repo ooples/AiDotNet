@@ -75,7 +75,7 @@ public class KFoldCrossValidatorIntegrationTests
         {
             NumberOfFolds = 10,
             ShuffleData = false,
-            RandomSeed = 42
+            Seed = 42
         };
 
         // Act
@@ -233,7 +233,7 @@ public class KFoldCrossValidatorIntegrationTests
         {
             NumberOfFolds = 5,
             ShuffleData = true,
-            RandomSeed = 42
+            Seed = 42
         };
 
         var model1 = CreateMockModel();

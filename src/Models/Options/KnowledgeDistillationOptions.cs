@@ -200,15 +200,6 @@ public class KnowledgeDistillationOptions<T, TInput, TOutput> : ModelOptions
     public bool FreezeTeacher { get; set; } = true;
 
     /// <summary>
-    /// Gets or sets the random seed for reproducibility.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Set a seed to get reproducible results.
-    /// Useful for debugging and comparing experiments.</para>
-    /// </remarks>
-    public int? RandomSeed { get; set; }
-
-    /// <summary>
     /// Gets or sets callback function invoked after each epoch.
     /// </summary>
     /// <remarks>

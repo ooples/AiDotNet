@@ -100,7 +100,7 @@ public class AdamWWeightDecayMaskTests
         var sourceMask = new Vector<double>(new[] { 0.0, 0.5, 1.0 });
         var source = new AdamWOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
-            RandomSeed = 8675309,
+            Seed = 8675309,
             MaxIterations = 37,
             MaxGradientValue = 0.125,
             InitialLearningRate = 0.012345,
@@ -111,7 +111,7 @@ public class AdamWWeightDecayMaskTests
 
         var copy = new AdamWOptimizerOptions<double, Matrix<double>, Vector<double>>(source);
 
-        Assert.Equal(source.RandomSeed, copy.RandomSeed);
+        Assert.Equal(source.Seed, copy.Seed);
         Assert.Equal(source.MaxIterations, copy.MaxIterations);
         Assert.Equal(source.MaxGradientValue, copy.MaxGradientValue);
         Assert.Equal(source.InitialLearningRate, copy.InitialLearningRate);

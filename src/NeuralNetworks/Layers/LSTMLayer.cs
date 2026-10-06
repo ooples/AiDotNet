@@ -462,6 +462,43 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     [Scratch]
     private Tensor<T>? _lastCellState;
 
+    // Set by ForwardFromState for the duration of one call: the (h, c) the sequence starts from, and that the call
+    // needs the final state back, which only the eager loop records for both h and c.
+    [AiDotNet.Attributes.Scratch]
+    private Tensor<T>? _initialHidden;
+    [AiDotNet.Attributes.Scratch]
+    private Tensor<T>? _initialCell;
+    [AiDotNet.Attributes.Scratch]
+    private bool _stateStepping;
+
+    /// <summary>
+    /// Runs <paramref name="input"/> <c>[B, T, F]</c> starting from the given hidden and cell state instead of zeros,
+    /// and returns the state after its last step, so a sequence can be extended one step at a time without
+    /// re-reading what came before. Null states start from zeros, as <see cref="LayerBase{T}.Forward(Tensor{T})"/> does.
+    /// </summary>
+    internal Tensor<T> ForwardFromState(
+        Tensor<T> input, Tensor<T>? hidden, Tensor<T>? cell, out Tensor<T> finalHidden, out Tensor<T> finalCell)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if ((hidden is null) != (cell is null))
+            throw new ArgumentException("Pass both the hidden and the cell state, or neither.", nameof(cell));
+        _initialHidden = hidden;
+        _initialCell = cell;
+        _stateStepping = true;
+        try
+        {
+            var output = Forward(input);
+            finalHidden = _lastHiddenState ?? throw new InvalidOperationException("The LSTM recorded no final hidden state.");
+            finalCell = _lastCellState ?? throw new InvalidOperationException("The LSTM recorded no final cell state.");
+            return output;
+        }
+        finally
+        {
+            _initialHidden = null;
+            _initialCell = null;
+            _stateStepping = false;
+        }
+    }
     /// <summary>
     /// Cached hidden states for all time steps (Batch, Time, Hidden).
     /// </summary>
@@ -1282,6 +1319,7 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         // returns an empty output with zeroed final states, but the fused path's
         // CopyLastTimestepHidden would slice at (seq - 1) = -1.
         if (timeSteps > 0
+            && !_stateStepping
             && typeof(T) == typeof(float)
             && Engine is AiDotNet.Tensors.Engines.CpuEngine cpuEngForFused
             && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
@@ -1362,7 +1400,15 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         // (Clone_ShouldProduceIdenticalOutput). Standard LSTM init is h0 = c0 = 0.
         currentH.Fill(NumOps.Zero);
         currentC.Fill(NumOps.Zero);
-
+        if (_initialHidden is not null && _initialCell is not null)
+        {
+            if (_initialHidden.Shape.Length != 2 || _initialHidden.Shape[0] != batchSize || _initialHidden.Shape[1] != _hiddenSize
+                || _initialCell.Shape.Length != 2 || _initialCell.Shape[0] != batchSize || _initialCell.Shape[1] != _hiddenSize)
+                throw new ArgumentException(
+                    $"The initial LSTM state must be [{batchSize}, {_hiddenSize}].", nameof(_initialHidden));
+            currentH = _initialHidden;
+            currentC = _initialCell;
+        }
         // Input projections hoisted out of the recurrence: for each gate, x * W_gi + b_g over ALL timesteps in one GEMM
         // (as cuDNN's LSTM does), so each step does one hidden GEMM per gate instead of an input GEMM, a hidden GEMM,
         // an add and a bias add. Kept per gate rather than packed [B, 4H]: splitting a packed gate tensor costs four
