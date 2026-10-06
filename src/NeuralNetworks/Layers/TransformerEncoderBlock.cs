@@ -192,6 +192,12 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
     /// <summary>The block's current FFN down-projection (ffnDim → hiddenSize) sublayer.</summary>
     public LayerBase<T> FfnDownLayer => _ffnDown;
 
+    /// <summary>The block's attention-sublayer LayerNorm (applied before attention; Pre-LN).</summary>
+    public LayerBase<T> Norm1Layer => _norm1;
+
+    /// <summary>The block's FFN-sublayer LayerNorm (applied before the FFN; Pre-LN).</summary>
+    public LayerBase<T> Norm2Layer => _norm2;
+
     /// <summary>
     /// Swaps the FFN up-projection sublayer (e.g. for a <c>QuantizedDenseLayer</c> or a
     /// LoRA adapter). Same registered-sublayer/parameter-count consistency contract as

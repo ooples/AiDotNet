@@ -177,6 +177,11 @@ class LSTMClassifier(nn.Module):
         super().__init__()
         self.lstm = nn.LSTM(input_size=32, hidden_size=64, batch_first=True)
         self.head = nn.Linear(64, 10)
+        # AiDotNet's LSTMLayer has ONE bias per gate; PyTorch's two (bias_ih + bias_hh) are the same function but
+        # each takes its own Adam step, so the effective bias moves twice as far per step (measured: every bias
+        # update off by exactly 50%). Zeroing and freezing bias_hh makes the parameterization identical.
+        self.lstm.bias_hh_l0.data.zero_()
+        self.lstm.bias_hh_l0.requires_grad_(False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out, _ = self.lstm(x)
@@ -186,10 +191,17 @@ class LSTMClassifier(nn.Module):
 class TransformerClassifier(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        layer = nn.TransformerEncoderLayer(d_model=64, nhead=4, dim_feedforward=128, batch_first=True)
+        # Same block as AiDotNet's TransformerEncoderBlock: Pre-LN (norm_first), no dropout (the C# side runs
+        # dropoutRate 0; PyTorch's default 0.1 was extra work and a different function), and no Q/K/V bias --
+        # AiDotNet's MultiHeadAttentionLayer has only an output bias, so in_proj_bias is zeroed and frozen.
+        layer = nn.TransformerEncoderLayer(d_model=64, nhead=4, dim_feedforward=128, dropout=0.0,
+                                           batch_first=True, norm_first=True)
         self.proj = nn.Linear(32, 64)
-        self.encoder = nn.TransformerEncoder(layer, num_layers=2)
+        self.encoder = nn.TransformerEncoder(layer, num_layers=2, enable_nested_tensor=False)
         self.head = nn.Linear(64, 10)
+        for block in self.encoder.layers:
+            block.self_attn.in_proj_bias.data.zero_()
+            block.self_attn.in_proj_bias.requires_grad_(False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         encoded = self.encoder(self.proj(x))

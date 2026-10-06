@@ -85,6 +85,25 @@ if (fusedDiag)
 }
 
 var benchOptions = BenchmarkOptions.Parse(args);
+if (benchOptions.VerifyStep1Dir is { } referenceDir)
+{
+    // Step-1 equivalence (pytorch/export_reference.py writes the inputs): same weights, same batch, then
+    // compare logits before and after one training step. Exit non-zero on any failure.
+    var backend = new AiDotNetTensorBackend(benchOptions.Seed);
+    var allPass = true;
+    foreach (var name in benchOptions.Models)
+    {
+        if (backend.Create(name) is not AiDotNetBenchmarkModel verifiable)
+        {
+            Console.WriteLine($"[step1] {name}: no PyTorch twin to verify against");
+            continue;
+        }
+        var result = verifiable.VerifyStep1(referenceDir, name);
+        Console.WriteLine($"[step1] {result}");
+        allPass &= result.Pass;
+    }
+    return allPass ? 0 : 1;
+}
 var report = new BenchmarkRunner(benchOptions).Run();
 var outputPath = Path.GetFullPath(benchOptions.OutputPath);
 Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
@@ -105,6 +124,7 @@ if (fusedDiag)
         ? "[bench] last fused-fallback exception: (none captured)"
         : $"[bench] last fused-fallback exception: {lastFallback.GetType().FullName}: {lastFallback.Message}");
 }
+return 0;
 
 internal sealed record BenchmarkOptions(
     string[] Models,
@@ -114,7 +134,8 @@ internal sealed record BenchmarkOptions(
     int InferenceIterations,
     int WarmupIterations,
     int Seed,
-    string OutputPath)
+    string OutputPath,
+    string? VerifyStep1Dir)
 {
     public static BenchmarkOptions Parse(string[] args)
     {
@@ -140,7 +161,8 @@ internal sealed record BenchmarkOptions(
             Int(map, "inference-iterations", 100),
             Int(map, "warmup-iterations", 10),
             Int(map, "seed", 1234),
-            map.GetValueOrDefault("output", "results/aidotnet.json"));
+            map.GetValueOrDefault("output", "results/aidotnet.json"),
+            map.GetValueOrDefault("verify-step1"));
     }
 }
 
@@ -393,6 +415,108 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
     protected abstract int[] InputShapePerSample { get; }   // shape WITHOUT batch dim
     protected abstract int OutputClasses { get; }
 
+    /// <summary>The PyTorch twin's module prefix for each parameter-bearing layer, in layer order (benchmark.py names).</summary>
+    protected abstract IReadOnlyList<string> PyTorchModulePrefixes { get; }
+
+    /// <summary>
+    /// Loads the twin's initial weights, then checks this network computes what PyTorch computed on the reference
+    /// batch: the logits at the initial weights (forward + weights), and the change in logits after one Train step
+    /// (backward + clip + AdamW). The step check compares the logit DELTA by cosine and relative error, because the
+    /// first Adam step moves every weight by ~lr·sign(g): its magnitude says little, its direction says everything.
+    /// </summary>
+    public Step1Result VerifyStep1(string referenceDir, string name)
+    {
+        var weights = AiDotNet.Agentic.Models.Local.SafetensorsReader.Read(
+            File.ReadAllBytes(Path.Combine(referenceDir, $"{name}.weights.safetensors")));
+        AiDotNet.Agentic.Models.Local.PyTorchStateDictImporter.Import(Network, weights, PyTorchModulePrefixes);
+
+        var reference = AiDotNet.Agentic.Models.Local.SafetensorsReader.Read(
+            File.ReadAllBytes(Path.Combine(referenceDir, $"{name}.reference.safetensors")));
+        var x = reference.ReadAsDouble("x").Select(v => (float)v).ToArray();
+        var classes = reference.ReadAsDouble("y");
+        var batch = classes.Length;
+        var input = new Tensor<float>(x, new[] { batch }.Concat(InputShapePerSample).ToArray());
+        var label = new float[batch * OutputClasses];
+        for (var b = 0; b < batch; b++) label[b * OutputClasses + (int)classes[b]] = 1f;
+        var labels = new Tensor<float>(label, [batch, OutputClasses]);
+
+        var ref0 = reference.ReadAsDouble("logits0");
+        var ref1 = reference.ReadAsDouble("logits1");
+        var refLoss = reference.ReadAsDouble("loss0")[0];
+
+        // Diagnostic A/B (AIDOTNET_PARITY_EAGER=1): run the step on the eager tape instead of the fused compiled
+        // plan, to tell a fused-plan defect from a backward defect. The switch is protected, hence reflection.
+        if (Environment.GetEnvironmentVariable("AIDOTNET_PARITY_EAGER") == "1")
+        {
+            typeof(NeuralNetworkBase<float>).GetProperty("IsFusedTrainingDisabled",
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                ?.SetValue(Network, true);
+        }
+        var init = Network.GetParameters().Select(v => (double)v).ToArray();
+        var ours0 = Network.Predict(input).ToVector().Select(v => (double)v).ToArray();
+        Network.Train(input, labels);
+        var trainLoss = Convert.ToDouble(Network.GetLastLoss());
+        var ours1 = Network.Predict(input).ToVector().Select(v => (double)v).ToArray();
+
+        // Localize a step mismatch: load PyTorch's post-step weights through the same importer and compare each
+        // layer's parameter update (ours - init vs theirs - init) by direction and relative error.
+        var oursAfter = Network.GetParameters().Select(v => (double)v).ToArray();
+        AiDotNet.Agentic.Models.Local.PyTorchStateDictImporter.Import(Network, AiDotNet.Agentic.Models.Local.SafetensorsReader.Read(
+            File.ReadAllBytes(Path.Combine(referenceDir, $"{name}.weights1.safetensors"))), PyTorchModulePrefixes);
+        var theirsAfter = Network.GetParameters().Select(v => (double)v).ToArray();
+        var layerReport = new List<string>();
+        // One row per trainable tensor (weight and bias separately), in flat-vector order.
+        var tensorSegments = new List<(string Name, int Offset, int Length)>();
+        var walk = 0;
+        foreach (var layer in Network.Layers.OfType<AiDotNet.NeuralNetworks.Layers.LayerBase<float>>())
+        {
+            var j = 0;
+            foreach (var tensor in layer.GetTrainableParameters())
+            {
+                var dims = string.Join("x", Enumerable.Range(0, tensor.Shape.Length).Select(i => tensor.Shape[i]));
+                tensorSegments.Add(($"{layer.GetType().Name.Split('`')[0]}.p{j++}[{dims}]", walk, tensor.Length));
+                walk += tensor.Length;
+            }
+        }
+        layerReport.Add($"train-path loss {trainLoss:F6}");
+        foreach (var segment in tensorSegments)
+        {
+            double d = 0, on = 0, tn = 0, en = 0;
+            for (var k = segment.Offset; k < segment.Offset + segment.Length; k++)
+            {
+                double a = oursAfter[k] - init[k], b = theirsAfter[k] - init[k];
+                d += a * b; on += a * a; tn += b * b; en += (a - b) * (a - b);
+            }
+            var segCos = d / Math.Max(Math.Sqrt(on * tn), double.Epsilon);
+            var segErr = Math.Sqrt(en) / Math.Max(Math.Sqrt(tn), double.Epsilon);
+            layerReport.Add($"{segment.Name} cos={segCos:F5} relErr={segErr:E2}");
+        }
+
+        var forwardMaxAbs = ours0.Zip(ref0, (a, b) => Math.Abs(a - b)).Max();
+        var ourLoss = CrossEntropy(ours0, classes, OutputClasses);
+        var ourDelta = ours1.Zip(ours0, (a, b) => a - b).ToArray();
+        var refDelta = ref1.Zip(ref0, (a, b) => a - b).ToArray();
+        var dot = ourDelta.Zip(refDelta, (a, b) => a * b).Sum();
+        var ourNorm = Math.Sqrt(ourDelta.Sum(v => v * v));
+        var refNorm = Math.Sqrt(refDelta.Sum(v => v * v));
+        var cosine = dot / Math.Max(ourNorm * refNorm, double.Epsilon);
+        var relError = Math.Sqrt(ourDelta.Zip(refDelta, (a, b) => (a - b) * (a - b)).Sum()) / Math.Max(refNorm, double.Epsilon);
+        return new Step1Result(name, forwardMaxAbs, ourLoss, refLoss, cosine, relError, layerReport);
+    }
+
+    private static double CrossEntropy(double[] logits, double[] classes, int numClasses)
+    {
+        double total = 0;
+        for (var b = 0; b < classes.Length; b++)
+        {
+            var row = logits.Skip(b * numClasses).Take(numClasses).ToArray();
+            var max = row.Max();
+            var logSum = max + Math.Log(row.Sum(v => Math.Exp(v - max)));
+            total += logSum - row[(int)classes[b]];
+        }
+        return total / classes.Length;
+    }
+
     public void LoadSyntheticBatch(int batchSize)
     {
         var perSample = InputShapePerSample;
@@ -439,6 +563,7 @@ internal sealed class AiDotNetMlpModel : AiDotNetBenchmarkModel
     public AiDotNetMlpModel(int seed) : base(seed) { }
     protected override int[] InputShapePerSample => new[] { 784 };
     protected override int OutputClasses => 10;
+    protected override IReadOnlyList<string> PyTorchModulePrefixes => ["net.0", "net.2", "net.4"];
     protected override NeuralNetworkBase<float> BuildNetwork()
     {
         // Linear(784,512)+ReLU+Linear(512,128)+ReLU+Linear(128,10).
@@ -526,6 +651,7 @@ internal sealed class AiDotNetCnnModel : AiDotNetBenchmarkModel
     public AiDotNetCnnModel(int seed) : base(seed) { }
     protected override int[] InputShapePerSample => new[] { 1, 28, 28 };
     protected override int OutputClasses => 10;
+    protected override IReadOnlyList<string> PyTorchModulePrefixes => ["features.0", "features.3", "head"];
     protected override NeuralNetworkBase<float> BuildNetwork()
     {
         // Mirror the PyTorch CNN exactly (benchmark.py): Conv2d(1,16,3,pad=1)+ReLU+MaxPool(2) +
@@ -558,6 +684,7 @@ internal sealed class AiDotNetLstmModel : AiDotNetBenchmarkModel
     public AiDotNetLstmModel(int seed) : base(seed) { }
     protected override int[] InputShapePerSample => new[] { 32, 32 };
     protected override int OutputClasses => 10;
+    protected override IReadOnlyList<string> PyTorchModulePrefixes => ["lstm", "head"];
     protected override NeuralNetworkBase<float> BuildNetwork()
     {
         // LSTM(input=32, hidden=64) + last-timestep slice + Linear(64, 10).
@@ -582,6 +709,7 @@ internal sealed class AiDotNetTransformerModel : AiDotNetBenchmarkModel
     public AiDotNetTransformerModel(int seed) : base(seed) { }
     protected override int[] InputShapePerSample => new[] { 32, 32 };
     protected override int OutputClasses => 10;
+    protected override IReadOnlyList<string> PyTorchModulePrefixes => ["proj", "encoder.layers.0", "encoder.layers.1", "head"];
     protected override NeuralNetworkBase<float> BuildNetwork()
     {
         // Linear(32,64) + 2× TransformerEncoderLayer(d_model=64,nhead=4,dim_ff=128)
@@ -599,7 +727,7 @@ internal sealed class AiDotNetTransformerModel : AiDotNetBenchmarkModel
             dropoutRate: 0.0,
             maxSequenceLength: 32,
             vocabularySize: 0,
-            usePositionalEncoding: true,
+            usePositionalEncoding: false, // the PyTorch twin has no positional encoding
             sequencePooling: SequencePoolingMode.MeanPool);
         return new Transformer<float>(arch, lossFunction: new CrossEntropyWithLogitsLoss<float>());
     }
@@ -784,4 +912,20 @@ internal sealed record RunEnvironment(
 internal static class JsonOptions
 {
     public static readonly JsonSerializerOptions Default = new() { WriteIndented = true };
+}
+
+/// <summary>
+/// Outcome of the step-1 equivalence check. Thresholds: the fp32 forward must agree to 1e-4 absolute on the logits
+/// (both sides are fp32 with different reduction orders); the post-step logit change must point the same way
+/// (cosine >= 0.999) with at most 1% relative error.
+/// </summary>
+internal sealed record Step1Result(string Model, double ForwardMaxAbs, double OurLoss, double ReferenceLoss,
+    double StepDeltaCosine, double StepDeltaRelError, IReadOnlyList<string> LayerUpdates)
+{
+    public bool Pass => ForwardMaxAbs <= 1e-4 && StepDeltaCosine >= 0.999 && StepDeltaRelError <= 0.01;
+
+    public override string ToString() =>
+        $"{Model}: {(Pass ? "PASS" : "FAIL")}  forward max|dlogit|={ForwardMaxAbs:E2}  loss {OurLoss:F6} vs {ReferenceLoss:F6}  " +
+        $"step delta cos={StepDeltaCosine:F6} relErr={StepDeltaRelError:E2}" +
+        string.Concat(LayerUpdates.Select(l => $"{Environment.NewLine}         update {l}"));
 }
