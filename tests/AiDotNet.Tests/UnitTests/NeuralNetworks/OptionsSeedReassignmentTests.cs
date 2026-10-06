@@ -1,3 +1,4 @@
+using System;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -68,5 +69,68 @@ public class OptionsSeedReassignmentTests
 
         Assert.Equal(first.Length, second.Length);
         Assert.NotEqual(first, second);
+    }
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Input, BatchOptional = true)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features,
+        Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+    private sealed class SuppliedWithOptions : NeuralNetworkBase<double>
+    {
+        public SuppliedWithOptions(NeuralNetworkArchitecture<double> architecture, params int?[] optionSeeds)
+            : base(architecture, new MeanSquaredErrorLoss<double>())
+        {
+            foreach (var seed in optionSeeds) Options = new NeuralNetworkOptions { Seed = seed };
+            InitializeLayers();
+        }
+
+        protected override void InitializeLayers() => Layers.AddRange(Architecture.Layers ?? new System.Collections.Generic.List<ILayer<double>>());
+
+        public override IFullModel<double, Tensor<double>, Tensor<double>> DeepCopy() => new SuppliedWithOptions(Architecture);
+
+        public override ModelMetadata<double> GetModelMetadata() => new()
+        {
+            Name = nameof(SuppliedWithOptions),
+            Description = "Test double that assigns a sequence of options before running its caller-built layers.",
+        };
+    }
+
+    private static (SuppliedWithOptions Model, FullyConnectedLayer<double> Layer) Supplied(int? layerSeed, params int?[] optionSeeds)
+    {
+        var layer = new FullyConnectedLayer<double>(4, 4, new AiDotNet.ActivationFunctions.IdentityActivation<double>());
+        if (layerSeed is int seed) layer.RandomSeed = seed;
+        var architecture = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 4, outputSize: 4, layers: new System.Collections.Generic.List<ILayer<double>> { layer });
+        return (new SuppliedWithOptions(architecture, optionSeeds), layer);
+    }
+
+    /// <summary>
+    /// Options without a seed that replace seeded ones leave the model unseeded: its caller-built layer no longer
+    /// carries the seed the replaced options gave it.
+    /// </summary>
+    [Fact]
+    public void UnseededOptionsReplacingSeededOnes_DropTheEarlierSeed()
+    {
+        var (seeded, seededLayer) = Supplied(null, 5);
+        var (replaced, replacedLayer) = Supplied(null, 5, null);
+
+        Assert.NotNull(seededLayer.RandomSeed);
+        Assert.NotEqual(seededLayer.RandomSeed, replacedLayer.RandomSeed);
+        GC.KeepAlive(seeded);
+        GC.KeepAlive(replaced);
+    }
+
+    /// <summary>A seed the caller set on a layer they built survives the seed wiring of the first training step.</summary>
+    [Fact]
+    public void ACallerChosenLayerSeed_SurvivesTraining()
+    {
+        var (model, layer) = Supplied(777, 5);
+        var input = new Tensor<double>(new[] { 1, 4 });
+        var target = new Tensor<double>(new[] { 1, 4 });
+        for (int i = 0; i < 4; i++) { input[i] = 0.1 * (i + 1); target[i] = 0.2 * i; }
+
+        model.Train(input, target);
+
+        Assert.Equal(777, layer.RandomSeed);
     }
 }

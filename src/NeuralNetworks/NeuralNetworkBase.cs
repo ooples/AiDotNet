@@ -7565,8 +7565,20 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     protected void ApplyOptionsSeed(int? seed)
     {
-        if (seed is not int value || Architecture is { HasExplicitRandomSeed: true })
+        if (Architecture is { HasExplicitRandomSeed: true })
             return;
+
+        if (seed is not int value)
+        {
+            // Options without a seed replacing seeded ones make the model unseeded again (or seeded by its
+            // architecture's fallback): the earlier options seed must not keep initialising the layers.
+            if (_optionsSeed is null)
+                return;
+            _optionsSeed = null;
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(Architecture?.RandomSeed);
+            SeedCallerBuiltLayers();
+            return;
+        }
 
         _optionsSeed = value;
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(value);
@@ -7618,11 +7630,18 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (baseLayer.RandomSeed is null || baseLayer.RandomSeedCameFromConstructionScope || seededHere)
         {
             int? seed = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextSeedOrNull();
-            if (seed is null)
-                return;
-            baseLayer.RandomSeed = seed;
-            (_layersSeededAtConstruction ??= new HashSet<ILayer<T>>(Helpers.TensorReferenceComparer<ILayer<T>>.Instance))
-                .Add(layer);
+            if (seed is int drawn)
+            {
+                baseLayer.RandomSeed = drawn;
+                (_layersSeededAtConstruction ??= new HashSet<ILayer<T>>(Helpers.TensorReferenceComparer<ILayer<T>>.Instance))
+                    .Add(layer);
+            }
+            else if (seededHere)
+            {
+                // The model has no seed any more, so the seed it gave this layer goes too.
+                baseLayer.RandomSeed = null;
+                _layersSeededAtConstruction?.Remove(layer);
+            }
         }
 
         foreach (var sub in baseLayer.GetSubLayers())
@@ -7644,12 +7663,42 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (EffectiveRandomSeed is not int seed) return;
         var seedRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var visited = new HashSet<ILayer<T>>(Helpers.TensorReferenceComparer<ILayer<T>>.Instance);
+        var callerChosen = CallerChosenLayerSeeds();
         foreach (var layer in Layers)
         {
-            WireLayerRandomSeedRecursive(layer, seedRng, visited);
+            WireLayerRandomSeedRecursive(layer, seedRng, visited, callerChosen);
         }
         foreach (var layer in GetExtraTrainableLayers())
-            if (layer is not null) WireLayerRandomSeedRecursive(layer, seedRng, visited);
+            if (layer is not null) WireLayerRandomSeedRecursive(layer, seedRng, visited, callerChosen);
+    }
+
+    /// <summary>
+    /// The caller-built layers (<see cref="NeuralNetworkArchitecture{T}.Layers"/>, with their sub-layers) whose
+    /// <see cref="Layers.LayerBase{T}.RandomSeed"/> the caller chose: set, neither drawn from a construction scope nor
+    /// given by this model. Seed wiring leaves those alone.
+    /// </summary>
+    private HashSet<ILayer<T>>? CallerChosenLayerSeeds()
+    {
+        var supplied = Architecture?.Layers;
+        if (supplied is null || supplied.Count == 0)
+            return null;
+
+        var chosen = new HashSet<ILayer<T>>(Helpers.TensorReferenceComparer<ILayer<T>>.Instance);
+        var visited = new HashSet<ILayer<T>>(Helpers.TensorReferenceComparer<ILayer<T>>.Instance);
+        var pending = new Stack<ILayer<T>>(supplied.Where(layer => layer is not null));
+        while (pending.Count > 0)
+        {
+            var layer = pending.Pop();
+            if (!visited.Add(layer) || layer is not Layers.LayerBase<T> baseLayer)
+                continue;
+            bool seededHere = _layersSeededAtConstruction is not null && _layersSeededAtConstruction.Contains(layer);
+            if (baseLayer.RandomSeed is not null && !baseLayer.RandomSeedCameFromConstructionScope && !seededHere)
+                chosen.Add(layer);
+            foreach (var sub in baseLayer.GetSubLayers())
+                if (sub is not null) pending.Push(sub);
+        }
+
+        return chosen.Count == 0 ? null : chosen;
     }
 
     /// <summary>
@@ -7666,15 +7715,19 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         WireLayerRandomSeeds();
     }
 
-    private static void WireLayerRandomSeedRecursive(ILayer<T> layer, Random seedRng, HashSet<ILayer<T>> visited)
+    private static void WireLayerRandomSeedRecursive(
+        ILayer<T> layer, Random seedRng, HashSet<ILayer<T>> visited, HashSet<ILayer<T>>? callerChosen)
     {
         if (!visited.Add(layer)) return;
         if (layer is Layers.LayerBase<T> baseLayer)
         {
-            baseLayer.RandomSeed = seedRng.Next();
+            // Draw for every layer, so skipping a caller-chosen one does not shift the seeds the others get.
+            int next = seedRng.Next();
+            if (callerChosen is null || !callerChosen.Contains(layer))
+                baseLayer.RandomSeed = next;
             foreach (var sub in baseLayer.GetSubLayers())
             {
-                WireLayerRandomSeedRecursive(sub, seedRng, visited);
+                WireLayerRandomSeedRecursive(sub, seedRng, visited, callerChosen);
             }
         }
     }
