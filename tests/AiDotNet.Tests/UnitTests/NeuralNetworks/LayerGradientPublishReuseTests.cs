@@ -38,8 +38,8 @@ public sealed class LayerGradientPublishReuseTests
         bool differs = false;
         for (int i = 0; i < firstSnapshot.Length && !differs; i++) differs = firstSnapshot[i] != second[i];
         Assert.True(differs, "step 2 published the same gradients as step 1; the surface did not update. step 1: "
-            + string.Join(",", firstSnapshot[..Math.Min(6, firstSnapshot.Length)]) + " step 2: "
-            + string.Join(",", second.ToArray()[..Math.Min(6, second.Length)]));
+            + string.Join(",", System.Linq.Enumerable.Take(firstSnapshot, 6)) + " step 2: "
+            + string.Join(",", System.Linq.Enumerable.Take(second.ToArray(), 6)));
     }
 
     [Fact]
