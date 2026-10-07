@@ -1376,6 +1376,48 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
             }
         }
 
+        // CUDA: the whole sequence runs on the fused sequence kernels (a persistent recurrence for the forward and for
+        // the BPTT, the weight and input gradients as GEMMs over all timesteps, as cuDNN does) instead of the
+        // per-timestep op chain below, which issued ~2,000 kernels per training step.
+        // TryLstmSequenceTrain records ONE tape node, or ONE lazy node under a compiled trace, so the eager tape, the
+        // compiled plan and its captured CUDA graph all take it. The stacked weights are tape-connected concats in
+        // PyTorch gate order (i, f, g, o), exactly as the CPU fused branch above builds them, so the gradients reach
+        // the per-gate parameters. It starts from zero state, so ForwardFromState (a caller-supplied h0/c0) keeps
+        // the per-step loop; it returns null for shapes the kernels do not cover (hidden > 1024, non-CUDA backends).
+        if (timeSteps > 0
+            && !_stateStepping
+            && typeof(T) == typeof(float)
+            && _initialHidden is null && _initialCell is null
+            && Engine is AiDotNet.Tensors.Engines.DirectGpuTensorEngine gpuEngForFused)
+        {
+            var stackedIh = Engine.Concat(new[] { _weightsIi, _weightsFi, _weightsCi, _weightsOi }, 0);
+            var stackedHh = Engine.Concat(new[] { _weightsIh, _weightsFh, _weightsCh, _weightsOh }, 0);
+            var stackedBias = Engine.Concat(new[] { _biasI, _biasF, _biasC, _biasO }, 0);
+            var gpuFused = gpuEngForFused.TryLstmSequenceTrain(input3D, stackedIh, stackedHh, stackedBias);
+            if (gpuFused is not null)
+            {
+                // The final hidden state as a device slice. Under a compiled trace nothing reads it, and recording it
+                // would add a node to every step; the kernel keeps no final cell state, and only ForwardFromState
+                // (excluded above) needs one.
+                _lastHiddenState = AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+                    ? null
+                    : Engine.TensorSliceAxis(gpuFused, axis: 1, index: timeSteps - 1);
+                _lastCellState = null;
+                if (_originalInputShape != null && _originalInputShape.Length > 3)
+                {
+                    int[] newShape = new int[_originalInputShape.Length];
+                    for (int d = 0; d < _originalInputShape.Length - 2; d++)
+                        newShape[d] = _originalInputShape[d];
+                    newShape[_originalInputShape.Length - 2] = timeSteps;
+                    newShape[_originalInputShape.Length - 1] = _hiddenSize;
+                    return Engine.Reshape(gpuFused, newShape);
+                }
+                if (_originalInputShape != null && _originalInputShape.Length == 2)
+                    return Engine.Reshape(gpuFused, [timeSteps, _hiddenSize]);
+                return gpuFused;
+            }
+        }
+
         // Per-time-step hidden states collected for a tape-connected concat (the
         // output must stay on the autodiff graph so gradients reach the weights; a
         // pre-allocated tensor written with SetSlice would detach it). This runs only
