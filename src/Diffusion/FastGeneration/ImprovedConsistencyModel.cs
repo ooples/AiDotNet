@@ -9,6 +9,7 @@ using AiDotNet.LinearAlgebra;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Optimizers;
 using AiDotNet.Diffusion.Schedulers;
 
 namespace AiDotNet.Diffusion.FastGeneration;
@@ -114,7 +115,18 @@ public partial class ImprovedConsistencyModel<T> : LatentDiffusionModelBase<T>
                 TrainTimesteps = 1000,
                 BetaStart = 0.00085,
                 BetaEnd = 0.012,
-                BetaSchedule = BetaSchedule.ScaledLinear
+                BetaSchedule = BetaSchedule.ScaledLinear,
+                // Song & Dhariwal 2023, App. C ("Training"): every model is trained with RAdam at a
+                // learning rate of 0.0001. The diffusion default (Adam at 1e-3) blew the averaged
+                // noise-prediction error up from 1.36 to 5.4e6 on the nightly heavy lane (#2087).
+                LearningRate = 0.0001,
+                OptimizerFactory = () => new RAdamOptimizer<T, Tensor<T>, Tensor<T>>(
+                    null,
+                    new RAdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                    {
+                        InitialLearningRate = 0.0001,
+                        UseAdaptiveLearningRate = false,
+                    }),
             },
             scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             architecture)
