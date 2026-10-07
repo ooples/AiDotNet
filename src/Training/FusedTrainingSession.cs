@@ -405,5 +405,15 @@ internal sealed class FusedTrainingSession<T>
     }
 
     private static Tensor<T> Head(IEngine engine, Tensor<T> tensor, int count)
-        => engine.TensorNarrow(engine.Reshape(tensor, new[] { tensor.Length }), 0, 0, count);
+    {
+        // A sparse parameter cannot be reshaped; its trainable values are its stored non-zeros, so sample those.
+        if (tensor is SparseTensor<T> sparse)
+        {
+            int take = Math.Min(count, sparse.NonZeroCount);
+            var head = new T[take];
+            Array.Copy(sparse.Values, head, take);
+            return new Tensor<T>(head, new[] { take });
+        }
+        return engine.TensorNarrow(engine.Reshape(tensor, new[] { tensor.Length }), 0, 0, count);
+    }
 }

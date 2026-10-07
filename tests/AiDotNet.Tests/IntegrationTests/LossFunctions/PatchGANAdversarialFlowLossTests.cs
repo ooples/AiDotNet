@@ -165,6 +165,25 @@ public class PatchGANAdversarialFlowLossTests
         var d = new PatchGANDiscriminator<double>(numLayers: 3, numFilters: 4, applySigmoid: false);
         d.Forward(Ramp([3, 32, 32]));   // resolve lazy shapes so weights exist
 
+        // One real backward pass: GetParameterGradients reports what a backward published and is empty until
+        // then (an empty vector means never computed; it is not faked as zeros), so the lengths are compared on
+        // gradients that actually came from the discriminator's parameters.
+        using (var tape = new GradientTape<double>())
+        {
+            var output = d.Forward(Ramp([3, 32, 32]));
+            var loss = AiDotNetEngine.Current.ReduceSum(output, null);
+            // The discriminator is a composite: its weights live in its sub-layers, so collect them recursively.
+            var sources = new System.Collections.Generic.List<Tensor<double>>();
+            void Collect(AiDotNet.Interfaces.ILayer<double> layer)
+            {
+                if (layer is LayerBase<double> trainable) sources.AddRange(trainable.GetTrainableParameters());
+                foreach (var sub in layer.GetSubLayers()) Collect(sub);
+            }
+            Collect(d);
+            var gradients = tape.ComputeGradients(loss, sources);
+            d.ScatterParameterGradients(gradients);
+        }
+
         var p = d.GetParameters();
         var g = d.GetParameterGradients();
         _out.WriteLine($"parameters={p.Length} gradients={g.Length}");

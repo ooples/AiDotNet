@@ -11903,8 +11903,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
             LastLoss = lossValue;
 
-            // Resolve optimizer
-            var opt = optimizer ?? GetOrCreateBaseOptimizer();
+            // The optimizer resolved at the top of this method (an explicit SetBaseTrainOptimizer wins over the model's
+            // default), so the eager step runs the same optimizer as the fused and streaming paths. Re-resolving from
+            // the raw argument here trained the model's constructor default on the eager path only.
+            var opt = resolvedOptimizer;
 
             // Re-evaluation callback applies the SAME alignment policy the
             // initial forward used: reshape the target (a leaf tensor not on
@@ -14503,12 +14505,18 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (_parameterBuffer is not null && _parameterBuffer.Count == trainableParams.Count)
             return _parameterBuffer;
 
-        // Build buffer from current parameter shapes
-        var shapes = new int[trainableParams.Count][];
+        // One layout per parameter: a sparse parameter keeps its pattern and stores only its non-zeros, so its
+        // buffer view is again a SparseTensor (a dense shape-only layout handed sparse layers a dense view they
+        // reject - SparseLinearLayer's generated SetTrainableParameters requires its SparseTensor leaf back).
+        var layouts = new ParameterLayout[trainableParams.Count];
         for (int i = 0; i < trainableParams.Count; i++)
-            shapes[i] = trainableParams[i]._shape;
+        {
+            layouts[i] = trainableParams[i] is SparseTensor<T> sparse
+                ? new ParameterLayout(sparse._shape, SparsityLayout.FromSparseTensor(sparse))
+                : new ParameterLayout(trainableParams[i]._shape);
+        }
 
-        var buffer = new ParameterBuffer<T>(shapes);
+        var buffer = new ParameterBuffer<T>(layouts);
 
         // Copy current weights into the buffer
         buffer.CopyFrom(trainableParams);
@@ -14697,7 +14705,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // correct only when the buffer is being invalidated.
             for (int i = 0; i < originals.Count; i++)
             {
-                Engine.TensorCopy(currentViews[i], originals[i]);
+                // A sparse leaf's buffer view shares the original's pattern and holds only its non-zeros (the
+                // ParameterLayout the buffer was built with), so the values copy across directly; dense TensorCopy
+                // would densify it and throws on a sparse tensor.
+                if (currentViews[i] is SparseTensor<T> sparseView && originals[i] is SparseTensor<T> sparseOriginal
+                    && sparseView.NonZeroCount == sparseOriginal.NonZeroCount)
+                    sparseView.DataVector.AsSpan().CopyTo(sparseOriginal.DataVector.AsWritableSpan());
+                else
+                    Engine.TensorCopy(currentViews[i], originals[i]);
             }
             stableRestoreCandidates.Add((trainable, originals));
         }
