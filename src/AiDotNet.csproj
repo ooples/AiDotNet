@@ -272,12 +272,15 @@
 
 	<!-- AiDotNet.Tensors NuGet package (spun out to separate repo).
 	     Build with -p:UseLocalTensors=true to compile against a sibling checkout instead, for
-	     cross-repo debugging without cutting a package first. Default is unchanged. -->
+	     cross-repo debugging without cutting a package first. Add -p:LocalTensorsRoot=<path> to point at a
+	     specific Tensors checkout or worktree (its repo root) instead of the sibling AiDotNet.Tensors folder.
+	     Default is unchanged. -->
 	<ItemGroup Condition="'$(UseLocalTensors)' != 'true'">
 	  <PackageReference Include="AiDotNet.Tensors" />
 	</ItemGroup>
 	<ItemGroup Condition="'$(UseLocalTensors)' == 'true'">
-	  <ProjectReference Include="$(MSBuildThisFileDirectory)..\..\AiDotNet.Tensors\src\AiDotNet.Tensors\AiDotNet.Tensors.csproj" />
+	  <ProjectReference Condition="'$(LocalTensorsRoot)' == ''" Include="$(MSBuildThisFileDirectory)..\..\AiDotNet.Tensors\src\AiDotNet.Tensors\AiDotNet.Tensors.csproj" />
+	  <ProjectReference Condition="'$(LocalTensorsRoot)' != ''" Include="$(LocalTensorsRoot)\src\AiDotNet.Tensors\AiDotNet.Tensors.csproj" />
 	</ItemGroup>
 
 	<!-- Generic quality-diversity engine extracted to the AiDotNet.Evolution package. -->
