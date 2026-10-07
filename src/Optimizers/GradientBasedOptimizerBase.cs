@@ -3733,12 +3733,16 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // optimizer step instead of being a no-op.
         if (maxNorm <= 0.0 || double.IsNaN(maxNorm) || double.IsInfinity(maxNorm)) return;
         var numOps = MathHelper.GetNumericOperations<T>();
+        // Host engine: one parallel SIMD pass per tensor for the norm and for the scale (FusedOptimizer helpers);
+        // the per-element loops remain for other layouts.
+        bool hostFast = !AiDotNetEngine.Current.SupportsGpu;
 
         double globalNormSq = 0.0;
         foreach (var kvp in context.Gradients)
         {
             var grad = kvp.Value;
             if (grad is null) continue;
+            if (hostFast && AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.TrySumOfSquaresHost(grad, out double sq)) { globalNormSq += sq; continue; }
             var span = grad.Data.Span;
             for (int i = 0; i < span.Length; i++)
             {
@@ -3757,6 +3761,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         {
             var grad = kvp.Value;
             if (grad is null) continue;
+            if (hostFast && AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.TryScaleHost(grad, scale)) continue;
             var span = grad.Data.Span;
             for (int i = 0; i < span.Length; i++)
                 span[i] = numOps.FromDouble(numOps.ToDouble(span[i]) * scale);
@@ -3809,10 +3814,17 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     protected static bool HasAnomalousTapeGradients(TapeStepContext<T> context)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
+        bool hostFast = !AiDotNetEngine.Current.SupportsGpu;
         foreach (var kvp in context.Gradients)
         {
             var grad = kvp.Value;
             if (grad is null) continue;
+            // A double sum of squares is non-finite exactly when an element is NaN/Inf: one parallel SIMD pass.
+            if (hostFast && AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.TrySumOfSquaresHost(grad, out double sq))
+            {
+                if (double.IsNaN(sq) || double.IsInfinity(sq)) return true;
+                continue;
+            }
             var span = grad.Data.Span;
             for (int i = 0; i < span.Length; i++)
             {

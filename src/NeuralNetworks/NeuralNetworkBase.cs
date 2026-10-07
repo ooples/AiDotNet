@@ -12373,10 +12373,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // Detect non-finite values before mutating any tensor. This preserves
             // the existing diagnostic contract: a poisoned step is left intact
             // so the originating layer can still be identified.
+            bool hostFast = !Engine.SupportsGpu;
             for (int p = 0; p < iterationOrder.Count; p++)
             {
                 if (!grads.TryGetValue(iterationOrder[p], out var g)) continue;
                 if (g is null || g.Length == 0) continue;
+                // A double sum of squares is non-finite exactly when an element is NaN/Inf: one parallel SIMD pass.
+                if (hostFast && AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.TrySumOfSquaresHost(g, out double sq))
+                {
+                    if (double.IsNaN(sq) || double.IsInfinity(sq)) { LastStepHadNonFiniteGradients = true; return; }
+                    continue;
+                }
                 var span = g.Data.Span;
                 for (int i = 0; i < g.Length; i++)
                 {
@@ -12406,11 +12413,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Step 1: total L2 norm across all gradient tensors, iterating in
         // the caller-supplied deterministic order (NOT dict bucket order —
         // that's process-randomized for reference-keyed dicts).
+        //
+        // On a host engine each tensor's contribution is one parallel SIMD pass (FusedOptimizer.TrySumOfSquaresHost,
+        // double accumulation, fixed chunk order); the per-element INumericOperations loop below remains for
+        // other layouts. Per-tensor partials are still added in iterationOrder, so the sum stays deterministic.
+        bool hostNorm = !Engine.SupportsGpu;
         double totalNormSq = 0.0;
         for (int p = 0; p < iterationOrder.Count; p++)
         {
             if (!grads.TryGetValue(iterationOrder[p], out var g)) continue;
             if (g is null || g.Length == 0) continue;
+            if (hostNorm && AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.TrySumOfSquaresHost(g, out double tensorSq))
+            {
+                totalNormSq += tensorSq;
+                continue;
+            }
             var span = g.Data.Span;
             int len = g.Length;
             for (int i = 0; i < len; i++)
@@ -12442,11 +12459,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Step 2: scale every gradient down so the new global norm == maxNorm.
         // The +1e-6 in the denominator matches PyTorch's clip_grad_norm_ to
         // avoid div-by-zero when the gradient magnitudes are vanishingly small.
-        T scale = NumOps.FromDouble(maxNorm / (totalNorm + 1e-6));
+        double scaleValue = maxNorm / (totalNorm + 1e-6);
+        T scale = NumOps.FromDouble(scaleValue);
         for (int p = 0; p < iterationOrder.Count; p++)
         {
             if (!grads.TryGetValue(iterationOrder[p], out var g)) continue;
             if (g is null || g.Length == 0) continue;
+            if (hostNorm && AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.TryScaleHost(g, scaleValue)) continue;
             var span = g.Data.Span;
             int len = g.Length;
             for (int i = 0; i < len; i++)
