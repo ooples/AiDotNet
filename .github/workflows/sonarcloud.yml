@@ -950,6 +950,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Set-ShardEnvironment self-test failed' }
           ./.github/scripts/New-CoverageRunSettings.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'New-CoverageRunSettings self-test failed' }
+          ./.github/scripts/Measure-HeavyChunkOutcome.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Measure-HeavyChunkOutcome self-test failed' }
           ./tools/TestImpact/Test-CiImpactWorkflow.ps1
           if ($LASTEXITCODE -ne 0) { throw 'CI impact workflow contract failed' }
           ./tools/TestImpact/Test-SelectAffectedTestsPassthrough.ps1
