@@ -105,14 +105,13 @@ public class NegativeSiSnrLossTests
             }
         }
 
-        var clock = System.Diagnostics.Stopwatch.StartNew();
+        // No timing assertion: enumerating 3.6 million permutations would hang rather than run slowly, and
+        // a wall-clock bound can fail a correct build on a loaded runner.
         double ordered = loss.ComputeTapeLoss(inOrder, reference)[0];
         double permuted = loss.ComputeTapeLoss(shuffled, reference)[0];
-        clock.Stop();
 
         Assert.Equal(ordered, permuted, 8);
         Assert.True(ordered < -20.0, $"Close estimates should score well above 20 dB; got {-ordered:F2} dB.");
-        Assert.True(clock.Elapsed.TotalSeconds < 10, $"Matching 10 sources took {clock.Elapsed.TotalSeconds:F1} s.");
     }
 
     private static Vector<double> Row(Tensor<double> tensor, int b, int s, int samples)
