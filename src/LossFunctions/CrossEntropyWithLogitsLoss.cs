@@ -130,6 +130,29 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         // target is supervision, no gradient flows through it — so building
         // a fresh tensor here doesn't break gradient flow back through
         // predicted → logSoftmax → product.
+        // Class-index targets over the LAST axis (language models, token classifiers): gather each row's target
+        // log-probability instead of one-hot encoding the targets. The one-hot path built an [N, classes] tensor and
+        // multiplied and reduced it every step -- for a 49 152-token vocabulary at N = 1024 that is 50M floats
+        // allocated, multiplied and summed, ~20% of a Track B LM training step. TensorGatherClassValues gives 0 for
+        // an ignored row (index outside [0, classes) after rounding, or NaN), so the sum matches the one-hot
+        // numerator, and the supervised-row count below is the same "count the rows" rule, built from the
+        // target alone as tensor ops (detached) so the compiled path re-evaluates it each step.
+        if (target.Shape.Length == predicted.Shape.Length - 1 && predicted.Shape.Length >= 2
+            && classAxis == predicted.Shape.Length - 1)
+        {
+            int classes = predicted.Shape[classAxis];
+            int rows = predicted.Length / Math.Max(1, classes);
+            var flatTarget = Engine.Reshape(target, [rows]);
+            var picked = Engine.TensorGatherClassValues(Engine.Reshape(logSoftmax, [rows, classes]), flatTarget);
+            var pickedTotal = Engine.ReduceSum(picked, new[] { 0 }, keepDims: false);
+            var inRange = Engine.TensorMultiply(
+                Engine.TensorGreaterThan(flatTarget, NumOps.FromDouble(-0.5)),
+                Engine.TensorGreaterThan(Engine.ScalarMinusTensor(NumOps.FromDouble(classes - 0.5), flatTarget), NumOps.Zero));
+            var rowCount = Engine.StopGradient(Engine.TensorClampMin(
+                Engine.ReduceSum(inRange, new[] { 0 }, keepDims: false), NumOps.One));
+            return Engine.TensorNegate(Engine.TensorDivide(pickedTotal, rowCount));
+        }
+
         if (target.Shape.Length == predicted.Shape.Length - 1)
         {
             target = ClassIndicesToOneHot(target, predicted.Shape[classAxis], classAxis, predicted.Shape.ToArray());
