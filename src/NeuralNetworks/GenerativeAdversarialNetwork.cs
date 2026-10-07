@@ -654,52 +654,6 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
     }
 
     /// <summary>
-    /// Updates the parameters of a network using the configured optimizer with the calculated gradients.
-    /// </summary>
-    /// <param name="network">The neural network to update.</param>
-    /// <remarks>
-    /// <para>
-    /// This method applies the calculated gradients to update the parameters of the specified network
-    /// using the configured optimizer (Generator or Discriminator). It includes gradient clipping
-    /// for stable and efficient training.
-    /// </para>
-    /// <para><b>For Beginners:</b> This updates the network's internal values using the optimizer.
-    ///
-    /// The parameter update process:
-    /// - Uses the configured optimizer (default is Adam)
-    /// - Applies gradient clipping to prevent exploding gradients
-    /// - The optimizer handles momentum, adaptive learning rates, etc.
-    ///
-    /// This approach helps GANs train more reliably and efficiently.
-    /// </para>
-    /// </remarks>
-    private void UpdateNetworkParameters(NeuralNetworkBase<T> network)
-    {
-        // Get current parameters and gradients
-        var parameters = network.GetParameters();
-        var gradients = network.GetParameterGradients();
-
-        // Gradient clipping to prevent exploding gradients (vectorized)
-        var gradientNorm = gradients.L2Norm();
-        var clipThreshold = NumOps.FromDouble(5.0);
-
-        if (NumOps.GreaterThan(gradientNorm, clipThreshold))
-        {
-            var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            gradients = Engine.Multiply(gradients, scaleFactor);
-        }
-
-        // Select the appropriate optimizer based on which network is being updated
-        var optimizer = ReferenceEquals(network, Generator) ? _generatorOptimizer : _discriminatorOptimizer;
-
-        // Use the optimizer to compute updated parameters
-        var updatedParameters = optimizer.UpdateParameters(parameters, gradients);
-
-        // Update network parameters
-        network.UpdateParameters(updatedParameters);
-    }
-
-    /// <summary>
     /// Evaluates the GAN by generating a batch of images and calculating metrics for their quality.
     /// </summary>
     /// <param name="sampleSize">The number of images to generate for evaluation.</param>

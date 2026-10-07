@@ -81,7 +81,7 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
 {
     private readonly OCTGANOptions<T> _options;
     // Separate G/D optimizers (see CTGANGenerator for the divergence rationale).
-    // Both training steps route through TapeStepOver, which now takes the optimizer
+    // Both training steps route through StepOver, which now takes the optimizer
     // so the generator and discriminator never share Adam moment state.
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _generatorOptimizer;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _discriminatorOptimizer;
@@ -538,13 +538,14 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         {
             var realRow = VectorToTensor(GetRow(trainData, i));
             var noise = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
-            using var tape = new GradientTape<T>();
-            var realEmb = DiscriminatorForward(realRow, isTraining: true);
-            var fakeRow = GeneratorForward(noise);
-            var fakeEmb = DiscriminatorForward(fakeRow, isTraining: true);
-            var loss = Engine.TensorSubtract(SvddDistSq(realEmb), SvddDistSq(fakeEmb));
-            loss = Engine.TensorAdd(loss, GradientPenalty(realRow, fakeRow));
-            TapeStepOver(tape, loss, BuildDiscriminatorLayerList(), _discriminatorOptimizer);
+            StepOver(() =>
+            {
+                var realEmb = DiscriminatorForward(realRow, isTraining: true);
+                var fakeRow = GeneratorForward(noise);
+                var fakeEmb = DiscriminatorForward(fakeRow, isTraining: true);
+                var loss = Engine.TensorSubtract(SvddDistSq(realEmb), SvddDistSq(fakeEmb));
+                return Engine.TensorAdd(loss, GradientPenalty(realRow, fakeRow));
+            }, BuildDiscriminatorLayerList(), _discriminatorOptimizer);
         }
     }
 
@@ -554,36 +555,24 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         // GPU-RESIDENT fast path — every iteration uses the same forward graph
         // (noise → gen → disc-frozen embedding → SVDD dist²), so the fused plan
         // compiles once and replays across the batch with refreshed noise per step.
+        // One step per noise sample through the shared training step: the fused plan when it applies (it compiles
+        // once and replays with the refreshed noise), otherwise the shared eager tape step on the same objective.
         var generatorLayers = BuildGeneratorLayerList();
         var trainableGenLayers = generatorLayers.OfType<ITrainableLayer<T>>().ToList();
-        if (trainableGenLayers.Count > 0 && AiDotNet.Training.FusedTrainingStep<T>.IsAvailable)
-        {
-            var target = new Tensor<T>(new[] { 1 });
-            Tensor<T> Fwd(Tensor<T> noiseT) => DiscriminatorForward(GeneratorForward(noiseT), isTraining: false);
-            Tensor<T> Loss(Tensor<T> emb, Tensor<T> _) => SvddDistSq(emb);
-            bool fusedEngaged = false;
-            for (int i = 0; i < batchSize; i++)
-            {
-                var noiseTensor = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
-                bool ran = AiDotNet.Training.FusedTrainingStep<T>.TryStep(
-                    trainableGenLayers, noiseTensor, target,
-                    forward: Fwd, computeLoss: Loss,
-                    optimizer: _generatorOptimizer,
-                    out T _, owner: this);
-                if (!ran) { if (!fusedEngaged) break; continue; }
-                fusedEngaged = true;
-            }
-            if (fusedEngaged) return;
-        }
-
+        var generatorParameters = Training.TapeTrainingStep<T>.CollectParameters(generatorLayers);
+        if (generatorParameters.Count == 0) return;
+        var target = new Tensor<T>(new[] { 1 });
+        Tensor<T> Fwd(Tensor<T> noiseT) => DiscriminatorForward(GeneratorForward(noiseT), isTraining: false);
+        Tensor<T> Loss(Tensor<T> emb, Tensor<T> _) => SvddDistSq(emb);
         for (int i = 0; i < batchSize; i++)
         {
-            var noise = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
-            using var tape = new GradientTape<T>();
-            var fakeRow = GeneratorForward(noise);
-            var fakeEmb = DiscriminatorForward(fakeRow, isTraining: false);
-            var loss = SvddDistSq(fakeEmb);
-            TapeStepOver(tape, loss, BuildGeneratorLayerList(), _generatorOptimizer);
+            var noiseTensor = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
+            LastLoss = AiDotNet.Training.FusedTrainingStep<T>.Step(
+                this, trainableGenLayers, noiseTensor, target,
+                forward: Fwd,
+                computeLoss: Loss,
+                optimizer: _generatorOptimizer,
+                extraTensors: generatorParameters);
         }
     }
 
@@ -829,12 +818,13 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         SetTrainingMode(true);
         try
         {
-            using var tape = new GradientTape<T>();
-            var output = GeneratorForward(input);
-            var flatOut = output.Rank == 1 ? output : Engine.Reshape(output, new[] { output.Length });
-            var target = expectedOutput.Rank == 1 ? expectedOutput : Engine.Reshape(expectedOutput, new[] { expectedOutput.Length });
-            var loss = ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(flatOut, target)));
-            TapeStepOver(tape, loss, BuildGeneratorLayerList(), _generatorOptimizer);
+            StepOver(() =>
+            {
+                var output = GeneratorForward(input);
+                var flatOut = output.Rank == 1 ? output : Engine.Reshape(output, new[] { output.Length });
+                var target = expectedOutput.Rank == 1 ? expectedOutput : Engine.Reshape(expectedOutput, new[] { expectedOutput.Length });
+                return ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(flatOut, target)));
+            }, BuildGeneratorLayerList(), _generatorOptimizer);
         }
         finally { SetTrainingMode(false); }
     }
@@ -851,16 +841,13 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
 
     #region Tape Step Helpers
 
-    private void TapeStepOver(GradientTape<T> tape, Tensor<T> loss, IReadOnlyList<ILayer<T>> layers,
+    // One update of the tensors of `layers` on the shared eager tape step.
+    private void StepOver(Func<Tensor<T>> objective, IReadOnlyList<ILayer<T>> layers,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
     {
         var trainable = Training.TapeTrainingStep<T>.CollectParameters(layers);
         if (trainable.Count == 0) return;
-        var grads = tape.ComputeGradients(loss, trainable);
-        T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
-        LastLoss = lossValue;
-        var ctx = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(trainable, grads, lossValue);
-        optimizer.Step(ctx);
+        LastLoss = Training.TapeTrainingStepper<T>.EagerObjectiveStep(trainable, objective, optimizer);
     }
 
     private Tensor<T> ReduceToScalar(Tensor<T> t)

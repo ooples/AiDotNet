@@ -467,8 +467,11 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     /// <inheritdoc />
     /// <remarks>
     /// <para>
-    /// One Adam step on the gradient tape: the loss function's reconstruction loss of
-    /// <see cref="ForwardForTraining"/>, differentiated through every registered weight.
+    /// One Adam step on the reconstruction loss of <see cref="ForwardForTraining"/>, differentiated through every
+    /// registered weight. The step goes through the shared <see cref="AiDotNet.Training.TapeTrainingStepper{T}"/>: the
+    /// fused compiled plan (forward, backward and Adam in one replay, CPU or GPU) when it applies, otherwise the eager
+    /// tape. A VAE whose training forward cannot be replayed from a single trace returns a reason from
+    /// <see cref="FusedTrainingGraphBreakReason"/>.
     /// </para>
     /// <para>
     /// This used to go through <see cref="ComputeGradients"/>, whose exact path needs
@@ -484,7 +487,19 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
         if (expectedOutput is null)
             throw new ArgumentNullException(nameof(expectedOutput));
 
-        var (parameters, gradients, loss) = TapeGradients(input, expectedOutput, LossFunction);
+        var parameters = LiveTrainableTensors();
+        if (parameters.Length == 0)
+        {
+            // A lazily shaped layer allocates its weights on its first forward; materialize them without recording.
+            using (new NoGradScope<T>())
+                ForwardForTraining(input);
+            parameters = LiveTrainableTensors();
+        }
+        if (parameters.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"{GetType().Name} exposes no live weight tensors to train; register its layers as parameter components.");
+        }
 
         _trainingOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             model: null,
@@ -499,15 +514,49 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
                 UseAMSGrad = false,
             });
 
-        Tensor<T> RecomputeForward(Tensor<T> x, Tensor<T> _) => ForwardForTraining(x);
-        Tensor<T> RecomputeLoss(Tensor<T> x, Tensor<T> target)
+        var lossFunction = LossFunction;
+        _trainingStepper ??= new AiDotNet.Training.TapeTrainingStepper<T>(this);
+        _trainingStepper.Step(new AiDotNet.Training.FusedTrainingStepRequest<T>
         {
-            using var noGrad = new NoGradScope<T>();
-            return LossFunction.ComputeTapeLoss(ForwardForTraining(x), target);
-        }
+            // The layers are passed for their per-step state (gradient reset, compiled dropout masks); the
+            // registry's live chunks are the exact set the step updates, as before.
+            Layers = TrainableLayerComponents(),
+            Selection = parameters,
+            ExtraParameters = parameters,
+            Input = input,
+            Target = expectedOutput,
+            Forward = ForwardForTraining,
+            ComputeLoss = (predicted, target) => lossFunction.ComputeTapeLoss(predicted, target),
+            Optimizer = _trainingOptimizer,
+            GraphBreakReason = FusedTrainingGraphBreakReason,
+        });
+    }
 
-        _trainingOptimizer.Step(new TapeStepContext<T>(
-            parameters, gradients, loss, input, expectedOutput, RecomputeForward, RecomputeLoss));
+    /// <summary>
+    /// Why this VAE's <see cref="ForwardForTraining"/> cannot be traced once and replayed by the fused compiled plan,
+    /// or null (the default) when it can. Override with a reason when the training forward reads tensor values on the
+    /// host or captures per-step state other than its input; training then stays on the eager tape.
+    /// </summary>
+    protected virtual string? FusedTrainingGraphBreakReason => null;
+
+    [AiDotNet.Attributes.Scratch]
+    private AiDotNet.Training.TapeTrainingStepper<T>? _trainingStepper;
+
+    // The live registered weights a training step updates: chunks that ARE the stored weight. A detached copy would
+    // receive a gradient the step could not apply.
+    private Tensor<T>[] LiveTrainableTensors()
+    {
+        EnsureComponentsRegistered();
+        return _parameterRegistry.GetParameterStateChunks()
+            .Where(chunk => chunk.IsWritableInPlace)
+            .Select(chunk => chunk.Tensor)
+            .ToArray();
+    }
+
+    private IReadOnlyList<ITrainableLayer<T>> TrainableLayerComponents()
+    {
+        EnsureComponentsRegistered();
+        return _parameterRegistry.Components.OfType<ITrainableLayer<T>>().ToArray();
     }
 
     /// <summary>

@@ -672,18 +672,28 @@ public static class CompiledTapeTrainingStep<T>
                 return (T)(object)lossMp;
             }
 
-            var plan = cache.GetOrCompileTraining(
-                compositeKey,
-                () =>
-                {
-                    // Tensors 0.50.1 changed GetOrCompileTraining to take a
-                    // Func<Tensor<T>> — the trace lambda must return the
-                    // scalar output (loss) so the compile-graph has a single
-                    // terminal node to differentiate from.
-                    var predicted = forward(input);
-                    return computeLoss(predicted, target);
-                },
-                parameters);
+            bool compiledNow = false;
+            ICompiledTrainingPlan<T> plan;
+            using (var stepRandom = CompiledStepRandom<T>.BeginRecording())
+            {
+                plan = cache.GetOrCompileTraining(
+                    compositeKey,
+                    () =>
+                    {
+                        compiledNow = true;
+                        // Tensors 0.50.1 changed GetOrCompileTraining to take a
+                        // Func<Tensor<T>> — the trace lambda must return the
+                        // scalar output (loss) so the compile-graph has a single
+                        // terminal node to differentiate from.
+                        var predicted = forward(input);
+                        return computeLoss(predicted, target);
+                    },
+                    parameters);
+                if (compiledNow)
+                    CompiledStepRandom<T>.Attach(plan, stepRandom);
+            }
+            if (!compiledNow)
+                CompiledStepRandom<T>.RedrawFor(plan);
 
             // Execute compiled forward + backward
             var lossOutput = plan.Step();
@@ -1207,6 +1217,8 @@ public static class CompiledTapeTrainingStep<T>
                     layers[li].SetTrainingMode(false);
                 try
                 {
+                    // Per-step random draws (CompiledStepRandom) are suppressed for the same reason.
+                    using var noDraws = CompiledStepRandom<T>.SuppressDraws();
                     forward(_persistentInput);
                 }
                 finally
@@ -1397,6 +1409,9 @@ public static class CompiledTapeTrainingStep<T>
                     (typeof(T) == typeof(float) && Environment.GetEnvironmentVariable("AIDOTNET_FP16_CAPTURE") == "1")
                         ? new AiDotNet.Tensors.Engines.Gpu.AutocastScope(AiDotNet.Tensors.Engines.Gpu.PrecisionMode.Float16)
                         : null;
+                // Per-step random tensors the forward draws (CompiledStepRandom) are recorded with the plan the
+                // trace produces, so every later replay redraws them instead of reusing the traced draw.
+                using var stepRandom = CompiledStepRandom<T>.BeginRecording();
                 plan = cache.GetOrCompileTraining(
                     compositeKey,
                     () =>
@@ -1408,6 +1423,8 @@ public static class CompiledTapeTrainingStep<T>
                         return computeLoss(predicted, _persistentTarget!);
                     },
                     parameters);
+                if (compiledThisCall)
+                    CompiledStepRandom<T>.Attach(plan, stepRandom);
             }
 
             // STRICT SINGLE-PLAN POLICY: optimizer state lives inside the
@@ -1532,7 +1549,10 @@ public static class CompiledTapeTrainingStep<T>
             // first traced draw for step one, then refresh captured tensors in place before
             // later replays. The fused plan and optimizer moments remain intact.
             if (!isFirstStepForConfiguredPlan)
+            {
                 RefreshCompiledStochasticState(layers);
+                CompiledStepRandom<T>.RedrawFor(plan);
+            }
 
             // Execute forward + backward + fused parameter update in one replay.
             var lossOutput = plan.Step();

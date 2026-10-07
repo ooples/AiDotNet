@@ -420,20 +420,11 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
                 return;
             }
 
-            var parameters = TapeTrainingStep<T>.CollectParameters(Layers);
-            if (parameters.Count == 0) return;
+            if (TapeTrainingStep<T>.CollectParameters(Layers).Count == 0) return;
 
-            using var tape = new GradientTape<T>();
-            var loss = JointObjective(input, expected);
-            var gradients = ComputeAndPublishParameterGradients(tape, loss, parameters);
-            T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
-
-            var context = new TapeStepContext<T>(
-                parameters, gradients, lossValue, input, expected,
-                (inp, _) => CtcForward(EncodeForward(inp)),
-                (_, __) => JointObjective(input, expected),
-                parameterBuffer: null);
-            _optimizer?.Step(context);
+            // The joint objective on the network's shared eager step: gradients published through the base, the
+            // configured optimizer (AdamW by default) driving the update.
+            TrainWithCustomObjective(input, expected, JointObjective, _optimizer);
         }
         finally
         {

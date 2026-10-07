@@ -715,35 +715,15 @@ public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
         var trainableLayers = Layers
             .Where(l => l is ITrainableLayer<T>).Cast<ITrainableLayer<T>>()
             .ToList();
-        if (AiDotNet.Training.FusedTrainingStep<T>.TryStep(
-                trainableLayers, input, expectedOutput,
-                forward: Forward,
-                computeLoss: tapeLoss.ComputeTapeLoss,
-                optimizer: _optimizer,
-                out T fusedLoss,
-                onGradients: ScatterFusedGradients,
-                owner: this))
-        {
-            LastLoss = fusedLoss;
-            return;
-        }
-
-        using (var tape = new GradientTape<T>())
-        {
-            var predictions = Forward(input);
-            var lossTensor = tapeLoss.ComputeTapeLoss(predictions, expectedOutput);
-            // Always record the loss that was computed, even when there are no trainable parameters to
-            // step — LastLoss must reflect the most recent Train call for consistent telemetry.
-            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-            var trainableParameters = Training.TapeTrainingStep<T>.CollectParameters(Layers, LayerStructureVersion);
-            if (trainableParameters.Count > 0)
-            {
-                var gradients = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParameters);
-                var context = new TapeStepContext<T>(trainableParameters, gradients, lossValue);
-                _optimizer.Step(context);
-            }
-            LastLoss = lossValue;
-        }
+        // The shared training step: the fused plan when it applies, otherwise the shared eager tape step with the
+        // same optimizer and gradient publication. Every registered tensor (nested modules included) is trained.
+        LastLoss = AiDotNet.Training.FusedTrainingStep<T>.Step(
+            this, trainableLayers, input, expectedOutput,
+            forward: Forward,
+            computeLoss: tapeLoss.ComputeTapeLoss,
+            optimizer: _optimizer,
+            extraTensors: Training.TapeTrainingStep<T>.CollectParameters(Layers, LayerStructureVersion),
+            onGradients: ScatterFusedGradients);
     }
 
     /// <summary>

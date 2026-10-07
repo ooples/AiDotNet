@@ -229,6 +229,8 @@ public sealed class MultiSlotFusedStep<T> : IDisposable
             if (_plan is null)
             {
                 using var arenaSuspend = TensorArena.Suspend();
+                // Per-step random tensors drawn by the forward are recorded with the plan and redrawn per replay.
+                using var stepRandom = CompiledStepRandom<T>.BeginRecording();
                 using var scope = GraphMode.Enable();
                 var pred = forward(_persistentSlots);
                 var loss = computeLoss(pred, _persistentSlots);
@@ -242,6 +244,11 @@ public sealed class MultiSlotFusedStep<T> : IDisposable
                     CacheParameters(traced, optimizerType);
                 }
                 _plan = scope.CompileTraining(_cachedParameters!, loss);
+                CompiledStepRandom<T>.Attach(_plan, stepRandom);
+            }
+            else
+            {
+                CompiledStepRandom<T>.RedrawFor(_plan);
             }
 
             // Configure optimizer on first Step OR when config changed.
