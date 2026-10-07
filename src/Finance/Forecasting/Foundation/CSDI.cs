@@ -382,45 +382,18 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
                 }
             }
 
-            // Eager fallback: runs the same denoiser graph on the tape. Used when the fused
-            // path cannot engage (non-fuse-able optimizer, non-GPU host, etc.).
-            using var tape = new GradientTape<T>();
-            var epsilonPred = DenoiserForwardFromSlots(slots);
+            // Eager fallback, used when the fused path cannot engage (non-fuse-able optimizer, non-GPU host): the same
+            // denoiser graph on the network's shared eager step (TrainWithCustomObjective), with the model's registered
+            // loss so custom losses are respected and the constructor's optimizer driving the update. That step
+            // publishes the gradients through the base (so GetParameterGradients reports the real ones rather than the
+            // layer accessors' fabricated zeros) and pins recomputation to THIS draw of (t, eps): a line-searching
+            // optimizer that re-sampled would compare losses from two different diffusion timesteps.
             var epsilonTarget = slots[1];
-
-            // Use the model's registered loss (defaults to MSE) so custom
-            // loss functions are respected -- the denoising-objective shape
-            // matches any per-element loss.
-            var lossTensor = loss.ComputeTapeLoss(epsilonPred, epsilonTarget);
-
-            // Publish through the base instead of calling tape.ComputeGradients directly.
-            // GetParameterGradients() answers from the published surface, and with nothing
-            // published it falls back to the layer accessors, which fabricate a zero for every
-            // parameter -- 184804 of them here. A caller then cannot tell a genuinely zero
-            // gradient from one that was never written, and a gradient-flow check reads the
-            // whole model as severed while the weights visibly move.
-            var grads = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParams);
-
-            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-            LastLoss = lossValue;
-
-            // The optimizer handed to the constructor drives the update. The hand-rolled
-            // `param -= 0.001 * grad` this replaces ignored it outright, so an Adam, a
-            // configured learning rate, a schedule and any weight decay a caller passed all
-            // had no effect whatsoever. Recomputation is pinned to THIS draw of (t, eps):
-            // a line-searching optimizer that re-sampled would be comparing losses from two
-            // different diffusion timesteps and would read the difference as progress.
-            Tensor<T> ComputeForward(Tensor<T> _, Tensor<T> __) => DenoiserForwardFromSlots(slots);
-            Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> __) => loss.ComputeTapeLoss(pred, epsilonTarget);
-
-            var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
-                trainableParams, grads, lossValue,
-                input, target, ComputeForward, RecomputeLoss);
-
-            MarkTrainMutationStarted();
-            _optimizer.Step(context);
-            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
-            StepSchedulerIfSupported(_optimizer);
+            TrainWithCustomObjective(
+                input,
+                target,
+                (_, _) => loss.ComputeTapeLoss(DenoiserForwardFromSlots(slots), epsilonTarget),
+                _optimizer);
         }
         finally
         {

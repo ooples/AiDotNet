@@ -1524,125 +1524,65 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
             }
         }
 
-        using var tape = new GradientTape<T>();
-
-        // Forward pass — triggers lazy layer initialization, then we walk for
-        // trainable parameters. Collection must happen AFTER the forward pass so
-        // newly-initialized layers are visible to the walker. Batched inputs route
-        // through the per-element PredictNoiseBatched (Ho et al. 2020 canonical pattern);
-        // rank-1 unbatched inputs go through the scalar PredictNoise for backward compat.
-        var predicted = PredictTrainingNoise(
-            noisySampleTensor, timesteps, isBatched, input, expectedOutput);
-        var paramTensors = CollectTrainableParameters();
-        if (paramTensors.Length == 0)
-        {
-            throw new InvalidOperationException(
-                $"{GetType().Name} has no trainable parameters discoverable via " +
-                "CollectTrainableParameters. Make sure layers register their weights via " +
-                "LayerBase.RegisterTrainableParameter so the gradient tape can reach them.");
-        }
-
-        // MSE loss against the true noise — tape-tracked.
-        var noiseTensor = new Tensor<T>(predicted._shape, noiseVector);
-        var diff = Engine.TensorSubtract(predicted, noiseTensor);
-        var sq = Engine.TensorMultiply(diff, diff);
-        // DDPM training objective (Ho et al. 2020, the simplified loss L_simple =
-        // E[||ε − ε_θ||²]) is the MEAN squared error between predicted and true
-        // noise — matching the reference implementations (HuggingFace diffusers
-        // trains with F.mse_loss, which uses mean reduction). A SUM here scales
-        // the gradient by the element count (e.g. 1024× for a [1,4,16,16] latent),
-        // which destabilised the plain-SGD update: Imagen2's
-        // Training_ShouldReducePredictionError saw the error RISE (0.317 → 0.321)
-        // over 10 steps because each step overshot. Mean keeps the gradient scale
-        // invariant to latent size, so the same LearningRate is stable regardless
-        // of resolution. d(mean)/dparam = (1/N)·d(sum)/dparam, so this is exactly
-        // the mean-MSE gradient.
-        var loss = Engine.TensorMultiplyScalar(
-            Engine.ReduceSum(sq, null), NumOps.FromDouble(1.0 / sq.Length));
-
-        // Backward pass via graph-based autodiff.
-        var grads = tape.ComputeGradients(loss, paramTensors);
-        if (RetainTrainingGradientSurface)
-            RetainTrainingParameterGradients(paramTensors, grads);
-
-        // Global gradient-norm clipping (canonical diffusion training: HuggingFace
-        // diffusers and the SVD / Video-Diffusion reference recipes call
-        // torch.nn.utils.clip_grad_norm_(params, max_norm=1.0) after every backward).
-        // Plain SGD without it can overshoot on a freshly random-initialised model —
-        // a single step can move the noise-prediction error the WRONG way before the
-        // weights settle, which is exactly what Training_ShouldReducePredictionError
-        // caught for FateZero (error rose 0.399 -> 0.456 over 10 steps on an unlucky
-        // init, while the seeded sibling models happened to start in a stable basin).
-        // Clipping rescales the WHOLE gradient by max_norm/‖g‖ when ‖g‖ exceeds the
-        // threshold, so it bounds the step magnitude while preserving its direction —
-        // it can only stabilise training, never reverse a descent direction. The norm
-        // is computed with Engine reductions (no per-element scalar loop).
-        // Global gradient-norm clipping is delegated to the optimizer (configured at MaxGradientNorm
-        // = 1.0 below — the canonical DDPM / HuggingFace-diffusers recipe of
-        // clip_grad_norm_(params, 1.0)). The optimizer's Step performs the clip on its SIMD path
-        // right before the moment update, so there's no separate per-step scalar reduction here.
-
-        // G5 (#1624): restore the full-precision shadow weights before the optimizer step, so the
-        // update lands on full precision (straight-through estimator). The forward used the quantized
-        // values; the gradients are computed against them but applied to the full-precision weights.
-        if (qatParams is not null && qatShadows is not null)
-        {
-            for (int i = 0; i < qatParams.Length; i++)
-            {
-                var span = qatParams[i].Data.Span;
-                var shadow = qatShadows[i];
-                for (int k = 0; k < span.Length && k < shadow.Length; k++) span[k] = shadow[k];
-            }
-        }
-
-        // Apply the configured gradient-based optimizer. Default: paper-faithful Adam (DDPM, Ho et al.
-        // 2020 — Adam, NOT AdamW: β1=0.9, β2=0.999, ε=1e-8, no weight decay), reusing the shared
-        // optimizer infrastructure so nothing is hardcoded and the update runs on its vectorized (SIMD)
-        // Engine path. The non-paper extras (adaptive betas, adaptive LR, AMSGrad) are disabled so the
-        // default reproduces the paper exactly (DDPM uses a FIXED learning rate — no schedule/warmup).
+        // The eager step: the shared TapeTrainingStepper loop (forward and loss under the tape, gradients of the
+        // trainable tensors collected AFTER the forward so lazily initialized layers are seen, update inside the
+        // tape's scope). Batched inputs route through the per-element PredictNoiseBatched (Ho et al. 2020 canonical
+        // pattern); rank-1 unbatched inputs go through the scalar PredictNoise for backward compat.
         //
-        // LR contract: the model's LearningRate is captured ONCE here, at the lazy first-Train build, and
-        // is thereafter fixed for the default optimizer (matching the paper's constant LR). Set
-        // LearningRate before the first Train to choose it. To vary LR during training (warmup, decay,
-        // schedules), supply an optimizer that owns its own scheduler via DiffusionModelOptions
-        // .OptimizerFactory — that optimizer's LR then drives training and this constant-LR default is
-        // bypassed entirely. Mutating the model's LearningRate after the first Train does NOT retroactively
-        // change the already-built default optimizer, by design.
-        var trainingOptimizer = GetOrCreateTrainingOptimizer();
-
-        // Drive the optimizer through its tape-step entry point. Step(TapeStepContext) runs the
-        // optimizer's fused, in-place, allocation-free SIMD kernel directly on the parameter tensors
-        // and their gradients — it does NOT take the legacy flat-vector UpdateParameters round-trip
-        // (~17 intermediate Vector<T> allocations per step) that dominated foundation-scale training
-        // wall-time and timed the FateZero/Step1XEdit probes out. The optimizer owns its per-parameter
-        // moment state (keyed by tensor reference, stable across in-place steps) plus the global-norm
-        // clip; nothing is materialized or copied here. The forward/loss closures are only consulted by
-        // optimizers that re-evaluate the objective (e.g. line search); Adam ignores them.
-        T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
-        Tensor<T> RecomputeForward(Tensor<T> inp, Tensor<T> _) =>
-            PredictTrainingNoise(inp, timesteps, isBatched, input, expectedOutput);
-        Tensor<T> RecomputeLoss(Tensor<T> inp, Tensor<T> target)
+        // DDPM training objective (Ho et al. 2020, L_simple = E[||eps - eps_theta||^2]) is the MEAN squared error
+        // between predicted and true noise, matching HuggingFace diffusers' F.mse_loss. A SUM scales the gradient by
+        // the element count and destabilised plain SGD (Imagen2's Training_ShouldReducePredictionError rose
+        // 0.317 -> 0.321 over 10 steps). The objective replays the same timesteps and noise when an optimizer
+        // re-evaluates it (line search).
+        Tensor<T>? noiseTensor = null;
+        Tensor<T> NoisePredictionLoss()
         {
-            using var noGrad = new NoGradScope<T>();
-            var recomputed = RecomputeForward(inp, target);
-            var diff2 = Engine.TensorSubtract(recomputed, target);
-            var sq2 = Engine.TensorMultiply(diff2, diff2);
+            var predicted = PredictTrainingNoise(
+                noisySampleTensor, timesteps, isBatched, input, expectedOutput);
+            noiseTensor ??= new Tensor<T>(predicted._shape, noiseVector);
+            var diff = Engine.TensorSubtract(predicted, noiseTensor);
+            var sq = Engine.TensorMultiply(diff, diff);
             return Engine.TensorMultiplyScalar(
-                Engine.ReduceSum(sq2, null),
-                NumOps.FromDouble(1.0 / sq2.Length));
+                Engine.ReduceSum(sq, null), NumOps.FromDouble(1.0 / sq.Length));
         }
-        // paramTensors is already a Tensor<T>[] (which implements IReadOnlyList<Tensor<T>>, the ctor's
-        // parameter type), so pass it directly instead of allocating a fresh List every Train call. The
-        // only remaining per-step allocation on this path is the two objective-re-evaluation delegates
-        // (RecomputeForward / RecomputeLoss) — they capture `timestep`/`this`, so they can't be cached
-        // statically. They are part of the TapeStepContext contract and are consulted ONLY by optimizers
-        // that re-evaluate the objective (e.g. line search); the default Adam ignores them entirely. Two
-        // small closures per step is negligible next to the tape's per-op tensor traffic.
-        var stepContext = new TapeStepContext<T>(
-            paramTensors, grads, lossValue,
-            noisySampleTensor, noiseTensor,
-            RecomputeForward, RecomputeLoss);
-        trainingOptimizer.Step(stepContext);
+
+        Tensor<T>[]? trainedTensors = null;
+        IReadOnlyList<Tensor<T>> TrainedTensors()
+        {
+            trainedTensors = CollectTrainableParameters();
+            if (trainedTensors.Length == 0)
+            {
+                throw new InvalidOperationException(
+                    $"{GetType().Name} has no trainable parameters discoverable via " +
+                    "CollectTrainableParameters. Make sure layers register their weights via " +
+                    "LayerBase.RegisterTrainableParameter so the gradient tape can reach them.");
+            }
+            return trainedTensors;
+        }
+
+        // Global gradient-norm clipping (clip_grad_norm_(params, 1.0), the diffusers / SVD recipe) is the default
+        // optimizer's MaxGradientNorm, applied inside its Step on the SIMD path.
+        //
+        // G5 (#1624): the full-precision shadow weights are restored before the optimizer step, so the update lands
+        // on full precision (straight-through estimator): the forward used the quantized values, the gradients are
+        // computed against them but applied to the full-precision weights.
+        //
+        // Default optimizer: paper-faithful Adam (DDPM: beta1=0.9, beta2=0.999, eps=1e-8, no weight decay, fixed LR
+        // captured at the first Train). Supply DiffusionModelOptions.OptimizerFactory for schedules.
+        AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
+            TrainedTensors,
+            NoisePredictionLoss,
+            GetOrCreateTrainingOptimizer(),
+            onGradients: RetainTrainingGradientSurface
+                ? gradients => RetainTrainingParameterGradients(trainedTensors ?? CollectTrainableParameters(), gradients)
+                : null,
+            beforeUpdate: qatParams is { } shadowedParams && qatShadows is { } shadows
+                ? () =>
+                {
+                    for (int i = 0; i < shadowedParams.Length; i++)
+                        RestoreShadow(shadowedParams[i], shadows[i]);
+                }
+                : null);
     }
 
     /// <summary>
@@ -1698,21 +1638,21 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
             throw new InvalidOperationException(
                 $"{GetType().Name} has no trainable parameters discoverable via CollectTrainableParameters.");
 
-        using var tape = new GradientTape<T>();
-        var loss = computeLoss();
-        if (loss is null || loss.Length != 1)
-            throw new InvalidOperationException("A custom training objective must be a scalar tensor.");
-        var gradients = tape.ComputeGradients(loss, parameters);
-        if (RetainTrainingGradientSurface)
-            RetainTrainingParameterGradients(parameters, gradients);
+        Tensor<T> ScalarObjective()
+        {
+            var loss = computeLoss();
+            if (loss is null || loss.Length != 1)
+                throw new InvalidOperationException("A custom training objective must be a scalar tensor.");
+            return loss;
+        }
 
-        T lossValue = loss[0];
-        var placeholder = new Tensor<T>(new[] { 1 });
-        GetOrCreateTrainingOptimizer().Step(new TapeStepContext<T>(
-            parameters, gradients, lossValue, placeholder, placeholder,
-            (input, target) => computeLoss(),
-            (objective, target) => objective));
-        return lossValue;
+        return AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
+            parameters,
+            ScalarObjective,
+            GetOrCreateTrainingOptimizer(),
+            onGradients: RetainTrainingGradientSurface
+                ? gradients => RetainTrainingParameterGradients(parameters, gradients)
+                : null);
     }
 
     /// <inheritdoc />
@@ -2555,7 +2495,7 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     /// <summary>
     /// Flattens gradient tensors into a single vector matching GetParameters() layout.
     /// </summary>
-    private Vector<T> FlattenGradients(Tensor<T>[] paramTensors, Dictionary<Tensor<T>, Tensor<T>> grads)
+    private Vector<T> FlattenGradients(Tensor<T>[] paramTensors, IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
     {
         int totalSize = 0;
         foreach (var p in paramTensors) totalSize += p.Length;
@@ -2577,7 +2517,7 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
 
     private void RetainTrainingParameterGradients(
         Tensor<T>[] parameters,
-        Dictionary<Tensor<T>, Tensor<T>> gradients)
+        IReadOnlyDictionary<Tensor<T>, Tensor<T>> gradients)
     {
         long scalarCount = 0;
         foreach (var parameter in parameters)

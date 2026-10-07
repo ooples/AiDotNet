@@ -641,25 +641,17 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         var aeParams = TapeTrainingStep<T>.CollectParameters(aeLayers);
         if (aeParams.Count == 0) return;
 
-        using var tape = new GradientTape<T>();
-        var embedding = EncoderForwardBatched(realBatch);
-        var logits = DecoderForwardBatched(embedding, applyOutputActivation: false);
-        var lossTensor = ReconstructionLoss(logits, realBatch);
-
-        var grads = tape.ComputeGradients(lossTensor, aeParams);
-        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-
-        var capturedReal = realBatch;
-        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) =>
-            DecoderForwardBatched(EncoderForwardBatched(inp), applyOutputActivation: false);
-        Tensor<T> RecomputeLoss(Tensor<T> replayLogits, Tensor<T> _) =>
-            ReconstructionLoss(replayLogits, capturedReal);
-
-        var context = new TapeStepContext<T>(
-            aeParams, grads, lossValue,
-            realBatch, realBatch, ComputeForward, RecomputeLoss,
-            parameterBuffer: null);
-        _autoencoderOptimizer.Step(context);
+        // The reconstruction objective is a forward of one input (the real batch is both input and target), so it
+        // goes through the shared training step: the fused plan when it applies, the shared eager step otherwise.
+        FusedTrainingStep<T>.Step(
+            this,
+            aeLayers.OfType<ITrainableLayer<T>>().ToList(),
+            realBatch,
+            realBatch,
+            forward: x => DecoderForwardBatched(EncoderForwardBatched(x), applyOutputActivation: false),
+            computeLoss: ReconstructionLoss,
+            optimizer: _autoencoderOptimizer,
+            extraTensors: aeParams);
     }
 
     /// <summary>
@@ -712,38 +704,15 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
                 var (rScores, fScores) = SplitStacked(allScores, realN, fakeN);
                 return DiscriminatorLoss(rScores, fScores);
             }
-            if (FusedTrainingStep<T>.TryStep(
-                    trainableDisc, stacked, target,
-                    forward: Fwd, computeLoss: Loss,
-                    optimizer: _discriminatorOptimizer,
-                    out T _, owner: this))
-            {
-                return;
-            }
+            // One step through the shared training step: the fused plan when it applies, otherwise the shared eager
+            // tape step on the same objective.
+            FusedTrainingStep<T>.Step(
+                this, trainableDisc, stacked, target,
+                forward: Fwd,
+                computeLoss: Loss,
+                optimizer: _discriminatorOptimizer,
+                extraTensors: TapeTrainingStep<T>.CollectParameters(BuildDiscLayerList()));
         }
-
-        using var tape = new GradientTape<T>();
-        var discParams = TapeTrainingStep<T>.CollectParameters(BuildDiscLayerList());
-
-        var realScores = DiscriminatorForwardBatched(realBatch);
-        var fakeScores = DiscriminatorForwardBatched(fakeBatch);
-        var lossTensor = DiscriminatorLoss(realScores, fakeScores);
-
-        var grads = tape.ComputeGradients(lossTensor, discParams);
-        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-
-        // Replay closure must reproduce BOTH terms against the SAME fake batch — resampling here
-        // would tie the replayed loss to a different objective than the gradients.
-        var capturedFakeBatch = fakeBatch;
-        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(inp);
-        Tensor<T> RecomputeLoss(Tensor<T> predReal, Tensor<T> _) =>
-            DiscriminatorLoss(predReal, DiscriminatorForwardBatched(capturedFakeBatch));
-
-        var context = new TapeStepContext<T>(
-            discParams, grads, lossValue,
-            realBatch, realBatch, ComputeForward, RecomputeLoss,
-            parameterBuffer: null);
-        _discriminatorOptimizer.Step(context);
     }
 
     /// <summary>
@@ -770,96 +739,18 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
             perExampleFake.Add(fb);
         }
 
-        T lossSum = NumOps.Zero;
-        using var dpSgdStep = new DpSgdFusedStep<T>();
-        bool dpFusedRan = dpSgdStep.TryStep(
-            parameters: discParams,
-            perExampleSlotData: exIdx => new[] { perExampleReal[exIdx], perExampleFake[exIdx] },
-            forward: slots => DiscriminatorForwardBatched(slots[0]),
-            computeLoss: (realScores, slots) =>
-            {
-                var fakeScores = DiscriminatorForwardBatched(slots[1]);
-                var lossTensor = DiscriminatorLoss(realScores, fakeScores);
-                if (lossTensor.Length > 0) lossSum = NumOps.Add(lossSum, lossTensor[0]);
-                return lossTensor;
-            },
-            batchSize: batchSize,
-            clipNorm: _options.ClipNorm,
-            noiseMultiplier: noiseMultiplier,
-            rng: _random,
-            out var noisedAvgGrads);
-
-        // Eager fallback: same clip-BEFORE-aggregate contract, by manual accumulation.
-        if (!dpFusedRan)
-        {
-            noisedAvgGrads = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
-            var gradSum = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
-            foreach (var p in discParams)
-            {
-                var zero = new Tensor<T>(p._shape);
-                zero.Fill(NumOps.Zero);
-                gradSum[p] = zero;
-            }
-            for (int row = startRow; row < endRow; row++)
-            {
-                var realBatch = perExampleReal[row - startRow];
-                var fakeBatch = perExampleFake[row - startRow];
-                using var tape = new GradientTape<T>();
-                var lossTensor = DiscriminatorLoss(
-                    DiscriminatorForwardBatched(realBatch), DiscriminatorForwardBatched(fakeBatch));
-                if (lossTensor.Length > 0) lossSum = NumOps.Add(lossSum, lossTensor[0]);
-                var grads = tape.ComputeGradients(lossTensor, discParams);
-
-                // GLOBAL L2 norm across ALL parameter gradients (the sensitivity contract).
-                T normSquared = NumOps.Zero;
-                foreach (var g in grads.Values)
-                {
-                    var perParamSum = Engine.ReduceSum(Engine.TensorMultiply(g, g), axes: null, keepDims: false);
-                    normSquared = NumOps.Add(normSquared, perParamSum.Length > 0 ? perParamSum[0] : NumOps.Zero);
-                }
-                double clipFactor = Math.Min(1.0, _options.ClipNorm / Math.Sqrt(NumOps.ToDouble(normSquared) + 1e-12));
-                var clipFactorT = NumOps.FromDouble(clipFactor);
-                foreach (var kvp in grads)
-                {
-                    gradSum[kvp.Key] = Engine.TensorAdd(
-                        gradSum[kvp.Key], Engine.TensorMultiplyScalar(kvp.Value, clipFactorT));
-                }
-            }
-
-            double invBatch = 1.0 / batchSize;
-            double noiseStdD = _options.ClipNorm * noiseMultiplier * invBatch;
-            var invBatchT = NumOps.FromDouble(invBatch);
-            var noiseStdT = NumOps.FromDouble(noiseStdD);
-            foreach (var kvp in gradSum)
-            {
-                var scaledSum = Engine.TensorMultiplyScalar(kvp.Value, invBatchT);
-                if (noiseStdD > 0)
-                {
-                    var noise = new Tensor<T>(kvp.Value._shape);
-                    Engine.TensorRandomNormalInto(noise, NumOps.Zero, noiseStdT);
-                    noisedAvgGrads[kvp.Key] = Engine.TensorAdd(scaledSum, noise);
-                }
-                else
-                {
-                    noisedAvgGrads[kvp.Key] = scaledSum;
-                }
-            }
-        }
-
-        var stackedReal = Engine.TensorConcatenate([.. perExampleReal], axis: 0);
-        var stackedFake = Engine.TensorConcatenate([.. perExampleFake], axis: 0);
-        T avgLoss = NumOps.Divide(lossSum, NumOps.FromDouble(batchSize));
-
-        var capturedFake = stackedFake;
-        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(inp);
-        Tensor<T> RecomputeLoss(Tensor<T> predReal, Tensor<T> _) =>
-            DiscriminatorLoss(predReal, DiscriminatorForwardBatched(capturedFake));
-
-        var context = new TapeStepContext<T>(
-            discParams, noisedAvgGrads, avgLoss,
-            stackedReal, stackedReal, ComputeForward, RecomputeLoss,
-            parameterBuffer: null);
-        _discriminatorOptimizer.Step(context);
+        // The shared DP-SGD step: per-example clip BEFORE aggregation, averaged, noised, then one optimizer update
+        // (the GPU-resident primitive when available, the shared eager per-example loop otherwise).
+        DpSgdTrainingStep<T>.Step(
+            discParams,
+            batchSize,
+            exIdx => new[] { perExampleReal[exIdx], perExampleFake[exIdx] },
+            slots => DiscriminatorForwardBatched(slots[0]),
+            (realScores, slots) => DiscriminatorLoss(realScores, DiscriminatorForwardBatched(slots[1])),
+            _options.ClipNorm,
+            noiseMultiplier,
+            _random,
+            _discriminatorOptimizer);
     }
 
     /// <summary>
@@ -902,31 +793,15 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
             var target = new Tensor<T>(new[] { 1 });
             Tensor<T> Fwd(Tensor<T> nb) => SynthesizeForDiscriminator(nb, isTraining: true);
             Tensor<T> Loss(Tensor<T> fake, Tensor<T> _) => GeneratorLoss(fake);
-            if (FusedTrainingStep<T>.TryStep(
-                    trainableGen, noiseBatch, target,
-                    forward: Fwd, computeLoss: Loss,
-                    optimizer: _generatorOptimizer,
-                    out T _, owner: this))
-            {
-                return;
-            }
+            // One step through the shared training step: the fused plan when it applies, otherwise the shared eager
+            // tape step on the same objective.
+            FusedTrainingStep<T>.Step(
+                this, trainableGen, noiseBatch, target,
+                forward: Fwd,
+                computeLoss: Loss,
+                optimizer: _generatorOptimizer,
+                extraTensors: genParams);
         }
-
-        using var tape = new GradientTape<T>();
-        var fakeBatch = SynthesizeForDiscriminator(noiseBatch, isTraining: true);
-        var lossTensor = GeneratorLoss(fakeBatch);
-
-        var grads = tape.ComputeGradients(lossTensor, genParams);
-        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-
-        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => SynthesizeForDiscriminator(inp, isTraining: true);
-        Tensor<T> RecomputeLoss(Tensor<T> fake, Tensor<T> _) => GeneratorLoss(fake);
-
-        var context = new TapeStepContext<T>(
-            genParams, grads, lossValue,
-            noiseBatch, noiseBatch, ComputeForward, RecomputeLoss,
-            parameterBuffer: null);
-        _generatorOptimizer.Step(context);
     }
 
     /// <summary>

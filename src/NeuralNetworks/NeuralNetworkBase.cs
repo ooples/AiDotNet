@@ -13099,49 +13099,83 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Func<Tensor<T>, Tensor<T>> computeLoss,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
     {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (computeLoss is null) throw new ArgumentNullException(nameof(computeLoss));
+
         SetTrainingMode(true);
         try
         {
-            var trainableParams = CollectModelTrainableTensors();
-            var opt = optimizer ?? GetOrCreateBaseOptimizer();
-
-            using var tape = new GradientTape<T>();
-            var output = ForwardForTraining(input);
-            var lossTensor = computeLoss(output);
-
-            var grads = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParams);
-
-            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-            LastLoss = lossValue;
-
-            Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => ForwardForTraining(inp);
-            Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _) => computeLoss(pred);
-
-            var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
-                trainableParams, grads, lossValue,
-                input, input, ComputeForward, RecomputeLoss);
-
-            // Tape optimizer step writes weights in place (#1624 OOM-retry gate).
-            MarkTrainMutationStarted();
-            ApplyOptimizerRegularization(opt, context);
-            opt.Step(context);
-            // GPU weight-cache coherence after the custom-loss step.
-            // See InvalidateWeightCachesAfterSuccessfulWeightUpdate.
-            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
-
-            // Mirror the OnBatchEnd advance from TrainWithTape via the
-            // shared helper so a custom-loss caller and a regular Train
-            // caller see identical scheduler behaviour. Closes #1269.zFt3
-            // (route via shared StepSchedulerIfSupported helper to keep
-            // every training entry point consistent — #1270.zKjB).
-            StepSchedulerIfSupported(opt);
-
-            return lossValue;
+            // The loss closure usually captures per-call host data (advantages, actions, a generator's samples), which
+            // a compiled plan would freeze at its first trace, so this step runs on the shared eager tape step.
+            return StepOnSharedTape(
+                () => computeLoss(ForwardForTraining(input)),
+                optimizer ?? GetOrCreateBaseOptimizer(),
+                input,
+                input,
+                (inp, _) => ForwardForTraining(inp),
+                (pred, _) => computeLoss(pred));
         }
         finally
         {
             SetTrainingMode(false);
         }
+    }
+
+    /// <summary>
+    /// One update of this network through the shared eager tape step
+    /// (<see cref="Training.TapeTrainingStepper{T}.EagerTapeStep"/>), with the network's own bookkeeping layered on:
+    /// the reachability probe and gradient publication of <see cref="ComputeAndPublishParameterGradients"/>, the
+    /// optimizer's regularization, the in-place mutation mark (#1624 OOM-retry gate), GPU weight-cache coherence and
+    /// the scheduler's batch advance (#1269 / #1270: every training entry point advances it the same way).
+    /// </summary>
+    /// <remarks>The trained set is read after the objective runs, so parameters a lazy layer materializes on its
+    /// first forward are updated on that same step.</remarks>
+    private T StepOnSharedTape(
+        Func<Tensor<T>> objective,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> opt,
+        Tensor<T> input,
+        Tensor<T> target,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> recomputeForward,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> recomputeLoss)
+    {
+        var probe = TapeReachabilityProbe<T>.Current;
+        var hooks = new Training.TapeTrainingStepper<T>.EagerStepHooks
+        {
+            // An armed probe only ever ADDS questions: its tensors are differentiated, never updated.
+            GradientSources = probe is not null && probe.Requested.Count > 0
+                ? parameters =>
+                {
+                    var widened = new List<Tensor<T>>(parameters.Count + probe.Requested.Count);
+                    widened.AddRange(parameters);
+                    widened.AddRange(probe.Requested);
+                    return widened;
+                }
+                : null,
+            OnTapeGradients = gradients =>
+            {
+                probe?.Record(this, gradients);
+                PublishParameterGradients(gradients);
+            },
+        };
+
+        T lossValue = Training.TapeTrainingStepper<T>.EagerTapeStep(
+            objective,
+            CollectModelTrainableTensors,
+            context =>
+            {
+                MarkTrainMutationStarted();
+                ApplyOptimizerRegularization(opt, context);
+                opt.Step(context);
+                InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+                StepSchedulerIfSupported(opt);
+            },
+            input,
+            target,
+            recomputeForward,
+            recomputeLoss,
+            hooks);
+        LastLoss = lossValue;
+        return lossValue;
     }
 
     /// <summary>
@@ -13169,14 +13203,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         SetTrainingMode(true);
         try
         {
-            var opt = optimizer ?? GetOrCreateBaseOptimizer();
-            using var tape = new GradientTape<T>();
-            var lossTensor = RecomputeObjective(input, expected);
-            var trainableParams = CollectModelTrainableTensors();
-            var grads = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParams);
-            T lossValue = lossTensor[0];
-            LastLoss = lossValue;
-
             Tensor<T> RecomputeObjective(Tensor<T> currentInput, Tensor<T> currentExpected)
             {
                 EnsureLayerRandomSeedsWired();
@@ -13189,16 +13215,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 return result;
             }
 
-            Tensor<T> ReadObjective(Tensor<T> objective, Tensor<T> _) => objective;
-            var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
-                trainableParams, grads, lossValue, input, expected, RecomputeObjective, ReadObjective);
-
-            MarkTrainMutationStarted();
-            ApplyOptimizerRegularization(opt, context);
-            opt.Step(context);
-            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
-            StepSchedulerIfSupported(opt);
-            return lossValue;
+            return StepOnSharedTape(
+                () => RecomputeObjective(input, expected),
+                optimizer ?? GetOrCreateBaseOptimizer(),
+                input,
+                expected,
+                RecomputeObjective,
+                (objective, _) => objective);
         }
         finally
         {

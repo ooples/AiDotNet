@@ -257,11 +257,12 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         }
 
         // Adam optimizer (Salinas et al. 2020 use Adam).
-        var adamOptions = new AdamOptimizerOptions<T, Matrix<T>, Vector<T>>
+        // Tensor-typed: the tape step updates the weight tensors directly, through the shared training step.
+        var adamOptions = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
         {
             InitialLearningRate = _options.LearningRate
         };
-        var optimizer = new AdamOptimizer<T, Matrix<T>, Vector<T>>(null, adamOptions);
+        var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(null, adamOptions);
 
         // Collect every registered weight/bias tensor from the LSTM stack and the head.
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(AllLayers(), -1);
@@ -349,34 +350,17 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
                 }
                 var batchTarget = new Tensor<T>(new[] { b, lookback }, new Vector<T>(targetData));
 
-                using var tape = new GradientTape<T>();
-
                 // Unroll the LSTM to per-step top hidden states, then let the selected distribution head
                 // build its own likelihood loss (the head owns the residual-mean skip + distribution math).
-                var hiddenSteps = ForwardHidden(lstmInputSteps, b);
-                var batchLoss = _head.ComputeBatchLoss(hiddenSteps, obsSteps, batchTarget);
+                // The batch is a list of per-timestep tensors whose batch size varies with the valid
+                // anchors, so it is not one input tensor: the shared objective step runs it eagerly.
+                T batchLoss = Training.TapeTrainingStepper<T>.EagerObjectiveStep(
+                    trainableParams,
+                    () => _head.ComputeBatchLoss(ForwardHidden(lstmInputSteps, b), obsSteps, batchTarget),
+                    optimizer);
 
-                var allGrads = tape.ComputeGradients(batchLoss, sources: null);
-                var grads = new Dictionary<Tensor<T>, Tensor<T>>(
-                    Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-                foreach (var param in trainableParams)
-                {
-                    if (allGrads.TryGetValue(param, out var grad))
-                        grads[param] = grad;
-                }
-
-                if (batchLoss.Length > 0)
-                {
-                    double bl = Convert.ToDouble(batchLoss[0]);
-                    epochLossSum += bl * b;
-                    epochSampleCount += b;
-                }
-
-                var context = new TapeStepContext<T>(
-                    trainableParams, grads,
-                    batchLoss.Length > 0 ? batchLoss[0] : NumOps.Zero);
-
-                optimizer.Step(context);
+                epochLossSum += Convert.ToDouble(batchLoss) * b;
+                epochSampleCount += b;
             }
 
             if (epochSampleCount > 0)
