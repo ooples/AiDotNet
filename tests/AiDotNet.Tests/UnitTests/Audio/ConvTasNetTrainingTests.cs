@@ -103,6 +103,41 @@ public class ConvTasNetTrainingTests
     }
 
     [Theory]
+    [InlineData(130)]
+    [InlineData(5)]
+    public void Output_KeepsALengthTheFramesDoNotTile_AndEachBatchRowIsIndependent(int length)
+    {
+        // 128 samples tile the stride exactly; these lengths take the pad-then-crop path (5 is shorter
+        // than the 8-sample encoder kernel). gLN normalizes each example on its own, so a row's output
+        // must not depend on what else is in the batch.
+        var model = CreateModel();
+        var rng = RandomHelper.CreateSeededRandom(length);
+        var batch = new Tensor<double>(new[] { 2, length });
+        var rows = new[] { new Tensor<double>(new[] { 1, length }), new Tensor<double>(new[] { 1, length }) };
+        for (int r = 0; r < 2; r++)
+        {
+            for (int t = 0; t < length; t++)
+            {
+                double v = rng.NextDouble() * 2 - 1;
+                batch[r, t] = v;
+                rows[r][0, t] = v;
+            }
+        }
+
+        var together = model.Predict(batch);
+        Assert.Equal(new[] { 2, 2, length }, together.Shape.ToArray());
+
+        for (int r = 0; r < 2; r++)
+        {
+            var alone = model.Predict(rows[r]);
+            Assert.Equal(new[] { 1, 2, length }, alone.Shape.ToArray());
+            for (int c = 0; c < 2; c++)
+                for (int t = 0; t < length; t++)
+                    Assert.Equal(alone[0, c, t], together[r, c, t], 10);
+        }
+    }
+
+    [Theory]
     [InlineData(2)]
     [InlineData(4)]
     public void EvenTcnKernel_IsRejectedAtConstruction(int tcnKernelSize)

@@ -545,11 +545,5 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         return metadata;
     }
 
-    /// <inheritdoc/>
-
-
-    /// <inheritdoc/>
-
-
     #endregion
 }
