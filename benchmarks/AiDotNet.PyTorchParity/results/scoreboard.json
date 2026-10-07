@@ -1,0 +1,2952 @@
+{
+  "generatedUtc": "2026-10-07T06:14:54+00:00",
+  "finishedUtc": "2026-10-07T08:35:14+00:00",
+  "config": {
+    "oursBin": "C:\\Users\\yolan\\source\\repos\\_bench\\baseline-bin",
+    "models": [
+      "mlp",
+      "cnn",
+      "lstm",
+      "transformer"
+    ],
+    "devices": [
+      "cpu",
+      "cuda"
+    ],
+    "runs": 9,
+    "selectRuns": 3,
+    "finalists": 2,
+    "epochs": 5,
+    "trainBatches": 20,
+    "batchSize": 64,
+    "seed": 1234,
+    "threads": 0,
+    "lockName": "Global\\AiDotNetBenchLock",
+    "maxBackgroundPct": 25.0,
+    "maxRetries": 2,
+    "quietWait": 120,
+    "priority": "above-normal",
+    "oursBinSnapshot": true,
+    "statistic": "per run: median steady-state epoch seconds / steps (epoch 0 excluded); per cell: median of runs"
+  },
+  "machine": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "cpu": "AMD Ryzen 7 4800H with Radeon Graphics",
+    "logicalProcessors": 16,
+    "python": "3.13.3",
+    "pytorch": {
+      "torch": "2.14.1+cu126",
+      "threads": 8,
+      "cuda": "12.6",
+      "gpu": "NVIDIA GeForce GTX 1660 Ti"
+    },
+    "dotnetSdk": "10.0.401"
+  },
+  "toolchain": {
+    "msvc": "vcvars64: C:\\Program Files (x86)\\Microsoft Visual Studio\\2019\\BuildTools\\VC\\Auxiliary\\Build\\vcvars64.bat",
+    "triton": "triton 3.8.0"
+  },
+  "aidotnet": {
+    "AiDotNet.dll": {
+      "path": "C:\\Users\\yolan\\source\\repos\\_bench\\baseline-bin\\AiDotNet.dll",
+      "sha256": "f2753a572ff74feb4832847abe3eb942b096d70352552b4d9d2b277ddb3d44ae",
+      "lastWriteUtc": "2026-10-06T15:50:20+00:00",
+      "productVersion": "0.204.0+2cc2dfa919100532b255ae6951e7dc80b4ce44b6"
+    },
+    "AiDotNet.Tensors.dll": {
+      "path": "C:\\Users\\yolan\\source\\repos\\_bench\\baseline-bin\\AiDotNet.Tensors.dll",
+      "sha256": "ed3f114b504f0d537f345d1d981943fcb985b3cc17b4d85812e1611f50c338ef",
+      "lastWriteUtc": "2026-10-06T15:04:56+00:00",
+      "productVersion": "1.0.0-preview+efb63d404bb1e6ecbd118249ceddfb53f1eb8c30"
+    },
+    "AiDotNet.PyTorchParity.dll": {
+      "path": "C:\\Users\\yolan\\source\\repos\\_bench\\baseline-bin\\AiDotNet.PyTorchParity.dll",
+      "sha256": "ad4fc342254f93bcbe32062ecaa56e4edc0ea076bdd68795cec36038b991cce3",
+      "lastWriteUtc": "2026-10-06T13:35:34+00:00",
+      "productVersion": "1.0.0+c14b4dc4275c3d2529c9221aac6725d66a54c22a"
+    }
+  },
+  "modesNotRun": {
+    "compile[inductor/max-autotune*]": "autotuning benchmarks GEMM/conv templates for minutes per process while holding the shared bench lock, and for these small shapes it targets the same kernels reduce-overhead already graphs; not run.",
+    "compile[inductor/reduce-overhead], compile[cudagraphs] on cpu": "CUDA graphs exist only on CUDA.",
+    "compile[aot_eager]": "a debugging backend that runs the eager kernels through AOTAutograd; never faster than eager."
+  },
+  "modesUnavailable": {},
+  "cells": [
+    {
+      "model": "mlp",
+      "device": "cpu",
+      "aidotnet": {
+        "runsMs": [
+          6.7788,
+          7.3139,
+          6.7186,
+          7.0325,
+          7.0403,
+          6.167,
+          7.0631,
+          6.189,
+          6.759
+        ],
+        "medianMs": 6.7788,
+        "p25Ms": 6.7186,
+        "p75Ms": 7.0403,
+        "minMs": 6.167,
+        "maxMs": 7.3139,
+        "backgroundCpuPct": [
+          12.8,
+          18.8,
+          10.1,
+          22.8,
+          22.0,
+          8.2,
+          15.3,
+          9.7,
+          9.6
+        ],
+        "discardedNoisyRuns": [],
+        "errors": []
+      },
+      "pytorchBestMode": "eager+fused-adamw",
+      "pytorchBest": {
+        "runsMs": [
+          3.3226,
+          2.721,
+          3.2302,
+          2.8088,
+          2.9165,
+          2.7359,
+          2.9487,
+          2.6883,
+          2.7146
+        ],
+        "medianMs": 2.8088,
+        "p25Ms": 2.721,
+        "p75Ms": 2.9487,
+        "minMs": 2.6883,
+        "maxMs": 3.3226,
+        "backgroundCpuPct": [
+          16.6,
+          11.2,
+          19.0,
+          23.5,
+          73.5,
+          11.5,
+          22.8,
+          9.8,
+          18.4
+        ],
+        "discardedNoisyRuns": [
+          {
+            "ms": 55.2415,
+            "backgroundCpuPct": 78.4
+          },
+          {
+            "ms": 3.1712,
+            "backgroundCpuPct": 27.7
+          }
+        ],
+        "errors": []
+      },
+      "pytorchEager": {
+        "runsMs": [
+          4.2455,
+          3.5683,
+          3.778,
+          3.4881,
+          3.8237,
+          4.3486,
+          4.1779,
+          3.5479,
+          3.6002
+        ],
+        "medianMs": 3.778,
+        "p25Ms": 3.5683,
+        "p75Ms": 4.1779,
+        "minMs": 3.4881,
+        "maxMs": 4.3486,
+        "backgroundCpuPct": [
+          23.7,
+          19.0,
+          17.9,
+          10.2,
+          17.0,
+          21.0,
+          16.9,
+          9.5,
+          9.7
+        ],
+        "discardedNoisyRuns": [
+          {
+            "ms": 4.931,
+            "backgroundCpuPct": 35.0
+          },
+          {
+            "ms": 3.9875,
+            "backgroundCpuPct": 45.8
+          }
+        ],
+        "errors": []
+      },
+      "ratioOursOverBest": 2.413,
+      "ratioOursOverEager": 1.794,
+      "verdict": "LOSE",
+      "selection": {
+        "eager": {
+          "runsMs": [
+            3.8643,
+            3.4616,
+            4.6499
+          ],
+          "medianMs": 3.8643,
+          "p25Ms": 3.6629,
+          "p75Ms": 4.2571,
+          "minMs": 3.4616,
+          "maxMs": 4.6499,
+          "backgroundCpuPct": [
+            22.9,
+            23.3,
+            22.5
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 4.4165,
+              "backgroundCpuPct": 25.2
+            },
+            {
+              "ms": 5.8511,
+              "backgroundCpuPct": 25.4
+            }
+          ],
+          "errors": []
+        },
+        "compile[inductor]": {
+          "runsMs": [
+            5.4909,
+            4.7046,
+            4.3331
+          ],
+          "medianMs": 4.7046,
+          "p25Ms": 4.5189,
+          "p75Ms": 5.0978,
+          "minMs": 4.3331,
+          "maxMs": 5.4909,
+          "backgroundCpuPct": [
+            21.2,
+            16.9,
+            14.0
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "eager+fused-adamw": {
+          "runsMs": [
+            2.6799,
+            3.4834,
+            2.592
+          ],
+          "medianMs": 2.6799,
+          "p25Ms": 2.636,
+          "p75Ms": 3.0817,
+          "minMs": 2.592,
+          "maxMs": 3.4834,
+          "backgroundCpuPct": [
+            17.7,
+            20.8,
+            13.6
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[inductor]+fused-adamw": {
+          "runsMs": [
+            3.6027,
+            6.0373,
+            4.9484
+          ],
+          "medianMs": 4.9484,
+          "p25Ms": 4.2756,
+          "p75Ms": 5.4929,
+          "minMs": 3.6027,
+          "maxMs": 6.0373,
+          "backgroundCpuPct": [
+            19.1,
+            24.3,
+            16.2
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 45.847,
+              "backgroundCpuPct": 81.5
+            }
+          ],
+          "errors": []
+        }
+      },
+      "final": {
+        "eager+fused-adamw": {
+          "runsMs": [
+            3.3226,
+            2.721,
+            3.2302,
+            2.8088,
+            2.9165,
+            2.7359,
+            2.9487,
+            2.6883,
+            2.7146
+          ],
+          "medianMs": 2.8088,
+          "p25Ms": 2.721,
+          "p75Ms": 2.9487,
+          "minMs": 2.6883,
+          "maxMs": 3.3226,
+          "backgroundCpuPct": [
+            16.6,
+            11.2,
+            19.0,
+            23.5,
+            73.5,
+            11.5,
+            22.8,
+            9.8,
+            18.4
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 55.2415,
+              "backgroundCpuPct": 78.4
+            },
+            {
+              "ms": 3.1712,
+              "backgroundCpuPct": 27.7
+            }
+          ],
+          "errors": []
+        },
+        "eager": {
+          "runsMs": [
+            4.2455,
+            3.5683,
+            3.778,
+            3.4881,
+            3.8237,
+            4.3486,
+            4.1779,
+            3.5479,
+            3.6002
+          ],
+          "medianMs": 3.778,
+          "p25Ms": 3.5683,
+          "p75Ms": 4.1779,
+          "minMs": 3.4881,
+          "maxMs": 4.3486,
+          "backgroundCpuPct": [
+            23.7,
+            19.0,
+            17.9,
+            10.2,
+            17.0,
+            21.0,
+            16.9,
+            9.5,
+            9.7
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 4.931,
+              "backgroundCpuPct": 35.0
+            },
+            {
+              "ms": 3.9875,
+              "backgroundCpuPct": 45.8
+            }
+          ],
+          "errors": []
+        }
+      },
+      "modesUnavailable": {}
+    },
+    {
+      "model": "cnn",
+      "device": "cpu",
+      "aidotnet": {
+        "runsMs": [
+          20.8117,
+          23.7168,
+          21.3291,
+          22.1055,
+          23.4172,
+          24.4819,
+          23.2908,
+          23.1059,
+          24.2258
+        ],
+        "medianMs": 23.2908,
+        "p25Ms": 22.1055,
+        "p75Ms": 23.7168,
+        "minMs": 20.8117,
+        "maxMs": 24.4819,
+        "backgroundCpuPct": [
+          8.8,
+          6.8,
+          2.1,
+          3.9,
+          13.9,
+          18.4,
+          16.6,
+          14.5,
+          20.8
+        ],
+        "discardedNoisyRuns": [
+          {
+            "ms": 31.3805,
+            "backgroundCpuPct": 45.1
+          }
+        ],
+        "errors": []
+      },
+      "pytorchBestMode": "eager",
+      "pytorchBest": {
+        "runsMs": [
+          6.7448,
+          8.5294,
+          6.561,
+          9.2166,
+          7.6239,
+          7.5895,
+          7.1787,
+          7.2047,
+          8.866
+        ],
+        "medianMs": 7.5895,
+        "p25Ms": 7.1787,
+        "p75Ms": 8.5294,
+        "minMs": 6.561,
+        "maxMs": 9.2166,
+        "backgroundCpuPct": [
+          17.1,
+          14.8,
+          5.4,
+          20.0,
+          23.7,
+          13.3,
+          11.1,
+          17.8,
+          27.3
+        ],
+        "discardedNoisyRuns": [
+          {
+            "ms": 8.7075,
+            "backgroundCpuPct": 25.6
+          },
+          {
+            "ms": 9.3134,
+            "backgroundCpuPct": 29.9
+          },
+          {
+            "ms": 80.288,
+            "backgroundCpuPct": 84.3
+          }
+        ],
+        "errors": []
+      },
+      "pytorchEager": {
+        "runsMs": [
+          6.7448,
+          8.5294,
+          6.561,
+          9.2166,
+          7.6239,
+          7.5895,
+          7.1787,
+          7.2047,
+          8.866
+        ],
+        "medianMs": 7.5895,
+        "p25Ms": 7.1787,
+        "p75Ms": 8.5294,
+        "minMs": 6.561,
+        "maxMs": 9.2166,
+        "backgroundCpuPct": [
+          17.1,
+          14.8,
+          5.4,
+          20.0,
+          23.7,
+          13.3,
+          11.1,
+          17.8,
+          27.3
+        ],
+        "discardedNoisyRuns": [
+          {
+            "ms": 8.7075,
+            "backgroundCpuPct": 25.6
+          },
+          {
+            "ms": 9.3134,
+            "backgroundCpuPct": 29.9
+          },
+          {
+            "ms": 80.288,
+            "backgroundCpuPct": 84.3
+          }
+        ],
+        "errors": []
+      },
+      "ratioOursOverBest": 3.069,
+      "ratioOursOverEager": 3.069,
+      "verdict": "LOSE",
+      "selection": {
+        "eager": {
+          "runsMs": [
+            10.7226,
+            8.0907,
+            7.8856
+          ],
+          "medianMs": 8.0907,
+          "p25Ms": 7.9882,
+          "p75Ms": 9.4066,
+          "minMs": 7.8856,
+          "maxMs": 10.7226,
+          "backgroundCpuPct": [
+            19.4,
+            20.0,
+            17.5
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[inductor]": {
+          "runsMs": [
+            13.5542,
+            15.4268,
+            11.5237
+          ],
+          "medianMs": 13.5542,
+          "p25Ms": 12.5389,
+          "p75Ms": 14.4905,
+          "minMs": 11.5237,
+          "maxMs": 15.4268,
+          "backgroundCpuPct": [
+            16.3,
+            14.6,
+            10.6
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "eager+fused-adamw": {
+          "runsMs": [
+            8.0104,
+            8.2523,
+            7.0909
+          ],
+          "medianMs": 8.0104,
+          "p25Ms": 7.5506,
+          "p75Ms": 8.1313,
+          "minMs": 7.0909,
+          "maxMs": 8.2523,
+          "backgroundCpuPct": [
+            17.8,
+            21.3,
+            17.8
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[inductor]+fused-adamw": {
+          "runsMs": [
+            11.8256,
+            17.5105,
+            12.9064
+          ],
+          "medianMs": 12.9064,
+          "p25Ms": 12.366,
+          "p75Ms": 15.2085,
+          "minMs": 11.8256,
+          "maxMs": 17.5105,
+          "backgroundCpuPct": [
+            11.4,
+            19.3,
+            15.9
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        }
+      },
+      "final": {
+        "eager+fused-adamw": {
+          "runsMs": [
+            9.1065,
+            7.0563,
+            8.9078,
+            7.4445,
+            9.9971,
+            8.2358,
+            6.9494,
+            7.9573,
+            6.9598
+          ],
+          "medianMs": 7.9573,
+          "p25Ms": 7.0563,
+          "p75Ms": 8.9078,
+          "minMs": 6.9494,
+          "maxMs": 9.9971,
+          "backgroundCpuPct": [
+            10.7,
+            10.9,
+            11.8,
+            6.7,
+            24.9,
+            21.7,
+            11.4,
+            21.2,
+            13.0
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "eager": {
+          "runsMs": [
+            6.7448,
+            8.5294,
+            6.561,
+            9.2166,
+            7.6239,
+            7.5895,
+            7.1787,
+            7.2047,
+            8.866
+          ],
+          "medianMs": 7.5895,
+          "p25Ms": 7.1787,
+          "p75Ms": 8.5294,
+          "minMs": 6.561,
+          "maxMs": 9.2166,
+          "backgroundCpuPct": [
+            17.1,
+            14.8,
+            5.4,
+            20.0,
+            23.7,
+            13.3,
+            11.1,
+            17.8,
+            27.3
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 8.7075,
+              "backgroundCpuPct": 25.6
+            },
+            {
+              "ms": 9.3134,
+              "backgroundCpuPct": 29.9
+            },
+            {
+              "ms": 80.288,
+              "backgroundCpuPct": 84.3
+            }
+          ],
+          "errors": []
+        }
+      },
+      "modesUnavailable": {}
+    },
+    {
+      "model": "lstm",
+      "device": "cpu",
+      "aidotnet": {
+        "runsMs": [
+          27.0461,
+          27.8793,
+          28.0624,
+          28.9818,
+          26.9926,
+          27.6944,
+          28.0122,
+          29.4633,
+          26.4796
+        ],
+        "medianMs": 27.8793,
+        "p25Ms": 27.0461,
+        "p75Ms": 28.0624,
+        "minMs": 26.4796,
+        "maxMs": 29.4633,
+        "backgroundCpuPct": [
+          15.5,
+          11.3,
+          10.3,
+          18.0,
+          13.0,
+          12.4,
+          10.2,
+          12.3,
+          11.5
+        ],
+        "discardedNoisyRuns": [],
+        "errors": []
+      },
+      "pytorchBestMode": "eager+fused-adamw",
+      "pytorchBest": {
+        "runsMs": [
+          4.5896,
+          5.5496,
+          5.4426,
+          5.0635,
+          5.2365,
+          5.8396,
+          4.8362,
+          4.4503,
+          4.445
+        ],
+        "medianMs": 5.0635,
+        "p25Ms": 4.5896,
+        "p75Ms": 5.4426,
+        "minMs": 4.445,
+        "maxMs": 5.8396,
+        "backgroundCpuPct": [
+          5.4,
+          9.2,
+          24.4,
+          22.1,
+          21.4,
+          22.5,
+          12.2,
+          11.6,
+          10.2
+        ],
+        "discardedNoisyRuns": [
+          {
+            "ms": 7.6969,
+            "backgroundCpuPct": 57.9
+          },
+          {
+            "ms": 5.5083,
+            "backgroundCpuPct": 25.8
+          }
+        ],
+        "errors": []
+      },
+      "pytorchEager": {
+        "runsMs": [
+          4.9863,
+          5.1549,
+          5.1208,
+          5.689,
+          5.1452,
+          5.5257,
+          6.1297,
+          4.6435,
+          4.7609
+        ],
+        "medianMs": 5.1452,
+        "p25Ms": 4.9863,
+        "p75Ms": 5.5257,
+        "minMs": 4.6435,
+        "maxMs": 6.1297,
+        "backgroundCpuPct": [
+          14.7,
+          11.5,
+          10.3,
+          13.5,
+          10.2,
+          12.8,
+          21.6,
+          13.6,
+          4.2
+        ],
+        "discardedNoisyRuns": [
+          {
+            "ms": 54.6022,
+            "backgroundCpuPct": 77.6
+          }
+        ],
+        "errors": []
+      },
+      "ratioOursOverBest": 5.506,
+      "ratioOursOverEager": 5.418,
+      "verdict": "LOSE",
+      "selection": {
+        "eager": {
+          "runsMs": [
+            5.2934,
+            5.6608,
+            5.4042
+          ],
+          "medianMs": 5.4042,
+          "p25Ms": 5.3488,
+          "p75Ms": 5.5325,
+          "minMs": 5.2934,
+          "maxMs": 5.6608,
+          "backgroundCpuPct": [
+            12.3,
+            12.0,
+            12.6
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 5.3873,
+              "backgroundCpuPct": 32.0
+            },
+            {
+              "ms": 5.8632,
+              "backgroundCpuPct": 25.4
+            }
+          ],
+          "errors": []
+        },
+        "compile[inductor]": {
+          "runsMs": [
+            5.4658,
+            5.2074,
+            84.7014
+          ],
+          "medianMs": 5.4658,
+          "p25Ms": 5.3366,
+          "p75Ms": 45.0836,
+          "minMs": 5.2074,
+          "maxMs": 84.7014,
+          "backgroundCpuPct": [
+            12.8,
+            13.1,
+            61.1
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 8.4339,
+              "backgroundCpuPct": 26.9
+            },
+            {
+              "ms": 6.3399,
+              "backgroundCpuPct": 35.9
+            }
+          ],
+          "errors": []
+        },
+        "eager+fused-adamw": {
+          "runsMs": [
+            5.0537,
+            4.9102,
+            4.8205
+          ],
+          "medianMs": 4.9102,
+          "p25Ms": 4.8653,
+          "p75Ms": 4.982,
+          "minMs": 4.8205,
+          "maxMs": 5.0537,
+          "backgroundCpuPct": [
+            13.3,
+            12.3,
+            19.6
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[inductor]+fused-adamw": {
+          "runsMs": [
+            5.0916,
+            5.0342,
+            5.5409
+          ],
+          "medianMs": 5.0916,
+          "p25Ms": 5.0629,
+          "p75Ms": 5.3163,
+          "minMs": 5.0342,
+          "maxMs": 5.5409,
+          "backgroundCpuPct": [
+            17.0,
+            15.0,
+            14.8
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 5.3385,
+              "backgroundCpuPct": 25.2
+            }
+          ],
+          "errors": []
+        }
+      },
+      "final": {
+        "eager+fused-adamw": {
+          "runsMs": [
+            4.5896,
+            5.5496,
+            5.4426,
+            5.0635,
+            5.2365,
+            5.8396,
+            4.8362,
+            4.4503,
+            4.445
+          ],
+          "medianMs": 5.0635,
+          "p25Ms": 4.5896,
+          "p75Ms": 5.4426,
+          "minMs": 4.445,
+          "maxMs": 5.8396,
+          "backgroundCpuPct": [
+            5.4,
+            9.2,
+            24.4,
+            22.1,
+            21.4,
+            22.5,
+            12.2,
+            11.6,
+            10.2
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 7.6969,
+              "backgroundCpuPct": 57.9
+            },
+            {
+              "ms": 5.5083,
+              "backgroundCpuPct": 25.8
+            }
+          ],
+          "errors": []
+        },
+        "compile[inductor]+fused-adamw": {
+          "runsMs": [
+            6.1989,
+            4.9335,
+            5.1638,
+            4.8274,
+            5.111,
+            6.1494,
+            6.1352,
+            4.6112,
+            5.5401
+          ],
+          "medianMs": 5.1638,
+          "p25Ms": 4.9335,
+          "p75Ms": 6.1352,
+          "minMs": 4.6112,
+          "maxMs": 6.1989,
+          "backgroundCpuPct": [
+            23.9,
+            13.3,
+            12.0,
+            22.2,
+            17.1,
+            24.1,
+            13.4,
+            12.3,
+            15.3
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 11.7941,
+              "backgroundCpuPct": 44.7
+            },
+            {
+              "ms": 5.5976,
+              "backgroundCpuPct": 28.3
+            },
+            {
+              "ms": 5.5354,
+              "backgroundCpuPct": 25.1
+            },
+            {
+              "ms": 4.7044,
+              "backgroundCpuPct": 27.5
+            }
+          ],
+          "errors": []
+        },
+        "eager": {
+          "runsMs": [
+            4.9863,
+            5.1549,
+            5.1208,
+            5.689,
+            5.1452,
+            5.5257,
+            6.1297,
+            4.6435,
+            4.7609
+          ],
+          "medianMs": 5.1452,
+          "p25Ms": 4.9863,
+          "p75Ms": 5.5257,
+          "minMs": 4.6435,
+          "maxMs": 6.1297,
+          "backgroundCpuPct": [
+            14.7,
+            11.5,
+            10.3,
+            13.5,
+            10.2,
+            12.8,
+            21.6,
+            13.6,
+            4.2
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 54.6022,
+              "backgroundCpuPct": 77.6
+            }
+          ],
+          "errors": []
+        }
+      },
+      "modesUnavailable": {}
+    },
+    {
+      "model": "transformer",
+      "device": "cpu",
+      "aidotnet": {
+        "runsMs": [
+          43.1318,
+          44.8841,
+          45.4397,
+          42.2913,
+          45.1311,
+          44.1609,
+          44.6609,
+          43.4909,
+          42.0095
+        ],
+        "medianMs": 44.1609,
+        "p25Ms": 43.1318,
+        "p75Ms": 44.8841,
+        "minMs": 42.0095,
+        "maxMs": 45.4397,
+        "backgroundCpuPct": [
+          11.1,
+          16.0,
+          23.8,
+          9.8,
+          19.0,
+          13.6,
+          18.8,
+          13.0,
+          10.3
+        ],
+        "discardedNoisyRuns": [
+          {
+            "ms": 49.5844,
+            "backgroundCpuPct": 30.0
+          }
+        ],
+        "errors": []
+      },
+      "pytorchBestMode": "eager+fused-adamw",
+      "pytorchBest": {
+        "runsMs": [
+          17.85,
+          14.9248,
+          17.7389,
+          14.2172,
+          15.3544,
+          14.7305,
+          15.2442,
+          15.2618,
+          17.2099
+        ],
+        "medianMs": 15.2618,
+        "p25Ms": 14.9248,
+        "p75Ms": 17.2099,
+        "minMs": 14.2172,
+        "maxMs": 17.85,
+        "backgroundCpuPct": [
+          20.5,
+          19.2,
+          24.0,
+          13.0,
+          15.2,
+          13.2,
+          12.6,
+          11.2,
+          20.3
+        ],
+        "discardedNoisyRuns": [
+          {
+            "ms": 18.6347,
+            "backgroundCpuPct": 26.1
+          },
+          {
+            "ms": 51.8976,
+            "backgroundCpuPct": 43.0
+          }
+        ],
+        "errors": []
+      },
+      "pytorchEager": {
+        "runsMs": [
+          18.33,
+          18.0506,
+          16.8899,
+          16.4032,
+          17.1524,
+          19.8303,
+          16.314,
+          20.2519,
+          16.3236
+        ],
+        "medianMs": 17.1524,
+        "p25Ms": 16.4032,
+        "p75Ms": 18.33,
+        "minMs": 16.314,
+        "maxMs": 20.2519,
+        "backgroundCpuPct": [
+          17.3,
+          18.3,
+          16.4,
+          13.5,
+          9.8,
+          20.3,
+          16.1,
+          16.7,
+          16.6
+        ],
+        "discardedNoisyRuns": [
+          {
+            "ms": 20.0399,
+            "backgroundCpuPct": 26.3
+          },
+          {
+            "ms": 20.8093,
+            "backgroundCpuPct": 30.3
+          }
+        ],
+        "errors": []
+      },
+      "ratioOursOverBest": 2.894,
+      "ratioOursOverEager": 2.575,
+      "verdict": "LOSE",
+      "selection": {
+        "eager": {
+          "runsMs": [
+            17.9884,
+            17.0289,
+            16.2859
+          ],
+          "medianMs": 17.0289,
+          "p25Ms": 16.6574,
+          "p75Ms": 17.5086,
+          "minMs": 16.2859,
+          "maxMs": 17.9884,
+          "backgroundCpuPct": [
+            16.1,
+            24.2,
+            14.1
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[inductor]": {
+          "runsMs": [
+            16.692,
+            15.9603,
+            20.9779
+          ],
+          "medianMs": 16.692,
+          "p25Ms": 16.3262,
+          "p75Ms": 18.8349,
+          "minMs": 15.9603,
+          "maxMs": 20.9779,
+          "backgroundCpuPct": [
+            13.6,
+            16.5,
+            15.3
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 18.0781,
+              "backgroundCpuPct": 33.2
+            }
+          ],
+          "errors": []
+        },
+        "eager+fused-adamw": {
+          "runsMs": [
+            13.1478,
+            15.4452,
+            25.3338
+          ],
+          "medianMs": 15.4452,
+          "p25Ms": 14.2965,
+          "p75Ms": 20.3895,
+          "minMs": 13.1478,
+          "maxMs": 25.3338,
+          "backgroundCpuPct": [
+            12.9,
+            16.6,
+            33.3
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 16.7692,
+              "backgroundCpuPct": 36.2
+            },
+            {
+              "ms": 45.076,
+              "backgroundCpuPct": 59.9
+            },
+            {
+              "ms": 17.9573,
+              "backgroundCpuPct": 30.9
+            }
+          ],
+          "errors": []
+        },
+        "compile[inductor]+fused-adamw": {
+          "runsMs": [
+            17.8403,
+            16.6787,
+            17.3316
+          ],
+          "medianMs": 17.3316,
+          "p25Ms": 17.0051,
+          "p75Ms": 17.5859,
+          "minMs": 16.6787,
+          "maxMs": 17.8403,
+          "backgroundCpuPct": [
+            17.9,
+            15.1,
+            20.1
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        }
+      },
+      "final": {
+        "eager+fused-adamw": {
+          "runsMs": [
+            17.85,
+            14.9248,
+            17.7389,
+            14.2172,
+            15.3544,
+            14.7305,
+            15.2442,
+            15.2618,
+            17.2099
+          ],
+          "medianMs": 15.2618,
+          "p25Ms": 14.9248,
+          "p75Ms": 17.2099,
+          "minMs": 14.2172,
+          "maxMs": 17.85,
+          "backgroundCpuPct": [
+            20.5,
+            19.2,
+            24.0,
+            13.0,
+            15.2,
+            13.2,
+            12.6,
+            11.2,
+            20.3
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 18.6347,
+              "backgroundCpuPct": 26.1
+            },
+            {
+              "ms": 51.8976,
+              "backgroundCpuPct": 43.0
+            }
+          ],
+          "errors": []
+        },
+        "compile[inductor]": {
+          "runsMs": [
+            17.5041,
+            18.9923,
+            18.892,
+            17.5213,
+            17.4001,
+            18.3697,
+            21.3807,
+            18.7252,
+            17.9772
+          ],
+          "medianMs": 18.3697,
+          "p25Ms": 17.5213,
+          "p75Ms": 18.892,
+          "minMs": 17.4001,
+          "maxMs": 21.3807,
+          "backgroundCpuPct": [
+            15.3,
+            21.3,
+            24.8,
+            12.3,
+            13.2,
+            22.0,
+            22.1,
+            20.4,
+            15.8
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 20.3913,
+              "backgroundCpuPct": 43.6
+            },
+            {
+              "ms": 19.3227,
+              "backgroundCpuPct": 26.9
+            }
+          ],
+          "errors": []
+        },
+        "eager": {
+          "runsMs": [
+            18.33,
+            18.0506,
+            16.8899,
+            16.4032,
+            17.1524,
+            19.8303,
+            16.314,
+            20.2519,
+            16.3236
+          ],
+          "medianMs": 17.1524,
+          "p25Ms": 16.4032,
+          "p75Ms": 18.33,
+          "minMs": 16.314,
+          "maxMs": 20.2519,
+          "backgroundCpuPct": [
+            17.3,
+            18.3,
+            16.4,
+            13.5,
+            9.8,
+            20.3,
+            16.1,
+            16.7,
+            16.6
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 20.0399,
+              "backgroundCpuPct": 26.3
+            },
+            {
+              "ms": 20.8093,
+              "backgroundCpuPct": 30.3
+            }
+          ],
+          "errors": []
+        }
+      },
+      "modesUnavailable": {}
+    },
+    {
+      "model": "mlp",
+      "device": "cuda",
+      "aidotnet": {
+        "runsMs": [
+          1.9813,
+          1.9723,
+          1.9271,
+          2.0606,
+          2.2277,
+          2.1152,
+          1.9831,
+          2.0995,
+          1.9282
+        ],
+        "medianMs": 1.9831,
+        "p25Ms": 1.9723,
+        "p75Ms": 2.0995,
+        "minMs": 1.9271,
+        "maxMs": 2.2277,
+        "backgroundCpuPct": [
+          5.9,
+          5.0,
+          3.4,
+          10.7,
+          17.8,
+          16.3,
+          10.0,
+          8.8,
+          16.3
+        ],
+        "discardedNoisyRuns": [
+          {
+            "ms": 2.0349,
+            "backgroundCpuPct": 40.8
+          }
+        ],
+        "errors": []
+      },
+      "pytorchBestMode": "compile[cudagraphs]+fused-adamw",
+      "pytorchBest": {
+        "runsMs": [
+          2.0694,
+          2.2156,
+          2.3474,
+          1.856,
+          2.1195,
+          2.1878,
+          2.087,
+          2.4072,
+          2.3831
+        ],
+        "medianMs": 2.1878,
+        "p25Ms": 2.087,
+        "p75Ms": 2.3474,
+        "minMs": 1.856,
+        "maxMs": 2.4072,
+        "backgroundCpuPct": [
+          4.7,
+          19.0,
+          16.1,
+          7.3,
+          14.8,
+          18.1,
+          17.8,
+          12.2,
+          11.9
+        ],
+        "discardedNoisyRuns": [
+          {
+            "ms": 2.26,
+            "backgroundCpuPct": 37.1
+          },
+          {
+            "ms": 10.4088,
+            "backgroundCpuPct": 83.4
+          }
+        ],
+        "errors": []
+      },
+      "pytorchEager": {
+        "runsMs": [
+          2.5881,
+          2.225,
+          2.7949,
+          2.5601,
+          3.6847,
+          2.4585,
+          2.4639,
+          2.6181,
+          2.5978
+        ],
+        "medianMs": 2.5881,
+        "p25Ms": 2.4639,
+        "p75Ms": 2.6181,
+        "minMs": 2.225,
+        "maxMs": 3.6847,
+        "backgroundCpuPct": [
+          7.5,
+          17.5,
+          16.6,
+          8.4,
+          19.5,
+          10.5,
+          10.0,
+          17.6,
+          10.3
+        ],
+        "discardedNoisyRuns": [
+          {
+            "ms": 2.6101,
+            "backgroundCpuPct": 31.6
+          },
+          {
+            "ms": 3.1843,
+            "backgroundCpuPct": 28.9
+          }
+        ],
+        "errors": []
+      },
+      "ratioOursOverBest": 0.906,
+      "ratioOursOverEager": 0.766,
+      "verdict": "win",
+      "selection": {
+        "eager": {
+          "runsMs": [
+            2.5644,
+            2.3547,
+            2.7783
+          ],
+          "medianMs": 2.5644,
+          "p25Ms": 2.4595,
+          "p75Ms": 2.6713,
+          "minMs": 2.3547,
+          "maxMs": 2.7783,
+          "backgroundCpuPct": [
+            15.4,
+            19.9,
+            12.2
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[inductor]": {
+          "runsMs": [
+            2.8669,
+            3.1016,
+            3.3788
+          ],
+          "medianMs": 3.1016,
+          "p25Ms": 2.9842,
+          "p75Ms": 3.2402,
+          "minMs": 2.8669,
+          "maxMs": 3.3788,
+          "backgroundCpuPct": [
+            12.1,
+            20.1,
+            18.0
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[inductor/reduce-overhead]": {
+          "runsMs": [
+            2.8361,
+            2.4693,
+            3.1286
+          ],
+          "medianMs": 2.8361,
+          "p25Ms": 2.6527,
+          "p75Ms": 2.9824,
+          "minMs": 2.4693,
+          "maxMs": 3.1286,
+          "backgroundCpuPct": [
+            16.6,
+            18.3,
+            14.6
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 13.1203,
+              "backgroundCpuPct": 84.6
+            }
+          ],
+          "errors": []
+        },
+        "compile[cudagraphs]": {
+          "runsMs": [
+            2.6757,
+            3.0282,
+            2.6884
+          ],
+          "medianMs": 2.6884,
+          "p25Ms": 2.682,
+          "p75Ms": 2.8583,
+          "minMs": 2.6757,
+          "maxMs": 3.0282,
+          "backgroundCpuPct": [
+            13.8,
+            22.7,
+            13.4
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "eager+fused-adamw": {
+          "runsMs": [
+            2.5417,
+            3.1519,
+            2.2795
+          ],
+          "medianMs": 2.5417,
+          "p25Ms": 2.4106,
+          "p75Ms": 2.8468,
+          "minMs": 2.2795,
+          "maxMs": 3.1519,
+          "backgroundCpuPct": [
+            23.1,
+            18.8,
+            13.5
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[inductor]+fused-adamw": {
+          "runsMs": [
+            3.3338,
+            3.0196,
+            3.1979
+          ],
+          "medianMs": 3.1979,
+          "p25Ms": 3.1088,
+          "p75Ms": 3.2659,
+          "minMs": 3.0196,
+          "maxMs": 3.3338,
+          "backgroundCpuPct": [
+            21.3,
+            20.4,
+            18.0
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[inductor/reduce-overhead]+fused-adamw": {
+          "runsMs": [
+            2.1208,
+            2.0755,
+            2.3926
+          ],
+          "medianMs": 2.1208,
+          "p25Ms": 2.0982,
+          "p75Ms": 2.2567,
+          "minMs": 2.0755,
+          "maxMs": 2.3926,
+          "backgroundCpuPct": [
+            18.3,
+            13.7,
+            20.9
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[cudagraphs]+fused-adamw": {
+          "runsMs": [
+            2.2933,
+            2.3669,
+            2.444
+          ],
+          "medianMs": 2.3669,
+          "p25Ms": 2.3301,
+          "p75Ms": 2.4054,
+          "minMs": 2.2933,
+          "maxMs": 2.444,
+          "backgroundCpuPct": [
+            13.9,
+            13.1,
+            15.8
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 2.6056,
+              "backgroundCpuPct": 29.5
+            }
+          ],
+          "errors": []
+        }
+      },
+      "final": {
+        "compile[inductor/reduce-overhead]+fused-adamw": {
+          "runsMs": [
+            2.6734,
+            2.334,
+            1.9858,
+            2.4183,
+            1.7997,
+            2.9847,
+            2.5141,
+            2.2256,
+            3.2182
+          ],
+          "medianMs": 2.4183,
+          "p25Ms": 2.2256,
+          "p75Ms": 2.6734,
+          "minMs": 1.7997,
+          "maxMs": 3.2182,
+          "backgroundCpuPct": [
+            18.6,
+            11.3,
+            24.1,
+            16.2,
+            22.9,
+            10.2,
+            18.2,
+            11.2,
+            18.0
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[cudagraphs]+fused-adamw": {
+          "runsMs": [
+            2.0694,
+            2.2156,
+            2.3474,
+            1.856,
+            2.1195,
+            2.1878,
+            2.087,
+            2.4072,
+            2.3831
+          ],
+          "medianMs": 2.1878,
+          "p25Ms": 2.087,
+          "p75Ms": 2.3474,
+          "minMs": 1.856,
+          "maxMs": 2.4072,
+          "backgroundCpuPct": [
+            4.7,
+            19.0,
+            16.1,
+            7.3,
+            14.8,
+            18.1,
+            17.8,
+            12.2,
+            11.9
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 2.26,
+              "backgroundCpuPct": 37.1
+            },
+            {
+              "ms": 10.4088,
+              "backgroundCpuPct": 83.4
+            }
+          ],
+          "errors": []
+        },
+        "eager": {
+          "runsMs": [
+            2.5881,
+            2.225,
+            2.7949,
+            2.5601,
+            3.6847,
+            2.4585,
+            2.4639,
+            2.6181,
+            2.5978
+          ],
+          "medianMs": 2.5881,
+          "p25Ms": 2.4639,
+          "p75Ms": 2.6181,
+          "minMs": 2.225,
+          "maxMs": 3.6847,
+          "backgroundCpuPct": [
+            7.5,
+            17.5,
+            16.6,
+            8.4,
+            19.5,
+            10.5,
+            10.0,
+            17.6,
+            10.3
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 2.6101,
+              "backgroundCpuPct": 31.6
+            },
+            {
+              "ms": 3.1843,
+              "backgroundCpuPct": 28.9
+            }
+          ],
+          "errors": []
+        }
+      },
+      "modesUnavailable": {}
+    },
+    {
+      "model": "cnn",
+      "device": "cuda",
+      "aidotnet": {
+        "runsMs": [
+          3.6931,
+          3.7086,
+          3.2648,
+          3.2942,
+          3.4959,
+          3.4129,
+          4.0772,
+          3.5181,
+          3.5132
+        ],
+        "medianMs": 3.5132,
+        "p25Ms": 3.4129,
+        "p75Ms": 3.6931,
+        "minMs": 3.2648,
+        "maxMs": 4.0772,
+        "backgroundCpuPct": [
+          20.9,
+          17.7,
+          10.1,
+          12.2,
+          29.9,
+          15.6,
+          15.2,
+          19.3,
+          15.9
+        ],
+        "discardedNoisyRuns": [
+          {
+            "ms": 3.5976,
+            "backgroundCpuPct": 34.4
+          },
+          {
+            "ms": 3.6452,
+            "backgroundCpuPct": 41.7
+          },
+          {
+            "ms": 3.8898,
+            "backgroundCpuPct": 40.0
+          }
+        ],
+        "errors": []
+      },
+      "pytorchBestMode": "compile[cudagraphs]+fused-adamw",
+      "pytorchBest": {
+        "runsMs": [
+          2.5242,
+          2.9156,
+          2.5212,
+          2.3765,
+          2.8973,
+          2.0261,
+          2.5338,
+          2.5738,
+          2.3354
+        ],
+        "medianMs": 2.5242,
+        "p25Ms": 2.3765,
+        "p75Ms": 2.5738,
+        "minMs": 2.0261,
+        "maxMs": 2.9156,
+        "backgroundCpuPct": [
+          20.0,
+          17.8,
+          12.1,
+          19.3,
+          24.6,
+          13.8,
+          14.9,
+          19.0,
+          11.7
+        ],
+        "discardedNoisyRuns": [
+          {
+            "ms": 2.496,
+            "backgroundCpuPct": 26.1
+          },
+          {
+            "ms": 2.5811,
+            "backgroundCpuPct": 39.7
+          }
+        ],
+        "errors": []
+      },
+      "pytorchEager": {
+        "runsMs": [
+          3.8508,
+          4.1779,
+          3.6455,
+          3.4874,
+          4.3321,
+          3.6603,
+          3.0268,
+          3.2299,
+          2.9196
+        ],
+        "medianMs": 3.6455,
+        "p25Ms": 3.2299,
+        "p75Ms": 3.8508,
+        "minMs": 2.9196,
+        "maxMs": 4.3321,
+        "backgroundCpuPct": [
+          19.8,
+          19.4,
+          11.0,
+          16.8,
+          18.6,
+          20.6,
+          24.7,
+          13.8,
+          16.9
+        ],
+        "discardedNoisyRuns": [
+          {
+            "ms": 3.2704,
+            "backgroundCpuPct": 39.1
+          },
+          {
+            "ms": 10.4499,
+            "backgroundCpuPct": 69.1
+          },
+          {
+            "ms": 4.2827,
+            "backgroundCpuPct": 37.0
+          }
+        ],
+        "errors": []
+      },
+      "ratioOursOverBest": 1.392,
+      "ratioOursOverEager": 0.964,
+      "verdict": "LOSE",
+      "selection": {
+        "eager": {
+          "runsMs": [
+            3.2119,
+            2.7959,
+            3.4171
+          ],
+          "medianMs": 3.2119,
+          "p25Ms": 3.0039,
+          "p75Ms": 3.3144,
+          "minMs": 2.7959,
+          "maxMs": 3.4171,
+          "backgroundCpuPct": [
+            14.3,
+            10.4,
+            10.1
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[inductor]": {
+          "runsMs": [
+            16.8476,
+            3.6769,
+            3.5491
+          ],
+          "medianMs": 3.6769,
+          "p25Ms": 3.613,
+          "p75Ms": 10.2622,
+          "minMs": 3.5491,
+          "maxMs": 16.8476,
+          "backgroundCpuPct": [
+            71.5,
+            23.7,
+            12.0
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 12.465,
+              "backgroundCpuPct": 85.1
+            },
+            {
+              "ms": 4.6736,
+              "backgroundCpuPct": 32.9
+            }
+          ],
+          "errors": []
+        },
+        "compile[inductor/reduce-overhead]": {
+          "runsMs": [
+            2.3191,
+            2.6826,
+            3.7438
+          ],
+          "medianMs": 2.6826,
+          "p25Ms": 2.5009,
+          "p75Ms": 3.2132,
+          "minMs": 2.3191,
+          "maxMs": 3.7438,
+          "backgroundCpuPct": [
+            12.6,
+            22.8,
+            20.4
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 3.6613,
+              "backgroundCpuPct": 32.6
+            }
+          ],
+          "errors": []
+        },
+        "compile[cudagraphs]": {
+          "runsMs": [
+            2.6479,
+            2.9872,
+            2.7315
+          ],
+          "medianMs": 2.7315,
+          "p25Ms": 2.6897,
+          "p75Ms": 2.8593,
+          "minMs": 2.6479,
+          "maxMs": 2.9872,
+          "backgroundCpuPct": [
+            18.4,
+            17.7,
+            22.5
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "eager+fused-adamw": {
+          "runsMs": [
+            3.0042,
+            3.0929,
+            3.1224
+          ],
+          "medianMs": 3.0929,
+          "p25Ms": 3.0486,
+          "p75Ms": 3.1077,
+          "minMs": 3.0042,
+          "maxMs": 3.1224,
+          "backgroundCpuPct": [
+            21.8,
+            14.0,
+            13.2
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[inductor]+fused-adamw": {
+          "runsMs": [
+            3.1711,
+            3.8508,
+            3.1217
+          ],
+          "medianMs": 3.1711,
+          "p25Ms": 3.1464,
+          "p75Ms": 3.5109,
+          "minMs": 3.1217,
+          "maxMs": 3.8508,
+          "backgroundCpuPct": [
+            13.2,
+            46.9,
+            11.3
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 8.7637,
+              "backgroundCpuPct": 39.8
+            },
+            {
+              "ms": 4.6344,
+              "backgroundCpuPct": 27.1
+            },
+            {
+              "ms": 2.871,
+              "backgroundCpuPct": 26.5
+            }
+          ],
+          "errors": []
+        },
+        "compile[inductor/reduce-overhead]+fused-adamw": {
+          "runsMs": [
+            2.6933,
+            7.2026,
+            2.3405
+          ],
+          "medianMs": 2.6933,
+          "p25Ms": 2.5169,
+          "p75Ms": 4.948,
+          "minMs": 2.3405,
+          "maxMs": 7.2026,
+          "backgroundCpuPct": [
+            15.7,
+            78.3,
+            20.8
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 3.8824,
+              "backgroundCpuPct": 34.5
+            },
+            {
+              "ms": 2.6867,
+              "backgroundCpuPct": 27.3
+            },
+            {
+              "ms": 2.7857,
+              "backgroundCpuPct": 28.9
+            }
+          ],
+          "errors": []
+        },
+        "compile[cudagraphs]+fused-adamw": {
+          "runsMs": [
+            2.6496,
+            2.5171,
+            2.8074
+          ],
+          "medianMs": 2.6496,
+          "p25Ms": 2.5834,
+          "p75Ms": 2.7285,
+          "minMs": 2.5171,
+          "maxMs": 2.8074,
+          "backgroundCpuPct": [
+            14.1,
+            12.6,
+            22.8
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 6.5147,
+              "backgroundCpuPct": 85.6
+            }
+          ],
+          "errors": []
+        }
+      },
+      "final": {
+        "compile[cudagraphs]+fused-adamw": {
+          "runsMs": [
+            2.5242,
+            2.9156,
+            2.5212,
+            2.3765,
+            2.8973,
+            2.0261,
+            2.5338,
+            2.5738,
+            2.3354
+          ],
+          "medianMs": 2.5242,
+          "p25Ms": 2.3765,
+          "p75Ms": 2.5738,
+          "minMs": 2.0261,
+          "maxMs": 2.9156,
+          "backgroundCpuPct": [
+            20.0,
+            17.8,
+            12.1,
+            19.3,
+            24.6,
+            13.8,
+            14.9,
+            19.0,
+            11.7
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 2.496,
+              "backgroundCpuPct": 26.1
+            },
+            {
+              "ms": 2.5811,
+              "backgroundCpuPct": 39.7
+            }
+          ],
+          "errors": []
+        },
+        "compile[inductor/reduce-overhead]": {
+          "runsMs": [
+            2.9077,
+            3.2323,
+            2.9024,
+            3.7762,
+            2.4736,
+            2.8883,
+            2.5061,
+            2.5703,
+            2.5593
+          ],
+          "medianMs": 2.8883,
+          "p25Ms": 2.5593,
+          "p75Ms": 2.9077,
+          "minMs": 2.4736,
+          "maxMs": 3.7762,
+          "backgroundCpuPct": [
+            17.5,
+            21.0,
+            13.3,
+            20.5,
+            21.3,
+            20.8,
+            12.4,
+            13.4,
+            12.7
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 2.4834,
+              "backgroundCpuPct": 73.4
+            }
+          ],
+          "errors": []
+        },
+        "eager": {
+          "runsMs": [
+            3.8508,
+            4.1779,
+            3.6455,
+            3.4874,
+            4.3321,
+            3.6603,
+            3.0268,
+            3.2299,
+            2.9196
+          ],
+          "medianMs": 3.6455,
+          "p25Ms": 3.2299,
+          "p75Ms": 3.8508,
+          "minMs": 2.9196,
+          "maxMs": 4.3321,
+          "backgroundCpuPct": [
+            19.8,
+            19.4,
+            11.0,
+            16.8,
+            18.6,
+            20.6,
+            24.7,
+            13.8,
+            16.9
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 3.2704,
+              "backgroundCpuPct": 39.1
+            },
+            {
+              "ms": 10.4499,
+              "backgroundCpuPct": 69.1
+            },
+            {
+              "ms": 4.2827,
+              "backgroundCpuPct": 37.0
+            }
+          ],
+          "errors": []
+        }
+      },
+      "modesUnavailable": {}
+    },
+    {
+      "model": "lstm",
+      "device": "cuda",
+      "aidotnet": {
+        "runsMs": [
+          10.9519,
+          10.9634,
+          11.2762,
+          11.1399,
+          10.8911,
+          11.3384,
+          10.9738,
+          10.8095,
+          10.9057
+        ],
+        "medianMs": 10.9634,
+        "p25Ms": 10.9057,
+        "p75Ms": 11.1399,
+        "minMs": 10.8095,
+        "maxMs": 11.3384,
+        "backgroundCpuPct": [
+          12.5,
+          13.2,
+          22.5,
+          20.1,
+          10.6,
+          14.6,
+          4.0,
+          14.1,
+          4.3
+        ],
+        "discardedNoisyRuns": [],
+        "errors": []
+      },
+      "pytorchBestMode": "compile[inductor]+fused-adamw",
+      "pytorchBest": {
+        "runsMs": [
+          3.9449,
+          3.5119,
+          3.166,
+          3.2654,
+          3.1364,
+          3.713,
+          3.1706,
+          3.4069,
+          3.5493
+        ],
+        "medianMs": 3.4069,
+        "p25Ms": 3.1706,
+        "p75Ms": 3.5493,
+        "minMs": 3.1364,
+        "maxMs": 3.9449,
+        "backgroundCpuPct": [
+          15.8,
+          19.8,
+          20.1,
+          13.8,
+          11.8,
+          7.8,
+          12.2,
+          17.4,
+          13.6
+        ],
+        "discardedNoisyRuns": [],
+        "errors": []
+      },
+      "pytorchEager": {
+        "runsMs": [
+          3.56,
+          3.3687,
+          3.7475,
+          3.126,
+          2.7099,
+          3.0549,
+          3.6858,
+          3.6753,
+          2.7964
+        ],
+        "medianMs": 3.3687,
+        "p25Ms": 3.0549,
+        "p75Ms": 3.6753,
+        "minMs": 2.7099,
+        "maxMs": 3.7475,
+        "backgroundCpuPct": [
+          15.4,
+          15.5,
+          19.2,
+          14.7,
+          11.7,
+          6.3,
+          13.8,
+          12.1,
+          14.2
+        ],
+        "discardedNoisyRuns": [
+          {
+            "ms": 3.4424,
+            "backgroundCpuPct": 32.7
+          }
+        ],
+        "errors": []
+      },
+      "ratioOursOverBest": 3.218,
+      "ratioOursOverEager": 3.255,
+      "verdict": "LOSE",
+      "selection": {
+        "eager": {
+          "runsMs": [
+            3.1978,
+            3.7333,
+            3.5601
+          ],
+          "medianMs": 3.5601,
+          "p25Ms": 3.3789,
+          "p75Ms": 3.6467,
+          "minMs": 3.1978,
+          "maxMs": 3.7333,
+          "backgroundCpuPct": [
+            14.4,
+            19.4,
+            15.5
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[inductor]": {
+          "runsMs": [
+            4.2005,
+            3.5811,
+            3.3867
+          ],
+          "medianMs": 3.5811,
+          "p25Ms": 3.4839,
+          "p75Ms": 3.8908,
+          "minMs": 3.3867,
+          "maxMs": 4.2005,
+          "backgroundCpuPct": [
+            18.0,
+            11.5,
+            11.6
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 3.678,
+              "backgroundCpuPct": 25.0
+            }
+          ],
+          "errors": []
+        },
+        "compile[inductor/reduce-overhead]": {
+          "runsMs": [
+            3.6536,
+            3.5536,
+            3.429
+          ],
+          "medianMs": 3.5536,
+          "p25Ms": 3.4913,
+          "p75Ms": 3.6036,
+          "minMs": 3.429,
+          "maxMs": 3.6536,
+          "backgroundCpuPct": [
+            15.2,
+            14.4,
+            10.9
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 5.1858,
+              "backgroundCpuPct": 66.2
+            }
+          ],
+          "errors": []
+        },
+        "compile[cudagraphs]": {
+          "runsMs": [
+            3.8822,
+            3.7614,
+            3.5407
+          ],
+          "medianMs": 3.7614,
+          "p25Ms": 3.651,
+          "p75Ms": 3.8218,
+          "minMs": 3.5407,
+          "maxMs": 3.8822,
+          "backgroundCpuPct": [
+            10.0,
+            11.3,
+            12.4
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "eager+fused-adamw": {
+          "runsMs": [
+            3.4692,
+            2.9935,
+            3.2874
+          ],
+          "medianMs": 3.2874,
+          "p25Ms": 3.1405,
+          "p75Ms": 3.3783,
+          "minMs": 2.9935,
+          "maxMs": 3.4692,
+          "backgroundCpuPct": [
+            11.3,
+            11.8,
+            12.2
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[inductor]+fused-adamw": {
+          "runsMs": [
+            3.0331,
+            3.114,
+            3.3385
+          ],
+          "medianMs": 3.114,
+          "p25Ms": 3.0736,
+          "p75Ms": 3.2262,
+          "minMs": 3.0331,
+          "maxMs": 3.3385,
+          "backgroundCpuPct": [
+            10.4,
+            12.6,
+            12.4
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[inductor/reduce-overhead]+fused-adamw": {
+          "runsMs": [
+            3.4112,
+            3.1077,
+            3.6073
+          ],
+          "medianMs": 3.4112,
+          "p25Ms": 3.2595,
+          "p75Ms": 3.5092,
+          "minMs": 3.1077,
+          "maxMs": 3.6073,
+          "backgroundCpuPct": [
+            11.8,
+            12.2,
+            10.7
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[cudagraphs]+fused-adamw": {
+          "runsMs": [
+            3.4572,
+            2.8258,
+            3.2726
+          ],
+          "medianMs": 3.2726,
+          "p25Ms": 3.0492,
+          "p75Ms": 3.3649,
+          "minMs": 2.8258,
+          "maxMs": 3.4572,
+          "backgroundCpuPct": [
+            14.3,
+            11.0,
+            10.6
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        }
+      },
+      "final": {
+        "compile[inductor]+fused-adamw": {
+          "runsMs": [
+            3.9449,
+            3.5119,
+            3.166,
+            3.2654,
+            3.1364,
+            3.713,
+            3.1706,
+            3.4069,
+            3.5493
+          ],
+          "medianMs": 3.4069,
+          "p25Ms": 3.1706,
+          "p75Ms": 3.5493,
+          "minMs": 3.1364,
+          "maxMs": 3.9449,
+          "backgroundCpuPct": [
+            15.8,
+            19.8,
+            20.1,
+            13.8,
+            11.8,
+            7.8,
+            12.2,
+            17.4,
+            13.6
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[cudagraphs]+fused-adamw": {
+          "runsMs": [
+            3.4632,
+            3.9198,
+            3.4556,
+            3.4144,
+            3.3503,
+            3.6099,
+            3.4366,
+            3.4211,
+            3.5398
+          ],
+          "medianMs": 3.4556,
+          "p25Ms": 3.4211,
+          "p75Ms": 3.5398,
+          "minMs": 3.3503,
+          "maxMs": 3.9198,
+          "backgroundCpuPct": [
+            11.0,
+            24.7,
+            19.4,
+            12.9,
+            11.1,
+            7.3,
+            7.5,
+            17.7,
+            19.5
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 7.4001,
+              "backgroundCpuPct": 86.7
+            }
+          ],
+          "errors": []
+        },
+        "eager": {
+          "runsMs": [
+            3.56,
+            3.3687,
+            3.7475,
+            3.126,
+            2.7099,
+            3.0549,
+            3.6858,
+            3.6753,
+            2.7964
+          ],
+          "medianMs": 3.3687,
+          "p25Ms": 3.0549,
+          "p75Ms": 3.6753,
+          "minMs": 2.7099,
+          "maxMs": 3.7475,
+          "backgroundCpuPct": [
+            15.4,
+            15.5,
+            19.2,
+            14.7,
+            11.7,
+            6.3,
+            13.8,
+            12.1,
+            14.2
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 3.4424,
+              "backgroundCpuPct": 32.7
+            }
+          ],
+          "errors": []
+        }
+      },
+      "modesUnavailable": {}
+    },
+    {
+      "model": "transformer",
+      "device": "cuda",
+      "aidotnet": {
+        "runsMs": [
+          7.0567,
+          6.5774,
+          6.6236,
+          6.2649,
+          6.287,
+          6.311,
+          6.556,
+          6.5607,
+          7.5922
+        ],
+        "medianMs": 6.5607,
+        "p25Ms": 6.311,
+        "p75Ms": 6.6236,
+        "minMs": 6.2649,
+        "maxMs": 7.5922,
+        "backgroundCpuPct": [
+          12.1,
+          13.6,
+          12.4,
+          12.4,
+          14.7,
+          11.3,
+          13.4,
+          15.5,
+          12.0
+        ],
+        "discardedNoisyRuns": [
+          {
+            "ms": 7.1218,
+            "backgroundCpuPct": 37.6
+          }
+        ],
+        "errors": []
+      },
+      "pytorchBestMode": "compile[inductor/reduce-overhead]+fused-adamw",
+      "pytorchBest": {
+        "runsMs": [
+          3.5806,
+          3.3175,
+          3.4625,
+          3.0261,
+          2.564,
+          3.3468,
+          2.959,
+          2.8924,
+          2.9363
+        ],
+        "medianMs": 3.0261,
+        "p25Ms": 2.9363,
+        "p75Ms": 3.3468,
+        "minMs": 2.564,
+        "maxMs": 3.5806,
+        "backgroundCpuPct": [
+          17.2,
+          11.8,
+          13.5,
+          10.3,
+          11.0,
+          10.7,
+          11.3,
+          12.6,
+          15.3
+        ],
+        "discardedNoisyRuns": [],
+        "errors": []
+      },
+      "pytorchEager": {
+        "runsMs": [
+          9.3961,
+          8.3797,
+          9.0379,
+          9.2782,
+          9.0157,
+          8.6618,
+          8.5581,
+          8.6056,
+          9.1506
+        ],
+        "medianMs": 9.0157,
+        "p25Ms": 8.6056,
+        "p75Ms": 9.1506,
+        "minMs": 8.3797,
+        "maxMs": 9.3961,
+        "backgroundCpuPct": [
+          14.4,
+          13.1,
+          13.2,
+          10.0,
+          11.6,
+          12.7,
+          15.1,
+          13.1,
+          12.9
+        ],
+        "discardedNoisyRuns": [
+          {
+            "ms": 26.1736,
+            "backgroundCpuPct": 70.3
+          }
+        ],
+        "errors": []
+      },
+      "ratioOursOverBest": 2.168,
+      "ratioOursOverEager": 0.728,
+      "verdict": "LOSE",
+      "selection": {
+        "eager": {
+          "runsMs": [
+            8.8159,
+            10.0122,
+            9.5015
+          ],
+          "medianMs": 9.5015,
+          "p25Ms": 9.1587,
+          "p75Ms": 9.7569,
+          "minMs": 8.8159,
+          "maxMs": 10.0122,
+          "backgroundCpuPct": [
+            12.5,
+            13.1,
+            10.5
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[inductor]": {
+          "runsMs": [
+            6.908,
+            6.463,
+            7.772
+          ],
+          "medianMs": 6.908,
+          "p25Ms": 6.6855,
+          "p75Ms": 7.34,
+          "minMs": 6.463,
+          "maxMs": 7.772,
+          "backgroundCpuPct": [
+            23.1,
+            10.6,
+            21.8
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 21.4482,
+              "backgroundCpuPct": 62.7
+            }
+          ],
+          "errors": []
+        },
+        "compile[inductor/reduce-overhead]": {
+          "runsMs": [
+            3.6986,
+            3.7132,
+            3.5692
+          ],
+          "medianMs": 3.6986,
+          "p25Ms": 3.6339,
+          "p75Ms": 3.7059,
+          "minMs": 3.5692,
+          "maxMs": 3.7132,
+          "backgroundCpuPct": [
+            14.6,
+            11.7,
+            16.6
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[cudagraphs]": {
+          "runsMs": [
+            3.642,
+            4.0608,
+            4.1784
+          ],
+          "medianMs": 4.0608,
+          "p25Ms": 3.8514,
+          "p75Ms": 4.1196,
+          "minMs": 3.642,
+          "maxMs": 4.1784,
+          "backgroundCpuPct": [
+            14.4,
+            10.5,
+            16.8
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "eager+fused-adamw": {
+          "runsMs": [
+            8.2896,
+            8.5082,
+            8.9983
+          ],
+          "medianMs": 8.5082,
+          "p25Ms": 8.3989,
+          "p75Ms": 8.7532,
+          "minMs": 8.2896,
+          "maxMs": 8.9983,
+          "backgroundCpuPct": [
+            11.4,
+            10.8,
+            11.7
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[inductor]+fused-adamw": {
+          "runsMs": [
+            6.3776,
+            6.3337,
+            6.3839
+          ],
+          "medianMs": 6.3776,
+          "p25Ms": 6.3556,
+          "p75Ms": 6.3807,
+          "minMs": 6.3337,
+          "maxMs": 6.3839,
+          "backgroundCpuPct": [
+            13.7,
+            13.6,
+            11.0
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[inductor/reduce-overhead]+fused-adamw": {
+          "runsMs": [
+            3.1206,
+            2.7858,
+            3.4909
+          ],
+          "medianMs": 3.1206,
+          "p25Ms": 2.9532,
+          "p75Ms": 3.3058,
+          "minMs": 2.7858,
+          "maxMs": 3.4909,
+          "backgroundCpuPct": [
+            14.4,
+            12.2,
+            11.8
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[cudagraphs]+fused-adamw": {
+          "runsMs": [
+            3.0196,
+            3.1733,
+            3.2223
+          ],
+          "medianMs": 3.1733,
+          "p25Ms": 3.0965,
+          "p75Ms": 3.1978,
+          "minMs": 3.0196,
+          "maxMs": 3.2223,
+          "backgroundCpuPct": [
+            13.5,
+            12.5,
+            7.1
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        }
+      },
+      "final": {
+        "compile[inductor/reduce-overhead]+fused-adamw": {
+          "runsMs": [
+            3.5806,
+            3.3175,
+            3.4625,
+            3.0261,
+            2.564,
+            3.3468,
+            2.959,
+            2.8924,
+            2.9363
+          ],
+          "medianMs": 3.0261,
+          "p25Ms": 2.9363,
+          "p75Ms": 3.3468,
+          "minMs": 2.564,
+          "maxMs": 3.5806,
+          "backgroundCpuPct": [
+            17.2,
+            11.8,
+            13.5,
+            10.3,
+            11.0,
+            10.7,
+            11.3,
+            12.6,
+            15.3
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "compile[cudagraphs]+fused-adamw": {
+          "runsMs": [
+            3.923,
+            3.1366,
+            3.2694,
+            2.9447,
+            2.9518,
+            3.0949,
+            3.0023,
+            3.2534,
+            3.1569
+          ],
+          "medianMs": 3.1366,
+          "p25Ms": 3.0023,
+          "p75Ms": 3.2534,
+          "minMs": 2.9447,
+          "maxMs": 3.923,
+          "backgroundCpuPct": [
+            20.0,
+            11.6,
+            13.9,
+            11.0,
+            12.7,
+            10.7,
+            10.3,
+            13.2,
+            12.7
+          ],
+          "discardedNoisyRuns": [],
+          "errors": []
+        },
+        "eager": {
+          "runsMs": [
+            9.3961,
+            8.3797,
+            9.0379,
+            9.2782,
+            9.0157,
+            8.6618,
+            8.5581,
+            8.6056,
+            9.1506
+          ],
+          "medianMs": 9.0157,
+          "p25Ms": 8.6056,
+          "p75Ms": 9.1506,
+          "minMs": 8.3797,
+          "maxMs": 9.3961,
+          "backgroundCpuPct": [
+            14.4,
+            13.1,
+            13.2,
+            10.0,
+            11.6,
+            12.7,
+            15.1,
+            13.1,
+            12.9
+          ],
+          "discardedNoisyRuns": [
+            {
+              "ms": 26.1736,
+              "backgroundCpuPct": 70.3
+            }
+          ],
+          "errors": []
+        }
+      },
+      "modesUnavailable": {}
+    }
+  ]
+}
