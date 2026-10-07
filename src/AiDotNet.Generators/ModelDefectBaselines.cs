@@ -11,10 +11,6 @@ internal static class ModelDefectBaselines
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
             "AiDotNet.Audio.AudioLDM.AudioLDMModel<T>",
-            "AiDotNet.Audio.Generation.AudioLM<T>",
-            "AiDotNet.Audio.Generation.FishSpeech<T>",
-            "AiDotNet.Audio.Generation.VALLE<T>",
-            "AiDotNet.Audio.Generation.VoiceCraft<T>",
             "AiDotNet.Audio.MusicGen.MusicGenModel<T>",
             "AiDotNet.Clustering.Neural.SelfOrganizingMap<T>",
             "AiDotNet.Clustering.Partitioning.MiniBatchKMeans<T>",
@@ -52,11 +48,7 @@ internal static class ModelDefectBaselines
             "AiDotNet.SpeechRecognition.CTCVariants.Branchformer<T>",
             "AiDotNet.SpeechRecognition.CTCVariants.EBranchformer<T>",
             "AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>",
-            "AiDotNet.TextToSpeech.CodecBased.AudioLM<T>",
             "AiDotNet.TextToSpeech.CodecBased.BarkModel<T>",
-            "AiDotNet.TextToSpeech.CodecBased.FishSpeech<T>",
-            "AiDotNet.TextToSpeech.CodecBased.VALLE<T>",
-            "AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>",
             "AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T>",
             "AiDotNet.TextToSpeech.Vocoders.WaveNet<T>",
             "AiDotNet.Video.Generation.StableVideoDiffusion<T>",

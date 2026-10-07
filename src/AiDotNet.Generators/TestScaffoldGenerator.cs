@@ -414,10 +414,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // ownership changes which model gets scaffolded and is a deliberate, separate change,
             // not a side effect of registering what already happens.
             // ---------------------------------------------------------------------------------
-            { "AudioLM", "AiDotNet.Audio.Generation." },
-            { "FishSpeech", "AiDotNet.Audio.Generation." },
-            { "VALLE", "AiDotNet.Audio.Generation." },
-            { "VoiceCraft", "AiDotNet.Audio.Generation." },
             { "DINO", "AiDotNet.ComputerVision.Detection.ObjectDetection.DETR." },
             { "GroundedSAM2", "AiDotNet.ComputerVision.Segmentation.OpenVocabulary." },
             { "CSDI", "AiDotNet.Finance.Forecasting.Foundation." },
@@ -6716,23 +6712,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "MaxSequenceLength = 12, VocabularySize = 64, HiddenDimension = 12, NumAttentionHeads = 1, " +
                     "IntermediateDimension = 24, NumLayers = 1, NumClasses = 3, DropoutRate = 0.0, TaskType = \"classification\" })";
             }
-            // TWO distinct FishSpeech<T> types exist -- AiDotNet.Audio.Generation.FishSpeech
-            // (AudioNeuralNetworkBase) and AiDotNet.TextToSpeech.CodecBased.FishSpeech (TtsModelBase)
-            // -- each with its OWN FishSpeechOptions. Matching on ClassName alone handed the codec-TTS
-            // one an AiDotNet.Audio.Generation.FishSpeechOptions, which bound against its
-            // (architecture, string modelPath, ...) overload and failed to compile:
-            // "Argument 2: cannot convert from 'AiDotNet.Audio.Generation.FishSpeechOptions' to
-            // 'string'". Scope this branch by NAMESPACE, as the DocOwl branch already does.
-            else if (model.ClassName == "FishSpeech" && model.TypeParameterCount == 1
-                     && typeName.StartsWith("AiDotNet.Audio.Generation.", System.StringComparison.Ordinal))
-            {
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, " +
-                    "inputSize: 16, outputSize: 8), new AiDotNet.Audio.Generation.FishSpeechOptions { " +
-                    "SemanticDim = 16, NumSemanticLayers = 1, NumSemanticHeads = 1, VocoderDim = 8, " +
-                    "NumVocoderLayers = 1, CodebookSize = 16, NumGroups = 1, TextVocabSize = 32, NumMels = 8, " +
-                    "DropoutRate = 0.0 })";
-            }
             else if (model.ClassName == "FishSpeech" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
             {
@@ -9204,46 +9183,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumAttentionHeads = 4, NumMels = 32, VocabSize = 64, " +
                     "MaxTextLength = 16, DropoutRate = 0.0 })";
             }
-            else if (model.ClassName == "VALLE" && model.TypeParameterCount == 1
-                     && typeName.StartsWith("AiDotNet.Audio.Generation.", System.StringComparison.Ordinal))
-            {
-                // VALL-E's production defaults are a two-stage neural codec LM: a 1024-wide,
-                // 12-layer autoregressive stage plus a 1024-wide, 12-layer non-autoregressive stage
-                // over an 8x1024 codec, across 30 s of audio. On the T-Z shard it measured 309 s of
-                // test time and failed LossStrictlyDecreasesOnMemorizationTask.
-                // Its configured LearningRate of 5e-4 was also being ignored entirely — the ctor
-                // built AdamW bare and Train() called the two-argument TrainWithTape — so it trained
-                // at the framework's 1e-3, twice the intended rate. That wiring is fixed separately;
-                // this bound brings the AR + NAR codec-LM topology to CI-smoke scale through the
-                // public options. Production defaults are unchanged.
-                // NumCodebooks stays at 2, NOT 1: VALL-E's whole contribution is the two-stage split
-                // where the AR model predicts the FIRST codebook and the NAR model predicts the
-                // REMAINING ones (Wang et al. 2023, and the class summary says exactly that). At
-                // NumCodebooks = 1 there are no remaining codebooks, so GenerateNARTokens has nothing
-                // to model and the NAR stage — half the paper's architecture — is silently skipped by
-                // the fixture. 2 is the smallest value that still exercises both stages.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, " +
-                    // 32, matching the probe this model is actually handed. VALLE resolves to the
-                    // AudioNN test family, whose generic branch emits [1, 64, 32] -- feature width
-                    // 32 -- while the architecture declared 16. The layer chain is width-consistent
-                    // for ANY width, so nothing in LayerHelper or InitializeLayers is wrong; the one
-                    // broken link was these two numbers disagreeing. Layers[0] resolved its weights
-                    // as [32, 16] from the declared 16, then met the 32-wide probe: "last dim of a
-                    // is 32, first dim of b is 16". It only bit the tests that trigger the lazy
-                    // shape walk first (SetTrainingMode / ParameterCount / GetParameters); a bare
-                    // Predict resolved Layers[0] straight from the probe and worked, which is why
-                    // this presented as 12 failures rather than all of them.
-                    // outputSize is 16 (= CodebookSize) for the same reason: 8 was never what this
-                    // model emits. It is read through the warm-up-derived EffectiveOutputShape so it
-                    // was harmless, but an honest number costs nothing.
-                    "inputSize: 32, outputSize: 16), " +
-                    "new AiDotNet.Audio.Generation.VALLEOptions { " +
-                    "MaxDurationSeconds = 1.0, ARHiddenDim = 32, NumARLayers = 1, NumARHeads = 2, " +
-                    "NARHiddenDim = 32, NumNARLayers = 1, NumNARHeads = 2, PhonemeVocabSize = 32, " +
-                    "CodebookSize = 16, NumCodebooks = 2, DropoutRate = 0.0 })";
-            }
             else if (model.ClassName == "MMS" && model.TypeParameterCount == 1)
             {
                 // MMS (Pratap et al. 2023) keeps its production wav2vec2-large stack by default:
@@ -9484,25 +9423,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "TextEncoderDim = 32, LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 2, " +
                     "NumHeads = 4, NumCodebooks = 1, CodebookSize = 80, " +
                     "MaxTextLength = 8, MaxCodecFrames = 8, DropoutRate = 0.0 })";
-            }
-            else if (model.ClassName == "AudioLM" && model.TypeParameterCount == 1
-                     && typeName.StartsWith(
-                         "AiDotNet.Audio.Generation.", System.StringComparison.Ordinal))
-            {
-                // This is the generated-census collision owner. The bounded CodecBased AudioLM
-                // branch below does not apply to it; as a result the census silently constructed
-                // the 152.2M-parameter, 12x1024 semantic model and peaked at 6.2 GiB for one fixture.
-                // Exercise the identical semantic projection/attention/MLP/vocabulary topology
-                // through its public options while keeping paper-scale production defaults intact.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
-                    "new AiDotNet.Audio.Generation.AudioLMOptions { SemanticDim = 32, " +
-                    "NumSemanticLayers = 2, NumSemanticHeads = 4, SemanticVocabSize = 64, " +
-                    "CoarseDim = 32, NumCoarseLayers = 2, CoarseCodebookSize = 64, " +
-                    "FineDim = 32, NumFineLayers = 2, FineCodebookSize = 64, " +
-                    "NumCoarseQuantizers = 1, NumFineQuantizers = 1, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "AudioLM" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -10521,21 +10441,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "VocabSize = 64, MaxTextLength = 8, MaxCodecFrames = 8, DropoutRate = 0.0, " +
                     "LearningRate = 1e-3, WeightDecay = 0.0 })";
             }
-            else if (model.ClassName == "VoiceCraft" && model.TypeParameterCount == 1
-                     && typeName.StartsWith("AiDotNet.Audio.Generation.", System.StringComparison.Ordinal))
-            {
-                // CollisionOwners assigns VoiceCraftTests to Audio.Generation.VoiceCraft. The
-                // bounded CodecBased branch below cannot affect that owner, so it silently retained
-                // a 2048-wide, 16-layer model and reached 19.6 GiB in the exact-model census.
-                pinInitSeed = true;
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 8, inputWidth: 32, inputDepth: 1, outputSize: 32), " +
-                    "new AiDotNet.Audio.Generation.VoiceCraftOptions { HiddenDim = 32, NumLayers = 1, " +
-                    "NumHeads = 4, CodebookSize = 32, NumQuantizers = 1, CodecEmbeddingDim = 16, " +
-                    "MaxDurationSeconds = 1.0, DropoutRate = 0.0 })";
-            }
             else if (model.ClassName == "VoiceCraft" && model.TypeParameterCount == 1 && typeName.Contains("CodecBased"))
             {
                 // VoiceCraft (Peng et al., 2024 — arXiv:2403.16973) codec-based LLM-TTS defaults to a
@@ -11248,13 +11153,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // IDs -> transformer text/codec LM -> codec logits. Use a
                 // smoke-scale config that preserves that paper contract without
                 // constructing the production 1024-wide, 12-layer stack for every
-                // generated invariant test. The namespace gate is REQUIRED: the
-                // codec-LM VALL-E family lives under AiDotNet.TextToSpeech.* and uses
-                // TextToSpeech VALLE*Options, but a distinct AiDotNet.Audio.Generation.VALLE
-                // (different VALLEOptions type + an arch-only native ctor) shares the simple
-                // name "VALLE" — without this gate it would be emitted with the wrong
-                // TextToSpeech.CodecBased.VALLEOptions and fail to compile. The Audio one
-                // falls through to the arch-only constructor path below.
+                // generated invariant test.
                 string optionsType = GetValleCodecLMOptionsType(model.ClassName);
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
@@ -13983,14 +13882,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
             sb.AppendLine("    protected override double MemorizationTaskAbsoluteLossFloor => 1.0;");
         }
-        else if (model.ClassName == "FishSpeech")
-        {
-            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 16 };");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 8 };");
-            sb.AppendLine("    protected override int TrainingIterations => 1;");
-            sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
-            sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
-        }
         else if (model.ClassName == "FastSAM")
         {
             sb.AppendLine("    protected override int[] InputShape => new[] { 1, 3, 32, 32 };");
@@ -15669,18 +15560,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
         else if (isAudioModel)
         {
-            if (model.ClassName == "VoiceCraft")
-            {
-                // Audio.Generation.VoiceCraft's bounded codec-LM maps each 32-wide token feature
-                // to one 32-way codebook logit vector without changing batch or sequence axes.
-                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 8, 32 };");
-                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 8, 32 };");
-                sb.AppendLine("    protected override int TrainingIterations => 1;");
-                sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
-                sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
-                sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
-            }
-            else if (model.ClassName == "EfficientConformer")
+            if (model.ClassName == "EfficientConformer")
             {
                 // The bounded native fixture retains the paper's complete 8x progressive
                 // reduction, so 64 input frames produce eight CTC log-probability frames.
@@ -15932,14 +15812,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 64 };");
                 sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
-            }
-            else if (model.ClassName == "AudioLM")
-            {
-                // The collision owner is AiDotNet.Audio.Generation.AudioLM. Its bounded public
-                // options above project the 32-wide semantic stream to a 64-token vocabulary.
-                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
-                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 64, 64 };");
-                sb.AppendLine("    protected override int VariableLengthAxis => 1;");
             }
             else if (model.ClassName == "SileroVad")
             {
