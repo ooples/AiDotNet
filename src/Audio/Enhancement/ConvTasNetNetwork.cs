@@ -60,6 +60,19 @@ internal sealed class ConvTasNetNetwork<T>
     public ConvTasNetNetwork(ConvTasNetOptions options)
     {
         if (options is null) throw new ArgumentNullException(nameof(options));
+        RequirePositive(options.EncoderDim, nameof(options.EncoderDim));
+        RequirePositive(options.KernelSize, nameof(options.KernelSize));
+        RequirePositive(options.BottleneckDim, nameof(options.BottleneckDim));
+        RequirePositive(options.HiddenDim, nameof(options.HiddenDim));
+        RequirePositive(options.NumBlocks, nameof(options.NumBlocks));
+        RequirePositive(options.NumRepeats, nameof(options.NumRepeats));
+        RequirePositive(options.TcnKernelSize, nameof(options.TcnKernelSize));
+        RequirePositive(options.NumSources, nameof(options.NumSources));
+        // "Same" padding of dilation * (P - 1) / 2 keeps the frame count only for an odd kernel; an even
+        // one shortens every block by one frame and the residual add fails on the first forward.
+        if (options.TcnKernelSize % 2 == 0)
+            throw new ArgumentOutOfRangeException(nameof(options.TcnKernelSize), options.TcnKernelSize,
+                "TcnKernelSize must be odd so the depthwise convolution preserves the frame count (the paper uses 3).");
         _encoderDim = options.EncoderDim;
         _kernelSize = options.KernelSize;
         _stride = Math.Max(1, options.KernelSize / 2);
@@ -70,6 +83,11 @@ internal sealed class ConvTasNetNetwork<T>
         _tcnKernelSize = options.TcnKernelSize;
         _numSources = options.NumSources;
         Build();
+    }
+
+    private static void RequirePositive(int value, string name)
+    {
+        if (value <= 0) throw new ArgumentOutOfRangeException(name, value, $"{name} must be positive.");
     }
 
     /// <summary>Every layer of the network, in a fixed order, for the owning model to publish.</summary>

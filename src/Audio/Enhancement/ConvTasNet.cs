@@ -326,11 +326,14 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
             return PostprocessOutput(output);
         }
 
-        return ForwardNative(preprocessed);
+        // EnhancementStrength applies to what a caller receives, in both modes; the training forward
+        // below stays raw because the loss must see the network's own output.
+        return PostprocessOutput(ForwardNative(preprocessed));
     }
 
     /// <inheritdoc />
-    /// <remarks>The same forward as inference: Conv-TasNet has no training-only branch.</remarks>
+    /// <remarks>The same network as inference, without the EnhancementStrength scaling applied to
+    /// what Predict returns.</remarks>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         if (IsOnnxMode) throw new InvalidOperationException("Cannot train in ONNX inference mode.");
@@ -356,7 +359,7 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
 
         if (_network is null)
         {
-            activations["Output"] = ForwardNative(preprocessed).Clone();
+            activations["Output"] = PostprocessOutput(ForwardNative(preprocessed)).Clone();
             return activations;
         }
 

@@ -20,14 +20,14 @@ public class ConvTasNetTrainingTests
 {
     private const int Samples = 128;
 
-    private static ConvTasNet<double> CreateModel() => new(
+    private static ConvTasNet<double> CreateModel(int tcnKernelSize = 3) => new(
         new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
             inputSize: Samples, outputSize: Samples),
         new ConvTasNetOptions
         {
             SampleRate = 8000, EncoderDim = 16, KernelSize = 8, BottleneckDim = 8, HiddenDim = 16,
-            NumBlocks = 2, NumRepeats = 1, TcnKernelSize = 3, NumSources = 2
+            NumBlocks = 2, NumRepeats = 1, TcnKernelSize = tcnKernelSize, NumSources = 2
         });
 
     private static (Tensor<double> Mixture, Tensor<double> Sources) TwoTones(int seed)
@@ -100,5 +100,29 @@ public class ConvTasNetTrainingTests
 
         Assert.Equal(new[] { 1, 2, Samples }, separated.Shape.ToArray());
         Assert.All(separated.ToArray(), value => Assert.False(double.IsNaN(value) || double.IsInfinity(value)));
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(4)]
+    public void EvenTcnKernel_IsRejectedAtConstruction(int tcnKernelSize)
+    {
+        var ex = Assert.Throws<ArgumentOutOfRangeException>(() => CreateModel(tcnKernelSize));
+        Assert.Equal("TcnKernelSize", ex.ParamName);
+    }
+
+    [Fact]
+    public void EnhancementStrength_ScalesWhatPredictReturns()
+    {
+        var model = CreateModel();
+        var (mixture, _) = TwoTones(4);
+        var full = model.Predict(mixture).ToArray();
+
+        model.EnhancementStrength = 0.5;
+        var half = model.Predict(mixture).ToArray();
+
+        Assert.Contains(full, value => Math.Abs(value) > 1e-9);
+        for (int i = 0; i < full.Length; i++)
+            Assert.Equal(full[i] * 0.5, half[i], 12);
     }
 }
