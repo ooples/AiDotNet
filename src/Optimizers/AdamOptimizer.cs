@@ -1644,8 +1644,6 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     {
         if (maxNorm <= 0.0) return;
 
-        var numOps = MathHelper.GetNumericOperations<T>();
-
         // Pass 1: compute global L2 norm. Walk every gradient tensor and
         // accumulate the squared sum across all elements.
         double globalNormSq = 0.0;
@@ -1653,12 +1651,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         {
             var grad = kvp.Value;
             if (grad is null) continue;
-            var span = grad.Data.Span;
-            for (int i = 0; i < span.Length; i++)
-            {
-                double v = numOps.ToDouble(span[i]);
-                globalNormSq += v * v;
-            }
+            globalNormSq += SumOfSquares(grad.Data.Span);
         }
         double globalNorm = Math.Sqrt(globalNormSq);
 
@@ -1673,11 +1666,147 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         {
             var grad = kvp.Value;
             if (grad is null) continue;
-            var span = grad.Data.Span;
-            for (int i = 0; i < span.Length; i++)
-                span[i] = numOps.FromDouble(numOps.ToDouble(span[i]) * scale);
+            ScaleInPlace(grad.Data.Span, scale);
         }
     }
+
+    // Both passes went through numOps.ToDouble/FromDouble per element: on a 477.6M-parameter
+    // U-Net that was 1.75 s of a 14 s training step, five times the Adam update itself (#2087).
+    // Float and double now take a vectorized path with the same arithmetic -- squares summed in
+    // double, each element scaled as (T)((double)x * scale) -- in one fixed lane order, so the
+    // result does not depend on thread count. Other element types keep the generic loop.
+    internal static double SumOfSquares(Span<T> span)
+    {
+#if NET7_0_OR_GREATER
+        if (typeof(T) == typeof(float))
+            return SumOfSquaresFloat(System.Runtime.InteropServices.MemoryMarshal.CreateReadOnlySpan(
+                ref System.Runtime.CompilerServices.Unsafe.As<T, float>(
+                    ref System.Runtime.InteropServices.MemoryMarshal.GetReference(span)), span.Length));
+        if (typeof(T) == typeof(double))
+            return SumOfSquaresDouble(System.Runtime.InteropServices.MemoryMarshal.CreateReadOnlySpan(
+                ref System.Runtime.CompilerServices.Unsafe.As<T, double>(
+                    ref System.Runtime.InteropServices.MemoryMarshal.GetReference(span)), span.Length));
+#endif
+        var numOps = MathHelper.GetNumericOperations<T>();
+        double total = 0.0;
+        for (int i = 0; i < span.Length; i++)
+        {
+            double v = numOps.ToDouble(span[i]);
+            total += v * v;
+        }
+
+        return total;
+    }
+
+    internal static void ScaleInPlace(Span<T> span, double scale)
+    {
+#if NET7_0_OR_GREATER
+        if (typeof(T) == typeof(float))
+        {
+            ScaleFloat(System.Runtime.InteropServices.MemoryMarshal.CreateSpan(
+                ref System.Runtime.CompilerServices.Unsafe.As<T, float>(
+                    ref System.Runtime.InteropServices.MemoryMarshal.GetReference(span)), span.Length), scale);
+            return;
+        }
+
+        if (typeof(T) == typeof(double))
+        {
+            ScaleDouble(System.Runtime.InteropServices.MemoryMarshal.CreateSpan(
+                ref System.Runtime.CompilerServices.Unsafe.As<T, double>(
+                    ref System.Runtime.InteropServices.MemoryMarshal.GetReference(span)), span.Length), scale);
+            return;
+        }
+#endif
+        var numOps = MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < span.Length; i++)
+            span[i] = numOps.FromDouble(numOps.ToDouble(span[i]) * scale);
+    }
+
+#if NET7_0_OR_GREATER
+    private static double SumOfSquaresFloat(ReadOnlySpan<float> values)
+    {
+        int i = 0;
+        double total = 0.0;
+        int width = System.Numerics.Vector<float>.Count;
+        if (System.Numerics.Vector.IsHardwareAccelerated && values.Length >= width)
+        {
+            var acc = System.Numerics.Vector<double>.Zero;
+            for (; i <= values.Length - width; i += width)
+            {
+                System.Numerics.Vector.Widen(new System.Numerics.Vector<float>(values.Slice(i, width)),
+                    out System.Numerics.Vector<double> lo, out System.Numerics.Vector<double> hi);
+                acc += lo * lo + hi * hi;
+            }
+
+            total = System.Numerics.Vector.Sum(acc);
+        }
+
+        for (; i < values.Length; i++)
+        {
+            double v = values[i];
+            total += v * v;
+        }
+
+        return total;
+    }
+
+    private static double SumOfSquaresDouble(ReadOnlySpan<double> values)
+    {
+        int i = 0;
+        double total = 0.0;
+        int width = System.Numerics.Vector<double>.Count;
+        if (System.Numerics.Vector.IsHardwareAccelerated && values.Length >= width)
+        {
+            var acc = System.Numerics.Vector<double>.Zero;
+            for (; i <= values.Length - width; i += width)
+            {
+                var v = new System.Numerics.Vector<double>(values.Slice(i, width));
+                acc += v * v;
+            }
+
+            total = System.Numerics.Vector.Sum(acc);
+        }
+
+        for (; i < values.Length; i++) total += values[i] * values[i];
+        return total;
+    }
+
+    private static void ScaleFloat(Span<float> values, double scale)
+    {
+        int i = 0;
+        int width = System.Numerics.Vector<float>.Count;
+        if (System.Numerics.Vector.IsHardwareAccelerated && values.Length >= width)
+        {
+            var factor = new System.Numerics.Vector<double>(scale);
+            for (; i <= values.Length - width; i += width)
+            {
+                var slice = values.Slice(i, width);
+                System.Numerics.Vector.Widen(new System.Numerics.Vector<float>(slice),
+                    out System.Numerics.Vector<double> lo, out System.Numerics.Vector<double> hi);
+                System.Numerics.Vector.Narrow(lo * factor, hi * factor).CopyTo(slice);
+            }
+        }
+
+        for (; i < values.Length; i++) values[i] = (float)(values[i] * scale);
+    }
+
+    private static void ScaleDouble(Span<double> values, double scale)
+    {
+        int i = 0;
+        int width = System.Numerics.Vector<double>.Count;
+        if (System.Numerics.Vector.IsHardwareAccelerated && values.Length >= width)
+        {
+            var factor = new System.Numerics.Vector<double>(scale);
+            for (; i <= values.Length - width; i += width)
+            {
+                var slice = values.Slice(i, width);
+                (new System.Numerics.Vector<double>(slice) * factor).CopyTo(slice);
+            }
+        }
+
+        for (; i < values.Length; i++) values[i] *= scale;
+    }
+#endif
 
     #endregion
 }
