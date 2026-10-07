@@ -122,16 +122,6 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
 
     public override bool SupportsTraining => true;
 
-    /// <summary>
-    /// Stores the indices of the maximum values found during the forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <b>For Beginners:</b> This keeps track of which input value was the maximum in each pooling window.
-    /// We need this information during the backward pass to know where to send the gradients.
-    /// </remarks>
-    // Device-resident argmax (MaxPool2DWithTensorIndices). The int[,,,,] form forced a download of the indices on every
-    // GPU forward, a host read that also aborted CUDA graph capture of every CNN training step.
-    private Tensor<int>? _maxIndices;
 
     /// <summary>
     /// Stores GPU-resident pooling indices for backward pass.
@@ -367,12 +357,11 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
             input4D = Engine.Reshape(input, new[] { flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
 
-        var poolSizeArr = new[] { PoolSize, PoolSize };
-        var strideArr = new[] { Stride, Stride };
-
-        // Use Engine operation (expects 4D); final output shape will match the original input rank
-        var output4D = Engine.MaxPool2DWithTensorIndices(input4D, poolSizeArr, strideArr, out var maxIndices);
-        _maxIndices = maxIndices;
+        // Use Engine operation (expects 4D); final output shape will match the original input rank.
+        // Engine.MaxPool2D records its own backward wherever one is needed: a lazy node in a compiled trace, the
+        // argmax on the tape in eager training (kept on the device by the GPU engine), and nothing at inference.
+        // MaxPool2DWithTensorIndices cannot be captured by an inference trace, so CompileForward could not compile it.
+        var output4D = Engine.MaxPool2D(input4D, PoolSize, Stride);
 
         // Return with matching dimensions to preserve original tensor rank
         if (_originalInputShape.Length > 4)
@@ -422,7 +411,7 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
     /// calculations.
     /// 
     /// During the forward pass, the max pooling layer remembers which positions had the maximum
-    /// values (stored in _maxIndices). This is needed for the backward pass.
+    /// values. The gradient tape records them for the backward pass.
     /// 
     /// Resetting the state clears this memory, which is useful when:
     /// 1. Starting a new training session
@@ -435,7 +424,6 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
     {
         // Clear cached values from forward pass
         _lastInput = null;
-        _maxIndices = null;
         _addedBatchDimension = false;
 
         // Dispose GPU resources
