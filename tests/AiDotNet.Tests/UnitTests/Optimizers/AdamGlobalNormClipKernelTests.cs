@@ -37,7 +37,7 @@ public class AdamGlobalNormClipKernelTests
 
         AdamOptimizer<float, Tensor<float>, Tensor<float>>.ScaleInPlace(values.AsSpan(), scale);
         for (int i = 0; i < length; i++)
-            Assert.Equal(BitConverter.SingleToInt32Bits(expectedScaled[i]), BitConverter.SingleToInt32Bits(values[i]));
+            Assert.Equal(Bits(expectedScaled[i]), Bits(values[i]));
     }
 
     [Theory]
@@ -66,6 +66,9 @@ public class AdamGlobalNormClipKernelTests
         for (int i = 0; i < length; i++)
             Assert.Equal(BitConverter.DoubleToInt64Bits(expectedScaled[i]), BitConverter.DoubleToInt64Bits(values[i]));
     }
+
+    // BitConverter.SingleToInt32Bits is not available on net471, which this project also targets.
+    private static int Bits(float value) => BitConverter.ToInt32(BitConverter.GetBytes(value), 0);
 
     private static float[] RandomFloats(int length, int seed)
     {
