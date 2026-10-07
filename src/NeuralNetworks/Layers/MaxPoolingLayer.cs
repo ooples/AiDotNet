@@ -358,10 +358,13 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
         }
 
         // Use Engine operation (expects 4D); final output shape will match the original input rank.
-        // Engine.MaxPool2D records its own backward wherever one is needed: a lazy node in a compiled trace, the
-        // argmax on the tape in eager training (kept on the device by the GPU engine), and nothing at inference.
-        // MaxPool2DWithTensorIndices cannot be captured by an inference trace, so CompileForward could not compile it.
-        var output4D = Engine.MaxPool2D(input4D, PoolSize, Stride);
+        // In training, MaxPool2DWithTensorIndices records the argmax for the backward (the GPU engine keeps it on the
+        // device, so no per-forward download). Inference needs no argmax, and an inference trace (CompileForward)
+        // cannot capture that op at all, so it pools with the capturable Engine.MaxPool2D: otherwise the compiled
+        // plan's buffers stayed resident after ReleaseCompiledPlans.
+        var output4D = IsTrainingMode
+            ? Engine.MaxPool2DWithTensorIndices(input4D, new[] { PoolSize, PoolSize }, new[] { Stride, Stride }, out _)
+            : Engine.MaxPool2D(input4D, PoolSize, Stride);
 
         // Return with matching dimensions to preserve original tensor rank
         if (_originalInputShape.Length > 4)

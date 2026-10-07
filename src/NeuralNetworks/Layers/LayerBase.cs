@@ -7475,10 +7475,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         if (sources.Count == 0) return false;
 
         var owned = new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        // A device copy made inside a tape step is one of the step's intermediates, which the tape frees on the device
+        // when it ends; the published gradient is read after that, so the tape must keep it.
+        var tape = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current;
         foreach (var (parameter, gradient) in sources)
         {
             var copy = new Tensor<T>(gradient._shape);
             Engine.TensorCopy(gradient, copy);
+            tape?.Retain(copy);
             owned[parameter] = copy;
             matched += gradient.Length;
         }

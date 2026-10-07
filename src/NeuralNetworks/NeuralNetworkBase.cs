@@ -8026,6 +8026,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
             return false;
 
+        // Trace in inference mode, as PredictCompiled replays it: the plan cached here is the one PredictCompiled
+        // runs, so tracing it in training mode captured training-only work (Dropout sampling, BatchNorm batch stats,
+        // the pooling argmax) into an inference plan.
+        using var _ = new NoGradScope<T>();
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
         try
         {
             // _compileHost.Predict handles trace-and-compile-on-miss / replay-on-hit
@@ -8053,6 +8059,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 $"CompileForward failed for shape [{string.Join(",", sampleInput._shape)}]: " +
                 $"{ex.GetType().Name}: {ex.Message}");
             return false;
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
         }
     }
 
