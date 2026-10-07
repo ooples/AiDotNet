@@ -96,39 +96,17 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
 
     private readonly INumericOperations<T> _numOps;
 
-    // Encoder parameters
+    // Architecture sizes, kept for the public surface, streaming and metadata.
     private readonly int _encoderDim;
     private readonly int _kernelSize;
     private readonly int _stride;
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T> _encoderWeight;
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T> _encoderBias;
-
-    // Separator (TCN) parameters
     private readonly int _numSources;
-    private readonly int _bottleneckDim;
-    private readonly int _hiddenDim;
     private readonly int _numBlocks;
     private readonly int _numRepeats;
-    private readonly int _tcnKernelSize;
 
-    // TCN layer weights (simplified representation)
-    private readonly List<TcnBlock> _tcnBlocks;
-
-    // Decoder parameters
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T> _decoderWeight;
-
-    // Mask estimation
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T> _maskWeight;
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T> _maskBias;
-
-    // Normalization layers
-    private Tensor<T> _normGamma;
-    private Tensor<T> _normBeta;
+    // The paper network (encoder, TCN separator, mask head, decoder), built from library layers and published
+    // through Layers so the base tape trains every weight; null in ONNX mode or for a custom layer stack.
+    private ConvTasNetNetwork<T>? _network;
 
     // State for streaming
     private T[]? _encoderBuffer;
@@ -213,23 +191,8 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         // Calculate latency (encoder kernel + some TCN lookahead)
         LatencySamples = _options.KernelSize;
 
-        // Initialize empty arrays (not used in ONNX mode)
-        _encoderWeight = new Tensor<T>([0]);
-        _encoderBias = new Tensor<T>([0]);
-        _decoderWeight = new Tensor<T>([0]);
-        _maskWeight = new Tensor<T>([0]);
-        _maskBias = new Tensor<T>([0]);
-        _normGamma = new Tensor<T>([0]);
-        _normBeta = new Tensor<T>([0]);
-        _tcnBlocks = new List<TcnBlock>();
-
-        // These are set for consistency
-        _bottleneckDim = _options.BottleneckDim;
-        _hiddenDim = _options.HiddenDim;
         _numBlocks = _options.NumBlocks;
         _numRepeats = _options.NumRepeats;
-        _tcnKernelSize = _options.TcnKernelSize;
-
     }
 
     /// <summary>
@@ -246,13 +209,13 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     /// <param name="tcnKernelSize">Kernel size for TCN convolutions (default: 3).</param>
     /// <param name="numSources">Number of sources to separate (default: 2).</param>
     /// <param name="optimizer">Optimizer for training. If null, a default Adam optimizer is used.</param>
-    /// <param name="lossFunction">Loss function. If null, SI-SNR loss is used.</param>
+    /// <param name="lossFunction">Loss function. If null, negative SI-SNR with permutation-invariant training (the paper's objective) is used.</param>
     public ConvTasNet(
         NeuralNetworkArchitecture<T> architecture,
         ConvTasNetOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture: architecture, lossFunction: lossFunction)
+        : base(architecture: architecture, lossFunction: lossFunction ?? new NegativeSiSnrLoss<T>())
     {
         _options = options ?? new ConvTasNetOptions();
         _options.Validate();
@@ -263,63 +226,52 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         _encoderDim = _options.EncoderDim;
         _kernelSize = _options.KernelSize;
         _stride = _options.KernelSize / 2;
-        _bottleneckDim = _options.BottleneckDim;
-        _hiddenDim = _options.HiddenDim;
+        _numSources = _options.NumSources;
         _numBlocks = _options.NumBlocks;
         _numRepeats = _options.NumRepeats;
-        _tcnKernelSize = _options.TcnKernelSize;
-        _numSources = _options.NumSources;
 
         // Calculate latency
         LatencySamples = _options.KernelSize;
 
-        // Initialize encoder weights
-        _encoderWeight = InitializeWeights(_encoderDim * _kernelSize);
-        _encoderBias = InitializeWeights(_encoderDim, 0.0);
-
-        // Initialize normalization
-        _normGamma = InitializeWeights(_encoderDim, 1.0);
-        _normBeta = InitializeWeights(_encoderDim, 0.0);
-
-        // Initialize TCN blocks
-        _tcnBlocks = new List<TcnBlock>();
-        for (int r = 0; r < _options.NumRepeats; r++)
-        {
-            for (int b = 0; b < _options.NumBlocks; b++)
-            {
-                int dilation = (int)Math.Pow(2, b);
-                _tcnBlocks.Add(new TcnBlock(
-                    _numOps,
-                    _options.BottleneckDim,
-                    _options.HiddenDim,
-                    _options.TcnKernelSize,
-                    dilation));
-            }
-        }
-
-        // Initialize mask estimation layer
-        int maskInputDim = _options.BottleneckDim;
-        _maskWeight = InitializeWeights(_options.NumSources * _options.EncoderDim * maskInputDim);
-        _maskBias = InitializeWeights(_options.NumSources * _options.EncoderDim, 0.0);
-
-        // Initialize decoder weights (transposed convolution)
-        _decoderWeight = InitializeWeights(_encoderDim * _kernelSize);
-
-        // Initialize optimizer (Adam by default)
+        // The paper's Adam (lr 1e-3, clipping at L2 norm 5), from the [PaperOptimizer] recipe.
         Optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
         InitializeLayers();
     }
 
     /// <summary>
-    /// Initializes the neural network layers.
+    /// Builds the paper network and publishes its layers; a caller-supplied stack in the same layout is
+    /// bound to the network, and any other stack runs as a plain sequential chain.
     /// </summary>
     protected override void InitializeLayers()
     {
-        // Layers are handled manually for Conv-TasNet's specific architecture
-        // The encoder, TCN, and decoder don't map directly to standard layer types
+        if (IsOnnxMode) return;
+        var network = new ConvTasNetNetwork<T>(_options);
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            if (network.Layers.Count == Layers.Count && TryBind(network, Layers)) _network = network;
+            return;
+        }
+
+        _network = network;
+        Layers.AddRange(network.Layers);
+    }
+
+    private static bool TryBind(ConvTasNetNetwork<T> network, IReadOnlyList<ILayer<T>> layers)
+    {
+        // BindTo restores the network before it throws, so a refused list leaves it as built.
+        try
+        {
+            network.BindTo(layers);
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -363,7 +315,7 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     /// Predicts separated sources from input audio.
     /// </summary>
     /// <param name="input">Input audio tensor [batch, samples] or [samples].</param>
-    /// <returns>Separated sources tensor [batch, sources, samples] or [sources, samples].</returns>
+    /// <returns>Separated sources tensor [batch, sources, samples].</returns>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var preprocessed = PreprocessAudio(input);
@@ -374,16 +326,20 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
             return PostprocessOutput(output);
         }
 
-        return SeparateSources(preprocessed);
+        return ForwardNative(preprocessed);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Conv-TasNet owns a manual encoder/TCN/mask/decoder graph rather than
-    /// populating the base <c>Layers</c> collection, so the base inspection
-    /// implementation has nothing to walk. Capture the actual semantic stages
-    /// of the same graph used by <see cref="PredictCore"/> instead.
-    /// </remarks>
+    /// <inheritdoc />
+    /// <remarks>The same forward as inference: Conv-TasNet has no training-only branch.</remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        if (IsOnnxMode) throw new InvalidOperationException("Cannot train in ONNX inference mode.");
+        return ForwardNative(PreprocessAudio(input));
+    }
+
+    /// <summary>
+    /// Captures every named stage of the network for a single input.
+    /// </summary>
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
     {
         SetTrainingMode(false);
@@ -398,287 +354,30 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
             return activations;
         }
 
-        int originalLength = preprocessed.Shape[1];
-        var encoded = Encode(preprocessed);
-        activations["Encoder"] = encoded.Clone();
+        if (_network is null)
+        {
+            activations["Output"] = ForwardNative(preprocessed).Clone();
+            return activations;
+        }
 
-        var normalized = LayerNorm(encoded);
-        activations["EncoderNormalization"] = normalized.Clone();
-
-        var bottleneck = BottleneckProject(normalized);
-        activations["BottleneckProjection"] = bottleneck.Clone();
-
-        var separatedFeatures = RunTcn(bottleneck);
-        activations["TemporalConvolutionalSeparator"] = separatedFeatures.Clone();
-
-        var masks = EstimateMasks(separatedFeatures);
-        activations["SourceMasks"] = masks.Clone();
-
-        var maskedSources = ApplyMasks(encoded, masks);
-        activations["MaskedEncoderSources"] = maskedSources.Clone();
-
-        var decoded = Decode(maskedSources, originalLength);
-        activations["WaveformDecoder"] = decoded.Clone();
-        activations["Output"] = PostprocessOutput(decoded).Clone();
+        _network.BindTo(Layers);
+        var separated = _network.Forward(preprocessed, activations);
+        activations["Output"] = PostprocessOutput(separated).Clone();
         return activations;
     }
 
-    /// <summary>
-    /// Separates audio into individual source signals.
-    /// </summary>
-    /// <param name="mixture">Input mixture tensor [batch, samples].</param>
-    /// <returns>Separated sources [batch, numSources, samples].</returns>
-    private Tensor<T> SeparateSources(Tensor<T> mixture)
+    private Tensor<T> ForwardNative(Tensor<T> mixture)
     {
-        int batchSize = mixture.Shape[0];
-        int numSamples = mixture.Shape[1];
-
-        // Step 1: Encoder - convert waveform to latent representation
-        var encoded = Encode(mixture);
-
-        // Step 2: Layer normalization on encoder output
-        var normalized = LayerNorm(encoded);
-
-        // Step 3: Bottleneck projection
-        var bottleneck = BottleneckProject(normalized);
-
-        // Step 4: TCN separator
-        var tcnOutput = RunTcn(bottleneck);
-
-        // Step 5: Mask estimation
-        var masks = EstimateMasks(tcnOutput);
-
-        // Step 6: Apply masks to encoder output
-        var maskedSources = ApplyMasks(encoded, masks);
-
-        // Step 7: Decoder - convert back to waveform
-        var separated = Decode(maskedSources, numSamples);
-
-        return separated;
-    }
-
-    /// <summary>
-    /// Encodes waveform using learned basis functions.
-    /// </summary>
-    private Tensor<T> Encode(Tensor<T> waveform)
-    {
-        int batchSize = waveform.Shape[0];
-        int numSamples = waveform.Shape[1];
-        int numFrames = (numSamples - _kernelSize) / _stride + 1;
-
-        var encoded = new T[batchSize * numFrames * _encoderDim];
-
-        for (int b = 0; b < batchSize; b++)
+        if (_network is null)
         {
-            for (int f = 0; f < numFrames; f++)
-            {
-                int sampleOffset = f * _stride;
-                for (int d = 0; d < _encoderDim; d++)
-                {
-                    T sum = _encoderBias[d];
-                    for (int k = 0; k < _kernelSize; k++)
-                    {
-                        int sampleIdx = sampleOffset + k;
-                        if (sampleIdx < numSamples)
-                        {
-                            int waveIdx = b * numSamples + sampleIdx;
-                            int weightIdx = d * _kernelSize + k;
-                            sum = _numOps.Add(sum, _numOps.Multiply(waveform.Data.Span[waveIdx], _encoderWeight[weightIdx]));
-                        }
-                    }
-                    // ReLU activation
-                    int outIdx = b * numFrames * _encoderDim + f * _encoderDim + d;
-                    encoded[outIdx] = _numOps.ToDouble(sum) > 0 ? sum : _numOps.Zero;
-                }
-            }
+            // A caller-supplied stack in another layout is an ordinary layer chain.
+            var output = mixture;
+            foreach (var layer in Layers) output = layer.Forward(output);
+            return output;
         }
 
-        return new Tensor<T>(encoded, new[] { batchSize, numFrames, _encoderDim });
-    }
-
-    /// <summary>
-    /// Applies layer normalization.
-    /// </summary>
-    private Tensor<T> LayerNorm(Tensor<T> input)
-    {
-        // _normGamma / _normBeta are already tensors -- no wrapping needed.
-        var gammaTensor = _normGamma;
-        var betaTensor = _normBeta;
-        return Engine.LayerNorm(input, gammaTensor, betaTensor, 1e-5, out _, out _);
-    }
-
-    /// <summary>
-    /// Projects to bottleneck dimension.
-    /// </summary>
-    private Tensor<T> BottleneckProject(Tensor<T> input)
-    {
-        int batchSize = input.Shape[0];
-        int numFrames = input.Shape[1];
-        int inputDim = input.Shape[2];
-
-        var projected = new T[batchSize * numFrames * _bottleneckDim];
-
-        // Simple linear projection
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int f = 0; f < numFrames; f++)
-            {
-                for (int d = 0; d < _bottleneckDim; d++)
-                {
-                    T sum = _numOps.Zero;
-                    for (int i = 0; i < inputDim && i < _bottleneckDim; i++)
-                    {
-                        int inIdx = b * numFrames * inputDim + f * inputDim + i;
-                        if (i == d && inIdx < input.Length)
-                        {
-                            sum = input.Data.Span[inIdx]; // Identity-like projection for simplicity
-                        }
-                    }
-                    int outIdx = b * numFrames * _bottleneckDim + f * _bottleneckDim + d;
-                    projected[outIdx] = sum;
-                }
-            }
-        }
-
-        return new Tensor<T>(projected, new[] { batchSize, numFrames, _bottleneckDim });
-    }
-
-    /// <summary>
-    /// Runs the Temporal Convolutional Network.
-    /// </summary>
-    private Tensor<T> RunTcn(Tensor<T> input)
-    {
-        var current = input;
-        foreach (var block in _tcnBlocks)
-        {
-            current = block.Forward(current);
-        }
-        return current;
-    }
-
-    /// <summary>
-    /// Estimates separation masks for each source.
-    /// </summary>
-    private Tensor<T> EstimateMasks(Tensor<T> tcnOutput)
-    {
-        int batchSize = tcnOutput.Shape[0];
-        int numFrames = tcnOutput.Shape[1];
-        int dim = tcnOutput.Shape[2];
-
-        var masks = new T[batchSize * _numSources * numFrames * _encoderDim];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int s = 0; s < _numSources; s++)
-            {
-                for (int f = 0; f < numFrames; f++)
-                {
-                    for (int d = 0; d < _encoderDim; d++)
-                    {
-                        // Linear projection followed by sigmoid
-                        T sum = _maskBias[(s * _encoderDim + d) % _maskBias.Length];
-                        for (int i = 0; i < dim; i++)
-                        {
-                            int inIdx = b * numFrames * dim + f * dim + i;
-                            int wIdx = (s * _encoderDim * dim + d * dim + i) % _maskWeight.Length;
-                            sum = _numOps.Add(sum, _numOps.Multiply(tcnOutput.Data.Span[inIdx], _maskWeight[wIdx]));
-                        }
-
-                        // Sigmoid activation for mask
-                        double maskVal = 1.0 / (1.0 + Math.Exp(-_numOps.ToDouble(sum)));
-
-                        int outIdx = b * _numSources * numFrames * _encoderDim +
-                                     s * numFrames * _encoderDim +
-                                     f * _encoderDim + d;
-                        masks[outIdx] = _numOps.FromDouble(maskVal);
-                    }
-                }
-            }
-        }
-
-        return new Tensor<T>(masks, new[] { batchSize, _numSources, numFrames, _encoderDim });
-    }
-
-    /// <summary>
-    /// Applies masks to encoder output to separate sources.
-    /// </summary>
-    private Tensor<T> ApplyMasks(Tensor<T> encoded, Tensor<T> masks)
-    {
-        int batchSize = encoded.Shape[0];
-        int numFrames = encoded.Shape[1];
-        int encoderDim = encoded.Shape[2];
-
-        var masked = new T[batchSize * _numSources * numFrames * encoderDim];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int s = 0; s < _numSources; s++)
-            {
-                for (int f = 0; f < numFrames; f++)
-                {
-                    for (int d = 0; d < encoderDim; d++)
-                    {
-                        int encIdx = b * numFrames * encoderDim + f * encoderDim + d;
-                        int maskIdx = b * _numSources * numFrames * encoderDim +
-                                      s * numFrames * encoderDim +
-                                      f * encoderDim + d;
-                        int outIdx = maskIdx;
-
-                        masked[outIdx] = _numOps.Multiply(encoded.Data.Span[encIdx], masks.Data.Span[maskIdx]);
-                    }
-                }
-            }
-        }
-
-        return new Tensor<T>(masked, new[] { batchSize, _numSources, numFrames, encoderDim });
-    }
-
-    /// <summary>
-    /// Decodes masked representations back to waveform.
-    /// </summary>
-    private Tensor<T> Decode(Tensor<T> maskedSources, int originalLength)
-    {
-        int batchSize = maskedSources.Shape[0];
-        int numSources = maskedSources.Shape[1];
-        int numFrames = maskedSources.Shape[2];
-        int encoderDim = maskedSources.Shape[3];
-
-        int outputLength = (numFrames - 1) * _stride + _kernelSize;
-        if (outputLength > originalLength)
-        {
-            outputLength = originalLength;
-        }
-
-        var decoded = new T[batchSize * numSources * outputLength];
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int s = 0; s < numSources; s++)
-            {
-                // Transposed convolution (overlap-add)
-                for (int f = 0; f < numFrames; f++)
-                {
-                    int sampleOffset = f * _stride;
-                    for (int k = 0; k < _kernelSize && sampleOffset + k < outputLength; k++)
-                    {
-                        for (int d = 0; d < encoderDim; d++)
-                        {
-                            int inIdx = b * numSources * numFrames * encoderDim +
-                                        s * numFrames * encoderDim +
-                                        f * encoderDim + d;
-                            int weightIdx = d * _kernelSize + k;
-                            int outIdx = b * numSources * outputLength + s * outputLength + sampleOffset + k;
-
-                            decoded[outIdx] = _numOps.Add(
-                                decoded[outIdx],
-                                _numOps.Multiply(maskedSources.Data.Span[inIdx], _decoderWeight[weightIdx % _decoderWeight.Length]));
-                        }
-                    }
-                }
-            }
-        }
-
-        return new Tensor<T>(decoded, new[] { batchSize, numSources, outputLength });
+        _network.BindTo(Layers);
+        return _network.Forward(mixture);
     }
 
     #region IAudioEnhancer Implementation
@@ -794,10 +493,11 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     #region Training
 
     /// <summary>
-    /// Trains the model on a batch of mixture-source pairs.
+    /// One training step on the base tape: the whole network (encoder, every TCN block, the mask head and the
+    /// decoder) is differentiated against the loss, negative SI-SNR with permutation-invariant training by default.
     /// </summary>
-    /// <param name="input">Mixture tensor [batch, samples].</param>
-    /// <param name="expected">Target sources [batch, sources, samples].</param>
+    /// <param name="input">The mixture, [batch, samples] or [samples].</param>
+    /// <param name="expected">The reference sources, [batch, sources, samples].</param>
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode)
@@ -808,209 +508,12 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
         SetTrainingMode(true);
         try
         {
-            var predicted = PredictCore(input);
-            _ = ComputeSiSnrLoss(predicted, expected);
-            var gradients = ComputeGradients(predicted, expected);
-            PublishComputedGradients(gradients);
-            UpdateWeights(gradients);
+            TrainWithTape(input, expected, Optimizer);
         }
         finally
         {
             SetTrainingMode(false);
         }
-    }
-
-    /// <summary>
-    /// Computes the SI-SNR loss for speech separation.
-    /// </summary>
-    private T ComputeSiSnrLoss(Tensor<T> predicted, Tensor<T> target)
-    {
-        // SI-SNR: Scale-Invariant Signal-to-Noise Ratio
-        // Higher is better, so we negate for loss
-        double totalLoss = 0;
-        int batchSize = predicted.Shape[0];
-        int numSources = predicted.Shape[1];
-        int numSamples = predicted.Shape[2];
-        double epsilon = 1e-8;
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int s = 0; s < numSources && s < target.Shape[1]; s++)
-            {
-                double dotProduct = 0;
-                double targetNormSq = 0;
-
-                for (int t = 0; t < numSamples && t < target.Shape[2]; t++)
-                {
-                    int predIdx = b * numSources * numSamples + s * numSamples + t;
-                    int targIdx = b * target.Shape[1] * target.Shape[2] + s * target.Shape[2] + t;
-
-                    if (predIdx < predicted.Length && targIdx < target.Length)
-                    {
-                        double pred = _numOps.ToDouble(predicted.Data.Span[predIdx]);
-                        double targ = _numOps.ToDouble(target.Data.Span[targIdx]);
-                        dotProduct += pred * targ;
-                        targetNormSq += targ * targ;
-                    }
-                }
-
-                // Scale factor
-                double scale = dotProduct / (targetNormSq + epsilon);
-
-                // Compute SI-SNR
-                double signalPower = 0;
-                double noisePower = 0;
-
-                for (int t = 0; t < numSamples && t < target.Shape[2]; t++)
-                {
-                    int predIdx = b * numSources * numSamples + s * numSamples + t;
-                    int targIdx = b * target.Shape[1] * target.Shape[2] + s * target.Shape[2] + t;
-
-                    if (predIdx < predicted.Length && targIdx < target.Length)
-                    {
-                        double targ = _numOps.ToDouble(target.Data.Span[targIdx]);
-                        double scaledTarget = scale * targ;
-                        double pred = _numOps.ToDouble(predicted.Data.Span[predIdx]);
-                        double noise = pred - scaledTarget;
-
-                        signalPower += scaledTarget * scaledTarget;
-                        noisePower += noise * noise;
-                    }
-                }
-
-                double siSnr = 10 * Math.Log10((signalPower + epsilon) / (noisePower + epsilon));
-                totalLoss -= siSnr; // Negate because higher SI-SNR is better
-            }
-        }
-
-        return _numOps.FromDouble(totalLoss / (batchSize * numSources));
-    }
-
-    /// <summary>
-    /// Computes gradients for backpropagation.
-    /// </summary>
-    private Dictionary<string, T[]> ComputeGradients(Tensor<T> predicted, Tensor<T> target)
-    {
-        // Simplified gradient computation
-        var gradients = new Dictionary<string, T[]>
-        {
-            ["encoder"] = new T[_encoderWeight.Length],
-            ["decoder"] = new T[_decoderWeight.Length],
-            ["mask"] = new T[_maskWeight.Length]
-        };
-
-        // Compute output gradients
-        int len = Math.Min(predicted.Length, target.Length);
-        for (int i = 0; i < len; i++)
-        {
-            double pred = _numOps.ToDouble(predicted.Data.Span[i]);
-            double targ = i < target.Length ? _numOps.ToDouble(target.Data.Span[i]) : 0;
-            double grad = pred - targ;
-
-            // Accumulate to decoder gradients
-            int decoderIdx = i % _decoderWeight.Length;
-            gradients["decoder"][decoderIdx] = _numOps.Add(
-                gradients["decoder"][decoderIdx],
-                _numOps.FromDouble(grad * 0.01));
-        }
-
-        return gradients;
-    }
-
-    /// <summary>Publishes the hand-derived Conv-TasNet gradients to the shared model surface.</summary>
-    private void PublishComputedGradients(Dictionary<string, T[]> gradients)
-    {
-        var published = new Dictionary<Tensor<T>, Tensor<T>>(
-            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-
-        void Add(string name, Tensor<T> parameter)
-        {
-            if (gradients.TryGetValue(name, out var values) && values.Length == parameter.Length)
-                published[parameter] = new Tensor<T>(values, parameter._shape);
-        }
-
-        Add("encoder", _encoderWeight);
-        Add("decoder", _decoderWeight);
-        Add("mask", _maskWeight);
-        PublishParameterGradients(published);
-    }
-
-    /// <summary>
-    /// Updates model weights using computed gradients.
-    /// </summary>
-    private void UpdateWeights(Dictionary<string, T[]> gradients)
-    {
-        double learningRate = 1e-4;
-
-        // Update encoder weights
-        if (gradients.TryGetValue("encoder", out var encoderGrad))
-        {
-            for (int i = 0; i < _encoderWeight.Length; i++)
-            {
-                double grad = i < encoderGrad.Length ? _numOps.ToDouble(encoderGrad[i]) : 0;
-                double weight = _numOps.ToDouble(_encoderWeight[i]);
-                _encoderWeight[i] = _numOps.FromDouble(weight - learningRate * grad);
-            }
-        }
-
-        // Update decoder weights
-        if (gradients.TryGetValue("decoder", out var decoderGrad))
-        {
-            for (int i = 0; i < _decoderWeight.Length; i++)
-            {
-                double grad = i < decoderGrad.Length ? _numOps.ToDouble(decoderGrad[i]) : 0;
-                double weight = _numOps.ToDouble(_decoderWeight[i]);
-                _decoderWeight[i] = _numOps.FromDouble(weight - learningRate * grad);
-            }
-        }
-
-        // Update mask weights
-        if (gradients.TryGetValue("mask", out var maskGrad))
-        {
-            for (int i = 0; i < _maskWeight.Length; i++)
-            {
-                double grad = i < maskGrad.Length ? _numOps.ToDouble(maskGrad[i]) : 0;
-                double weight = _numOps.ToDouble(_maskWeight[i]);
-                _maskWeight[i] = _numOps.FromDouble(weight - learningRate * grad);
-            }
-        }
-
-        // Update TCN blocks
-        foreach (var block in _tcnBlocks)
-        {
-            block.UpdateWeights(learningRate);
-        }
-    }
-
-    #endregion
-
-    #region Serialization
-
-    #endregion
-
-    #region Helper Methods
-
-    private Tensor<T> InitializeWeights(int size, double initValue = double.NaN)
-    {
-        var weights = new Tensor<T>([size]);
-        if (double.IsNaN(initValue))
-        {
-            // Xavier/Glorot initialization
-            double scale = Math.Sqrt(2.0 / size);
-            var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
-            for (int i = 0; i < size; i++)
-            {
-                weights[i] = _numOps.FromDouble(rand.NextGaussian() * scale);
-            }
-        }
-        else
-        {
-            for (int i = 0; i < size; i++)
-            {
-                weights[i] = _numOps.FromDouble(initValue);
-            }
-        }
-        return weights;
     }
 
     #endregion
@@ -1044,221 +547,6 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
 
     /// <inheritdoc/>
 
-
-    #endregion
-
-    #region Nested Types
-
-    /// <summary>
-    /// A single block in the Temporal Convolutional Network.
-    /// </summary>
-    private class TcnBlock
-    {
-        private readonly INumericOperations<T> _ops;
-        private readonly int _inputDim;
-        private readonly int _hiddenDim;
-        private readonly int _kernelSize;
-        private readonly int _dilation;
-
-        private Tensor<T> _conv1Weight;
-        private Tensor<T> _conv1Bias;
-        private Tensor<T> _conv2Weight;
-        private Tensor<T> _conv2Bias;
-        private Tensor<T> _depthwiseWeight;
-        private Tensor<T> _normGamma;
-        private Tensor<T> _normBeta;
-
-        private T[] _gradConv1;
-        private T[] _gradConv2;
-        private T[] _gradDepthwise;
-
-        public TcnBlock(INumericOperations<T> ops, int inputDim, int hiddenDim, int kernelSize, int dilation)
-        {
-            _ops = ops;
-            _inputDim = inputDim;
-            _hiddenDim = hiddenDim;
-            _kernelSize = kernelSize;
-            _dilation = dilation;
-
-            // Initialize weights
-            var rand = AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
-            double scale = Math.Sqrt(2.0 / inputDim);
-
-            _conv1Weight = new Tensor<T>([hiddenDim * inputDim]);
-            _conv1Bias = new Tensor<T>([hiddenDim]);
-            _conv2Weight = new Tensor<T>([inputDim * hiddenDim]);
-            _conv2Bias = new Tensor<T>([inputDim]);
-            _depthwiseWeight = new Tensor<T>([hiddenDim * kernelSize]);
-            _normGamma = new Tensor<T>([hiddenDim]);
-            _normBeta = new Tensor<T>([hiddenDim]);
-
-            for (int i = 0; i < _conv1Weight.Length; i++)
-            {
-                _conv1Weight[i] = _ops.FromDouble(rand.NextGaussian() * scale);
-            }
-            for (int i = 0; i < _conv2Weight.Length; i++)
-            {
-                _conv2Weight[i] = _ops.FromDouble(rand.NextGaussian() * scale);
-            }
-            for (int i = 0; i < _depthwiseWeight.Length; i++)
-            {
-                _depthwiseWeight[i] = _ops.FromDouble(rand.NextGaussian() * scale);
-            }
-            for (int i = 0; i < hiddenDim; i++)
-            {
-                _normGamma[i] = _ops.FromDouble(1.0);
-                _normBeta[i] = _ops.Zero;
-            }
-
-            _gradConv1 = new T[_conv1Weight.Length];
-            _gradConv2 = new T[_conv2Weight.Length];
-            _gradDepthwise = new T[_depthwiseWeight.Length];
-        }
-
-        public Tensor<T> Forward(Tensor<T> input)
-        {
-            int batchSize = input.Shape[0];
-            int numFrames = input.Shape[1];
-            int inputDim = input.Shape[2];
-
-            // 1x1 conv to hidden dim
-            var hidden = new T[batchSize * numFrames * _hiddenDim];
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int f = 0; f < numFrames; f++)
-                {
-                    for (int h = 0; h < _hiddenDim; h++)
-                    {
-                        T sum = _conv1Bias[h];
-                        for (int i = 0; i < inputDim; i++)
-                        {
-                            int inIdx = b * numFrames * inputDim + f * inputDim + i;
-                            int wIdx = h * inputDim + i;
-                            if (inIdx < input.Length && wIdx < _conv1Weight.Length)
-                            {
-                                sum = _ops.Add(sum, _ops.Multiply(input.Data.Span[inIdx], _conv1Weight[wIdx]));
-                            }
-                        }
-                        // PReLU activation
-                        int outIdx = b * numFrames * _hiddenDim + f * _hiddenDim + h;
-                        double val = _ops.ToDouble(sum);
-                        hidden[outIdx] = val > 0 ? sum : _ops.FromDouble(val * 0.25);
-                    }
-                }
-            }
-
-            // Depthwise convolution with dilation
-            var depthOut = new T[batchSize * numFrames * _hiddenDim];
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int f = 0; f < numFrames; f++)
-                {
-                    for (int h = 0; h < _hiddenDim; h++)
-                    {
-                        T sum = _ops.Zero;
-                        for (int k = 0; k < _kernelSize; k++)
-                        {
-                            int inputFrame = f - ((_kernelSize - 1) / 2 - k) * _dilation;
-                            if (inputFrame >= 0 && inputFrame < numFrames)
-                            {
-                                int inIdx = b * numFrames * _hiddenDim + inputFrame * _hiddenDim + h;
-                                int wIdx = h * _kernelSize + k;
-                                if (wIdx < _depthwiseWeight.Length)
-                                {
-                                    sum = _ops.Add(sum, _ops.Multiply(hidden[inIdx], _depthwiseWeight[wIdx]));
-                                }
-                            }
-                        }
-                        int outIdx = b * numFrames * _hiddenDim + f * _hiddenDim + h;
-                        double val = _ops.ToDouble(sum);
-                        depthOut[outIdx] = val > 0 ? sum : _ops.FromDouble(val * 0.25);
-                    }
-                }
-            }
-
-            // 1x1 conv back to input dim
-            var output = new T[batchSize * numFrames * _inputDim];
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int f = 0; f < numFrames; f++)
-                {
-                    for (int i = 0; i < _inputDim; i++)
-                    {
-                        T sum = _conv2Bias[i];
-                        for (int h = 0; h < _hiddenDim; h++)
-                        {
-                            int inIdx = b * numFrames * _hiddenDim + f * _hiddenDim + h;
-                            int wIdx = i * _hiddenDim + h;
-                            if (wIdx < _conv2Weight.Length)
-                            {
-                                sum = _ops.Add(sum, _ops.Multiply(depthOut[inIdx], _conv2Weight[wIdx]));
-                            }
-                        }
-                        int outIdx = b * numFrames * _inputDim + f * _inputDim + i;
-                        int inOrigIdx = b * numFrames * inputDim + f * inputDim + i;
-
-                        // Residual connection
-                        if (inOrigIdx < input.Length)
-                        {
-                            output[outIdx] = _ops.Add(sum, input.Data.Span[inOrigIdx]);
-                        }
-                        else
-                        {
-                            output[outIdx] = sum;
-                        }
-                    }
-                }
-            }
-
-            return new Tensor<T>(output, new[] { batchSize, numFrames, _inputDim });
-        }
-
-        public void UpdateWeights(double learningRate)
-        {
-            // Apply gradients to weights
-            for (int i = 0; i < _conv1Weight.Length; i++)
-            {
-                double grad = _ops.ToDouble(_gradConv1[i]);
-                double weight = _ops.ToDouble(_conv1Weight[i]);
-                _conv1Weight[i] = _ops.FromDouble(weight - learningRate * grad);
-                _gradConv1[i] = _ops.Zero;
-            }
-
-            for (int i = 0; i < _conv2Weight.Length; i++)
-            {
-                double grad = _ops.ToDouble(_gradConv2[i]);
-                double weight = _ops.ToDouble(_conv2Weight[i]);
-                _conv2Weight[i] = _ops.FromDouble(weight - learningRate * grad);
-                _gradConv2[i] = _ops.Zero;
-            }
-
-            for (int i = 0; i < _depthwiseWeight.Length; i++)
-            {
-                double grad = _ops.ToDouble(_gradDepthwise[i]);
-                double weight = _ops.ToDouble(_depthwiseWeight[i]);
-                _depthwiseWeight[i] = _ops.FromDouble(weight - learningRate * grad);
-                _gradDepthwise[i] = _ops.Zero;
-            }
-        }
-
-        /// <summary>The trainable tensors this block owns, in forward order.</summary>
-        /// <remarks>
-        /// Replaces this block's ParameterCount, GetParameterChunks, CopyParametersTo and
-        /// ReadParametersFrom -- four members that each listed the same seven weights in the same
-        /// order, plus a Copy/Read pair to move them element by element. ConvTasNet folds this one
-        /// enumeration for all four purposes.
-        /// </remarks>
-        internal IEnumerable<Tensor<T>> EnumerateTensors()
-        {
-            yield return _conv1Weight;
-            yield return _conv1Bias;
-            yield return _conv2Weight;
-            yield return _conv2Bias;
-            yield return _depthwiseWeight;
-            yield return _normGamma;
-            yield return _normBeta;
-        }
-    }
 
     #endregion
 }
