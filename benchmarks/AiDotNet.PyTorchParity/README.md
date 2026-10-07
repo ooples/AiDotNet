@@ -125,7 +125,10 @@ Flags: `--runs` (9), `--select-runs` (3), `--finalists` (2), `--modes` (subset o
 mode labels; eager is always included), `--epochs` (5), `--threads` (0 = each side
 at its default; N pins torch `--threads` and `AIDOTNET_BLAS_THREADS`), `--python`,
 `--vcvars`, `--output-dir` (`results/`), `--priority`, `--max-background-pct`,
-`--max-retries`, `--quiet-wait`, `--quiet-poll`, `--timeout` (1800 s per run).
+`--max-retries`, `--quiet-wait`, `--quiet-poll`, `--timeout` (1800 s per run),
+`--snapshot` / `--no-snapshot` (default on: AiDotNet runs from a private copy of
+`--ours-bin` taken at the start, so a shared baseline refreshed mid-sweep cannot
+mix two builds into one scoreboard; provenance hashes that copy).
 Windows only (the lock is a Win32 named
 mutex).
 

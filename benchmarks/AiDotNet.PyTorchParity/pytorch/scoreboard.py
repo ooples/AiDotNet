@@ -343,6 +343,12 @@ class Runner:
         self.args = args
         self.lock = BenchLock(args.lock_name)
         self.workdir = Path(tempfile.mkdtemp(prefix="scoreboard-"))
+        self.ours_bin = Path(args.ours_bin)
+        if args.snapshot:
+            # --ours-bin is often a shared directory (the bench baseline) that another track may refresh during
+            # a multi-hour sweep; running a private copy keeps every AiDotNet run on one build.
+            self.ours_bin = self.workdir / "ours-bin"
+            shutil.copytree(args.ours_bin, self.ours_bin)
         self.ours_env = dict(os.environ)
         self.torch_env = dict(msvc_env or os.environ)
         if args.threads > 0:
@@ -428,7 +434,7 @@ class Runner:
         raise AssertionError("unreachable")
 
     def ours(self, model: str, device: str) -> RunResult:
-        cmd = ["dotnet", str(Path(self.args.ours_bin) / "AiDotNet.PyTorchParity.dll"), "--models", model, "--device", device,
+        cmd = ["dotnet", str(self.ours_bin / "AiDotNet.PyTorchParity.dll"), "--models", model, "--device", device,
                # The harness has no training-only switch; one inference iteration per batch size keeps it negligible.
                "--inference-iterations", "1", "--warmup-iterations", "1"] + self._common()
         return self._run(cmd, self.ours_env, model, device, "AiDotNet")
@@ -589,7 +595,8 @@ def write_markdown(report: dict[str, object], path: Path) -> None:
         f"- Machine: {machine['cpu']} ({machine['logicalProcessors']} logical), GPU {torch_info.get('gpu')}, {machine['os']}",
         f"- PyTorch {torch_info.get('torch')} (CUDA {torch_info.get('cuda')}, {torch_info.get('threads')} intra-op threads), "
         f"Python {machine['python']}, {report['toolchain']['triton']}, MSVC: {report['toolchain']['msvc']}",
-        f"- AiDotNet harness: `{cfg['oursBin']}` (.NET SDK {machine['dotnetSdk']}); thread pin: "
+        f"- AiDotNet harness: `{cfg['oursBin']}`{' (run from a copy taken at the start)' if cfg.get('oursBinSnapshot') else ''} "
+        f"(.NET SDK {machine['dotnetSdk']}); thread pin: "
         f"{cfg['threads'] if cfg['threads'] > 0 else 'none (each side at its default)'}",
     ]
     for name, prov in ours.items():
@@ -628,6 +635,9 @@ def main() -> None:
     parser.add_argument("--max-retries", type=int, default=2, help="re-runs of a run discarded for background load")
     parser.add_argument("--quiet-wait", type=float, default=120, help="max seconds to wait for a quiet machine before a run")
     parser.add_argument("--quiet-poll", type=float, default=10, help="seconds between quiet-machine checks")
+    parser.add_argument("--snapshot", action=argparse.BooleanOptionalAction, default=True,
+                        help="run AiDotNet from a private copy of --ours-bin taken at the start (default on), so a "
+                             "shared directory refreshed mid-sweep cannot mix two builds into one scoreboard")
     parser.add_argument("--output-dir", type=Path, default=HERE.parent / "results")
     args = parser.parse_args()
 
@@ -657,6 +667,11 @@ def main() -> None:
 
     runner = Runner(args, msvc_env)
     started = dt.datetime.now(dt.timezone.utc)
+    # Provenance of exactly the DLLs that run (the snapshot when --snapshot is on).
+    ours_provenance = {name: file_provenance(runner.ours_bin / name)
+                       for name in ("AiDotNet.dll", "AiDotNet.Tensors.dll", "AiDotNet.PyTorchParity.dll")}
+    for prov in ours_provenance.values():
+        prov["path"] = str(args.ours_bin / Path(str(prov["path"])).name)
     cells = []
     try:
         for device in devices:
@@ -674,12 +689,11 @@ def main() -> None:
                    "selectRuns": args.select_runs, "finalists": args.finalists, "epochs": args.epochs, "trainBatches": args.train_batches,
                    "batchSize": args.batch_size, "seed": args.seed, "threads": args.threads, "lockName": args.lock_name,
                    "maxBackgroundPct": args.max_background_pct, "maxRetries": args.max_retries, "quietWait": args.quiet_wait,
-                   "priority": args.priority,
+                   "priority": args.priority, "oursBinSnapshot": args.snapshot,
                    "statistic": "per run: median steady-state epoch seconds / steps (epoch 0 excluded); per cell: median of runs"},
         "machine": machine_info(args.python),
         "toolchain": {"msvc": msvc_note, "triton": triton_note},
-        "aidotnet": {name: file_provenance(args.ours_bin / name)
-                     for name in ("AiDotNet.dll", "AiDotNet.Tensors.dll", "AiDotNet.PyTorchParity.dll")},
+        "aidotnet": ours_provenance,
         "modesNotRun": NOT_RUN,
         "modesUnavailable": unavailable,
         "cells": cells,
