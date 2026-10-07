@@ -28,6 +28,8 @@ public class MVDreamCloneTests
 
         var clone = model.Clone();
 
+        Assert.Equal(model.GetParameters().ToArray(), clone.GetParameters().ToArray());
+
         var sourceLayers = ReachableLayers(model);
         Assert.NotEmpty(sourceLayers);
         var shared = new List<string>();
@@ -50,9 +52,12 @@ public class MVDreamCloneTests
         {
             var current = pending.Pop();
             var type = current.GetType();
+            // Walk the library's own objects and any collection that may hold them; skip every other
+            // framework object, whose internals cannot hold a layer.
+            bool libraryType = type.Namespace is not null
+                && type.Namespace.StartsWith("AiDotNet", System.StringComparison.Ordinal);
             if (!seen.Add(current) || type.IsPrimitive || current is string || current is System.Delegate
-                || type.Namespace is null || !type.Namespace.StartsWith("AiDotNet", System.StringComparison.Ordinal)
-                && current is not IEnumerable)
+                || (!libraryType && current is not IEnumerable))
             {
                 continue;
             }
