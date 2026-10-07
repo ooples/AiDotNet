@@ -81,6 +81,18 @@ function Get-HeavyChunkOutcome {
         return $result
     }
 
+    # A crashed or hung host can be recorded only as a run-level error, beside results that are all
+    # envelope failures. xUnit also echoes every failed test there as "[xUnit.net ...] <test> [FAIL]",
+    # which the result rows below already judge, so only the other errors are evidence on their own.
+    foreach ($info in @($trx.SelectNodes("//t:RunInfo[@outcome='Error']", $ns))) {
+        $textNode = $info.SelectSingleNode('t:Text', $ns)
+        $text = if ($null -eq $textNode) { '' } else { $textNode.InnerText.Trim() }
+        if ($text -notmatch '^\[xUnit\.net [\d:.]+\]\s+\S+ \[FAIL\]$') {
+            $result.Reason = "run error: $(($text -split "`r?`n")[0])"
+            return $result
+        }
+    }
+
     $failedResults = @($trx.SelectNodes("//t:UnitTestResult[@outcome='Failed']", $ns))
     if ($failedResults.Count -eq 0) {
         # dotnet test exited 1 with nothing failed: the run itself broke, which is not the envelope.
@@ -112,13 +124,16 @@ function Invoke-SelfTest {
     [void] [System.IO.Directory]::CreateDirectory($root)
     $problems = [System.Collections.Generic.List[string]]::new()
 
-    function New-Trx([string] $Name, [string] $RunOutcome, [object[]] $Results) {
+    function New-Trx([string] $Name, [string] $RunOutcome, [object[]] $Results, [string[]] $RunErrors = @()) {
         $rows = foreach ($r in $Results) {
             $message = [System.Security.SecurityElement]::Escape($r.Message)
             "<UnitTestResult testName=`"$($r.Name)`" outcome=`"$($r.Outcome)`"><Output><ErrorInfo><Message>$message</Message></ErrorInfo></Output></UnitTestResult>"
         }
+        $infos = foreach ($e in $RunErrors) {
+            "<RunInfo computerName=`"runner`" outcome=`"Error`"><Text>$([System.Security.SecurityElement]::Escape($e))</Text></RunInfo>"
+        }
         $path = Join-Path $root "$Name.trx"
-        $xml = "<?xml version=`"1.0`" encoding=`"utf-8`"?><TestRun xmlns=`"http://microsoft.com/schemas/VisualStudio/TeamTest/2010`"><Results>$($rows -join '')</Results><ResultSummary outcome=`"$RunOutcome`" /></TestRun>"
+        $xml = "<?xml version=`"1.0`" encoding=`"utf-8`"?><TestRun xmlns=`"http://microsoft.com/schemas/VisualStudio/TeamTest/2010`"><Results>$($rows -join '')</Results><ResultSummary outcome=`"$RunOutcome`"><RunInfos>$($infos -join '')</RunInfos></ResultSummary></TestRun>"
         Set-Content -LiteralPath $path -Value $xml -Encoding utf8NoBOM
         return $path
     }
@@ -138,6 +153,12 @@ function Invoke-SelfTest {
                 @{ Name = 'B'; Outcome = 'Failed'; Message = $aggOom },
                 @{ Name = 'C'; Outcome = 'Failed'; Message = $disk },
                 @{ Name = 'D'; Outcome = 'Passed'; Message = '' })) '1'
+        Assert-Outcome 'oom_with_fail_echo' Envelope (New-Trx 'echo' 'Failed' @(
+                @{ Name = 'A'; Outcome = 'Failed'; Message = $oom }) @(
+                '[xUnit.net 00:02:07.32]     AiDotNet.Tests.SomeModelTests.Metadata_ShouldExist [FAIL]')) '1'
+        Assert-Outcome 'oom_with_host_crash' Failed (New-Trx 'crash' 'Failed' @(
+                @{ Name = 'A'; Outcome = 'Failed'; Message = $oom }) @(
+                'The active test run was aborted. Reason: Test host process crashed')) '1'
         Assert-Outcome 'oom_and_assertion' Failed (New-Trx 'mixed' 'Failed' @(
                 @{ Name = 'A'; Outcome = 'Failed'; Message = $oom },
                 @{ Name = 'B'; Outcome = 'Failed'; Message = 'Training did not reduce loss: initial=1, final=2.' })) '1'
