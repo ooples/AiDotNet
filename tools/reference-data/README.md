@@ -1,7 +1,8 @@
 # Reference data generators
 
 The C# tests under `tests/AiDotNet.Tests` compare AiDotNet's implementations against fixed values from the
-original implementations: the official codec code, librosa, PyWorld and NATSpeech. This folder holds the scripts
+original implementations: the official codec code, librosa, PyWorld, NATSpeech, Hugging Face T5, pyannote.audio,
+espeak-ng and Pheme's own modules. This folder holds the scripts
 that produce those values, so you can check them yourself or regenerate them.
 
 | Script | Fixture it produces | Reference implementation |
@@ -11,6 +12,12 @@ that produce those values, so you can check them yourself or regenerate them.
 | `speechtokenizer_reference.py` | `Audio/Codecs/ReferenceData/speechtokenizer_official_layout_reference.json` | the authors' `speechtokenizer` package |
 | `pitch_reference.py` | `Audio/Pitch/ReferenceData/pyworld_dio_stonemask.json` and `natspeech_pitch_cwt.json` | PyWorld, and NATSpeech's `cwt.py` (vendored unchanged in `natspeech_cwt.py`) |
 | `tacotron_mel_reference.py` | `TextToSpeech/ReferenceData/librosa_tacotron_mel.json` | librosa |
+| `t5_reference.py` | `TextToSpeech/ReferenceData/t5_reference.json` | Hugging Face `transformers` `T5ForConditionalGeneration` (Pheme's text-to-semantic model) |
+| `conformer_reference.py` | `TextToSpeech/ReferenceData/soundstorm_conformer_reference.json` | Pheme's `modules/conformer.py` (needs `--pheme`, a checkout of PolyAI-LDN/pheme) |
+| `pheme_s2a_reference.py` | `TextToSpeech/ReferenceData/pheme_s2a_reference.json` | Pheme's `modules/s2a_model.py` `TTSConformer` (needs `--pheme`) |
+| `xvector_reference.py` | `TextToSpeech/ReferenceData/pyannote_xvector_reference.json` | pyannote.audio `XVectorSincNet` |
+| `espeak_g2p_reference.py` | `TextToSpeech/ReferenceData/espeak_arctic_phonemes.json` | espeak-ng through `phonemizer` (the front end Pheme was trained with) |
+| `g2p_resources.py` | `src/TextToSpeech/FrontEnd/Resources/cmudict.tsv.gz` and `nrl_rules.tsv` (the English G2P's data, not a test fixture) | CMUdict and NRL Report 7948's rules, from pinned sources |
 
 ## Set up
 

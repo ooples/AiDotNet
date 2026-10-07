@@ -36,6 +36,13 @@ public class NeuralAudioCodecOptions : ModelOptions
     /// <summary>Gets or sets the seed of the training draws (segment offsets, bandwidths, discriminator updates).</summary>
     public int SamplingSeed { get; set; }
 
+    /// <summary>
+    /// Gets or sets whether the codec builds the discriminators its adversarial training needs (true). A codec used only
+    /// to encode and decode, such as the tokenizer and vocoder inside a codec language model, sets this to false: it
+    /// then allocates only its encoder, quantizer and decoder, and refuses to train.
+    /// </summary>
+    public bool IncludeDiscriminators { get; set; } = true;
+
     /// <summary>Gets or sets the path of an ONNX model with the encoder and decoder in one graph.</summary>
     public string? ModelPath { get; set; }
 
@@ -184,7 +191,8 @@ public abstract class NeuralAudioCodecBase<T> : AudioNeuralNetworkBase<T>, IAudi
             return;
         }
         Quantizer = CreateCodec(_generatorLayers);
-        _discriminatorLayers.AddRange(CreateDiscriminators());
+        if (_codec.IncludeDiscriminators)
+            _discriminatorLayers.AddRange(CreateDiscriminators());
         Layers.AddRange(_generatorLayers);
     }
 
@@ -355,6 +363,9 @@ public abstract class NeuralAudioCodecBase<T> : AudioNeuralNetworkBase<T>, IAudi
     /// </summary>
     protected void TrainOnSegment(Tensor<T> source, Tensor<T> target)
     {
+        if (!_codec.IncludeDiscriminators)
+            throw new InvalidOperationException("This codec was built without discriminators (IncludeDiscriminators = false), " +
+                "so it can encode and decode but not train; build it with IncludeDiscriminators = true to train it.");
         var (quantizers, bandwidth) = SampleTrainingBandwidth(_trainingRandom);
         bool updateDiscriminator = _trainingRandom.NextDouble() < DiscriminatorUpdateProbability;
         if (updateDiscriminator && _discriminatorLayers.Count > 0)

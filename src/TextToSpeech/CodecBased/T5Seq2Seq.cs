@@ -304,6 +304,46 @@ internal sealed class T5Seq2Seq<T>
         training && Configuration.Dropout > 0 ? Dropout(_engine, x, Configuration.Dropout, random) : x;
 
     /// <summary>
+    /// Initializes the parameters as Hugging Face's <c>T5PreTrainedModel._init_weights</c> does (initializer factor 1):
+    /// the shared embedding from N(0, 1); query N(0, (d_model · d_kv)^-1/2), key and value N(0, d_model^-1/2), output
+    /// N(0, (heads · d_kv)^-1/2); the relative bias tables N(0, d_model^-1/2); wi N(0, d_model^-1/2), wo
+    /// N(0, d_ff^-1/2); layer norms at one.
+    /// </summary>
+    public void InitializeLikeHuggingFace(Random random)
+    {
+        var c = Configuration;
+        int inner = c.Heads * c.KeyValueDim;
+        double Normal(double std)
+        {
+            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
+            return std * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
+        }
+        void Fill(BiasFreeLinearLayer<T> layer, int inputs, int outputs, double std)
+        {
+            var values = new Vector<T>(inputs * outputs);
+            for (int i = 0; i < values.Length; i++) values[i] = NumOps.FromDouble(Normal(std));
+            layer.SetParameters(values);
+        }
+        void Attention(T5Attention<T> attention)
+        {
+            Fill(attention.Query, c.ModelDim, inner, Math.Pow(c.ModelDim * c.KeyValueDim, -0.5));
+            Fill(attention.Key, c.ModelDim, inner, Math.Pow(c.ModelDim, -0.5));
+            Fill(attention.Value, c.ModelDim, inner, Math.Pow(c.ModelDim, -0.5));
+            Fill(attention.Output, inner, c.ModelDim, Math.Pow(inner, -0.5));
+        }
+        Shared.Reinitialize(() => Normal(1.0));
+        EncoderBias.Reinitialize(() => Normal(Math.Pow(c.ModelDim, -0.5)));
+        DecoderBias.Reinitialize(() => Normal(Math.Pow(c.ModelDim, -0.5)));
+        foreach (var block in Encoder.Concat(Decoder))
+        {
+            Attention(block.SelfAttention);
+            if (block.CrossAttention is not null) Attention(block.CrossAttention);
+            Fill(block.Wi, c.ModelDim, c.FeedForwardDim, Math.Pow(c.ModelDim, -0.5));
+            Fill(block.Wo, c.FeedForwardDim, c.ModelDim, Math.Pow(c.FeedForwardDim, -0.5));
+        }
+    }
+
+    /// <summary>
     /// Loads a Hugging Face <c>T5ForConditionalGeneration</c> state dict; <paramref name="read"/> returns the named
     /// tensor's values, row-major, after checking its shape. Linear weights are <c>[out, in]</c> in the checkpoint.
     /// </summary>

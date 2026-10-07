@@ -8,11 +8,11 @@ using AiDotNet.NeuralNetworks.Layers;
 namespace AiDotNet.TextToSpeech.CodecBased;
 
 /// <summary>
-/// Parameter-owning Bark boundary around an EnCodec-compatible audio codec.
+/// Parameter-owning boundary around a neural audio codec that a model owns as one of its stages.
 /// </summary>
 /// <remarks>
-/// A codec is a model in its own right, but Bark owns it as its fourth stage. Registering the
-/// nested codec layers here makes the ordinary layer graph the single source of truth for
+/// A codec is a model in its own right, but Bark owns one as its fourth stage and Pheme as its tokenizer and
+/// vocoder. Registering the nested codec layers here makes the ordinary layer graph the single source of truth for
 /// parameters, gradients, serialization, cloning, and device placement.
 /// </remarks>
 [AutoParameters]
@@ -21,11 +21,11 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [LayerProperty(IsTrainable = true, SupportsBackpropagation = false, ChangesShape = true, Cost = ComputeCost.High)]
 [TensorLayout(TensorAxis.Channels, TensorAxis.Time, Direction = TensorLayoutDirection.Input)]
 [TensorLayout(TensorAxis.Time, Direction = TensorLayoutDirection.Output)]
-internal partial class BarkCodecLayer<T> : LayerBase<T>, IShapeContract
+internal partial class AudioCodecLayer<T> : LayerBase<T>, IShapeContract
 {
     private readonly IAudioCodec<T> _codec;
 
-    internal BarkCodecLayer(IAudioCodec<T> codec)
+    internal AudioCodecLayer(IAudioCodec<T> codec)
         : base([LayerShape.Dynamic, LayerShape.Dynamic], [LayerShape.Dynamic])
     {
         _codec = codec ?? throw new ArgumentNullException(nameof(codec));
@@ -63,7 +63,7 @@ internal partial class BarkCodecLayer<T> : LayerBase<T>, IShapeContract
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Shape.Length != 2)
-            throw new ArgumentException("Bark codec input must have shape [codebook, frame].", nameof(input));
+            throw new ArgumentException("Codec input must have shape [codebook, frame].", nameof(input));
 
         int codebooks = input.Shape[0];
         int frames = input.Shape[1];

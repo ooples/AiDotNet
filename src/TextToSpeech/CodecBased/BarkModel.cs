@@ -139,7 +139,7 @@ public partial class BarkModel<T> : TtsModelBase<T>
     private BarkTransformerStageLayer<T> _semantic;
     private BarkTransformerStageLayer<T> _coarse;
     private BarkTransformerStageLayer<T> _fine;
-    private readonly BarkCodecLayer<T> _codec;
+    private readonly AudioCodecLayer<T> _codec;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private TrainingStage _trainingStage;
     private int _fineTrainingHead;
@@ -176,7 +176,7 @@ public partial class BarkModel<T> : TtsModelBase<T>
             _options.Fine,
             inputStreams: _options.NumCodebooks,
             outputHeads: _options.NumCodebooks - _options.NumberOfFineCodebooksGiven);
-        _codec = new BarkCodecLayer<T>(codec ?? CreateDefaultCodec(_options));
+        _codec = new AudioCodecLayer<T>(codec ?? CreateDefaultCodec(_options));
         InitializeLayers();
         StreamingTraining = StreamingTrainingMode.Auto;
     }
@@ -828,6 +828,8 @@ public partial class BarkModel<T> : TtsModelBase<T>
         double perCodebook = codecOptions.SampleRate / (double)codecOptions.Ratios.Aggregate(1, (a, b) => a * b)
             * Math.Log(codecOptions.CodebookSize, 2) / 1000.0;
         codecOptions.TargetBandwidthKbps = options.NumCodebooks * perCodebook;
+        // Bark only encodes and decodes with its codec, so the codec's training discriminators are never built.
+        codecOptions.IncludeDiscriminators = false;
         var architecture = new NeuralNetworkArchitecture<T>(inputFeatures: 1, outputSize: codecOptions.Dimension);
         return new EnCodec<T>(architecture, codecOptions);
     }

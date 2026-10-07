@@ -144,6 +144,33 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
             energy[f] = Math.Min(Math.Sqrt(sum), 600.0);
         }
 
+        // Codec tokens for models that generate them (Pheme): one code per codebook per frame, a deterministic function of
+        // the target so a memorization task has something consistent to learn.
+        Tensor<T>? codecTokens = null;
+        Tensor<T>? speakerRecording = null;
+        if (network is not null && (network.TrainingSupervision & AiDotNet.TextToSpeech.TtsSupervision.CodecTokens) != 0)
+        {
+            int codebooks = network.CodecTokenCodebooks, vocabulary = network.CodecTokenVocabulary;
+            // A waveform target [samples] holds one codec frame per hop; a frame-shaped target one per row.
+            int codecFrames = target.Rank >= 2 ? frames : Math.Max(1, target.Length / Math.Max(1, network.HopSize));
+            codecTokens = new Tensor<T>(new[] { codecFrames, codebooks });
+            for (int f = 0; f < codecFrames; f++)
+            {
+                double level = 0;
+                for (int c = 0; c < channels; c++) level += Math.Abs(ops.ToDouble(mel[f, c]));
+                for (int q = 0; q < codebooks; q++)
+                    codecTokens[f, q] = ops.FromDouble(((int)(level * 997) + 31 * q + 7 * f) % vocabulary);
+            }
+        }
+        if (network is not null && (network.TrainingSupervision & AiDotNet.TextToSpeech.TtsSupervision.ReferenceRecording) != 0)
+        {
+            // The same one-second two-tone waveform CreateNetwork gives as the voice.
+            int samples = Math.Max(1, network.SampleRate);
+            speakerRecording = new Tensor<T>(new[] { samples });
+            for (int i = 0; i < samples; i++)
+                speakerRecording[i] = ops.FromDouble(0.4 * Math.Sin(2 * Math.PI * 180.0 * i / samples) + 0.2 * Math.Sin(2 * Math.PI * 470.0 * i / samples));
+        }
+
         return new AiDotNet.TextToSpeech.TtsTrainingSample<T>
         {
             Tokens = tokens.Rank == 1 ? tokens : new Tensor<T>(new[] { tokenCount }, tokens.ToVector()),
@@ -153,6 +180,8 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
             Energy = energy,
             SpeakerId = 0,
             LinearSpectrogram = linear,
+            CodecTokens = codecTokens,
+            SpeakerReference = speakerRecording,
         };
     }
 
@@ -163,7 +192,7 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
     // =====================================================
 
     [Fact(Timeout = 120000)]
-    public async Task DifferentText_DifferentAudio()
+    public virtual async Task DifferentText_DifferentAudio()
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();

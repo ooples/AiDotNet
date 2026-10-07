@@ -33,4 +33,10 @@ public enum TtsSupervision
     /// spectrogram (YourTTS's H/ASP speaker encoder).
     /// </summary>
     ReferenceRecording = 32,
+
+    /// <summary>
+    /// The recording's discrete codec tokens, <c>[frames, codebooks]</c> (or the recording, which the model encodes with
+    /// its codec), for models that generate codec tokens rather than a spectrogram (Pheme's SpeechTokenizer codes).
+    /// </summary>
+    CodecTokens = 64,
 }

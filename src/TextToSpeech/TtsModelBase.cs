@@ -358,8 +358,22 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
         if ((RequiredSupervision & TtsSupervision.LanguageId) != 0 && sample.LanguageId is null)
             throw new ArgumentException(
                 $"{GetType().Name} trains a language table; set {nameof(sample.LanguageId)}.", nameof(sample));
+        if ((RequiredSupervision & TtsSupervision.CodecTokens) != 0 && sample.CodecTokens is null && sample.Audio is null)
+            throw new ArgumentException(
+                $"{GetType().Name} trains on the recording's codec tokens; set {nameof(sample.CodecTokens)} or {nameof(sample.Audio)}.",
+                nameof(sample));
+        if ((RequiredSupervision & TtsSupervision.ReferenceRecording) != 0 && sample.SpeakerReference is null && sample.Audio is null)
+            throw new ArgumentException(
+                $"{GetType().Name} reads the speaker from a recording; set {nameof(sample.SpeakerReference)} or {nameof(sample.Audio)}.",
+                nameof(sample));
         return TrainOnSample(sample);
     }
+
+    /// <summary>Codebooks per frame of the codec tokens this model trains on (0 for a model that does not).</summary>
+    public virtual int CodecTokenCodebooks => 0;
+
+    /// <summary>Codes per codebook of those codec tokens (0 for a model that does not train on them).</summary>
+    public virtual int CodecTokenVocabulary => 0;
 
     /// <summary>
     /// The voice synthesis and prediction use, for models whose paper defines inference relative to a speaker or a

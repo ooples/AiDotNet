@@ -113,6 +113,16 @@ public partial class TiedEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         return Engine.Reshape(logits, shape);
     }
 
+    /// <summary>Redraws every entry from <paramref name="sample"/> (row-major) and zeroes row
+    /// <paramref name="zeroRow"/> when given, as <c>nn.Embedding(padding_idx=...)</c> starts its padding row.</summary>
+    internal void Reinitialize(Func<double> sample, int? zeroRow = null)
+    {
+        for (int i = 0; i < _table.Length; i++) _table[i] = NumOps.FromDouble(sample());
+        if (zeroRow is int row)
+            for (int d = 0; d < _dimension; d++) _table[row, d] = NumOps.Zero;
+        Engine.InvalidatePersistentTensor(_table);
+    }
+
     /// <summary>Loads the table from a row-major <c>[vocabulary, dimension]</c> array.</summary>
     internal void LoadTable(double[] values)
     {

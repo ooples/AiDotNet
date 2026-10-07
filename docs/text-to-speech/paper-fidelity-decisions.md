@@ -33,6 +33,7 @@ outside the model. Calling plain `Train(tokens, mel)` on them throws; pass a `Tt
 | AdaSpeech, AdaSpeech 2 | Phoneme durations and the speaker's ID. |
 | Tacotron, Deep Voice 3 | The recording, or its linear spectrogram, which a mel spectrogram does not contain. |
 | SpeechTokenizer | The self-supervised teacher's features for each clip (the HuBERT distillation target). |
+| Pheme | The recording's SpeechTokenizer codes (or the recording, which it encodes), and for the speaker embedding a recording of the speaker. Synthesis needs a voice: a prompt recording and, optionally, its transcript (`CreateVoice`). |
 
 Pitch, energy and the mel target are derived from the recording when you don't supply them, the way each paper
 derives them.
@@ -99,6 +100,12 @@ derives them.
 | WaveNet | van den Oord et al. 2016 | r9y9/wavenet_vocoder (μ-law preset) | The paper fixes the model's form; the reference supplies the sizes (30 layers in 3 cycles). |
 | WaveRNN | Kalchbrenner et al. 2018 | fatchord/WaveRNN (optimizer only) | WaveRNN-896. The paper conditions on linguistic features without saying how; the mel spectrogram is upsampled WaveNet-style and projected into the gates. Weight pruning (§3) is off unless you set `SparsityTarget`. |
 
+## Codec language models
+
+| Model | Paper | Gaps filled from | Choices |
+|---|---|---|---|
+| Pheme | Budzianowski et al. 2024 | PolyAI-LDN/pheme | Defaults are the paper's small model (Table 5) and its optimizer for both networks (§4.1: AdamW, β = 0.9 / 0.98, 5e-4, 10k warm-up, linear decay over 800k steps; the paper's "decayed from 2×10⁻⁴" contradicts its stated rate, so 5e-4 is the peak). The released checkpoints differ from the paper's text: `OfficialSmallCheckpoint` has a 768-wide acoustic model (the paper says 1024), and `OfficialLargeCheckpoint` has no speaker embedding. Text becomes espeak-style phonemes through the built-in English G2P (`EnglishG2P`: CMUdict, then NRL letter-to-sound rules, mapped to espeak-ng's symbols; 3 % phone error rate against espeak-ng on CMU ARCTIC), and the vocabulary is the reference's. The paper and the code decode the acoustic codebooks in opposite orders. The paper says greedy on the first level and 16 MaskGIT steps on the rest. The default follows the code (MaskGIT on the first level, greedy on the rest), which produced the released outputs. `AcousticDecoding` selects the paper's order. Two reference behaviours are kept: the speaker-embedding dropout stays on at inference, and the last prompt frame is regenerated and returned with the new frames. One is not: the reference's MaskGIT loop feeds the model its initial, fully masked input at every step, so here each step reads the tokens decoded so far, as MaskGIT and SoundStorm do. |
+
 ## Neural audio codecs
 
 | Model | Paper | Gaps filled from | Choices |
@@ -108,5 +115,5 @@ derives them.
 | DAC | Kumar et al. 2023 | descriptinc/descript-audio-codec | Factorized 8-dimensional, L2-normalized codes chosen by cosine similarity; loss weights 15 / 2 / 1 / 1 / 0.25. |
 | SpeechTokenizer | Zhang et al. 2024 | ZhangXInFD/SpeechTokenizer | The paper's loss forms with the reference's λ values. Training needs the teacher's features (see above). |
 
-Official weights load into the native EnCodec, DAC and SpeechTokenizer models. The tests check them against tiny
+Official weights load into the native EnCodec, DAC and SpeechTokenizer models, and into Pheme's three networks (from their state dictionaries). The tests check them against tiny
 reference models; the scripts that produce those references are in `tools/reference-data`.

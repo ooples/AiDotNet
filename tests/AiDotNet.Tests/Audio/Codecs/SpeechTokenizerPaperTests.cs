@@ -134,6 +134,28 @@ public class SpeechTokenizerPaperTests
         Assert.Throws<NotSupportedException>(() => model.Train(audio, audio));
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task WithoutDiscriminators_EncodesAndDecodesButRefusesToTrain()
+    {
+        await Task.Yield();
+        // A codec used only as a tokenizer and vocoder (Pheme's) skips its discriminators: it allocates fewer parameters,
+        // codes and reconstructs exactly as the full model does, and refuses the adversarial training it cannot do.
+        using var full = new SpeechTokenizer<double>(Architecture(), TinyOptions());
+        var options = TinyOptions();
+        options.IncludeDiscriminators = false;
+        using var bare = new SpeechTokenizer<double>(Architecture(), options);
+        Assert.True(bare.ParameterCount < full.ParameterCount, $"{bare.ParameterCount} parameters without discriminators, {full.ParameterCount} with.");
+
+        var audio = new Tensor<double>(new[] { 96 });
+        for (int i = 0; i < audio.Length; i++) audio[i] = 0.3 * Math.Sin(0.21 * i);
+        var codes = bare.Encode(audio);
+        Assert.Equal(full.Encode(audio), codes);
+        Assert.Equal(full.Decode(codes).ToArray(), bare.Decode(codes).ToArray());
+
+        var teacher = Teacher(audio.Length / 8, 6);
+        Assert.Throws<InvalidOperationException>(() => bare.Train(audio, teacher));
+    }
+
     [Fact(Timeout = 600000)]
     public async Task Distillation_AlignsTheFirstCodebookWithTheTeacher()
     {

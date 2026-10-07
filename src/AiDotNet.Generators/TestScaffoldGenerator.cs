@@ -10287,6 +10287,28 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumCodebooks = 1, CodebookSize = 16, VocabSize = 64, " +
                     "MaxTextLength = 8, MaxCodecFrames = 8, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "Pheme" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
+            {
+                // Pheme's paper model is a 512-wide six-layer T5, a 768-wide SoundStorm Conformer and the released
+                // SpeechTokenizer; keep every component (T5, Conformer with per-level heads, pyannote speaker encoder,
+                // SpeechTokenizer) with 16-wide networks, two acoustic codebooks of 16 codes and a short generation. The
+                // codec's hop is 2560 (6 frames a second), so the base class's one-second voice prompt is 6 frames, shorter
+                // than the 16-frame training utterances, as a real prompt is: with the paper codec's 50 frames the T5 only
+                // ever saw utterances shorter than the prompt and learned to end synthesis right after it.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 1, outputSize: 1), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.PhemeOptions { HiddenDim = 16, TextModelDim = 16, " +
+                    "TextFeedForwardDim = 32, TextKeyValueDim = 8, NumHeads = 2, NumEncoderLayers = 1, NumDecoderLayers = 1, " +
+                    "AcousticLayers = 1, AcousticHeads = 2, AcousticHeadDim = 8, AcousticCodebooks = 2, CodebookSize = 16, " +
+                    "SemanticCodes = 16, MaxNewSemanticTokens = 6, TopK = 8, MaskGitSteps = 3, LearningRate = 3e-3, TextWarmupSteps = 0, " +
+                    "AcousticWarmupSteps = 0, DropoutRate = 0.0, HopSize = 2560, " +
+                    "SpeechTokenizer = new AiDotNet.Audio.Generation.SpeechTokenizerOptions { Filters = 4, Ratios = [8, 5, 4, 4, 4], " +
+                    "Dimension = 8, SemanticDimension = 6, LstmLayers = 1, NumQuantizers = 3, CodebookSize = 16, " +
+                    "TargetBandwidthKbps = 0.075 } })";
+            }
             else if (model.ClassName == "CosyVoiceClone" && model.TypeParameterCount == 1)
             {
                 // CosyVoiceClone keeps the paper-scale supervised semantic-token encoder,
@@ -15503,6 +15525,50 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // features and its mel projection emits the same configured width.
                     sb.AppendLine("    protected override int[] InputShape => new[] { 8, 16 };");
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 16 };");
+                }
+                else if (model.ClassName == "Pheme")
+                {
+                    // Pheme reads phoneme ids and trains on codec tokens, one frame per target row (the TTS base
+                    // synthesizes [16, 3] tokens from a [16, 1] target).
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 16, 1 };");
+                    // An untrained text-to-semantic T5 samples few of the fixture's 16 semantic tokens among its 111 (the
+                    // reference keeps only those, lazy_decode), so synthesis returns the regenerated prompt frame whatever
+                    // the text. A few steps on the fixture's semantic targets open the text path before the
+                    // input-sensitivity probes.
+                    sb.AppendLine("    protected override int InputSensitivityWarmUpSteps => 6;");
+                    // Pheme samples its semantic tokens, and a tiny T5 trained on one sample memorizes that sample's
+                    // sequence, so two constant inputs synthesize identical audio under the fixed sampling seed: a
+                    // property of sampling, not a broken text path. These two probes therefore compare the model's
+                    // deterministic training objective (MeasureLoss, the teacher-forced text-to-semantic loss, which
+                    // reads the text through the encoder and cross-attention) for the two inputs against one target.
+                    // Synthesize_DifferentText_DifferentOutput still checks the sampled audio for real text.
+                    foreach (var (name, trains) in new[] { ("DifferentText_DifferentAudio", false), ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true) })
+                    {
+                        sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
+                        sb.AppendLine($"    public override async System.Threading.Tasks.Task {name}()");
+                        sb.AppendLine("    {");
+                        sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
+                        sb.AppendLine("        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Create();");
+                        sb.AppendLine("        var rng = AiDotNet.Tests.ModelFamilyTests.Base.ModelTestHelpers.CreateSeededRandom();");
+                        sb.AppendLine("        using var network = CreateNetwork();");
+                        sb.AppendLine("        var target = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);");
+                        if (trains)
+                        {
+                            sb.AppendLine("        var trainInput = CreateRandomTensor(EffectiveInputShape, rng);");
+                            sb.AppendLine("        int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);");
+                            sb.AppendLine("        for (int i = 0; i < iterations; i++) TrainOn(network, trainInput, target);");
+                        }
+                        sb.AppendLine("        var input1 = CreateConstantTensor(EffectiveInputShape, 0.1);");
+                        sb.AppendLine("        var input2 = CreateConstantTensor(EffectiveInputShape, 0.9);");
+                        sb.AppendLine("        double loss1 = MeasureLoss(network, input1, target, target);");
+                        sb.AppendLine("        double loss2 = MeasureLoss(network, input2, target, target);");
+                        sb.AppendLine("        Xunit.Assert.True(double.IsFinite(loss1) && double.IsFinite(loss2), $\"Objective not finite: {loss1}, {loss2}.\");");
+                        sb.AppendLine("        Xunit.Assert.True(System.Math.Abs(loss1 - loss2) > 1e-9 * System.Math.Max(1.0, System.Math.Abs(loss1)),");
+                        sb.AppendLine("            $\"The text-to-semantic objective is identical for distinct texts ({loss1:R}): the text never reaches the model.\");");
+                        sb.AppendLine("    }");
+                        sb.AppendLine();
+                    }
                 }
                 else if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS")
                 {
