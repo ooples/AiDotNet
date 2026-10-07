@@ -36,7 +36,15 @@ public class NegativeSiSnrLoss<T> : LossFunctionBase<T>
     private const double Epsilon = 1e-8;
     private static readonly double DecibelsPerNeper = 10.0 / Math.Log(10.0);
 
-    /// <inheritdoc />
+    /// <summary>
+    /// Negative SI-SNR of ONE estimated signal against ONE reference.
+    /// </summary>
+    /// <remarks>
+    /// A flat vector carries no source axis, so it is scored as a single signal with no permutation
+    /// search. For several sources keep the [batch, sources, samples] layout and use
+    /// <see cref="ComputeTapeLoss"/>, which scores every source assignment and keeps the best; flattening
+    /// separated sources into this overload would score them as one concatenated waveform.
+    /// </remarks>
     public override T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
         ValidateVectorLengths(predicted, actual);
