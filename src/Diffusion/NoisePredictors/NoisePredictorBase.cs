@@ -1263,7 +1263,10 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
 
         foreach (var layer in ReflectInstanceLayers(this))
         {
-            if (layer is not LayerBase<T> lb) continue;
+            // A layer that never initialized registered nothing, and GetTrainableParameters would
+            // allocate its weights now: on the failure path after an out-of-memory forward that
+            // second allocation threw over the original error.
+            if (layer is not LayerBase<T> lb || !lb.IsInitialized) continue;
             foreach (var tensor in lb.GetTrainableParameters())
             {
                 if (tensor is null || tensor.Lifetime != WeightLifetime.Streaming) continue;
