@@ -129,7 +129,13 @@ try {
     # neither may be excused as "did not run".
     foreach ($implicated in 'timed_out', 'startup_failure') {
         & $Gate -Stage Validation -ReuseScope None -SourceResult success -RequiresValidation true `
-            -SelectResult success -BuildResult $implicated -SummaryFile $summaryPath *> $null
+            -SelectResult success -BuildResult $implicated -BuildCompatResult success -TestsResult success `
+            -RegressionAnalysisResult success -VerdictEnforced true -AggregateAnalysisResult success `
+            -SizeCheckResult success -SummaryFile $summaryPath *> $null
+        # Every other job passed, so the exit code is decided by the build's outcome alone.
+        if ($LASTEXITCODE -ne 1) {
+            [void] $failures.Add("validation_build_${implicated}: expected exit 1, got $LASTEXITCODE")
+        }
         $text = Get-Content -LiteralPath $summaryPath -Raw
         if ($text -match 'No required job reported a failure') {
             [void] $failures.Add("summary_names_incomplete: a build that reported '$implicated' was excused as not having run")
