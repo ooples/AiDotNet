@@ -1672,9 +1672,12 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
 
     // Both passes went through numOps.ToDouble/FromDouble per element: on a 477.6M-parameter
     // U-Net that was 1.75 s of a 14 s training step, five times the Adam update itself (#2087).
-    // Float and double now take a vectorized path with the same arithmetic -- squares summed in
-    // double, each element scaled as (T)((double)x * scale) -- in one fixed lane order, so the
-    // result does not depend on thread count. Other element types keep the generic loop.
+    // Float and double now take a vectorized path. The scaling is bit-identical to the scalar
+    // definition, (T)((double)x * scale). The sum of squares is still accumulated in double but
+    // per vector lane, so its rounding differs slightly from a sequential sum; it is single-threaded
+    // in a fixed lane order, so it is deterministic and independent of thread count, and the clip
+    // threshold is not sensitive to that last-bit difference. Other element types keep the generic
+    // loop.
     internal static double SumOfSquares(Span<T> span)
     {
 #if NET7_0_OR_GREATER
