@@ -125,6 +125,14 @@ try {
     if ($text -match 'No required job reported a failure') {
         [void] $failures.Add('summary_names_incomplete: a real build failure was described as not having run')
     }
+    & $Gate -Stage Validation -ReuseScope None -SourceResult success -RequiresValidation true `
+        -SelectResult mystery_state -BuildResult skipped -BuildCompatResult skipped -TestsResult skipped `
+        -RegressionAnalysisResult skipped -AggregateAnalysisResult skipped -SizeCheckResult skipped `
+        -SummaryFile $summaryPath *> $null
+    $text = Get-Content -LiteralPath $summaryPath -Raw
+    if ($text -notmatch '\*\*Gate FAILED\*\*' -or $text -notmatch "reported an unrecognized conclusion 'mystery_state', treated as not passing") {
+        [void] $failures.Add('summary_names_unrecognized: an unrecognized select conclusion was not named in a failed summary')
+    }
 }
 finally {
     Remove-Item -LiteralPath $summaryPath -ErrorAction SilentlyContinue
