@@ -26,6 +26,26 @@ _bench/bench.ps1 uses) for its own duration only, so other benchmark tracks
 interleave between runs instead of waiting for the whole sweep, and no two timed
 runs ever overlap.
 
+The lock does not stop builds and test runs, which on a shared box inflated CPU
+steps up to 6x. Three defences, applied identically to both sides:
+
+  * PRIORITY: every timed process starts at --priority (default above-normal), so
+    the normal-priority builds and test hosts of other tracks yield the CPUs to it
+    instead of time-slicing with it. (Not inherited by TorchInductor's compile
+    workers, which run before the timed epochs anyway.)
+  * QUIET GATE: before a run starts (lock held), the system-wide CPU load is
+    sampled; above --max-background-pct the run waits with the lock RELEASED, for at
+    most --quiet-wait seconds, then proceeds.
+  * DISCARD: afterwards the load from OTHER processes during the run (system busy
+    CPU time minus the CPU time of the run's whole process tree, from a Win32 job
+    object) is computed; a run above --max-background-pct is discarded and redone,
+    up to --max-retries times, after which the last value is kept AND flagged.
+    Every kept run's background load is in the JSON and summarised in the markdown,
+    and every discarded run is listed with its value and load.
+
+Interleaving (ours and each PyTorch finalist alternate run by run) makes whatever
+noise remains hit both sides alike rather than one side's whole series.
+
 Outputs (in --output-dir): scoreboard.json (every raw run value, the selection
 table, skipped modes with reasons, machine + DLL provenance) and scoreboard.md.
 
@@ -38,6 +58,7 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import ctypes.wintypes
 import datetime as dt
 import glob
 import hashlib
@@ -52,12 +73,16 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import psutil
+
 from compare import Stat, _index, _verdict
 
 HERE = Path(__file__).resolve().parent
 FAMILIES = ["mlp", "cnn", "lstm", "transformer"]
 DEVICES = ["cpu", "cuda"]
 LOCK_NAME = "Global\\AiDotNetBenchLock"
+# Win32 priority classes a timed run can start at (--priority); both sides always get the same one.
+PRIORITY_CLASSES = {"normal": 0x00000020, "above-normal": 0x00008000, "high": 0x00000080}
 
 
 @dataclass(frozen=True)
@@ -125,6 +150,60 @@ class BenchLock:
         self._k32.ReleaseMutex(self._handle)
         self._k32.CloseHandle(self._handle)
         self._handle = None
+
+
+# ------------------------------------------------------------------------------------- background load
+
+def _system_busy_seconds() -> float:
+    """Busy CPU seconds summed over all logical CPUs since boot (user + kernel, idle excluded)."""
+    t = psutil.cpu_times()
+    return t.user + t.system
+
+
+class _JobAccounting(ctypes.Structure):
+    _fields_ = [("TotalUserTime", ctypes.c_int64), ("TotalKernelTime", ctypes.c_int64),
+                ("ThisPeriodTotalUserTime", ctypes.c_int64), ("ThisPeriodTotalKernelTime", ctypes.c_int64),
+                ("TotalPageFaultCount", ctypes.c_uint32), ("TotalProcesses", ctypes.c_uint32),
+                ("ActiveProcesses", ctypes.c_uint32), ("TotalTerminatedProcesses", ctypes.c_uint32)]
+
+
+class ProcessTree:
+    """A Win32 job object holding a run's process and every process it spawns (TorchInductor compiles in
+    worker subprocesses), so the run's OWN CPU time covers the whole tree, including processes that have
+    already exited, and a timed-out run can be killed as a tree."""
+
+    def __init__(self) -> None:
+        self._k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        self._k32.CreateJobObjectW.restype = ctypes.c_void_p
+        self._k32.CreateJobObjectW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p]
+        self._k32.AssignProcessToJobObject.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        self._k32.QueryInformationJobObject.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_void_p, ctypes.c_uint32, ctypes.c_void_p]
+        self._k32.TerminateJobObject.argtypes = [ctypes.c_void_p, ctypes.c_uint]
+        self._k32.CloseHandle.argtypes = [ctypes.c_void_p]
+        self._job = self._k32.CreateJobObjectW(None, None)
+        if not self._job:
+            raise OSError(ctypes.get_last_error(), "CreateJobObjectW failed")
+
+    def adopt(self, process_handle: int) -> None:
+        if not self._k32.AssignProcessToJobObject(self._job, process_handle):
+            raise OSError(ctypes.get_last_error(), "AssignProcessToJobObject failed")
+
+    def cpu_seconds(self) -> float:
+        info = _JobAccounting()
+        if not self._k32.QueryInformationJobObject(self._job, 1, ctypes.byref(info), ctypes.sizeof(info), None):
+            raise OSError(ctypes.get_last_error(), "QueryInformationJobObject failed")
+        return (info.TotalUserTime + info.TotalKernelTime) / 1e7
+
+    def kill(self) -> None:
+        self._k32.TerminateJobObject(self._job, 1)
+
+    def close(self) -> None:
+        self._k32.CloseHandle(self._job)
+
+
+def sample_background_pct(seconds: float = 1.0) -> float:
+    """System-wide CPU load over `seconds`, as % of all logical CPUs (this process is idle meanwhile)."""
+    return psutil.cpu_percent(interval=seconds)
 
 
 # ------------------------------------------------------------------------------------ toolchain probing
@@ -209,9 +288,20 @@ def machine_info(python: str) -> dict[str, object]:
 
 @dataclass
 class Series:
-    """The per-run ms/step values of one contender in one cell."""
+    """The per-run ms/step values of one contender in one cell, with each kept run's background
+    load and the runs discarded for a noisy machine."""
     values: list[float] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    background: list[float] = field(default_factory=list)
+    discarded: list[dict[str, float]] = field(default_factory=list)
+
+    def add(self, result: RunResult) -> None:
+        self.discarded.extend(result.discarded)
+        if result.value is None:
+            self.errors.append(result.error or "failed")
+        else:
+            self.values.append(result.value)
+            self.background.append(result.background_pct)
 
     def stat(self) -> Stat | None:
         if not self.values:
@@ -227,7 +317,17 @@ class Series:
                 "p75Ms": None if st is None else round(st.p75, 4),
                 "minMs": round(min(self.values), 4) if self.values else None,
                 "maxMs": round(max(self.values), 4) if self.values else None,
+                "backgroundCpuPct": [round(v, 1) for v in self.background],
+                "discardedNoisyRuns": self.discarded,
                 "errors": self.errors}
+
+
+@dataclass
+class RunResult:
+    value: float | None
+    error: str | None = None
+    background_pct: float = 0.0
+    discarded: list[dict[str, float]] = field(default_factory=list)
 
 
 def _quantile(sorted_values: list[float], q: float) -> float:
@@ -254,38 +354,86 @@ class Runner:
         return ["--epochs", str(a.epochs), "--train-batches", str(a.train_batches), "--batch-size", str(a.batch_size),
                 "--seed", str(a.seed)]
 
-    def _run(self, cmd: list[str], env: dict[str, str], model: str, device: str, label: str) -> tuple[float | None, str | None]:
-        out = self.workdir / f"run-{self.count}.json"
-        self.count += 1
-        started = time.perf_counter()
-        try:
-            with self.lock:
-                proc = subprocess.run(cmd + ["--output", str(out)], env=env, cwd=self.workdir, capture_output=True,
-                                      text=True, encoding="utf-8", errors="replace", timeout=self.args.timeout)
-        except subprocess.TimeoutExpired:
-            print(f"  {model:<12}{device:<5}{label:<44} TIMED OUT after {self.args.timeout}s", flush=True)
-            return None, f"timed out after {self.args.timeout}s"
-        wall = time.perf_counter() - started
-        if proc.returncode != 0 or not out.exists():
-            tail = (proc.stderr or proc.stdout or "").strip().splitlines()
-            err = next((line for line in reversed(tail) if line.strip()), f"exit {proc.returncode}")
-            print(f"  {model:<12}{device:<5}{label:<44} FAILED ({err[:160]})", flush=True)
-            return None, err[:500]
-        report = json.loads(out.read_text(encoding="utf-8"))
-        out.unlink()
-        rows = _index(report).get(model)
-        if rows is None or rows.training is None or rows.device != device:
-            return None, f"report has no {model} training row on {device} (device={rows.device if rows else None})"
-        print(f"  {model:<12}{device:<5}{label:<44}{rows.training.median:10.3f} ms/step  ({wall:.0f}s wall)", flush=True)
-        return rows.training.median, None
+    def _acquire_quiet(self) -> float:
+        """Take the lock on a quiet machine; returns the pre-run load. Waits with the lock RELEASED so
+        other tracks are not blocked by our wait; after --quiet-wait seconds it proceeds anyway (the
+        post-run background check still discards the run if the noise persists)."""
+        deadline = time.monotonic() + self.args.quiet_wait
+        while True:
+            self.lock.__enter__()
+            load = sample_background_pct()
+            if load <= self.args.max_background_pct or time.monotonic() >= deadline:
+                return load
+            self.lock.__exit__()
+            print(f"    machine busy ({load:.0f}% CPU > {self.args.max_background_pct:.0f}%), waiting", flush=True)
+            time.sleep(self.args.quiet_poll)
 
-    def ours(self, model: str, device: str) -> tuple[float | None, str | None]:
+    def _run_once(self, cmd: list[str], env: dict[str, str], out: Path) -> tuple[subprocess.CompletedProcess | None, float, float, float]:
+        """One locked, quiet-gated run. Returns (proc or None on timeout, pre-run load %, background load % during
+        the run, wall seconds)."""
+        pre = self._acquire_quiet()
+        tree = ProcessTree()
+        try:
+            busy0, started = _system_busy_seconds(), time.perf_counter()
+            with subprocess.Popen(cmd + ["--output", str(out)], env=env, cwd=self.workdir, stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
+                                  creationflags=PRIORITY_CLASSES[self.args.priority]) as popen:
+                # Adopted before the interpreter/runtime has started, so every later child is in the job too.
+                tree.adopt(int(popen._handle))
+                try:
+                    stdout, stderr = popen.communicate(timeout=self.args.timeout)
+                except subprocess.TimeoutExpired:
+                    tree.kill()
+                    popen.communicate()
+                    return None, pre, 0.0, time.perf_counter() - started
+                wall = time.perf_counter() - started
+                busy = _system_busy_seconds() - busy0
+                own = tree.cpu_seconds()
+                tree.kill()  # reap lingering compile workers so they cannot load the next run
+        finally:
+            tree.close()
+            self.lock.__exit__()
+        background = max(0.0, busy - own) / (wall * (os.cpu_count() or 1)) * 100
+        return subprocess.CompletedProcess(cmd, popen.returncode, stdout, stderr), pre, background, wall
+
+    def _run(self, cmd: list[str], env: dict[str, str], model: str, device: str, label: str) -> RunResult:
+        discarded: list[dict[str, float]] = []
+        for attempt in range(self.args.max_retries + 1):
+            out = self.workdir / f"run-{self.count}.json"
+            self.count += 1
+            proc, pre, background, wall = self._run_once(cmd, env, out)
+            if proc is None:
+                print(f"  {model:<12}{device:<5}{label:<44} TIMED OUT after {self.args.timeout}s", flush=True)
+                return RunResult(None, f"timed out after {self.args.timeout}s", discarded=discarded)
+            if proc.returncode != 0 or not out.exists():
+                tail = (proc.stderr or proc.stdout or "").strip().splitlines()
+                err = next((line for line in reversed(tail) if line.strip()), f"exit {proc.returncode}")
+                print(f"  {model:<12}{device:<5}{label:<44} FAILED ({err[:160]})", flush=True)
+                return RunResult(None, err[:500], discarded=discarded)
+            report = json.loads(out.read_text(encoding="utf-8"))
+            out.unlink()
+            rows = _index(report).get(model)
+            if rows is None or rows.training is None or rows.device != device:
+                return RunResult(None, f"report has no {model} training row on {device} "
+                                       f"(device={rows.device if rows else None})", discarded=discarded)
+            value = rows.training.median
+            noisy = background > self.args.max_background_pct
+            print(f"  {model:<12}{device:<5}{label:<44}{value:10.3f} ms/step  ({wall:.0f}s, background "
+                  f"{background:.0f}%{', DISCARDED' if noisy and attempt < self.args.max_retries else ''})", flush=True)
+            if noisy and attempt < self.args.max_retries:
+                discarded.append({"ms": round(value, 4), "backgroundCpuPct": round(background, 1)})
+                time.sleep(self.args.quiet_poll)
+                continue
+            return RunResult(value, None, background, discarded)
+        raise AssertionError("unreachable")
+
+    def ours(self, model: str, device: str) -> RunResult:
         cmd = ["dotnet", str(Path(self.args.ours_bin) / "AiDotNet.PyTorchParity.dll"), "--models", model, "--device", device,
                # The harness has no training-only switch; one inference iteration per batch size keeps it negligible.
                "--inference-iterations", "1", "--warmup-iterations", "1"] + self._common()
         return self._run(cmd, self.ours_env, model, device, "AiDotNet")
 
-    def pytorch(self, model: str, device: str, mode: PyTorchMode) -> tuple[float | None, str | None]:
+    def pytorch(self, model: str, device: str, mode: PyTorchMode) -> RunResult:
         cmd = [self.args.python, str(HERE / "benchmark.py"), "--models", model, "--device", device, "--skip-inference"] \
               + list(mode.flags) + self._common()
         if self.args.threads > 0:
@@ -300,12 +448,10 @@ def score_cell(runner: Runner, model: str, device: str, candidates: list[PyTorch
     live = list(candidates)
     for _ in range(select_runs):
         for mode in list(live):
-            value, err = runner.pytorch(model, device, mode)
-            if value is None:
-                selection[mode.label].errors.append(err or "failed")
+            result = runner.pytorch(model, device, mode)
+            selection[mode.label].add(result)
+            if result.value is None:
                 live.remove(mode)  # a mode that cannot run is not retried
-            else:
-                selection[mode.label].values.append(value)
     ranked = sorted((m for m in live if selection[m.label].values), key=lambda m: selection[m.label].stat().median)
     if not ranked:
         raise RuntimeError(f"{model}/{device}: no PyTorch mode ran")
@@ -324,11 +470,7 @@ def score_cell(runner: Runner, model: str, device: str, candidates: list[PyTorch
         jobs = [(ours, lambda: runner.ours(model, device))]
         jobs += [(final[m.label], (lambda m=m: runner.pytorch(model, device, m))) for m in contenders]
         for series, fn in jobs:
-            value, err = fn()
-            if value is None:
-                series.errors.append(err or "failed")
-            else:
-                series.values.append(value)
+            series.add(fn())
     scored = [m for m in finalists if final[m.label].values]
     if not scored:
         raise RuntimeError(f"{model}/{device}: no PyTorch finalist completed a scored run")
@@ -372,7 +514,9 @@ def write_markdown(report: dict[str, object], path: Path) -> None:
         f"Generated {report['generatedUtc']} by `pytorch/scoreboard.py`. Training **ms per step** (forward + backward + "
         f"clip + AdamW), batch {cfg['batchSize']}, {cfg['trainBatches']} steps/epoch, {cfg['epochs']} epochs per process "
         f"(epoch 0 is warmup). Each cell is the **median of {cfg['runs']} process runs** with p25-p75; every run held "
-        f"`{cfg['lockName']}` on its own.",
+        f"`{cfg['lockName']}` on its own, ran at {cfg['priority']} priority (both sides), and was quiet-gated: a run "
+        f"during which other processes used more than {cfg['maxBackgroundPct']:.0f}% of the CPUs was discarded and "
+        f"redone (up to {cfg['maxRetries']}x; see *Machine noise*).",
         "",
         "PyTorch is scored in its **fastest mode for that cell**: every candidate mode ran "
         f"{cfg['selectRuns']}x first, then the best {cfg['finalists']} (plus eager) were re-measured {cfg['runs']}x from "
@@ -424,6 +568,19 @@ def write_markdown(report: dict[str, object], path: Path) -> None:
         lines.append(f"- `{label}`: unavailable on this machine: {reason}")
     for model, device, label, err in failures:
         lines.append(f"- `{label}` on {model}/{device} failed: `{err[:200].replace('`', '')}`")
+    lines += ["", "## Machine noise", "",
+              "CPU used by OTHER processes during each kept run (% of all logical CPUs), and runs discarded and redone "
+              "because it exceeded the threshold.", "",
+              "| family | device | contender | kept runs median background % | kept runs max background % | "
+              f"kept runs over {cfg['maxBackgroundPct']:.0f}% | discarded runs |", "|---|---|---|---|---|---|---|"]
+    for c in report["cells"]:
+        contenders = [("AiDotNet", c["aidotnet"])] + [(f"PyTorch {k}", v) for k, v in c["final"].items()]
+        contenders += [(f"PyTorch {k} (selection)", v) for k, v in c["selection"].items()]
+        for name, s in contenders:
+            bg = sorted(s.get("backgroundCpuPct") or [])
+            over = sum(1 for v in bg if v > cfg["maxBackgroundPct"])
+            lines.append(f"| {c['model']} | {c['device']} | {name} | {round(_quantile(bg, 0.5), 1) if bg else 'n/a'} | "
+                         f"{max(bg) if bg else 'n/a'} | {over} | {len(s.get('discardedNoisyRuns') or [])} |")
     ours = report["aidotnet"]
     lines += [
         "",
@@ -464,6 +621,13 @@ def main() -> None:
     parser.add_argument("--vcvars", default=None, help="vcvars64.bat for CPU TorchInductor (auto-detected by default)")
     parser.add_argument("--lock-name", default=LOCK_NAME)
     parser.add_argument("--timeout", type=int, default=1800, help="seconds before a single run is abandoned")
+    parser.add_argument("--priority", choices=sorted(PRIORITY_CLASSES), default="above-normal",
+                        help="Win32 priority class of every timed process (both sides)")
+    parser.add_argument("--max-background-pct", type=float, default=25.0,
+                        help="max CPU load (%% of all logical CPUs) from OTHER processes before/during a run; noisier runs are redone")
+    parser.add_argument("--max-retries", type=int, default=2, help="re-runs of a run discarded for background load")
+    parser.add_argument("--quiet-wait", type=float, default=120, help="max seconds to wait for a quiet machine before a run")
+    parser.add_argument("--quiet-poll", type=float, default=10, help="seconds between quiet-machine checks")
     parser.add_argument("--output-dir", type=Path, default=HERE.parent / "results")
     args = parser.parse_args()
 
@@ -509,6 +673,8 @@ def main() -> None:
         "config": {"oursBin": str(args.ours_bin), "models": models, "devices": devices, "runs": args.runs,
                    "selectRuns": args.select_runs, "finalists": args.finalists, "epochs": args.epochs, "trainBatches": args.train_batches,
                    "batchSize": args.batch_size, "seed": args.seed, "threads": args.threads, "lockName": args.lock_name,
+                   "maxBackgroundPct": args.max_background_pct, "maxRetries": args.max_retries, "quietWait": args.quiet_wait,
+                   "priority": args.priority,
                    "statistic": "per run: median steady-state epoch seconds / steps (epoch 0 excluded); per cell: median of runs"},
         "machine": machine_info(args.python),
         "toolchain": {"msvc": msvc_note, "triton": triton_note},

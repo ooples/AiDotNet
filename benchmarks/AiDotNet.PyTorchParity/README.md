@@ -95,8 +95,19 @@ Protocol:
   `--skip-inference`.
 - **Every run holds `Global\AiDotNetBenchLock`** (the mutex `_bench/bench.ps1`
   takes) for its own duration only, so other benchmark tracks interleave between
-  runs and no two timed runs ever overlap. Builds do not take the lock, so a
-  heavy concurrent build still adds noise; the medians and IQRs are the defence.
+  runs and no two timed runs ever overlap.
+- **Machine noise**: builds and test hosts of other tracks do not take the lock
+  (on the shared box they inflated CPU steps up to 6x), so three more defences
+  apply to both sides alike. Every timed process starts at `--priority`
+  (`above-normal`), so normal-priority builds yield the CPUs to it. Before a run,
+  with the lock held, the system CPU load is sampled; above
+  `--max-background-pct` (25% of all logical CPUs) the run waits with the lock
+  released, up to `--quiet-wait` seconds. After the run, the CPU used by OTHER
+  processes (system busy time minus the run's whole process tree, read from a
+  Win32 job object so TorchInductor compile workers count as the run's own) is
+  computed; a run above the threshold is discarded and redone up to
+  `--max-retries` (2) times, then kept and flagged. The *Machine noise* table
+  lists every contender's background load and discarded runs.
 - **Mode selection**: every PyTorch mode available on the device runs 3× —
   `eager`, `compile[inductor]` (CPU needs MSVC `cl.exe`; found via vswhere /
   `--vcvars`; GPU needs `triton-windows`), and on CUDA
@@ -113,7 +124,9 @@ Protocol:
 Flags: `--runs` (9), `--select-runs` (3), `--finalists` (2), `--modes` (subset of
 mode labels; eager is always included), `--epochs` (5), `--threads` (0 = each side
 at its default; N pins torch `--threads` and `AIDOTNET_BLAS_THREADS`), `--python`,
-`--vcvars`, `--output-dir` (`results/`). Windows only (the lock is a Win32 named
+`--vcvars`, `--output-dir` (`results/`), `--priority`, `--max-background-pct`,
+`--max-retries`, `--quiet-wait`, `--quiet-poll`, `--timeout` (1800 s per run).
+Windows only (the lock is a Win32 named
 mutex).
 
 ## CLI options (both sides)
