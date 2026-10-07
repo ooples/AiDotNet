@@ -125,6 +125,16 @@ try {
     if ($text -match 'No required job reported a failure') {
         [void] $failures.Add('summary_names_incomplete: a real build failure was described as not having run')
     }
+    # A timeout can be a hang the change introduced, and a startup failure an invalid workflow it edited:
+    # neither may be excused as "did not run".
+    foreach ($implicated in 'timed_out', 'startup_failure') {
+        & $Gate -Stage Validation -ReuseScope None -SourceResult success -RequiresValidation true `
+            -SelectResult success -BuildResult $implicated -SummaryFile $summaryPath *> $null
+        $text = Get-Content -LiteralPath $summaryPath -Raw
+        if ($text -match 'No required job reported a failure') {
+            [void] $failures.Add("summary_names_incomplete: a build that reported '$implicated' was excused as not having run")
+        }
+    }
     & $Gate -Stage Validation -ReuseScope None -SourceResult success -RequiresValidation true `
         -SelectResult mystery_state -BuildResult skipped -BuildCompatResult skipped -TestsResult skipped `
         -RegressionAnalysisResult skipped -AggregateAnalysisResult skipped -SizeCheckResult skipped `

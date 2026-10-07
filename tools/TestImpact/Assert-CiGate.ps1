@@ -161,9 +161,11 @@ else {
 $failed = @($requirements | Where-Object Conclusion -ne ([CiJobConclusion]::Success))
 
 # A job that was cancelled or never ran is not a job that failed. Telling them apart is the point of
-# #2131: a run cancelled for lack of runners otherwise reads as a broken PR.
-$didNotComplete = @([CiJobConclusion]::Cancelled, [CiJobConclusion]::Abandoned, [CiJobConclusion]::TimedOut,
-    [CiJobConclusion]::StartupFailure, [CiJobConclusion]::Stale, [CiJobConclusion]::Unknown)
+# #2131: a run cancelled for lack of runners otherwise reads as a broken PR. TimedOut and StartupFailure are
+# NOT in this set: a hang the change introduced times out, and an invalid workflow the change edited fails to
+# start, so both stay failures the change may have caused.
+$didNotComplete = @([CiJobConclusion]::Cancelled, [CiJobConclusion]::Abandoned, [CiJobConclusion]::Stale,
+    [CiJobConclusion]::Unknown)
 $incomplete = @($failed | Where-Object { $didNotComplete -contains $_.Conclusion })
 # Jobs downstream of one that never ran report Skipped; they are not failures either. A Skipped required
 # job with no incomplete job upstream is still a real gate failure (for example, required tests not run).
@@ -200,7 +202,7 @@ if ($gateStage -eq [CiGateStage]::Complete) {
 if ($onlyIncomplete) {
     [void] $summary.Add('')
     [void] $summary.Add("No required job reported a failure: $($incomplete.Count) did not run to completion " +
-        '(cancelled, never assigned a runner, or timed out). Re-run the failed jobs; nothing in the change is implicated yet.')
+        '(cancelled, never assigned a runner, or never reported). Re-run the failed jobs; nothing in the change is implicated yet.')
 }
 foreach ($name in $script:UnrecognizedConclusions.Keys) {
     [void] $summary.Add('')
