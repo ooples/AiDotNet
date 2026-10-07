@@ -49,7 +49,14 @@ enum CiJobConclusion {
     ActionRequired
     StartupFailure
     Stale
+    # Undocumented, but reported for a job that never got a runner (it sat queued until GitHub gave up).
+    Abandoned
+    # A result this gate does not know. Still not a pass; the raw value is reported, never thrown.
+    Unrecognized
 }
+
+# The raw value behind every Unrecognized conclusion, so the summary can name it.
+$script:UnrecognizedConclusions = @{}
 
 function ConvertTo-CiJobConclusion {
     param([AllowEmptyString()] [string] $Value, [string] $Name)
@@ -63,8 +70,14 @@ function ConvertTo-CiJobConclusion {
         'action_required' { return [CiJobConclusion]::ActionRequired }
         'startup_failure' { return [CiJobConclusion]::StartupFailure }
         'stale' { return [CiJobConclusion]::Stale }
+        'abandoned' { return [CiJobConclusion]::Abandoned }
         '' { return [CiJobConclusion]::Unknown }
-        default { throw "$Name has unsupported job conclusion '$Value'" }
+        default {
+            # Throwing here crashed the gate itself (#2131): a PR whose select job never got a runner
+            # showed a script exception instead of the job that did not run.
+            $script:UnrecognizedConclusions[$Name] = $Value
+            return [CiJobConclusion]::Unrecognized
+        }
     }
 }
 
@@ -146,6 +159,17 @@ else {
 }
 
 $failed = @($requirements | Where-Object Conclusion -ne ([CiJobConclusion]::Success))
+
+# A job that was cancelled or never ran is not a job that failed. Telling them apart is the point of
+# #2131: a run cancelled for lack of runners otherwise reads as a broken PR.
+$didNotComplete = @([CiJobConclusion]::Cancelled, [CiJobConclusion]::Abandoned, [CiJobConclusion]::TimedOut,
+    [CiJobConclusion]::StartupFailure, [CiJobConclusion]::Stale, [CiJobConclusion]::Unknown)
+$incomplete = @($failed | Where-Object { $didNotComplete -contains $_.Conclusion })
+# Jobs downstream of one that never ran report Skipped; they are not failures either. A Skipped required
+# job with no incomplete job upstream is still a real gate failure (for example, required tests not run).
+$hardFailures = @($failed | Where-Object {
+        ($didNotComplete -notcontains $_.Conclusion) -and $_.Conclusion -ne [CiJobConclusion]::Skipped })
+$onlyIncomplete = $incomplete.Count -gt 0 -and $hardFailures.Count -eq 0
 $mode = if ($gateStage -eq [CiGateStage]::Validation) {
     if ($requiresRuntimeValidation) { 'runtime validation' } else { 'non-runtime validation' }
 }
@@ -173,6 +197,15 @@ if ($gateStage -eq [CiGateStage]::Complete) {
 }
 [void] $summary.Add('')
 [void] $summary.Add($(if ($failed.Count -eq 0) { '**Gate PASSED**' } else { '**Gate FAILED**' }))
+if ($onlyIncomplete) {
+    [void] $summary.Add('')
+    [void] $summary.Add("No required job reported a failure: $($incomplete.Count) did not run to completion " +
+        '(cancelled, never assigned a runner, or timed out). Re-run the failed jobs; nothing in the change is implicated yet.')
+}
+foreach ($name in $script:UnrecognizedConclusions.Keys) {
+    [void] $summary.Add('')
+    [void] $summary.Add("$name reported an unrecognized conclusion '$($script:UnrecognizedConclusions[$name])', treated as not passing.")
+}
 
 if ($SummaryFile) {
     $summary -join "`n" | Set-Content -LiteralPath $SummaryFile -Encoding utf8
@@ -183,7 +216,16 @@ else {
 
 if ($failed.Count -gt 0) {
     foreach ($failure in $failed) {
-        Write-Host "::error title=$Stage CI Gate::Required job '$($failure.Name)' reported '$($failure.Conclusion)' (expected Success)."
+        $why = if ($didNotComplete -contains $failure.Conclusion) {
+            'did not run to completion; re-run it'
+        }
+        elseif ($onlyIncomplete -and $failure.Conclusion -eq [CiJobConclusion]::Skipped) {
+            'skipped because a job it needs did not run'
+        }
+        else {
+            'expected Success'
+        }
+        Write-Host "::error title=$Stage CI Gate::Required job '$($failure.Name)' reported '$($failure.Conclusion)' ($why)."
     }
     exit 1
 }
