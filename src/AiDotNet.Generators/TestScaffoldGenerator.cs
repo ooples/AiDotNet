@@ -7000,6 +7000,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     $"new {codecOptionsType} {{ NumCodebooks = 2, " +
                     "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 64, NumEncoderLayers = 1, " +
                     "NumLLMLayers = 2, NumHeads = 4, MaxTextLength = 8, MaxCodecFrames = 8, " +
+                    // MaskGCT's paper warmup is 32000 steps, which leaves the rate near 3e-9 for the
+                    // memorization probe's two steps (loss fell 0.6% against the required 1%, #2087);
+                    // a short ramp reaches the recipe's 1e-4, as the NaturalSpeech3 fixture does.
+                    (model.ClassName == "MaskGCT" ? "WarmupSteps = 2, " : "") +
                     "DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "ByteTrack" && model.TypeParameterCount == 1
