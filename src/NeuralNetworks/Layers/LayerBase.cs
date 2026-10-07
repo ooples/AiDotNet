@@ -309,6 +309,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 _pendingDeviceGradients = null;
                 _parameterGradients = MaterializeParameterGradients(owned);
             }
+            if (_pendingBorrowedGradients is { } borrowed)
+            {
+                _pendingBorrowedGradients = null;
+                // A revoked lease means the buffers have been (or are being) overwritten by a later step, so the
+                // view no longer describes the step that published it: report "no gradient" rather than mixed data.
+                _parameterGradients = borrowed.Lease.IsLive ? MaterializeParameterGradients(borrowed.Gradients) : null;
+            }
             // Anything that reads the published vector may keep it, so the next publish must not refill it.
             if (_parameterGradients is not null && (object)_parameterGradients == _scatterVector)
                 _scatterVectorHandedOut = true;
@@ -317,6 +324,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         set
         {
             _pendingDeviceGradients = null;
+            _pendingBorrowedGradients = null;
             _parameterGradients = value;
         }
     }
@@ -336,6 +344,30 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     // copies (an async device-to-device copy each, no sync) and downloads only if something reads the gradients.
     // Owned, not referenced: the step's own gradient buffers are reclaimed when it returns.
     private Dictionary<Tensor<T>, Tensor<T>>? _pendingDeviceGradients;
+
+    // A fused compiled step hands over its OWN gradient buffers, which stay intact until the model's next fused step
+    // overwrites them. Copying every one into the layer surface each step (an Array.Clear plus a memmove of the whole
+    // parameter set: ~17% of the parity MLP's CPU training thread) bought nothing unless something read it. The layer
+    // instead keeps the borrowed map and copies only on a read; the model revokes the lease before the plan can write
+    // the buffers again, so a read can never observe a later step's (or a half-written) gradient.
+    private (IReadOnlyDictionary<Tensor<T>, Tensor<T>> Gradients, BorrowedGradientLease Lease)? _pendingBorrowedGradients;
+
+    /// <summary>
+    /// Validity token for gradient buffers a layer surface borrows instead of copying (see
+    /// <see cref="ScatterParameterGradients(IReadOnlyDictionary{Tensor{T}, Tensor{T}}, BorrowedGradientLease?)"/>).
+    /// </summary>
+    /// <remarks>
+    /// The owner of the buffers revokes it before anything may write them again. A layer reads the borrowed
+    /// buffers only while the lease is live; after revocation an unread borrowed publish reports "no gradient".
+    /// </remarks>
+    internal sealed class BorrowedGradientLease
+    {
+        /// <summary>True until <see cref="Revoke"/> is called.</summary>
+        public bool IsLive { get; private set; } = true;
+
+        /// <summary>Marks the borrowed buffers as no longer describing the step that published them.</summary>
+        public void Revoke() => IsLive = false;
+    }
 
     /// <summary>
     /// Gets the input shape for this layer.
@@ -7529,7 +7561,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         return true;
     }
 
-    private Vector<T>? MaterializeParameterGradients(Dictionary<Tensor<T>, Tensor<T>> owned)
+    private Vector<T>? MaterializeParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> owned)
     {
         int ignored = 0;
         int total = FillParameterGradients(null, 0, owned, ref ignored);
@@ -7537,7 +7569,42 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         var filled = new T[total];
         int matched = 0;
         FillParameterGradients(filled, 0, owned, ref matched);
-        return matched == 0 ? null : new Vector<T>(filled);
+        // Wrap the freshly filled array; the IEnumerable constructor would copy it a second time.
+        return matched == 0 ? null : Vector<T>.FromMemory(new Memory<T>(filled));
+    }
+
+    // Same walk and match rule as FillParameterGradients, counting the scalars a fill WOULD take from a real gradient
+    // without writing anything. A borrowed publish needs that count up front (its return value and the "anything
+    // published?" decision) while deferring the copy to the first read.
+    private int CountMatchedParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+    {
+        int matched = 0;
+        var components = GetOrderedParameterComponents();
+        for (int i = 0; i < components.Length; i++)
+        {
+            var component = components[i];
+            if (component.Kind == DeclaredParameterComponentKind.Buffer) continue;
+            if (component.Kind == DeclaredParameterComponentKind.Trainable)
+            {
+                var tensor = component.Tensor;
+                int count = ParameterComponentScalarCount(component);
+                if (count == 0) continue;
+                if (tensor is not null
+                    && grads.TryGetValue(tensor, out var gradient)
+                    && gradient is not null
+                    && TrainableScalarCount(gradient) == count)
+                {
+                    matched += count;
+                }
+                continue;
+            }
+
+            var sub = component.Layer;
+            if (sub is null || IsSubLayerParameterFrozen(sub)) continue;
+            if (sub is LayerBase<T> layerBase)
+                matched += layerBase.CountMatchedParameterGradients(grads);
+        }
+        return matched;
     }
 
     private int FillParameterGradients(
@@ -7639,11 +7706,35 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
 
     public int ScatterParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+        => ScatterParameterGradients(grads, borrowedLease: null);
+
+    /// <summary>
+    /// Publishes <paramref name="grads"/> to this layer's gradient surface, borrowing the buffers instead of
+    /// copying them when <paramref name="borrowedLease"/> is given.
+    /// </summary>
+    /// <param name="grads">Tape gradients, keyed by parameter tensor reference.</param>
+    /// <param name="borrowedLease">
+    /// <c>null</c> copies the gradients now. Otherwise the caller guarantees the buffers keep this step's values
+    /// while the lease is live and revokes it before they can change; the copy is then taken on the first read, and
+    /// a read after revocation reports no gradient.
+    /// </param>
+    /// <returns>The number of scalars published from a real gradient.</returns>
+    internal int ScatterParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads, BorrowedGradientLease? borrowedLease)
     {
         if (grads is null || grads.Count == 0) return 0;
 
         if (Engine.SupportsGpu && TryPublishDeviceGradients(grads, out int deviceMatched))
             return deviceMatched;
+
+        if (borrowedLease is { IsLive: true })
+        {
+            int borrowedMatched = CountMatchedParameterGradients(grads);
+            // Nothing keyed to this layer: leave the surface unpopulated, exactly as the copying path does.
+            if (borrowedMatched == 0) return 0;
+            ParameterGradients = null;
+            _pendingBorrowedGradients = (grads, borrowedLease);
+            return borrowedMatched;
+        }
 
         int ignored = 0;
         int total = FillParameterGradients(null, 0, grads, ref ignored);

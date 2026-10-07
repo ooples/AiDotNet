@@ -5023,14 +5023,71 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// Receives the fused kernel's gradients and publishes them to the layer surface.
     /// </summary>
     /// <remarks>
-    /// No copy is taken here on purpose. The plan hands over its pre-allocated buffers by reference
-    /// and overwrites them on the next step, but the scatter READS the scalars into each layer's own
-    /// vector rather than retaining the tensors, so the published surface is already independent of
-    /// the plan's buffers by the time this returns.
+    /// <para>
+    /// The plan hands over its gradient buffers by reference and overwrites them on its next step. When every one is
+    /// a buffer the plan OWNS, the layers BORROW them under a lease and copy only when something reads the gradients
+    /// (the copy of the whole parameter set every step was ~17% of the parity MLP's CPU training thread). Every
+    /// caller must call <see cref="RevokeBorrowedFusedGradients"/> before its next fused step can write them; an
+    /// unread publication then reports no gradient instead of a later step's values.
+    /// </para>
+    /// <para>
+    /// A plan-owned buffer is recognised by identity: the plan hands over the same tensor object step after step.
+    /// A gradient the backward REPLACED this step (an out-of-place accumulation) is a new object each step, rented
+    /// from the step's transient arena, whose memory the arena recycles as soon as the step returns -- so any
+    /// publication containing one (and the first step of every plan) is copied now, exactly as before. GPU engines
+    /// keep the layers' owned device copies, which never read the host buffers.
+    /// </para>
     /// </remarks>
     private protected void ScatterFusedGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
     {
-        PublishParameterGradients(grads);
+        _borrowedFusedGradientLease?.Revoke();
+        _borrowedFusedGradientLease = null;
+
+        var previous = _lastFusedGradientTensors;
+        var current = new Dictionary<Tensor<T>, Tensor<T>>(grads.Count, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        bool allPlanOwned = previous is not null && !Engine.SupportsGpu;
+        foreach (var entry in grads)
+        {
+            current[entry.Key] = entry.Value;
+            if (allPlanOwned && previous is not null
+                && (!previous.TryGetValue(entry.Key, out var last) || !ReferenceEquals(last, entry.Value)))
+                allPlanOwned = false;
+        }
+        _lastFusedGradientTensors = current;
+
+        if (!allPlanOwned)
+        {
+            PublishParameterGradients(grads);
+            return;
+        }
+        var lease = new LayerBase<T>.BorrowedGradientLease();
+        _borrowedFusedGradientLease = lease;
+        PublishParameterGradients(grads, lease);
+    }
+
+    /// <summary>Lease on the fused plan's gradient buffers that the layer surfaces currently borrow, if any.</summary>
+    private LayerBase<T>.BorrowedGradientLease? _borrowedFusedGradientLease;
+
+    /// <summary>The gradient tensor objects the previous fused publication handed over, keyed by parameter.</summary>
+    private Dictionary<Tensor<T>, Tensor<T>>? _lastFusedGradientTensors;
+
+    /// <summary>
+    /// Withdraws a borrowed fused-step publication before the plan's gradient buffers can change. The surface then
+    /// reports no gradient (as before the first step) until the next publication; a borrowed gradient that was
+    /// already read keeps the copy that read took.
+    /// </summary>
+    private protected void RevokeBorrowedFusedGradients()
+    {
+        var lease = _borrowedFusedGradientLease;
+        if (lease is null) return;
+        _borrowedFusedGradientLease = null;
+        lease.Revoke();
+        // Withdraw the WHOLE publication, including any slice a read already copied: a surface mixing copied
+        // slices with withdrawn ones would concatenate into a vector misaligned with the parameter vector. The
+        // model-level flag goes too, or GetParameterGradients would present the withdrawn slices as real zeros.
+        ClearPublishedLayerGradientSlices();
+        _hasPublishedParameterGradients = false;
+        _publishedExtraTensorGradients = null;
     }
 
     private void ClearPublishedLayerGradientSlices()
@@ -5046,6 +5103,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     protected int ScatterParameterGradientsToLayers(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+        => ScatterParameterGradientsToLayers(grads, borrowedLease: null);
+
+    private int ScatterParameterGradientsToLayers(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads,
+        LayerBase<T>.BorrowedGradientLease? borrowedLease)
     {
         if (grads is null || grads.Count == 0) return 0;
 
@@ -5054,13 +5115,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             if (Layers[i] is LayerBase<T> layer)
             {
-                matched += layer.ScatterParameterGradients(grads);
+                matched += layer.ScatterParameterGradients(grads, borrowedLease);
             }
         }
 
         foreach (var layer in GetExtraTrainableLayers())
         {
-            if (layer is not null) matched += layer.ScatterParameterGradients(grads);
+            if (layer is not null) matched += layer.ScatterParameterGradients(grads, borrowedLease);
         }
 
         return matched;
@@ -5068,7 +5129,22 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
     /// <summary>Publishes one backward pass to the public model and layer gradient surfaces.</summary>
     protected int PublishParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+        => PublishParameterGradients(grads, borrowedLease: null);
+
+    /// <summary>
+    /// Publishes one backward pass; with <paramref name="borrowedLease"/> the layer surfaces borrow the buffers
+    /// (copying on first read) instead of copying them now. See <see cref="ScatterFusedGradients"/>.
+    /// </summary>
+    private int PublishParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads,
+        LayerBase<T>.BorrowedGradientLease? borrowedLease)
     {
+        // A copying publish replaces a borrowed one wholesale; retire its lease so a later revoke cannot withdraw
+        // this publication.
+        if (borrowedLease is null && _borrowedFusedGradientLease is { } stale)
+        {
+            stale.Revoke();
+            _borrowedFusedGradientLease = null;
+        }
         _gradientSurfaceUnavailable = false;
         _publishedExtraTensorGradients = null;
         _publishedFlatParameterGradients = null;
@@ -5077,7 +5153,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         if (grads is null || grads.Count == 0) return 0;
 
-        int matched = ScatterParameterGradientsToLayers(grads);
+        int matched = ScatterParameterGradientsToLayers(grads, borrowedLease);
         Dictionary<Tensor<T>, Vector<T>>? extras = null;
         foreach (var tensor in GetExtraTrainableTensors())
         {
@@ -12778,6 +12854,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> resolvedOptimizer,
         bool useStreamingDefaults)
     {
+        // The previous fused step's layer surface borrows the plan's gradient buffers, which this step (or a
+        // recompile, or the eager fallback) is about to overwrite. Withdraw it before anything can write them.
+        RevokeBorrowedFusedGradients();
+
         // Callers can still force the eager path via
         // <c>TensorCodecOptions.EnableCompilation = false</c> (handled
         // below). The dedicated <c>ForceEagerPath</c> diagnostic flag

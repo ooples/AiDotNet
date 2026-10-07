@@ -342,6 +342,20 @@ internal sealed class FusedTrainingSession<T>
     private static bool AnyGradientNonZero(IReadOnlyDictionary<Tensor<T>, Tensor<T>> gradients)
     {
         var engine = AiDotNetEngine.Current;
+        if (!engine.SupportsGpu)
+        {
+            // On the CPU the gradients are already host memory, so one fused sum of squares per tensor answers the
+            // question without materialising the squared tensor: the engine-op form rented a full-size temporary
+            // per gradient (1.6 MB for the parity MLP's first weight) every probed step, and those large-object
+            // allocations drove the collections the training thread then waited on. Stops at the first non-zero.
+            foreach (var gradient in gradients.Values)
+            {
+                if (gradient is null || gradient.Length == 0) continue;
+                // NaN counts as non-zero, as below.
+                if (NumOps.ToDouble(engine.TensorSumOfSquares(gradient)) != 0.0) return true;
+            }
+            return false;
+        }
         using var noGrad = new NoGradScope<T>();
         Tensor<T>? total = null;
         foreach (var gradient in gradients.Values)

@@ -718,6 +718,9 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
         var trainableLayers = Layers
             .Where(l => l is ITrainableLayer<T>).Cast<ITrainableLayer<T>>()
             .ToList();
+        // The previous fused step's layer surfaces borrow the plan's gradient buffers; withdraw them before this
+        // step can overwrite those buffers.
+        RevokeBorrowedFusedGradients();
         if (AiDotNet.Training.FusedTrainingStep<T>.TryStep(
                 trainableLayers, input, expectedOutput,
                 forward: Forward,

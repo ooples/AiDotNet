@@ -64,6 +64,75 @@ public sealed class LayerGradientPublishReuseTests
                 $"gradient {i}: {actual[i]} vs {expected[i]}; a reused buffer kept step-1 values");
     }
 
+    // A fused step's layer surfaces borrow the plan's gradient buffers and copy on first read. A model read only
+    // after its last step must report exactly what a model read after every step reports for that same step: the
+    // borrowed buffers must hold that step's gradients, not an earlier step's and not a half-overwritten mix.
+    [Fact]
+    public void FusedGradientsReadOnlyAfterTheLastStep_EqualThoseOfAModelReadEveryStep()
+    {
+        var readEveryStep = Build();
+        var readAtEnd = Build();
+        readAtEnd.SetParameters(readEveryStep.GetParameters());
+
+        // The fused-step counter is per model (it reads the state of the model that stepped last).
+        long fusedEveryStep = 0, fusedAtEnd = 0;
+        var lastRead = new float[readEveryStep.Layers.Count][];
+        for (int step = 0; step < 4; step++)
+        {
+            readEveryStep.Train(Input(10 + step), Target(step));
+            fusedEveryStep = AiDotNet.Training.CompiledTapeTrainingStep<float>.GetFusedStepCount();
+            readAtEnd.Train(Input(10 + step), Target(step));
+            fusedAtEnd = AiDotNet.Training.CompiledTapeTrainingStep<float>.GetFusedStepCount();
+            for (int l = 0; l < readEveryStep.Layers.Count; l++)
+                lastRead[l] = ((LayerBase<float>)readEveryStep.Layers[l]).GetParameterGradients().ToArray();
+        }
+        Assert.True(fusedEveryStep >= 4 && fusedAtEnd >= 4,
+            $"the fused compiled path ran {fusedEveryStep} and {fusedAtEnd} of 4 steps, so the borrowed publication was never exercised");
+
+        for (int l = 0; l < readAtEnd.Layers.Count; l++)
+        {
+            var actual = ((LayerBase<float>)readAtEnd.Layers[l]).GetParameterGradients().ToArray();
+            Assert.True(actual.Length == lastRead[l].Length && actual.Length > 0,
+                $"layer {l}: {actual.Length} gradients published, expected {lastRead[l].Length}");
+            Assert.Equal(lastRead[l], actual);
+        }
+        Assert.Equal(readEveryStep.GetParameterGradients().ToArray(), readAtEnd.GetParameterGradients().ToArray());
+    }
+
+    // The lease contract on its own: a read while the lease is live copies the borrowed buffers (later writes to
+    // them do not reach the copy), and a publication still unread when the lease is revoked reports no gradient
+    // rather than whatever the buffers hold by then.
+    [Fact]
+    public void BorrowedPublication_CopiesOnReadWhileLive_AndIsWithdrawnOnRevoke()
+    {
+        var model = Build();
+        var dense = (LayerBase<float>)model.Layers[0];
+        var map = new System.Collections.Generic.Dictionary<Tensor<float>, Tensor<float>>(
+            AiDotNet.Helpers.TensorReferenceComparer<Tensor<float>>.Instance);
+        int expectedCount = 0;
+        foreach (var parameter in dense.GetTrainableParameters())
+        {
+            var gradient = new Tensor<float>(parameter.Shape.ToArray());
+            for (int i = 0; i < gradient.Length; i++) gradient[i] = 0.25f * (expectedCount + i + 1);
+            map[parameter] = gradient;
+            expectedCount += gradient.Length;
+        }
+        Assert.True(expectedCount > 0, "the dense layer exposed no trainable tensors, so this test would prove nothing");
+
+        var lease = new LayerBase<float>.BorrowedGradientLease();
+        Assert.Equal(expectedCount, dense.ScatterParameterGradients(map, lease));
+        var read = dense.GetParameterGradients().ToArray();
+        Assert.Equal(expectedCount, read.Length);
+        foreach (var gradient in map.Values)
+            for (int i = 0; i < gradient.Length; i++) gradient[i] = -1f;
+        Assert.Equal(read, dense.GetParameterGradients().ToArray());
+
+        var unread = new LayerBase<float>.BorrowedGradientLease();
+        Assert.Equal(expectedCount, dense.ScatterParameterGradients(map, unread));
+        unread.Revoke();
+        Assert.Empty(dense.GetParameterGradients().ToArray());
+    }
+
     private static FeedForwardNeuralNetwork<float> Build()
     {
         var layers = new System.Collections.Generic.List<ILayer<float>>
