@@ -220,6 +220,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // ensemble (populated with members) is covered by the AutoML search integration tests.
         "AutoMLEnsembleModel",
 
+        // A search over diffusion configurations, not a diffusion model: it extends AutoMLModelBase and
+        // returns the best IFullModel it found, so it implements no IDiffusionModel and the Diffusion
+        // family it is routed to by its (accurate, descriptive) [ModelCategory(Diffusion)] can never
+        // build it (#2138). DiffusionAutoMLTrainingTests covers the search itself.
+        "DiffusionAutoML",
+
         // Proprietary-API TTS wrappers (ElevenLabs, AmazonPolly, AzureNeuralTTS,
         // GoogleCloudTTS, Murf, NVIDIARivaTTS): real inference is a remote API
         // call, not a local Predict pipeline — these classes have no published
