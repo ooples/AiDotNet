@@ -34,20 +34,23 @@ permissions:
 
 jobs:
   heavy-timeout:
-    name: Heavy Timeout Models (${{ matrix.slice }}/20)
+    name: Heavy Timeout Models (${{ matrix.slice }}/30)
     runs-on: ubuntu-latest
     timeout-minutes: 350   # generous budget; these models are the slow ones by definition
     # SLICED ACROSS PARALLEL JOBS (#2087). With one class per process the lane takes about 11 minutes per class,
     # and 220 classes do not fit one 350-minute job: the first capped run finished 8 before the timeout cancelled it.
-    # Each slice runs every 20th class of the same sorted discovery, so the slices cover every class exactly once:
-    # about 11 classes each. Twenty slices since HeavyTimeout tests got a 4x per-test budget below (a paper-scale
-    # training invariant needs ~230 s on this runner), which roughly doubles a heavy class's time; max-parallel keeps
-    # it at ten jobs at once, because the account runs at most 20 jobs and this lane must not starve pull-request CI.
+    # Each slice runs every 30th class of the same sorted discovery, so the slices cover every class exactly once:
+    # about 7 classes each. HeavyTimeout tests get a 4x per-test budget below (a paper-scale training invariant needs
+    # ~230 s on this runner), so a heavy class can take ~35 min, and the loop reserves the full 60-min chunk cap before
+    # starting one: with ~11 classes a slice could hit its 320-min budget and record the rest "not run". Seven classes
+    # fit even when all of them run near the cap's typical ~35 min. Total runner time is unchanged by the split;
+    # max-parallel keeps ten jobs at once, because the account runs at most 20 and this lane must not starve PR CI.
     strategy:
       fail-fast: false
       max-parallel: 10
       matrix:
-        slice: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+        slice: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+                20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -213,7 +216,7 @@ jobs:
             exit 1
           }
 
-          $sliceCount = 20
+          $sliceCount = 30
           $slice = [int]$env:HEAVY_SLICE
           $classes = @(for ($c = 0; $c -lt $classes.Count; $c++) { if ($c % $sliceCount -eq $slice) { $classes[$c] } })
           Write-Host "--- slice $($slice) of $($sliceCount): $($classes.Count) class(es) ---"
