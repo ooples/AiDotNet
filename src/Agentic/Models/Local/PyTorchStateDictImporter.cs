@@ -31,7 +31,7 @@ namespace AiDotNet.Agentic.Models.Local;
 /// AiDotNet network computes exactly what the PyTorch one did.
 /// </para>
 /// </remarks>
-public static class PyTorchStateDictImporter
+internal static class PyTorchStateDictImporter
 {
     /// <summary>
     /// Imports the PyTorch tensors under each module prefix into the corresponding parameter-bearing layer.
