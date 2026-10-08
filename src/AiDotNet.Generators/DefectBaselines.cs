@@ -59,7 +59,6 @@ internal static class DefectBaselines
             "global::AiDotNet.DistributedTraining.ZeRO3Model<T, TInput, TOutput>",
             "global::AiDotNet.Finance.AutoML.FinancialAutoML<T>",
             "global::AiDotNet.Finance.Probabilistic.CSDI<T>",
-            "global::AiDotNet.Finance.Probabilistic.TimeGrad<T>",
             "global::AiDotNet.Finance.Probabilistic.TSDiff<T>",
             "global::AiDotNet.KnowledgeDistillation.FeatureDistillationStrategy<T>",
             "global::AiDotNet.MetaLearning.Algorithms.AdaptedMetaModel<T, TInput, TOutput>",

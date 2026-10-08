@@ -60,8 +60,4 @@ public class TimeSeriesForestOptions<T> : TimeSeriesClassifierOptions<T>
     /// </remarks>
     public int MinSamplesSplit { get; set; } = 2;
 
-    /// <summary>
-    /// Gets or sets the random seed for reproducible results.
-    /// </summary>
-    public int? RandomSeed { get; set; }
 }

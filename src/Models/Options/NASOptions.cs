@@ -282,14 +282,6 @@ public class NASOptions<T> : ModelOptions
     public string? CheckpointDirectory { get; set; }
 
     /// <summary>
-    /// Gets or sets the random seed for reproducibility.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Reproducibility:</b> Set a seed to get repeatable results.</para>
-    /// </remarks>
-    public int? RandomSeed { get; set; }
-
-    /// <summary>
     /// Gets or sets whether to enable verbose logging during search.
     /// </summary>
     public bool Verbose { get; set; } = true;
@@ -395,7 +387,7 @@ public class NASOptions<T> : ModelOptions
             OnEpochComplete = OnEpochComplete,
             SaveCheckpoints = SaveCheckpoints,
             CheckpointDirectory = CheckpointDirectory,
-            RandomSeed = RandomSeed,
+            Seed = Seed,
             Verbose = Verbose
         };
 

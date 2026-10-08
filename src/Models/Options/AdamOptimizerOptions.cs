@@ -82,7 +82,7 @@ public class AdamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
         // OptimizationAlgorithmOptions and this class).
         CopyRegularizationFrom(other);
         ShuffleData = other.ShuffleData;
-        RandomSeed = other.RandomSeed;
+        Seed = other.Seed;
         EnableGradientClipping = other.EnableGradientClipping;
         MaxGradientNorm = other.MaxGradientNorm;
 

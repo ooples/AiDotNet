@@ -4117,7 +4117,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             backgroundData,
             nSamples: options.SHAPSampleCount,
             featureNames: options.FeatureNames,
-            randomState: options.RandomSeed);
+            randomState: options.Seed);
 
         return explainer.Explain(instance);
     }
@@ -4151,7 +4151,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             backgroundData,
             nSamples: options.SHAPSampleCount,
             featureNames: options.FeatureNames,
-            randomState: options.RandomSeed);
+            randomState: options.Seed);
 
         return explainer.ExplainGlobal(data);
     }
@@ -4190,7 +4190,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             nSamples: options.LIMESampleCount,
             kernelWidth: options.LIMEKernelWidth ?? 0.75,
             featureNames: options.FeatureNames,
-            randomState: options.RandomSeed);
+            randomState: options.Seed);
 
         return explainer.Explain(instance);
     }
@@ -4234,7 +4234,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             scoreFunction,
             nRepeats: options.PermutationRepeatCount,
             featureNames: options.FeatureNames,
-            randomState: options.RandomSeed);
+            randomState: options.Seed);
 
         return calculator.Calculate(X, y);
     }

@@ -14,6 +14,12 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class ObjectDetectionOptions<T> : ModelOptions
 {
+    /// <summary>Creates options with the historical default seed of 42.</summary>
+    public ObjectDetectionOptions()
+    {
+        Seed = 42;
+    }
+
     /// <summary>
     /// The detection architecture to use.
     /// </summary>
@@ -125,11 +131,6 @@ public class ObjectDetectionOptions<T> : ModelOptions
     /// <para>If null, uses COCO class names by default.</para>
     /// </remarks>
     public string[]? ClassNames { get; set; }
-
-    /// <summary>
-    /// Random seed for reproducibility.
-    /// </summary>
-    public int? RandomSeed { get; set; } = 42;
 
     /// <summary>
     /// Set prediction loss used by <c>TrainDetections</c> on DETR-family detectors, or null for the

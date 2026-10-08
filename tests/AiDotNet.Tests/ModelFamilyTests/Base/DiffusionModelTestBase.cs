@@ -210,13 +210,35 @@ public abstract class DiffusionModelTestBase<TNum> : IAsyncLifetime
     {
         int? previous = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed;
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = FixtureInitializationSeed;
+        IDiffusionModel<TNum> model;
         try
         {
-            return CreateModel();
+            model = CreateModel();
         }
         finally
         {
             AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = previous;
+        }
+
+        ConfigureFixtureModel(model);
+        return model;
+    }
+
+    /// <summary>
+    /// Adjusts a freshly built fixture model to the data this family's tests feed it.
+    /// </summary>
+    /// <remarks>
+    /// A latent diffusion model treats a training sample as an image to encode unless told otherwise. A fixture
+    /// whose declared input depth is the model's latent depth is feeding latents, so the model is told so;
+    /// encoding those again would shrink them by the VAE's downsample factor.
+    /// </remarks>
+    protected virtual void ConfigureFixtureModel(IDiffusionModel<TNum> model)
+    {
+        var shape = InputShape;
+        if (model is global::AiDotNet.Diffusion.LatentDiffusionModelBase<TNum> latent && shape.Length >= 3
+            && shape[shape.Length - 3] == latent.LatentChannels)
+        {
+            latent.TrainingSampleSpace = AiDotNet.Enums.DiffusionTrainingSampleSpace.Latent;
         }
     }
 

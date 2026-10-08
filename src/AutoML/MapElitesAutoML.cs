@@ -506,7 +506,7 @@ public sealed class MapElitesAutoML<T, TInput, TOutput> :
             "automl-cross-validation-v1",
             CrossValidationOptions.NumberOfFolds.ToString(CultureInfo.InvariantCulture),
             CrossValidationOptions.ValidationType.ToString(),
-            CrossValidationOptions.RandomSeed?.ToString(CultureInfo.InvariantCulture) ??
+            CrossValidationOptions.Seed?.ToString(CultureInfo.InvariantCulture) ??
                 "map-elites-stable-inherited-stream",
             CrossValidationOptions.ShuffleData ? "1" : "0"
         };

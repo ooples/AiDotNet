@@ -220,15 +220,6 @@ public class ActiveLearningOptions : ModelOptions
     public int NumNeighbors { get; set; } = 10;
 
     /// <summary>
-    /// Gets or sets the random seed for reproducibility.
-    /// </summary>
-    /// <remarks>
-    /// Setting a seed ensures the same samples are selected across runs.
-    /// Leave as null for random selection each time.
-    /// </remarks>
-    public int? RandomSeed { get; set; }
-
-    /// <summary>
     /// Gets or sets the minimum number of samples required in the unlabeled pool.
     /// </summary>
     /// <remarks>

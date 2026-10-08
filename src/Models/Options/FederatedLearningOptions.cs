@@ -524,22 +524,6 @@ public class FederatedLearningOptions : ModelOptions
     public FederatedDriftOptions? DriftDetection { get; set; } = new();
 
     /// <summary>
-    /// Gets or sets a random seed for reproducibility.
-    /// </summary>
-    /// <remarks>
-    /// <b>For Beginners:</b> Random seed makes randomness reproducible. Using the same
-    /// seed will produce the same random client selections, initializations, etc.
-    ///
-    /// Benefits:
-    /// - Reproducible experiments
-    /// - Easier debugging
-    /// - Fair comparison between methods
-    ///
-    /// Set to null for truly random behavior.
-    /// </remarks>
-    public int? RandomSeed { get; set; } = null;
-
-    /// <summary>
     /// Gets or sets the federated learning mode (horizontal or vertical).
     /// </summary>
     /// <remarks>

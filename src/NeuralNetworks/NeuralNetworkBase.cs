@@ -298,9 +298,28 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// Configuration options for this neural network model.
     /// </summary>
     /// <remarks>
-    /// Derived classes should set this to their specific options type in their constructor.
+    /// <para>Derived classes should set this to their specific options type in their constructor.</para>
+    /// <para>
+    /// Setting it also applies <see cref="ModelOptions.Seed"/> (see <see cref="ApplyOptionsSeed"/>), so a
+    /// model that assigns its options before building its layers, as constructors do, initialises its
+    /// weights from that seed. Before this, 81 of 90 finance models, and every other model that took its
+    /// seed only from the architecture, silently ignored <c>Options.Seed</c> (#2290).
+    /// </para>
     /// </remarks>
-    protected ModelOptions Options { get; set; } = new NeuralNetworkOptions();
+    protected ModelOptions Options
+    {
+        get => _modelOptions;
+        set
+        {
+            _modelOptions = value;
+            // Only while no layer exists yet: restarting the construction scope after layers were built
+            // would hand later layers the seeds earlier ones already used, so they would initialise alike.
+            if (_layers is null || _layers.Count == 0)
+                ApplyOptionsSeed(value?.Seed);
+        }
+    }
+
+    private ModelOptions _modelOptions = new NeuralNetworkOptions();
 
     /// <inheritdoc/>
     public virtual ModelOptions GetOptions() => Options;
@@ -638,6 +657,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // training-determinism bug). Inert when no seed was requested (production
         // default), preserving the existing non-reproducible init behaviour.
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(architecture.RandomSeed);
+        SeedCallerBuiltLayers();
         _layers = new List<ILayer<T>>();
         NumOps = MathHelper.GetNumericOperations<T>();
         MaxGradNorm = NumOps.FromDouble(maxGradNorm);
@@ -7284,6 +7304,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             return;
         }
 
+        var accumulatedPair = PrepareTrainingPair(input, target, _trainingPairDraws++);
+        input = accumulatedPair.Input;
+        target = accumulatedPair.Target ?? throw new InvalidOperationException(
+            $"{GetType().Name}.{nameof(PrepareTrainingPair)} returned no target for a training step.");
+
         if (input.Shape[0] != target.Shape[0])
         {
             throw new ArgumentException(
@@ -7538,6 +7563,122 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     private bool _layerRandomSeedsWired;
 
     /// <summary>
+    /// The seed from this model's options (<see cref="Models.Options.ModelOptions.Seed"/>), applied by
+    /// <see cref="ApplyOptionsSeed"/> when the architecture carries no explicit seed of its own.
+    /// </summary>
+    private int? _optionsSeed;
+
+    /// <summary>
+    /// The seed this model's weight initialisation and stochastic layers derive from: the architecture's
+    /// explicit seed if it has one, otherwise the options seed, otherwise the architecture's fallback.
+    /// </summary>
+    private int? EffectiveRandomSeed =>
+        Architecture is { HasExplicitRandomSeed: true } ? Architecture.RandomSeed : _optionsSeed ?? Architecture?.RandomSeed;
+
+    /// <summary>
+    /// Seeds this model from its options, so <see cref="Models.Options.ModelOptions.Seed"/> reproduces the
+    /// initial weights and the stochastic layers' streams exactly as an architecture seed does.
+    /// </summary>
+    /// <param name="seed">The options seed; null leaves the model unseeded (or architecture-seeded).</param>
+    /// <remarks>
+    /// <para>
+    /// Call it from the constructor <b>before</b> the layers are built: weight initialisation draws from the
+    /// construction seed scope, which this restarts from <paramref name="seed"/>. An explicit
+    /// <see cref="NeuralNetworkArchitecture{T}.RandomSeed"/> wins, so code that seeded the architecture keeps
+    /// its results.
+    /// </para>
+    /// <para>
+    /// Without this, models whose options carry a seed but build their layers from the architecture alone
+    /// ignored it: the finance transformers read neither <c>Options.Seed</c> nor their own
+    /// <c>RandomSeed</c> (#2290).
+    /// </para>
+    /// </remarks>
+    protected void ApplyOptionsSeed(int? seed)
+    {
+        if (Architecture is { HasExplicitRandomSeed: true })
+            return;
+
+        if (seed is not int value)
+        {
+            // Options without a seed replacing seeded ones make the model unseeded again (or seeded by its
+            // architecture's fallback): the earlier options seed must not keep initialising the layers.
+            if (_optionsSeed is null)
+                return;
+            _optionsSeed = null;
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(Architecture?.RandomSeed);
+            SeedCallerBuiltLayers();
+            return;
+        }
+
+        _optionsSeed = value;
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(value);
+        SeedCallerBuiltLayers();
+    }
+
+    // The caller-built layers this model gave a seed, so a later options seed can replace those seeds and no others.
+    private HashSet<ILayer<T>>? _layersSeededAtConstruction;
+
+    /// <summary>
+    /// Gives every caller-built layer (<see cref="NeuralNetworkArchitecture{T}.Layers"/>) whose seed nobody chose the
+    /// next seed of this model's construction scope.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The caller constructs those layers before this model exists, so the scope that seeds the layers a model
+    /// builds for itself was never active for them. Layers that draw their initial weights lazily (most of them) take
+    /// this seed when they materialize, and layers that draw in their constructor (MambaBlock, RWKV7Block) redo that
+    /// draw from it through <see cref="Layers.LayerBase{T}.OnRandomSeedAssigned"/> while their weights are untouched.
+    /// Seeding here, at construction, is what makes that redraw land before any Predict, so equal model seeds give
+    /// equal initial weights for a caller-built stack too.
+    /// </para>
+    /// <para>
+    /// A seed the caller set on a layer is left alone. One the layer drew from a construction scope left armed by an
+    /// earlier model is not the caller's choice, and is replaced (see
+    /// <see cref="Layers.LayerBase{T}.RandomSeedCameFromConstructionScope"/>). When <see cref="ApplyOptionsSeed"/> restarts the scope,
+    /// the seeds given here are replaced from the new scope, still before any forward has read the weights.
+    /// </para>
+    /// </remarks>
+    private void SeedCallerBuiltLayers()
+    {
+        var supplied = Architecture?.Layers;
+        if (supplied is null || supplied.Count == 0)
+            return;
+
+        var visited = new HashSet<ILayer<T>>(Helpers.TensorReferenceComparer<ILayer<T>>.Instance);
+        foreach (var layer in supplied)
+        {
+            if (layer is not null) SeedCallerBuiltLayer(layer, visited);
+        }
+    }
+
+    private void SeedCallerBuiltLayer(ILayer<T> layer, HashSet<ILayer<T>> visited)
+    {
+        if (!visited.Add(layer) || layer is not Layers.LayerBase<T> baseLayer)
+            return;
+
+        bool seededHere = _layersSeededAtConstruction is not null && _layersSeededAtConstruction.Contains(layer);
+        if (baseLayer.RandomSeed is null || baseLayer.RandomSeedCameFromConstructionScope || seededHere)
+        {
+            int? seed = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextSeedOrNull();
+            if (seed is int drawn)
+            {
+                baseLayer.RandomSeed = drawn;
+                (_layersSeededAtConstruction ??= new HashSet<ILayer<T>>(Helpers.TensorReferenceComparer<ILayer<T>>.Instance))
+                    .Add(layer);
+            }
+            else if (_layersSeededAtConstruction is { } seededLayers && seededLayers.Remove(layer))
+            {
+                // The model has no seed any more, so the seed it gave this layer goes too.
+                baseLayer.RandomSeed = null;
+            }
+        }
+
+        foreach (var sub in baseLayer.GetSubLayers())
+        {
+            if (sub is not null) SeedCallerBuiltLayer(sub, visited);
+        }
+    }
+    /// <summary>
     /// Propagates <see cref="NeuralNetworkArchitecture{T}.RandomSeed"/> to every layer (and nested
     /// sub-layer) so seed-respecting stochastic layers — chiefly <see cref="Layers.DropoutLayer{T}"/>,
     /// whose mask derives from <see cref="Layers.LayerBase{T}.RandomSeed"/> plus a per-forward
@@ -7548,15 +7689,45 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </summary>
     private void WireLayerRandomSeeds()
     {
-        if (Architecture?.RandomSeed is not int seed) return;
+        if (EffectiveRandomSeed is not int seed) return;
         var seedRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         var visited = new HashSet<ILayer<T>>(Helpers.TensorReferenceComparer<ILayer<T>>.Instance);
+        var callerChosen = CallerChosenLayerSeeds();
         foreach (var layer in Layers)
         {
-            WireLayerRandomSeedRecursive(layer, seedRng, visited);
+            WireLayerRandomSeedRecursive(layer, seedRng, visited, callerChosen);
         }
         foreach (var layer in GetExtraTrainableLayers())
-            if (layer is not null) WireLayerRandomSeedRecursive(layer, seedRng, visited);
+            if (layer is not null) WireLayerRandomSeedRecursive(layer, seedRng, visited, callerChosen);
+    }
+
+    /// <summary>
+    /// The caller-built layers (<see cref="NeuralNetworkArchitecture{T}.Layers"/>, with their sub-layers) whose
+    /// <see cref="Layers.LayerBase{T}.RandomSeed"/> the caller chose: set, neither drawn from a construction scope nor
+    /// given by this model. Seed wiring leaves those alone.
+    /// </summary>
+    private HashSet<ILayer<T>>? CallerChosenLayerSeeds()
+    {
+        var supplied = Architecture?.Layers;
+        if (supplied is null || supplied.Count == 0)
+            return null;
+
+        var chosen = new HashSet<ILayer<T>>(Helpers.TensorReferenceComparer<ILayer<T>>.Instance);
+        var visited = new HashSet<ILayer<T>>(Helpers.TensorReferenceComparer<ILayer<T>>.Instance);
+        var pending = new Stack<ILayer<T>>(supplied.Where(layer => layer is not null));
+        while (pending.Count > 0)
+        {
+            var layer = pending.Pop();
+            if (!visited.Add(layer) || layer is not Layers.LayerBase<T> baseLayer)
+                continue;
+            bool seededHere = _layersSeededAtConstruction is not null && _layersSeededAtConstruction.Contains(layer);
+            if (baseLayer.RandomSeed is not null && !baseLayer.RandomSeedCameFromConstructionScope && !seededHere)
+                chosen.Add(layer);
+            foreach (var sub in baseLayer.GetSubLayers())
+                if (sub is not null) pending.Push(sub);
+        }
+
+        return chosen.Count == 0 ? null : chosen;
     }
 
     /// <summary>
@@ -7573,15 +7744,19 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         WireLayerRandomSeeds();
     }
 
-    private static void WireLayerRandomSeedRecursive(ILayer<T> layer, Random seedRng, HashSet<ILayer<T>> visited)
+    private static void WireLayerRandomSeedRecursive(
+        ILayer<T> layer, Random seedRng, HashSet<ILayer<T>> visited, HashSet<ILayer<T>>? callerChosen)
     {
         if (!visited.Add(layer)) return;
         if (layer is Layers.LayerBase<T> baseLayer)
         {
-            baseLayer.RandomSeed = seedRng.Next();
+            // Draw for every layer, so skipping a caller-chosen one does not shift the seeds the others get.
+            int next = seedRng.Next();
+            if (callerChosen is null || !callerChosen.Contains(layer))
+                baseLayer.RandomSeed = next;
             foreach (var sub in baseLayer.GetSubLayers())
             {
-                WireLayerRandomSeedRecursive(sub, seedRng, visited);
+                WireLayerRandomSeedRecursive(sub, seedRng, visited, callerChosen);
             }
         }
     }
@@ -11276,6 +11451,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // training saw different tensors: Document models normalize in Predict via PreprocessDocument but
         // trained on the raw page, and Donut fed a rank-3 page into a patch embedding that indexes NCHW.
         // A model whose ForwardForTraining or PredictCore owns its input convention gets the input unchanged.
+        var pair = PrepareTrainingPair(input, expected, _trainingPairDraws++);
+        input = pair.Input;
+        expected = pair.Target ?? throw new InvalidOperationException(
+            $"{GetType().Name}.{nameof(PrepareTrainingPair)} returned no target for a training step.");
         input = ForwardForTrainingOwnsPublicInputPreparation() ? input : PrepareInputForTraining(input);
 
         var configuredOptimizer = optimizer ?? _baseTrainOptimizer;
@@ -18814,6 +18993,31 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     {
     }
 
+    // Training steps that have drawn a pair so far; see PrepareTrainingPair.
+    private long _trainingPairDraws;
+
+    /// <summary>
+    /// Turns the caller's (input, target) into the pair this model actually trains on.
+    /// </summary>
+    /// <param name="input">The caller's input.</param>
+    /// <param name="target">The caller's target, or null for a training forward that has none (a shape or
+    /// contract probe); a model then pairs against a zero clean sample.</param>
+    /// <param name="draw">The index of this training step's random draw. Training advances it once per step; the
+    /// gradient-check entry points pass the current value without advancing, so repeated evaluations of one
+    /// objective see the same draw. Derive every random choice from it (and the model's seed), never from a
+    /// shared stream.</param>
+    /// <returns>The input and target the step trains on. The default returns them unchanged.</returns>
+    /// <remarks>
+    /// A denoising diffusion model does not train on (context, future): it trains its noise predictor on
+    /// (context, x_k, k) against the noise eps, where x_k = sqrt(alphaBar_k) x_0 + sqrt(1 - alphaBar_k) eps is
+    /// drawn from the target x_0 at a sampled step k (Ho et al. 2020). The draw happens outside the parameter
+    /// graph, so it is done here, once, for every path that trains - the plain, fused, streaming and
+    /// gradient-accumulation steps and the gradient-check objective - and the training forward stays a pure
+    /// function of the paired input, which a compiled plan can replay.
+    /// </remarks>
+    protected virtual (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
+        => (input, target);
+
     /// <summary>
     /// Converts a public model input into the tensor consumed by the trainable layer graph.
     /// </summary>
@@ -18887,9 +19091,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// generated test assembly can observe the exact objective-output contract without exposing a
     /// second production API.
     /// </remarks>
-    internal Tensor<T> ForwardPreparedForTraining(Tensor<T> input)
+    internal Tensor<T> ForwardPreparedForTraining(Tensor<T> input) => ForwardPreparedForTraining(input, pairTransformed: false);
+
+    private Tensor<T> ForwardPreparedForTraining(Tensor<T> input, bool pairTransformed)
     {
         SetTrainingMode(true);
+        if (!pairTransformed)
+            input = PrepareTrainingPair(input, null, _trainingPairDraws).Input;
         var trainingInput = ForwardForTrainingOwnsPublicInputPreparation()
             ? input
             : PrepareInputForTraining(input);
@@ -18919,8 +19127,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // training contract here so trainable layers, autodiff, and streaming storage all see a
         // consistent mode. In particular, an inference-first model may have read-only quantized
         // streaming snapshots that must be promoted before its weights participate in backward.
-        var prediction = ForwardPreparedForTraining(input);
-        return ComputeObjectiveFromPrediction(input, prediction, target, lossFunction);
+        var pair = PrepareTrainingPair(input, target, _trainingPairDraws);
+        var pairedTarget = pair.Target ?? target;
+        var prediction = ForwardPreparedForTraining(pair.Input, pairTransformed: true);
+        return ComputeObjectiveFromPrediction(pair.Input, prediction, pairedTarget, lossFunction);
     }
 
     /// <summary>
@@ -18956,11 +19166,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         ILossFunction<T>? lossFunction = null)
     {
         using var _ = new NoGradScope<T>();
+        var pair = PrepareTrainingPair(input, target, _trainingPairDraws);
+        var pairedTarget = pair.Target ?? target;
         var trainingInput = ForwardForTrainingOwnsPublicInputPreparation()
-            ? input
-            : PrepareInputForTraining(input);
+            ? pair.Input
+            : PrepareInputForTraining(pair.Input);
         var prediction = ForwardForTraining(trainingInput);
-        var objective = ComputeObjectiveFromPrediction(input, prediction, target, lossFunction);
+        var objective = ComputeObjectiveFromPrediction(pair.Input, prediction, pairedTarget, lossFunction);
         return objective.Length > 0 ? objective[0] : NumOps.Zero;
     }
 
@@ -18993,8 +19205,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         bool usesCompositeObjective = this is ICompositeLoss<T> && _compositeTargetsAreReal;
         if (resolved is LossFunctions.MeanSquaredErrorLoss<T> && !usesCompositeObjective)
         {
-            var prediction = ForwardPreparedForTraining(input);
-            target = AlignTargetToOutputShape(prediction, target);
+            // The same pair BuildTrainingObjective differentiates (the current draw, not a new one), so the finite
+            // difference measures the objective the analytic gradient is taken of.
+            var pair = PrepareTrainingPair(input, target, _trainingPairDraws);
+            var prediction = ForwardPreparedForTraining(pair.Input, pairTransformed: true);
+            target = AlignTargetToOutputShape(prediction, pair.Target ?? target);
             if (prediction.Length == 0) return 0.0;
 
             // Neumaier summation also keeps the double reference stable when the squared residuals

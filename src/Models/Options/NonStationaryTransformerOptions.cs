@@ -183,12 +183,6 @@ public class NonStationaryTransformerOptions<T> : ModelOptions
     /// </summary>
     public double LearningRate { get; set; } = 0.0001;
 
-    /// <summary>
-    /// Gets or sets the random seed for reproducibility.
-    /// Default: null (random initialization).
-    /// </summary>
-    public int? RandomSeed { get; set; }
-
     #endregion
 
     #region Input/Output Configuration

@@ -304,11 +304,6 @@ public class FineTuningOptions<T> : ModelOptions
     /// </summary>
     public int MaxCheckpoints { get; set; } = 3;
 
-    /// <summary>
-    /// Gets or sets the random seed for reproducibility.
-    /// </summary>
-    public int? RandomSeed { get; set; }
-
     // ========== Advanced Parameters ==========
 
     /// <summary>

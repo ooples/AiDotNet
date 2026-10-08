@@ -626,14 +626,67 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         get => _randomSeed;
         set
         {
+            // Anyone setting the seed directly chose it; only AssignInitializationSeedFromScope marks a scope draw.
+            RandomSeedCameFromConstructionScope = false;
             if (_randomSeed == value) return;
             _randomSeed = value;
             // A changed seed denotes a new stream. Keeping the old Random instance here makes a
             // post-construction LayerHelper wiring update look seeded while it continues from the
             // previous seed (or from a clone-construction stream).
             _seededRandom = null;
+            if (value.HasValue) OnRandomSeedAssigned();
         }
     }
+
+    /// <summary>
+    /// Called when <see cref="RandomSeed"/> is assigned a value.
+    /// </summary>
+    /// <remarks>
+    /// A layer that draws random values in its constructor and was constructed before a seed existed (a
+    /// layer built into an explicit <see cref="NeuralNetworkArchitecture{T}.Layers"/> list, before the network
+    /// opens its seed scope) can override this to re-run that initialisation from the seed, provided its
+    /// parameters are still exactly the ones construction produced. It can run while a base constructor is
+    /// still executing, before the derived fields exist, so an override must check its own state first.
+    /// </remarks>
+    protected virtual void OnRandomSeedAssigned()
+    {
+    }
+
+    /// <summary>
+    /// A fingerprint of the values in <paramref name="tensors"/>, used to tell whether they have changed since a
+    /// point in time (training, loading or <c>SetParameters</c>) without keeping a copy of them.
+    /// </summary>
+    /// <remarks>
+    /// It reads the tensors themselves, not <see cref="GetParameters"/>: a constructor that asked for the flat
+    /// vector materialized the layer's parameter layout before the layer was complete, and a deserialized RWKV7Block
+    /// then held 160 fewer values than the one that was saved.
+    /// </remarks>
+    protected long ComputeParameterFingerprint(IReadOnlyList<Tensor<T>> tensors)
+    {
+        unchecked
+        {
+            long hash = 1469598103934665603L;
+            foreach (var tensor in tensors)
+            {
+                hash = (hash ^ tensor.Length) * 1099511628211L;
+                for (int i = 0; i < tensor.Length; i++)
+                    hash = (hash ^ System.BitConverter.DoubleToInt64Bits(NumOps.ToDouble(tensor[i]))) * 1099511628211L;
+            }
+
+            return hash;
+        }
+    }
+
+    /// <summary>
+    /// True when <see cref="RandomSeed"/> was drawn from whatever construction scope was armed when this layer was
+    /// built, rather than chosen by someone.
+    /// </summary>
+    /// <remarks>
+    /// The scope stays armed on the thread after a model finishes constructing, so a layer a caller builds later,
+    /// for another model's <c>Architecture.Layers</c>, can draw from the previous model's sequence. That seed belongs
+    /// to neither model, and the model that adopts the layer replaces it with one of its own.
+    /// </remarks>
+    internal bool RandomSeedCameFromConstructionScope { get; private set; }
 
     /// <summary>Copies base-owned stochastic progress into a reconstructed clone.</summary>
     internal void CopyBaseRandomStateTo(LayerBase<T> clone, bool shareRandomState)
@@ -662,7 +715,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         {
             int? scoped = LayerInitializationSeedScope.NextSeedOrNull();
             if (scoped.HasValue)
+            {
                 RandomSeed = scoped;
+                RandomSeedCameFromConstructionScope = true;
+            }
         }
     }
 
@@ -9909,6 +9965,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     // end up bit-identical to each other.
     private int _initWeightsCallCounter;
 
+    /// <summary>
+    /// Restarts the per-instance sequence that seeded weight initialization mixes into each draw, so a layer that
+    /// redoes its initialization from a newly assigned seed draws exactly what a layer constructed with that seed
+    /// draws. Without it, a construction-time initialization from an earlier seed had already advanced the
+    /// sequence, and two layers given equal seeds came out different.
+    /// </summary>
+    protected void RestartSeededInitializationSequence() => System.Threading.Interlocked.Exchange(ref _initWeightsCallCounter, 0);
     /// <summary>
     /// Initializes weights using this layer's <see cref="InitializationStrategy"/>,
     /// falling back to Xavier/Glorot normal if none was set.

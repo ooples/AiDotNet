@@ -19,6 +19,8 @@ public partial class ParameterGeneratorSemanticTests
         OwnerAlias,
         DelegateEscape,
         VirtualOwnerCall,
+        EmptyVirtualOwnerCall,
+        ExplicitBasePropertyOverriddenByOwner,
         UnresolvedOwnerCall,
         InitiallyEmptyCollection,
         InheritedInitializer,
@@ -79,7 +81,12 @@ public partial class ParameterGeneratorSemanticTests
             StructureInitializerCase.OwnerEscape => "Observe(this);",
             StructureInitializerCase.OwnerAlias => "var owner = this; owner.InitializeChild();",
             StructureInitializerCase.DelegateEscape => "System.Action callback = InitializeChild; callback();",
+            // Virtual calls on this: the proof follows the implementation the EXACT owner type runs.
             StructureInitializerCase.VirtualOwnerCall => "OnInitialize();",
+            StructureInitializerCase.EmptyVirtualOwnerCall => "OnInitializeNothing();",
+            // base.P runs LayerBase's accessor, which calls a hook the owner overrides to build a child, while the owner's
+            // own override of P is child-free: the proof must follow base.P into the base body, not the override.
+            StructureInitializerCase.ExplicitBasePropertyOverriddenByOwner => "_counter = base.ParametersAreConstructionSized ? 1 : 0;",
             StructureInitializerCase.UnresolvedOwnerCall => "InitializeUnknown();",
             StructureInitializerCase.InitiallyEmptyCollection => "_children.Add(new Child<T>());",
             StructureInitializerCase.InheritedInitializer => "base.EnsureInitialized();",
@@ -167,7 +174,10 @@ public partial class ParameterGeneratorSemanticTests
                     callback?.Invoke();
                 }
                 private void ReplaceCallback(ref System.Action? callback) { callback = _configuredCallback; }
-                protected virtual void OnInitialize() { }
+                // Builds a child: dispatch is followed, and a child-building virtual still blocks the skip.
+                protected virtual void OnInitialize() { InitializeChild(); }
+                protected virtual void OnInitializeNothing() { }
+                {{(kind == StructureInitializerCase.ExplicitBasePropertyOverriddenByOwner ? "protected override bool ParametersAreConstructionSized => true; protected override bool DeclaredSubLayerShapesCoverEveryChild() { InitializeChild(); return false; }" : "")}}
                 partial void InitializeUnknown();
                 public void Configure() { InitializeChild(); }
                 public void ConfigureCallback() { _configuredCallback = InitializeChild; }
@@ -206,7 +216,8 @@ public partial class ParameterGeneratorSemanticTests
         bool independent = kind is StructureInitializerCase.DisjointWeightHelper or StructureInitializerCase.ExternalValueStrategy
             or StructureInitializerCase.ReadOnlyNullCallback or StructureInitializerCase.PrimitiveOperators
             or StructureInitializerCase.FrameworkException or StructureInitializerCase.ExpressionBodiedValueProperty
-            or StructureInitializerCase.RuntimeTypeName or StructureInitializerCase.RuntimeTypeEquality;
+            or StructureInitializerCase.RuntimeTypeName or StructureInitializerCase.RuntimeTypeEquality
+            or StructureInitializerCase.EmptyVirtualOwnerCall;
         const string declaration = "protected override bool NeedsDeclaredSubLayerInitialization";
         if (independent)
         {
