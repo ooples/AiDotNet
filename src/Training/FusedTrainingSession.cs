@@ -241,10 +241,14 @@ internal sealed class FusedTrainingSession<T>
             bool? attached = CompiledTapeTrainingStep<T>.ConfiguredPlanTrainsLiveParameters(
                 (IEnumerable<Tensor<T>>?)request.Selection ?? EnumerateLiveParameters(request));
             bool detached = attached == false;
+            // No sample means no trained tensor held an element before the step: lazily shaped weights materialize on
+            // the first forward, so there was nothing to compare against. That is inconclusive, not a failed update.
+            bool sampled = probe is { Length: > 0 };
             if (!persisted && !detached
-                && !StepCouldHaveMovedParameters(config, gradientsObserved, gradientNonZero, attached == true))
+                && (!sampled || !StepCouldHaveMovedParameters(config, gradientsObserved, gradientNonZero, attached == true)))
             {
-                // Nothing could have moved (zero gradients, zero learning rate): inconclusive, check again next step.
+                // Nothing could have moved (zero gradients, zero learning rate) or nothing was sampled: inconclusive,
+                // check again next step.
                 _stepsSincePersistenceCheck = PersistenceRecheckInterval;
             }
             else if (!persisted || detached)
