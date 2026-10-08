@@ -349,6 +349,14 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 
                     var gradients = ComputeGradients(input, target);
                     AccumulateGradients(gradients);
+
+                    // Recycle this sample's Engine-op scratch. TimeSeriesModelBase.Train runs TrainCore inside one
+                    // TensorArena and relies on GradientTape.Dispose to Reset it per step; this hand-written backprop
+                    // uses no tape, so without this every op took a NEW ring buffer that lived until training ended
+                    // (measured: ~220 MB/s of retained growth, 74 GB on an Ooples-sized fit). Nothing arena-backed
+                    // outlives the sample: gradients were just folded into the heap accumulators, and the layer
+                    // caches are overwritten by the next forward before they are read.
+                    AiDotNet.Tensors.Helpers.TensorArena.Current?.Reset();
                 }
 
                 // Apply accumulated gradients
@@ -639,7 +647,12 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
             }
             else
             {
-                _gradientAccumulators[kvp.Key] = kvp.Value;
+                // A heap copy, never the gradient itself: the gradient may be an arena tensor that the per-sample
+                // TensorArena.Reset in TrainCore recycles, and an accumulator must outlive the sample.
+                var accumulatorCopy = new Tensor<T>(kvp.Value._shape);
+                for (int i = 0; i < kvp.Value.Length; i++)
+                    accumulatorCopy[i] = kvp.Value[i];
+                _gradientAccumulators[kvp.Key] = accumulatorCopy;
             }
         }
         _gradientCount++;
