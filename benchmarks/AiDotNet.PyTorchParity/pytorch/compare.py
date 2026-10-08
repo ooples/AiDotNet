@@ -72,6 +72,22 @@ def _inference_stat(row: dict) -> Stat | None:
     return Stat(median, p25, p75)
 
 
+def _batch_size(value: object) -> int | None:
+    """The row's batch size as an int key ("1", 1 and 1.0 all match); None for a missing or unusable one."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value) if value.is_integer() else None
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
 def _index(report: dict) -> dict[str, ModelRows]:
     out: dict[str, ModelRows] = {}
     report_device = _get(report, "device", "Device")
@@ -83,8 +99,9 @@ def _index(report: dict) -> dict[str, ModelRows]:
         inference: dict[int, Stat] = {}
         for r in _get(model, "inference", "Inference", default=[]):
             stat = _inference_stat(r)
-            if stat is not None:
-                inference[_get(r, "batch_size", "BatchSize")] = stat
+            batch_size = _batch_size(_get(r, "batch_size", "BatchSize"))
+            if stat is not None and batch_size is not None:
+                inference[batch_size] = stat
         out[name] = ModelRows(device, training, inference)
     return out
 
@@ -123,8 +140,10 @@ def main() -> None:
     refused: list[str] = []
     for model in sorted(set(ai_idx) & set(pt_idx)):
         a, p = ai_idx[model], pt_idx[model]
-        if a.device != p.device:
-            refused.append(f"{model}: AiDotNet ran on {a.device}, PyTorch on {p.device}")
+        # Compared only when both sides are KNOWN to have run on the same device: two missing devices are
+        # equal, but prove nothing.
+        if a.device is None or p.device is None or a.device != p.device:
+            refused.append(f"{model}: AiDotNet ran on {a.device or 'unknown'}, PyTorch on {p.device or 'unknown'}")
             continue
         pairs: list[tuple[str, Stat | None, Stat | None]] = [("train", a.training, p.training)]
         for bs in sorted(set(a.inference) & set(p.inference)):

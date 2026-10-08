@@ -1657,6 +1657,11 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     private double GlobalGradientSquaredNorm(TapeStepContext<T> context)
     {
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        // The norm's temporaries must not come from the training step's arena. Renting them there advanced the
+        // arena's tensor ring, so a later rent in the same step reissued a wrapper a caller's tape still held,
+        // reshaped: credit-rule training then failed with "Tensor shapes must match. Got [16, 6, 48] and
+        // [96, 48]". Optimizer bookkeeping is not part of the step's graph, so it allocates outside the arena.
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         Tensor<T>? total = null;
         foreach (var kvp in context.Gradients)
         {
@@ -1712,7 +1717,8 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         if (double.IsPositiveInfinity(globalNormSq)) globalNormSq = HostGlobalGradientSquaredNorm(context);
         double globalNorm = Math.Sqrt(globalNormSq);
 
-        if (globalNorm <= maxNorm || globalNorm == 0.0 || !IsFiniteDouble(globalNorm))
+        // maxNorm > 0 here, so a zero norm already returns through the first test.
+        if (globalNorm <= maxNorm || !IsFiniteDouble(globalNorm))
             return;
 
         // Scale every gradient in place by PyTorch's clip_grad_norm_ coefficient,

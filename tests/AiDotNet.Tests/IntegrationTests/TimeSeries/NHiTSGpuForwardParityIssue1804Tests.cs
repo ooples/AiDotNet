@@ -25,30 +25,34 @@ public class NHiTSGpuForwardParityIssue1804Tests
     private readonly ITestOutputHelper _output;
     public NHiTSGpuForwardParityIssue1804Tests(ITestOutputHelper output) => _output = output;
 
-    [Fact(Timeout = 120000)]
-    public async Task BatchedForward_OnGpu_MatchesCpu()
+    // Pooling 8/4/1 (the defaults) over: a lookback every kernel divides; one that leaves a short last window
+    // (50 = 6x8 + 2 = 12x4 + 2), the narrowed tail path; and one shorter than the first kernel (6 < 8), where
+    // the whole lookback is that single short window.
+    [SkippableTheory(Timeout = 120000)]
+    [InlineData(48)]
+    [InlineData(50)]
+    [InlineData(6)]
+    public async Task BatchedForward_OnGpu_MatchesCpu(int lookback)
     {
         await Task.Yield();
         DirectGpuTensorEngine? gpu = null;
-        try { gpu = new DirectGpuTensorEngine(); } catch { /* no backend */ }
-        if (gpu is null || !gpu.SupportsGpu)
-        {
-            _output.WriteLine("No GPU backend available — skipping #1804 N-HiTS GPU parity check.");
-            gpu?.Dispose();
-            return;
-        }
+        try { gpu = new DirectGpuTensorEngine(); }
+        catch (Exception ex) { _output.WriteLine($"No GPU backend: {ex.GetType().Name}: {ex.Message}"); }
+        bool available = gpu is not null && gpu.SupportsGpu;
+        if (!available) gpu?.Dispose();
+        Skip.IfNot(available && gpu is not null, "No GPU backend available for the #1804 N-HiTS GPU parity check.");
+        if (gpu is null) return;
 
         var previous = AiDotNetEngine.Current;
         try
         {
-            // Defaults (3 stacks, pooling 8/4/1, hidden 512) on a lookback every pooling size divides.
-            const int lookback = 48, horizon = 24, batch = 64;
+            const int horizon = 24, batch = 64;
             var model = new NHiTSModel<float>(new NHiTSOptions<float>
             {
                 LookbackWindow = lookback, ForecastHorizon = horizon, BatchSize = batch,
             });
 
-            var rng = new Random(1804);
+            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1804);
             var data = new float[batch * lookback];
             for (int i = 0; i < data.Length; i++) data[i] = (float)(rng.NextDouble() * 2.0 - 1.0);
 

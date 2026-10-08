@@ -326,6 +326,17 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
             if (idx >= lookback && idx + horizon <= yNorm.Length)
                 validWindows.Add(idx);
 
+        // No window means no step: an epoch budget would mark the untrained model trained, and a time budget would
+        // spin until it expired. N-HiTS and Informer refuse the same input.
+        if (validWindows.Count == 0)
+        {
+            throw new ArgumentException(
+                $"Training series must contain at least {checked(lookback + horizon)} values " +
+                $"(LookbackWindow {lookback} + ForecastHorizon {horizon}), with as many rows in x; " +
+                $"got {yNorm.Length} values and {numSamples} rows.",
+                nameof(y));
+        }
+
         var random = RandomHelper.CreateSeededRandom(SeedOr(42));
         _lastRunEpochLosses = new List<double>();
 

@@ -192,11 +192,17 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
     /// <summary>The block's current FFN down-projection (ffnDim → hiddenSize) sublayer.</summary>
     public LayerBase<T> FfnDownLayer => _ffnDown;
 
-    /// <summary>The block's attention-sublayer LayerNorm (applied before attention; Pre-LN).</summary>
-    public LayerBase<T> Norm1Layer => _norm1;
+    /// <summary>
+    /// The block's attention-sublayer LayerNorm: applied to the attention input under Pre-LN, and to the attention
+    /// residual sum under Post-LN. Exposed for weight import.
+    /// </summary>
+    internal LayerBase<T> Norm1Layer => _norm1;
 
-    /// <summary>The block's FFN-sublayer LayerNorm (applied before the FFN; Pre-LN).</summary>
-    public LayerBase<T> Norm2Layer => _norm2;
+    /// <summary>
+    /// The block's FFN-sublayer LayerNorm: applied to the FFN input under Pre-LN, and to the FFN residual sum under
+    /// Post-LN. Exposed for weight import.
+    /// </summary>
+    internal LayerBase<T> Norm2Layer => _norm2;
 
     /// <summary>
     /// Swaps the FFN up-projection sublayer (e.g. for a <c>QuantizedDenseLayer</c> or a

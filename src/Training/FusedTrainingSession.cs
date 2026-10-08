@@ -6,6 +6,16 @@ using AiDotNet.Validation;
 
 namespace AiDotNet.Training;
 
+/// <summary>How a committed fused plan's failed step is recovered from (see <see cref="FusedTrainingSession{T}.DropAfterCommittedFailure"/>).</summary>
+internal enum CommittedFailureKind
+{
+    /// <summary>The device ran out of memory.</summary>
+    DeviceOutOfMemory,
+
+    /// <summary>A transient device fault: driver, stream, launch, or a buffer released under the step.</summary>
+    DeviceTransient,
+}
+
 /// <summary>What one <see cref="FusedTrainingSession{T}.TryStep"/> call did.</summary>
 internal enum FusedStepOutcome
 {
@@ -101,6 +111,7 @@ internal sealed class FusedTrainingSession<T>
 
     private readonly object _owner;
     private readonly Action? _onReset;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _lastOptimizer;
     private bool _persistenceVerified;
     private int _stepsSincePersistenceCheck;
     private bool _replayAgreementVerified;
@@ -109,6 +120,7 @@ internal sealed class FusedTrainingSession<T>
     // last few digits; a plan replaying stale host-side decisions differs at the scale of the loss itself.
     private const double ReplayAgreementTolerance = 1e-3;
 
+    /// <summary>Creates the fused lifecycle for one model.</summary>
     /// <param name="owner">The model; keys its compiled plan and optimizer moments.</param>
     /// <param name="onReset">Owner cleanup to run when a committed plan is dropped (caches, GPU transients).</param>
     public FusedTrainingSession(object owner, Action? onReset = null)
@@ -164,6 +176,19 @@ internal sealed class FusedTrainingSession<T>
         loss = NumOps.Zero;
         LastFallbackException = null;
 
+        // The compiled plan carries the optimizer's moments. A different optimizer instance (a new Train call, a
+        // learning-rate overload, an optimizer override) starts from its own fresh state, as it would eagerly, so
+        // the old plan is dropped here rather than read as hyperparameter drift on a committed plan, which refuses
+        // the step; a replacement with the same hyperparameters must not inherit the old plan's moments either.
+        // Every caller goes through this, so none tracks the instance itself. A new optimizer is also a fresh
+        // chance for a plan that a device fault disabled; an owner that opts out checks before stepping.
+        if (!ReferenceEquals(_lastOptimizer, request.Optimizer))
+        {
+            if (_lastOptimizer is not null)
+                Reset(stickyDisable: false);
+            _lastOptimizer = request.Optimizer;
+        }
+
         if (request.GraphBreakReason is { } graphBreak)
         {
             if (!IsCommitted)
@@ -172,7 +197,6 @@ internal sealed class FusedTrainingSession<T>
             LastFallbackException = new InvalidOperationException("graph break after fused steps ran: " + graphBreak);
             return FusedStepOutcome.CommittedFailure;
         }
-        if (IsDisabled)
             return Decline("fused path sticky-disabled from a prior fallback");
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
             return Decline("TensorCodecOptions.EnableCompilation = false");
@@ -315,10 +339,14 @@ internal sealed class FusedTrainingSession<T>
             bool? attached = CompiledTapeTrainingStep<T>.ConfiguredPlanTrainsLiveParameters(
                 (IEnumerable<Tensor<T>>?)request.Selection ?? EnumerateLiveParameters(request));
             bool detached = attached == false;
+            // No sample means no trained tensor held an element before the step: lazily shaped weights materialize on
+            // the first forward, so there was nothing to compare against. That is inconclusive, not a failed update.
+            bool sampled = probe is { Length: > 0 };
             if (!persisted && !detached
-                && !StepCouldHaveMovedParameters(config, gradientsObserved, gradientNonZero, attached == true))
+                && (!sampled || !StepCouldHaveMovedParameters(config, gradientsObserved, gradientNonZero, attached == true)))
             {
-                // Nothing could have moved (zero gradients, zero learning rate): inconclusive, check again next step.
+                // Nothing could have moved (zero gradients, zero learning rate) or nothing was sampled: inconclusive,
+                // check again next step.
                 _stepsSincePersistenceCheck = PersistenceRecheckInterval;
             }
             else if (!persisted || detached)
@@ -372,6 +400,32 @@ internal sealed class FusedTrainingSession<T>
         return regularization is null or AiDotNet.Regularization.NoRegularization<T, Tensor<T>, Tensor<T>> ? null : regularization;
     }
 
+    /// <summary>
+    /// The one recovery policy for a committed plan whose step failed (<see cref="FusedStepOutcome.CommittedFailure"/>).
+    /// </summary>
+    /// <remarks>
+    /// A device fault says nothing about the model, so the plan is dropped for this run (sticky, with a warning that
+    /// names the cause) and the kind is returned: the caller continues on the eager tape and adds only what it alone
+    /// can do, as a network switching to streaming training on out-of-memory. Any other failure throws, because the
+    /// plan's optimizer moments cannot move to the eager optimizer and a silent switch would change the trajectory.
+    /// </remarks>
+    public CommittedFailureKind DropAfterCommittedFailure()
+    {
+        var cause = LastFallbackException;
+        CommittedFailureKind kind;
+        if (TapeTrainingStepper<T>.IsGpuOutOfMemoryFailure(cause))
+            kind = CommittedFailureKind.DeviceOutOfMemory;
+        else if (TapeTrainingStepper<T>.IsGpuTransientFailure(cause))
+            kind = CommittedFailureKind.DeviceTransient;
+        else
+            throw TapeTrainingStepper<T>.CommittedPlanCannotContinue(cause);
+
+        Warn("committed fused plan dropped after a device failure (" + kind + "), training continues on the eager "
+            + "tape with fresh optimizer moments: "
+            + (cause is null ? "no exception" : cause.GetType().Name + ": " + cause.Message));
+        Reset(stickyDisable: true);
+        return kind;
+    }
     private FusedStepOutcome Decline(string reason)
     {
         LastMissReason = reason;
