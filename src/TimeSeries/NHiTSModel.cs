@@ -442,12 +442,52 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
         var predictions = new Vector<T>(n);
         // Forecast every row from its own lookback window (see DeepARModel.Predict: the prior
         // i < _trainingSeries.Length shortcut returned memorized training values for OOS rows).
+        //
+        // Rows that reach the stacks as a full lookback window (a row of exactly LookbackWindow values, or a shorter
+        // row that PredictSingle replaces with the training-series tail) run as one batched forward per chunk instead
+        // of one per row: AiModelBuilder predicts the whole dataset after fitting, so per-row inference was a large
+        // share of a production fit. Same values as PredictSingle (NHiTSBatchedPredictTests): the batched pooling is
+        // the same tail-mean average pool, and each stack already emits ForecastHorizon values, so the per-row
+        // interpolation is the identity. Any other row length keeps the per-row path.
+        int lookback = _options.LookbackWindow;
+        bool tailFill = _trainingSeries.Length >= lookback;
+        var batched = new List<int>(n);
         for (int i = 0; i < n; i++)
         {
-            predictions[i] = PredictSingle(input.GetRow(i));
+            if (input.Columns == lookback || (input.Columns < lookback && tailFill))
+                batched.Add(i);
+            else
+                predictions[i] = PredictSingle(input.GetRow(i));
+        }
+
+        for (int c0 = 0; c0 < batched.Count; c0 += PredictChunkRows)
+        {
+            int rows = Math.Min(PredictChunkRows, batched.Count - c0);
+            // A nested arena per chunk: its scratch is recycled when the chunk ends without touching any arena the
+            // caller has open (whose tensors may still be live).
+            using var chunkArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
+            var data = new T[rows * lookback];
+            for (int r = 0; r < rows; r++)
+            {
+                int row = batched[c0 + r];
+                for (int t = 0; t < lookback; t++)
+                {
+                    T v = input.Columns == lookback ? input[row, t] : _trainingSeries[_trainingSeries.Length - lookback + t];
+                    data[r * lookback + t] = NumOps.Divide(NumOps.Subtract(v, _normMean), _normStd);
+                }
+            }
+            var outNorm = RunForwardBatched(new Tensor<T>(new[] { rows, lookback }, new Vector<T>(data)))
+                ?? throw new InvalidOperationException("N-HiTS has no stacks to run; the model was not initialized.");
+            var outSpan = outNorm.IsContiguous ? outNorm.AsSpan() : outNorm.Contiguous().AsSpan();   // [rows, horizon]
+            int horizon = _options.ForecastHorizon;
+            for (int r = 0; r < rows; r++)
+                predictions[batched[c0 + r]] = NumOps.Add(NumOps.Multiply(outSpan[r * horizon], _normStd), _normMean);
         }
         return predictions;
     }
+
+    // Rows per batched predict forward; bounds activation memory ([rows, HiddenLayerSize] per stack layer).
+    private const int PredictChunkRows = 1024;
 
     /// <summary>
     /// Applies pooling to downsample the input tensor.
