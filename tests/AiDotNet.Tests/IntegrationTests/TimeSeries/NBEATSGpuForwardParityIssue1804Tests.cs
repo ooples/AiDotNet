@@ -27,18 +27,17 @@ public class NBEATSGpuForwardParityIssue1804Tests
     private readonly ITestOutputHelper _output;
     public NBEATSGpuForwardParityIssue1804Tests(ITestOutputHelper output) => _output = output;
 
-    [Fact(Timeout = 120000)]
+    [SkippableFact(Timeout = 120000)]
     public async Task StackForward_OnGpu_MatchesCpu()
     {
         await Task.Yield();
         DirectGpuTensorEngine? gpu = null;
-        try { gpu = new DirectGpuTensorEngine(); } catch { /* no backend */ }
-        if (gpu is null || !gpu.SupportsGpu)
-        {
-            _output.WriteLine("No GPU backend available — skipping #1804 GPU parity check.");
-            gpu?.Dispose();
-            return;
-        }
+        try { gpu = new DirectGpuTensorEngine(); }
+        catch (Exception ex) { _output.WriteLine($"No GPU backend: {ex.GetType().Name}: {ex.Message}"); }
+        bool available = gpu is not null && gpu.SupportsGpu;
+        if (!available) gpu?.Dispose();
+        Skip.IfNot(available && gpu is not null, "No GPU backend available for the #1804 N-BEATS GPU parity check.");
+        if (gpu is null) return;
 
         var previous = AiDotNetEngine.Current;
         try
@@ -52,7 +51,7 @@ public class NBEATSGpuForwardParityIssue1804Tests
                 UseInterpretableBasis = false,
             });
 
-            var rng = new Random(1804);
+            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1804);
             var data = new float[batch * lookback];
             for (int i = 0; i < data.Length; i++) data[i] = (float)(rng.NextDouble() * 2.0 - 1.0);
 

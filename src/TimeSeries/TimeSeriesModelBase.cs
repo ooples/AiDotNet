@@ -554,6 +554,9 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
         finally
         {
             TrainingCancellationToken = CancellationToken.None;
+            // The compiled training plan and its optimizer moments (GPU buffers on a GPU engine) serve only this
+            // run: the next Train call brings a fresh optimizer, which starts a fresh plan anyway.
+            _tapeStepper?.Session.Reset(stickyDisable: false);
         }
 
         // Mark the model as trained (even after early cancellation)
@@ -2855,5 +2858,7 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     {
         if (_disposed) return;
         _disposed = true;
+        // Drop any compiled training state still keyed by this model, as NeuralNetworkBase does.
+        Training.CompiledTapeTrainingStep<T>.Forget(this);
     }
 }
