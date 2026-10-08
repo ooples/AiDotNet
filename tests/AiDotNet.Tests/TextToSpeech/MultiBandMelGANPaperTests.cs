@@ -86,14 +86,12 @@ public class MultiBandMelGANPaperTests
         for (int c = 0; c < 8; c++)
             for (int f = 0; f < 32; f++) frames[0, c, f] = mel[0, c, f];
         double before = provider.EvaluateTrainingObjective(frames, audio);
-        var start = model.GetParameters().ToArray();
+        var discriminatorStart = GanVocoderWeights.Of(model.DiscriminatorLayers);
         for (int i = 0; i < 20; i++) model.Train(frames, audio);
         double after = provider.EvaluateTrainingObjective(frames, audio);
         Assert.True(after < before, $"The STFT loss did not fall ({before} -> {after}).");
-        // The generator's parameters come first; the discriminators' (the tail) are untouched during pre-training.
-        var end = model.GetParameters().ToArray();
-        int discriminatorTail = 50;
-        for (int i = start.Length - discriminatorTail; i < start.Length; i++) Assert.Equal(start[i], end[i]);
+        // Every discriminator weight is untouched during pre-training.
+        Assert.Equal(discriminatorStart, GanVocoderWeights.Of(model.DiscriminatorLayers));
     }
 
     [Fact(Timeout = 300000)]
@@ -102,9 +100,9 @@ public class MultiBandMelGANPaperTests
         await Task.Yield();
         var model = CreateModel(Options(pretraining: 0));
         var audio = Audio();
-        var start = model.GetParameters().ToArray();
+        var start = GanVocoderWeights.Of(model.DiscriminatorLayers);
         model.Train(model.ComputeMel(audio), audio);
-        var end = model.GetParameters().ToArray();
-        Assert.Contains(Enumerable.Range(start.Length - 50, 50), i => start[i] != end[i]);
+        Assert.True(GanVocoderWeights.AnyChanged(start, GanVocoderWeights.Of(model.DiscriminatorLayers)),
+            "An adversarial step left every discriminator weight where it was.");
     }
 }

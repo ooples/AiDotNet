@@ -65,12 +65,12 @@ public class ParallelWaveGANPaperTests
         for (int c = 0; c < 8; c++)
             for (int f = 0; f < 32; f++) mel[0, c, f] = full[0, c, f];
         double before = provider.EvaluateTrainingObjective(mel, audio);
-        var start = model.GetParameters().ToArray();
+        var discriminatorStart = GanVocoderWeights.Of(model.DiscriminatorLayers);
         for (int i = 0; i < 20; i++) model.Train(mel, audio);
         double after = provider.EvaluateTrainingObjective(mel, audio);
         Assert.True(after < before, $"The STFT loss did not fall ({before} -> {after}).");
-        var end = model.GetParameters().ToArray();
-        for (int i = start.Length - 20; i < start.Length; i++) Assert.Equal(start[i], end[i]);
+        // Every discriminator weight is untouched during pre-training.
+        Assert.Equal(discriminatorStart, GanVocoderWeights.Of(model.DiscriminatorLayers));
     }
 
     [Fact(Timeout = 120000)]
@@ -79,10 +79,12 @@ public class ParallelWaveGANPaperTests
         await Task.Yield();
         var model = CreateModel(Options(discriminatorStart: 0));
         var audio = Audio();
-        var start = model.GetParameters().ToArray();
+        var generatorStart = GanVocoderWeights.Of(model.GeneratorLayers);
+        var discriminatorStart = GanVocoderWeights.Of(model.DiscriminatorLayers);
         model.Train(model.ComputeMel(audio), audio);
-        var end = model.GetParameters().ToArray();
-        Assert.Contains(Enumerable.Range(start.Length - 20, 20), i => start[i] != end[i]);
-        Assert.Contains(Enumerable.Range(0, 20), i => start[i] != end[i]);
+        Assert.True(GanVocoderWeights.AnyChanged(discriminatorStart, GanVocoderWeights.Of(model.DiscriminatorLayers)),
+            "An adversarial step left every discriminator weight where it was.");
+        Assert.True(GanVocoderWeights.AnyChanged(generatorStart, GanVocoderWeights.Of(model.GeneratorLayers)),
+            "An adversarial step left every generator weight where it was.");
     }
 }
