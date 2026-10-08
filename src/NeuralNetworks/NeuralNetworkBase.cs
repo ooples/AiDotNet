@@ -12951,14 +12951,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (outcome == Training.FusedStepOutcome.Declined)
             return EmitFusedMissAndFallback(FusedSession.LastMissReason ?? "fused path declined the step");
 
-        // Committed plan, failed step. Its optimizer moments live in the plan, so a silent eager fallback would
-        // diverge from the previous fused steps; only a device failure (which says nothing about the model) is
-        // recovered from.
+        // Committed plan, failed step. The session's shared policy drops the plan after a device failure (which
+        // says nothing about the model) and throws for anything else, since the plan's optimizer moments cannot
+        // move to the eager optimizer. What stays here is the one recovery only a network has: streaming on OOM.
         var fallbackEx = FusedSession.LastFallbackException;
-        if (IsGpuOutOfMemoryFailure(fallbackEx))
+        if (FusedSession.DropAfterCommittedFailure() == Training.CommittedFailureKind.DeviceOutOfMemory)
         {
             StreamingTraining = StreamingTrainingMode.ForceOn;
-            ResetCompiledFusedStateAfterCommittedFailure(stickyDisableFused: true);
             ForceSinglePassStreamingClipAfterFusedOom();
             TrainWithTapeStreaming(input, expected, resolvedOptimizer, useStreamingDefaults);
             EmitFusedPathEventIfEnabled(
@@ -12967,18 +12966,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             return true; // step handled via the streaming path
         }
 
-        if (IsGpuTransientFailure(fallbackEx))
-        {
-            _pendingFusedMissReason = $"committed fused plan GPU transient; reset to eager ({DescribeException(fallbackEx)})";
-            ResetCompiledFusedStateAfterCommittedFailure(stickyDisableFused: true);
-            return false;
-        }
-
-        throw Training.TapeTrainingStepper<T>.CommittedPlanCannotContinue(fallbackEx);
+        _pendingFusedMissReason = $"committed fused plan GPU transient; reset to eager ({DescribeException(fallbackEx)})";
+        return false;
     }
-
-    private void ResetCompiledFusedStateAfterCommittedFailure(bool stickyDisableFused)
-        => FusedSession.Reset(stickyDisableFused);
 
     private static void ReclaimGpuTransientsAfterFusedFailure()
     {

@@ -21,6 +21,7 @@ internal sealed class TapeTrainingStepper<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <summary>Creates the stepper for one model, with its own fused session.</summary>
     /// <param name="owner">The model being trained; keys its compiled plan.</param>
     /// <param name="onReset">Owner cleanup when a committed fused plan is dropped.</param>
     public TapeTrainingStepper(object owner, Action? onReset = null)
@@ -32,7 +33,6 @@ internal sealed class TapeTrainingStepper<T>
     /// <summary>The fused lifecycle; exposed for diagnostics and explicit resets.</summary>
     public FusedTrainingSession<T> Session { get; }
 
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _lastOptimizer;
 
     /// <summary>Whether the most recent <see cref="Step"/> ran on the fused compiled plan.</summary>
     public bool LastStepFused { get; private set; }
@@ -42,16 +42,6 @@ internal sealed class TapeTrainingStepper<T>
     {
         Guard.NotNull(request);
 
-        // The compiled plan carries the optimizer's moments. A different optimizer instance (a model's next
-        // Train call builds a fresh one) starts from its own fresh state, as it would eagerly, so the old plan is
-        // dropped rather than treated as hyperparameter drift on a committed plan, which refuses the step.
-        if (!ReferenceEquals(_lastOptimizer, request.Optimizer))
-        {
-            if (_lastOptimizer is not null)
-                Session.Reset(stickyDisable: false);
-            _lastOptimizer = request.Optimizer;
-        }
-
         var outcome = Session.TryStep(request, out T fusedLoss);
         if (outcome == FusedStepOutcome.Stepped)
         {
@@ -59,15 +49,10 @@ internal sealed class TapeTrainingStepper<T>
             return fusedLoss;
         }
 
+        // A device fault drops the plan and continues on the eager tape from the current weights; anything else
+        // throws. The policy is the session's, shared with every other fused caller.
         if (outcome == FusedStepOutcome.CommittedFailure)
-        {
-            var cause = Session.LastFallbackException;
-            // Device memory pressure or a transient device fault: the plan is unusable for this run, but nothing
-            // about the model is wrong, so continue on the eager tape from the current weights.
-            if (!IsGpuOutOfMemoryFailure(cause) && !IsGpuTransientFailure(cause))
-                throw CommittedPlanCannotContinue(cause);
-            Session.Reset(stickyDisable: true);
-        }
+            Session.DropAfterCommittedFailure();
 
         LastStepFused = false;
         return EagerStep(request);
@@ -89,9 +74,8 @@ internal sealed class TapeTrainingStepper<T>
             loss = request.ComputeLoss(predicted, request.Target);
             var all = tape.ComputeGradients(loss, parameters);
             gradients = new Dictionary<Tensor<T>, Tensor<T>>(parameters.Length, TensorReferenceComparer<Tensor<T>>.Instance);
-            foreach (var parameter in parameters)
-                if (all.TryGetValue(parameter, out var gradient))
-                    gradients[parameter] = gradient;
+            foreach (var parameter in parameters.Where(all.ContainsKey))
+                gradients[parameter] = all[parameter];
         }
 
         request.OnGradients?.Invoke(gradients);
@@ -99,13 +83,11 @@ internal sealed class TapeTrainingStepper<T>
             ClipByGlobalNorm(gradients, request.ModelGradientClip);
 
         T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
-        var forward = request.Forward;
-        var computeLoss = request.ComputeLoss;
         var context = new TapeStepContext<T>(
             parameters, gradients, lossValue,
             request.Input, request.Target,
-            (input, _) => forward(input),
-            (predicted, target) => computeLoss(predicted, target),
+            (input, _) => request.Forward(input),
+            (predicted, target) => request.ComputeLoss(predicted, target),
             parameterBuffer: null);
         request.Optimizer.Step(context);
         if (request.Optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> scheduled)
@@ -118,7 +100,7 @@ internal sealed class TapeTrainingStepper<T>
     {
         for (var e = exception; e is not null; e = e.InnerException)
         {
-            if (e is OutOfMemoryException)
+            if (e is OutOfMemoryException or AiDotNet.Tensors.Engines.DirectGpu.GpuOutOfMemoryException)
                 return true;
             var message = e.Message;
             if (message.Contains("Out of memory", StringComparison.OrdinalIgnoreCase)
@@ -134,8 +116,17 @@ internal sealed class TapeTrainingStepper<T>
     }
 
     /// <summary>A transient device fault (driver, stream, launch, or a buffer released under the step).</summary>
+    /// <remarks>
+    /// The backends report most device faults as messages rather than typed exceptions, so this matches the
+    /// driver-level markers, and first rules out the failures those markers also appear in that would fail again
+    /// on the next step: a kernel that does not compile, an argument or shape the device rejects. Dropping a
+    /// committed plan for one of those would hide a bug behind an optimizer switch.
+    /// </remarks>
     internal static bool IsGpuTransientFailure(Exception? exception)
     {
+        if (IsDeterministicDeviceFailure(exception))
+            return false;
+
         for (var e = exception; e is not null; e = e.InnerException)
         {
             var message = e.Message;
@@ -146,6 +137,32 @@ internal sealed class TapeTrainingStepper<T>
                 || message.Contains("OpenCL", StringComparison.OrdinalIgnoreCase)
                 || message.Contains("released before materialization", StringComparison.OrdinalIgnoreCase)
                 || message.Contains("buffer was released", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // A failure that recurs on every attempt: the step's own arguments or a kernel build, whichever backend reports it.
+    private static bool IsDeterministicDeviceFailure(Exception? exception)
+    {
+        for (var e = exception; e is not null; e = e.InnerException)
+        {
+            if (e is ArgumentException or IndexOutOfRangeException or NotSupportedException
+                or AiDotNet.Tensors.Engines.DirectGpu.HIP.HipKernelCompilationException)
+            {
+                return true;
+            }
+
+            var message = e.Message;
+            if (message.Contains("CL_BUILD_PROGRAM_FAILURE", StringComparison.Ordinal)
+                || message.Contains("CL_COMPILE_PROGRAM_FAILURE", StringComparison.Ordinal)
+                || message.Contains("CL_INVALID_", StringComparison.Ordinal)
+                || message.Contains("CUDA_ERROR_INVALID_VALUE", StringComparison.Ordinal)
+                || message.Contains("CUDA_ERROR_INVALID_PTX", StringComparison.Ordinal)
+                || message.Contains("CUDA_ERROR_NO_BINARY_FOR_GPU", StringComparison.Ordinal)
+                || message.Contains("compilation failed", StringComparison.OrdinalIgnoreCase))
             {
                 return true;
             }
@@ -204,7 +221,8 @@ internal sealed class TapeTrainingStepper<T>
         }
         if (total is null) return;
         double norm = Math.Sqrt(NumOps.ToDouble(total[0]));
-        if (!(norm > maxNorm) || double.IsInfinity(norm)) return;
+        // A NaN norm is left alone rather than spread to every gradient as a NaN scale.
+        if (double.IsNaN(norm) || double.IsInfinity(norm) || norm <= maxNorm) return;
         T scale = NumOps.FromDouble(maxNorm / (norm + 1e-6));
         foreach (var gradient in gradients.Values)
             engine.TensorMultiplyScalarInPlace(gradient, scale);

@@ -32,7 +32,6 @@ internal static class FusedTrainingStep<T>
     {
         public OwnerState(object owner) => Session = new FusedTrainingSession<T>(owner);
         public FusedTrainingSession<T> Session { get; }
-        public object? LastOptimizer { get; set; }
     }
 
     private static readonly ConditionalWeakTable<object, OwnerState> States = new();
@@ -87,14 +86,6 @@ internal static class FusedTrainingStep<T>
             return false;
 
         var state = States.GetValue(key, k => new OwnerState(k));
-        // A different optimizer instance starts from its own fresh moments, as it would eagerly; the plan holding
-        // the previous optimizer's moments is dropped rather than refused as hyperparameter drift.
-        if (!ReferenceEquals(state.LastOptimizer, typed))
-        {
-            if (state.LastOptimizer is not null)
-                state.Session.Reset(stickyDisable: false);
-            state.LastOptimizer = typed;
-        }
 
         var outcome = state.Session.TryStep(new FusedTrainingStepRequest<T>
         {
@@ -114,10 +105,7 @@ internal static class FusedTrainingStep<T>
             case FusedStepOutcome.Stepped:
                 return true;
             case FusedStepOutcome.CommittedFailure:
-                var cause = state.Session.LastFallbackException;
-                if (!TapeTrainingStepper<T>.IsGpuOutOfMemoryFailure(cause) && !TapeTrainingStepper<T>.IsGpuTransientFailure(cause))
-                    throw TapeTrainingStepper<T>.CommittedPlanCannotContinue(cause);
-                state.Session.Reset(stickyDisable: true);
+                state.Session.DropAfterCommittedFailure();
                 return false;
             default:
                 return false;
