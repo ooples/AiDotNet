@@ -468,12 +468,73 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         }
 
         int n = input.Rows;
+        if (_options.CovariateSize == 0 && n > 1)
+            return PredictRowsBatched(input);
+
         var predictions = new Vector<T>(n);
 
         // Each input row is an independent lookback window — forecast it from its own content.
         for (int i = 0; i < n; i++)
         {
             predictions[i] = PredictSingle(input.GetRow(i));
+        }
+
+        return predictions;
+    }
+
+    /// <summary>
+    /// <see cref="Predict(Matrix{T})"/> for many rows: the same per-row computation as <see cref="PredictDistNorm"/>
+    /// (normalize, left-pad a short window with its first value, unroll the LSTM, head on the final hidden state),
+    /// with the LSTM unrolled ONCE for all rows -- each row is a column of the [H, B] state, the layout training already
+    /// batches -- instead of once per row at B = 1. The head still runs per row on that row's final hidden column, so
+    /// every distribution head keeps its exact point-forecast semantics. AiModelBuilder predicts the whole dataset after
+    /// fitting, and the per-row B = 1 unroll was about half of an Ooples production DeepAR fit (profiled).
+    /// </summary>
+    private Vector<T> PredictRowsBatched(Matrix<T> input)
+    {
+        int n = input.Rows, cols = input.Columns;
+        int steps = Math.Max(cols, _options.LookbackWindow), pad = steps - cols;
+        int layers = _lstmLayers.Count, h = _options.HiddenSize;
+
+        var hState = new Tensor<T>[layers];
+        var cState = new Tensor<T>[layers];
+        for (int l = 0; l < layers; l++)
+        {
+            hState[l] = new Tensor<T>(new[] { h, n });
+            cState[l] = new Tensor<T>(new[] { h, n });
+        }
+
+        var lastNorm = new T[n];
+        for (int t = 0; t < steps; t++)
+        {
+            var xt = new Tensor<T>(new[] { 1, n });
+            for (int i = 0; i < n; i++)
+            {
+                T raw = cols == 0 ? NumOps.Zero : input[i, t < pad ? 0 : t - pad];
+                T normValue = NumOps.Divide(NumOps.Subtract(raw, _normMean), _normStd);
+                xt[0, i] = normValue;
+                lastNorm[i] = normValue;
+            }
+
+            Tensor<T> layerInput = xt;
+            for (int l = 0; l < layers; l++)
+            {
+                var (hNew, cNew) = _lstmLayers[l].Step(layerInput, hState[l], cState[l]);
+                hState[l] = hNew;
+                cState[l] = cNew;
+                layerInput = hNew;
+            }
+        }
+
+        var top = hState[layers - 1];
+        var predictions = new Vector<T>(n);
+        var column = new Tensor<T>(new[] { h, 1 });
+        for (int i = 0; i < n; i++)
+        {
+            for (int r = 0; r < h; r++)
+                column[r, 0] = top[r, i];
+            var dist = _head.PredictNorm(column, lastNorm[i]);
+            predictions[i] = NumOps.Add(NumOps.Multiply(dist.MeanNorm, _normStd), _normMean);
         }
 
         return predictions;
