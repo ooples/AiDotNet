@@ -8,10 +8,10 @@ using Xunit;
 namespace AiDotNet.Tests.UnitTests.TimeSeries;
 
 /// <summary>
-/// ChronosFoundationModel trains with hand-written backprop (no GradientTape) inside the TensorArena that
-/// TimeSeriesModelBase.Train opens around TrainCore. Without a per-sample arena reset every Engine op took a fresh ring
-/// buffer that lived until training ended (74 GB on an Ooples-sized fit). The arena's peak working set must now stay
-/// bounded as the training set grows, and recycling must not change what the model learns.
+/// ChronosFoundationModel trains inside the TensorArena that TimeSeriesModelBase.Train opens around TrainCore. Its
+/// former tape-less training never reset that arena, so every Engine op took a fresh ring buffer that lived until
+/// training ended (74 GB on an Ooples-sized fit). The arena's peak working set must stay bounded as the training set
+/// grows, and recycling must not change what the model learns.
 /// </summary>
 public sealed class ChronosArenaRecycleTests
 {
@@ -33,13 +33,15 @@ public sealed class ChronosArenaRecycleTests
     [Trait("category", "unit")]
     public void ArenaPeak_DoesNotGrowWithTrainingSetSize()
     {
-        Train(60);
-        long small = TensorArena.LastDisposedPeakBackingBytes;
+        // Training is batched per group of equal-length windows, and the arena keeps one ring buffer per distinct
+        // group shape across its per-group resets; the shape variety saturates once every (group size, length)
+        // combination has occurred. Past that point more data must not grow the arena: 4x the rows, same peak.
         Train(240);
+        long small = TensorArena.LastDisposedPeakBackingBytes;
+        Train(960);
         long large = TensorArena.LastDisposedPeakBackingBytes;
-        // 4x the samples: with per-sample recycling the arena's peak is one sample's working set either way.
-        Assert.True(large <= small * 1.5 + 1_000_000,
-            $"arena peak grew with the training set: {small:N0} bytes at 60 rows vs {large:N0} at 240 rows");
+        Assert.True(large <= small * 1.25 + 1_000_000,
+            $"arena peak grew with the training set: {small:N0} bytes at 240 rows vs {large:N0} at 960 rows");
     }
 
     [Fact]
