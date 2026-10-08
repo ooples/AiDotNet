@@ -60,15 +60,27 @@ internal sealed class HeavyTimeoutScalingExecutor : XunitTestFrameworkExecutor
             else
             {
                 testCases = testCases.ToList();
-                foreach (var testCase in testCases)
-                {
-                    if (testCase is XunitTestCase xunitCase && xunitCase.Timeout > 0 && IsHeavyTimeout(testCase.Traits))
-                        TimeoutSetter.Invoke(xunitCase, new object[] { (int)Math.Min(int.MaxValue, (long)xunitCase.Timeout * scale) });
-                }
+                ApplyScale(testCases, scale);
             }
         }
 
         base.RunTestCases(testCases, executionMessageSink, executionOptions);
+    }
+
+    /// <summary>
+    /// Multiplies the timeout of every HeavyTimeout case that has one, clamping at <see cref="int.MaxValue"/>.
+    /// </summary>
+    /// <returns>False when this xUnit version gives no way to set the timeout, so nothing was changed.</returns>
+    internal static bool ApplyScale(IEnumerable<IXunitTestCase> testCases, int scale)
+    {
+        if (TimeoutSetter is null) return false;
+        foreach (var testCase in testCases)
+        {
+            if (testCase is XunitTestCase xunitCase && xunitCase.Timeout > 0 && IsHeavyTimeout(testCase.Traits))
+                TimeoutSetter.Invoke(xunitCase, new object[] { (int)Math.Min(int.MaxValue, (long)xunitCase.Timeout * scale) });
+        }
+
+        return true;
     }
 
     internal static bool IsHeavyTimeout(Dictionary<string, List<string>>? traits) =>
