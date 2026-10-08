@@ -184,6 +184,50 @@ public class FusedOptimizerScheduleAndClipParityTests
     }
 
     [Fact]
+    public void OptimizerGlobalNormClip_ScalesKnownGradientsByPyTorchCoefficient()
+    {
+        // Gradients (3, 4) and (12) have global norm 13. clip_grad_norm_ scales them by max / (13 + 1e-6), giving
+        // a clipped norm of 13 * max / (13 + 1e-6). With Epsilon = 1 the first Adam step moves each parameter by
+        // lr * gc / (|gc| + 1), gc the clipped gradient, and that is not scale-invariant, so the parameters pin the
+        // applied scale: an unclipped step, or one scaled to exactly max / 13, lands elsewhere.
+        const double maxNorm = 0.5, learningRate = 1e-2, norm = 13.0;
+        var optimizer = new AdamOptimizer<double, Tensor<double>, Tensor<double>>(null,
+            new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                InitialLearningRate = learningRate,
+                Epsilon = 1.0,
+                EnableGradientClipping = true,
+                GradientClippingMethod = GradientClippingMethod.ByNorm,
+                MaxGradientNorm = maxNorm,
+            });
+
+        var first = new Tensor<double>(new[] { 2 }, new Vector<double>(new[] { 1.0, -2.0 }));
+        var second = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 0.5 }));
+        var gradients = new System.Collections.Generic.Dictionary<Tensor<double>, Tensor<double>>(
+            AiDotNet.Helpers.TensorReferenceComparer<Tensor<double>>.Instance)
+        {
+            [first] = new Tensor<double>(new[] { 2 }, new Vector<double>(new[] { 3.0, 4.0 })),
+            [second] = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 12.0 })),
+        };
+        var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<double>(
+            new[] { first, second }, gradients, 0.0, first, first,
+            (input, _) => input, (predicted, _) => predicted, parameterBuffer: null);
+
+        optimizer.Step(context);
+
+        double scale = maxNorm / (norm + 1e-6);
+        double[] raw = { 3.0, 4.0, 12.0 }, initial = { 1.0, -2.0, 0.5 };
+        double[] after = { first[0], first[1], second[0] };
+        for (int i = 0; i < raw.Length; i++)
+        {
+            double clipped = raw[i] * scale;
+            double expected = initial[i] - learningRate * clipped / (Math.Abs(clipped) + 1.0);
+            Assert.True(Math.Abs(after[i] - expected) <= 1e-12,
+                $"parameter {i}: {after[i]:R}, expected {expected:R} for a clip scale of {scale:R}.");
+        }
+    }
+
+    [Fact]
     public void WarmupThenEpochScheduler_StaysOnTheEagerPath()
     {
         // The fused path never calls OnBatchEnd, so it cannot advance a per-batch warmup; the optimizer

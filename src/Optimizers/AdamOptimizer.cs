@@ -1717,7 +1717,8 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         if (double.IsPositiveInfinity(globalNormSq)) globalNormSq = HostGlobalGradientSquaredNorm(context);
         double globalNorm = Math.Sqrt(globalNormSq);
 
-        if (globalNorm <= maxNorm || globalNorm == 0.0 || !IsFiniteDouble(globalNorm))
+        // maxNorm > 0 here, so a zero norm already returns through the first test.
+        if (globalNorm <= maxNorm || !IsFiniteDouble(globalNorm))
             return;
 
         // Scale every gradient in place by PyTorch's clip_grad_norm_ coefficient,

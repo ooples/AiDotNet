@@ -94,7 +94,10 @@ public class FusedConvolutionalStepParityTests
             offset += fused.TensorLengths[t];
             Assert.True(en > 0, $"tensor {t}: the eager step did not move it.");
             double cosine = dot / Math.Sqrt(fn * en), relError = Math.Sqrt(diff / en);
-            if (cosine < 0.9999 || relError > 1e-3)
+            // A NaN fails every comparison, so a non-finite fused update must be rejected before the tolerances.
+            bool finite = !double.IsNaN(cosine) && !double.IsInfinity(cosine)
+                && !double.IsNaN(relError) && !double.IsInfinity(relError);
+            if (!finite || cosine < 0.9999 || relError > 1e-3)
                 failures.Add($"tensor {t} [{fused.TensorLengths[t]}]: update cosine {cosine:F5}, relative error {relError:E2}");
         }
 
