@@ -44,8 +44,8 @@ public class MVDreamCloneTests
 
     private static HashSet<object> ReachableLayers(object root)
     {
-        var layers = new HashSet<object>(ReferenceEqualityComparer.Instance);
-        var seen = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        var layers = new HashSet<object>(IdentityComparer.Instance);
+        var seen = new HashSet<object>(IdentityComparer.Instance);
         var pending = new Stack<object>();
         pending.Push(root);
         while (pending.Count > 0)
@@ -85,5 +85,14 @@ public class MVDreamCloneTests
         }
 
         return layers;
+    }
+
+    // System.Collections.Generic.ReferenceEqualityComparer is public only from .NET 5; net471, which this project also
+    // targets, needs its own.
+    private sealed class IdentityComparer : IEqualityComparer<object>
+    {
+        public static readonly IdentityComparer Instance = new IdentityComparer();
+        public new bool Equals(object? x, object? y) => ReferenceEquals(x, y);
+        public int GetHashCode(object obj) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
     }
 }
