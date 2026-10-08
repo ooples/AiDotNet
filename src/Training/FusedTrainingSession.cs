@@ -197,6 +197,8 @@ internal sealed class FusedTrainingSession<T>
             LastFallbackException = new InvalidOperationException("graph break after fused steps ran: " + graphBreak);
             return FusedStepOutcome.CommittedFailure;
         }
+
+        if (IsDisabled)
             return Decline("fused path sticky-disabled from a prior fallback");
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
             return Decline("TensorCodecOptions.EnableCompilation = false");
