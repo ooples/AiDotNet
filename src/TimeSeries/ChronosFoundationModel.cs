@@ -466,7 +466,7 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         {
             if (!grads.TryGetValue(param, out var g)) continue;
             var copy = new Tensor<T>(g._shape);
-            for (int i = 0; i < g.Length; i++) copy[i] = g[i];
+            (g.IsContiguous ? g : g.Contiguous()).AsSpan().CopyTo(copy.AsWritableSpan());
             result[key] = copy;
         }
         return result;
@@ -474,12 +474,12 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
 
     private void ResetGradientAccumulators()
     {
+        // Whole-buffer clears: the per-element indexer form (one interface call and one version bump per element,
+        // over every parameter-sized accumulator, every batch) was a measurable share of a training step.
         foreach (var tensor in _gradientAccumulators.Values)
         {
-            for (int i = 0; i < tensor.Length; i++)
-            {
-                tensor[i] = _numOps.Zero;
-            }
+            tensor.AsWritableSpan().Clear();
+            tensor.IncrementVersion();
         }
         _gradientCount = 0;
     }
@@ -529,18 +529,18 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         {
             if (_gradientAccumulators.TryGetValue(kvp.Key, out var accumulator))
             {
-                for (int i = 0; i < Math.Min(accumulator.Length, kvp.Value.Length); i++)
-                {
-                    accumulator[i] = _numOps.Add(accumulator[i], kvp.Value[i]);
-                }
+                // Vectorized accumulate (same per-element sum as the former indexer loop).
+                int n = Math.Min(accumulator.Length, kvp.Value.Length);
+                var acc = accumulator.AsWritableSpan().Slice(0, n);
+                _numOps.Add(acc, kvp.Value.AsSpan().Slice(0, n), acc);
+                accumulator.IncrementVersion();
             }
             else
             {
-                // A heap copy, never the gradient itself: the gradient may be an arena tensor that the per-sample
-                // TensorArena.Reset in TrainCore recycles, and an accumulator must outlive the sample.
+                // A heap copy, never the gradient itself: the gradient may be an arena tensor that the per-group
+                // TensorArena.Reset in TrainCore recycles, and an accumulator must outlive the group.
                 var accumulatorCopy = new Tensor<T>(kvp.Value._shape);
-                for (int i = 0; i < kvp.Value.Length; i++)
-                    accumulatorCopy[i] = kvp.Value[i];
+                kvp.Value.AsSpan().CopyTo(accumulatorCopy.AsWritableSpan());
                 _gradientAccumulators[kvp.Key] = accumulatorCopy;
             }
         }
@@ -575,10 +575,8 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         var avgGrad = Engine.TensorDivideScalar(gradient, batchSize);
         var scaledGrad = Engine.TensorMultiplyScalar(avgGrad, learningRate);
         var result = Engine.TensorSubtract(tensor, scaledGrad);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = result[i];
-        }
+        result.AsSpan().CopyTo(tensor.AsWritableSpan());      // one bulk copy, not one indexer call per element
+        tensor.IncrementVersion();
     }
 
     /// <summary>
@@ -1191,6 +1189,20 @@ internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.
     /// attention over the full embedding scaled by 1/sqrt(headDim) with q/k/v/out = W x, residual, pre-norm,
     /// GELU FFN (W x + b), residual -- expressed as Engine ops so a GradientTape yields every parameter's gradient.
     /// </summary>
+    private static readonly bool s_chronosUseSdpa = Environment.GetEnvironmentVariable("AIDOTNET_CHRONOS_SDPA") == "1";
+    private Tensor<T>? _causalMask;
+
+    /// <summary>[1, L, L] additive causal mask (0 on and below the diagonal, -inf above), cached per length.</summary>
+    private Tensor<T> CausalMask(int l)
+    {
+        if (_causalMask is { } cached && cached.Shape[1] == l) return cached;
+        var mask = new Tensor<T>(new[] { 1, l, l });
+        for (int i = 0; i < l; i++)
+            for (int j = i + 1; j < l; j++)
+                mask[0, i, j] = NumOps.FromDouble(double.NegativeInfinity);
+        return _causalMask = mask;
+    }
+
     internal Tensor<T> ForwardBatch(Tensor<T> x)
     {
         int b = x.Shape[0], l = x.Shape[1], e = _embeddingDim;
@@ -1200,7 +1212,21 @@ internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.
         var q = Engine.Reshape(Engine.TensorMatMulTransposed(n1, _queryProj), new[] { b, l, e });
         var k = Engine.Reshape(Engine.TensorMatMulTransposed(n1, _keyProj), new[] { b, l, e });
         var v = Engine.Reshape(Engine.TensorMatMulTransposed(n1, _valueProj), new[] { b, l, e });
-        var ctx = Engine.MultiHeadAttentionCore(q, k, v, numHeads: 1, scale: 1.0 / Math.Sqrt(_headDim), causal: true);
+        // Causal single-head attention as batched GEMMs + softmax (B x [L, L] scores). The double SDPA kernel
+        // behind MultiHeadAttentionCore runs five scalar per-(batch, head) matrix products; at Chronos's tiny L
+        // that dominated the backward. AIDOTNET_CHRONOS_SDPA=1 restores the kernel route for A/B.
+        Tensor<T> ctx;
+        if (s_chronosUseSdpa)
+        {
+            ctx = Engine.MultiHeadAttentionCore(q, k, v, numHeads: 1, scale: 1.0 / Math.Sqrt(_headDim), causal: true);
+        }
+        else
+        {
+            var scores = Engine.TensorMultiplyScalar(
+                Engine.BatchMatMul(q, Engine.TensorPermute(k, new[] { 0, 2, 1 })), NumOps.FromDouble(1.0 / Math.Sqrt(_headDim)));
+            var weights = Engine.Softmax(Engine.TensorAdd(scores, CausalMask(l)), -1);   // [B, L, L]
+            ctx = Engine.BatchMatMul(weights, v);                                          // [B, L, E]
+        }
         var attn = Engine.TensorMatMulTransposed(Engine.Reshape(ctx, new[] { b * l, e }), _outputProj);
         var r1 = Engine.TensorAdd(flat, attn);
 
@@ -1386,10 +1412,8 @@ internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.
         var avgGrad = engine.TensorDivideScalar(gradient, batchSize);
         var scaledGrad = engine.TensorMultiplyScalar(avgGrad, learningRate);
         var result = engine.TensorSubtract(tensor, scaledGrad);
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = result[i];
-        }
+        result.AsSpan().CopyTo(tensor.AsWritableSpan());      // one bulk copy, not one indexer call per element
+        tensor.IncrementVersion();
     }
 
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
