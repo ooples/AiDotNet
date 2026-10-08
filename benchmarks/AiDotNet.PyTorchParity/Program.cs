@@ -93,6 +93,7 @@ if (benchOptions.VerifyStep1Dir is { } referenceDir)
     // compare logits before and after one training step. Exit non-zero on any failure.
     var backend = new AiDotNetTensorBackend(benchOptions.Seed);
     var allPass = true;
+    var anyVerdict = false;
     foreach (var name in benchOptions.Models)
     {
         if (backend.Create(name) is not AiDotNetBenchmarkModel verifiable)
@@ -102,9 +103,12 @@ if (benchOptions.VerifyStep1Dir is { } referenceDir)
         }
         var result = verifiable.VerifyStep1(referenceDir, name);
         Console.WriteLine($"[step1] {result}");
+        if (result.DiagnosticOnly) continue;
+        anyVerdict = true;
         allPass &= result.Pass;
     }
-    return allPass ? 0 : 1;
+    // Exit 2 when every result was diagnostic-only (AIDOTNET_PARITY_TRAIN_STEPS > 1): no verdict, so no success.
+    return !anyVerdict ? 2 : allPass ? 0 : 1;
 }
 var report = new BenchmarkRunner(benchOptions).Run();
 var outputPath = Path.GetFullPath(benchOptions.OutputPath);
@@ -184,8 +188,16 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
             Console.WriteLine($"[bench] {modelName}: building network…");
             var model = factory.Create(modelName);
             Console.WriteLine($"[bench] {modelName}: training ({options.Epochs}e × {options.TrainBatches}b × {options.BatchSize}bs, {model.ParameterCount} params)…");
-            var training = BenchmarkTraining(model);
-            Console.WriteLine($"[bench] {modelName}: training done in {training.TotalSeconds:F2}s; running inference…");
+            TrainingReport? training = null;
+            if (model.IsInferenceOnly)
+            {
+                Console.WriteLine($"[bench] {modelName}: inference-only, no training report; running inference…");
+            }
+            else
+            {
+                training = BenchmarkTraining(model);
+                Console.WriteLine($"[bench] {modelName}: training done in {training.TotalSeconds:F2}s; running inference…");
+            }
             var inference = BenchmarkInference(model);
             modelStart.Stop();
             Console.WriteLine($"[bench] {modelName}: complete in {modelStart.Elapsed.TotalSeconds:F2}s");
@@ -342,6 +354,11 @@ internal interface IBenchmarkModel
     void Forward();
     void Backward();
     void Step();
+    /// <summary>
+    /// True for a forward-only model: it has no training step, so it gets no training report rather than one that
+    /// times batch replay around empty Backward/Step calls.
+    /// </summary>
+    bool IsInferenceOnly => false;
     /// <summary>The batch the next Forward/Backward consumes; settable so the training loop can replay pre-generated batches.</summary>
     (Tensor<float> Input, Tensor<float> Label) CurrentBatch { get; set; }
 }
@@ -381,6 +398,9 @@ internal sealed class AiDotNetTensorBackend(int seed)
 /// </summary>
 internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
 {
+    /// <summary>The identity activation, typed so the layer constructor overload is unambiguous.</summary>
+    protected static IActivationFunction<float>? NoActivation => null;
+
     protected readonly Random Random;
     protected readonly NeuralNetworkBase<float> Network;
     protected Tensor<float> Input = Tensor<float>.Empty();
@@ -601,6 +621,13 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
             layerReport.Add($"{segment.Name} cos={segCos:F5} relErr={segErr:E2}");
         }
 
+        // Zip stops at the shorter side, and Max throws on an empty one: prove "same shape" before "same function".
+        if (ours0.Length == 0 || ours0.Length != ref0.Length || ours1.Length != ref1.Length || ours0.Length != ours1.Length)
+        {
+            throw new InvalidOperationException(
+                $"[step1] {name}: logit shapes differ, ours {ours0.Length} -> {ours1.Length} values, " +
+                $"PyTorch {ref0.Length} -> {ref1.Length}; the comparison would cover the wrong elements.");
+        }
         var forwardMaxAbs = ours0.Zip(ref0, (a, b) => Math.Abs(a - b)).Max();
         // CrossEntropy log-softmaxes its input; log-softmax of log-probabilities is the identity, so log(p) is exact.
         var ourLoss = CrossEntropy(PredictReturnsProbabilities ? ours0.Select(p => Math.Log(Math.Max(p, 1e-300))).ToArray() : ours0, classes, OutputClasses);
@@ -614,7 +641,11 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
         // The published gradients are post-clip: expected |ours|/|torch| = min(1, maxNorm / preClipNorm), maxNorm 1.
         var preClipNorm = reference.TensorNames.Contains("grad_norm") ? reference.ReadAsDouble("grad_norm")[0] : double.NaN;
         var expectedRatio = double.IsNaN(preClipNorm) ? double.NaN : Math.Min(1.0, 1.0 / preClipNorm);
-        return new Step1Result(name, forwardMaxAbs, ourLoss, refLoss, cosine, relError, layerReport, gradCos, gradRatio, expectedRatio);
+        // After extra steps, ours covers N steps against PyTorch's one: the numbers are diagnostics, not a verdict.
+        return new Step1Result(name, forwardMaxAbs, ourLoss, refLoss, cosine, relError, layerReport, gradCos, gradRatio, expectedRatio)
+        {
+            DiagnosticOnly = extraSteps > 1,
+        };
     }
 
     private static double[] SoftmaxRows(double[] logits, int numClasses)
@@ -698,7 +729,7 @@ internal sealed class AiDotNetMlpModel : AiDotNetBenchmarkModel
         {
             new DenseLayer<float>(512, (IActivationFunction<float>)new ReLUActivation<float>()),
             new DenseLayer<float>(128, (IActivationFunction<float>)new ReLUActivation<float>()),
-            new DenseLayer<float>(10, activationFunction: (IActivationFunction<float>?)null),
+            new DenseLayer<float>(10, activationFunction: NoActivation),
         };
         var arch = new NeuralNetworkArchitecture<float>(
             inputType: InputType.OneDimensional,
@@ -771,6 +802,7 @@ internal sealed class AiDotNetMlpFusedModel : IBenchmarkModel
 
     public void Backward() { }
     public void Step() { }
+    public bool IsInferenceOnly => true;
 }
 
 internal sealed class AiDotNetCnnModel : AiDotNetBenchmarkModel
@@ -794,7 +826,7 @@ internal sealed class AiDotNetCnnModel : AiDotNetBenchmarkModel
                                           activationFunction: new ReLUActivation<float>()),
             new AdaptiveAveragePoolingLayer<float>(outputHeight: 4, outputWidth: 4),
             new FlattenLayer<float>(),
-            new DenseLayer<float>(10, activationFunction: (IActivationFunction<float>?)null),
+            new DenseLayer<float>(10, activationFunction: NoActivation),
         };
         var arch = new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
@@ -819,7 +851,7 @@ internal sealed class AiDotNetLstmModel : AiDotNetBenchmarkModel
         {
             new LSTMLayer<float>(hiddenSize: 64),
             new SequenceTokenSliceLayer<float>(SequenceTokenSliceLayer<float>.Position.Last),
-            new DenseLayer<float>(10, activationFunction: (IActivationFunction<float>?)null),
+            new DenseLayer<float>(10, activationFunction: NoActivation),
         };
         var arch = new NeuralNetworkArchitecture<float>(
             // [sequence 32, features 32]: a OneDimensional/inputSize 32 architecture resolves the LSTM's shape contract
@@ -830,7 +862,7 @@ internal sealed class AiDotNetLstmModel : AiDotNetBenchmarkModel
             inputWidth: 32,
             outputSize: 10,
             layers: layers);
-        return new LSTMNeuralNetwork<float>(arch, lossFunction: new CrossEntropyWithLogitsLoss<float>(), outputActivation: (IActivationFunction<float>?)null);
+        return new LSTMNeuralNetwork<float>(arch, lossFunction: new CrossEntropyWithLogitsLoss<float>(), outputActivation: NoActivation);
     }
 }
 
@@ -983,12 +1015,29 @@ internal static class BenchStats
 
     public static bool ProfileRangeRequested => Environment.GetEnvironmentVariable("PROFILE_RANGE") == "1";
 
-    // CUDA profiler capture range; a no-op on the CPU engine (nvcuda.dll may not even exist there).
-    public static void ProfilerStart() { if (DeviceName == "cuda") cuProfilerStart(); }
-    public static void ProfilerStop() { if (DeviceName == "cuda") cuProfilerStop(); }
+    // CUDA profiler capture range; a no-op on the CPU engine. The driver library is resolved by platform at run
+    // time (nvcuda.dll on Windows, libcuda.so.1 on Linux, where nsys runs), and a missing library or export is a
+    // warning that leaves the run unprofiled instead of a DllNotFoundException in the last epoch.
+    public static void ProfilerStart() => InvokeProfiler("cuProfilerStart");
+    public static void ProfilerStop() => InvokeProfiler("cuProfilerStop");
 
-    [System.Runtime.InteropServices.DllImport("nvcuda.dll")] private static extern int cuProfilerStart();
-    [System.Runtime.InteropServices.DllImport("nvcuda.dll")] private static extern int cuProfilerStop();
+    private delegate int CuProfilerCall();
+
+    private static void InvokeProfiler(string export)
+    {
+        if (DeviceName != "cuda") return;
+        string library = OperatingSystem.IsWindows() ? "nvcuda.dll" : "libcuda.so.1";
+        if (!System.Runtime.InteropServices.NativeLibrary.TryLoad(library, out var handle)
+            || !System.Runtime.InteropServices.NativeLibrary.TryGetExport(handle, export, out var address))
+        {
+            Console.Error.WriteLine($"[bench] PROFILE_RANGE: {export} not found in {library}; this range is not profiled.");
+            return;
+        }
+        var call = System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer<CuProfilerCall>(address);
+        int status = call();
+        if (status != 0)
+            Console.Error.WriteLine($"[bench] PROFILE_RANGE: {export} returned CUDA status {status}.");
+    }
 
     public static double Quantile(IReadOnlyList<double> sorted, double q)
     {
@@ -1025,7 +1074,7 @@ internal static class RunEnvironmentProbe
 }
 
 internal sealed record BenchmarkReport(string Framework, string DotNetRuntime, RunEnvironment Environment, object AiDotNet, List<ModelReport> Results);
-internal sealed record ModelReport(string Model, string Backend, string Device, long Parameters, TrainingReport Training, List<InferenceReport> Inference);
+internal sealed record ModelReport(string Model, string Backend, string Device, long Parameters, TrainingReport? Training, List<InferenceReport> Inference);
 // SteadyStateEpochSecondsAvg excludes the first epoch (issue #1566 item 4): the
 // AiDotNet first epoch is dominated by JIT + autotune warmup (~2.1 s) and drops to
 // ~0.36 s thereafter, so TotalSeconds/EpochSeconds[0] are warmup-skewed; the
@@ -1063,13 +1112,26 @@ internal sealed record Step1Result(string Model, double ForwardMaxAbs, double Ou
     double StepDeltaCosine, double StepDeltaRelError, IReadOnlyList<string> LayerUpdates,
     double GradCosine = double.NaN, double GradRatio = double.NaN, double ExpectedGradRatio = double.NaN)
 {
+    /// <summary>True when ours ran more than the one step the reference covers; such a result has no verdict.</summary>
+    public bool DiagnosticOnly { get; init; }
+
+    public bool Pass => !DiagnosticOnly && ForwardAgrees && StepAgrees && GradientAgrees;
+
+    private bool ForwardAgrees => ForwardMaxAbs <= 1e-4;
+
+    private bool StepAgrees => StepDeltaCosine >= 0.999 && StepDeltaRelError <= 0.01;
+
     // The gradient check is what sees SCALE: Adam's first step (~lr*sign(g)) hides a uniformly scaled gradient.
-    public bool Pass => ForwardMaxAbs <= 1e-4 && StepDeltaCosine >= 0.999 && StepDeltaRelError <= 0.01
-        && (double.IsNaN(GradCosine) || (GradCosine >= 0.9999
-            && (double.IsNaN(ExpectedGradRatio) || Math.Abs(GradRatio - ExpectedGradRatio) <= 1e-3 * Math.Max(1.0, ExpectedGradRatio))));
+    // No reference gradients (NaN cosine) means nothing to check.
+    private bool GradientAgrees => double.IsNaN(GradCosine) || (GradCosine >= 0.9999 && GradientScaleAgrees);
+
+    private bool GradientScaleAgrees => double.IsNaN(ExpectedGradRatio)
+        || Math.Abs(GradRatio - ExpectedGradRatio) <= 1e-3 * Math.Max(1.0, ExpectedGradRatio);
+
+    private string Verdict => DiagnosticOnly ? "DIAGNOSTIC (multi-step, no verdict)" : Pass ? "PASS" : "FAIL";
 
     public override string ToString() =>
-        $"{Model}: {(Pass ? "PASS" : "FAIL")}  forward max|dlogit|={ForwardMaxAbs:E2}  loss {OurLoss:F6} vs {ReferenceLoss:F6}  " +
+        $"{Model}: {Verdict}  forward max|dlogit|={ForwardMaxAbs:E2}  loss {OurLoss:F6} vs {ReferenceLoss:F6}  " +
         $"step delta cos={StepDeltaCosine:F6} relErr={StepDeltaRelError:E2}  grad cos={GradCosine:F6} ratio={GradRatio:F4} (expect {ExpectedGradRatio:F4})" +
         string.Concat(LayerUpdates.Select(l => $"{Environment.NewLine}         update {l}"));
 }

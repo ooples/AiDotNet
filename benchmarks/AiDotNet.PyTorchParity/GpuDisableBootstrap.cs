@@ -49,12 +49,17 @@ internal static class BenchmarkDeviceArg
     /// <summary>Reads `--device cpu|cuda` (default cpu); any other value is an error, not a silent CPU run.</summary>
     public static BenchmarkDevice Parse(string[] args)
     {
-        for (var i = 0; i < args.Length - 1; i++)
+        for (var i = 0; i < args.Length; i++)
         {
             if (!string.Equals(args[i], "--device", StringComparison.OrdinalIgnoreCase)) continue;
-            return Enum.TryParse<BenchmarkDevice>(args[i + 1], ignoreCase: true, out var device)
-                ? device
-                : throw new ArgumentException($"--device must be cpu or cuda, got '{args[i + 1]}'.");
+            if (i + 1 >= args.Length)
+                throw new ArgumentException("--device needs a value: cpu or cuda.");
+            // The two names only: Enum.TryParse also takes "1" (Cuda) and "7" (an undefined value every caller
+            // reads as CPU), either of which would put a CPU row against PyTorch's CUDA results.
+            string value = args[i + 1];
+            if (string.Equals(value, "cpu", StringComparison.OrdinalIgnoreCase)) return BenchmarkDevice.Cpu;
+            if (string.Equals(value, "cuda", StringComparison.OrdinalIgnoreCase)) return BenchmarkDevice.Cuda;
+            throw new ArgumentException($"--device must be cpu or cuda, got '{value}'.");
         }
         return BenchmarkDevice.Cpu;
     }

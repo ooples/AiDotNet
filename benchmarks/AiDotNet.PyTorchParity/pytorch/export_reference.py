@@ -1,8 +1,9 @@
 """Export each PyTorch twin's initial weights plus a step-1 reference for the equivalence check.
 
-For every model this writes two safetensors files into --out:
+For every model this writes four safetensors files into --out:
 
     <model>.weights.safetensors    the twin's state_dict at initialization (seeded)
+    <model>.grads.safetensors      the step's gradients before clipping, keyed like the state_dict
     <model>.weights1.safetensors   the state_dict after that one training step
     <model>.reference.safetensors  one fixed batch and what PyTorch computes on it:
         x        the input batch
