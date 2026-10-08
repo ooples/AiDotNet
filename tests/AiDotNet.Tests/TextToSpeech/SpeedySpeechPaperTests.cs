@@ -107,7 +107,7 @@ public class SpeedySpeechPaperTests
         Assert.Equal(2, mel.Rank);
         Assert.Equal(MelBins, mel.Shape[1]);
         Assert.True(mel.Shape[0] >= 5, $"Every phoneme lasts at least one frame; got {mel.Shape[0]} frames for 5 phonemes.");
-        for (int i = 0; i < mel.Length; i++) Assert.True(double.IsFinite(mel[i]), $"mel[{i}] = {mel[i]}");
+        for (int i = 0; i < mel.Length; i++) Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(mel[i]), $"mel[{i}] = {mel[i]}");
     }
 
     [Fact(Timeout = 60000)]

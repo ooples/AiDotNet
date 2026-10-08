@@ -146,7 +146,7 @@ public class PhemePaperTests
         var first = pheme.Synthesize("hello there");
         var second = pheme.Synthesize("hello there");
         Assert.Equal(first.ToArray(), second.ToArray());
-        Assert.All(first.ToArray(), v => Assert.True(double.IsFinite(v)));
+        Assert.All(first.ToArray(), v => Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(v)));
 
         // The output is the regenerated last prompt frame plus at most MaxNewSemanticTokens frames, 320 samples each.
         Assert.Equal(0, first.Length % 320);

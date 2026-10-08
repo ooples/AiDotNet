@@ -15601,7 +15601,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         sb.AppendLine("        var input2 = CreateConstantTensor(EffectiveInputShape, 0.9);");
                         sb.AppendLine("        double loss1 = MeasureLoss(network, input1, target, target);");
                         sb.AppendLine("        double loss2 = MeasureLoss(network, input2, target, target);");
-                        sb.AppendLine("        Xunit.Assert.True(double.IsFinite(loss1) && double.IsFinite(loss2), $\"Objective not finite: {loss1}, {loss2}.\");");
+                        sb.AppendLine("        Xunit.Assert.True(global::AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(loss1) && global::AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(loss2), $\"Objective not finite: {loss1}, {loss2}.\");");
                         sb.AppendLine("        Xunit.Assert.True(System.Math.Abs(loss1 - loss2) > 1e-9 * System.Math.Max(1.0, System.Math.Abs(loss1)),");
                         sb.AppendLine("            $\"The text-to-semantic objective is identical for distinct texts ({loss1:R}): the text never reaches the model.\");");
                         sb.AppendLine("    }");

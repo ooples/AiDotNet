@@ -84,8 +84,8 @@ public class TacotronPaperTests
             var x = new Tensor<double>(new[] { time, 6 });
             for (int i = 0; i < x.Length; i++) x[i] = Math.Sin(0.37 * i);
             var y = cbhg.Forward(x);
-            Assert.Equal(new[] { time, 6 }, y.Shape);
-            for (int i = 0; i < y.Length; i++) Assert.True(double.IsFinite(y[i]));
+            Assert.Equal(new[] { time, 6 }, y.Shape.ToArray());
+            for (int i = 0; i < y.Length; i++) Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(y[i]));
         }
     }
 
@@ -109,7 +109,7 @@ public class TacotronPaperTests
         var audio = new Tensor<double>(new[] { 1600 });
         for (int n = 0; n < audio.Length; n++) audio[n] = 0.3 * Math.Sin(2 * Math.PI * 220 * n / 16000.0);
         double loss = model.EvaluateTrainingObjective(new TtsTrainingSample<double> { Tokens = Tokens(5), Audio = audio });
-        Assert.True(double.IsFinite(loss) && loss > 0, $"Objective on a recording was {loss}.");
+        Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(loss) && loss > 0, $"Objective on a recording was {loss}.");
     }
 
     [Fact(Timeout = 120000)]
@@ -118,14 +118,14 @@ public class TacotronPaperTests
         await Task.Yield();
         var model = CreateModel();
         var mel = model.Synthesize("hello");
-        Assert.Equal(new[] { 6 * 2, MelBins }, mel.Shape);
-        for (int i = 0; i < mel.Length; i++) Assert.True(double.IsFinite(mel[i]), $"mel[{i}] = {mel[i]}");
+        Assert.Equal(new[] { 6 * 2, MelBins }, mel.Shape.ToArray());
+        for (int i = 0; i < mel.Length; i++) Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(mel[i]), $"mel[{i}] = {mel[i]}");
 
         var linear = model.PredictLinearSpectrogram("hello");
-        Assert.Equal(new[] { 12, 33 }, linear.Shape);
+        Assert.Equal(new[] { 12, 33 }, linear.Shape.ToArray());
         var waveform = model.SynthesizeWaveform("hello");
         Assert.True(waveform.Length > 0);
-        for (int i = 0; i < waveform.Length; i++) Assert.True(double.IsFinite(waveform[i]), $"wave[{i}] = {waveform[i]}");
+        for (int i = 0; i < waveform.Length; i++) Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(waveform[i]), $"wave[{i}] = {waveform[i]}");
     }
 
     [Fact(Timeout = 60000)]

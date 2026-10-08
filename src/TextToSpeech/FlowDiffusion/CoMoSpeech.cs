@@ -364,7 +364,8 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcoustic
             // Eq. 13 / Algorithm 2: x = D(t_N x_N, t_N); for more steps re-noise to each t_i with √(t_i² − ε²) z,
             // z ~ N(μ, I), and denoise again.
             int steps = Math.Max(1, _options.NumFlowSteps);
-            var levels = NoiseLevels(steps + 1).Reverse().ToArray();   // σ_max ... σ_min
+            // Enumerable.Reverse explicitly: on net471 an array's .Reverse() binds to the in-place MemoryExtensions.Reverse.
+            var levels = Enumerable.Reverse(NoiseLevels(steps + 1)).ToArray();   // σ_max ... σ_min
             x = Denoise(_denoiser!, Engine.TensorMultiplyScalar(NoiseAroundMu(), NumOps.FromDouble(_options.SigmaMax)), _options.SigmaMax, mu, mask);
             for (int i = 1; i < steps; i++)
             {

@@ -125,6 +125,6 @@ public class AdaSpeech2PaperTests
         var mel = model.Synthesize("hello");
         Assert.Equal(2, mel.Rank);
         Assert.Equal(MelBins, mel.Shape[1]);
-        for (int i = 0; i < mel.Length; i++) Assert.True(double.IsFinite(mel[i]), $"mel[{i}] = {mel[i]}");
+        for (int i = 0; i < mel.Length; i++) Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(mel[i]), $"mel[{i}] = {mel[i]}");
     }
 }

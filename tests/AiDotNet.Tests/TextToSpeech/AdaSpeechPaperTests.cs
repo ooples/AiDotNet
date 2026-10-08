@@ -194,7 +194,7 @@ public class AdaSpeechPaperTests
         var first = model.Synthesize("hello");
         Assert.Equal(2, first.Rank);
         Assert.Equal(MelBins, first.Shape[1]);
-        for (int i = 0; i < first.Length; i++) Assert.True(double.IsFinite(first[i]), $"mel[{i}] = {first[i]}");
+        for (int i = 0; i < first.Length; i++) Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(first[i]), $"mel[{i}] = {first[i]}");
 
         model.Voice = new TtsVoice<double> { SpeakerId = 2, Reference = Mel(12, 0.0) };
         var otherSpeaker = model.Synthesize("hello");
