@@ -74,8 +74,17 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     // Static-enrichment GRN.
     private GatedResidualNetwork<T> _enrichmentGrn;
 
-    // Interpretable multi-head attention: Q/K/V + output projection.
-    private Tensor<T> _queryWeight, _keyWeight, _valueWeight, _attnOutputWeight; // each [hiddenSize, hiddenSize]
+    // Interpretable multi-head attention: Q/K/V + output projection, each [hiddenSize, hiddenSize]. One attribute per
+    // declaration: these four (and the GRNs, parameter sources themselves) were missing from ParameterCount,
+    // GetParameters and SetParameters, so a clone or a saved model silently dropped most of the trained weights.
+    [AiDotNet.Attributes.TrainableParameter]
+    private Tensor<T> _queryWeight;
+    [AiDotNet.Attributes.TrainableParameter]
+    private Tensor<T> _keyWeight;
+    [AiDotNet.Attributes.TrainableParameter]
+    private Tensor<T> _valueWeight;
+    [AiDotNet.Attributes.TrainableParameter]
+    private Tensor<T> _attnOutputWeight;
 
     // Post-attention gated skip connection.
     private GatedResidualNetwork<T> _postAttentionGrn;
