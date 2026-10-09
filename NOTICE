@@ -118,6 +118,27 @@ NRL letter-to-sound rules (public domain, US Government work)
   Laboratory, 1976. The rules are embedded as
   src/TextToSpeech/FrontEnd/Resources/nrl_rules.tsv.
 
+jieba 0.42.1 (MIT, Copyright (c) 2013 Sun Junyi)
+  https://github.com/fxsjy/jieba
+  Its dictionary and HMM tables are embedded as the Mandarin G2P's word
+  segmentation data (src/TextToSpeech/FrontEnd/Resources/jieba_dict.tsv.gz and
+  jieba_hmm.json.gz); MandarinG2P ports its default segmentation.
+
+pypinyin 0.55.0 (MIT, Copyright (c) 2016 mozillazg, 闲耘)
+  https://github.com/mozillazg/python-pinyin
+  Its character and phrase readings, in its BOPOMOFO style, are embedded as
+  src/TextToSpeech/FrontEnd/Resources/pypinyin_chars.tsv.gz and
+  pypinyin_phrases.tsv.gz; MandarinG2P ports its phrase segmentation.
+
+cn2an 0.5.24 (MIT, Copyright (c) 2017 Ailln)
+  https://github.com/Ailln/cn2an
+  MandarinG2P ports its an2cn numeral conversion.
+
+VALL-E X front end (MIT, Copyright (c) 2023 Songting)
+  https://github.com/Plachtaa/VALL-E-X
+  MandarinG2P ports utils/g2p/mandarin.py's bopomofo-to-IPA and Latin-to-bopomofo
+  tables and rewrite rules.
+
 NATSpeech utils/audio/cwt.py (MIT, Copyright (c) 2022 Yi Ren)
   https://github.com/NATSpeech/NATSpeech
   Vendored unchanged in tools/reference-data/natspeech_cwt.py (a test-data

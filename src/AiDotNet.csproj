@@ -369,6 +369,10 @@
 	<ItemGroup>
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\cmudict.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.cmudict.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\nrl_rules.tsv" LogicalName="AiDotNet.TextToSpeech.FrontEnd.nrl_rules.tsv" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\jieba_dict.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.jieba_dict.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\jieba_hmm.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.jieba_hmm.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\pypinyin_chars.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.pypinyin_chars.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\pypinyin_phrases.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.pypinyin_phrases.tsv.gz" />
 	</ItemGroup>
 
 </Project>
