@@ -34,18 +34,23 @@ permissions:
 
 jobs:
   heavy-timeout:
-    name: Heavy Timeout Models (${{ matrix.slice }}/10)
+    name: Heavy Timeout Models (${{ matrix.slice }}/30)
     runs-on: ubuntu-latest
     timeout-minutes: 350   # generous budget; these models are the slow ones by definition
     # SLICED ACROSS PARALLEL JOBS (#2087). With one class per process the lane takes about 11 minutes per class,
     # and 220 classes do not fit one 350-minute job: the first capped run finished 8 before the timeout cancelled it.
-    # Each slice runs every 10th class of the same sorted discovery, so the slices cover every class exactly once:
-    # about 22 classes, roughly four hours. Ten, not more, because the account runs at most 20 jobs at once and this
-    # lane must not starve pull-request CI for the night.
+    # Each slice runs every 30th class of the same sorted discovery, so the slices cover every class exactly once:
+    # about 7 classes each. HeavyTimeout tests get a 4x per-test budget below (a paper-scale training invariant needs
+    # ~230 s on this runner), so a heavy class can take ~35 min, and the loop reserves the full 60-min chunk cap before
+    # starting one: with ~11 classes a slice could hit its 320-min budget and record the rest "not run". Seven classes
+    # fit even when all of them run near the cap's typical ~35 min. Total runner time is unchanged by the split;
+    # max-parallel keeps ten jobs at once, because the account runs at most 20 and this lane must not starve PR CI.
     strategy:
       fail-fast: false
+      max-parallel: 10
       matrix:
-        slice: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        slice: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+                20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -110,6 +115,10 @@ jobs:
           AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
           HEAVY_CHUNK_SIZE: ${{ inputs.chunk_size }}
           HEAVY_SLICE: ${{ matrix.slice }}
+          # Lengthens only HeavyTimeout tests' [Fact(Timeout)] (the PR gate's 120 s budget) by this factor; see
+          # tests/AiDotNet.Tests/TestInfrastructure/HeavyTimeoutScalingExecutor.cs. Assertions are unchanged, and a real
+          # hang is still stopped by --blame-hang (10 min) and the per-chunk cap below.
+          AIDOTNET_HEAVY_TEST_TIMEOUT_SCALE: '4'
         run: |
           # Exits 1 when the runner config is missing, which is the same fail-fast this lane had: these
           # models are flagged heavy precisely because they OOM without serialization, so falling
@@ -207,7 +216,7 @@ jobs:
             exit 1
           }
 
-          $sliceCount = 10
+          $sliceCount = 30
           $slice = [int]$env:HEAVY_SLICE
           $classes = @(for ($c = 0; $c -lt $classes.Count; $c++) { if ($c % $sliceCount -eq $slice) { $classes[$c] } })
           Write-Host "--- slice $($slice) of $($sliceCount): $($classes.Count) class(es) ---"
@@ -231,7 +240,7 @@ jobs:
           # the slice with no summary. Each chunk now runs under `timeout`, with --blame-hang naming a test that stops
           # progressing, and a chunk that would not finish inside the job budget is reported as not run, so every slice
           # ends with a row for every class.
-          $chunkCapMinutes = 20
+          $chunkCapMinutes = 60
           $budgetMinutes   = 320
           $laneStarted     = Get-Date
           foreach ($chunk in $chunks) {
