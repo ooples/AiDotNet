@@ -81,6 +81,8 @@ namespace AiDotNet.Audio.Enhancement;
 [ModelTask(ModelTask.Denoising)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[PreprocessesInput("ConvTasNetNetwork.Forward reshapes the caller's [batch, samples] mixture to a single-channel [batch, 1, samples] waveform before the encoder's 1-D convolution.")]
+[StackInputLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time)]
 [ResearchPaper("Conv-TasNet: Surpassing Ideal Time-Frequency Magnitude Masking for Speech Separation", "https://arxiv.org/abs/1809.07454", Year = 2019, Authors = "Yi Luo, Nima Mesgarani")]
 [PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-3, MaxGradientNorm = 5.0,
                 Schedule = LearningRateSchedulerType.ReduceOnPlateau, DecayRate = 0.5,
