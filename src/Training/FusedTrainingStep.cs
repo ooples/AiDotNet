@@ -28,14 +28,6 @@ namespace AiDotNet.Training;
 /// <typeparam name="T">Numeric type (float and double fuse; other types fall back to eager).</typeparam>
 internal static class FusedTrainingStep<T>
 {
-    private sealed class OwnerState
-    {
-        public OwnerState(object owner) => Session = new FusedTrainingSession<T>(owner);
-        public FusedTrainingSession<T> Session { get; }
-    }
-
-    private static readonly ConditionalWeakTable<object, OwnerState> States = new();
-
     /// <summary>
     /// Asks the optimizer itself how it maps onto the fused kernel (<see cref="Optimizers.Fused.IFusedOptimizerSpec"/>).
     /// False - eager fallback - for an optimizer that has no fused equivalent or declines in its current configuration.
@@ -85,9 +77,9 @@ internal static class FusedTrainingStep<T>
         if (key is null)
             return false;
 
-        var state = States.GetValue(key, k => new OwnerState(k));
-
-        var outcome = state.Session.TryStep(new FusedTrainingStepRequest<T>
+        // The owner's stepper: the same session, optimizer-identity reset and committed-plan rule every base class
+        // uses (a new optimizer instance starts from fresh moments; a committed plan that cannot continue throws).
+        return TapeTrainingStepper<T>.ForOwner(key).TryFusedStep(new FusedTrainingStepRequest<T>
         {
             Layers = layers,
             Input = input,
@@ -99,16 +91,40 @@ internal static class FusedTrainingStep<T>
             ModelGradientClip = maxGradNorm,
             OnGradients = onGradients,
         }, out lossValue);
+    }
 
-        switch (outcome)
+    /// <summary>
+    /// One complete training step for <paramref name="owner"/>: the fused compiled plan when it applies, otherwise the
+    /// shared eager tape step with the same optimizer, clip and gradient publication. Returns the step's loss.
+    /// </summary>
+    /// <remarks>Use this instead of <see cref="TryStep"/> followed by a hand-written eager fallback.</remarks>
+    public static T Step(
+        object owner,
+        IReadOnlyList<ITrainableLayer<T>> layers,
+        Tensor<T> input,
+        Tensor<T> target,
+        Func<Tensor<T>, Tensor<T>> forward,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
+        double maxGradNorm = 0.0,
+        IReadOnlyList<Tensor<T>>? extraTensors = null,
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients = null,
+        string? graphBreakReason = null)
+    {
+        if (owner is null) throw new ArgumentNullException(nameof(owner));
+        if (optimizer is null) throw new ArgumentNullException(nameof(optimizer));
+        return TapeTrainingStepper<T>.ForOwner(owner).Step(new FusedTrainingStepRequest<T>
         {
-            case FusedStepOutcome.Stepped:
-                return true;
-            case FusedStepOutcome.CommittedFailure:
-                state.Session.DropAfterCommittedFailure();
-                return false;
-            default:
-                return false;
-        }
+            Layers = layers ?? Array.Empty<ITrainableLayer<T>>(),
+            Input = input,
+            Target = target,
+            Forward = forward,
+            ComputeLoss = computeLoss,
+            Optimizer = optimizer,
+            ExtraParameters = extraTensors,
+            ModelGradientClip = maxGradNorm,
+            OnGradients = onGradients,
+            GraphBreakReason = graphBreakReason,
+        });
     }
 }

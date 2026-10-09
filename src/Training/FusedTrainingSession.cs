@@ -54,6 +54,31 @@ internal sealed class FusedTrainingStepRequest<T>
 
     /// <summary>Receives the step's gradients while their buffers are valid (the model's public gradient surface).</summary>
     public Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? OnGradients { get; init; }
+
+    /// <summary>
+    /// Why this step's forward cannot be compiled once and replayed, or null when it can. A non-null reason keeps the
+    /// step on the eager tape: the same graph break <c>torch.compile</c> takes for a dynamic region.
+    /// </summary>
+    /// <remarks>
+    /// A compiled plan replays the graph its first step traced, refreshing only the input, the target, the
+    /// parameters and the per-step random tensors declared through <see cref="CompiledStepRandom{T}"/>. A forward
+    /// that reads a tensor's values on the host (a data-dependent branch, an index computed from the batch, a matching
+    /// step in a detection loss) or that captures other per-step state would replay the first step's decisions
+    /// forever. Such a model, or its base class, sets this reason instead of training on a frozen objective.
+    /// </remarks>
+    public string? GraphBreakReason { get; init; }
+
+    /// <summary>
+    /// Check, on the plan's first replay with new data, that the compiled plan computes the same loss as the eager
+    /// forward on that data; on disagreement the replay's update is undone and the model stays on the eager tape.
+    /// </summary>
+    /// <remarks>
+    /// For base classes whose models' training forwards were never audited for replay (a host-side read of a tensor
+    /// value is frozen into the trace; see <see cref="GraphBreakReason"/>). The check costs one extra no-grad forward
+    /// and one copy of the trained tensors, once per plan. A forward with its own randomness (dropout) disagrees by
+    /// construction and conservatively stays eager.
+    /// </remarks>
+    public bool VerifyReplayAgreement { get; init; }
 }
 
 /// <summary>
@@ -89,6 +114,11 @@ internal sealed class FusedTrainingSession<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _lastOptimizer;
     private bool _persistenceVerified;
     private int _stepsSincePersistenceCheck;
+    private bool _replayAgreementVerified;
+
+    // Relative tolerance for the replay-agreement check: fusion reassociates sums, so float losses differ in the
+    // last few digits; a plan replaying stale host-side decisions differs at the scale of the loss itself.
+    private const double ReplayAgreementTolerance = 1e-3;
 
     /// <summary>Creates the fused lifecycle for one model.</summary>
     /// <param name="owner">The model; keys its compiled plan and optimizer moments.</param>
@@ -124,6 +154,7 @@ internal sealed class FusedTrainingSession<T>
         IsCommitted = false;
         _persistenceVerified = false;
         _stepsSincePersistenceCheck = 0;
+        _replayAgreementVerified = false;
     }
 
     /// <summary>Re-enables the fused path after an explicit model reset (new layers, new optimizer).</summary>
@@ -133,6 +164,7 @@ internal sealed class FusedTrainingSession<T>
         IsCommitted = false;
         _persistenceVerified = false;
         _stepsSincePersistenceCheck = 0;
+        _replayAgreementVerified = false;
         LastMissReason = null;
         LastFallbackException = null;
     }
@@ -155,6 +187,15 @@ internal sealed class FusedTrainingSession<T>
             if (_lastOptimizer is not null)
                 Reset(stickyDisable: false);
             _lastOptimizer = request.Optimizer;
+        }
+
+        if (request.GraphBreakReason is { } graphBreak)
+        {
+            if (!IsCommitted)
+                return Decline("graph break: " + graphBreak);
+            // The plan holds the optimizer's moments; an eager step now would restart them silently.
+            LastFallbackException = new InvalidOperationException("graph break after fused steps ran: " + graphBreak);
+            return FusedStepOutcome.CommittedFailure;
         }
 
         if (IsDisabled)
@@ -212,6 +253,20 @@ internal sealed class FusedTrainingSession<T>
             request.OnGradients?.Invoke(gradients);
         }
 
+        // The first replay with new data (the step after the trace) is checked against the eager forward when the
+        // caller asks: the eager loss on this batch, and a copy of the trained tensors to undo a disagreeing update.
+        bool checkReplay = request.VerifyReplayAgreement && IsCommitted && !_replayAgreementVerified;
+        double eagerLoss = 0.0;
+        (Tensor<T> Live, Tensor<T> Saved)[]? snapshot = null;
+        if (checkReplay)
+        {
+            using var noGrad = new NoGradScope<T>();
+            using var noDraws = CompiledStepRandom<T>.SuppressDraws();
+            var eager = request.ComputeLoss(request.Forward(request.Input), request.Target);
+            eagerLoss = eager.Length > 0 ? NumOps.ToDouble(eager[0]) : 0.0;
+            snapshot = SnapshotTrainedTensors(request);
+        }
+
         // Each step's transient activations are reclaimed when it returns, the way PyTorch's caching allocator
         // returns an iteration's blocks; the plan's moments and persistent input/target are not arena-allocated
         // (#1624 / #1640). Disposed before result handling so a fallback starts from a clean ring.
@@ -258,6 +313,26 @@ internal sealed class FusedTrainingSession<T>
             return Decline("compiled plan declined the step ("
                 + (LastFallbackException is null ? "no exception" : LastFallbackException.GetType().Name + ": " + LastFallbackException.Message)
                 + ")");
+        }
+
+        if (checkReplay && snapshot is not null)
+        {
+            double replayLoss = NumOps.ToDouble(stepLoss);
+            double scale = Math.Max(1.0, Math.Max(Math.Abs(eagerLoss), Math.Abs(replayLoss)));
+            bool agree = (double.IsNaN(eagerLoss) && double.IsNaN(replayLoss))
+                || Math.Abs(eagerLoss - replayLoss) <= ReplayAgreementTolerance * scale;
+            if (!agree)
+            {
+                RestoreTrainedTensors(snapshot);
+                string reason = "the compiled plan's loss on new data (" + replayLoss.ToString("G6")
+                    + ") disagrees with the eager forward (" + eagerLoss.ToString("G6") + "): the training forward "
+                    + "depends on more than its input tensor (a host-side read or captured per-step state), so the "
+                    + "replay's update was undone and training continues on the eager tape";
+                Warn(reason);
+                Reset(stickyDisable: true);
+                return Decline(reason);
+            }
+            _replayAgreementVerified = true;
         }
 
         if (verifyPersistence)
@@ -407,6 +482,33 @@ internal sealed class FusedTrainingSession<T>
         }
         // NaN counts as non-zero: the gradient reached the parameters (as non-finite values the plan's guard handles).
         return total is not null && NumOps.ToDouble(total[0]) != 0.0;
+    }
+
+    private static (Tensor<T> Live, Tensor<T> Saved)[] SnapshotTrainedTensors(FusedTrainingStepRequest<T> request)
+    {
+        var engine = AiDotNetEngine.Current;
+        var trained = request.Selection is not null
+            ? request.Selection
+            : EnumerateLiveParameters(request).Distinct(TensorReferenceComparer<Tensor<T>>.Instance).ToList();
+        var saved = new List<(Tensor<T>, Tensor<T>)>(trained.Count);
+        foreach (var parameter in trained)
+        {
+            if (parameter is null || parameter.Length == 0 || parameter is SparseTensor<T>) continue;
+            saved.Add((parameter, engine.TensorMultiplyScalar(parameter, NumOps.One)));
+        }
+        return saved.ToArray();
+    }
+
+    private static void RestoreTrainedTensors((Tensor<T> Live, Tensor<T> Saved)[] snapshot)
+    {
+        var engine = AiDotNetEngine.Current;
+        using var noGrad = new NoGradScope<T>();
+        foreach (var (live, saved) in snapshot)
+        {
+            engine.TensorCopy(saved, live);
+            live.IncrementVersion();
+            engine.InvalidatePersistentTensor(live);
+        }
     }
 
     private static IEnumerable<Tensor<T>> EnumerateLiveParameters(FusedTrainingStepRequest<T> request)

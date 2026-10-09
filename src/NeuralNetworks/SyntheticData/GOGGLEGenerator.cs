@@ -587,7 +587,14 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     /// </summary>
     private Tensor<T> ReparameterizeTape(Tensor<T> mean, Tensor<T> logVar)
     {
-        var eps = new Tensor<T>(mean._shape);
+        // A per-step draw: the fused compiled plan redraws epsilon on every replay instead of reusing the traced one.
+        var eps = AiDotNet.Training.CompiledStepRandom<T>.Draw(mean._shape, FillStandardNormal);
+        var std = Engine.TensorExp(Engine.TensorMultiplyScalar(logVar, NumOps.FromDouble(0.5)));
+        return Engine.TensorAdd(mean, Engine.TensorMultiply(std, eps));
+    }
+
+    private void FillStandardNormal(Tensor<T> eps)
+    {
         for (int i = 0; i < eps.Length; i++)
         {
             double u1 = 1.0 - _random.NextDouble();
@@ -595,8 +602,6 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
             double n = Math.Sqrt(-2.0 * Math.Log(Math.Max(u1, 1e-10))) * Math.Cos(2.0 * Math.PI * u2);
             eps[i] = NumOps.FromDouble(n);
         }
-        var std = Engine.TensorExp(Engine.TensorMultiplyScalar(logVar, NumOps.FromDouble(0.5)));
-        return Engine.TensorAdd(mean, Engine.TensorMultiply(std, eps));
     }
 
     private Tensor<T> DecoderForwardTape(Tensor<T> z)

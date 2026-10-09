@@ -714,50 +714,6 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
     }
 
     /// <summary>
-    /// Updates critic parameters using the configured optimizer with pre-computed gradients.
-    /// </summary>
-    /// <param name="gradients">The pre-computed combined gradients.</param>
-    private void UpdateCriticWithOptimizer(Vector<T> gradients)
-    {
-        var parameters = Critic.GetParameters();
-
-        // Gradient clipping using vectorized operations
-        var gradientNorm = gradients.L2Norm();
-        var clipThreshold = NumOps.FromDouble(5.0);
-
-        if (NumOps.GreaterThan(gradientNorm, clipThreshold))
-        {
-            var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            gradients = Engine.Multiply(gradients, scaleFactor);
-        }
-
-        var updatedParameters = _criticOptimizer.UpdateParameters(parameters, gradients);
-        Critic.UpdateParameters(updatedParameters);
-    }
-
-    /// <summary>
-    /// Updates generator parameters using the configured optimizer.
-    /// </summary>
-    private void UpdateGeneratorWithOptimizer()
-    {
-        var parameters = Generator.GetParameters();
-        var gradients = Generator.GetParameterGradients();
-
-        // Gradient clipping using vectorized operations
-        var gradientNorm = gradients.L2Norm();
-        var clipThreshold = NumOps.FromDouble(5.0);
-
-        if (NumOps.GreaterThan(gradientNorm, clipThreshold))
-        {
-            var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            gradients = Engine.Multiply(gradients, scaleFactor);
-        }
-
-        var updatedParameters = _generatorOptimizer.UpdateParameters(parameters, gradients);
-        Generator.UpdateParameters(updatedParameters);
-    }
-
-    /// <summary>
     /// Generates synthetic images using the generator.
     /// </summary>
     /// <param name="noise">The noise tensor to generate images from.</param>

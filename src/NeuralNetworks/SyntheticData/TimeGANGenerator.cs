@@ -595,44 +595,15 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
                 var m = Engine.ReduceMean(s, axes, keepDims: false);
                 return Engine.TensorMultiplyScalar(m, NumOps.FromDouble(_options.ReconstructionWeight));
             }
-            if (AiDotNet.Training.FusedTrainingStep<T>.TryStep(
-                    trainableEmbRec, xBatch, xBatch,
-                    forward: Fwd, computeLoss: Loss,
-                    optimizer: _embedderOptimizer,
-                    out T _, owner: this))
-            {
-                return;
-            }
+            // One step through the shared training step: the fused plan when it applies, otherwise the shared eager
+            // tape step on the same objective.
+            FusedTrainingStep<T>.Step(
+                this, trainableEmbRec, xBatch, xBatch,
+                forward: Fwd,
+                computeLoss: Loss,
+                optimizer: _embedderOptimizer,
+                extraTensors: paramsList);
         }
-
-        using var tape = new GradientTape<T>();
-
-        var hBatch = EmbedderForwardBatched(xBatch, isTraining: true);
-        var rBatch = RecoveryForwardBatched(hBatch, isTraining: true);
-
-        // L_R = mean((x - r)^2) * reconstruction_weight
-        var diff = Engine.TensorSubtract(rBatch, xBatch);
-        var sq = Engine.TensorMultiply(diff, diff);
-        var allAxes = Enumerable.Range(0, sq.Shape.Length).ToArray();
-        var meanSq = Engine.ReduceMean(sq, allAxes, keepDims: false);
-        var lossTensor = Engine.TensorMultiplyScalar(meanSq, NumOps.FromDouble(_options.ReconstructionWeight));
-
-        var grads = tape.ComputeGradients(lossTensor, paramsList);
-        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-
-        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) =>
-            RecoveryForwardBatched(EmbedderForwardBatched(inp, true), true);
-        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> target) => Engine.TensorMultiplyScalar(
-            Engine.ReduceMean(
-                Engine.TensorMultiply(Engine.TensorSubtract(pred, target), Engine.TensorSubtract(pred, target)),
-                allAxes, keepDims: false),
-            NumOps.FromDouble(_options.ReconstructionWeight));
-
-        var context = new TapeStepContext<T>(
-            paramsList, grads, lossValue,
-            xBatch, xBatch, ComputeForward, RecomputeLoss,
-            parameterBuffer: null);
-        _embedderOptimizer.Step(context);
     }
 
     /// <summary>
@@ -668,37 +639,15 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
                 var axes = Enumerable.Range(0, s.Shape.Length).ToArray();
                 return Engine.ReduceMean(s, axes, keepDims: false);
             }
-            if (AiDotNet.Training.FusedTrainingStep<T>.TryStep(
-                    trainableSup, ht, htNext,
-                    forward: Fwd, computeLoss: Loss,
-                    optimizer: _supervisorOptimizer,
-                    out T _, owner: this))
-            {
-                return;
-            }
+            // One step through the shared training step: the fused plan when it applies, otherwise the shared eager
+            // tape step on the same objective.
+            FusedTrainingStep<T>.Step(
+                this, trainableSup, ht, htNext,
+                forward: Fwd,
+                computeLoss: Loss,
+                optimizer: _supervisorOptimizer,
+                extraTensors: paramsList);
         }
-
-        using var tape = new GradientTape<T>();
-
-        var htPred = SupervisorForwardBatched(ht, isTraining: true);
-        var diff = Engine.TensorSubtract(htPred, htNext);
-        var sq = Engine.TensorMultiply(diff, diff);
-        var allAxes = Enumerable.Range(0, sq.Shape.Length).ToArray();
-        var lossTensor = Engine.ReduceMean(sq, allAxes, keepDims: false);
-
-        var grads = tape.ComputeGradients(lossTensor, paramsList);
-        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-
-        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => SupervisorForwardBatched(inp, true);
-        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> target) => Engine.ReduceMean(
-            Engine.TensorMultiply(Engine.TensorSubtract(pred, target), Engine.TensorSubtract(pred, target)),
-            allAxes, keepDims: false);
-
-        var context = new TapeStepContext<T>(
-            paramsList, grads, lossValue,
-            ht, htNext, ComputeForward, RecomputeLoss,
-            parameterBuffer: null);
-        _supervisorOptimizer.Step(context);
     }
 
     /// <summary>
@@ -722,47 +671,25 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         var fakeEmb = GeneratorForwardBatched(noise, isTraining: false);
         var fakeSup = SupervisorForwardBatched(fakeEmb, isTraining: false);
 
-        using var tape = new GradientTape<T>();
-
         var discLayers = new List<ILayer<T>>();
         discLayers.AddRange(_discriminatorForwardLayers);
         discLayers.AddRange(_discriminatorBackwardLayers);
         if (_discriminatorOutput is not null) discLayers.Add(_discriminatorOutput);
         var paramsList = TapeTrainingStep<T>.CollectParameters(discLayers);
 
-        var realScores = DiscriminatorForwardBatched(realEmb, isTraining: true);
-        var fakeScores = DiscriminatorForwardBatched(fakeSup, isTraining: true);
-
-        var allAxes = Enumerable.Range(0, realScores.Shape.Length).ToArray();
-        var lossReal = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(realScores), allAxes, keepDims: false));
-        var lossFake = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(Engine.TensorNegate(fakeScores)), allAxes, keepDims: false));
-        var lossTensor = Engine.TensorAdd(lossReal, lossFake);
-
-        var grads = tape.ComputeGradients(lossTensor, paramsList);
-        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-
-        // Replay-correct closure for the critic: lossTensor was
-        // (lossReal + lossFake), so RecomputeLoss must replay BOTH BCE
-        // terms to stay tied to the objective that produced `grads`.
-        // ComputeForward receives the real-embedded input and returns the
-        // real discriminator scores; RecomputeLoss captures fakeSup so it
-        // can re-run the discriminator on the fake side too, then build
-        // the same -log σ(realScore) + -log σ(-fakeScore) sum.
-        var capturedFakeSup = fakeSup;
-        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(inp, true);
-        Tensor<T> RecomputeLoss(Tensor<T> predReal, Tensor<T> _)
+        // Non-saturating discriminator loss -log sigma(D(real)) - log(1 - sigma(D(fake))) on the shared eager tape
+        // step; the real and fake latents were produced outside the step, so only the discriminator moves.
+        Tensor<T> DiscriminatorObjective()
         {
-            var predFake = DiscriminatorForwardBatched(capturedFakeSup, true);
-            var lossR = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(predReal), allAxes, keepDims: false));
-            var lossF = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(Engine.TensorNegate(predFake)), allAxes, keepDims: false));
-            return Engine.TensorAdd(lossR, lossF);
+            var realScores = DiscriminatorForwardBatched(realEmb, isTraining: true);
+            var fakeScores = DiscriminatorForwardBatched(fakeSup, isTraining: true);
+            var allAxes = Enumerable.Range(0, realScores.Shape.Length).ToArray();
+            var lossReal = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(realScores), allAxes, keepDims: false));
+            var lossFake = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(Engine.TensorNegate(fakeScores)), allAxes, keepDims: false));
+            return Engine.TensorAdd(lossReal, lossFake);
         }
 
-        var context = new TapeStepContext<T>(
-            paramsList, grads, lossValue,
-            realEmb, realEmb, ComputeForward, RecomputeLoss,
-            parameterBuffer: null);
-        _discriminatorOptimizer.Step(context);
+        Training.TapeTrainingStepper<T>.EagerObjectiveStep(paramsList, DiscriminatorObjective, _discriminatorOptimizer);
     }
 
     /// <summary>

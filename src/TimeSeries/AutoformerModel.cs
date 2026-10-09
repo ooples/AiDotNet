@@ -364,60 +364,25 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
                 int end = Math.Min(start + batchSize, shuffled.Count);
                 int b = end - start;
 
-                // Mini-batch gradient by accumulating each sample's gradient across SEPARATE
-                // tapes. Every sample runs its own small forward graph under its own tape which
-                // is disposed immediately after its backward — so peak memory stays at one
-                // forward, not the whole batch, and the auto-correlation graph (hundreds of
-                // small tensor nodes per forward) is not held B times over. The per-sample
-                // gradients are summed and averaged, then ONE Adam step is taken per batch (so
-                // Adam's moment estimates do not thrash the way a per-sample step would). This
-                // is the exact mini-batch gradient (mean over the batch); the accumulation
-                // arithmetic runs eagerly outside any tape.
-                var accum = new Dictionary<Tensor<T>, Tensor<T>>(
-                    Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-                double batchLossSum = 0.0;
-                for (int bi = 0; bi < b; bi++)
+                // Mini-batch gradient by accumulation: each sample runs its own small forward graph on its own tape
+                // (the shared TapeTrainingStepper accumulation step), so peak memory stays at one forward instead of
+                // the auto-correlation graph (hundreds of small tensor nodes per forward) held B times over. The
+                // per-sample gradients are summed and averaged and ONE Adam step is taken per batch, so Adam's moment
+                // estimates do not thrash the way a per-sample step would: the exact mini-batch mean gradient.
+                int batchStart = start;
+                Tensor<T> SampleObjective(int bi)
                 {
-                    int idx = shuffled[start + bi];
+                    int idx = shuffled[batchStart + bi];
                     var window = new Vector<T>(lookback);
                     for (int t = 0; t < lookback; t++) window[t] = yNorm[idx - lookback + t];
                     var targetData = new Vector<T>(horizon);
                     for (int h = 0; h < horizon; h++) targetData[h] = yNorm[idx + h];
                     var targetTensor = new Tensor<T>(new[] { horizon, 1 }, targetData);
-
-                    T sampleLoss;
-                    using (var tape = new Tensors.Engines.Autodiff.GradientTape<T>())
-                    {
-                        var pred = ForwardCore(window);
-                        var l = mseLoss.ComputeTapeLoss(pred, targetTensor);
-                        var sampleGrads = tape.ComputeGradients(l, sources: null);
-                        sampleLoss = l.Length > 0 ? l[0] : _numOps.Zero;
-
-                        // Tape disposal resets the arena. Read gradients before that reset and
-                        // retain owned accumulators, not scratch tensors recycled by the next sample.
-                        foreach (var param in allParams)
-                        {
-                            if (!sampleGrads.TryGetValue(param, out var g)) continue;
-                            accum.TryGetValue(param, out var acc);
-                            accum[param] = AccumulateGradient(acc, g);
-                        }
-                    }
-                    batchLossSum += Convert.ToDouble(sampleLoss);
+                    return mseLoss.ComputeTapeLoss(ForwardCore(window), targetTensor);
                 }
 
-                var grads = new Dictionary<Tensor<T>, Tensor<T>>(
-                    Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-                T invB = _numOps.FromDouble(1.0 / b);
-                foreach (var kv in accum)
-                    grads[kv.Key] = Engine.TensorMultiplyScalar(kv.Value, invB);
-
-                T lossValue = _numOps.FromDouble(batchLossSum / b);
-                Tensor<T> ComputeForward(Tensor<T> a, Tensor<T> t) => a;
-                Tensor<T> ComputeLoss(Tensor<T> p, Tensor<T> t) => mseLoss.ComputeTapeLoss(p, t);
-                var placeholder = new Tensor<T>(new[] { 1 });
-                var context = new Tensors.Engines.Autodiff.TapeStepContext<T>(
-                    allParams, grads, lossValue, placeholder, placeholder, ComputeForward, ComputeLoss, null);
-                optimizer.Step(context);
+                T lossValue = Training.TapeTrainingStepper<T>.EagerAccumulatedObjectiveStep(
+                    allParams, b, SampleObjective, optimizer);
 
                 epochLossSum += Convert.ToDouble(lossValue) * b;
                 epochCount += b;
