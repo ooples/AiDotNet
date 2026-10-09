@@ -1273,10 +1273,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // <double>. <float> halves per-step cost. (DocumentNNModelTestBase was made generic over T so this
         // float entry compiles as DocumentNNModelTestBase<float>.)
         "UDOP",
-        // VALL-E 2's codec-language-model memorization probe exceeded the 180-second gate at
-        // double precision. Apply the required precision-first timeout mitigation before
-        // considering iteration caps or any further public-options reduction.
-        "VALLE2",
         // Video-LISA's generated segmentation fixture exceeded both the 120-second
         // MoreData and 180-second memorization gates at double precision. Apply the
         // required precision-first timeout mitigation before considering iteration
@@ -10268,6 +10264,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "CodebookSize = 64, Filters = 4, Ratios = [8, 5, 4, 4, 4], Dimension = 8, ResidualKernelSizes = [3, 1], " +
                     "TargetBandwidthKbps = 0.16875 } })";
             }
+            else if (model.ClassName == "VALLE2" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
+            {
+                // VALL-E 2's paper model is VALL-E's Transformers with grouped codes, decoded by Vocos's EnCodec model;
+                // keep all of it (groups of 2, repetition-aware sampling, the Vocos decoder) at 16 wide, four codebooks
+                // (a Vocos bandwidth class) of 64 codes and a 2560-sample codec hop.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 1, outputSize: 1), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.VALLE2Options { HiddenDim = 16, NumHeads = 2, NumEncoderLayers = 1, " +
+                    "NumDecoderLayers = 1, FeedForwardDim = 32, TextTokens = 128, NumCodebooks = 4, CodebookSize = 64, " +
+                    "MaxCodesPerTextToken = 2, MaxCodePositions = 256, LearningRate = 3e-3, WarmupSteps = 0, DropoutRate = 0.0, " +
+                    "HopSize = 2560, DecoderDim = 16, DecoderIntermediateDim = 32, DecoderLayers = 1, " +
+                    "Codec = new AiDotNet.Audio.Generation.EnCodecOptions { SampleRate = 24000, NumQuantizers = 4, " +
+                    "CodebookSize = 64, Filters = 4, Ratios = [8, 5, 4, 4, 4], Dimension = 8, ResidualKernelSizes = [3, 1], " +
+                    "TargetBandwidthKbps = 0.225 } })";
+            }
             else if (model.ClassName == "Pheme" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
             {
@@ -15246,7 +15260,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 }
                 bool useCodecSmokeIterations =
                     model.ClassName is "Bark" or "BarkModel" or "FishSpeech" or "Llasa" or "MegaTTS3"
-                        or "VALLE2" or "XTTSv2Clone"
+                        or "XTTSv2Clone"
                         or "GLM4Voice" or "IndexTTS2" or "SeedTTS" or "SoundStorm";
                 sb.AppendLine(useCodecSmokeIterations
                     ? "    protected override int MoreDataShortIterations => 1;"
@@ -15254,7 +15268,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine(useCodecSmokeIterations
                     ? "    protected override int MoreDataLongIterations => 2;"
                     : "    protected override int MoreDataLongIterations => 10;");
-                if (model.ClassName is "Bark" or "BarkModel" or "Llasa" or "MegaTTS3" or "VALLE2"
+                if (model.ClassName is "Bark" or "BarkModel" or "Llasa" or "MegaTTS3"
                     or "GLM4Voice" or "IndexTTS2" or "SeedTTS" or "SoundStorm"
                     || IsValleCodecLMModel(model.ClassName))
                 {
@@ -15269,8 +15283,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // invariant and the cross-lingual codec-LM topology remains unchanged.
                     sb.AppendLine("    protected override int MemorizationTaskIterations => 15;");
                 }
-                if (model.ClassName == "VALLE2")
-                    sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
                 sb.AppendLine();
                 // The base ScaledInput_ShouldChangeOutput multiplies the input by 10 — meaningless for
                 // DISCRETE token IDs and it drives the indices past the embedding vocabulary
@@ -15462,7 +15474,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine("    protected override int[] InputShape => new[] { 8, 16 };");
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 16 };");
                 }
-                else if (model.ClassName is "Pheme" or "VALLE" or "VALLEX")
+                else if (model.ClassName is "Pheme" or "VALLE" or "VALLEX" or "VALLE2")
                 {
                     // Pheme and VALL-E read phoneme ids and train on codec tokens, one frame per target row (the TTS
                     // base synthesizes [16, codebooks] tokens from a [16, 1] target).
@@ -20949,7 +20961,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
         return className switch
         {
-            "VALLE2" => 16,
             "VALLEXClone" => 16,
             "IndexTTS" => 16,
             "IndexTTS2" => 80,
@@ -20993,7 +21004,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return className is "VALLE2" or "VALLEXClone";
+        return className is "VALLEXClone";
     }
 
     private static int CodecLMInputVocabSize(string className)
@@ -21015,7 +21026,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         return className switch
         {
             "VALLEXClone" => "AiDotNet.TextToSpeech.VoiceCloning.VALLEXCloneOptions",
-            "VALLE2" => "AiDotNet.TextToSpeech.CodecBased.VALLE2Options",
             _ => "AiDotNet.TextToSpeech.CodecBased.VALLEOptions",
         };
     }

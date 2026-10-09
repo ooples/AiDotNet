@@ -286,7 +286,8 @@ internal sealed class CenteredLogMel<T>
 /// <summary>
 /// A differentiable inverse STFT with <c>torch.istft</c>'s semantics (one-sided spectrum, periodic Hann window of the
 /// window length centred in the FFT frame, overlap-add normalized by the summed squared window, <c>center=True</c>
-/// trimming of n_fft/2 samples at each end).
+/// trimming of n_fft/2 samples at each end), or with Vocos's <c>padding="same"</c> trimming of (window − hop)/2 at each
+/// end, which gives frames · hop samples.
 /// </summary>
 internal sealed class InverseStft<T>
 {
@@ -298,9 +299,11 @@ internal sealed class InverseStft<T>
     private readonly Tensor<T> _cos;       // [bins, fft], windowed and scaled
     private readonly Tensor<T> _sin;       // [bins, fft]
     private readonly Tensor<T> _overlap;   // [fft, 1, 1, fft] identity for overlap-add
+    private readonly int? _samePad;
 
-    public InverseStft(IEngine engine, int fftSize, int hopSize, int windowSize)
+    public InverseStft(IEngine engine, int fftSize, int hopSize, int windowSize, bool samePadding = false)
     {
+        _samePad = samePadding ? (windowSize - hopSize) / 2 : null;
         _engine = engine;
         _fft = fftSize;
         _hop = hopSize;
@@ -325,8 +328,8 @@ internal sealed class InverseStft<T>
         for (int c = 0; c < fftSize; c++) _overlap[c, 0, 0, c] = NumOps.One;
     }
 
-    /// <summary>The waveform <c>[(frames − 1) · hop]</c> of a spectrum given by its magnitude and phase
-    /// <c>[1, bins, frames]</c>.</summary>
+    /// <summary>The waveform <c>[(frames − 1) · hop]</c> (<c>[frames · hop]</c> with "same" padding) of a spectrum given
+    /// by its magnitude and phase <c>[1, bins, frames]</c>.</summary>
     public Tensor<T> Forward(Tensor<T> magnitude, Tensor<T> phase)
     {
         int bins = magnitude.Shape[1], frames = magnitude.Shape[2];
@@ -340,7 +343,7 @@ internal sealed class InverseStft<T>
         var sums = new double[length];
         for (int f = 0; f < frames; f++)
             for (int n = 0; n < _fft; n++) sums[f * _hop + n] += _window[n] * _window[n];
-        int start = _fft / 2, outLength = (frames - 1) * _hop;
+        int start = _samePad ?? _fft / 2, outLength = _samePad is int pad ? length - 2 * pad : (frames - 1) * _hop;
         for (int i = 0; i < length; i++)
         {
             if (i >= start && i < start + outLength && sums[i] < 1e-11)

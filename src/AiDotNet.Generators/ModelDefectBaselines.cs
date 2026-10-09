@@ -300,7 +300,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.TextToSpeech.CodecBased.SPEARTTS<T>",
             "AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>",
             "AiDotNet.TextToSpeech.CodecBased.UniAudio<T>",
-            "AiDotNet.TextToSpeech.CodecBased.VALLE2<T>",
             "AiDotNet.TextToSpeech.CodecBased.Voicebox<T>",
             "AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>",
             "AiDotNet.TextToSpeech.CodecBased.Zonos<T>",

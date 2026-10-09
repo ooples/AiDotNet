@@ -48,6 +48,7 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
     private readonly int _wordSeparator;
 
     private VallECore<T>? _core;
+    private bool _networksBuilt;
     private readonly List<LayerBase<T>> _arLayers = new();
     private readonly List<LayerBase<T>> _narLayers = new();
     private AudioCodecLayer<T>? _codec;
@@ -162,7 +163,7 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
     public override int CodecTokenVocabulary => _options.CodebookSize;
 
     /// <summary>Whether the model was built with its paper layers (not caller-supplied ones).</summary>
-    protected bool HasPaperLayers => _core is not null;
+    protected bool HasPaperLayers => _networksBuilt;
 
     /// <inheritdoc />
     /// <remarks>The phoneme ids: the vocabulary, not the embedding table (whose rows can exceed it, as the reference's
@@ -192,11 +193,8 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
         var o = _options;
         if (o.NumEncoderLayers != o.NumDecoderLayers)
             throw new ArgumentException($"{GetType().Name}'s AR and NAR models have the same depth; set NumEncoderLayers = NumDecoderLayers.");
-        _core = new VallECore<T>(Engine, _arLayers, _narLayers, new VallEConfiguration(
-            TextTokens: o.TextTokens, AudioTokens: o.CodebookSize, Codebooks: o.NumCodebooks, ModelDim: o.HiddenDim,
-            Heads: o.NumHeads, Layers: o.NumDecoderLayers, FeedForwardDim: o.FeedForwardDim, Dropout: o.DropoutRate,
-            Languages: LanguageCount, LanguagePlacement: LanguagePlacement));
-        _core.InitializeLikePyTorch(AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Architecture.RandomSeed ?? o.SamplingSeed));
+        BuildNetworks(_arLayers, _narLayers, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Architecture.RandomSeed ?? o.SamplingSeed));
+        _networksBuilt = true;
 
         // The codec (pretrained, frozen) only encodes and decodes.
         var codecOptions = (EnCodecOptions)AiDotNet.Models.CloneEngine.CopyConfiguration(o.Codec);
@@ -217,6 +215,28 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
         AddEncoderDecoderLayers(_arLayers.Cast<ILayer<T>>().ToList(), Array.Empty<ILayer<T>>());
         ComponentLayers.AddRange(_narLayers);
         ComponentLayers.Add(_codec);
+        ComponentLayers.AddRange(DecoderLayers);
+    }
+
+    /// <summary>Builds the AR and NAR models into their layer lists (VALL-E's <see cref="VallECore{T}"/> by default).</summary>
+    private protected virtual void BuildNetworks(List<LayerBase<T>> arLayers, List<LayerBase<T>> narLayers, Random initialization)
+    {
+        var o = _options;
+        _core = new VallECore<T>(Engine, arLayers, narLayers, new VallEConfiguration(
+            TextTokens: o.TextTokens, AudioTokens: o.CodebookSize, Codebooks: o.NumCodebooks, ModelDim: o.HiddenDim,
+            Heads: o.NumHeads, Layers: o.NumDecoderLayers, FeedForwardDim: o.FeedForwardDim, Dropout: o.DropoutRate,
+            Languages: LanguageCount, LanguagePlacement: LanguagePlacement));
+        _core.InitializeLikePyTorch(initialization);
+    }
+
+    /// <summary>Layers of a decoder other than the codec's own (VALL-E 2's Vocos), frozen like the codec.</summary>
+    private protected virtual IEnumerable<LayerBase<T>> DecoderLayers => Array.Empty<LayerBase<T>>();
+
+    /// <summary>The waveform <c>[samples]</c> of codes <c>[codebooks, frames]</c> (EnCodec's decoder by default).</summary>
+    protected virtual Tensor<T> DecodeCodes(int[,] codes)
+    {
+        var audio = Codec.Decode(codes);
+        return audio.Reshape(new[] { audio.Length });
     }
 
     // ---------------------------------------------------------------- vocabulary and front end
@@ -460,8 +480,7 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
             var byCodebook = new int[codebooks, frames];
             for (int f = 0; f < frames; f++)
                 for (int q = 0; q < codebooks; q++) byCodebook[q, f] = codes[f, q];
-            var audio = Codec.Decode(byCodebook);
-            return audio.Reshape(new[] { audio.Length });
+            return DecodeCodes(byCodebook);
         }
         finally
         {
@@ -515,8 +534,7 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
         var codes = new int[tokens.Shape[1], tokens.Shape[0]];
         for (int f = 0; f < tokens.Shape[0]; f++)
             for (int q = 0; q < tokens.Shape[1]; q++) codes[q, f] = (int)Math.Round(NumOps.ToDouble(tokens[f, q]));
-        var audio = Codec.Decode(codes);
-        return audio.Reshape(new[] { audio.Length });
+        return DecodeCodes(codes);
     }
 
     // ---------------------------------------------------------------- pretrained weights
@@ -526,7 +544,7 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
     public void LoadReferenceWeights(string path)
     {
         var file = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        PaperCore.LoadTorchWeights((name, shape) =>
+        LoadNetworkWeights((name, shape) =>
         {
             if (!file.TryGetValue(name, out var tensor) && !file.TryGetValue("model." + name, out tensor))
                 throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
@@ -537,6 +555,9 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
             return tensor.ToVector().Select(v => (double)v).ToArray();
         });
     }
+
+    /// <summary>Loads the AR and NAR models from a reference state dictionary.</summary>
+    private protected virtual void LoadNetworkWeights(Func<string, int[], double[]> read) => PaperCore.LoadTorchWeights(read);
 
     // ---------------------------------------------------------------- housekeeping
 
