@@ -97,6 +97,6 @@ public class FlowMatchingInfillingPaperTests
         model.Voice = new TtsVoice<double> { Reference = reference, ReferenceTokens = tokens };
         var mel = model.Synthesize("hello");
         Assert.Equal(16, mel.Shape[0]);
-        for (int i = 0; i < mel.Length; i++) Assert.True(double.IsFinite(mel[i]));
+        for (int i = 0; i < mel.Length; i++) Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(mel[i]));
     }
 }

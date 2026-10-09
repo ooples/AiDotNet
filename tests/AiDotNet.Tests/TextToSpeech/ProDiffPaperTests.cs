@@ -96,7 +96,7 @@ public class ProDiffPaperTests
         Assert.Equal(teacherSample.ToVector().ToArray(), model.Synthesize("ab").ToVector().ToArray());
         Assert.Equal(2, teacherSample.Rank);
         Assert.Equal(MelBins, teacherSample.Shape[1]);
-        for (int i = 0; i < teacherSample.Length; i++) Assert.True(double.IsFinite(teacherSample[i]));
+        for (int i = 0; i < teacherSample.Length; i++) Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(teacherSample[i]));
 
         model.BeginDistillation();
         var studentSample = model.Synthesize("ab");

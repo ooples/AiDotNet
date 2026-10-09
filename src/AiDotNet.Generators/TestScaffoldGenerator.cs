@@ -7986,6 +7986,36 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputSize: 10, outputSize: 4), " +
                     "new AiDotNet.Models.Options.NBEATSModelOptions<double> { LearningRate = 1e-6 })";
             }
+            else if (model.ClassName == "TimeGrad" && model.TypeParameterCount == 1)
+            {
+                // TimeGrad (Rasul et al. 2021): production keeps the paper's defaults (2x40 LSTM, 8 residual
+                // blocks of 8 channels, N = 100 diffusion steps, 100 sample paths). Sampling runs
+                // horizon x N denoiser passes over every path, so the generated CPU fixture bounds the same
+                // architecture through the public options surface: a short context and horizon, 10 diffusion
+                // steps whose schedule still ends near pure noise (alphaBar_N ~ 0.07), and 4 sample paths.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 24, outputSize: 8), " +
+                    "new AiDotNet.Models.Options.TimeGradOptions<double> { ContextLength = 24, ForecastHorizon = 8, " +
+                    "HiddenDimension = 16, NumRnnLayers = 2, DropoutRate = 0.0, NumDiffusionSteps = 10, " +
+                    "BetaStart = 1e-4, BetaEnd = 0.5, NumSamples = 4, ResidualLayers = 2, ResidualChannels = 4, " +
+                    "DenoisingNetworkDim = 16, TimeEmbeddingDim = 8 })";
+            }
+            else if (model.ClassName == "DiffusionTS" && model.TypeParameterCount == 1)
+            {
+                // Diffusion-TS (Yuan & Qiao 2024): production keeps the reference configuration (d_model 64,
+                // 3 encoder / 2 decoder blocks, 500 cosine diffusion steps, 100 generated windows). Sampling
+                // runs one denoiser pass per diffusion step over every window, so the generated CPU fixture
+                // bounds the same architecture through the public options surface.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 16, outputSize: 8), " +
+                    "new AiDotNet.Models.Options.DiffusionTSOptions<double> { SequenceLength = 16, ForecastHorizon = 8, " +
+                    "NumFeatures = 1, HiddenDimension = 16, NumHeads = 2, NumEncoderLayers = 1, NumDecoderLayers = 1, " +
+                    "MlpHiddenTimes = 2, NumDiffusionSteps = 10, NumSamples = 2 })";
+            }
             else if (model.ClassName == "Hippo" && model.TypeParameterCount == 1)
             {
                 // HiPPO (Gu et al. 2020): the production defaults remain the official LSICell
@@ -15356,8 +15386,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // No tolerance is relaxed; only the measurement point moves past the hump, the
                     // same remedy E2TTS / SpeechT5 / AudioLM already use in this file.
                     bool naturalSpeechWarmup = model.ClassName == "NaturalSpeech";
-                    int ttsSmokeIterations = model.ClassName is "FastSpeech" or "FastSpeech2" or "AdaSpeech" or "AdaSpeech2" ? 1
-                                           : naturalSpeechWarmup ? 12 : 2;
+                    // FastSpeech2 (#2093) diverged once (9.66 -> 15.63) and a 1-step probe cannot see a trajectory.
+                    // Measured on a fixed (input, target) pair, seed 11: 11.88, 6.16, 6.10, 7.19, 5.50, then
+                    // 5.12 at step 10 and 1.30 at step 40. Twelve steps clear the step-4 bump with a wide margin.
+                    const int FastSpeechSmokeIterations = 1;
+                    const int PastWarmupTtsIterations = 12;
+                    const int DefaultTtsSmokeIterations = 2;
+                    const int E2TtsMemorizationIterations = 15;
+                    int ttsSmokeIterations = model.ClassName is "FastSpeech" or "AdaSpeech" or "AdaSpeech2" ? FastSpeechSmokeIterations
+                                           : model.ClassName == "FastSpeech2" || naturalSpeechWarmup
+                                               ? PastWarmupTtsIterations : DefaultTtsSmokeIterations;
                     sb.AppendLine($"    protected override int TrainingIterations => {ttsSmokeIterations};");
                     sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
                     sb.AppendLine($"    protected override int MoreDataLongIterations => {ttsSmokeIterations};");
@@ -15370,12 +15408,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // (reference nn.init.zeros_), so its untrained denoiser predicts a constant whatever the condition.
                     if (model.ClassName is "E2TTS" or "F5TTS" or "ProDiff")
                         sb.AppendLine("    protected override int InputSensitivityWarmUpSteps => 2;");
-                    int memorizationSteps = model.ClassName is "E2TTS" or "F5TTS" ? 15 : naturalSpeechWarmup ? 12
+                    int memorizationSteps = model.ClassName is "E2TTS" or "F5TTS" ? E2TtsMemorizationIterations : naturalSpeechWarmup ? PastWarmupTtsIterations
                         : model.ClassName is "AdaSpeech" or "AdaSpeech2" ? 4
                         // ForwardTacotron's and Non-Attentive Tacotron's objectives fall a fraction of a percent per step at
                         // the fixtures' constant 1e-3 (Non-Attentive Tacotron measured 0.8098 -> 0.8071 in one step); six
                         // steps clear the 1 % threshold, which is unchanged.
-                        : model.ClassName is "ForwardTacotron" or "NonAttentiveTacotron" ? 6 : 2;
+                        : model.ClassName is "ForwardTacotron" or "NonAttentiveTacotron" ? 6 : DefaultTtsSmokeIterations;
                     sb.AppendLine($"    protected override int MemorizationTaskIterations => {memorizationSteps};");
                     if (naturalSpeechWarmup)
                     {
@@ -15496,7 +15534,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         }
                         sb.AppendLine("        double loss1 = MeasureLoss(network, input1, target, target);");
                         sb.AppendLine("        double loss2 = MeasureLoss(network, input2, target, target);");
-                        sb.AppendLine("        Xunit.Assert.True(double.IsFinite(loss1) && double.IsFinite(loss2), $\"Objective not finite: {loss1}, {loss2}.\");");
+                        sb.AppendLine("        Xunit.Assert.True(global::AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(loss1) && global::AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(loss2), $\"Objective not finite: {loss1}, {loss2}.\");");
                         sb.AppendLine("        Xunit.Assert.True(System.Math.Abs(loss1 - loss2) > 1e-9 * System.Math.Max(1.0, System.Math.Abs(loss1)),");
                         sb.AppendLine("            $\"The training objective is identical for distinct inputs ({loss1:R}): the text never reaches the model.\");");
                         sb.AppendLine("    }");
@@ -21205,7 +21243,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // keep the InputShape context in lockstep with that reduced ContextLength.
             "Kronos" => 64,
             "YingLong" => 1024,
-            "TimeGrad" => 168,
+            // TimeGrad is built at CI scale (ContextLength = 24) by its constructor special-case.
+            "TimeGrad" => 24,
+            // DiffusionTS is built at CI scale (SequenceLength = 16) by its constructor special-case.
+            "DiffusionTS" => 16,
             "TFC" => 200,
             // NBEATSFinance uses NBEATSModelOptions.LookbackWindow = 10 by
             // default. NBEATSFinance.Forward validates input length against
@@ -21296,8 +21337,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // Generated HiPPO CI factory uses ForecastHorizon=8; production remains 96.
             "Hippo" => "8",
 
-            // TimeGrad: forecast horizon (diffusion output is denoised target).
-            "TimeGrad" => "24",
+            // TimeGrad: forecast horizon of the CI-scale fixture (the mean of the sampled paths).
+            "TimeGrad" => "8",
+
+            // DiffusionTS: [horizon, features] for the unbatched univariate CI-scale fixture.
+            "DiffusionTS" => "8, 1",
 
             // TimesNet (Wu et al. 2023 ICLR): output is [B, T, M] with M =
             // TimesNetOptions.NumFeatures default 7. After

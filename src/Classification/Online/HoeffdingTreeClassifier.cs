@@ -150,8 +150,8 @@ public partial class HoeffdingTreeClassifier<T> : ClassifierBase<T>, IOnlineClas
         if (_options.NumBins <= 1)
             throw new ArgumentOutOfRangeException(nameof(options), "NumBins must be > 1.");
 
-        _random = _options.RandomSeed.HasValue
-            ? RandomHelper.CreateSeededRandom(_options.RandomSeed.Value)
+        _random = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
         _knownClasses = new List<T>();
         _root = CreateLeaf(0);

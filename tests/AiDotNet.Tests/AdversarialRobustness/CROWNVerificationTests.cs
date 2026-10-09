@@ -456,7 +456,7 @@ public class CROWNVerificationTests
             NormType = "L2",
             UseTightBounds = true,
             BatchSize = 32,
-            RandomSeed = 42
+            Seed = 42
         };
         var crown = new CROWNVerification<double, Vector<double>, Vector<double>>(options);
 
@@ -473,7 +473,7 @@ public class CROWNVerificationTests
         Assert.Equal("L2", restoredOptions.NormType);
         Assert.True(restoredOptions.UseTightBounds);
         Assert.Equal(32, restoredOptions.BatchSize);
-        Assert.Equal(42, restoredOptions.RandomSeed);
+        Assert.Equal(42, restoredOptions.Seed);
         Assert.Equal("CROWN", restoredOptions.CertificationMethod);
     }
 
@@ -596,7 +596,7 @@ public class CROWNVerificationTests
         {
             NoiseSigma = 0.01,
             NumSamples = 50,
-            RandomSeed = 42
+            Seed = 42
         };
         var crown1 = new CROWNVerification<double, Vector<double>, Vector<double>>(options);
         var crown2 = new CROWNVerification<double, Vector<double>, Vector<double>>(options);

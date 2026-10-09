@@ -1280,7 +1280,7 @@ public class ClassifierSerializationRoundTripTests
     public async Task OnlineNaiveBayes_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(60, 3, separation: 5.0, seed: 42);
-        var options = new OnlineNaiveBayesOptions<double> { RandomSeed = 42 };
+        var options = new OnlineNaiveBayesOptions<double> { Seed = 42 };
         var classifier = new OnlineNaiveBayesClassifier<double>(options);
         classifier.Train(trainX, trainY);
 
@@ -1299,7 +1299,7 @@ public class ClassifierSerializationRoundTripTests
     public async Task OnlineNaiveBayes_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(60, 3, separation: 5.0, seed: 42);
-        var options = new OnlineNaiveBayesOptions<double> { RandomSeed = 42 };
+        var options = new OnlineNaiveBayesOptions<double> { Seed = 42 };
         var classifier = new OnlineNaiveBayesClassifier<double>(options);
         classifier.Train(trainX, trainY);
 
@@ -1316,7 +1316,7 @@ public class ClassifierSerializationRoundTripTests
     public async Task OnlineNaiveBayes_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(100, 3, separation: 5.0, seed: 42);
-        var options = new OnlineNaiveBayesOptions<double> { RandomSeed = 42 };
+        var options = new OnlineNaiveBayesOptions<double> { Seed = 42 };
         var classifier = new OnlineNaiveBayesClassifier<double>(options);
         classifier.Train(trainX, trainY);
 
@@ -1332,7 +1332,7 @@ public class ClassifierSerializationRoundTripTests
     public async Task HoeffdingTree_SerializeRoundTrip_PredictionsMatch()
     {
         var (trainX, trainY) = CreateBinaryData(200, 3, separation: 5.0, seed: 42);
-        var options = new HoeffdingTreeOptions<double> { GracePeriod = 20, MaxDepth = 5, RandomSeed = 42 };
+        var options = new HoeffdingTreeOptions<double> { GracePeriod = 20, MaxDepth = 5, Seed = 42 };
         var classifier = new HoeffdingTreeClassifier<double>(options);
         classifier.Train(trainX, trainY);
 
@@ -1351,7 +1351,7 @@ public class ClassifierSerializationRoundTripTests
     public async Task HoeffdingTree_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(200, 3, separation: 5.0, seed: 42);
-        var options = new HoeffdingTreeOptions<double> { GracePeriod = 20, MaxDepth = 5, RandomSeed = 42 };
+        var options = new HoeffdingTreeOptions<double> { GracePeriod = 20, MaxDepth = 5, Seed = 42 };
         var classifier = new HoeffdingTreeClassifier<double>(options);
         classifier.Train(trainX, trainY);
 
@@ -1373,7 +1373,7 @@ public class ClassifierSerializationRoundTripTests
         ShuffleData(trainX, trainY, seed: 42);
         var options = new HoeffdingTreeOptions<double>
         {
-            GracePeriod = 50, MaxDepth = 10, RandomSeed = 42,
+            GracePeriod = 50, MaxDepth = 10, Seed = 42,
             Delta = 0.1, TieThreshold = 0.1
         };
         var classifier = new HoeffdingTreeClassifier<double>(options);
@@ -1393,7 +1393,7 @@ public class ClassifierSerializationRoundTripTests
         var (trainX, trainY) = CreateBinaryData(200, 4, separation: 5.0, seed: 42);
         var options = new AdaptiveRandomForestOptions<double>
         {
-            NumTrees = 5, GracePeriod = 20, MaxTreeDepth = 5, RandomSeed = 42
+            NumTrees = 5, GracePeriod = 20, MaxTreeDepth = 5, Seed = 42
         };
         var classifier = new AdaptiveRandomForestClassifier<double>(options);
         classifier.Train(trainX, trainY);
@@ -1415,7 +1415,7 @@ public class ClassifierSerializationRoundTripTests
         var (trainX, trainY) = CreateBinaryData(200, 4, separation: 5.0, seed: 42);
         var options = new AdaptiveRandomForestOptions<double>
         {
-            NumTrees = 5, GracePeriod = 20, MaxTreeDepth = 5, RandomSeed = 42
+            NumTrees = 5, GracePeriod = 20, MaxTreeDepth = 5, Seed = 42
         };
         var classifier = new AdaptiveRandomForestClassifier<double>(options);
         classifier.Train(trainX, trainY);
@@ -1437,7 +1437,7 @@ public class ClassifierSerializationRoundTripTests
         ShuffleData(trainX, trainY, seed: 42);
         var options = new AdaptiveRandomForestOptions<double>
         {
-            NumTrees = 5, GracePeriod = 50, MaxTreeDepth = 10, RandomSeed = 42,
+            NumTrees = 5, GracePeriod = 50, MaxTreeDepth = 10, Seed = 42,
             HoeffdingDelta = 0.1, TieThreshold = 0.1
         };
         var classifier = new AdaptiveRandomForestClassifier<double>(options);
@@ -1460,7 +1460,7 @@ public class ClassifierSerializationRoundTripTests
     {
         // TimeSeriesForest wraps Matrix into Tensor internally via Train(Matrix, Vector)
         var (trainX, trainY) = CreateBinaryData(100, 20, separation: 5.0, seed: 42);
-        var options = new TimeSeriesForestOptions<double> { NumTrees = 5, MaxDepth = 5, RandomSeed = 42 };
+        var options = new TimeSeriesForestOptions<double> { NumTrees = 5, MaxDepth = 5, Seed = 42 };
         var classifier = new TimeSeriesForestClassifier<double>(options);
         classifier.Train(trainX, trainY);
 
@@ -1479,7 +1479,7 @@ public class ClassifierSerializationRoundTripTests
     public async Task TimeSeriesForest_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(100, 20, separation: 5.0, seed: 42);
-        var options = new TimeSeriesForestOptions<double> { NumTrees = 5, MaxDepth = 5, RandomSeed = 42 };
+        var options = new TimeSeriesForestOptions<double> { NumTrees = 5, MaxDepth = 5, Seed = 42 };
         var classifier = new TimeSeriesForestClassifier<double>(options);
         classifier.Train(trainX, trainY);
 
@@ -1496,7 +1496,7 @@ public class ClassifierSerializationRoundTripTests
     public async Task TimeSeriesForest_TrainAndPredict_AchievesReasonableAccuracy()
     {
         var (trainX, trainY) = CreateBinaryData(200, 20, separation: 5.0, seed: 42);
-        var options = new TimeSeriesForestOptions<double> { NumTrees = 10, MaxDepth = 5, RandomSeed = 42 };
+        var options = new TimeSeriesForestOptions<double> { NumTrees = 10, MaxDepth = 5, Seed = 42 };
         var classifier = new TimeSeriesForestClassifier<double>(options);
         classifier.Train(trainX, trainY);
 
@@ -1550,7 +1550,7 @@ public class ClassifierSerializationRoundTripTests
     {
         // MiniRocket uses 84 fixed kernels × dilations × biases — needs enough sequence length
         var (trainX, trainY) = CreateBinaryData(60, 20, separation: 5.0, seed: 42);
-        var options = new MiniRocketOptions<double> { RandomSeed = 42, NumBiasesPerDilation = 3 };
+        var options = new MiniRocketOptions<double> { Seed = 42, NumBiasesPerDilation = 3 };
         var classifier = new MiniRocketClassifier<double>(options);
         classifier.Train(trainX, trainY);
 
@@ -1569,7 +1569,7 @@ public class ClassifierSerializationRoundTripTests
     public async Task MiniRocket_DeepCopy_PreservesTrainedState()
     {
         var (trainX, trainY) = CreateBinaryData(60, 20, separation: 5.0, seed: 42);
-        var options = new MiniRocketOptions<double> { RandomSeed = 42, NumBiasesPerDilation = 3 };
+        var options = new MiniRocketOptions<double> { Seed = 42, NumBiasesPerDilation = 3 };
         var classifier = new MiniRocketClassifier<double>(options);
         classifier.Train(trainX, trainY);
 

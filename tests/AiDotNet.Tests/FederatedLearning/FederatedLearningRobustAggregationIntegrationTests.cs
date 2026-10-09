@@ -44,7 +44,7 @@ public class FederatedLearningRobustAggregationIntegrationTests
                 UseClientWeightsWhenAveragingSelectedUpdates = false,
                 GeometricMedianMaxIterations = 5
             },
-            RandomSeed = 42,
+            Seed = 42,
             MinRoundsBeforeConvergence = 1,
             ConvergenceThreshold = 0.0
         };

@@ -136,8 +136,8 @@ public partial class TimeSeriesForestClassifier<T> : ClassifierBase<T>, ITimeSer
         : base(options)
     {
         _options = options ?? new TimeSeriesForestOptions<T>();
-        _random = _options.RandomSeed.HasValue
-            ? RandomHelper.CreateSeededRandom(_options.RandomSeed.Value)
+        _random = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
     }
 

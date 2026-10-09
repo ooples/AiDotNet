@@ -313,11 +313,6 @@ public class AdversarialRobustnessOptions<T> : ModelOptions
     // ========================================================================
 
     /// <summary>
-    /// Gets or sets the random seed for reproducibility.
-    /// </summary>
-    public int? RandomSeed { get; set; }
-
-    /// <summary>
     /// Gets or sets the batch size for robustness operations.
     /// </summary>
     public int BatchSize { get; set; } = 100;

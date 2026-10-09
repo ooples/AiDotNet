@@ -1,159 +1,191 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using AiDotNet.Diffusion.NoisePredictors;
 using AiDotNet.Diffusion.StyleTransfer;
-using AiDotNet.Diffusion.VAE;
-using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Enums;
 using AiDotNet.Tensors.Helpers;
+using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Diffusion;
 
 /// <summary>
-/// A latent diffusion model trains its denoiser on the VAE latent of an image, not on the image (#2157).
+/// Latent diffusion trains its denoiser on z = E(x), the scaled VAE latent of an image (Rombach et al. 2022,
+/// section 3.3). LatentDiffusionModelBase used to hand the training sample to the scheduler unchanged, so a
+/// caller who passed images trained the denoiser on pixels while Generate ran it on latents (#2157).
 /// </summary>
-/// <remarks>
-/// Every <c>LatentDiffusionModelBase</c> subclass inherited the pixel-space default, so an image passed to
-/// <c>Train</c> was noised and denoised in pixel space, while <c>Generate</c> denoises a latent and decodes it.
-/// The latent model's <c>PredictNoise</c> zero-pads a 3-channel image up to the U-Net's 4 input channels, so the
-/// mismatch never threw. The model-family fixtures train on latent-shaped <c>[1, 4]</c> tensors and could not see it.
-/// </remarks>
 public class LatentDiffusionTrainingSampleTests
 {
-    private const int ImageChannelCount = 3;
-    private const int LatentChannelCount = 4;
-    private const int ImagePixels = 8;
-    private const int LatentPixels = 4; // two channel-multiplier levels downsample by 2
-
-    /// <summary>Records the shape of every sample the training loop hands the denoiser.</summary>
-    private sealed class RecordingStyDiff : StyDiffModel<double>
+    /// <summary>Records the sample the denoiser is trained on.</summary>
+    private sealed class ProbeModel : UniVSTModel<double>
     {
-        public List<int[]> TrainingSampleShapes { get; } = new();
-
-        public RecordingStyDiff(int seed)
+        // UniVST's own topology at test width: a 3 -> 4 channel VAE downsampling by eight, as the paper-scale one
+        // does, and a small latent U-Net. At paper scale (U-Net width 320, VAE width 128) this class peaked at 26 GB
+        // and killed the 16 GB CI runner of the shard it runs in.
+        public ProbeModel()
             : base(
-                predictor: new UNetNoisePredictor<double>(
-                    inputChannels: LatentChannelCount, outputChannels: LatentChannelCount, baseChannels: 8,
-                    channelMultipliers: new[] { 1 }, numResBlocks: 1, attentionResolutions: Array.Empty<int>(),
-                    contextDim: 8, numHeads: 2, inputHeight: LatentPixels, seed: seed),
-                vae: new StandardVAE<double>(
-                    inputChannels: ImageChannelCount, latentChannels: LatentChannelCount, baseChannels: 8,
-                    channelMultipliers: new[] { 1, 2 }, numResBlocksPerLevel: 1, seed: seed),
-                seed: seed)
+                predictor: new AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<double>(
+                    inputChannels: 4, outputChannels: 4, baseChannels: 8, channelMultipliers: [1, 2],
+                    numResBlocks: 1, attentionResolutions: [], contextDim: 16, seed: 42),
+                vae: new AiDotNet.Diffusion.VAE.StandardVAE<double>(
+                    inputChannels: 3, latentChannels: 4, baseChannels: 8, channelMultipliers: [1, 2, 4, 4],
+                    numResBlocksPerLevel: 1, seed: 42),
+                seed: 42)
         {
         }
 
-        protected override Tensor<double> PredictTrainingNoise(
-            Tensor<double> noisySample, int[] timesteps, bool isBatched,
-            Tensor<double> input, Tensor<double> expectedOutput)
+        public int[]? NoisedShape { get; private set; }
+
+        public List<int[]> NoisePredictionShapes { get; } = new();
+
+        public override Tensor<double> PredictNoise(Tensor<double> noisySample, int timestep)
         {
-            TrainingSampleShapes.Add(noisySample.Shape.ToArray());
+            NoisePredictionShapes.Add(noisySample.Shape.ToArray());
+            return base.PredictNoise(noisySample, timestep);
+        }
+
+        protected override Tensor<double> PredictTrainingNoise(
+            Tensor<double> noisySample, int[] timesteps, bool isBatched, Tensor<double> input, Tensor<double> expectedOutput)
+        {
+            NoisedShape = noisySample.Shape.ToArray();
             return base.PredictTrainingNoise(noisySample, timesteps, isBatched, input, expectedOutput);
         }
     }
 
     private static Tensor<double> Random(int[] shape, int seed)
     {
+        var t = new Tensor<double>(shape);
         var rng = RandomHelper.CreateSeededRandom(seed);
-        var tensor = new Tensor<double>(shape);
-        for (int i = 0; i < tensor.Length; i++) tensor[i] = rng.NextDouble() * 2.0 - 1.0;
-        return tensor;
+        for (int i = 0; i < t.Length; i++) t[i] = (rng.NextDouble() * 2.0) - 1.0;
+        return t;
     }
 
-    private static double[] Values(Vector<double> vector) => Enumerable.Range(0, vector.Length).Select(i => vector[i]).ToArray();
-
-    [Fact(Timeout = 120000)]
-    public async Task Train_OnAnImage_DenoisesItsVaeLatent()
+    [Fact]
+    public void Train_OnAnImage_TrainsTheDenoiserOnItsLatent()
     {
-        await Task.Yield();
-        var model = new RecordingStyDiff(seed: 7);
-        var images = Random(new[] { 2, ImageChannelCount, ImagePixels, ImagePixels }, 1);
+        using var model = new ProbeModel();
+        int channels = model.VAE.InputChannels;
+        int factor = model.VAE.DownsampleFactor;
+        var image = Random(new[] { 1, channels, 64, 64 }, 1);
 
-        model.Train(images, images);
+        model.Train(image, image);
 
-        Assert.NotEmpty(model.TrainingSampleShapes);
-        Assert.All(model.TrainingSampleShapes, shape =>
-            Assert.Equal(new[] { 2, LatentChannelCount, LatentPixels, LatentPixels }, shape));
+        Assert.Equal(new[] { 1, model.LatentChannels, 64 / factor, 64 / factor }, model.NoisedShape);
     }
 
-    [Fact(Timeout = 120000)]
-    public async Task Train_OnAnImage_MovesTheDenoiserAndLeavesTheAutoencoderFixed()
+    [Fact]
+    public void ImageIsTheDefaultSampleSpace()
     {
-        await Task.Yield();
-        var model = new RecordingStyDiff(seed: 8);
-        var images = Random(new[] { 2, ImageChannelCount, ImagePixels, ImagePixels }, 2);
-        model.Train(images, images);
+        using var model = new ProbeModel();
 
-        var denoiserBefore = Values(model.NoisePredictor.GetParameters());
-        var autoencoderBefore = Values(((StandardVAE<double>)model.VAE).GetParameters());
-        model.Train(images, images);
-        var denoiserAfter = Values(model.NoisePredictor.GetParameters());
-        var autoencoderAfter = Values(((StandardVAE<double>)model.VAE).GetParameters());
-
-        Assert.True(denoiserBefore.Zip(denoiserAfter, (a, b) => a != b).Any(changed => changed),
-            "A training step on images left every denoiser weight where it was.");
-        // Rombach et al. 2022 train the denoiser on the latents of a fixed first stage.
-        Assert.Equal(autoencoderBefore, autoencoderAfter);
+        Assert.Equal(DiffusionTrainingSampleSpace.Image, model.TrainingSampleSpace);
     }
 
-    [Fact(Timeout = 120000)]
-    public async Task Train_OnALatent_UsesItAsItIs()
+    [Fact]
+    public void Train_OnALatent_UsesItAsItIs()
     {
-        await Task.Yield();
-        var model = new RecordingStyDiff(seed: 9);
-        var latents = Random(new[] { 2, LatentChannelCount, LatentPixels, LatentPixels }, 3);
+        using var model = new ProbeModel { TrainingSampleSpace = DiffusionTrainingSampleSpace.Latent };
+        int factor = model.VAE.DownsampleFactor;
+        var latent = Random(new[] { 1, model.LatentChannels, 64 / factor, 64 / factor }, 2);
 
-        model.Train(latents, latents);
+        model.Train(latent, latent);
 
-        Assert.NotEmpty(model.TrainingSampleShapes);
-        Assert.All(model.TrainingSampleShapes, shape =>
-            Assert.Equal(new[] { 2, LatentChannelCount, LatentPixels, LatentPixels }, shape));
+        Assert.Equal(latent.Shape.ToArray(), model.NoisedShape);
     }
 
     /// <summary>
-    /// A batch of more than one trains the denoiser through the base loop.
+    /// The case a channel-count guess got wrong: image and latent of equal depth. Stated as an image, the sample
+    /// is still encoded, so the denoiser trains at the latent resolution Generate samples at.
     /// </summary>
-    /// <remarks>
-    /// <c>DiffusionModelBase.PredictNoiseBatched</c> copied each element through host spans into a fresh tensor and
-    /// wrote the predictions back the same way, which detached them from the gradient tape: every batch larger than
-    /// one computed an all-zero gradient (measured: 0 of 23576 entries non-zero) and never moved a weight.
-    /// </remarks>
-    [Fact(Timeout = 120000)]
-    public async Task Train_OnABatchOfLatents_MovesTheDenoiser()
+    [Fact]
+    public void Train_OnAnImage_WhoseDepthEqualsTheLatentDepth_StillEncodesIt()
     {
-        await Task.Yield();
-        var model = new RecordingStyDiff(seed: 10);
-        var latents = Random(new[] { 3, LatentChannelCount, LatentPixels, LatentPixels }, 4);
-        model.Train(latents, latents);
+        using var model = new ImagenProbeModel();
+        Assert.Equal(model.VAE.InputChannels, model.LatentChannels);
+        int factor = model.VAE.DownsampleFactor;
+        Assert.True(factor > 1);
+        var image = Random(new[] { 1, model.VAE.InputChannels, 64, 64 }, 3);
 
-        var before = Values(model.NoisePredictor.GetParameters());
-        model.Train(latents, latents);
-        var after = Values(model.NoisePredictor.GetParameters());
+        model.Train(image, image);
 
-        Assert.True(before.Zip(after, (a, b) => a != b).Any(changed => changed),
-            "A training step on a batch of three latents left every denoiser weight where it was.");
+        Assert.Equal(new[] { 1, model.LatentChannels, 64 / factor, 64 / factor }, model.NoisedShape);
     }
 
-    [Fact(Timeout = 120000)]
-    public async Task PredictNoiseBatched_MatchesPerElementPredictions()
+    [Fact]
+    public void Train_OnAFlattenedLatent_UsesItAsItIs()
     {
-        await Task.Yield();
-        var model = new RecordingStyDiff(seed: 11);
-        var batch = Random(new[] { 2, LatentChannelCount, LatentPixels, LatentPixels }, 5);
-        int[] timesteps = { 100, 700 };
+        using var model = new ProbeModel { TrainingSampleSpace = DiffusionTrainingSampleSpace.Latent };
+        int factor = model.VAE.DownsampleFactor;
+        int side = 64 / factor;
+        var flattened = Random(new[] { 1, model.LatentChannels * side * side }, 5);
 
-        var batched = model.PredictNoiseBatched(batch, timesteps);
+        model.Train(flattened, flattened);
 
-        int perElement = batch.Length / 2;
-        for (int b = 0; b < 2; b++)
+        Assert.Equal(new[] { 1, model.LatentChannels * side * side }, model.NoisedShape);
+    }
+
+    /// <summary>
+    /// A flattened batch stays [B, C*H*W] for the scheduler, and the batched predictor hands each row to the denoiser on
+    /// its own as [1, C*H*W], which the latent model reshapes to a latent per row.
+    /// </summary>
+    [Fact]
+    public void Train_OnTwoFlattenedLatents_PredictsEachRowOnItsOwn()
+    {
+        using var model = new ProbeModel { TrainingSampleSpace = DiffusionTrainingSampleSpace.Latent };
+        int side = 64 / model.VAE.DownsampleFactor;
+        int width = model.LatentChannels * side * side;
+        var flattened = Random(new[] { 2, width }, 7);
+
+        model.Train(flattened, flattened);
+
+        Assert.Equal(new[] { 2, width }, model.NoisedShape);
+        Assert.Equal(2, model.NoisePredictionShapes.Count);
+        Assert.All(model.NoisePredictionShapes, shape => Assert.Equal(new[] { 1, width }, shape));
+    }
+    [Fact]
+    public void Train_WithAnUndefinedSampleSpace_IsRefused()
+    {
+        using var model = new ProbeModel { TrainingSampleSpace = (DiffusionTrainingSampleSpace)7 };
+        var image = Random(new[] { 1, model.VAE.InputChannels, 64, 64 }, 6);
+
+        Assert.Throws<InvalidOperationException>(() => model.Train(image, image));
+    }
+
+    [Fact]
+    public void Train_OnAnImage_WithTheWrongDepth_IsRefused()
+    {
+        using var model = new ProbeModel();
+        var notAnImage = Random(new[] { 1, model.VAE.InputChannels + 1, 64, 64 }, 4);
+
+        var error = Assert.Throws<ArgumentException>(() => model.Train(notAnImage, notAnImage));
+        Assert.Contains(nameof(DiffusionTrainingSampleSpace.Latent), error.Message);
+    }
+
+    /// <summary>Records the sample the denoiser is trained on, for a model whose image and latent depths match.</summary>
+    private sealed class ImagenProbeModel : AiDotNet.Diffusion.TextToImage.ImagenModel<double>
+    {
+        // Imagen's own topology at test width: its pixel-depth VAE (three channels in and out, downsampling by
+        // four) and a small base U-Net, so the case runs in a unit test.
+        public ImagenProbeModel()
+            : base(
+                baseUnet: SmallUnet(), superRes1Unet: SmallUnet(),
+                vae: new AiDotNet.Diffusion.VAE.StandardVAE<double>(
+                    inputChannels: 3, latentChannels: 3, baseChannels: 8, channelMultipliers: [1, 2, 4],
+                    numResBlocksPerLevel: 1, latentScaleFactor: 1.0, seed: 42),
+                seed: 42)
         {
-            var element = new Tensor<double>(new[] { 1, LatentChannelCount, LatentPixels, LatentPixels });
-            for (int j = 0; j < perElement; j++) element[j] = batch[b * perElement + j];
-            var single = model.PredictNoise(element, timesteps[b]);
-            for (int j = 0; j < perElement; j++)
-                Assert.Equal(single[j], batched[b * perElement + j], 12);
+        }
+
+        private static AiDotNet.Diffusion.NoisePredictors.UNetNoisePredictor<double> SmallUnet() => new(
+            inputChannels: 3, outputChannels: 3, baseChannels: 8, channelMultipliers: [1, 2],
+            numResBlocks: 1, attentionResolutions: [], contextDim: 16, seed: 42);
+
+        public int[]? NoisedShape { get; private set; }
+
+        protected override Tensor<double> PredictTrainingNoise(
+            Tensor<double> noisySample, int[] timesteps, bool isBatched, Tensor<double> input, Tensor<double> expectedOutput)
+        {
+            NoisedShape = noisySample.Shape.ToArray();
+            return base.PredictTrainingNoise(noisySample, timesteps, isBatched, input, expectedOutput);
         }
     }
 }

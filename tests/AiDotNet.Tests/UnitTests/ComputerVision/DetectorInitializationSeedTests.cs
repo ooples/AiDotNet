@@ -11,7 +11,7 @@ using Xunit;
 namespace AiDotNet.Tests.UnitTests.ComputerVision;
 
 /// <summary>
-/// ObjectDetectionOptions.RandomSeed must decide a detector's initial weights. A detector builds a backbone
+/// ObjectDetectionOptions.Seed must decide a detector's initial weights. A detector builds a backbone
 /// that is itself a network with no seed of its own, and the backbone used to end the detector's seed scope:
 /// its weights, and everything built after it, then came from the process-shared generator, so the same
 /// options gave different weights depending on what had run before (FasterRCNN's Train_ShouldReduceLoss
@@ -24,7 +24,7 @@ public class DetectorInitializationSeedTests
     {
         var options = new ObjectDetectionOptions<double>
         {
-            Size = ModelSize.Small, NumClasses = 3, InputSize = new[] { 64, 64 }, RandomSeed = seed
+            Size = ModelSize.Small, NumClasses = 3, InputSize = new[] { 64, 64 }, Seed = seed
         };
         var model = new FasterRCNN<double>(options);
         // The heads resolve their shapes on the first forward; read the weights after it.
@@ -42,7 +42,7 @@ public class DetectorInitializationSeedTests
 
         Assert.Equal(first.Length, second.Length);
         Assert.True(first.SequenceEqual(second),
-            "Two detectors built from the same RandomSeed got different initial weights.");
+            "Two detectors built from the same Seed got different initial weights.");
     }
 
     [Fact]
@@ -50,6 +50,6 @@ public class DetectorInitializationSeedTests
     {
         // Positive control: the seed must actually reach the weights, not merely be ignored consistently.
         Assert.False(InitialWeights(7).SequenceEqual(InitialWeights(8)),
-            "RandomSeed did not change the initial weights.");
+            "Seed did not change the initial weights.");
     }
 }

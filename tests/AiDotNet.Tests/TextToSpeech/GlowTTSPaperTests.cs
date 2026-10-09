@@ -209,6 +209,6 @@ public class GlowTTSPaperTests
         Assert.Equal(MelBins, first.Shape[1]);
         Assert.Equal(0, first.Shape[0] % 2);
         Assert.Equal(first.ToVector().ToArray(), second.ToVector().ToArray());
-        for (int i = 0; i < first.Length; i++) Assert.True(double.IsFinite(first[i]), $"mel[{i}] = {first[i]}");
+        for (int i = 0; i < first.Length; i++) Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(first[i]), $"mel[{i}] = {first[i]}");
     }
 }

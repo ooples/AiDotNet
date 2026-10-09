@@ -99,6 +99,12 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
     /// <summary>Gets whether the paper's layers were built (false when the architecture supplied its own layers).</summary>
     protected bool HasPaperLayers => _generatorLayers.Count > 0;
 
+    /// <summary>The generator's layers, in build order.</summary>
+    internal IReadOnlyList<LayerBase<T>> GeneratorLayers => _generatorLayers;
+
+    /// <summary>The discriminators' layers, in build order.</summary>
+    internal IReadOnlyList<LayerBase<T>> DiscriminatorLayers => _discriminatorLayers;
+
     /// <inheritdoc />
     public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => WaveformUpsampleContract(inputRank);
 

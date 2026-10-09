@@ -288,7 +288,7 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
             NormType = _options.NormType,
             UseTightBounds = _options.UseTightBounds,
             BatchSize = _options.BatchSize,
-            RandomSeed = _options.RandomSeed
+            RandomSeed = _options.Seed
         };
 
         var json = JsonConvert.SerializeObject(data, Formatting.None);
@@ -322,7 +322,7 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
                 NormType = deserialized.NormType,
                 UseTightBounds = deserialized.UseTightBounds,
                 BatchSize = deserialized.BatchSize,
-                RandomSeed = deserialized.RandomSeed,
+                Seed = deserialized.RandomSeed,
                 CertificationMethod = "IBP"
             };
         }
@@ -651,8 +651,8 @@ public class IntervalBoundPropagation<T, TInput, TOutput> : ICertifiedDefense<T,
 
         // Sample points to approximate bounds
         int numSamples = _options.NumSamples;
-        var random = _options.RandomSeed.HasValue
-            ? RandomHelper.CreateSeededRandom(_options.RandomSeed.Value)
+        var random = _options.Seed.HasValue
+            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
 
         for (int s = 0; s < numSamples; s++)

@@ -233,7 +233,7 @@ public abstract partial class SupervisedAutoMLModelBase<T, TInput, TOutput> : Au
 
         if (cvOptions.ShuffleData)
         {
-            var rng = cvOptions.RandomSeed.HasValue ? RandomHelper.CreateSeededRandom(cvOptions.RandomSeed.Value) : Random;
+            var rng = cvOptions.Seed.HasValue ? RandomHelper.CreateSeededRandom(cvOptions.Seed.Value) : Random;
             for (int i = allIndices.Length - 1; i > 0; i--)
             {
                 int j = rng.Next(i + 1);

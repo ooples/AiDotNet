@@ -27,7 +27,7 @@ public class FederatedLearningHeterogeneityCorrectionIntegrationTests
             ClientSelectionFraction = 1.0,
             LocalEpochs = 2,
             AggregationStrategy = FederatedAggregationStrategy.FedAvg,
-            RandomSeed = 7,
+            Seed = 7,
             MinRoundsBeforeConvergence = 100,
             ConvergenceThreshold = 0.0,
             HeterogeneityCorrection = new FederatedHeterogeneityCorrectionOptions

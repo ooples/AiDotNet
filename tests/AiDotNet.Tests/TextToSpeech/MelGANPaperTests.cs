@@ -84,6 +84,6 @@ public class MelGANPaperTests
         Assert.Contains(Enumerable.Range(0, before.Length), i => Math.Abs(before[i] - after[i]) > 1e-9);
         var trained = model.GetParameters().ToArray();
         Assert.Contains(Enumerable.Range(0, parameters.Length), i => parameters[i] != trained[i]);
-        Assert.True(double.IsFinite(Convert.ToDouble(model.GetLastLoss())));
+        Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(Convert.ToDouble(model.GetLastLoss())));
     }
 }

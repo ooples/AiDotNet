@@ -95,12 +95,12 @@ public class PortaSpeechPaperTests
         Assert.Equal(2, first.Rank);
         Assert.Equal(MelBins, first.Shape[1]);
         Assert.Equal(0, first.Shape[0] % 4);
-        for (int i = 0; i < first.Length; i++) Assert.True(double.IsFinite(first[i]), $"mel[{i}] = {first[i]}");
+        for (int i = 0; i < first.Length; i++) Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(first[i]), $"mel[{i}] = {first[i]}");
 
         model.CurrentPhase = PortaSpeechTrainingPhase.PostNet;
         var refined = model.Synthesize("ab cd");
         Assert.Equal(first.Shape, refined.Shape);
-        for (int i = 0; i < refined.Length; i++) Assert.True(double.IsFinite(refined[i]), $"mel[{i}] = {refined[i]}");
+        for (int i = 0; i < refined.Length; i++) Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(refined[i]), $"mel[{i}] = {refined[i]}");
     }
 
     [Fact(Timeout = 60000)]

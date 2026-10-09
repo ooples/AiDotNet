@@ -90,7 +90,7 @@ public class DeepVoice3PaperTests
         var linear = model.PredictLinearSpectrogram("hello");
         Assert.Equal(mel.Shape[0], linear.Shape[0]);
         Assert.Equal(33, linear.Shape[1]);
-        for (int i = 0; i < mel.Length; i++) Assert.True(double.IsFinite(mel[i]), $"mel[{i}] = {mel[i]}");
+        for (int i = 0; i < mel.Length; i++) Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(mel[i]), $"mel[{i}] = {mel[i]}");
     }
 
     [Fact(Timeout = 60000)]

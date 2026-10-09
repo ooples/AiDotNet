@@ -70,7 +70,7 @@ public class VoiceFlowPaperTests
         double first = Convert.ToDouble(model.TrainRectified(rectified, noise));
         double last = first;
         for (int i = 0; i < 20; i++) last = Convert.ToDouble(model.TrainRectified(rectified, noise));
-        Assert.True(double.IsFinite(first) && double.IsFinite(last));
+        Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(first) && AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(last));
     }
 
     [Fact(Timeout = 120000)]
@@ -82,7 +82,7 @@ public class VoiceFlowPaperTests
         Assert.Equal(mel.ToVector().ToArray(), model.Synthesize("hello").ToVector().ToArray());
         Assert.Equal(2, mel.Rank);
         Assert.Equal(MelBins, mel.Shape[1]);
-        for (int i = 0; i < mel.Length; i++) Assert.True(double.IsFinite(mel[i]));
+        for (int i = 0; i < mel.Length; i++) Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(mel[i]));
     }
 
     [Fact(Timeout = 60000)]

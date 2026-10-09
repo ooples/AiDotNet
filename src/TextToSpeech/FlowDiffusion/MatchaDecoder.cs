@@ -301,7 +301,8 @@ internal sealed class MatchaDecoder<T>
         }
         for (int i = 0; i < midBlocks; i++)
             _mids.Add((new ResnetBlock(this, channels[^1], output, timeDim), new TransformerBlock(this, output, heads, headDim, dropout)));
-        var up = channels.Reverse().Append(channels[0]).ToArray();
+        // Enumerable.Reverse explicitly: on net471 an array's .Reverse() binds to the in-place MemoryExtensions.Reverse.
+        var up = Enumerable.Reverse(channels).Append(channels[0]).ToArray();
         for (int i = 0; i < up.Length - 1; i++)
         {
             bool last = i == up.Length - 2;

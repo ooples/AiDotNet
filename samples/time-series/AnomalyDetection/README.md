@@ -216,7 +216,7 @@ var options = new TimeSeriesIsolationForestOptions<double>
     LagFeatures = 10,            // Temporal context
     RollingWindowSize = 20,      // Rolling statistics window
     UseTrendFeatures = true,     // Include derivative features
-    RandomSeed = 42              // Reproducibility
+    Seed = 42                    // Reproducibility
 };
 
 var isolationForest = new TimeSeriesIsolationForest<double>(options);

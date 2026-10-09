@@ -74,7 +74,7 @@ public class CoMoSpeechPaperTests
         Assert.True(changed > 0 && changed < before.Length, $"{changed} of {before.Length} parameters changed.");
         // θ, θ⁻ and the teacher start identical, so the loss starts near zero and then tracks an EMA target that moves
         // with θ (Eq. 11-12); it is not expected to fall monotonically, only to stay a finite consistency gap.
-        Assert.True(double.IsFinite(lossBefore) && double.IsFinite(lossAfter), $"{lossBefore} -> {lossAfter}");
+        Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(lossBefore) && AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(lossAfter), $"{lossBefore} -> {lossAfter}");
     }
 
     [Fact(Timeout = 120000)]
@@ -86,11 +86,11 @@ public class CoMoSpeechPaperTests
         Assert.Equal(teacher.ToVector().ToArray(), model.Synthesize("hello").ToVector().ToArray());
         Assert.Equal(2, teacher.Rank);
         Assert.Equal(MelBins, teacher.Shape[1]);
-        for (int i = 0; i < teacher.Length; i++) Assert.True(double.IsFinite(teacher[i]));
+        for (int i = 0; i < teacher.Length; i++) Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(teacher[i]));
 
         model.BeginDistillation();
         var student = model.Synthesize("hello");
         Assert.Equal(teacher.Shape, student.Shape);
-        for (int i = 0; i < student.Length; i++) Assert.True(double.IsFinite(student[i]));
+        for (int i = 0; i < student.Length; i++) Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(student[i]));
     }
 }

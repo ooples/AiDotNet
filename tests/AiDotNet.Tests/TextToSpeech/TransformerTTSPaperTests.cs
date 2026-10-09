@@ -91,6 +91,6 @@ public class TransformerTTSPaperTests
         Assert.Equal(2, mel.Rank);
         Assert.Equal(MelBins, mel.Shape[1]);
         Assert.InRange(mel.Shape[0], 1, 7);
-        for (int i = 0; i < mel.Length; i++) Assert.True(double.IsFinite(mel[i]), $"mel[{i}] = {mel[i]}");
+        for (int i = 0; i < mel.Length; i++) Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(mel[i]), $"mel[{i}] = {mel[i]}");
     }
 }

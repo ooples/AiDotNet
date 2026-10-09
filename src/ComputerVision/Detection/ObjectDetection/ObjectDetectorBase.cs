@@ -131,7 +131,7 @@ public abstract partial class ObjectDetectorBase<T> : VisionTaskModelBase<T>
         // adapters' inner layers, and the necks and query tables that draw from the scope then take a
         // deterministic seed, so two models built from equal options start from equal weights (#2201).
         // A null seed leaves the scope unarmed and initialization stays unseeded.
-        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(options.RandomSeed);
+        AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(options.Seed);
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.OfferSeedToNestedBackbone();
         Nms = new NMS<T>();
         WeightDownloader = new WeightDownloader();

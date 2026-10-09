@@ -74,7 +74,7 @@ public class MatchaTTSPaperTests
         Assert.Equal(2, first.Rank);
         Assert.Equal(MelBins, first.Shape[1]);
         Assert.Equal(first.ToVector().ToArray(), second.ToVector().ToArray());
-        for (int i = 0; i < first.Length; i++) Assert.True(double.IsFinite(first[i]), $"mel[{i}] = {first[i]}");
+        for (int i = 0; i < first.Length; i++) Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(first[i]), $"mel[{i}] = {first[i]}");
 
         // The output is x·std + mean of the same normalized sample.
         var options = (MatchaTTSOptions)model.GetOptions();

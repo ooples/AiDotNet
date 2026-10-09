@@ -731,7 +731,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
             NoiseSigma = 0.25,
             NumSamples = 200,
             ConfidenceLevel = 0.95,
-            RandomSeed = Seed
+            Seed = Seed
         };
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
 
@@ -776,9 +776,9 @@ public class AdversarialRobustnessDeepMathIntegrationTests
         var model = new ARMockModel(4, 2, weights);
 
         var optionsSmall = new CertifiedDefenseOptions<double>
-        { NoiseSigma = 0.1, NumSamples = 200, ConfidenceLevel = 0.95, RandomSeed = Seed };
+        { NoiseSigma = 0.1, NumSamples = 200, ConfidenceLevel = 0.95, Seed = Seed };
         var optionsLarge = new CertifiedDefenseOptions<double>
-        { NoiseSigma = 0.5, NumSamples = 200, ConfidenceLevel = 0.95, RandomSeed = Seed };
+        { NoiseSigma = 0.5, NumSamples = 200, ConfidenceLevel = 0.95, Seed = Seed };
 
         var smoothSmall = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(optionsSmall);
         var smoothLarge = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(optionsLarge);
@@ -804,7 +804,7 @@ public class AdversarialRobustnessDeepMathIntegrationTests
             NoiseSigma = 0.25,
             NumSamples = 200,
             ConfidenceLevel = 0.95,
-            RandomSeed = Seed
+            Seed = Seed
         };
         var smoothing = new RandomizedSmoothing<double, Vector<double>, Vector<double>>(options);
 

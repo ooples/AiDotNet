@@ -97,7 +97,7 @@ public class FastSpeech2PaperTests
         double last = first;
         for (int i = 0; i < 30; i++) last = model.Train(sample);
 
-        Assert.True(double.IsFinite(first) && double.IsFinite(last), $"Loss went non-finite: {first} -> {last}.");
+        Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(first) && AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(last), $"Loss went non-finite: {first} -> {last}.");
         Assert.True(last < first * 0.5, $"The FastSpeech 2 objective did not halve: {first} -> {last} over 30 steps.");
     }
 
@@ -140,7 +140,7 @@ public class FastSpeech2PaperTests
         Assert.Equal(2, mel.Rank);
         Assert.Equal(80, mel.Shape[1]);
         Assert.True(mel.Shape[0] > 0);
-        for (int i = 0; i < mel.Length; i++) Assert.True(double.IsFinite(mel[i]), $"mel[{i}] = {mel[i]}");
+        for (int i = 0; i < mel.Length; i++) Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(mel[i]), $"mel[{i}] = {mel[i]}");
     }
 
     [Fact(Timeout = 60000)]
