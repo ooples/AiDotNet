@@ -140,12 +140,38 @@ public class ImageHelperEncodedFormatTests : IDisposable
     [Fact]
     public void LoadImage_HeaderDeclaringHugeDimensions_IsRejectedBeforeDecoding()
     {
-        // 60000 x 60000 needs 14.4 GB of RGBA: more than any managed array. The file itself is tiny, so
-        // only the header check stands between it and the decoder's allocation.
-        string path = WritePng("huge.png", declaredWidth: 60000, declaredHeight: 60000);
+        // A TGA header, because TGA is a format whose header stb accepts at this size: a 30000 x 30000
+        // image needs 3.6 GB of RGBA, more than any managed array, and the file itself is 18 bytes, so
+        // only ImageHelper's own size check stands between it and the decoder's allocation. (A PNG
+        // cannot test this: stb rejects any PNG header past roughly 1 GB itself, before the check.)
+        string path = Path.Combine(_dir, "huge.tga");
+        var header = new byte[18];
+        header[2] = 2;                                   // uncompressed true-colour
+        header[12] = 30000 & 0xFF; header[13] = 30000 >> 8;   // width, little-endian
+        header[14] = 30000 & 0xFF; header[15] = 30000 >> 8;   // height
+        header[16] = 32;                                 // bits per pixel
+        File.WriteAllBytes(path, header);
 
         var error = Assert.Throws<InvalidDataException>(() => ImageHelper<double>.LoadImage(path));
         Assert.Contains("too large", error.Message);
+    }
+
+    [Fact]
+    public void LoadImage_TgaWithinTheBound_LoadsAtItsDeclaredSize()
+    {
+        // The guard's negative control: the same header layout at 2 x 2 must pass the size check and
+        // load, so the test above fails because of the size and not because of the format.
+        string path = Path.Combine(_dir, "small.tga");
+        var file = new byte[18 + 2 * 2 * 4];
+        file[2] = 2;
+        file[12] = 2;
+        file[14] = 2;
+        file[16] = 32;
+        File.WriteAllBytes(path, file);
+
+        var tensor = ImageHelper<double>.LoadImage(path);
+
+        Assert.Equal(new[] { 1, 3, 2, 2 }, tensor.Shape.ToArray());
     }
 
     private static int IndexOf(byte[] haystack, byte[] needle)
