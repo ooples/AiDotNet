@@ -76,20 +76,34 @@ public sealed class PaperWarmupOverrideValidationTests
     }
 
     /// <summary>
-    /// Two steps into a 2-step warmup the rate has reached the recipe's peak; two steps into the paper's
-    /// warmup (32000 or 5000 steps) it is still a sliver of it. The ratio is what proves the override
-    /// reached the optimizer the model trains with, whatever the schedule's shape after the ramp.
+    /// A 2-step warmup is below the recipe's peak at step 1 and exactly at it by step 2 -- which pins the
+    /// forwarded value itself, not merely "shorter than the default". The default is not a fixed 32000 or
+    /// 5000 steps here: the recipe factory rescales a paper warmup to its share of the configured run, so
+    /// at these fixture sizes it reaches 2.8e-5 of a 1e-4 peak by step 2. The comparison against it only
+    /// shows the override is not the default; the step-1/step-2 shape is what shows it is 2.
     /// </summary>
     private static void AssertWarmupReachesTheSchedule(
         IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>? shortWarmup,
         IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>? paperWarmup)
     {
-        double shortRate = ScheduleOf(shortWarmup).GetLearningRateAtStep(2);
-        double paperRate = ScheduleOf(paperWarmup).GetLearningRateAtStep(2);
+        // Read off the schedule's own shape, not BaseLearningRate, and without pinning the exact index
+        // the ramp tops out at: LinearWarmupScheduler counts from step 0 and peaks at index 2, while
+        // NoamHoldAnnealingScheduler counts from 1 (trainingStep = step + 1) and peaks at index 1. In
+        // both, a 2-step warmup is still rising at step 0 and has reached its maximum by step 2.
+        var shortSchedule = ScheduleOf(shortWarmup);
+        double atZero = shortSchedule.GetLearningRateAtStep(0);
+        double atTwo = shortSchedule.GetLearningRateAtStep(2);
+        double highest = 0;
+        for (int step = 0; step <= 10; step++)
+            highest = Math.Max(highest, shortSchedule.GetLearningRateAtStep(step));
+        double paperAtTwo = ScheduleOf(paperWarmup).GetLearningRateAtStep(2);
 
-        Assert.True(shortRate > 0, $"the short warmup reached no learning rate at step 2 ({shortRate})");
-        Assert.True(shortRate > 100 * paperRate,
-            $"step 2: {shortRate} with a 2-step warmup against {paperRate} with the paper's; the override did not apply");
+        Assert.True(atTwo > 0, $"the short warmup reached no learning rate at step 2 ({atTwo})");
+        Assert.True(atZero < atTwo, $"step 0: {atZero} is not below step 2's {atTwo}; there is no warmup at all");
+        Assert.True(atTwo >= highest * (1 - 1e-12),
+            $"step 2: {atTwo} is below the schedule's maximum {highest}; the warmup is longer than 2 steps");
+        Assert.True(paperAtTwo < atTwo,
+            $"step 2: {atTwo} with a 2-step warmup against {paperAtTwo} with the default; the override did not apply");
     }
 
     private static ILearningRateScheduler ScheduleOf(
