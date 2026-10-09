@@ -505,12 +505,35 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
         int trainN = _trainingSeries.Length;
         var predictions = new Vector<T>(n);
 
-        // If the input has enough columns to serve as a lookback window, use rows directly
+        // If the input has enough columns to serve as a lookback window, use rows directly. A row of exactly
+        // LookbackWindow values runs through the doubly-residual stack as one batched forward per chunk instead of
+        // one PredictSingle per row: AiModelBuilder predicts the whole dataset after fitting, and per-row inference
+        // (a matrix-vector product per layer per block per row) was most of a short production fit. Same values as
+        // PredictSingle (NBEATSBatchedPredictTests). A longer row keeps the per-row path, which rejects it.
         if (input.Columns >= _options.LookbackWindow)
         {
-            for (int i = 0; i < n; i++)
+            if (input.Columns != _options.LookbackWindow)
             {
-                predictions[i] = PredictSingle(input.GetRow(i));
+                for (int i = 0; i < n; i++)
+                    predictions[i] = PredictSingle(input.GetRow(i));
+                return predictions;
+            }
+
+            int lookback = _options.LookbackWindow, horizon = _options.ForecastHorizon;
+            for (int c0 = 0; c0 < n; c0 += PredictChunkRows)
+            {
+                int rows = Math.Min(PredictChunkRows, n - c0);
+                // A nested arena per chunk: its scratch is recycled when the chunk ends without touching any arena
+                // the caller has open (whose tensors may still be live).
+                using var chunkArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
+                var data = new T[rows * lookback];
+                for (int r = 0; r < rows; r++)
+                    for (int t = 0; t < lookback; t++)
+                        data[r * lookback + t] = NumOps.Divide(NumOps.Subtract(input[c0 + r, t], _normMean), _normStd);
+                var outNorm = RunForwardStack(new Tensor<T>(new[] { rows, lookback }, new Vector<T>(data))); // [rows, H]
+                var outSpan = outNorm.IsContiguous ? outNorm.AsSpan() : outNorm.Contiguous().AsSpan();
+                for (int r = 0; r < rows; r++)
+                    predictions[c0 + r] = NumOps.Add(NumOps.Multiply(outSpan[r * horizon], _normStd), _normMean);
             }
             return predictions;
         }
@@ -587,6 +610,9 @@ public partial class NBEATSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFunct
 
         return predictions;
     }
+
+    // Rows per batched predict forward; bounds activation memory ([HiddenLayerSize, rows] per block layer).
+    private const int PredictChunkRows = 1024;
 
     /// <summary>
     /// Extracts a lookback window vector for a given sample index.
