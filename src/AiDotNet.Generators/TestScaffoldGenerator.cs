@@ -39,6 +39,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private const string IActivationFunctionPrefix = "AiDotNet.Interfaces.IActivationFunction<";
     private const string ILossFunctionPrefix = "AiDotNet.Interfaces.ILossFunction<";
 
+    // A paper-length warmup (MaskGCT: 32000 steps) leaves the learning rate near zero for the
+    // few steps a smoke fixture runs, so the memorization probe sees no loss drop (#2087).
+    // Fixtures for such models shorten the ramp to this, which reaches the recipe's peak rate.
+    private const string SmokeWarmupSteps = "WarmupSteps = 2";
+
+    // Codec-LM models that share one constructor branch below but need the short warmup.
+    private static readonly HashSet<string> ShortWarmupCodecModels = new(System.StringComparer.Ordinal)
+    {
+        "MaskGCT",
+    };
+
     // Non-model algorithm interface prefixes (for invariant test generation)
     private const string ICausalDiscoveryPrefix = "AiDotNet.CausalDiscovery.ICausalDiscoveryAlgorithm<";
     private const string IActiveLearningPrefix = "AiDotNet.Interfaces.IActiveLearningStrategy<";
@@ -7003,7 +7014,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // MaskGCT's paper warmup is 32000 steps, which leaves the rate near 3e-9 for the
                     // memorization probe's two steps (loss fell 0.6% against the required 1%, #2087);
                     // a short ramp reaches the recipe's 1e-4, as the NaturalSpeech3 fixture does.
-                    (model.ClassName == "MaskGCT" ? "WarmupSteps = 2, " : "") +
+                    (ShortWarmupCodecModels.Contains(model.ClassName) ? SmokeWarmupSteps + ", " : "") +
                     "DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "ByteTrack" && model.TypeParameterCount == 1
@@ -8496,7 +8507,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "ForecastHorizon = 8, PatchLength = 8, EncoderHiddenDim = 32, " +
                     "DecoderHiddenDim = 32, NumEncoderLayers = 2, NumDecoderLayers = 2, " +
                     "NumHeads = 4, NumQuantiles = 3, DropoutRate = 0.0, " +
-                    "WarmupSteps = 2, TotalSteps = 16 })";
+                    SmokeWarmupSteps + ", TotalSteps = 16 })";
             }
             else if (model.ClassName == "Chronos" && model.TypeParameterCount == 1)
             {
@@ -9076,7 +9087,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "MelChannels = 16, NumEncoderLayers = 1, NumDiffusionSteps = 2, " +
                     // WarmupSteps: the paper's 5000-step ramp leaves the rate near 1e-8 for the
                     // memorization probe's two steps; a short ramp reaches the recipe's 1e-4.
-                    "NumHeads = 4, DropoutRate = 0.0, MaxTextLength = 16, WarmupSteps = 2 })";
+                    "NumHeads = 4, DropoutRate = 0.0, MaxTextLength = 16, " + SmokeWarmupSteps + " })";
             }
             else if (model.ClassName == "OWSM" && model.TypeParameterCount == 1)
             {

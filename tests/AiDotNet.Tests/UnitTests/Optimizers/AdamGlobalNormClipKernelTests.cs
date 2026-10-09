@@ -67,6 +67,55 @@ public class AdamGlobalNormClipKernelTests
             Assert.Equal(BitConverter.DoubleToInt64Bits(expectedScaled[i]), BitConverter.DoubleToInt64Bits(values[i]));
     }
 
+    [Fact]
+    public void Float_SumOfSquares_WidensBeforeSquaring_SoLargeMagnitudesDoNotOverflow()
+    {
+        // (1e30f)^2 is 1e60, far past float's 3.4e38: squaring in float would give +Infinity and the
+        // global norm would clip every update to nothing. 33 elements reach the vector body and a tail.
+        var values = new float[33];
+        for (int i = 0; i < values.Length; i++) values[i] = 1e30f;
+
+        double sum = AdamOptimizer<float, Tensor<float>, Tensor<float>>.SumOfSquares(values.AsSpan());
+
+        double expected = 33 * (double)1e30f * (double)1e30f;
+        Assert.False(double.IsInfinity(sum));
+        Assert.Equal(expected, sum, 1e-9 * expected);
+    }
+
+    [Theory]
+    [InlineData(float.NaN)]
+    [InlineData(float.PositiveInfinity)]
+    public void Float_SumOfSquares_PropagatesANonFiniteElement(float bad)
+    {
+        // The caller's non-finite check depends on a NaN or infinity reaching the sum, wherever it sits.
+        foreach (int position in new[] { 0, 16, 32 })
+        {
+            var values = RandomFloats(33, seed: position + 3);
+            values[position] = bad;
+
+            double sum = AdamOptimizer<float, Tensor<float>, Tensor<float>>.SumOfSquares(values.AsSpan());
+
+            Assert.True(double.IsNaN(sum) || double.IsInfinity(sum), $"position {position} gave {sum}");
+        }
+    }
+
+    [Fact]
+    public void Generic_ElementType_UsesTheScalarDefinition()
+    {
+        // decimal takes neither vectorized path, so this covers the numeric-operations loop that every
+        // other element type -- and float/double on net471 -- runs.
+        var values = new decimal[] { -1.5m, 0.25m, 2m, -0.125m, 3m };
+        double expectedSum = 0;
+        foreach (var v in values) expectedSum += (double)v * (double)v;
+        const double scale = 0.5;
+
+        double sum = AdamOptimizer<decimal, Tensor<decimal>, Tensor<decimal>>.SumOfSquares(values.AsSpan());
+        Assert.Equal(expectedSum, sum, 12);
+
+        AdamOptimizer<decimal, Tensor<decimal>, Tensor<decimal>>.ScaleInPlace(values.AsSpan(), scale);
+        Assert.Equal(new[] { -0.75m, 0.125m, 1m, -0.0625m, 1.5m }, values);
+    }
+
     // BitConverter.SingleToInt32Bits is not available on net471, which this project also targets.
     private static int Bits(float value) => BitConverter.ToInt32(BitConverter.GetBytes(value), 0);
 

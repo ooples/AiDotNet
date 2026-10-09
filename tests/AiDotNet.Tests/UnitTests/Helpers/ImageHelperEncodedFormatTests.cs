@@ -19,7 +19,8 @@ public class ImageHelperEncodedFormatTests : IDisposable
     public void Dispose()
     {
         try { Directory.Delete(_dir, recursive: true); }
-        catch (IOException) { /* best-effort temp cleanup; a locked file must not fail the test */ }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+        { /* best-effort temp cleanup; a locked file must not fail the test */ }
     }
 
     // 2x2 RGB: red, green / blue, (10, 20, 30).
@@ -29,7 +30,12 @@ public class ImageHelperEncodedFormatTests : IDisposable
         { 0, 0, 255 }, { 10, 20, 30 },
     };
 
-    private string WritePng(string name)
+    private string WritePng(string name) => WritePng(name, declaredWidth: 2, declaredHeight: 2);
+
+    /// <summary>
+    /// The 2x2 image, with the IHDR able to declare other dimensions so a header can lie about its size.
+    /// </summary>
+    private string WritePng(string name, uint declaredWidth, uint declaredHeight)
     {
         var raw = new MemoryStream();
         for (int y = 0; y < 2; y++)
@@ -42,7 +48,11 @@ public class ImageHelperEncodedFormatTests : IDisposable
 
         var png = new MemoryStream();
         png.Write(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }, 0, 8);
-        WriteChunk(png, "IHDR", new byte[] { 0, 0, 0, 2, 0, 0, 0, 2, 8, 2, 0, 0, 0 });   // 2x2, 8-bit, RGB
+        var ihdr = new MemoryStream();
+        WriteBigEndian(ihdr, declaredWidth);
+        WriteBigEndian(ihdr, declaredHeight);
+        ihdr.Write(new byte[] { 8, 2, 0, 0, 0 }, 0, 5);   // 8-bit, RGB
+        WriteChunk(png, "IHDR", ihdr.ToArray());
         WriteChunk(png, "IDAT", Zlib(raw.ToArray()));
         WriteChunk(png, "IEND", Array.Empty<byte>());
         string path = Path.Combine(_dir, name);
@@ -115,11 +125,38 @@ public class ImageHelperEncodedFormatTests : IDisposable
     {
         string path = WritePng("corrupt.png");
         var bytes = File.ReadAllBytes(path);
-        // Keep the signature and IHDR (so the format is recognised) and cut the compressed pixel data short.
-        Array.Resize(ref bytes, 8 + 25 + 12);
+        // Keep the signature and IHDR (so the format is recognised) and cut the compressed pixel data short:
+        // the cut lands four bytes into IDAT's data, located from the chunk itself rather than assumed.
+        int idatType = IndexOf(bytes, System.Text.Encoding.ASCII.GetBytes("IDAT"));
+        Assert.True(idatType > 0, "the PNG has an IDAT chunk");
+        int idatLength = (bytes[idatType - 4] << 24) | (bytes[idatType - 3] << 16) | (bytes[idatType - 2] << 8) | bytes[idatType - 1];
+        Assert.True(idatLength > 4, "the cut must land inside the compressed data");
+        Array.Resize(ref bytes, idatType + 4 + 4);
         File.WriteAllBytes(path, bytes);
 
         Assert.Throws<InvalidDataException>(() => ImageHelper<double>.LoadImage(path));
+    }
+
+    [Fact]
+    public void LoadImage_HeaderDeclaringHugeDimensions_IsRejectedBeforeDecoding()
+    {
+        // 60000 x 60000 needs 14.4 GB of RGBA: more than any managed array. The file itself is tiny, so
+        // only the header check stands between it and the decoder's allocation.
+        string path = WritePng("huge.png", declaredWidth: 60000, declaredHeight: 60000);
+
+        var error = Assert.Throws<InvalidDataException>(() => ImageHelper<double>.LoadImage(path));
+        Assert.Contains("too large", error.Message);
+    }
+
+    private static int IndexOf(byte[] haystack, byte[] needle)
+    {
+        for (int i = 0; i + needle.Length <= haystack.Length; i++)
+        {
+            int j = 0;
+            while (j < needle.Length && haystack[i + j] == needle[j]) j++;
+            if (j == needle.Length) return i;
+        }
+        return -1;
     }
 
     [Fact]

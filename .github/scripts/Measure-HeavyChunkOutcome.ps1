@@ -72,6 +72,12 @@ function Get-HeavyChunkOutcome {
         $result.Reason = 'unreadable result file'
         return $result
     }
+    # An empty or truncated file parses to a document with no root element, and reading the
+    # namespace off it below would throw out of the whole lane rather than fail this one chunk.
+    if ($null -eq $trx -or $null -eq $trx.DocumentElement) {
+        $result.Reason = 'unreadable result file'
+        return $result
+    }
 
     $ns = [System.Xml.XmlNamespaceManager]::new($trx.NameTable)
     $ns.AddNamespace('t', $trx.DocumentElement.NamespaceURI)
@@ -173,6 +179,14 @@ function Invoke-SelfTest {
         Assert-Outcome 'no_failed_test' Failed (New-Trx 'none' 'Failed' @(
                 @{ Name = 'A'; Outcome = 'Passed'; Message = '' })) '1'
         Assert-Outcome 'missing_trx' Failed (Join-Path $root 'absent.trx') '1'
+        # A host killed mid-write leaves an empty or root-less file; it parses, then has nothing to
+        # read a namespace from. It must fail this chunk, not throw out of the lane.
+        $empty = Join-Path $root 'empty.trx'
+        Set-Content -LiteralPath $empty -Value '' -NoNewline
+        Assert-Outcome 'empty_trx' Failed $empty '1'
+        $declOnly = Join-Path $root 'decl.trx'
+        Set-Content -LiteralPath $declOnly -Value '<?xml version="1.0" encoding="utf-8"?>' -Encoding utf8NoBOM
+        Assert-Outcome 'declaration_only_trx' Failed $declOnly '1'
         Assert-Outcome 'chunk_timeout' Failed (New-Trx 'cap' 'Failed' @(
                 @{ Name = 'A'; Outcome = 'Failed'; Message = $oom })) 'timeout after 20 min'
         Assert-Outcome 'sigkill' Failed '' 'SIGKILL (timeout escalation or OOM)'

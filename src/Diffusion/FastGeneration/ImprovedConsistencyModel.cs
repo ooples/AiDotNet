@@ -68,6 +68,9 @@ public partial class ImprovedConsistencyModel<T> : LatentDiffusionModelBase<T>
     private const int ICT_LATENT_CHANNELS = 4;
     private const double ICT_DEFAULT_GUIDANCE = 0.0;
 
+    /// <summary>RAdam learning rate from Song &amp; Dhariwal 2023, App. C ("Training").</summary>
+    private const double ICT_LEARNING_RATE = 0.0001;
+
     #endregion
 
     #region Fields
@@ -119,12 +122,12 @@ public partial class ImprovedConsistencyModel<T> : LatentDiffusionModelBase<T>
                 // Song & Dhariwal 2023, App. C ("Training"): every model is trained with RAdam at a
                 // learning rate of 0.0001. The diffusion default (Adam at 1e-3) blew the averaged
                 // noise-prediction error up from 1.36 to 5.4e6 on the nightly heavy lane (#2087).
-                LearningRate = 0.0001,
+                LearningRate = ICT_LEARNING_RATE,
                 OptimizerFactory = () => new RAdamOptimizer<T, Tensor<T>, Tensor<T>>(
                     null,
                     new RAdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
                     {
-                        InitialLearningRate = 0.0001,
+                        InitialLearningRate = ICT_LEARNING_RATE,
                         UseAdaptiveLearningRate = false,
                     }),
             },

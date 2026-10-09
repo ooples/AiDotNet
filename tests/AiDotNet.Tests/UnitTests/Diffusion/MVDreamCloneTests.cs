@@ -42,6 +42,39 @@ public class MVDreamCloneTests
             $"The clone shares {shared.Count} layer object(s) with its source, first {string.Join(", ", shared.GetRange(0, System.Math.Min(5, shared.Count)))}.");
     }
 
+    [Fact]
+    public void DeepCopy_IsAnIndependentCopyWithEqualParameters()
+    {
+        var source = new MultiViewUNet<float>(
+            inputChannels: 4, outputChannels: 4, baseChannels: 8, numViews: 2, contextDim: 16, seed: 1);
+        var before = source.GetParameters().ToArray();
+
+        var copy = source.DeepCopy();
+
+        Assert.NotSame(source, copy);
+        Assert.Equal(before, copy.GetParameters().ToArray());
+
+        // Writing the copy's weights must not reach the source: shared buffers or layers would.
+        var changed = copy.GetParameters().ToArray();
+        for (int i = 0; i < changed.Length; i++) changed[i] += 1f;
+        copy.SetParameters(new AiDotNet.Tensors.LinearAlgebra.Vector<float>(changed));
+
+        Assert.Equal(changed, copy.GetParameters().ToArray());
+        Assert.Equal(before, source.GetParameters().ToArray());
+        Assert.Empty(SharedLayers(source, copy));
+    }
+
+    private static List<string> SharedLayers(object source, object copy)
+    {
+        var sourceLayers = ReachableLayers(source);
+        var shared = new List<string>();
+        foreach (var layer in ReachableLayers(copy))
+        {
+            if (sourceLayers.Contains(layer)) shared.Add(layer.GetType().Name);
+        }
+        return shared;
+    }
+
     private static HashSet<object> ReachableLayers(object root)
     {
         var layers = new HashSet<object>(IdentityComparer.Instance);

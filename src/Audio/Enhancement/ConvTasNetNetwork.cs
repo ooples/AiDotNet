@@ -183,7 +183,10 @@ internal sealed class ConvTasNetNetwork<T>
             if (next is not null) residual = next;
         }
 
-        var separated = skipSum ?? residual;
+        // Every block emits a skip and the constructor requires at least one block, so the mask head
+        // always reads the skip sum, as in the paper. A layout that produced none would otherwise mask
+        // from the bottleneck output and still run, silently.
+        var separated = skipSum ?? throw new InvalidOperationException("The TCN separator produced no skip output.");
         Record(stages, "TemporalConvolutionalSeparator", separated);
 
         var masks = engine.Reshape(_maskConv.Forward(_outputPRelu.Forward(separated)),
@@ -266,7 +269,7 @@ internal sealed class ConvTasNetNetwork<T>
             {
                 throw new InvalidOperationException(
                     $"The layer graph does not match the Conv-TasNet layout at position {index}: expected " +
-                    $"{typeof(TLayer).Name}, found {(index < _bindSource.Count ? _bindSource[index].GetType().Name : "the end")}.");
+                    $"{typeof(TLayer).Name}, found {(index < _bindSource.Count ? _bindSource[index]?.GetType().Name ?? "null" : "the end")}.");
             }
 
             layer = existing;

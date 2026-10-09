@@ -280,7 +280,14 @@ jobs:
             # A chunk whose every failure ran out of memory or disk has outgrown the 16 GB runner, not
             # broken: it is listed but does not fail the lane, so a real defect among ~600 OOMs is the
             # thing that turns it red (#2087). Timeouts, crashes and assertions still fail it.
-            $verdict = ./.github/scripts/Measure-HeavyChunkOutcome.ps1 -TrxPath (Join-Path $resultsDir "$label.trx") -ExitCode "$exit"
+            # A classifier error fails this chunk; it must not end the step, or the remaining chunks
+            # never run and the summary this lane exists to write is lost.
+            try {
+              $verdict = ./.github/scripts/Measure-HeavyChunkOutcome.ps1 -TrxPath (Join-Path $resultsDir "$label.trx") -ExitCode "$exit"
+            }
+            catch {
+              $verdict = [pscustomobject]@{ Outcome = 'Failed'; Reason = "classifier error: $($_.Exception.Message)" }
+            }
             if ($verdict.Outcome -eq 'Failed') { $failed++ }
             elseif ($verdict.Outcome -eq 'Envelope') { $envelope++ }
             $rows += [pscustomobject]@{

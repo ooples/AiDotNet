@@ -103,18 +103,18 @@ $requiresRuntimeValidation = ConvertTo-RequiredBoolean $RequiresValidation 'Requ
 $requiresTestsNow = ConvertTo-RequiredBoolean $RequiresTests 'RequiresTests'
 $verdictIsEnforced = ConvertTo-RequiredBoolean $VerdictEnforced 'VerdictEnforced'
 
-$source = ConvertTo-CiJobConclusion $SourceResult 'SourceResult'
-$select = ConvertTo-CiJobConclusion $SelectResult 'SelectResult'
-$build = ConvertTo-CiJobConclusion $BuildResult 'BuildResult'
-$buildCompat = ConvertTo-CiJobConclusion $BuildCompatResult 'BuildCompatResult'
-$tests = ConvertTo-CiJobConclusion $TestsResult 'TestsResult'
-$regression = ConvertTo-CiJobConclusion $RegressionAnalysisResult 'RegressionAnalysisResult'
-$aggregate = ConvertTo-CiJobConclusion $AggregateAnalysisResult 'AggregateAnalysisResult'
-$sizeCheck = ConvertTo-CiJobConclusion $SizeCheckResult 'SizeCheckResult'
-$promotion = ConvertTo-CiJobConclusion $PromotionResult 'PromotionResult'
-$codeql = ConvertTo-CiJobConclusion $CodeQLResult 'CodeQLResult'
-$sonar = ConvertTo-CiJobConclusion $SonarResult 'SonarResult'
-$validationGate = ConvertTo-CiJobConclusion $ValidationGateResult 'ValidationGateResult'
+$source = ConvertTo-CiJobConclusion $SourceResult 'validation-source'
+$select = ConvertTo-CiJobConclusion $SelectResult 'select-shards'
+$build = ConvertTo-CiJobConclusion $BuildResult 'build'
+$buildCompat = ConvertTo-CiJobConclusion $BuildCompatResult 'build-compat'
+$tests = ConvertTo-CiJobConclusion $TestsResult 'test-net10-sharded'
+$regression = ConvertTo-CiJobConclusion $RegressionAnalysisResult 'test-regression-analysis'
+$aggregate = ConvertTo-CiJobConclusion $AggregateAnalysisResult 'ci-test-analysis'
+$sizeCheck = ConvertTo-CiJobConclusion $SizeCheckResult 'size-check'
+$promotion = ConvertTo-CiJobConclusion $PromotionResult 'promote-ci-test-analysis'
+$codeql = ConvertTo-CiJobConclusion $CodeQLResult 'codeql'
+$sonar = ConvertTo-CiJobConclusion $SonarResult 'sonarcloud'
+$validationGate = ConvertTo-CiJobConclusion $ValidationGateResult 'validation-gate'
 
 $requirements = [System.Collections.Generic.List[object]]::new()
 Add-RequiredSuccess $requirements 'validation-source' $source
@@ -163,9 +163,10 @@ $failed = @($requirements | Where-Object Conclusion -ne ([CiJobConclusion]::Succ
 # A job that was cancelled or never ran is not a job that failed. Telling them apart is the point of
 # #2131: a run cancelled for lack of runners otherwise reads as a broken PR. TimedOut and StartupFailure are
 # NOT in this set: a hang the change introduced times out, and an invalid workflow the change edited fails to
-# start, so both stay failures the change may have caused.
-$didNotComplete = @([CiJobConclusion]::Cancelled, [CiJobConclusion]::Abandoned, [CiJobConclusion]::Stale,
-    [CiJobConclusion]::Unknown)
+# start, so both stay failures the change may have caused. Unknown is NOT in it either: needs.<job>.result is
+# never empty for a job that exists, so an empty value means the gate was called without that input -- a
+# wiring fault to report as one, not a run to re-try.
+$didNotComplete = @([CiJobConclusion]::Cancelled, [CiJobConclusion]::Abandoned, [CiJobConclusion]::Stale)
 $incomplete = @($failed | Where-Object { $didNotComplete -contains $_.Conclusion })
 # Jobs downstream of one that never ran report Skipped; they are not failures either. A Skipped required
 # job with no incomplete job upstream is still a real gate failure (for example, required tests not run).
@@ -202,11 +203,21 @@ if ($gateStage -eq [CiGateStage]::Complete) {
 if ($onlyIncomplete) {
     [void] $summary.Add('')
     [void] $summary.Add("No required job reported a failure: $($incomplete.Count) did not run to completion " +
-        '(cancelled, never assigned a runner, or never reported). Re-run the failed jobs; nothing in the change is implicated yet.')
+        '(cancelled, never assigned a runner, or stale). Re-run the failed jobs; nothing in the change is implicated yet.')
 }
-foreach ($name in $script:UnrecognizedConclusions.Keys) {
-    [void] $summary.Add('')
-    [void] $summary.Add("$name reported an unrecognized conclusion '$($script:UnrecognizedConclusions[$name])', treated as not passing.")
+# In the requirements' own order, and only for required jobs, so the summary is stable from run to run and
+# never names an advisory job that this stage does not gate on.
+foreach ($requirement in $requirements) {
+    if ($requirement.Conclusion -eq [CiJobConclusion]::Unknown) {
+        [void] $summary.Add('')
+        [void] $summary.Add("$($requirement.Name) reported no result: the gate was called without it, which is a " +
+            'workflow wiring fault rather than a job that did not run.')
+    }
+    elseif ($requirement.Conclusion -eq [CiJobConclusion]::Unrecognized) {
+        $raw = $script:UnrecognizedConclusions[$requirement.Name]
+        [void] $summary.Add('')
+        [void] $summary.Add("$($requirement.Name) reported an unrecognized conclusion '$raw', treated as not passing.")
+    }
 }
 
 if ($SummaryFile) {
