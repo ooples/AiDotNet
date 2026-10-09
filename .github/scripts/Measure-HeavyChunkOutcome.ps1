@@ -188,7 +188,7 @@ function Invoke-SelfTest {
         Set-Content -LiteralPath $declOnly -Value '<?xml version="1.0" encoding="utf-8"?>' -Encoding utf8NoBOM
         Assert-Outcome 'declaration_only_trx' Failed $declOnly '1'
         Assert-Outcome 'chunk_timeout' Failed (New-Trx 'cap' 'Failed' @(
-                @{ Name = 'A'; Outcome = 'Failed'; Message = $oom })) 'timeout after 20 min'
+                @{ Name = 'A'; Outcome = 'Failed'; Message = $oom })) 'timeout after 60 min'
         Assert-Outcome 'sigkill' Failed '' 'SIGKILL (timeout escalation or OOM)'
     }
     finally {

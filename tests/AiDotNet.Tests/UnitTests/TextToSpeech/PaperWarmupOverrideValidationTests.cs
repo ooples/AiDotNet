@@ -1,6 +1,10 @@
 using System;
 using AiDotNet.Enums;
+using AiDotNet.Interfaces;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TextToSpeech.CodecBased;
 using AiDotNet.TextToSpeech.FlowDiffusion;
 using Xunit;
@@ -13,38 +17,62 @@ namespace AiDotNet.Tests.UnitTests.TextToSpeech;
 /// </summary>
 public sealed class PaperWarmupOverrideValidationTests
 {
+    // The exception is checked down to its parameter and rejected value: construction can throw
+    // ArgumentOutOfRangeException for other reasons, and only these two prove it came from the warmup check.
     [Theory]
     [InlineData(0)]
     [InlineData(-5)]
+    [InlineData(int.MinValue)]
     public void MaskGCT_RejectsANonPositiveWarmup(int warmupSteps)
     {
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => new MaskGCT<double>(CreateArchitecture(), new MaskGCTOptions { WarmupSteps = warmupSteps }));
+        var error = Assert.Throws<ArgumentOutOfRangeException>(
+            () => new MaskGCT<double>(CreateArchitecture(), SmallMaskGct(warmupSteps)));
+        Assert.Equal("options", error.ParamName);
+        Assert.Equal(warmupSteps, error.ActualValue);
     }
 
     [Theory]
     [InlineData(0)]
     [InlineData(-5)]
+    [InlineData(int.MinValue)]
     public void NaturalSpeech3_RejectsANonPositiveWarmup(int warmupSteps)
     {
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => new NaturalSpeech3<double>(CreateArchitecture(), new NaturalSpeech3Options { WarmupSteps = warmupSteps }));
+        var error = Assert.Throws<ArgumentOutOfRangeException>(
+            () => new NaturalSpeech3<double>(CreateSpectrogramArchitecture(), SmallNaturalSpeech3(warmupSteps)));
+        Assert.Equal("options", error.ParamName);
+        Assert.Equal(warmupSteps, error.ActualValue);
+    }
+
+    // The boundary: the check is `<= 0`, so 1 must be accepted. A regression to `< 1` or `<= 1` would
+    // still reject 0 and -5, which is why the smallest positive value is tested on its own.
+    [Fact]
+    public void MaskGCT_AcceptsTheSmallestPositiveWarmup()
+    {
+        var model = new MaskGCT<double>(CreateArchitecture(), SmallMaskGct(warmupSteps: 1));
+        Assert.NotNull(model.TrainingOptimizer);
+    }
+
+    [Fact]
+    public void NaturalSpeech3_AcceptsTheSmallestPositiveWarmup()
+    {
+        var model = new NaturalSpeech3<double>(CreateSpectrogramArchitecture(), SmallNaturalSpeech3(warmupSteps: 1));
+        Assert.NotNull(model.TrainingOptimizer);
     }
 
     [Fact]
     public void MaskGCT_ForwardsAPositiveWarmupToItsOptimizer()
     {
         AssertWarmupReachesTheSchedule(
-            new MaskGCT<double>(CreateArchitecture(), SmallMaskGct(warmupSteps: 2)),
-            new MaskGCT<double>(CreateArchitecture(), SmallMaskGct(warmupSteps: null)));
+            new MaskGCT<double>(CreateArchitecture(), SmallMaskGct(warmupSteps: 2)).TrainingOptimizer,
+            new MaskGCT<double>(CreateArchitecture(), SmallMaskGct(warmupSteps: null)).TrainingOptimizer);
     }
 
     [Fact]
     public void NaturalSpeech3_ForwardsAPositiveWarmupToItsOptimizer()
     {
         AssertWarmupReachesTheSchedule(
-            new NaturalSpeech3<double>(CreateSpectrogramArchitecture(), SmallNaturalSpeech3(warmupSteps: 2)),
-            new NaturalSpeech3<double>(CreateSpectrogramArchitecture(), SmallNaturalSpeech3(warmupSteps: null)));
+            new NaturalSpeech3<double>(CreateSpectrogramArchitecture(), SmallNaturalSpeech3(warmupSteps: 2)).TrainingOptimizer,
+            new NaturalSpeech3<double>(CreateSpectrogramArchitecture(), SmallNaturalSpeech3(warmupSteps: null)).TrainingOptimizer);
     }
 
     /// <summary>
@@ -52,7 +80,9 @@ public sealed class PaperWarmupOverrideValidationTests
     /// warmup (32000 or 5000 steps) it is still a sliver of it. The ratio is what proves the override
     /// reached the optimizer the model trains with, whatever the schedule's shape after the ramp.
     /// </summary>
-    private static void AssertWarmupReachesTheSchedule(object shortWarmup, object paperWarmup)
+    private static void AssertWarmupReachesTheSchedule(
+        IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>? shortWarmup,
+        IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>? paperWarmup)
     {
         double shortRate = ScheduleOf(shortWarmup).GetLearningRateAtStep(2);
         double paperRate = ScheduleOf(paperWarmup).GetLearningRateAtStep(2);
@@ -62,18 +92,14 @@ public sealed class PaperWarmupOverrideValidationTests
             $"step 2: {shortRate} with a 2-step warmup against {paperRate} with the paper's; the override did not apply");
     }
 
-    private static AiDotNet.LearningRateSchedulers.ILearningRateScheduler ScheduleOf(object model)
+    private static ILearningRateScheduler ScheduleOf(
+        IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>? trainingOptimizer)
     {
-        var field = model.GetType().GetField(
-            "_optimizer", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-        if (field is null)
-            throw new Xunit.Sdk.XunitException($"{model.GetType().Name} has no _optimizer field to inspect.");
-        var optimizer = Assert.IsAssignableFrom<AiDotNet.Optimizers.GradientBasedOptimizerBase<
-            double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>>(
-            field.GetValue(model));
+        var optimizer = Assert.IsAssignableFrom<GradientBasedOptimizerBase<double, Tensor<double>, Tensor<double>>>(
+            trainingOptimizer);
         var schedule = optimizer.LearningRateScheduler;
         if (schedule is null)
-            throw new Xunit.Sdk.XunitException($"{model.GetType().Name}'s optimizer has no learning-rate schedule.");
+            throw new Xunit.Sdk.XunitException("The training optimizer has no learning-rate schedule.");
         return schedule;
     }
 

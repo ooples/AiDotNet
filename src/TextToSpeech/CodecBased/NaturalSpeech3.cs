@@ -56,6 +56,9 @@ public partial class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
     public override ModelOptions GetOptions() => _options;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+
+    /// <summary>The optimizer this model trains with, for tests that check its recipe reached it.</summary>
+    internal IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
