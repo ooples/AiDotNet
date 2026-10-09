@@ -375,8 +375,11 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
     {
         if (_network is null)
         {
-            // A caller-supplied stack in another layout is an ordinary layer chain.
-            var output = mixture;
+            // A caller-supplied stack is an ordinary layer chain, fed the same single-channel
+            // [batch, 1, samples] waveform [StackInputLayout] declares for the paper network.
+            var output = mixture.Shape.Length == 2
+                ? mixture.Reshape(new[] { mixture.Shape[0], 1, mixture.Shape[1] })
+                : mixture;
             foreach (var layer in Layers) output = layer.Forward(output);
             return output;
         }
