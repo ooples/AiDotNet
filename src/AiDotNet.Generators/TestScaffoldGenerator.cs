@@ -10207,6 +10207,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumCodebooks = 1, CodebookSize = 16, VocabSize = 64, " +
                     "MaxTextLength = 8, MaxCodecFrames = 8, DropoutRate = 0.0 })";
             }
+            else if (model.ClassName == "VALLE" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
+            {
+                // VALL-E's paper model is two 1024-wide, 12-layer Transformers over EnCodec's eight 1024-code codebooks;
+                // keep both (AR with learned positional scales, NAR with adaptive layer norm and tied heads) and the
+                // codec at 16 wide, three codebooks of 64 codes, two codes per phoneme token. The codec's hop is 2560
+                // (9 frames a second), so the base class's one-second voice is a 9-frame prompt, shorter than the
+                // 16-frame training utterances.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 1, outputSize: 1), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.VALLEOptions { HiddenDim = 16, NumHeads = 2, NumEncoderLayers = 1, " +
+                    "NumDecoderLayers = 1, FeedForwardDim = 32, TextTokens = 128, NumCodebooks = 3, CodebookSize = 64, " +
+                    "MaxCodesPerTextToken = 2, LearningRate = 3e-3, WarmupSteps = 0, DropoutRate = 0.0, HopSize = 2560, " +
+                    "Codec = new AiDotNet.Audio.Generation.EnCodecOptions { SampleRate = 24000, NumQuantizers = 3, " +
+                    "CodebookSize = 64, Filters = 4, Ratios = [8, 5, 4, 4, 4], Dimension = 8, ResidualKernelSizes = [3, 1], " +
+                    "TargetBandwidthKbps = 0.16875 } })";
+            }
             else if (model.ClassName == "Pheme" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
             {
@@ -15417,24 +15436,33 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine("    protected override int[] InputShape => new[] { 8, 16 };");
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 16 };");
                 }
-                else if (model.ClassName == "Pheme")
+                else if (model.ClassName is "Pheme" or "VALLE")
                 {
-                    // Pheme reads phoneme ids and trains on codec tokens, one frame per target row (the TTS base
-                    // synthesizes [16, 3] tokens from a [16, 1] target).
+                    // Pheme and VALL-E read phoneme ids and train on codec tokens, one frame per target row (the TTS
+                    // base synthesizes [16, codebooks] tokens from a [16, 1] target).
                     sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 16, 1 };");
-                    // An untrained text-to-semantic T5 samples few of the fixture's 16 semantic tokens among its 111 (the
-                    // reference keeps only those, lazy_decode), so synthesis returns the regenerated prompt frame whatever
-                    // the text. A few steps on the fixture's semantic targets open the text path before the
-                    // input-sensitivity probes.
+                    // An untrained Pheme T5 samples few of the fixture's 16 semantic tokens among its 111 (the reference
+                    // keeps only those, lazy_decode), so synthesis returns the regenerated prompt frame whatever the
+                    // text; an untrained VALL-E stops at its end token after a code or two. A few steps on the fixture's
+                    // targets open the text path before the input-sensitivity probes.
                     sb.AppendLine("    protected override int InputSensitivityWarmUpSteps => 6;");
-                    // Pheme samples its semantic tokens, and a tiny T5 trained on one sample memorizes that sample's
-                    // sequence, so two constant inputs synthesize identical audio under the fixed sampling seed: a
-                    // property of sampling, not a broken text path. These two probes therefore compare the model's
-                    // deterministic training objective (MeasureLoss, the teacher-forced text-to-semantic loss, which
-                    // reads the text through the encoder and cross-attention) for the two inputs against one target.
-                    // Synthesize_DifferentText_DifferentOutput still checks the sampled audio for real text.
-                    foreach (var (name, trains) in new[] { ("DifferentText_DifferentAudio", false), ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true) })
+                    // Both sample their first stage (Pheme its semantic tokens, VALL-E its first codebook), and at a tiny
+                    // size the text shifts those draws only slightly: two texts sample the same tokens under the fixed
+                    // sampling seed and stop at the same step (and after training on one sample the model reproduces that
+                    // sample's sequence whatever the text). Identical audio is then a property of sampling, not a broken
+                    // text path, so every text-sensitivity probe compares the model's deterministic training objective
+                    // (MeasureLoss: the teacher-forced loss of the first stage, which reads the text) for two inputs
+                    // against one target. Each model's paper tests check its synthesized audio after training.
+                    var probes = new[]
+                    {
+                        ("DifferentText_DifferentAudio", false, "constant"),
+                        ("DifferentInputs_ShouldProduceDifferentOutputs", false, "constant"),
+                        ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
+                        ("ScaledInput_ShouldChangeOutput", false, "random"),
+                        ("Synthesize_DifferentText_DifferentOutput", false, "text"),
+                    };
+                    foreach (var (name, trains, inputs) in probes)
                     {
                         sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
                         sb.AppendLine($"    public override async System.Threading.Tasks.Task {name}()");
@@ -15450,13 +15478,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                             sb.AppendLine("        int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);");
                             sb.AppendLine("        for (int i = 0; i < iterations; i++) TrainOn(network, trainInput, target);");
                         }
-                        sb.AppendLine("        var input1 = CreateConstantTensor(EffectiveInputShape, 0.1);");
-                        sb.AppendLine("        var input2 = CreateConstantTensor(EffectiveInputShape, 0.9);");
+                        if (inputs == "constant")
+                        {
+                            sb.AppendLine("        var input1 = CreateConstantTensor(EffectiveInputShape, 0.1);");
+                            sb.AppendLine("        var input2 = CreateConstantTensor(EffectiveInputShape, 0.9);");
+                        }
+                        else if (inputs == "random")
+                        {
+                            sb.AppendLine("        var input1 = CreateRandomTensor(EffectiveInputShape, rng);");
+                            sb.AppendLine("        var input2 = CreateRandomTensor(EffectiveInputShape, rng);");
+                        }
+                        else
+                        {
+                            sb.AppendLine("        var tts = (AiDotNet.TextToSpeech.TtsModelBase<double>)network;");
+                            sb.AppendLine("        var input1 = tts.TextToTokens(\"the quick brown fox\");");
+                            sb.AppendLine("        var input2 = tts.TextToTokens(\"a completely different sentence\");");
+                        }
                         sb.AppendLine("        double loss1 = MeasureLoss(network, input1, target, target);");
                         sb.AppendLine("        double loss2 = MeasureLoss(network, input2, target, target);");
                         sb.AppendLine("        Xunit.Assert.True(double.IsFinite(loss1) && double.IsFinite(loss2), $\"Objective not finite: {loss1}, {loss2}.\");");
                         sb.AppendLine("        Xunit.Assert.True(System.Math.Abs(loss1 - loss2) > 1e-9 * System.Math.Max(1.0, System.Math.Abs(loss1)),");
-                        sb.AppendLine("            $\"The text-to-semantic objective is identical for distinct texts ({loss1:R}): the text never reaches the model.\");");
+                        sb.AppendLine("            $\"The training objective is identical for distinct inputs ({loss1:R}): the text never reaches the model.\");");
                         sb.AppendLine("    }");
                         sb.AppendLine();
                     }
@@ -20881,7 +20923,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
         return className switch
         {
-            "VALLE" => 16,
             "VALLEX" => 16,
             "VALLE2" => 16,
             "VALLEXClone" => 16,
@@ -20927,7 +20968,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return className is "VALLE" or "VALLEX" or "VALLE2" or "VALLEXClone";
+        return className is "VALLEX" or "VALLE2" or "VALLEXClone";
     }
 
     private static int CodecLMInputVocabSize(string className)

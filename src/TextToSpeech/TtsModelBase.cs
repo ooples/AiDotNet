@@ -316,6 +316,10 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     /// The network forward is <see cref="NeuralNetworkBase{T}.Predict"/>, the same graph training updates, so what a
     /// user hears is what was trained. ONNX models run their loaded graph instead.
     /// </remarks>
+    /// <summary>The tokens <see cref="Synthesize"/> feeds the model for <paramref name="text"/> (phoneme or character
+    /// ids, as this model's front end reads text).</summary>
+    public Tensor<T> TextToTokens(string text) => PreprocessText(text);
+
     public virtual Tensor<T> Synthesize(string text)
     {
         var tokens = PreprocessText(text);

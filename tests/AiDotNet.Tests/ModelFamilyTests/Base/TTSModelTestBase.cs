@@ -336,7 +336,7 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
     }
 
     [SkippableFact(Timeout = 120000)]
-    public async Task Synthesize_DifferentText_DifferentOutput()
+    public virtual async Task Synthesize_DifferentText_DifferentOutput()
     {
         await Task.Yield();
         using var _arena = TensorArena.Create();

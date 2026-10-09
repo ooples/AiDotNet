@@ -134,17 +134,6 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
     private PyannoteXVector<T>? _speakerEncoder;
     private AudioCodecLayer<T>? _codec;
 
-    /// <summary>USLM's <c>unique_text_tokens.k2symbols</c> (fnlp/USLM, USLM_libritts), the phoneme table Pheme's
-    /// checkpoints were trained on: espeak-ng's American English symbols, word separator and punctuation.</summary>
-    private static readonly string[] PhonemeSymbols =
-    {
-        "<eps>", "!", "\"", "(", ")", ",", ".", ":", ";", "?", "_", "aɪ", "aɪə", "aɪɚ", "aɪʊ", "aɪʊɹ", "aʊ", "b", "d",
-        "dʒ", "e", "enus", "es", "eɪ", "f", "fr", "h", "i", "iə", "iː", "j", "k", "l", "m", "n", "nʲ", "oʊ", "oː", "oːɹ",
-        "p", "r", "s", "t", "tʃ", "uː", "v", "w", "x", "z", "æ", "ç", "ð", "ø", "ŋ", "ɐ", "ɑ", "ɑː", "ɑːɹ", "ɔ", "ɔɪ",
-        "ɔː", "ɔːɹ", "ə", "əl", "ɚ", "ɛ", "ɛɹ", "ɛː", "ɜː", "ɡ", "ɡʲ", "ɣ", "ɪ", "ɪɹ", "ɫ", "ɬ", "ɲ", "ɹ", "ɾ", "ʃ",
-        "ʊ", "ʊɹ", "ʌ", "ʒ", "ʔ", "̃", "̩", "θ", "ᵻ", "—",
-    };
-
     /// <inheritdoc />
     public override ModelOptions GetOptions() => _options;
 
@@ -185,12 +174,12 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
         base.SampleRate = _options.SampleRate;
         base.HopSize = _options.HopSize;
         base.HiddenDim = _options.HiddenDim;
-        _options.VocabSize = 5 + PhonemeSymbols.Length + _options.SemanticCodes;
+        _options.VocabSize = 5 + LibriTtsPhonemeTable.Symbols.Length + _options.SemanticCodes;
     }
 
     private static (string[] Tokens, int[] SemanticIds) BuildVocabulary(Dictionary<string, int> ids, int semanticCodes)
     {
-        var symbols = new List<string>(PhonemeSymbols);
+        var symbols = new List<string>(LibriTtsPhonemeTable.Symbols);
         for (int s = 0; s < semanticCodes; s++) symbols.Add(s.ToString(System.Globalization.CultureInfo.InvariantCulture));
         symbols.Sort(StringComparer.Ordinal);                      // Python's sorted(): code-point order
         var tokens = new List<string> { "<pad>", "<bos>", "<eos>", "spkr_1", "spkr_2" };

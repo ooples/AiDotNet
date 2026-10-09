@@ -15,6 +15,7 @@ that produce those values, so you can check them yourself or regenerate them.
 | `t5_reference.py` | `TextToSpeech/ReferenceData/t5_reference.json` | Hugging Face `transformers` `T5ForConditionalGeneration` (Pheme's text-to-semantic model) |
 | `conformer_reference.py` | `TextToSpeech/ReferenceData/soundstorm_conformer_reference.json` | Pheme's `modules/conformer.py` (needs `--pheme`, a checkout of PolyAI-LDN/pheme) |
 | `pheme_s2a_reference.py` | `TextToSpeech/ReferenceData/pheme_s2a_reference.json` | Pheme's `modules/s2a_model.py` `TTSConformer` (needs `--pheme`) |
+| `valle_reference.py` | `TextToSpeech/ReferenceData/valle_reference.json` | lifeiteng/vall-e's `VALLE` (needs `--valle`, a checkout of lifeiteng/vall-e) |
 | `xvector_reference.py` | `TextToSpeech/ReferenceData/pyannote_xvector_reference.json` | pyannote.audio `XVectorSincNet` |
 | `espeak_g2p_reference.py` | `TextToSpeech/ReferenceData/espeak_arctic_phonemes.json` | espeak-ng through `phonemizer` (the front end Pheme was trained with) |
 | `g2p_resources.py` | `src/TextToSpeech/FrontEnd/Resources/cmudict.tsv.gz` and `nrl_rules.tsv` (the English G2P's data, not a test fixture) | CMUdict and NRL Report 7948's rules, from pinned sources |
