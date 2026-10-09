@@ -128,7 +128,7 @@ public class VALLEPaperTests
         var first = valle.Synthesize("hello there");
         var second = valle.Synthesize("hello there");
         Assert.Equal(first.ToArray(), second.ToArray());
-        Assert.All(first.ToArray(), v => Assert.True(double.IsFinite(v)));
+        Assert.All(first.ToArray(), v => Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(v)));
         // Only the new frames are returned, 320 samples each.
         Assert.True(first.Length > 0 && first.Length % 320 == 0, $"{first.Length} samples.");
 
