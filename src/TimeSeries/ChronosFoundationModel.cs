@@ -100,7 +100,9 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     [Buffer]
     private Tensor<T> _positionalEncoding;   // [maxLen, embeddingDim]
     private List<ChronosTransformerLayerTensor<T>> _transformerLayers;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputProjection;     // [vocabularySize, embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputBias;           // [vocabularySize]
 
     // Layer normalization for final output

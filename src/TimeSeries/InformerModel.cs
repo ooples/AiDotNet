@@ -83,6 +83,7 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
     private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     // Input embedding and positional encoding (Tensor-based)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _inputProjection;      // [embeddingDim, 1]
     [Buffer]
     private Tensor<T> _positionalEncoding;   // [maxLen, embeddingDim]
@@ -97,10 +98,13 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
 
     // Decoder components (Tensor-based)
     private readonly List<InformerDecoderLayerTensor<T>> _decoderLayers;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _decoderStartToken;    // [embeddingDim]
 
     // Output projection (Tensor-based)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputProjection;     // [forecastHorizon, embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputBias;           // [forecastHorizon]
 
     // Normalization statistics computed during training (zero-mean / unit-variance of the
@@ -1357,6 +1361,7 @@ internal partial class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.Lay
     private  Tensor<T> _crossOutputProj;
 
     // FFN
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _ffn1;
     [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _ffn1Bias;
