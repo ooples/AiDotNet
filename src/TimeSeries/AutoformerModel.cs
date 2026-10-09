@@ -1424,6 +1424,7 @@ internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBa
     private Tensor<T> _crossOutputProj;
 
     // Feed-forward parameters
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ff1Weight;
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ff1Bias;
