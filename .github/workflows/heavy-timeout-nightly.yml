@@ -231,6 +231,7 @@ jobs:
 
           $rows   = @()
           $failed = 0
+          $envelope = 0
           $index  = 0
 
           # Set only now, so discovery above is never constrained by the cap.
@@ -249,7 +250,7 @@ jobs:
             $filter  = 'Category=HeavyTimeout&(' + (($chunk | ForEach-Object { "FullyQualifiedName~$_" }) -join '|') + ')'
             $names   = ($chunk | ForEach-Object { $_.Substring($_.LastIndexOf('.') + 1) }) -join ', '
             if (((Get-Date) - $laneStarted).TotalMinutes + $chunkCapMinutes -gt $budgetMinutes) {
-              $rows += [pscustomobject]@{ Label = $label; Names = $names; Exit = 'not run (budget)'; Seconds = 0; MemPre = -1; MemPost = -1 }
+              $rows += [pscustomobject]@{ Label = $label; Names = $names; Exit = 'not run (budget)'; Outcome = 'Failed'; Reason = 'not run (budget)'; Seconds = 0; MemPre = -1; MemPost = -1 }
               $failed++
               Write-Host "$label -> not run: the slice's $budgetMinutes-minute budget is spent"
               continue
@@ -276,9 +277,14 @@ jobs:
             # kill-after escalation, or the kernel OOM killer), so it is reported as such rather than as a timeout.
             if ($exit -eq 124) { $exit = "timeout after $($chunkCapMinutes) min" }
             elseif ($exit -eq 137) { $exit = 'SIGKILL (timeout escalation or OOM)' }
-            if ($exit -ne 0) { $failed++ }
+            # A chunk whose every failure ran out of memory or disk has outgrown the 16 GB runner, not
+            # broken: it is listed but does not fail the lane, so a real defect among ~600 OOMs is the
+            # thing that turns it red (#2087). Timeouts, crashes and assertions still fail it.
+            $verdict = ./.github/scripts/Measure-HeavyChunkOutcome.ps1 -TrxPath (Join-Path $resultsDir "$label.trx") -ExitCode "$exit"
+            if ($verdict.Outcome -eq 'Failed') { $failed++ }
+            elseif ($verdict.Outcome -eq 'Envelope') { $envelope++ }
             $rows += [pscustomobject]@{
-              Label = $label; Names = $names; Exit = $exit
+              Label = $label; Names = $names; Exit = $exit; Outcome = [string]$verdict.Outcome; Reason = $verdict.Reason
               Seconds = $duration; MemPre = $memPre; MemPost = $memPost
             }
             Write-Host "$label -> exit $exit in ${duration}s (MemAvailable ${memPre} MB -> ${memPost} MB)"
@@ -290,17 +296,21 @@ jobs:
           $summary = @()
           $summary += '## Heavy Timeout Models'
           $summary += ''
-          $summary += "$($classes.Count) classes in $($chunks.Count) chunk(s) of up to $chunkSize, one process each. $failed chunk(s) failed."
+          $summary += "$($classes.Count) classes in $($chunks.Count) chunk(s) of up to $chunkSize, one process each. $failed chunk(s) failed; $envelope exceeded the runner's memory or disk."
           $summary += ''
           $summary += '| Chunk | Result | Seconds | Mem before | Mem after | Classes |'
           $summary += '|---|---|---:|---:|---:|---|'
           foreach ($r in $rows) {
-            $result = if ($r.Exit -eq 0) { 'pass' } else { "FAIL (exit $($r.Exit))" }
+            $result = switch ($r.Outcome) {
+              'Passed'   { 'pass' }
+              'Envelope' { "exceeds runner ($($r.Reason))" }
+              default    { "FAIL ($($r.Reason))" }
+            }
             $summary += "| $($r.Label) | $result | $($r.Seconds) | $($r.MemPre) MB | $($r.MemPost) MB | $($r.Names) |"
           }
           $summary -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
-          Write-Host "=== $($chunks.Count) chunk(s) run, $failed failed ==="
+          Write-Host "=== $($chunks.Count) chunk(s) run, $failed failed, $envelope exceeded the runner ==="
           if ($failed -gt 0) { exit 1 }
 
       - name: Upload results

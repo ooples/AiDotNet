@@ -89,6 +89,10 @@ public partial class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
         : base(architecture)
     {
         _options = options ?? new NaturalSpeech3Options();
+        // PaperOptimizerFactory ignores a non-positive override and would silently train on the
+        // paper warmup instead of the value the caller set.
+        if (_options.WarmupSteps <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), _options.WarmupSteps, "WarmupSteps must be positive.");
         _useNativeMode = true;
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, warmupStepsOverride: _options.WarmupSteps)

@@ -220,6 +220,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // ensemble (populated with members) is covered by the AutoML search integration tests.
         "AutoMLEnsembleModel",
 
+        // A search over diffusion configurations, not a diffusion model: it extends AutoMLModelBase and
+        // returns the best IFullModel it found, so it implements no IDiffusionModel and the Diffusion
+        // family it is routed to by its (accurate, descriptive) [ModelCategory(Diffusion)] can never
+        // build it (#2138). DiffusionAutoMLTrainingTests covers the search itself.
+        "DiffusionAutoML",
+
         // Proprietary-API TTS wrappers (ElevenLabs, AmazonPolly, AzureNeuralTTS,
         // GoogleCloudTTS, Murf, NVIDIARivaTTS): real inference is a remote API
         // call, not a local Predict pipeline — these classes have no published
@@ -6994,6 +7000,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     $"new {codecOptionsType} {{ NumCodebooks = 2, " +
                     "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 64, NumEncoderLayers = 1, " +
                     "NumLLMLayers = 2, NumHeads = 4, MaxTextLength = 8, MaxCodecFrames = 8, " +
+                    // MaskGCT's paper warmup is 32000 steps, which leaves the rate near 3e-9 for the
+                    // memorization probe's two steps (loss fell 0.6% against the required 1%, #2087);
+                    // a short ramp reaches the recipe's 1e-4, as the NaturalSpeech3 fixture does.
+                    (model.ClassName == "MaskGCT" ? "WarmupSteps = 2, " : "") +
                     "DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "ByteTrack" && model.TypeParameterCount == 1
@@ -12713,6 +12723,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumPropagationBranches = 4, BlocksPerBranch = 1, ScaleFactor = 2, " +
                     "ReconstructionChannels = 8, Seed = 1234 })";
             }
+            else if (model.ClassName == "ConvTasNet" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Audio.Enhancement.", System.StringComparison.Ordinal))
+            {
+                // Conv-TasNet (Luo & Mesgarani 2019) at smoke width with its whole topology: the learned
+                // encoder, gLN, the bottleneck, two TCN blocks (one residual path, dilations 1 and 2), the
+                // PReLU + sigmoid mask head for two sources (so permutation-invariant SI-SNR is exercised)
+                // and the transposed-conv decoder. It separates waveforms, so the input is [1, samples].
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 128, outputSize: 128), " +
+                    "new AiDotNet.Models.Options.ConvTasNetOptions { " +
+                    "SampleRate = 8000, EncoderDim = 16, KernelSize = 8, BottleneckDim = 8, HiddenDim = 16, " +
+                    "NumBlocks = 2, NumRepeats = 1, TcnKernelSize = 3, NumSources = 2 })";
+            }
             else if (model.ClassName == "DOVE" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
             {
@@ -13638,6 +13663,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // full strength.
             sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 16, 16 };");
+        }
+        else if (model.ClassName == "ConvTasNet")
+        {
+            // One 128-sample mono mixture separated into two sources; see the constructor pin above.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 128 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 2, 128 };");
         }
         else if (model.ClassName == "MIAVSR")
         {

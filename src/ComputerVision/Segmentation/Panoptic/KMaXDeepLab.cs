@@ -2,6 +2,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -58,6 +59,12 @@ namespace AiDotNet.ComputerVision.Segmentation.Panoptic;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("k-means Mask Transformer", "https://arxiv.org/abs/2207.04044", Year = 2022, Authors = "Yu et al.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-4, WeightDecay = 0.05,
+                WarmupSteps = 5000, Schedule = LearningRateSchedulerType.LinearWarmup, ReferenceBatchSize = 64,
+                Source = "Yu et al. 2022, Sec. 4 (Training and testing; COCO dataset): AdamW with weight decay "
+                        + "0.05, batch size 64, and a learning rate that rises linearly from 0 to 5e-4 over the "
+                        + "first 5k steps. The segmentation default (AdamW at 1e-3, decay 0.01) raised the "
+                        + "loss from 1.98 to 2.63 in two steps on the nightly heavy lane (#2087).")]
 public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
 {
     private readonly KMaXDeepLabOptions _options;

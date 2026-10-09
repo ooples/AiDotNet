@@ -102,6 +102,58 @@ Invoke-GateCase -Name complete_non_runtime_reuse -ReuseScope Complete -RequiresV
 Invoke-GateCase -Name source_failure_always_blocks -ReuseScope Complete -Source failure `
     -Promotion success -CodeQL skipped -Sonar skipped -ValidationGate skipped -ExpectedExit 1
 
+# #2131: a select job that never got a runner reports the undocumented conclusion 'abandoned'. The gate
+# must fail on it (no job ran) without throwing, and so must any conclusion it does not recognise.
+Invoke-GateCase -Name validation_select_abandoned -Stage Validation -Select abandoned -ExpectedExit 1
+Invoke-GateCase -Name validation_select_unrecognized -Stage Validation -Select mystery_state -ExpectedExit 1
+Invoke-GateCase -Name complete_codeql_abandoned -CodeQL abandoned -ExpectedExit 1
+
+# The summary must say when nothing failed and jobs merely did not run, and must not say it when one failed.
+$summaryPath = [System.IO.Path]::GetTempFileName()
+try {
+    & $Gate -Stage Validation -ReuseScope None -SourceResult success -RequiresValidation true `
+        -SelectResult abandoned -BuildResult skipped -BuildCompatResult skipped -TestsResult skipped `
+        -RegressionAnalysisResult skipped -AggregateAnalysisResult skipped -SizeCheckResult skipped `
+        -SummaryFile $summaryPath *> $null
+    $text = Get-Content -LiteralPath $summaryPath -Raw
+    if ($text -notmatch 'No required job reported a failure') {
+        [void] $failures.Add('summary_names_incomplete: an abandoned select job was not described as not having run')
+    }
+    & $Gate -Stage Validation -ReuseScope None -SourceResult success -RequiresValidation true `
+        -SelectResult success -BuildResult failure -SummaryFile $summaryPath *> $null
+    $text = Get-Content -LiteralPath $summaryPath -Raw
+    if ($text -match 'No required job reported a failure') {
+        [void] $failures.Add('summary_names_incomplete: a real build failure was described as not having run')
+    }
+    # A timeout can be a hang the change introduced, and a startup failure an invalid workflow it edited:
+    # neither may be excused as "did not run".
+    foreach ($implicated in 'timed_out', 'startup_failure') {
+        & $Gate -Stage Validation -ReuseScope None -SourceResult success -RequiresValidation true `
+            -SelectResult success -BuildResult $implicated -BuildCompatResult success -TestsResult success `
+            -RegressionAnalysisResult success -VerdictEnforced true -AggregateAnalysisResult success `
+            -SizeCheckResult success -SummaryFile $summaryPath *> $null
+        # Every other job passed, so the exit code is decided by the build's outcome alone.
+        if ($LASTEXITCODE -ne 1) {
+            [void] $failures.Add("validation_build_${implicated}: expected exit 1, got $LASTEXITCODE")
+        }
+        $text = Get-Content -LiteralPath $summaryPath -Raw
+        if ($text -match 'No required job reported a failure') {
+            [void] $failures.Add("summary_names_incomplete: a build that reported '$implicated' was excused as not having run")
+        }
+    }
+    & $Gate -Stage Validation -ReuseScope None -SourceResult success -RequiresValidation true `
+        -SelectResult mystery_state -BuildResult skipped -BuildCompatResult skipped -TestsResult skipped `
+        -RegressionAnalysisResult skipped -AggregateAnalysisResult skipped -SizeCheckResult skipped `
+        -SummaryFile $summaryPath *> $null
+    $text = Get-Content -LiteralPath $summaryPath -Raw
+    if ($text -notmatch '\*\*Gate FAILED\*\*' -or $text -notmatch "reported an unrecognized conclusion 'mystery_state', treated as not passing") {
+        [void] $failures.Add('summary_names_unrecognized: an unrecognized select conclusion was not named in a failed summary')
+    }
+}
+finally {
+    Remove-Item -LiteralPath $summaryPath -ErrorAction SilentlyContinue
+}
+
 Invoke-GateCase -Name deferred_validation_is_not_passing -Source failure -Select skipped `
     -Build skipped -BuildCompat skipped -Tests skipped `
     -Regression skipped -Aggregate skipped -SizeCheck skipped -CodeQL skipped -Sonar skipped `
