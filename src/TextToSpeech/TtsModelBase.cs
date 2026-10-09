@@ -366,6 +366,10 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
             throw new ArgumentException(
                 $"{GetType().Name} trains on the recording's codec tokens; set {nameof(sample.CodecTokens)} or {nameof(sample.Audio)}.",
                 nameof(sample));
+        if ((RequiredSupervision & TtsSupervision.PromptCodecTokens) != 0 && sample.PromptCodecTokens is null)
+            throw new ArgumentException(
+                $"{GetType().Name} trains with the codec tokens of another utterance of the same speaker as a prompt; set " +
+                $"{nameof(sample.PromptCodecTokens)}.", nameof(sample));
         if ((RequiredSupervision & TtsSupervision.ReferenceRecording) != 0 && sample.SpeakerReference is null && sample.Audio is null)
             throw new ArgumentException(
                 $"{GetType().Name} reads the speaker from a recording; set {nameof(sample.SpeakerReference)} or {nameof(sample.Audio)}.",

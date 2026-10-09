@@ -39,4 +39,11 @@ public enum TtsSupervision
     /// its codec), for models that generate codec tokens rather than a spectrogram (Pheme's SpeechTokenizer codes).
     /// </summary>
     CodecTokens = 64,
+
+    /// <summary>
+    /// The codec tokens of another utterance of the same speaker, <c>[frames, codebooks]</c>, which the model reads as an
+    /// acoustic prompt in training (VALL-E X's NAR model reads the previous sentence of the same speaker, Zhang et al.
+    /// 2023 Eq. 2).
+    /// </summary>
+    PromptCodecTokens = 128,
 }

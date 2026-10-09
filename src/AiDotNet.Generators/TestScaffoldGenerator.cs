@@ -7260,7 +7260,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if ((model.ClassName == "MARS5TTS" || model.ClassName == "MaskGCT"
                       || model.ClassName == "MinMo" || model.ClassName == "LlamaOmni"
-                      || model.ClassName == "Voicebox" || model.ClassName == "VALLEX"
+                      || model.ClassName == "Voicebox"
                       || model.ClassName == "WhisperSpeech" || model.ClassName == "Zonos")
                      && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.TextToSpeech.", System.StringComparison.Ordinal))
@@ -7275,10 +7275,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // MaskGCT and MinMo were already on Fp32TestClassNames, so <float> was applied
                 // first and measured insufficient — these OOM during CONSTRUCTION, which halving
                 // element width cannot fix. MARS5TTS carried no mitigation at all.
-                // Voicebox, VALLEX and WhisperSpeech join from the T-Z shard, which ran only 23
-                // classes before hitting the 45-min job timeout: measured there at 356s, 231s and
-                // 199s of test time respectively — with VALLE (309s) and W2vBERT (251s), six
-                // classes accounted for roughly 24 of those 45 minutes. Voicebox and WhisperSpeech
+                // Voicebox and WhisperSpeech join from the T-Z shard, which ran only 23 classes
+                // before hitting the 45-min job timeout: measured there at 356s and 199s of test time. Voicebox and WhisperSpeech
                 // additionally failed Training_ShouldReduceLoss and
                 // LossStrictlyDecreasesOnMemorizationTask, which the smaller fixture also settles
                 // by keeping training stable at the default step size.
@@ -7286,9 +7284,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // at smoke scale through the public options, exactly as the FireRedTTS bound above
                 // does for the same base. Production defaults are unchanged.
                 // NumCodebooks stays at 2, NOT 1. Several models routed here have a genuine
-                // MULTI-codebook contract that collapses at 1: VALLEX is VALL-E X, whose AR stage
-                // predicts the first codebook and whose NAR stage predicts the REMAINING ones, and
-                // MaskGCT and Voicebox are likewise non-autoregressive over multiple codec layers.
+                // MULTI-codebook contract that collapses at 1: MaskGCT and Voicebox are
+                // non-autoregressive over multiple codec layers.
                 // At NumCodebooks = 1 there are no remaining codebooks, so the NAR half of those
                 // architectures is silently skipped by the fixture and the test stops covering the
                 // thing the paper is about. 2 is the smallest value that keeps both stages live, and
@@ -7299,7 +7296,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "MaskGCT" => "AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions",
                     "LlamaOmni" => "AiDotNet.TextToSpeech.MultiModal.LlamaOmniOptions",
                     "Voicebox" => "AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions",
-                    "VALLEX" => "AiDotNet.TextToSpeech.CodecBased.VALLEXOptions",
                     "WhisperSpeech" => "AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions",
                     "Zonos" => "AiDotNet.TextToSpeech.CodecBased.ZonosOptions",
                     _ => "AiDotNet.TextToSpeech.MultiModal.MinMoOptions",
@@ -10251,6 +10247,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputSize: 1, outputSize: 1), " +
                     "new AiDotNet.TextToSpeech.CodecBased.VALLEOptions { HiddenDim = 16, NumHeads = 2, NumEncoderLayers = 1, " +
                     "NumDecoderLayers = 1, FeedForwardDim = 32, TextTokens = 128, NumCodebooks = 3, CodebookSize = 64, " +
+                    "MaxCodesPerTextToken = 2, LearningRate = 3e-3, WarmupSteps = 0, DropoutRate = 0.0, HopSize = 2560, " +
+                    "Codec = new AiDotNet.Audio.Generation.EnCodecOptions { SampleRate = 24000, NumQuantizers = 3, " +
+                    "CodebookSize = 64, Filters = 4, Ratios = [8, 5, 4, 4, 4], Dimension = 8, ResidualKernelSizes = [3, 1], " +
+                    "TargetBandwidthKbps = 0.16875 } })";
+            }
+            else if (model.ClassName == "VALLEX" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
+            {
+                // VALL-E X is VALL-E with a language table; the same bounded fixture as VALL-E's (16 wide, three codebooks
+                // of 64 codes, a 2560-sample codec hop), its vocabulary the English and Mandarin tables together.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 1, outputSize: 1), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.VALLEXOptions { HiddenDim = 16, NumHeads = 2, NumEncoderLayers = 1, " +
+                    "NumDecoderLayers = 1, FeedForwardDim = 32, TextTokens = 192, NumCodebooks = 3, CodebookSize = 64, " +
                     "MaxCodesPerTextToken = 2, LearningRate = 3e-3, WarmupSteps = 0, DropoutRate = 0.0, HopSize = 2560, " +
                     "Codec = new AiDotNet.Audio.Generation.EnCodecOptions { SampleRate = 24000, NumQuantizers = 3, " +
                     "CodebookSize = 64, Filters = 4, Ratios = [8, 5, 4, 4, 4], Dimension = 8, ResidualKernelSizes = [3, 1], " +
@@ -15249,30 +15261,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine("    protected override int TrainingIterations => 2;");
                     sb.AppendLine("    protected override int MemorizationTaskIterations => 15;");
                 }
-                else if (model.ClassName is "VALLE" or "VALLEX")
-                {
-                    // The exact Generated U-Z shard timed out in the default repeated training
-                    // probes even after FP32 and the reduced codec-LM fixture were in place
-                    // (VALLE: Training_ShouldReduceLoss; VALLEX: TrainingError). Six real
-                    // updates retain the fitting invariant without changing the paper's
-                    // discrete-code conditional-language-model topology.
-                    sb.AppendLine("    protected override int TrainingIterations => 2;");
-                    if (model.ClassName == "VALLE")
-                    {
-                        // Its exact 100-step memorization probe also exceeded the 180-second
-                        // watchdog after FP32; retain 15 real optimizer steps before considering
-                        // any further reduction of the already smoke-scale codec-LM fixture.
-                        sb.AppendLine("    protected override int MemorizationTaskIterations => 15;");
-                    }
-                    else if (model.ClassName == "VALLEX")
-                    {
-                        // The exact 100-step memorization probe also exceeded the 180-second
-                        // watchdog after FP32; cap only its repetition count at the same 15 real
-                        // optimizer steps as the VALL-E-family siblings. The reduced fixture and
-                        // discrete-code conditional-language-model topology remain unchanged.
-                        sb.AppendLine("    protected override int MemorizationTaskIterations => 15;");
-                    }
-                }
                 else if (model.ClassName == "VALLEXClone")
                 {
                     // The exact Generated U-Z shard proved the FP32, reduced VALL-E-X fixture still
@@ -15474,7 +15462,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine("    protected override int[] InputShape => new[] { 8, 16 };");
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 16 };");
                 }
-                else if (model.ClassName is "Pheme" or "VALLE")
+                else if (model.ClassName is "Pheme" or "VALLE" or "VALLEX")
                 {
                     // Pheme and VALL-E read phoneme ids and train on codec tokens, one frame per target row (the TTS
                     // base synthesizes [16, codebooks] tokens from a [16, 1] target).
@@ -20961,7 +20949,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
         return className switch
         {
-            "VALLEX" => 16,
             "VALLE2" => 16,
             "VALLEXClone" => 16,
             "IndexTTS" => 16,
@@ -21006,7 +20993,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     {
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return className is "VALLEX" or "VALLE2" or "VALLEXClone";
+        return className is "VALLE2" or "VALLEXClone";
     }
 
     private static int CodecLMInputVocabSize(string className)
@@ -21029,7 +21016,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             "VALLEXClone" => "AiDotNet.TextToSpeech.VoiceCloning.VALLEXCloneOptions",
             "VALLE2" => "AiDotNet.TextToSpeech.CodecBased.VALLE2Options",
-            "VALLEX" => "AiDotNet.TextToSpeech.CodecBased.VALLEXOptions",
             _ => "AiDotNet.TextToSpeech.CodecBased.VALLEOptions",
         };
     }

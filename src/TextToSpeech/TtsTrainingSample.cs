@@ -60,4 +60,10 @@ public sealed class TtsTrainingSample<T>
 
     /// <summary>Discrete codec tokens of the recording, <c>[frames, codebooks]</c>.</summary>
     public Tensor<T>? CodecTokens { get; init; }
+
+    /// <summary>
+    /// Discrete codec tokens of another utterance of the same speaker, <c>[frames, codebooks]</c>, for models that train
+    /// with an acoustic prompt from a different sentence (VALL-E X).
+    /// </summary>
+    public Tensor<T>? PromptCodecTokens { get; init; }
 }

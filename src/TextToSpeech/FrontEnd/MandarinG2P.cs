@@ -99,6 +99,10 @@ public sealed class MandarinG2P
         }
     }
 
+    /// <summary>Every symbol <see cref="Phonemize"/> produces from Chinese, punctuation and Latin letters (characters it
+    /// passes through unchanged, such as other symbols, are outside it).</summary>
+    public static IReadOnlyList<string> Symbols => SymbolTable.Value;
+
     /// <summary>The shared instance (the dictionaries load once, on first use).</summary>
     public static MandarinG2P Default => SharedInstance.Value;
 
@@ -264,6 +268,15 @@ public sealed class MandarinG2P
         ("ㄦ", "əɻ"), ("ㄧ", "i"), ("ㄨ", "u"), ("ㄩ", "ɥ"), ("ˉ", "→"), ("ˊ", "↑"), ("ˇ", "↓↑"), ("ˋ", "↓"),
         ("˙", ""), ("，", ","), ("。", "."), ("！", "!"), ("？", "?"), ("—", "-"),
     };
+
+    // Declared after the table it reads: static fields initialize in textual order.
+    private static readonly Lazy<IReadOnlyList<string>> SymbolTable = new(() =>
+    {
+        var symbols = new SortedSet<string>(StringComparer.Ordinal) { "_", "j", "w", "ɹ", "`" };
+        foreach (var (_, replacement) in BopomofoToIpa)
+            foreach (var c in Codepoints(replacement)) symbols.Add(c);
+        return symbols.ToList();
+    }, isThreadSafe: true);
 
     // pypinyin's RE_HANS character ranges.
     private static readonly (int From, int To)[] HanRanges =

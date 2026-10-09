@@ -16,9 +16,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <param name="Dropout">Dropout (0.1).</param>
 /// <param name="ShareEmbedding">Whether NAR head j shares its weights with acoustic embedding j + 1 (the reference's
 /// <c>share_embedding</c>, on).</param>
+/// <param name="Languages">Language-ID table rows (0: no language IDs, as in VALL-E; VALL-E X's languages).</param>
+/// <param name="LanguagePlacement">Where the language embedding is added (VALL-E X).</param>
 internal sealed record VallEConfiguration(
     int TextTokens, int AudioTokens, int Codebooks, int ModelDim, int Heads, int Layers, int FeedForwardDim,
-    double Dropout, bool ShareEmbedding = true);
+    double Dropout, bool ShareEmbedding = true, int Languages = 0,
+    VallELanguagePlacement LanguagePlacement = VallELanguagePlacement.AcousticTokens);
+
+/// <summary>Where VALL-E X adds its language embedding.</summary>
+public enum VallELanguagePlacement
+{
+    /// <summary>To the AR model's acoustic-token embeddings (Zhang et al. 2023, §3.3).</summary>
+    AcousticTokens,
+
+    /// <summary>To the phoneme embeddings of both the AR and the NAR model (Plachtaa/VALL-E-X).</summary>
+    TextTokens,
+}
 
 /// <summary>
 /// VALL-E's autoregressive and non-autoregressive codec language models (Wang et al. 2023, §4.2; lifeiteng/vall-e
@@ -75,6 +88,12 @@ internal sealed class VallECore<T>
         // without sharing).
         for (int j = 0; j < c.Codebooks - 1; j++)
             NarOwnHeads.Add(c.ShareEmbedding && j < c.Codebooks - 2 ? null : Own(narLayers, new BiasFreeLinearLayer<T>(d, c.AudioTokens)));
+        if (c.Languages > 0)
+        {
+            ArLanguageEmbedding = Own(arLayers, new TiedEmbeddingLayer<T>(c.Languages, d));
+            if (c.LanguagePlacement == VallELanguagePlacement.TextTokens)
+                NarLanguageEmbedding = Own(narLayers, new TiedEmbeddingLayer<T>(c.Languages, d));
+        }
     }
 
     public VallEConfiguration Configuration { get; }
@@ -95,6 +114,18 @@ internal sealed class VallECore<T>
     public VallETransformer<T> NarDecoder { get; }
     public List<TiedEmbeddingLayer<T>> NarStageEmbeddings { get; } = new();
     public List<BiasFreeLinearLayer<T>?> NarOwnHeads { get; } = new();
+    public TiedEmbeddingLayer<T>? ArLanguageEmbedding { get; }
+    public TiedEmbeddingLayer<T>? NarLanguageEmbedding { get; }
+
+    // Adds each position's language embedding, when the model has one and the caller gives the positions' languages.
+    private Tensor<T> WithLanguage(Tensor<T> embedded, TiedEmbeddingLayer<T>? table, IReadOnlyList<int>? languages)
+    {
+        if (table is null) return embedded;
+        if (languages is null) throw new ArgumentException("This model reads a language ID for every position.");
+        if (languages.Count != embedded.Shape[0])
+            throw new ArgumentException($"{languages.Count} language IDs for {embedded.Shape[0]} positions.");
+        return _engine.TensorAdd(embedded, table.Forward(Ids(languages)));
+    }
 
     private static TLayer Own<TLayer>(List<LayerBase<T>> layers, TLayer layer) where TLayer : LayerBase<T>
     {
@@ -131,6 +162,8 @@ internal sealed class VallECore<T>
         ArAudioEmbedding.Reinitialize(Normal);
         ArDecoder.InitializeLikePyTorch(random);
         Head(ArPredict);
+        ArLanguageEmbedding?.Reinitialize(Normal);
+        NarLanguageEmbedding?.Reinitialize(Normal);
         NarTextEmbedding.Reinitialize(Normal);
         foreach (var embedding in NarAudioEmbeddings) embedding.Reinitialize(Normal);
         NarDecoder.InitializeLikePyTorch(random);
@@ -146,11 +179,15 @@ internal sealed class VallECore<T>
     /// (framed), first-codebook codes <paramref name="codes"/>; position <c>t</c> predicts the code after
     /// <c>codes[t]</c>.
     /// </summary>
-    public Tensor<T> ArLogits(IReadOnlyList<int> text, IReadOnlyList<int> codes, bool training, Random random)
+    public Tensor<T> ArLogits(IReadOnlyList<int> text, IReadOnlyList<int> codes, bool training, Random random,
+        IReadOnlyList<int>? textLanguages = null, IReadOnlyList<int>? codeLanguages = null)
     {
         int textLength = text.Count, codeLength = codes.Count, total = textLength + codeLength;
-        var x = ArTextPosition.Forward(ArTextEmbedding.Forward(Ids(text)), training, random);
-        var y = ArAudioPosition.Forward(ArAudioEmbedding.Forward(Ids(codes)), training, random);
+        bool onText = Configuration.LanguagePlacement == VallELanguagePlacement.TextTokens;
+        var x = ArTextPosition.Forward(WithLanguage(ArTextEmbedding.Forward(Ids(text)), onText ? ArLanguageEmbedding : null,
+            textLanguages), training, random);
+        var y = ArAudioPosition.Forward(WithLanguage(ArAudioEmbedding.Forward(Ids(codes)), onText ? null : ArLanguageEmbedding,
+            codeLanguages), training, random);
         var xy = _engine.TensorConcatenate(new[] { x, y }, 0);
         // Phonemes attend to phonemes only; each code to the phonemes and the codes up to itself.
         var ops = MathHelper.GetNumericOperations<T>();
@@ -166,9 +203,10 @@ internal sealed class VallECore<T>
 
     /// <summary>The AR loss (§4.2.1): the summed cross-entropy of each next code and, after the last, the end token,
     /// teacher-forced (the reference's <c>reduction="sum"</c>).</summary>
-    public Tensor<T> ArLoss(IReadOnlyList<int> text, IReadOnlyList<int> codes, bool training, Random random)
+    public Tensor<T> ArLoss(IReadOnlyList<int> text, IReadOnlyList<int> codes, bool training, Random random,
+        IReadOnlyList<int>? textLanguages = null, IReadOnlyList<int>? codeLanguages = null)
     {
-        var logits = ArLogits(text, codes, training, random);                                                // [T, V]
+        var logits = ArLogits(text, codes, training, random, textLanguages, codeLanguages);                                                // [T, V]
         var targets = new int[codes.Count];
         for (int t = 0; t < codes.Count; t++) targets[t] = t + 1 < codes.Count ? codes[t + 1] : EndToken;
         return CrossEntropySum(logits, targets);
@@ -180,13 +218,16 @@ internal sealed class VallECore<T>
     /// <paramref name="maxNewCodes"/>. Returns only the new codes.
     /// </summary>
     public List<int> ArGenerate(IReadOnlyList<int> text, IReadOnlyList<int> prompt, double temperature, int topK,
-        int maxNewCodes, Random random)
+        int maxNewCodes, Random random, IReadOnlyList<int>? textLanguages = null, int promptLanguage = 0, int targetLanguage = 0)
     {
         var codes = new List<int>(prompt);
         var generated = new List<int>();
         while (generated.Count <= maxNewCodes)
         {
-            var logits = ArLogits(text, codes, training: false, random);
+            // The prompt's codes speak the prompt's language, the new ones the target's.
+            var codeLanguages = ArLanguageEmbedding is null ? null
+                : Enumerable.Range(0, codes.Count).Select(i => i < prompt.Count ? promptLanguage : targetLanguage).ToArray();
+            var logits = ArLogits(text, codes, training: false, random, textLanguages, codeLanguages);
             int last = codes.Count - 1, vocabulary = logits.Shape[1];
             var row = new double[vocabulary];
             int best = 0;
@@ -236,7 +277,8 @@ internal sealed class VallECore<T>
     /// <paramref name="prompt"/> <c>[promptFrames, codebooks]</c> (all codebooks summed) and the target's codes
     /// <paramref name="codes"/> <c>[frames, codebooks]</c>, of which codebooks <c>0 … stage − 1</c> are summed.
     /// </summary>
-    public Tensor<T> NarLogits(IReadOnlyList<int> text, int[,] prompt, int[,] codes, int stage, bool training, Random random)
+    public Tensor<T> NarLogits(IReadOnlyList<int> text, int[,] prompt, int[,] codes, int stage, bool training, Random random,
+        IReadOnlyList<int>? textLanguages = null)
     {
         var c = Configuration;
         int promptFrames = prompt.GetLength(0), frames = codes.GetLength(0), d = c.ModelDim;
@@ -256,7 +298,8 @@ internal sealed class VallECore<T>
         var y = Sum(codes, stage);
         if (promptFrames > 0)
             y = _engine.TensorConcatenate(new[] { Sum(prompt, c.Codebooks), y }, 0);
-        var x = NarTextPosition.Forward(NarTextEmbedding.Forward(Ids(text)), training, random);
+        var x = NarTextPosition.Forward(WithLanguage(NarTextEmbedding.Forward(Ids(text)), NarLanguageEmbedding, textLanguages),
+            training, random);
         var yPositioned = NarAudioPosition.Forward(y, training, random);
         var xy = _engine.TensorConcatenate(new[] { x, yPositioned }, 0);
         var stageEmbedding = NarStageEmbeddings[stage - 1].Forward(new Tensor<T>(new[] { 1 }));             // [1, d]
@@ -298,8 +341,23 @@ internal sealed class VallECore<T>
             MathHelper.GetNumericOperations<T>().FromDouble((double)frames / (frames - length)));
     }
 
+    /// <summary>
+    /// The NAR loss with an acoustic prompt from another utterance of the same speaker (VALL-E X, Eq. 2): a uniformly
+    /// drawn stage, the prompt's codes (all codebooks) in front, and the summed cross-entropy of the stage's codes.
+    /// </summary>
+    public Tensor<T> NarLossWithPrompt(IReadOnlyList<int> text, int[,] prompt, int[,] codes, bool training, Random random,
+        IReadOnlyList<int>? textLanguages = null)
+    {
+        int stage = 1 + random.Next(Configuration.Codebooks - 1);
+        var logits = NarLogits(text, prompt, codes, stage, training, random, textLanguages);
+        var targets = new int[codes.GetLength(0)];
+        for (int t = 0; t < targets.Length; t++) targets[t] = codes[t, stage];
+        return CrossEntropySum(logits, targets);
+    }
+
     /// <summary>Fills codebooks 2 … 8 of the frames after the prompt, greedily, one stage at a time (§4.3).</summary>
-    public int[,] NarGenerate(IReadOnlyList<int> text, int[,] prompt, int[] firstCodebook, Random random)
+    public int[,] NarGenerate(IReadOnlyList<int> text, int[,] prompt, int[] firstCodebook, Random random,
+        IReadOnlyList<int>? textLanguages = null)
     {
         var c = Configuration;
         int frames = firstCodebook.Length;
@@ -308,7 +366,7 @@ internal sealed class VallECore<T>
         var ops = MathHelper.GetNumericOperations<T>();
         for (int stage = 1; stage < c.Codebooks; stage++)
         {
-            var logits = NarLogits(text, prompt, codes, stage, training: false, random);
+            var logits = NarLogits(text, prompt, codes, stage, training: false, random, textLanguages);
             for (int t = 0; t < frames; t++)
             {
                 int best = 0;
@@ -359,5 +417,8 @@ internal sealed class VallECore<T>
             if (NarOwnHeads[j] is { } head)
                 TorchParameters.Linear(head, d, c.AudioTokens, read($"nar_predict_layers.{j}.weight", new[] { c.AudioTokens, d }));
         }
+        // Plachtaa/VALL-E-X's names for VALL-E X's language tables.
+        ArLanguageEmbedding?.LoadTable(read("ar_language_embedding.word_embeddings.weight", new[] { c.Languages, d }));
+        NarLanguageEmbedding?.LoadTable(read("nar_language_embedding.word_embeddings.weight", new[] { c.Languages, d }));
     }
 }

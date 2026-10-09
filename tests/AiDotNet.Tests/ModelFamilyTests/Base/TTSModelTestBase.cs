@@ -148,6 +148,7 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
         // the target so a memorization task has something consistent to learn.
         Tensor<T>? codecTokens = null;
         Tensor<T>? speakerRecording = null;
+        Tensor<T>? promptCodecTokens = null;
         if (network is not null && (network.TrainingSupervision & AiDotNet.TextToSpeech.TtsSupervision.CodecTokens) != 0)
         {
             int codebooks = network.CodecTokenCodebooks, vocabulary = network.CodecTokenVocabulary;
@@ -161,6 +162,17 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
                 for (int q = 0; q < codebooks; q++)
                     codecTokens[f, q] = ops.FromDouble(((int)(level * 997) + 31 * q + 7 * f) % vocabulary);
             }
+        }
+        if (network is not null && (network.TrainingSupervision & AiDotNet.TextToSpeech.TtsSupervision.PromptCodecTokens) != 0)
+        {
+            // Another "utterance of the same speaker": half as many frames, a different deterministic code pattern.
+            int codebooks = network.CodecTokenCodebooks, vocabulary = network.CodecTokenVocabulary;
+            // Sized from the codec tokens (a waveform target counts samples, not frames).
+            int promptFrames = Math.Max(2, (codecTokens?.Shape[0] ?? frames) / 2);
+            promptCodecTokens = new Tensor<T>(new[] { promptFrames, codebooks });
+            for (int f = 0; f < promptFrames; f++)
+                for (int q = 0; q < codebooks; q++)
+                    promptCodecTokens[f, q] = ops.FromDouble((13 * f + 5 * q + 3) % vocabulary);
         }
         if (network is not null && (network.TrainingSupervision & AiDotNet.TextToSpeech.TtsSupervision.ReferenceRecording) != 0)
         {
@@ -179,9 +191,11 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
             Pitch = pitch,
             Energy = energy,
             SpeakerId = 0,
+            LanguageId = 0,
             LinearSpectrogram = linear,
             CodecTokens = codecTokens,
             SpeakerReference = speakerRecording,
+            PromptCodecTokens = promptCodecTokens,
         };
     }
 
