@@ -9,9 +9,9 @@
 // 1. src/data/tensors-cpu-benchmarks.json, the only performance numbers the site shows, must equal the summary table of
 //    the AiDotNet.Tensors README (wins and losses per library, the cited Results/<run>/ folder, the versions named).
 //    The README is fetched from GitHub main, so a new Tensors run fails this check until the site is updated.
-// 2. Everywhere else under src/ (the generated API reference excepted), a multiplier ("2x", "500x"), "faster than",
+// 2. Everywhere under src/ (the generated API reference excepted), a multiplier ("2x", "500x"), a percentage speed claim, "faster than",
 //    "slower than", "fastest", "outperform" or "speedup" fails unless performance-claims-allowlist.json lists that
-//    line with the reason it is not a performance claim. Allowlist entries that no longer match also fail.
+//    phrase with the reason it is not a performance claim; the rest of that line is still checked. Entries that no longer match, or lack a reason, also fail.
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,8 +21,13 @@ const src = join(site, 'src');
 const SKIP = [join(src, 'content', 'docs', 'reference')];
 const EXTENSIONS = /\.(astro|md|mdx|ts|tsx|js|mjs|json|html)$/;
 const TENSORS_README = 'https://raw.githubusercontent.com/ooples/AiDotNet.Tensors/main/README.md';
-const MULTIPLIER = /(?<![\w.×])\d+(?:[.,]\d+)?\+?\s?[x×](?![\w\d])/;
+const MULTIPLIER = /(?<![\w.×/]|[A-Za-z]-)\d+(?:[.,]\d+)?\+?\s?[x×](?![\w\d])/;
 const CLAIM = /\b(?:faster|slower) than\b|\bfastest\b|\boutperform\w*|\bspeed-?ups?\b/i;
+// "50% faster", "30 percent quicker", "2.5% less latency": a relative speed claim without an "x".
+const PERCENT = /\b\d+(?:[.,]\d+)?\s?(?:%|percent)\s+(?:faster|slower|quicker|less (?:time|latency)|more throughput|speed\w*)/i;
+// A result label is "<library> <version>", optionally "(<backend>)"; anything else would be unchecked display text.
+const LABEL = /^[A-Za-z][A-Za-z.]* \d+(?:\.\d+)*(?: \([A-Za-z]+\))?$/;
+const isClaim = (text) => MULTIPLIER.test(text) || CLAIM.test(text) || PERCENT.test(text);
 
 const errors = [];
 const fail = (msg) => errors.push(msg);
@@ -52,6 +57,8 @@ function checkBenchmarkData(readme) {
   const summary = new Map();
   for (const m of readme.matchAll(/^\| ([^|]+?) (?:\([^|]*\) )?\| (\d+) \| (\d+) \|$/gm)) summary.set(m[1].trim(), [Number(m[2]), Number(m[3])]);
   for (const r of data.results) {
+    if (typeof r.label !== 'string' || !LABEL.test(r.label) || !r.label.startsWith(r.library.split('.')[0]))
+      fail(`${r.library}: label ${JSON.stringify(r.label)} must be "<library> <version>" with an optional "(<backend>)".`);
     const published = summary.get(r.library);
     if (!published) { fail(`The Tensors README summary has no row for ${r.library}.`); continue; }
     if (published[0] !== r.wins || published[1] !== r.losses)
@@ -68,15 +75,21 @@ function checkBenchmarkData(readme) {
 function checkClaims() {
   const allowPath = join(site, 'performance-claims-allowlist.json');
   const allow = JSON.parse(readFileSync(allowPath, 'utf8')).entries;
+  allow.forEach((a, i) => {
+    for (const key of ['file', 'text', 'reason'])
+      if (typeof a[key] !== 'string' || a[key].trim() === '') fail(`performance-claims-allowlist.json entry ${i} needs a non-empty "${key}".`);
+  });
   const used = new Set();
   for (const path of files(src)) {
     const rel = relative(site, path).split(sep).join('/');
     readFileSync(path, 'utf8').split(/\r?\n/).forEach((line, i) => {
-      if (rel === 'src/data/tensors-cpu-benchmarks.json') return;   // verified against the Tensors README above
-      if (!MULTIPLIER.test(line) && !CLAIM.test(line)) return;
-      const entry = allow.findIndex((a) => a.file === rel && line.includes(a.text));
-      if (entry >= 0) { used.add(entry); return; }
-      fail(`${rel}:${i + 1} makes a performance claim with no benchmark behind it: ${line.trim().slice(0, 160)}`);
+      if (!isClaim(line)) return;
+      // An allowlisted phrase exempts only itself: the rest of the line is checked again.
+      let rest = line;
+      allow.forEach((a, k) => {
+        if (a.file === rel && typeof a.text === 'string' && a.text && rest.includes(a.text)) { used.add(k); rest = rest.split(a.text).join(' '); }
+      });
+      if (isClaim(rest)) fail(`${rel}:${i + 1} makes a performance claim with no benchmark behind it: ${line.trim().slice(0, 160)}`);
     });
   }
   allow.forEach((a, i) => {
