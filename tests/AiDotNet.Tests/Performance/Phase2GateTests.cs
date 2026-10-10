@@ -305,6 +305,11 @@ public class Phase2GateTests
         Assert.True(hasNonZero, "Xavier initialization should produce non-zero weights");
     }
 
+    // .NET 5+ ONLY: the assertion needs a cumulative per-thread allocation counter. net471 has none,
+    // and its GC.GetTotalMemory measures surviving heap, so transient tensors collected before the
+    // second reading would let an unpooled loop pass -- a test that cannot fail proves nothing.
+    // CI compiles net471 and never runs it.
+#if NET5_0_OR_GREATER
     [Fact(Timeout = 60000)]
     public async Task TensorPool_ReducesAllocations()
     {
@@ -318,11 +323,11 @@ public class Phase2GateTests
             pool.Return(t);
         }
 
-        // Force GC to get clean baseline
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
-        var allocsBefore = GC.GetTotalMemory(true);
+        // ALLOCATIONS ON THIS THREAD, not the process heap. GC.GetTotalMemory measured every live
+        // object in the test host, so test classes running in parallel moved it: it failed in CI at
+        // 5,714,840 bytes and passed on the immediate rerun, with no change to the pool. This loop
+        // runs synchronously on one thread, so its own allocations are exactly what pooling saves.
+        var allocsBefore = GC.GetAllocatedBytesForCurrentThread();
 
         // Do many rent/return cycles
         for (int i = 0; i < 1000; i++)
@@ -331,7 +336,7 @@ public class Phase2GateTests
             pool.Return(tensor);
         }
 
-        var allocsAfter = GC.GetTotalMemory(true);
+        var allocsAfter = GC.GetAllocatedBytesForCurrentThread();
         var allocsDelta = allocsAfter - allocsBefore;
 
         // With pooling, allocations should be minimal
@@ -342,6 +347,7 @@ public class Phase2GateTests
 
         pool.Dispose();
     }
+#endif
 
     [Fact(Timeout = 60000)]
     public async Task DenseLayer_LazyInit_IsNotInitializedAfterConstruction()

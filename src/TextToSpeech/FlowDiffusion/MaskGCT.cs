@@ -54,6 +54,9 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
     public override ModelOptions GetOptions() => _options;
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+
+    /// <summary>The optimizer this model trains with, for tests that check its recipe reached it.</summary>
+    internal IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -87,9 +90,13 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
         : base(architecture)
     {
         _options = options ?? new MaskGCTOptions();
+        // PaperOptimizerFactory ignores a non-positive override and would silently train on the
+        // paper warmup instead of the value the caller set.
+        if (_options.WarmupSteps <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), _options.WarmupSteps, "WarmupSteps must be positive.");
         _useNativeMode = true;
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, warmupStepsOverride: _options.WarmupSteps)
     ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
