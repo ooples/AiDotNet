@@ -1,0 +1,42 @@
+name: Website Performance Claims
+
+# Every speed number on the website must come from published AiDotNet.Tensors benchmarks. The site once advertised
+# "up to 500x faster than PyTorch" and four GPU speedup cards that no benchmark backed. The check verifies
+# website/src/data/tensors-cpu-benchmarks.json against the Tensors README's summary table (fetched from GitHub
+# main) and fails on any other multiplier, "faster than", "fastest", "outperform" or "speedup" in website/src
+# that website/performance-claims-allowlist.json does not explain.
+#
+# No path filter, so it can be a required check. The daily run catches a new Tensors benchmark run, which changes
+# the numbers the site must show without a pull request here.
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  schedule:
+    - cron: '23 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: website-claims-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  claims:
+    name: Website performance claims
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+
+      - name: Check website performance claims against the AiDotNet.Tensors benchmarks
+        run: node website/scripts/check-performance-claims.mjs
