@@ -416,12 +416,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // ---------------------------------------------------------------------------------
             { "DINO", "AiDotNet.ComputerVision.Detection.ObjectDetection.DETR." },
             { "GroundedSAM2", "AiDotNet.ComputerVision.Segmentation.OpenVocabulary." },
-            { "CSDI", "AiDotNet.Finance.Forecasting.Foundation." },
-            { "TSDiff", "AiDotNet.Finance.Forecasting.Foundation." },
-            { "TimeGrad", "AiDotNet.Finance.Forecasting.Foundation." },
             { "WaveNet", "AiDotNet.Finance.Forecasting.Neural." },
-            { "Branchformer", "AiDotNet.SpeechRecognition.CTCVariants." },
-            { "EBranchformer", "AiDotNet.SpeechRecognition.CTCVariants." },
         };
 
     /// <summary>
@@ -439,6 +434,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                        "generated test class '{2}Tests' and only one can have it. The winner would " +
                        "otherwise depend on discovery order, which is not stable. Add '{2}' to " +
                        "CollisionOwners naming the owning namespace prefix.",
+        category: "AiDotNet.TestScaffold",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    /// <summary>
+    /// Raised when a <see cref="CollisionOwners"/> entry no longer describes a collision: its owner
+    /// namespace matches none of the models with that name, or only one model has the name.
+    /// </summary>
+    /// <remarks>
+    /// An owner that matches nothing fails open: every namesake is skipped as "not the owner", so no
+    /// test class is generated for the name at all and nothing says so. That happened when the
+    /// owning copy of a duplicated model was deleted and the survivor silently lost its coverage.
+    /// </remarks>
+    private static readonly DiagnosticDescriptor StaleCollisionOwnerDescriptor = new DiagnosticDescriptor(
+        id: "ADNTEST004",
+        title: "A CollisionOwners entry no longer describes a collision",
+        messageFormat: "CollisionOwners maps '{0}' to '{1}', but {2}. Remove the entry, or point it at the namespace " +
+                       "of the model that should own the generated test class '{0}Tests'.",
         category: "AiDotNet.TestScaffold",
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -3340,6 +3353,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 context.ReportDiagnostic(Diagnostic.Create(
                     UnownedNameCollisionDescriptor, Location.None,
                     candidates[0], candidates[1], clash.Key));
+            }
+
+            // A registered owner must still name one of at least two namesakes; otherwise the entry
+            // either suppresses every candidate or guards a collision that no longer exists.
+            foreach (var owner in CollisionOwners.OrderBy(e => e.Key, System.StringComparer.Ordinal))
+            {
+                var namesakes = orderedUntested
+                    .Where(m => string.Equals(StripBacktick(m.ClassName), owner.Key, System.StringComparison.Ordinal))
+                    .Select(m => m.FullyQualifiedName)
+                    .ToList();
+                string? problem = namesakes.Count == 0
+                    ? "no discovered model has that name"
+                    : !namesakes.Any(n => n.IndexOf(owner.Value, System.StringComparison.Ordinal) >= 0)
+                        ? "none of its models (" + string.Join(", ", namesakes) + ") is in that namespace, so none gets a generated test"
+                        : namesakes.Count == 1
+                            ? "only " + namesakes[0] + " has that name now"
+                            : null;
+                if (problem is not null)
+                    context.ReportDiagnostic(Diagnostic.Create(StaleCollisionOwnerDescriptor, Location.None, owner.Key, owner.Value, problem));
             }
 
             foreach (var model in orderedUntested)
