@@ -39,6 +39,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private const string IActivationFunctionPrefix = "AiDotNet.Interfaces.IActivationFunction<";
     private const string ILossFunctionPrefix = "AiDotNet.Interfaces.ILossFunction<";
 
+    // A paper-length warmup (MaskGCT: 32000 steps) leaves the learning rate near zero for the
+    // few steps a smoke fixture runs, so the memorization probe sees no loss drop (#2087).
+    // Fixtures for such models shorten the ramp to this, which reaches the recipe's peak rate.
+    private const string SmokeWarmupSteps = "WarmupSteps = 2";
+
+    // Codec-LM models that share one constructor branch below but need the short warmup.
+    private static readonly HashSet<string> ShortWarmupCodecModels = new(System.StringComparer.Ordinal)
+    {
+        "MaskGCT",
+    };
+
     // Non-model algorithm interface prefixes (for invariant test generation)
     private const string ICausalDiscoveryPrefix = "AiDotNet.CausalDiscovery.ICausalDiscoveryAlgorithm<";
     private const string IActiveLearningPrefix = "AiDotNet.Interfaces.IActiveLearningStrategy<";
@@ -219,6 +230,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // scaffold has no way to supply member models, so every invariant fails. The real
         // ensemble (populated with members) is covered by the AutoML search integration tests.
         "AutoMLEnsembleModel",
+
+        // A search over diffusion configurations, not a diffusion model: it extends AutoMLModelBase and
+        // returns the best IFullModel it found, so it implements no IDiffusionModel and the Diffusion
+        // family it is routed to by its (accurate, descriptive) [ModelCategory(Diffusion)] can never
+        // build it (#2138). DiffusionAutoMLTrainingTests covers the search itself.
+        "DiffusionAutoML",
 
         // Proprietary-API TTS wrappers (ElevenLabs, AmazonPolly, AzureNeuralTTS,
         // GoogleCloudTTS, Murf, NVIDIARivaTTS): real inference is a remote API
@@ -6994,6 +7011,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     $"new {codecOptionsType} {{ NumCodebooks = 2, " +
                     "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 64, NumEncoderLayers = 1, " +
                     "NumLLMLayers = 2, NumHeads = 4, MaxTextLength = 8, MaxCodecFrames = 8, " +
+                    // MaskGCT's paper warmup is 32000 steps, which leaves the rate near 3e-9 for the
+                    // memorization probe's two steps (loss fell 0.6% against the required 1%, #2087);
+                    // a short ramp reaches the recipe's 1e-4, as the NaturalSpeech3 fixture does.
+                    (ShortWarmupCodecModels.Contains(model.ClassName) ? SmokeWarmupSteps + ", " : "") +
                     "DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "ByteTrack" && model.TypeParameterCount == 1
@@ -8486,7 +8507,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "ForecastHorizon = 8, PatchLength = 8, EncoderHiddenDim = 32, " +
                     "DecoderHiddenDim = 32, NumEncoderLayers = 2, NumDecoderLayers = 2, " +
                     "NumHeads = 4, NumQuantiles = 3, DropoutRate = 0.0, " +
-                    "WarmupSteps = 2, TotalSteps = 16 })";
+                    SmokeWarmupSteps + ", TotalSteps = 16 })";
             }
             else if (model.ClassName == "Chronos" && model.TypeParameterCount == 1)
             {
@@ -9066,7 +9087,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "MelChannels = 16, NumEncoderLayers = 1, NumDiffusionSteps = 2, " +
                     // WarmupSteps: the paper's 5000-step ramp leaves the rate near 1e-8 for the
                     // memorization probe's two steps; a short ramp reaches the recipe's 1e-4.
-                    "NumHeads = 4, DropoutRate = 0.0, MaxTextLength = 16, WarmupSteps = 2 })";
+                    "NumHeads = 4, DropoutRate = 0.0, MaxTextLength = 16, " + SmokeWarmupSteps + " })";
             }
             else if (model.ClassName == "OWSM" && model.TypeParameterCount == 1)
             {
@@ -12713,6 +12734,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumPropagationBranches = 4, BlocksPerBranch = 1, ScaleFactor = 2, " +
                     "ReconstructionChannels = 8, Seed = 1234 })";
             }
+            else if (model.ClassName == "ConvTasNet" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Audio.Enhancement.", System.StringComparison.Ordinal))
+            {
+                // Conv-TasNet (Luo & Mesgarani 2019) at smoke width with its whole topology: the learned
+                // encoder, gLN, the bottleneck, two TCN blocks (one residual path, dilations 1 and 2), the
+                // PReLU + sigmoid mask head for two sources (so permutation-invariant SI-SNR is exercised)
+                // and the transposed-conv decoder. It separates waveforms, so the input is [1, samples].
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 128, outputSize: 128), " +
+                    "new AiDotNet.Models.Options.ConvTasNetOptions { " +
+                    "SampleRate = 8000, EncoderDim = 16, KernelSize = 8, BottleneckDim = 8, HiddenDim = 16, " +
+                    "NumBlocks = 2, NumRepeats = 1, TcnKernelSize = 3, NumSources = 2 })";
+            }
             else if (model.ClassName == "DOVE" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
             {
@@ -13638,6 +13674,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // full strength.
             sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 16, 16 };");
+        }
+        else if (model.ClassName == "ConvTasNet")
+        {
+            // One 128-sample mono mixture separated into two sources; see the constructor pin above.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 128 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 2, 128 };");
         }
         else if (model.ClassName == "MIAVSR")
         {

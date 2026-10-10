@@ -20,4 +20,13 @@ public class CpuOnlyTestFramework : TestFrameworkBase
         // Initialize CPU-only mode before any tests run
         TestModuleInitializer.EnsureInitialized();
     }
+#if !AIDOTNET_TEST_ATTRIBUTION
+
+    /// <summary>
+    /// Runs tests through <see cref="TestInfrastructure.HeavyTimeoutScalingExecutor"/>, which lengthens HeavyTimeout tests'
+    /// per-test timeout only when the nightly heavy lane sets its scale variable.
+    /// </summary>
+    protected override Xunit.Abstractions.ITestFrameworkExecutor CreateExecutor(System.Reflection.AssemblyName assemblyName)
+        => new TestInfrastructure.HeavyTimeoutScalingExecutor(assemblyName, SourceInformationProvider, DiagnosticMessageSink);
+#endif
 }

@@ -1,11 +1,8 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Text;
 using AiDotNet.LinearAlgebra;
-#if NET6_0_OR_GREATER
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
-#endif
+using StbImageSharp;
 
 namespace AiDotNet.Helpers;
 
@@ -14,10 +11,8 @@ namespace AiDotNet.Helpers;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Supports common image formats without external dependencies:
-/// - BMP: Windows Bitmap format (uncompressed)
-/// - PPM/PGM: Portable Pixmap/Graymap (simple text or binary)
-/// - RAW: Raw pixel data with specified dimensions
+/// Reads BMP (uncompressed), PPM/PGM and RAW (with explicit dimensions) itself, and PNG, JPEG, GIF, TGA, PSD and
+/// HDR through StbImageSharp on every target framework. TIFF and WebP are not supported.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> This class converts image files into tensors for neural networks.
@@ -51,11 +46,7 @@ public static class ImageHelper<T>
             ".ppm" => LoadPpm(filePath, normalize),
             ".pgm" => LoadPgm(filePath, normalize),
             ".raw" => throw new NotSupportedException("RAW format requires explicit dimensions. Use LoadRaw method."),
-#if NET6_0_OR_GREATER
-            _ => LoadImageWithImageSharp(filePath, normalize)
-#else
-            _ => throw new NotSupportedException($"Unsupported image format: {extension}. On .NET Framework only .bmp, .ppm, .pgm are supported. Use .NET 6+ for PNG/JPEG/GIF/TIFF support.")
-#endif
+            _ => LoadEncodedImage(filePath, normalize)
         };
     }
 
@@ -496,56 +487,86 @@ public static class ImageHelper<T>
         }
     }
 
-#if NET6_0_OR_GREATER
     /// <summary>
-    /// Loads an image using SixLabors.ImageSharp for formats not natively supported (PNG, JPEG, GIF, TIFF, WebP, etc.).
+    /// Decodes PNG, JPEG, GIF (first frame), TGA, PSD or HDR with StbImageSharp (MIT; no license key, and it runs on
+    /// .NET Framework too). It replaced SixLabors.ImageSharp, whose 3.x line has unpatched decoder advisories and
+    /// whose patched 4.x line needs a commercial license key to build.
     /// </summary>
     /// <param name="filePath">Path to the image file.</param>
     /// <param name="normalize">Whether to normalize pixel values to [0, 1] range.</param>
-    /// <returns>Tensor with shape [1, channels, height, width].</returns>
-    private static Tensor<T> LoadImageWithImageSharp(string filePath, bool normalize)
+    /// <returns>Tensor with shape [1, 3, height, width].</returns>
+    /// <exception cref="NotSupportedException">The file is not in a format the decoder recognizes (TIFF, WebP, ...).</exception>
+    /// <exception cref="InvalidDataException">The format is recognized but the content cannot be decoded.</exception>
+    private static Tensor<T> LoadEncodedImage(string filePath, bool normalize)
     {
-        SixLabors.ImageSharp.Image<Rgba32> image;
-        try
+        // THE HEADER FIRST, from the file rather than from memory: an unrecognized file is rejected
+        // before it is loaded whole, and a header declaring dimensions no managed array can hold is
+        // rejected before the decoder allocates 4 bytes per pixel for it.
+        ImageInfo? info;
+        using (var header = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
         {
-            image = Image.Load<Rgba32>(filePath);
+            info = ImageInfo.FromStream(header);
         }
-        catch (SixLabors.ImageSharp.UnknownImageFormatException ex)
+        if (info is null)
         {
             throw new NotSupportedException(
-                $"Unsupported or unrecognized image format for file: {filePath}", ex);
+                $"Unsupported or unrecognized image format for file: {filePath}. Supported: BMP, PPM, PGM, PNG, JPEG, "
+                + "GIF, TGA, PSD and HDR.");
         }
-        catch (SixLabors.ImageSharp.InvalidImageContentException ex)
+        RequireDecodableSize(info.Value.Width, info.Value.Height, filePath);
+
+        byte[] bytes = File.ReadAllBytes(filePath);
+        ImageResult image;
+        try
         {
-            throw new InvalidDataException(
-                $"Image file is corrupted or has invalid content: {filePath}", ex);
+            image = ImageResult.FromMemory(bytes, ColorComponents.RedGreenBlueAlpha);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            // stb reports a decode failure as a plain Exception carrying its failure reason.
+            throw new InvalidDataException($"Image file is corrupted or has invalid content: {filePath}", ex);
         }
 
-        using var _ = image;
         int width = image.Width;
         int height = image.Height;
+        var data = image.Data;
+        if (width <= 0 || height <= 0 || data is null || data.Length < 4L * width * height)
+            throw new InvalidDataException($"Image file decoded to no pixel data: {filePath}");
+        // Checked again on what was decoded: the loop below indexes with int arithmetic (3 * plane,
+        // 4 * i + 2), which the bound keeps in range.
+        RequireDecodableSize(width, height, filePath);
 
         var normFactor = normalize ? 255.0 : 1.0;
-        var pixelData = new T[3 * height * width];
-
-        image.ProcessPixelRows(accessor =>
+        int plane = height * width;
+        var pixelData = new T[3 * plane];
+        for (int i = 0; i < plane; i++)
         {
-            for (int y = 0; y < height; y++)
-            {
-                var row = accessor.GetRowSpan(y);
-                for (int x = 0; x < width; x++)
-                {
-                    var pixel = row[x];
-                    pixelData[0 * height * width + y * width + x] = NumOps.FromDouble(pixel.R / normFactor);
-                    pixelData[1 * height * width + y * width + x] = NumOps.FromDouble(pixel.G / normFactor);
-                    pixelData[2 * height * width + y * width + x] = NumOps.FromDouble(pixel.B / normFactor);
-                }
-            }
-        });
+            // RGBA rows, top to bottom; the alpha channel is dropped as before.
+            pixelData[i] = NumOps.FromDouble(data[4 * i] / normFactor);
+            pixelData[plane + i] = NumOps.FromDouble(data[4 * i + 1] / normFactor);
+            pixelData[2 * plane + i] = NumOps.FromDouble(data[4 * i + 2] / normFactor);
+        }
 
         return new Tensor<T>(pixelData, new[] { 1, 3, height, width });
     }
-#endif
+
+    /// <summary>
+    /// Rejects dimensions whose RGBA buffer could not be held in one managed array.
+    /// </summary>
+    /// <remarks>
+    /// Four bytes per pixel is the larger of the two buffers involved (the decoder's RGBA output
+    /// against the three-channel tensor), so this bound also keeps every <c>int</c> index the
+    /// conversion computes in range.
+    /// </remarks>
+    /// <exception cref="InvalidDataException">The dimensions are non-positive or too large.</exception>
+    private static void RequireDecodableSize(int width, int height, string filePath)
+    {
+        if (width <= 0 || height <= 0 || 4L * width * height > int.MaxValue)
+        {
+            throw new InvalidDataException(
+                $"Image dimensions {width}x{height} are invalid or too large to decode: {filePath}");
+        }
+    }
 
     /// <summary>
     /// Reads a token from a PNM file (skipping comments and whitespace).
