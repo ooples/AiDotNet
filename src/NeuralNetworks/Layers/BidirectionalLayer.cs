@@ -137,11 +137,6 @@ public partial class BidirectionalLayer<T> : LayerBase<T>, IShapeContract
 
     public override bool SupportsTraining => _forwardLayer.SupportsTraining || _backwardLayer.SupportsTraining;
 
-    public override Vector<T> GetParameterGradients()
-    {
-        return Vector<T>.Concatenate(_forwardLayer.GetParameterGradients(), _backwardLayer.GetParameterGradients());
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

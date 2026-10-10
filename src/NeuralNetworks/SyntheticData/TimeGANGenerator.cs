@@ -595,7 +595,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
                 var m = Engine.ReduceMean(s, axes, keepDims: false);
                 return Engine.TensorMultiplyScalar(m, NumOps.FromDouble(_options.ReconstructionWeight));
             }
-            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+            if (AiDotNet.Training.FusedTrainingStep<T>.TryStep(
                     trainableEmbRec, xBatch, xBatch,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _embedderOptimizer,
@@ -668,7 +668,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
                 var axes = Enumerable.Range(0, s.Shape.Length).ToArray();
                 return Engine.ReduceMean(s, axes, keepDims: false);
             }
-            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+            if (AiDotNet.Training.FusedTrainingStep<T>.TryStep(
                     trainableSup, ht, htNext,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _supervisorOptimizer,

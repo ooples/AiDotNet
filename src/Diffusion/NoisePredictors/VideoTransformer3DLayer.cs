@@ -200,18 +200,6 @@ public sealed partial class VideoTransformer3DLayer<T> : LayerBase<T>
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameterGradients()
-    {
-        var values = new List<T>();
-        foreach (var layer in ParameterLayers())
-        {
-            var gradients = layer.GetParameterGradients();
-            for (int i = 0; i < gradients.Length; i++) values.Add(gradients[i]);
-        }
-        return new Vector<T>(values.ToArray());
-    }
-
-    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         foreach (var layer in ParameterLayers()) layer.UpdateParameters(learningRate);

@@ -1510,17 +1510,6 @@ public partial class SpikingLayer<T> : LayerBase<T>, IShapeContract
         _bias = new Tensor<T>([_bias.Shape[0]], parameters.Slice(weightCount, _bias.Shape[0]));
     }
 
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_weightGradients == null || _biasGradients == null)
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-
-        return Vector<T>.Concatenate(
-            new Vector<T>(_weightGradients.ToArray()),
-            new Vector<T>(_biasGradients.ToArray())
-        );
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

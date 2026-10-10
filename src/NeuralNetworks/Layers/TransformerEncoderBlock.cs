@@ -193,6 +193,18 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
     public LayerBase<T> FfnDownLayer => _ffnDown;
 
     /// <summary>
+    /// The block's attention-sublayer LayerNorm: applied to the attention input under Pre-LN, and to the attention
+    /// residual sum under Post-LN. Exposed for weight import.
+    /// </summary>
+    internal LayerBase<T> Norm1Layer => _norm1;
+
+    /// <summary>
+    /// The block's FFN-sublayer LayerNorm: applied to the FFN input under Pre-LN, and to the FFN residual sum under
+    /// Post-LN. Exposed for weight import.
+    /// </summary>
+    internal LayerBase<T> Norm2Layer => _norm2;
+
+    /// <summary>
     /// Swaps the FFN up-projection sublayer (e.g. for a <c>QuantizedDenseLayer</c> or a
     /// LoRA adapter). Same registered-sublayer/parameter-count consistency contract as
     /// <see cref="ReplaceAttention"/>. The replacement must map
@@ -289,14 +301,6 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
         layer.SetParameters(slice);
         offset += count;
     }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients() =>
-        Vector<T>.Concatenate(
-            Vector<T>.Concatenate(
-                Vector<T>.Concatenate(_attention.GetParameterGradients(), _norm1.GetParameterGradients()),
-                Vector<T>.Concatenate(_ffnUp.GetParameterGradients(), _ffnDown.GetParameterGradients())),
-            _norm2.GetParameterGradients());
 
     /// <inheritdoc/>
     public override void ClearGradients()

@@ -1303,54 +1303,6 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         }
     }
 
-    /// <summary>
-    /// Resets the internal state of the batch normalization layer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method clears all cached values from the forward and backward passes,
-    /// including:
-    /// - Last input tensor
-    /// - Last normalized values
-    /// - Last batch mean and variance
-    /// - Gradients for gamma and beta parameters
-    /// </para>
-    /// <para>
-    /// It does NOT reset the learned parameters (gamma and beta) or the running statistics
-    /// (running mean and variance) used for inference.
-    /// </para>
-    /// <para>
-    /// This is typically called when starting a new training epoch or when switching
-    /// between training and inference modes.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method clears the layer's memory of previous calculations.
-    /// 
-    /// During training, the batch normalization layer keeps track of:
-    /// - The last input it processed
-    /// - The normalized values it calculated
-    /// - The mean and variance of the last batch
-    /// - The gradients for its parameters
-    /// 
-    /// This method clears all of these temporary values, which is useful when:
-    /// - Starting a new training epoch
-    /// - Switching between training and testing modes
-    /// - Ensuring the layer behaves deterministically
-    /// 
-    /// Important: This does NOT reset the learned parameters (gamma and beta) or
-    /// the running statistics (running mean and variance) that are used during inference.
-    /// It only clears temporary calculation values.
-    /// 
-    /// Think of it as clearing the layer's short-term memory while preserving its
-    /// long-term learning.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_gammaGradient == null || _betaGradient == null)
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        return Vector<T>.Concatenate((_gammaGradient is not null ? Vector<T>.FromMemory(_gammaGradient.Data) : new Vector<T>(0)), (_betaGradient is not null ? Vector<T>.FromMemory(_betaGradient.Data) : new Vector<T>(0)));
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

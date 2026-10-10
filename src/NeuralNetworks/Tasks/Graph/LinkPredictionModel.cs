@@ -710,19 +710,19 @@ public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
                 + $"implements ComputeTapeLoss); the configured loss '{_lossFunction.GetType().Name}' is "
                 + "not tape-differentiable. Supply a LossFunctionBase<T>-derived loss such as BinaryCrossEntropyLoss.");
 
-        // GPU-RESIDENT fast path — same seam as GraphClassificationModel and
-        // TimeSeries deep forecasters. Compiled forward + backward + fused Adam
-        // step on a device-resident plan; falls back to eager tape+optimizer.
+        // Fused compiled step (FusedTrainingStep), as GraphClassificationModel: one plan on any engine,
+        // GPU-resident on a GPU; falls back to the eager tape+optimizer.
         var trainableLayers = Layers
             .Where(l => l is ITrainableLayer<T>).Cast<ITrainableLayer<T>>()
             .ToList();
-        if (CanTrainOnGpu
-            && AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+        if (AiDotNet.Training.FusedTrainingStep<T>.TryStep(
                 trainableLayers, input, expectedOutput,
                 forward: Forward,
                 computeLoss: tapeLoss.ComputeTapeLoss,
                 optimizer: _optimizer,
-                out T fusedLoss, owner: this))
+                out T fusedLoss,
+                onGradients: ScatterFusedGradients,
+                owner: this))
         {
             LastLoss = fusedLoss;
             return;

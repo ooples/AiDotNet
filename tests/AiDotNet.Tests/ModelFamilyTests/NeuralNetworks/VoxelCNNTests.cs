@@ -75,6 +75,6 @@ public class VoxelCNNTests : NeuralNetworkModelTestBase<float>
 
     private sealed class TestableVoxelCNN : VoxelCNN<float>
     {
-        internal bool FusedTrainingDisabled => _fusedTrainingDisabled;
+        internal bool FusedTrainingDisabled => IsFusedTrainingDisabled;
     }
 }

@@ -486,7 +486,7 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
             }
         }
 
-        // Secondary fused path: GpuResidentFusedStep with the loss composed via
+        // Secondary fused path: FusedTrainingStep with the loss composed via
         // this class's ComputeGradientPenalty (createGraph=true GP fix, #1844).
         var trainableDiscLayers = _discLayers.OfType<ITrainableLayer<T>>().ToList();
         if (trainableDiscLayers.Count > 0)
@@ -512,7 +512,7 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
                 return Engine.TensorAdd(wasserstein,
                     Engine.TensorMultiplyScalar(gp, NumOps.FromDouble(_options.GradientPenaltyWeight)));
             }
-            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+            if (AiDotNet.Training.FusedTrainingStep<T>.TryStep(
                     trainableDiscLayers, stacked, target,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _discriminatorOptimizer,
@@ -650,7 +650,7 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
         {
             Tensor<T> Fwd(Tensor<T> nb) => ApplyOutputActivationsBatched(GeneratorForwardBatched(nb));
             Tensor<T> Loss(Tensor<T> fakeActivated, Tensor<T> real) => ComputeGeneratorLoss(fakeActivated, real);
-            if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+            if (AiDotNet.Training.FusedTrainingStep<T>.TryStep(
                     trainableGenLayers, noiseBatch, realBatch,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _generatorOptimizer,

@@ -463,42 +463,6 @@ public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>, IShapeContrac
     }
 
     /// <summary>
-    /// Gets the parameter gradients for all MLP blocks.
-    /// Returns concatenated gradients from all levels.
-    /// </summary>
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_mlpBlocks == null || _mlpBlocks.Length == 0)
-            throw new InvalidOperationException("MLP blocks are not initialized");
-
-        // Calculate total parameter count
-        int totalParams = 0;
-        foreach (var mlp in _mlpBlocks)
-        {
-            if (mlp == null)
-                throw new InvalidOperationException("MLP block is null");
-
-            totalParams += (int)mlp.ParameterCount;
-        }
-
-        // Concatenate all accumulated gradients
-        var allGradients = new Vector<T>(totalParams);
-        int offset = 0;
-
-        for (int level = 0; level < _mlpBlocks.Length; level++)
-        {
-            var accGrad = _accumulatedGradients[level];
-            for (int i = 0; i < accGrad.Length; i++)
-            {
-                allGradients[offset + i] = accGrad[i];
-            }
-            offset += accGrad.Length;
-        }
-
-        return allGradients;
-    }
-
-    /// <summary>
     /// Clears all accumulated gradients across all levels.
     /// </summary>
     public override void ClearGradients()

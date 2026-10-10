@@ -702,14 +702,6 @@ internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
             writer.Write(NumOps.ToDouble(tensor[i]));
     }
 
-    public override Vector<T> GetParameterGradients()
-    {
-        var g = new List<T>();
-        foreach (var t in new[] { _weightsGrad, _biasGrad, _meanWeightsGrad, _meanBiasGrad, _logVarWeightsGrad, _logVarBiasGrad })
-            for (int i = 0; i < t.Length; i++) g.Add(t[i]);
-        return new Vector<T>(g.ToArray());
-    }
-
     private Tensor<T> ReadTensor(BinaryReader reader)
     {
         int rank = reader.ReadInt32();
@@ -975,11 +967,4 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         return tensor;
     }
 
-    public override Vector<T> GetParameterGradients()
-    {
-        var g = new List<T>();
-        foreach (var t in new[] { _weightsGrad, _biasGrad, _outputWeightsGrad, _outputBiasGrad })
-            for (int i = 0; i < t.Length; i++) g.Add(t[i]);
-        return new Vector<T>(g.ToArray());
-    }
 }

@@ -826,26 +826,6 @@ public partial class RecurrentLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
-    /// <summary>
-    /// Gets all parameter gradients of the recurrent layer as a single vector.
-    /// </summary>
-    /// <returns>A vector containing all parameter gradients (input weight gradients, hidden weight gradients, and bias gradients).</returns>
-    public override Vector<T> GetParameterGradients()
-    {
-        // If gradients haven't been computed yet, return zero gradients
-        if (_inputWeightsGradient == null || _hiddenWeightsGradient == null || _biasesGradient == null)
-        {
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        }
-
-        // VECTORIZED: Concatenate gradient data using Vector.Concatenate
-        return Vector<T>.Concatenate(
-            _inputWeightsGradient.ToVector(),
-            _hiddenWeightsGradient.ToVector(),
-            _biasesGradient.ToVector()
-        );
-    }
-
     /// <inheritdoc/>
     internal override Dictionary<string, string> GetMetadata()
     {

@@ -265,19 +265,6 @@ public partial class SwinPatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     private Vector<T>? _pendingParameters;
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        var projGrads = _projection.GetParameterGradients();
-        var normGrads = _norm.GetParameterGradients();
-
-        var result = new T[projGrads.Length + normGrads.Length];
-        projGrads.AsSpan().CopyTo(result.AsSpan(0, projGrads.Length));
-        normGrads.AsSpan().CopyTo(result.AsSpan(projGrads.Length, normGrads.Length));
-
-        return new Vector<T>(result);
-    }
-
-    /// <inheritdoc/>
     public override void ClearGradients()
     {
         base.ClearGradients();

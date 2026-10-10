@@ -615,28 +615,6 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        var allGrads = new List<T>();
-
-        allGrads.AddRange(_norm1.GetParameterGradients().ToArray());
-        allGrads.AddRange(_norm2.GetParameterGradients().ToArray());
-        allGrads.AddRange(_qkvProj.GetParameterGradients().ToArray());
-        allGrads.AddRange(_outProj.GetParameterGradients().ToArray());
-
-        // Bias table gradients (would need to be computed in backward)
-        for (int i = 0; i < _relativePositionBiasTable.Length; i++)
-        {
-            allGrads.Add(NumOps.Zero);
-        }
-
-        allGrads.AddRange(_mlpFc1.GetParameterGradients().ToArray());
-        allGrads.AddRange(_mlpFc2.GetParameterGradients().ToArray());
-
-        return new Vector<T>([.. allGrads]);
-    }
-
-    /// <inheritdoc/>
     public override void ClearGradients()
     {
         base.ClearGradients();

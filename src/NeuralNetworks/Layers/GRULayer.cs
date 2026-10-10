@@ -1739,29 +1739,6 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
         InvalidateGpuStackedWeights();
     }
 
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_dWz == null || _dWr == null || _dWh == null ||
-            _dUz == null || _dUr == null || _dUh == null ||
-            _dbz == null || _dbr == null || _dbh == null)
-        {
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        }
-
-        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
-        return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_dWz.Data),
-            Vector<T>.FromMemory(_dWr.Data),
-            Vector<T>.FromMemory(_dWh.Data),
-            Vector<T>.FromMemory(_dUz.Data),
-            Vector<T>.FromMemory(_dUr.Data),
-            Vector<T>.FromMemory(_dUh.Data),
-            Vector<T>.FromMemory(_dbz.Data),
-            Vector<T>.FromMemory(_dbr.Data),
-            Vector<T>.FromMemory(_dbh.Data)
-        );
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

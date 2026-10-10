@@ -475,33 +475,6 @@ public partial class GraphIsomorphismLayer<T> : LayerBase<T>, IGraphConvolutionL
         }
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        var gradList = new List<T>();
-
-        var w1Grad = _mlpWeights1Gradient;
-        for (int i = 0; i < _mlpWeights1.Length; i++)
-            gradList.Add(w1Grad != null ? w1Grad.GetFlat(i) : NumOps.Zero);
-
-        var b1Grad = _mlpBias1Gradient;
-        for (int i = 0; i < _mlpBias1.Length; i++)
-            gradList.Add(b1Grad != null ? b1Grad.GetFlat(i) : NumOps.Zero);
-
-        var w2Grad = _mlpWeights2Gradient;
-        for (int i = 0; i < _mlpWeights2.Length; i++)
-            gradList.Add(w2Grad != null ? w2Grad.GetFlat(i) : NumOps.Zero);
-
-        var b2Grad = _mlpBias2Gradient;
-        for (int i = 0; i < _mlpBias2.Length; i++)
-            gradList.Add(b2Grad != null ? b2Grad.GetFlat(i) : NumOps.Zero);
-
-        if (_learnEpsilon)
-            gradList.Add(_epsilonGradient);
-
-        return new Vector<T>(gradList.ToArray());
-    }
-
     /// <summary>
     /// Returns layer-specific metadata for serialization.
     /// </summary>

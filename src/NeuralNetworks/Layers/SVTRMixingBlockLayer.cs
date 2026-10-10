@@ -190,8 +190,6 @@ public partial class SVTRMixingBlockLayer<T> : LayerBase<T>
         return Engine.TensorMultiply(branch, mask);
     }
 
-    public override Vector<T> GetParameterGradients() => Concatenate(layer => layer.GetParameterGradients());
-
     private Vector<T> Concatenate(Func<ILayer<T>, Vector<T>> selector)
     {
         var parts = ParameterLayers.Select(selector).ToArray();

@@ -159,15 +159,6 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
             $"state-reset entry points.");
     }
 
-    public override Vector<T> GetParameterGradients()
-    {
-        var ff2 = RequireResolvedFeedForward2(nameof(GetParameterGradients));
-        return Vector<T>.Concatenate(
-            _selfAttention.GetParameterGradients(), _crossAttention.GetParameterGradients(),
-            _feedForward1.GetParameterGradients(), ff2.GetParameterGradients(),
-            _norm1.GetParameterGradients(), _norm2.GetParameterGradients(), _norm3.GetParameterGradients());
-    }
-
     public override void ClearGradients()
     {
         var ff2 = RequireResolvedFeedForward2(nameof(ClearGradients));

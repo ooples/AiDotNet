@@ -92,9 +92,7 @@ public class FacadeModelOwnStepTests
             var predicted = result.Predict(x);
             double mse = 0;
             for (int i = 0; i < y.Length; i++) { double d = predicted[i] - y[i]; mse += d * d; }
-            bool fused = (bool)typeof(NeuralNetworkBase<float>)
-                .GetField("_fusedTrainingCommitted", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
-                .GetValue(network)!;
+            bool fused = network.FusedSession.IsCommitted;
             return (network.GetParameters().ToArray(), mse / y.Length, optimizer.ModelOwnStepCount, optimizer.LastModelStepDeclineReason, fused);
         }
         finally

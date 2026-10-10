@@ -1174,29 +1174,6 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        var gIncomingWeights = _incomingWeightsGradient != null ? new Vector<T>(_incomingWeightsGradient.ToArray()) : new Vector<T>(_incomingWeights.Length);
-        var gOutgoingWeights = _outgoingWeightsGradient != null ? new Vector<T>(_outgoingWeightsGradient.ToArray()) : new Vector<T>(_outgoingWeights.Length);
-        var gSelfWeights = _selfWeightsGradient != null ? new Vector<T>(_selfWeightsGradient.ToArray()) : new Vector<T>(_selfWeights.Length);
-        var gCombinationWeights = _combinationWeightsGradient != null ? new Vector<T>(_combinationWeightsGradient.ToArray()) : new Vector<T>(_combinationWeights.Length);
-        var gIncomingBias = _incomingBiasGradient != null ? new Vector<T>(_incomingBiasGradient.ToArray()) : new Vector<T>(_incomingBias.Length);
-        var gOutgoingBias = _outgoingBiasGradient != null ? new Vector<T>(_outgoingBiasGradient.ToArray()) : new Vector<T>(_outgoingBias.Length);
-        var gSelfBias = _selfBiasGradient != null ? new Vector<T>(_selfBiasGradient.ToArray()) : new Vector<T>(_selfBias.Length);
-        var gCombinationBias = _combinationBiasGradient != null ? new Vector<T>(_combinationBiasGradient.ToArray()) : new Vector<T>(_combinationBias.Length);
-
-        var parts = new List<Vector<T>> { gIncomingWeights, gOutgoingWeights, gSelfWeights, gCombinationWeights, gIncomingBias, gOutgoingBias, gSelfBias, gCombinationBias };
-
-        if (_useGating && _gateWeights != null && _gateBias != null)
-        {
-            parts.Add(_gateWeightsGradient != null ? new Vector<T>(_gateWeightsGradient.ToArray()) : new Vector<T>(_gateWeights.Length));
-            parts.Add(_gateBiasGradient != null ? new Vector<T>(_gateBiasGradient.ToArray()) : new Vector<T>(_gateBias.Length));
-        }
-
-        return Vector<T>.Concatenate(parts.ToArray());
-    }
-
-    /// <inheritdoc/>
     public override void ClearGradients()
     {
         _incomingWeightsGradient = null;

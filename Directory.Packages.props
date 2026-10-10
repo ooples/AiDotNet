@@ -364,12 +364,17 @@ Bumped 0.130.3 to 0.132.1 for AiDotNet.Tensors #1035 (non-causal FlashAttention 
 Bumped 0.134.0 to 0.134.3 for AiDotNet.Tensors #1085 and #1087: MathHelper.Tanh and the engine's
          strided Tanh, Mish, GELU and LSTM-cell copies returned NaN once e^2x overflowed (x > ~44 in
          float, ~5.5 in Half). CQL and IQL squashed an untrained policy mean through it and emitted
-         NaN actions from the first step (#2216). -->
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.134.4" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.134.4" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.134.4" />
+         NaN actions from the first step (#2216).
+
+Bumped 0.134.4 to 0.135.0 for AiDotNet.Tensors #1095: TapeStepContext.ValidateBufferAlignment counts a
+         sparse leaf's buffer slot as its NonZeroCount. 0.134.4 counted the dense size, so every sparse model's
+         tape step threw "ParameterBuffer total size (110) does not match parameter total (210)" once sparse
+         parameters kept their pattern in the contiguous buffer (SparseNeuralNetwork, #1804). -->
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.135.0" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.135.0" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.135.0" />
     <PackageVersion Include="AiDotNet.Evolution" Version="0.2.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.134.4" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.135.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />

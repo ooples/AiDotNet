@@ -102,21 +102,6 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
     private T _normStd = MathHelper.GetNumericOperations<T>().One;
 
     /// <summary>
-    /// True when the most recent <c>TrainCore</c> completed via the GPU-resident
-    /// fused compiled plan (weights / activations / Adam moments resident on the
-    /// device across the whole loop). False when the eager tape path ran instead —
-    /// either because <c>CanTrainOnGpu</c> was false, the resident attempt didn't
-    /// improve the validation baseline, or the config's pool sizes don't divide the
-    /// lookback cleanly (see <see cref="TryTrainGpuResident"/>).
-    /// </summary>
-    /// <remarks>
-    /// Internal diagnostic: the public surface stays limited to the facade
-    /// (<c>AiModelBuilder</c>/<c>AiModelResult</c>). Visible to the test and
-    /// serving assemblies via <c>InternalsVisibleTo</c>.
-    /// </remarks>
-    internal bool LastRunUsedGpuResidentPath { get; private set; }
-
-    /// <summary>
     /// Initializes a new instance of the NHiTSModel class.
     /// </summary>
     /// <param name="options">Configuration options for N-HiTS.</param>
@@ -250,33 +235,18 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
         for (int i = 0; i < y.Length; i++)
             yNorm[i] = NumOps.Divide(NumOps.Subtract(y[i], yMean), yStd);
 
-        // GPU-RESIDENT fast path (float + DirectGpuTensorEngine + compilation).
-        // Same seam NBEATSModel uses via TimeSeriesModelBase.TryFusedResidentStep —
-        // forward + backward + Adam captured as a single on-device plan, weights /
-        // activations / Adam moments resident across every step. Only in epoch-bounded
-        // mode: the resident attempt is validated against the untrained baseline and
-        // rejected (with a fresh block reinit) if it didn't help, so in a wall-clock-
-        // bounded run a rejected attempt would burn the whole budget and leave nothing
-        // for the eager fallback. Epoch budgets don't have that hazard.
-        LastRunUsedGpuResidentPath = false;
-        if (CanTrainOnGpu && _options.MaxTrainingTimeSeconds <= 0
-            && TryTrainGpuResident(yNorm))
-        {
-            LastRunUsedGpuResidentPath = true;
-            return;
-        }
-
         // Adam optimizer (Challu et al. 2023).
-        var adamOptions = new AdamOptimizerOptions<T, Matrix<T>, Vector<T>>
+        var adamOptions = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
         {
             InitialLearningRate = _options.LearningRate
         };
-        var optimizer = new AdamOptimizer<T, Matrix<T>, Vector<T>>(null, adamOptions);
+        var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(null, adamOptions);
 
         // Collect every trainable weight/bias tensor from all stacks (registered via
         // RegisterTrainableParameter in the stack constructor).
         var allStacks = _stacks.Cast<Interfaces.ILayer<T>>().ToList();
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(allStacks, -1);
+        var trainableLayers = _stacks.Cast<ITrainableLayer<T>>().ToList();
 
         var trainingLoss = TrainingLoss;
 
@@ -313,96 +283,39 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
                 break;
             TrainingCancellationToken.ThrowIfCancellationRequested();
 
-            var indices = Enumerable.Range(0, numSamples).OrderBy(_ => _random.Next()).ToList();
+            // Only windows with a complete lookback AND target (idx ∈ [L, N - H]) train, mirroring the paper's
+            // windowed sampling. They are filtered once (checkpointWindows), before shuffling, so every batch but
+            // the last has exactly BatchSize samples: each distinct batch shape is a separate compiled plan.
+            var order = checkpointWindows.OrderBy(_ => _random.Next()).ToList();
 
             int epochSampleCount = 0;
 
-            for (int batchStart = 0; batchStart < numSamples; batchStart += _options.BatchSize)
+            for (int batchStart = 0; batchStart < order.Count; batchStart += _options.BatchSize)
             {
                 if (timeBounded && TrainingCancellationToken.IsCancellationRequested)
                     break;
                 TrainingCancellationToken.ThrowIfCancellationRequested();
 
-                int batchEnd = Math.Min(batchStart + _options.BatchSize, numSamples);
-                int batchCount = batchEnd - batchStart;
-
-                // Keep only samples with a complete lookback AND target window
-                // (idx ∈ [L, N - H]); mirrors the paper's windowed sampling.
-                var validIndices = new List<int>(batchCount);
-                for (int bi = 0; bi < batchCount; bi++)
-                {
-                    int idx = indices[batchStart + bi];
-                    if (idx < lookback || idx + horizon > yNorm.Length)
-                        continue;
-                    validIndices.Add(idx);
-                }
-
-                if (validIndices.Count == 0)
-                    continue;
-
-                int effectiveBatch = validIndices.Count;
-
-                // Target horizon window [B, H] (normalized).
+                int effectiveBatch = Math.Min(_options.BatchSize, order.Count - batchStart);
+                var inputData = new T[effectiveBatch * lookback];
                 var targetData = new T[effectiveBatch * horizon];
                 for (int bi = 0; bi < effectiveBatch; bi++)
                 {
-                    int idx = validIndices[bi];
+                    int idx = order[batchStart + bi];
+                    for (int j = 0; j < lookback; j++)
+                        inputData[bi * lookback + j] = yNorm[idx - lookback + j];
                     for (int h = 0; h < horizon; h++)
                         targetData[bi * horizon + h] = yNorm[idx + h];
                 }
+                var batchInput = new Tensor<T>(new[] { effectiveBatch, lookback }, new Vector<T>(inputData));
                 var batchTarget = new Tensor<T>(new[] { effectiveBatch, horizon }, new Vector<T>(targetData));
 
-                using var tape = new GradientTape<T>();
-
-                // Each stack forecasts from its own multi-rate pooled view of the
-                // lookback. Pooling has no trainable parameters, so we materialize the
-                // pooled inputs eagerly as tape leaves and let ForwardTape carry the
-                // gradient back into the stack's MLP weights.
-                Tensor<T>? aggregatedForecast = null;
-                foreach (var stack in _stacks)
-                {
-                    int pooledLen = stack.InputLength;
-                    var pooledData = new T[effectiveBatch * pooledLen];
-                    for (int bi = 0; bi < effectiveBatch; bi++)
-                    {
-                        int idx = validIndices[bi];
-                        var window = new Tensor<T>(new[] { lookback });
-                        for (int j = 0; j < lookback; j++)
-                            window[j] = yNorm[idx - lookback + j];
-                        var pooled = ApplyPoolingTensor(window, stack.PoolingSize);
-                        for (int j = 0; j < pooledLen; j++)
-                            pooledData[bi * pooledLen + j] = j < pooled.Shape[0] ? pooled[j] : NumOps.Zero;
-                    }
-
-                    var pooledInput = new Tensor<T>(new[] { effectiveBatch, pooledLen }, new Vector<T>(pooledData));
-                    var stackForecast = stack.ForwardTape(pooledInput); // [B, H]
-                    aggregatedForecast = aggregatedForecast is null
-                        ? stackForecast
-                        : Engine.TensorAdd(aggregatedForecast, stackForecast);
-                }
-
-                var batchLoss = trainingLoss.ComputeTapeLoss(aggregatedForecast!, batchTarget);
-
-                var allGrads = tape.ComputeGradients(batchLoss, sources: null);
-                var grads = new Dictionary<Tensor<T>, Tensor<T>>(
-                    Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-                foreach (var param in trainableParams)
-                {
-                    if (allGrads.TryGetValue(param, out var grad))
-                        grads[param] = grad;
-                }
-
-                // Count trained samples this epoch so best-checkpoint selection only
-                // fires when training actually ran. The epoch is SCORED separately on
-                // the frozen end-of-epoch weights (see ValidationMse below), so the
-                // per-batch pre-update loss is no longer accumulated here.
+                // Multi-rate pooling, every stack's forecast and their sum (RunForwardBatched), the loss, the
+                // backward and the Adam update: one fused compiled plan when it applies (CPU or GPU), the eager
+                // tape otherwise (TrainTapeBatch). The epoch is SCORED separately on the frozen end-of-epoch
+                // weights (see ValidationMse), so the per-batch loss is not accumulated here.
+                TrainTapeBatch(trainableLayers, batchInput, batchTarget, RunStacksForTraining, trainingLoss.ComputeTapeLoss, optimizer);
                 epochSampleCount += effectiveBatch;
-
-                var context = new TapeStepContext<T>(
-                    trainableParams, grads,
-                    batchLoss.Length > 0 ? batchLoss[0] : NumOps.Zero);
-
-                optimizer.Step(context);
             }
 
             // Snapshot the parameters if this epoch's FROZEN end-of-epoch weights are
@@ -441,47 +354,57 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
     }
 
     /// <summary>
-    /// Batched, tape-recordable average pooling for the fused-resident forward.
-    /// <c>[B, L] → [B, L/kernelSize]</c> via <c>Reshape → ReduceMean(axis=2)</c>.
-    /// Requires <c>L % kernelSize == 0</c>; returns null otherwise so the caller
-    /// can fall back to the eager path. Kernel=1 is identity (returned as-is).
+    /// Batched, tape-recordable average pooling: <c>[B, L] → [B, ceil(L / kernelSize)]</c>, the same windows
+    /// <see cref="ApplyPoolingTensor"/> produces per sample (the last one shorter when the kernel does not divide
+    /// the lookback). Kernel 1 is identity.
     /// </summary>
-    private Tensor<T>? PoolBatchedTape(Tensor<T> input, int kernelSize)
+    private Tensor<T> PoolBatchedTape(Tensor<T> input, int kernelSize)
     {
         if (kernelSize <= 1) return input;
         int B = input.Shape[0];
         int L = input.Shape[1];
-        if (L % kernelSize != 0) return null;
-        int poolCount = L / kernelSize;
-        var reshaped = Engine.Reshape(input, new[] { B, poolCount, kernelSize });
-        return Engine.ReduceMean(reshaped, new[] { 2 }, keepDims: false);
+        int fullWindows = L / kernelSize;
+        int tail = L - fullWindows * kernelSize;
+
+        Tensor<T>? full = null;
+        if (fullWindows > 0)
+        {
+            var body = tail == 0 ? input : Engine.TensorNarrow(input, 1, 0, fullWindows * kernelSize);
+            full = Engine.ReduceMean(Engine.Reshape(body, new[] { B, fullWindows, kernelSize }), new[] { 2 }, keepDims: false);
+        }
+        if (tail == 0 && full is not null)
+            return full;
+
+        // The partial last window averages only the elements it has.
+        var last = Engine.ReduceMean(Engine.TensorNarrow(input, 1, fullWindows * kernelSize, tail), new[] { 1 }, keepDims: true);
+        return full is null ? last : Engine.TensorConcatenate(new[] { full, last }, axis: 1);
     }
 
     /// <summary>
-    /// Runs the full multi-rate stack over a <c>[B, L]</c> batch using on-tape
-    /// pooling + per-stack forecast + sum. Returns null when any stack's pooling
-    /// size doesn't divide the lookback cleanly (fused path unsupported for that
-    /// config; caller falls back to eager).
+    /// Runs the full multi-rate stack over a <c>[B, L]</c> batch using on-tape pooling, each stack's forecast and
+    /// their sum, returning <c>[B, H]</c>. Null only when the model has no stacks.
     /// </summary>
-    private Tensor<T>? RunForwardBatched(Tensor<T> input)
+    internal Tensor<T>? RunForwardBatched(Tensor<T> input)
     {
         Tensor<T>? aggregated = null;
         foreach (var stack in _stacks)
         {
             var pooled = PoolBatchedTape(input, stack.PoolingSize);
-            if (pooled is null) return null;
-            var forecast = stack.ForwardTape(pooled);
+            // Summed column-major ([H, B]) and transposed once below: see ForwardTapeColumns.
+            var forecast = stack.ForwardTapeColumns(pooled);
             aggregated = aggregated is null
                 ? forecast
                 : Engine.TensorAdd(aggregated, forecast);
         }
-        return aggregated;
+        return aggregated is null ? null : Engine.TensorPermute(aggregated, new[] { 1, 0 });
     }
 
+    private Tensor<T> RunStacksForTraining(Tensor<T> input)
+        => RunForwardBatched(input) ?? throw new InvalidOperationException("N-HiTS has no stacks to run; the model was not initialized.");
+
     /// <summary>
-    /// Validation MSE across up to 256 windows for the accept/reject gate. Uses
-    /// the current stack weights so it correctly reflects the pre- or post-resident
-    /// state depending on when it's called.
+    /// Validation MSE across up to 256 windows, scoring each epoch on its frozen end-of-epoch weights. Uses
+    /// the current stack weights.
     /// </summary>
     private double ValidationMse(List<int> valid, Vector<T> yNorm, int L, int H)
     {
@@ -506,142 +429,6 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
             sum += d * d;
         }
         return sum / n;
-    }
-
-    /// <summary>
-    /// GPU-resident training via the fused compiled-plan capture path — mirrors
-    /// NBEATSModel.TryTrainGpuResident. Returns false when the fused path can't
-    /// engage, when the pool sizes don't divide the lookback cleanly, or when the
-    /// resident run failed to improve on the untrained baseline (blocks are
-    /// re-initialized before returning so the eager fallback starts clean).
-    /// </summary>
-    private bool TryTrainGpuResident(Vector<T> yNorm)
-    {
-        int L = _options.LookbackWindow;
-        int H = _options.ForecastHorizon;
-        int batchSize = _options.BatchSize;
-
-        // Precondition: every stack's pooling divides L cleanly so PoolBatchedTape
-        // works. Fall back to eager for non-power-of-two configs.
-        foreach (var stack in _stacks)
-        {
-            if (stack.PoolingSize > 1 && L % stack.PoolingSize != 0)
-                return false;
-        }
-
-        // Time-ordered windows; reserve the latest ~20% as a holdout the resident
-        // optimizer never trains on, so the accept/reject gate measures
-        // GENERALIZATION rather than training-set fit.
-        var valid = new List<int>();
-        for (int idx = 0; idx < yNorm.Length; idx++)
-            if (idx >= L && idx + H <= yNorm.Length)
-                valid.Add(idx);
-        int holdoutCount = Math.Max(1, valid.Count / 5);
-        int trainCount = valid.Count - holdoutCount;
-        var trainWindows = valid.Take(trainCount).ToList();
-        var holdoutWindows = valid.Skip(trainCount).ToList();
-        if (trainWindows.Count < batchSize) return false;
-
-        var layers = _stacks.Cast<ITrainableLayer<T>>().ToList();
-        var trainingLoss = TrainingLoss;
-
-        Tensor<T> ForwardStack(Tensor<T> input) => RunForwardBatched(input)!;
-        Tensor<T> ComputeLoss(Tensor<T> pred, Tensor<T> target) =>
-            trainingLoss.ComputeTapeLoss(pred, target);
-
-        double preMse = ValidationMse(holdoutWindows, yNorm, L, H);
-
-        float lr = (float)_options.LearningRate;
-        const float beta1 = 0.9f;
-        const float beta2 = 0.999f;
-        const float epsilon = 1e-8f;
-        const float weightDecay = 0f;
-
-        AiDotNet.Training.CompiledTapeTrainingStep<T>.Invalidate(this);
-        AiDotNet.Training.CompiledTapeTrainingStep<T>.ResetFusedStepCount(this);
-
-        var random = RandomHelper.CreateSeededRandom(SeedOr(42));
-        int maxEpochs = _options.Epochs;
-        bool fusedEngaged = false;
-        bool diverged = false;
-        double firstStepLoss = double.NaN;
-
-        for (int epoch = 0; epoch < maxEpochs && !diverged; epoch++)
-        {
-            TrainingCancellationToken.ThrowIfCancellationRequested();
-            var order = trainWindows.OrderBy(_ => random.Next()).ToList();
-            int fullBatches = order.Count / batchSize;
-
-            double epochLossSum = 0;
-            int epochBatchCount = 0;
-
-            for (int b = 0; b < fullBatches; b++)
-            {
-                TrainingCancellationToken.ThrowIfCancellationRequested();
-                int baseIdx = b * batchSize;
-                var inputData = new T[batchSize * L];
-                var targetData = new T[batchSize * H];
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    int idx = order[baseIdx + bi];
-                    for (int j = 0; j < L; j++) inputData[bi * L + j] = yNorm[idx - L + j];
-                    for (int h = 0; h < H; h++) targetData[bi * H + h] = yNorm[idx + h];
-                }
-                var batchInput = new Tensor<T>(new[] { batchSize, L }, new Vector<T>(inputData));
-                var batchTarget = new Tensor<T>(new[] { batchSize, H }, new Vector<T>(targetData));
-
-                bool ran = TryFusedResidentStep(
-                    layers, batchInput, batchTarget, ForwardStack, ComputeLoss,
-                    lr, beta1, beta2, epsilon, weightDecay, out T stepLoss);
-                if (!ran)
-                {
-                    if (!fusedEngaged) return false;
-                    // Engaged earlier but this step couldn't run: don't silently skip
-                    // (a partial run could still be accepted). Diverge so the gate
-                    // reinitializes and hands off to the eager path.
-                    diverged = true;
-                    break;
-                }
-                fusedEngaged = true;
-                double stepLossD = NumOps.ToDouble(stepLoss);
-                if (double.IsNaN(stepLossD) || double.IsInfinity(stepLossD))
-                {
-                    diverged = true;
-                    break;
-                }
-                if (double.IsNaN(firstStepLoss)) firstStepLoss = stepLossD;
-                else if (stepLossD > 1e3 && stepLossD > firstStepLoss * 1e3)
-                {
-                    diverged = true;
-                    break;
-                }
-
-                epochLossSum += stepLossD;
-                epochBatchCount++;
-            }
-
-            // Surface the resident epoch to facade callbacks / early stopping; break on veto (the post-loop
-            // baseline validation still decides whether to keep the resident attempt).
-            if (!diverged && epochBatchCount > 0 &&
-                !ReportEpoch(epoch, _options.Epochs, NumOps.FromDouble(epochLossSum / epochBatchCount)))
-            {
-                break;
-            }
-        }
-
-        if (fusedEngaged)
-        {
-            double postMse = ValidationMse(holdoutWindows, yNorm, L, H);
-            bool improved = !double.IsNaN(postMse) && !double.IsInfinity(postMse)
-                            && postMse < preMse * 0.98;
-            if (diverged || !improved)
-            {
-                _stacks.Clear();
-                InitializeStacks();
-                return false;
-            }
-        }
-        return fusedEngaged;
     }
 
     public override Vector<T> Predict(Matrix<T> input)
@@ -1024,7 +811,22 @@ internal partial class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>,
     /// <see cref="ForwardInternal"/> used at inference — both read the same weight tensors, so
     /// Adam updates applied to the registered tensors are visible to inference immediately.
     /// </summary>
+    /// <remarks>
+    /// The result is a permuted view. A caller that sums several stacks' forecasts should use
+    /// <see cref="ForwardTapeColumns"/> and transpose the sum once: adding permuted views of
+    /// device-resident results gave a wrong sum on the DirectGpu engine (#1804,
+    /// AiDotNet.Tensors#1090), and costs a strided permute per stack either way.
+    /// </remarks>
     public Tensor<T> ForwardTape(Tensor<T> input)
+        => Engine.TensorPermute(ForwardTapeColumns(input), new[] { 1, 0 });
+
+    /// <summary>
+    /// Tape-tracked forward pass over a batched, already-pooled input <c>[B, inputLength]</c>,
+    /// returning the stack forecast column-major, <c>[outputLength, B]</c>: the layout the stack
+    /// computes in (weight <c>[out, in]</c> @ x <c>[in, B]</c>), so forecasts from several stacks
+    /// sum as dense tensors.
+    /// </summary>
+    internal Tensor<T> ForwardTapeColumns(Tensor<T> input)
     {
         // [B, in] -> [in, B] so weight[out, in] @ x[in, B] = [out, B].
         var x = Engine.TensorPermute(input, new[] { 1, 0 });
@@ -1040,7 +842,6 @@ internal partial class NHiTSStackTensor<T> : NeuralNetworks.Layers.LayerBase<T>,
             x = layer < _weights.Count - 1 ? Engine.ReLU(linear) : linear;
         }
 
-        // [outputLength, B] -> [B, outputLength]
-        return Engine.TensorPermute(x, new[] { 1, 0 });
+        return x; // [outputLength, B]
     }
 }

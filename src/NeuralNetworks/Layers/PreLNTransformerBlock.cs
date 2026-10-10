@@ -356,15 +356,6 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        Vector<T> acc = new Vector<T>(0);
-        foreach (var layer in OrderedSubLayers())
-            acc = Vector<T>.Concatenate(acc, layer.GetParameterGradients());
-        return acc;
-    }
-
-    /// <inheritdoc/>
     public override void ClearGradients()
     {
         base.ClearGradients();

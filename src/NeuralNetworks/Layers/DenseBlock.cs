@@ -131,11 +131,6 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
 
     public override bool SupportsTraining => true;
 
-    public override Vector<T> GetParameterGradients()
-    {
-        return new Vector<T>(_layers.SelectMany(l => l.GetParameterGradients().ToArray()).ToArray());
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

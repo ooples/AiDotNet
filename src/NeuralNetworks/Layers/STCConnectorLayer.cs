@@ -399,9 +399,6 @@ public partial class STCConnectorLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients() => Concatenate(_parameterLayers, gradients: true);
-
     private static Vector<T> Concatenate(IEnumerable<LayerBase<T>> layers, bool gradients)
     {
         var vectors = layers
@@ -604,8 +601,6 @@ public partial class STCConnectorLayer<T> : LayerBase<T>, IShapeContract
             foreach (var layer in _allLayers)
                 layer.SetTrainingMode(isTraining);
         }
-
-        public override Vector<T> GetParameterGradients() => Concatenate(_parameterLayers, gradients: true);
 
         public override void ClearGradients()
         {

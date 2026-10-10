@@ -146,10 +146,6 @@ public partial class Rwkv7Stack<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameterGradients()
-        => new Vector<T>(_blocks.SelectMany(b => b.GetParameterGradients().ToArray()).ToArray());
-
-    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

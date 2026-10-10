@@ -968,18 +968,6 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
         Engine.InvalidatePersistentTensor(_bias);
     }
 
-    public override Vector<T> GetParameterGradients()
-    {
-        return Vector<T>.Concatenate(
-            _edgeNetworkWeights1Gradient != null ? new Vector<T>(_edgeNetworkWeights1Gradient.ToArray()) : new Vector<T>(_edgeNetworkWeights1.Length),
-            _edgeNetworkWeights2Gradient != null ? new Vector<T>(_edgeNetworkWeights2Gradient.ToArray()) : new Vector<T>(_edgeNetworkWeights2.Length),
-            _edgeNetworkBias1Gradient != null ? new Vector<T>(_edgeNetworkBias1Gradient.ToArray()) : new Vector<T>(_edgeNetworkBias1.Length),
-            _edgeNetworkBias2Gradient != null ? new Vector<T>(_edgeNetworkBias2Gradient.ToArray()) : new Vector<T>(_edgeNetworkBias2.Length),
-            _selfWeightsGradient != null ? new Vector<T>(_selfWeightsGradient.ToArray()) : new Vector<T>(_selfWeights.Length),
-            _biasGradient != null ? new Vector<T>(_biasGradient.ToArray()) : new Vector<T>(_bias.Length)
-        );
-    }
-
     public override void ClearGradients()
     {
         _edgeNetworkWeights1Gradient = null;

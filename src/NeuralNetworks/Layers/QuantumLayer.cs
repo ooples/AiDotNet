@@ -578,11 +578,6 @@ public partial class QuantumLayer<T> : LayerBase<T>, IShapeContract
         _angleGradients.Fill(NumOps.Zero);
     }
 
-    public override Vector<T> GetParameterGradients()
-    {
-        return new Vector<T>(_angleGradients.ToArray());
-    }
-
     public override void ClearGradients()
     {
         _angleGradients = new Tensor<T>([_numQubits]);

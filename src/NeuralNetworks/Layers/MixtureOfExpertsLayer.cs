@@ -848,45 +848,6 @@ public partial class MixtureOfExpertsLayer<T> : LayerBase<T>, IAuxiliaryLossLaye
         }
     }
 
-    /// <summary>
-    /// Sets all trainable parameters from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing parameters for the router and all experts.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameter count doesn't match.</exception>
-    /// <remarks>
-    /// <para>
-    /// Parameters should be in the same order as returned by GetParameters():
-    /// [router parameters] [expert1 parameters] [expert2 parameters] ...
-    /// </para>
-    /// <para><b>For Beginners:</b> Loads previously saved parameters back into the model.
-    ///
-    /// This is the opposite of GetParameters():
-    /// - Takes a vector of all parameters
-    /// - Distributes them to the router and experts
-    /// - Must match the exact format returned by GetParameters()
-    ///
-    /// Use this to:
-    /// - Load a saved model from disk
-    /// - Initialize with pre-trained parameters
-    /// - Implement custom optimization algorithms
-    ///
-    /// If the parameter count doesn't match exactly, an error is thrown to prevent
-    /// accidentally corrupting the model.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        var gradVectors = new List<Vector<T>>();
-
-        if (_router.ParameterCount > 0)
-            gradVectors.Add(_router.GetParameterGradients());
-
-        foreach (var expert in _experts.Where(e => e.ParameterCount > 0))
-            gradVectors.Add(expert.GetParameterGradients());
-
-        return gradVectors.Count > 0 ? Vector<T>.Concatenate(gradVectors.ToArray()) : new Vector<T>(0);
-    }
-
     public override void ClearGradients()
     {
         _router.ClearGradients();

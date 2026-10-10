@@ -150,22 +150,6 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
     /// </summary>
     public override bool SupportsTraining => true;
 
-    public override Vector<T> GetParameterGradients()
-    {
-        // All sub-layers stay null until OnFirstForward resolves input
-        // channel count; null-guard each to keep this query side-effect-
-        // free in the pre-Forward state.
-        var grads = new List<T>();
-        if (_expandConv is not null) grads.AddRange(_expandConv.GetParameterGradients().ToArray());
-        if (_expandBn is not null) grads.AddRange(_expandBn.GetParameterGradients().ToArray());
-        if (_dwConv is not null) grads.AddRange(_dwConv.GetParameterGradients().ToArray());
-        if (_dwBn is not null) grads.AddRange(_dwBn.GetParameterGradients().ToArray());
-        if (_se is not null) grads.AddRange(_se.GetParameterGradients().ToArray());
-        if (_projectConv is not null) grads.AddRange(_projectConv.GetParameterGradients().ToArray());
-        if (_projectBn is not null) grads.AddRange(_projectBn.GetParameterGradients().ToArray());
-        return new Vector<T>([.. grads]);
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

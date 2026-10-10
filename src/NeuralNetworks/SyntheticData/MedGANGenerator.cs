@@ -712,7 +712,7 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
                 var (rScores, fScores) = SplitStacked(allScores, realN, fakeN);
                 return DiscriminatorLoss(rScores, fScores);
             }
-            if (GpuResidentFusedStep<T>.TryStep(
+            if (FusedTrainingStep<T>.TryStep(
                     trainableDisc, stacked, target,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _discriminatorOptimizer,
@@ -902,7 +902,7 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
             var target = new Tensor<T>(new[] { 1 });
             Tensor<T> Fwd(Tensor<T> nb) => SynthesizeForDiscriminator(nb, isTraining: true);
             Tensor<T> Loss(Tensor<T> fake, Tensor<T> _) => GeneratorLoss(fake);
-            if (GpuResidentFusedStep<T>.TryStep(
+            if (FusedTrainingStep<T>.TryStep(
                     trainableGen, noiseBatch, target,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _generatorOptimizer,

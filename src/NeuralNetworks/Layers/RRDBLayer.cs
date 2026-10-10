@@ -397,12 +397,6 @@ public partial class RRDBLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
-    public override Vector<T> GetParameterGradients()
-    {
-        var gradVectors = _rdbBlocks.Select(r => r.GetParameterGradients()).ToArray();
-        return Vector<T>.Concatenate(gradVectors);
-    }
-
     public override void ClearGradients()
     {
         foreach (var rdb in _rdbBlocks)

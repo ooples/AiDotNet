@@ -165,9 +165,6 @@ public sealed partial class TimeSformerBlockLayer<T> : LayerBase<T>, IShapeContr
         return Forward(input, _configuredFrames);
     }
 
-    public override Vector<T> GetParameterGradients() =>
-        ConcatenateLayerVectors(layer => layer.GetParameterGradients());
-
     public override void ClearGradients()
     {
         base.ClearGradients();

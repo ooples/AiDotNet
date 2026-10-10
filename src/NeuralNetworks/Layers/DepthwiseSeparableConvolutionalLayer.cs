@@ -473,18 +473,6 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
 
     public override bool SupportsTraining => true;
 
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_depthwiseKernelsGradient == null || _pointwiseKernelsGradient == null || _biasesGradient == null)
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
-        return Vector<T>.Concatenate(
-            Vector<T>.Concatenate(
-                Vector<T>.FromMemory(_depthwiseKernelsGradient.Data),
-                Vector<T>.FromMemory(_pointwiseKernelsGradient.Data)),
-            Vector<T>.FromMemory(_biasesGradient.Data));
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

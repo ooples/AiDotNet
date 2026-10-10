@@ -164,12 +164,6 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
     /// <value>Always <c>true</c> for Conv3DLayer as it has learnable parameters.</value>
     public override bool SupportsTraining => true;
 
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_kernelsGradient == null || _biasesGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        return Vector<T>.Concatenate(new Vector<T>(_kernelsGradient.ToArray()), new Vector<T>(_biasesGradient.ToArray()));
-    }
-
     public override void ClearGradients() { base.ClearGradients(); _kernelsGradient = null; _biasesGradient = null; }
 
     internal override Dictionary<string, string> GetMetadata()

@@ -1140,14 +1140,6 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         Engine.InvalidatePersistentTensor(_Wk);
         Engine.InvalidatePersistentTensor(_Wv);
     }
-    public override Vector<T> GetParameterGradients()
-    {
-        var gQ = _dWq != null ? _dWq.ToVector() : new Vector<T>(_Wq.Length);
-        var gK = _dWk != null ? _dWk.ToVector() : new Vector<T>(_Wk.Length);
-        var gV = _dWv != null ? _dWv.ToVector() : new Vector<T>(_Wv.Length);
-        var gO = new Vector<T>(_Wo.Length); // Wo gradient not tracked separately yet
-        return Vector<T>.Concatenate(Vector<T>.Concatenate(gQ, gK), Vector<T>.Concatenate(gV, gO));
-    }
 
     public override void ClearGradients()
     {

@@ -775,31 +775,6 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
         Engine.TensorAddInPlace(_outputBias, Engine.TensorMultiplyScalar(_outputBiasGradient, negLR));
     }
 
-    public override Vector<T> GetParameterGradients()
-    {
-        EnsureWeightsMaterialized();
-        var gradTensors = new[] { _queryWeightsGradient, _keyWeightsGradient, _valueWeightsGradient, _outputWeightsGradient, null, null, null, _outputBiasGradient };
-        var weightTensors = new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights, _queryBias, _keyBias, _valueBias, _outputBias };
-        int totalParams = weightTensors.Sum(w => w.Length);
-        var result = new Vector<T>(totalParams);
-        int index = 0;
-        for (int g = 0; g < gradTensors.Length; g++)
-        {
-            var grad = gradTensors[g];
-            int len = weightTensors[g].Length;
-            if (grad != null)
-            {
-                for (int i = 0; i < len; i++)
-                    result[index++] = grad[i];
-            }
-            else
-            {
-                index += len;
-            }
-        }
-        return result;
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

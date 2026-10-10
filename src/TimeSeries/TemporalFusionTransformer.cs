@@ -252,22 +252,13 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
                 var batchInput = new Tensor<T>([b, lookback], new Vector<T>(inputData));
                 var batchTarget = new Tensor<T>([b, horizon], new Vector<T>(targetData));
 
-                using var tape = new GradientTape<T>();
-                var forecast = ForwardBatch(batchInput, b, lookback); // [b, horizon*Q]
-                var lossTensor = QuantilePinballLoss(forecast, batchTarget);
-                var allGrads = tape.ComputeGradients(lossTensor, sources: null);
-
-                var grads = new Dictionary<Tensor<T>, Tensor<T>>(
-                    TensorReferenceComparer<Tensor<T>>.Instance);
-                foreach (var param in allParams)
-                    if (allGrads.TryGetValue(param, out var g)) grads[param] = g;
-
-                T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-                Tensor<T> ComputeForward(Tensor<T> a, Tensor<T> t) => forecast;
-                Tensor<T> ComputeLoss(Tensor<T> p, Tensor<T> t) => QuantilePinballLoss(p, t);
-                var context = new TapeStepContext<T>(
-                    allParams, grads, lossValue, batchInput, batchTarget, ComputeForward, ComputeLoss, null);
-                optimizer.Step(context);
+                // Variable selection, LSTM encoder, interpretable multi-head attention, quantile head, the pinball
+                // loss, the backward and the update: one fused compiled plan when it applies (CPU or GPU), the eager
+                // tape otherwise (TrainTapeBatch).
+                T lossValue = TrainTapeBatch(
+                    Array.Empty<ITrainableLayer<T>>(), batchInput, batchTarget,
+                    input => ForwardBatch(input, input.Shape[0], input.Shape[1]),
+                    QuantilePinballLoss, optimizer, extraParameters: allParams);
 
                 epochLossSum += Convert.ToDouble(lossValue) * b;
                 epochCount += b;

@@ -568,7 +568,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
                     var halfT2A = SymmetricRowCrossEntropy(logitsT2A, batchSize);
                     return Engine.TensorAdd<T>(halfA2T, halfT2A);
                 }
-                if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                if (AiDotNet.Training.FusedTrainingStep<T>.TryStep(
                         trainableLayers, input, expected,
                         forward: FwdCLAP, computeLoss: LossCLAP,
                         optimizer: optimizer,

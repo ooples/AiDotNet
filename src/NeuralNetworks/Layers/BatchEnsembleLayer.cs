@@ -379,63 +379,6 @@ public partial class BatchEnsembleLayer<T> : LayerBase<T>, IShapeContract
         return Engine.ReduceMean(reshaped, new[] { 1 }, keepDims: false);
     }
 
-    /// <summary>
-    /// Gets the parameter gradients as a single vector.
-    /// </summary>
-    public override Vector<T> GetParameterGradients()
-    {
-        var gradsList = new List<T>();
-
-        if (_weightsGrad != null)
-        {
-            for (int i = 0; i < _weightsGrad.Length; i++)
-                gradsList.Add(_weightsGrad[i]);
-        }
-        else
-        {
-            for (int i = 0; i < _weights.Length; i++)
-                gradsList.Add(NumOps.Zero);
-        }
-
-        if (_bias != null)
-        {
-            if (_biasGrad != null)
-            {
-                for (int i = 0; i < _biasGrad.Length; i++)
-                    gradsList.Add(_biasGrad[i]);
-            }
-            else
-            {
-                for (int i = 0; i < _bias.Length; i++)
-                    gradsList.Add(NumOps.Zero);
-            }
-        }
-
-        if (_rVectorsGrad != null)
-        {
-            for (int i = 0; i < _rVectorsGrad.Length; i++)
-                gradsList.Add(_rVectorsGrad[i]);
-        }
-        else
-        {
-            for (int i = 0; i < _rVectors.Length; i++)
-                gradsList.Add(NumOps.Zero);
-        }
-
-        if (_sVectorsGrad != null)
-        {
-            for (int i = 0; i < _sVectorsGrad.Length; i++)
-                gradsList.Add(_sVectorsGrad[i]);
-        }
-        else
-        {
-            for (int i = 0; i < _sVectors.Length; i++)
-                gradsList.Add(NumOps.Zero);
-        }
-
-        return new Vector<T>([.. gradsList]);
-    }
-
     /// <inheritdoc/>
     public override void UpdateParameters(T learningRate)
     {

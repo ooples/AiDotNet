@@ -1839,40 +1839,6 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         }
     }
 
-    /// <summary>
-    /// Resets the internal state of the multi-head attention layer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method clears all cached values from previous forward and backward passes,
-    /// effectively resetting the layer to its initial state but keeping the learned weights.
-    /// This is useful when starting a new training sequence or when you want to clear
-    /// any temporary data without losing the layer's learned parameters.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> Think of this like clearing your scratch paper after solving a math problem.
-    /// You're keeping all the knowledge you've gained (the weights), but you're getting rid of
-    /// all the intermediate calculations (cached values) to make room for new work.
-    /// 
-    /// This is particularly important in neural networks because:
-    /// 1. It frees up memory by removing data we no longer need
-    /// 2. It ensures that each new input is processed with a "clean slate"
-    /// 3. It prevents old calculations from affecting new ones, which could lead to incorrect results
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null)
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
-        return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_queryWeightsGradient.Data),
-            Vector<T>.FromMemory(_keyWeightsGradient.Data),
-            Vector<T>.FromMemory(_valueWeightsGradient.Data),
-            _outputWeightsGradient != null ? Vector<T>.FromMemory(_outputWeightsGradient.Data) : new Vector<T>(_outputWeights.Length),
-            _outputBiasGradient != null ? Vector<T>.FromMemory(_outputBiasGradient.Data) : new Vector<T>(_outputBias.Length));
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

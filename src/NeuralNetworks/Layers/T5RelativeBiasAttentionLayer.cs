@@ -597,25 +597,6 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        EnsureWeightsAllocated();
-        if (_qGradient is null)
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-
-        var qG = _qGradient.ToVector();
-        var kG = (_kGradient ?? new Tensor<T>(_kWeights._shape)).ToVector();
-        var vG = (_vGradient ?? new Tensor<T>(_vWeights._shape)).ToVector();
-        var oG = (_oGradient ?? new Tensor<T>(_oWeights._shape)).ToVector();
-        if (!_ownsBiasTable)
-            return Vector<T>.Concatenate(Vector<T>.Concatenate(qG, kG), Vector<T>.Concatenate(vG, oG));
-        var bG = (_biasTableGradient ?? new Tensor<T>(_relativeBiasTable._shape)).ToVector();
-        return Vector<T>.Concatenate(
-            Vector<T>.Concatenate(qG, kG),
-            Vector<T>.Concatenate(Vector<T>.Concatenate(vG, oG), bG));
-    }
-
-    /// <inheritdoc/>
     public override void ClearGradients()
     {
         base.ClearGradients();

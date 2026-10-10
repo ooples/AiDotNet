@@ -507,39 +507,6 @@ public partial class ReadoutLayer<T> : LayerBase<T>, IShapeContract
         Engine.InvalidatePersistentTensor(_bias);
     }
 
-    /// <summary>
-    /// Sets the trainable parameters of the readout layer.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters (weights and biases) to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets the trainable parameters (weights and biases) of the readout layer from a single vector.
-    /// The vector should contain the weight values first, followed by the bias values. This is useful for loading
-    /// saved model weights or for implementing optimization algorithms that operate on all parameters at once.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the weights and biases in the readout layer.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with the correct total length
-    /// - The first part of the vector is used for the weights
-    /// - The second part of the vector is used for the biases
-    /// 
-    /// This is useful for:
-    /// - Loading a previously saved model
-    /// - Transferring parameters from another model
-    /// - Testing different parameter values
-    /// 
-    /// An error is thrown if the input vector doesn't have the expected number of parameters.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        var flatWeightGrads = new Vector<T>(_weightGradients.ToArray());
-        var flatBiasGrads = new Vector<T>(_biasGradients.ToArray());
-        return Vector<T>.Concatenate(flatWeightGrads, flatBiasGrads);
-    }
-
     public override void ClearGradients()
     {
         _weightGradients = new Tensor<T>(_weights._shape);

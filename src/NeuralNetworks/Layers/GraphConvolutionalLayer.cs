@@ -1295,25 +1295,6 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     }
 
     /// <summary>
-    /// Gets the gradients of all trainable parameters in this layer.
-    /// </summary>
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_weightsGradient == null || (_useBias && _biasGradient == null))
-        {
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        }
-
-        if (!_useBias)
-            return new Vector<T>(_weightsGradient.ToArray());
-
-        return Vector<T>.Concatenate(
-            new Vector<T>(_weightsGradient.ToArray()),
-            new Vector<T>(_biasGradient!.ToArray())
-        );
-    }
-
-    /// <summary>
     /// Clears the stored gradients for this layer.
     /// </summary>
     public override void ClearGradients()

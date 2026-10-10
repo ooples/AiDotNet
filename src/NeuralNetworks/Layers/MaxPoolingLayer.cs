@@ -122,14 +122,6 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
 
     public override bool SupportsTraining => true;
 
-    /// <summary>
-    /// Stores the indices of the maximum values found during the forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <b>For Beginners:</b> This keeps track of which input value was the maximum in each pooling window.
-    /// We need this information during the backward pass to know where to send the gradients.
-    /// </remarks>
-    private int[,,,,]? _maxIndices;
 
     /// <summary>
     /// Stores GPU-resident pooling indices for backward pass.
@@ -365,11 +357,14 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
             input4D = Engine.Reshape(input, new[] { flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
 
-        var poolSizeArr = new[] { PoolSize, PoolSize };
-        var strideArr = new[] { Stride, Stride };
-
-        // Use Engine operation (expects 4D); final output shape will match the original input rank
-        var output4D = Engine.MaxPool2DWithIndices(input4D, poolSizeArr, strideArr, out _maxIndices);
+        // Use Engine operation (expects 4D); final output shape will match the original input rank.
+        // In training, MaxPool2DWithTensorIndices records the argmax for the backward (the GPU engine keeps it on the
+        // device, so no per-forward download). Inference needs no argmax, and an inference trace (CompileForward)
+        // cannot capture that op at all, so it pools with the capturable Engine.MaxPool2D: otherwise the compiled
+        // plan's buffers stayed resident after ReleaseCompiledPlans.
+        var output4D = IsTrainingMode
+            ? Engine.MaxPool2DWithTensorIndices(input4D, new[] { PoolSize, PoolSize }, new[] { Stride, Stride }, out _)
+            : Engine.MaxPool2D(input4D, PoolSize, Stride);
 
         // Return with matching dimensions to preserve original tensor rank
         if (_originalInputShape.Length > 4)
@@ -419,7 +414,7 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
     /// calculations.
     /// 
     /// During the forward pass, the max pooling layer remembers which positions had the maximum
-    /// values (stored in _maxIndices). This is needed for the backward pass.
+    /// values. The gradient tape records them for the backward pass.
     /// 
     /// Resetting the state clears this memory, which is useful when:
     /// 1. Starting a new training session
@@ -432,7 +427,6 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
     {
         // Clear cached values from forward pass
         _lastInput = null;
-        _maxIndices = null;
         _addedBatchDimension = false;
 
         // Dispose GPU resources

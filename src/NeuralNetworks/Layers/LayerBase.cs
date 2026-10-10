@@ -300,7 +300,42 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// needs a bigger adjustment during training.
     /// </para>
     /// </remarks>
-    protected Vector<T>? ParameterGradients;
+    protected Vector<T>? ParameterGradients
+    {
+        get
+        {
+            if (_pendingDeviceGradients is { } owned)
+            {
+                _pendingDeviceGradients = null;
+                _parameterGradients = MaterializeParameterGradients(owned);
+            }
+            // Anything that reads the published vector may keep it, so the next publish must not refill it.
+            if (_parameterGradients is not null && (object)_parameterGradients == _scatterVector)
+                _scatterVectorHandedOut = true;
+            return _parameterGradients;
+        }
+        set
+        {
+            _pendingDeviceGradients = null;
+            _parameterGradients = value;
+        }
+    }
+
+    private Vector<T>? _parameterGradients;
+
+    // CPU gradient publish reuses ONE layer-owned buffer across steps instead of allocating two arrays per layer per
+    // step (new T[total], then Vector<T>(IEnumerable) copying it again). For a 784x256 dense layer each was an
+    // 800 KB large-object-heap allocation every step. A published vector that has been read is never refilled:
+    // the next publish allocates a fresh buffer, so a caller's snapshot of an earlier step stays unchanged.
+    private T[]? _scatterBuffer;
+    private Vector<T>? _scatterVector;
+    private bool _scatterVectorHandedOut;
+
+    // On a GPU engine a training step's gradients live on the device. Publishing them used to download every one,
+    // every step (one sync per tensor: 35 per LSTM step, 65 per Transformer step). The layer now keeps OWNED device
+    // copies (an async device-to-device copy each, no sync) and downloads only if something reads the gradients.
+    // Owned, not referenced: the step's own gradient buffers are reclaimed when it returns.
+    private Dictionary<Tensor<T>, Tensor<T>>? _pendingDeviceGradients;
 
     /// <summary>
     /// Gets the input shape for this layer.
@@ -4130,7 +4165,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// which uses them to update the parameters in a way that reduces errors.
     /// </para>
     /// </remarks>
-    public virtual Vector<T> GetParameterGradients()
+    public Vector<T> GetParameterGradients()
     {
         // EMPTY MEANS "NEVER COMPUTED", AND MUST NOT BE FAKED. This used to allocate a fresh zero
         // vector on read, so a gradient that was never written was indistinguishable from one that
@@ -7188,6 +7223,37 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     internal int ParameterVectorLength => FillParameters(null, 0);
 
     /// <summary>
+    /// Appends this layer's slice of the flat parameter vector as segments, in exactly the order
+    /// <see cref="FillParameters"/> writes them: own trainable tensors and buffers, then sublayers recursively,
+    /// frozen sublayers skipped. <c>Tensor</c> is null where the values are not backed by a <c>Tensor&lt;T&gt;</c>
+    /// (a low-precision buffer or a sublayer that is not a <see cref="LayerBase{T}"/>). Lets callers that address
+    /// weights by tensor (such as a checkpoint importer) place values without re-deriving the layout.
+    /// </summary>
+    internal void AppendFlatParameterLayout(List<(Tensor<T>? Tensor, int Length, bool IsBuffer)> segments)
+    {
+        var components = GetOrderedParameterComponents();
+        for (int i = 0; i < components.Length; i++)
+        {
+            var component = components[i];
+            if (component.Kind is DeclaredParameterComponentKind.Trainable
+                or DeclaredParameterComponentKind.Buffer)
+            {
+                segments.Add((component.LowPrecisionTensor is null ? component.Tensor : null,
+                    ParameterComponentScalarCount(component),
+                    component.Kind == DeclaredParameterComponentKind.Buffer));
+                continue;
+            }
+
+            var sub = component.Layer;
+            if (sub is null || IsSubLayerParameterFrozen(sub)) continue;
+            if (sub is LayerBase<T> layerBase)
+                layerBase.AppendFlatParameterLayout(segments);
+            else
+                segments.Add((null, sub.GetParameters().Length, false));
+        }
+    }
+
+    /// <summary>
     /// Enumerates live persistent parameter/buffer storage identities and mutation versions without
     /// producing parameter values, projected sparse payloads, or fp16 conversion snapshots.
     /// </summary>
@@ -7396,8 +7462,90 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// by allocating a fresh zero vector on read.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// GPU path of <see cref="ScatterParameterGradients"/>: copies each matched, device-resident gradient into a tensor
+    /// this layer owns, on the device. Declines (returns false) when any matched gradient is not device-resident or is
+    /// a sparse payload / strided view, so those keep the exact eager copy.
+    /// </summary>
+    private bool TryPublishDeviceGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads, out int matched)
+    {
+        matched = 0;
+        var sources = new List<(Tensor<T> Parameter, Tensor<T> Gradient)>();
+        if (!CollectDeviceGradients(grads, sources)) return false;
+        if (sources.Count == 0) return false;
+
+        var owned = new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        // A device copy made inside a tape step is one of the step's intermediates, which the tape frees on the device
+        // when it ends; the published gradient is read after that, so the tape must keep it.
+        var tape = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current;
+        foreach (var (parameter, gradient) in sources)
+        {
+            var copy = new Tensor<T>(gradient._shape);
+            Engine.TensorCopy(gradient, copy);
+            tape?.Retain(copy);
+            owned[parameter] = copy;
+            matched += gradient.Length;
+        }
+
+        _parameterGradients = null;
+        _pendingDeviceGradients = owned;
+        return true;
+    }
+
+    // Same walk and match rule as FillParameterGradients; false when a matched gradient cannot take the device path.
+    private bool CollectDeviceGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads,
+        List<(Tensor<T> Parameter, Tensor<T> Gradient)> sources)
+    {
+        var components = GetOrderedParameterComponents();
+        for (int i = 0; i < components.Length; i++)
+        {
+            var component = components[i];
+            if (component.Kind == DeclaredParameterComponentKind.Buffer) continue;
+            if (component.Kind == DeclaredParameterComponentKind.Trainable)
+            {
+                var tensor = component.Tensor;
+                int count = ParameterComponentScalarCount(component);
+                if (count == 0 || tensor is null) continue;
+                if (!grads.TryGetValue(tensor, out var gradient) || gradient is null
+                    || TrainableScalarCount(gradient) != count)
+                    continue;
+                if (gradient is SparseTensor<T> || !gradient.IsContiguous || !gradient.HasPendingGpuData)
+                {
+                    if (System.Environment.GetEnvironmentVariable("AIDOTNET_PUBLISH_TRACE") == "1")
+                        System.Console.WriteLine($"[publish] {GetType().Name} declined: sparse={gradient is SparseTensor<T>} contiguous={gradient.IsContiguous} pendingGpu={gradient.HasPendingGpuData} gpuBuffer={gradient.TryGetGpuBuffer() is not null} len={gradient.Length}");
+                    return false;
+                }
+                sources.Add((tensor, gradient));
+                continue;
+            }
+
+            var sub = component.Layer;
+            if (sub is null || IsSubLayerParameterFrozen(sub)) continue;
+            if (sub is LayerBase<T> layerBase)
+            {
+                if (!layerBase.CollectDeviceGradients(grads, sources)) return false;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private Vector<T>? MaterializeParameterGradients(Dictionary<Tensor<T>, Tensor<T>> owned)
+    {
+        int ignored = 0;
+        int total = FillParameterGradients(null, 0, owned, ref ignored);
+        if (total <= 0) return null;
+        var filled = new T[total];
+        int matched = 0;
+        FillParameterGradients(filled, 0, owned, ref matched);
+        return matched == 0 ? null : new Vector<T>(filled);
+    }
+
     private int FillParameterGradients(
-        Vector<T>? dest,
+        T[]? dest,
         int offset,
         IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads,
         ref int matched)
@@ -7423,8 +7571,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                     && gradient is not null
                     && TrainableScalarCount(gradient) == count)
                 {
-                    for (int j = 0; j < count; j++)
-                        dest[offset++] = ReadTrainableScalar(gradient, j);
+                    // One bulk copy for a dense contiguous gradient. The per-scalar read below went through
+                    // GetFlat's host-sync checks once per element: on a GPU MLP that loop was 32.5% of the
+                    // training step, on the CPU most of ~20%. Sparse payloads and strided views keep the
+                    // exact per-scalar path, so every value lands where it did before.
+                    if (gradient is not SparseTensor<T> && gradient.IsContiguous)
+                    {
+                        gradient.AsSpan().Slice(0, count).CopyTo(dest.AsSpan(offset, count));
+                        offset += count;
+                    }
+                    else
+                    {
+                        for (int j = 0; j < count; j++)
+                            dest[offset++] = ReadTrainableScalar(gradient, j);
+                    }
                     matched += count;
                 }
                 else
@@ -7481,15 +7641,22 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     internal void ClearScatteredParameterGradients() => ParameterGradients = null;
 
+
     public int ScatterParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
     {
         if (grads is null || grads.Count == 0) return 0;
+
+        if (Engine.SupportsGpu && TryPublishDeviceGradients(grads, out int deviceMatched))
+            return deviceMatched;
 
         int ignored = 0;
         int total = FillParameterGradients(null, 0, grads, ref ignored);
         if (total <= 0) return 0;
 
-        var filled = new Vector<T>(total);
+        bool reuse = !_scatterVectorHandedOut && _scatterBuffer is { } owned && owned.Length == total;
+        var filled = reuse && _scatterBuffer is { } buffer ? buffer : new T[total];
+        // Slots with no gradient this step must read as zero, exactly as in a fresh array.
+        if (reuse) Array.Clear(filled, 0, total);
         int matched = 0;
         FillParameterGradients(filled, 0, grads, ref matched);
 
@@ -7497,7 +7664,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // "never computed" rather than a vector of manufactured zeros.
         if (matched == 0) return 0;
 
-        ParameterGradients = filled;
+        if (!reuse || _scatterVector is null)
+        {
+            _scatterBuffer = filled;
+            _scatterVector = Vector<T>.FromMemory(new Memory<T>(filled));
+        }
+        _scatterVectorHandedOut = false;
+        ParameterGradients = _scatterVector;
         return matched;
     }
 

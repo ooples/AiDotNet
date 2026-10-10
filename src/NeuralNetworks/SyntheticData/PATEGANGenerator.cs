@@ -618,7 +618,7 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         // stays frozen — only the generator's layers get moment updates.
         var generatorLayers = BuildGeneratorLayerList();
         var trainableGenLayers = generatorLayers.OfType<ITrainableLayer<T>>().ToList();
-        if (trainableGenLayers.Count > 0 && AiDotNet.Training.GpuResidentFusedStep<T>.IsGpuResidentAvailable)
+        if (trainableGenLayers.Count > 0 && AiDotNet.Training.FusedTrainingStep<T>.IsAvailable)
         {
             // The target tensor is unused (BceLoss takes a fixed scalar target=1.0)
             // but TryStepWithFusedOptimizer requires one; pass a 1-element scalar
@@ -639,7 +639,7 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             {
                 var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
                 var noiseTensor = new Tensor<T>(new[] { noise.Length }, noise);
-                bool ran = AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                bool ran = AiDotNet.Training.FusedTrainingStep<T>.TryStep(
                     trainableGenLayers, noiseTensor, targetPlaceholder,
                     forward: ForwardG, computeLoss: ComputeGenLoss,
                     optimizer: _generatorOptimizer,
