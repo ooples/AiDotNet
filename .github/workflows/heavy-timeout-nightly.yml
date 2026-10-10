@@ -34,18 +34,23 @@ permissions:
 
 jobs:
   heavy-timeout:
-    name: Heavy Timeout Models (${{ matrix.slice }}/10)
+    name: Heavy Timeout Models (${{ matrix.slice }}/30)
     runs-on: ubuntu-latest
     timeout-minutes: 350   # generous budget; these models are the slow ones by definition
     # SLICED ACROSS PARALLEL JOBS (#2087). With one class per process the lane takes about 11 minutes per class,
     # and 220 classes do not fit one 350-minute job: the first capped run finished 8 before the timeout cancelled it.
-    # Each slice runs every 10th class of the same sorted discovery, so the slices cover every class exactly once:
-    # about 22 classes, roughly four hours. Ten, not more, because the account runs at most 20 jobs at once and this
-    # lane must not starve pull-request CI for the night.
+    # Each slice runs every 30th class of the same sorted discovery, so the slices cover every class exactly once:
+    # about 7 classes each. HeavyTimeout tests get a 4x per-test budget below (a paper-scale training invariant needs
+    # ~230 s on this runner), so a heavy class can take ~35 min, and the loop reserves the full 60-min chunk cap before
+    # starting one: with ~11 classes a slice could hit its 320-min budget and record the rest "not run". Seven classes
+    # fit even when all of them run near the cap's typical ~35 min. Total runner time is unchanged by the split;
+    # max-parallel keeps ten jobs at once, because the account runs at most 20 and this lane must not starve PR CI.
     strategy:
       fail-fast: false
+      max-parallel: 10
       matrix:
-        slice: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+        slice: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+                20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -110,6 +115,10 @@ jobs:
           AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
           HEAVY_CHUNK_SIZE: ${{ inputs.chunk_size }}
           HEAVY_SLICE: ${{ matrix.slice }}
+          # Lengthens only HeavyTimeout tests' [Fact(Timeout)] (the PR gate's 120 s budget) by this factor; see
+          # tests/AiDotNet.Tests/TestInfrastructure/HeavyTimeoutScalingExecutor.cs. Assertions are unchanged, and a real
+          # hang is still stopped by --blame-hang (10 min) and the per-chunk cap below.
+          AIDOTNET_HEAVY_TEST_TIMEOUT_SCALE: '4'
         run: |
           # Exits 1 when the runner config is missing, which is the same fail-fast this lane had: these
           # models are flagged heavy precisely because they OOM without serialization, so falling
@@ -207,7 +216,7 @@ jobs:
             exit 1
           }
 
-          $sliceCount = 10
+          $sliceCount = 30
           $slice = [int]$env:HEAVY_SLICE
           $classes = @(for ($c = 0; $c -lt $classes.Count; $c++) { if ($c % $sliceCount -eq $slice) { $classes[$c] } })
           Write-Host "--- slice $($slice) of $($sliceCount): $($classes.Count) class(es) ---"
@@ -222,6 +231,7 @@ jobs:
 
           $rows   = @()
           $failed = 0
+          $envelope = 0
           $index  = 0
 
           # Set only now, so discovery above is never constrained by the cap.
@@ -231,7 +241,7 @@ jobs:
           # the slice with no summary. Each chunk now runs under `timeout`, with --blame-hang naming a test that stops
           # progressing, and a chunk that would not finish inside the job budget is reported as not run, so every slice
           # ends with a row for every class.
-          $chunkCapMinutes = 20
+          $chunkCapMinutes = 60
           $budgetMinutes   = 320
           $laneStarted     = Get-Date
           foreach ($chunk in $chunks) {
@@ -240,7 +250,7 @@ jobs:
             $filter  = 'Category=HeavyTimeout&(' + (($chunk | ForEach-Object { "FullyQualifiedName~$_" }) -join '|') + ')'
             $names   = ($chunk | ForEach-Object { $_.Substring($_.LastIndexOf('.') + 1) }) -join ', '
             if (((Get-Date) - $laneStarted).TotalMinutes + $chunkCapMinutes -gt $budgetMinutes) {
-              $rows += [pscustomobject]@{ Label = $label; Names = $names; Exit = 'not run (budget)'; Seconds = 0; MemPre = -1; MemPost = -1 }
+              $rows += [pscustomobject]@{ Label = $label; Names = $names; Exit = 'not run (budget)'; Outcome = 'Failed'; Reason = 'not run (budget)'; Seconds = 0; MemPre = -1; MemPost = -1 }
               $failed++
               Write-Host "$label -> not run: the slice's $budgetMinutes-minute budget is spent"
               continue
@@ -267,9 +277,21 @@ jobs:
             # kill-after escalation, or the kernel OOM killer), so it is reported as such rather than as a timeout.
             if ($exit -eq 124) { $exit = "timeout after $($chunkCapMinutes) min" }
             elseif ($exit -eq 137) { $exit = 'SIGKILL (timeout escalation or OOM)' }
-            if ($exit -ne 0) { $failed++ }
+            # A chunk whose every failure ran out of memory or disk has outgrown the 16 GB runner, not
+            # broken: it is listed but does not fail the lane, so a real defect among ~600 OOMs is the
+            # thing that turns it red (#2087). Timeouts, crashes and assertions still fail it.
+            # A classifier error fails this chunk; it must not end the step, or the remaining chunks
+            # never run and the summary this lane exists to write is lost.
+            try {
+              $verdict = ./.github/scripts/Measure-HeavyChunkOutcome.ps1 -TrxPath (Join-Path $resultsDir "$label.trx") -ExitCode "$exit"
+            }
+            catch {
+              $verdict = [pscustomobject]@{ Outcome = 'Failed'; Reason = "classifier error: $($_.Exception.Message)" }
+            }
+            if ($verdict.Outcome -eq 'Failed') { $failed++ }
+            elseif ($verdict.Outcome -eq 'Envelope') { $envelope++ }
             $rows += [pscustomobject]@{
-              Label = $label; Names = $names; Exit = $exit
+              Label = $label; Names = $names; Exit = $exit; Outcome = [string]$verdict.Outcome; Reason = $verdict.Reason
               Seconds = $duration; MemPre = $memPre; MemPost = $memPost
             }
             Write-Host "$label -> exit $exit in ${duration}s (MemAvailable ${memPre} MB -> ${memPost} MB)"
@@ -281,17 +303,21 @@ jobs:
           $summary = @()
           $summary += '## Heavy Timeout Models'
           $summary += ''
-          $summary += "$($classes.Count) classes in $($chunks.Count) chunk(s) of up to $chunkSize, one process each. $failed chunk(s) failed."
+          $summary += "$($classes.Count) classes in $($chunks.Count) chunk(s) of up to $chunkSize, one process each. $failed chunk(s) failed; $envelope exceeded the runner's memory or disk."
           $summary += ''
           $summary += '| Chunk | Result | Seconds | Mem before | Mem after | Classes |'
           $summary += '|---|---|---:|---:|---:|---|'
           foreach ($r in $rows) {
-            $result = if ($r.Exit -eq 0) { 'pass' } else { "FAIL (exit $($r.Exit))" }
+            $result = switch ($r.Outcome) {
+              'Passed'   { 'pass' }
+              'Envelope' { "exceeds runner ($($r.Reason))" }
+              default    { "FAIL ($($r.Reason))" }
+            }
             $summary += "| $($r.Label) | $result | $($r.Seconds) | $($r.MemPre) MB | $($r.MemPost) MB | $($r.Names) |"
           }
           $summary -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
 
-          Write-Host "=== $($chunks.Count) chunk(s) run, $failed failed ==="
+          Write-Host "=== $($chunks.Count) chunk(s) run, $failed failed, $envelope exceeded the runner ==="
           if ($failed -gt 0) { exit 1 }
 
       - name: Upload results

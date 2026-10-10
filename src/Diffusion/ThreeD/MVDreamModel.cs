@@ -1186,7 +1186,7 @@ public class MVDreamConfig
 /// Multi-view aware U-Net for MVDream.
 /// </summary>
 /// <typeparam name="T">Numeric type.</typeparam>
-public class MultiViewUNet<T> : IParameterSource<T>
+public class MultiViewUNet<T> : IParameterSource<T>, ICloneable<MultiViewUNet<T>>
 {
     private readonly INumericOperations<T> _numOps;
     private UNetNoisePredictor<T> _baseUNet;
@@ -1264,12 +1264,18 @@ public class MultiViewUNet<T> : IParameterSource<T>
         _mvAttention = mvAttention;
     }
 
+    /// <inheritdoc cref="Clone"/>
+    public MultiViewUNet<T> DeepCopy() => Clone();
+
     /// <summary>
     /// Deep-copies this multi-view U-Net, preserving trained weights. The base U-Net is cloned via its
     /// own <c>Clone()</c> (which resolves and copies its lazy layers), and the multi-view attention block
     /// is rebuilt at the same shape and its parameters copied into the private clone constructor — so the
     /// result is structurally and observationally identical to this instance.
     /// </summary>
+    // Declaring ICloneable is what lets CloneEngine find this Clone. Without it MVDreamModel's
+    // configuration copy received the SOURCE's multi-view U-Net as its constructor argument, so the
+    // clone and the original shared every base U-Net layer and Clone threw AliasedLayerGraph (#2087).
     public MultiViewUNet<T> Clone()
     {
         var clonedAttention = new MultiViewAttention<T>(channels: _baseChannels * 4, numViews: _numViews);

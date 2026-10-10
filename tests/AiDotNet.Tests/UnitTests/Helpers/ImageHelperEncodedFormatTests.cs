@@ -19,7 +19,8 @@ public class ImageHelperEncodedFormatTests : IDisposable
     public void Dispose()
     {
         try { Directory.Delete(_dir, recursive: true); }
-        catch (IOException) { /* best-effort temp cleanup; a locked file must not fail the test */ }
+        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+        { /* best-effort temp cleanup; a locked file must not fail the test */ }
     }
 
     // 2x2 RGB: red, green / blue, (10, 20, 30).
@@ -29,7 +30,12 @@ public class ImageHelperEncodedFormatTests : IDisposable
         { 0, 0, 255 }, { 10, 20, 30 },
     };
 
-    private string WritePng(string name)
+    private string WritePng(string name) => WritePng(name, declaredWidth: 2, declaredHeight: 2);
+
+    /// <summary>
+    /// The 2x2 image, with the IHDR able to declare other dimensions so a header can lie about its size.
+    /// </summary>
+    private string WritePng(string name, uint declaredWidth, uint declaredHeight)
     {
         var raw = new MemoryStream();
         for (int y = 0; y < 2; y++)
@@ -42,7 +48,11 @@ public class ImageHelperEncodedFormatTests : IDisposable
 
         var png = new MemoryStream();
         png.Write(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }, 0, 8);
-        WriteChunk(png, "IHDR", new byte[] { 0, 0, 0, 2, 0, 0, 0, 2, 8, 2, 0, 0, 0 });   // 2x2, 8-bit, RGB
+        var ihdr = new MemoryStream();
+        WriteBigEndian(ihdr, declaredWidth);
+        WriteBigEndian(ihdr, declaredHeight);
+        ihdr.Write(new byte[] { 8, 2, 0, 0, 0 }, 0, 5);   // 8-bit, RGB
+        WriteChunk(png, "IHDR", ihdr.ToArray());
         WriteChunk(png, "IDAT", Zlib(raw.ToArray()));
         WriteChunk(png, "IEND", Array.Empty<byte>());
         string path = Path.Combine(_dir, name);
@@ -115,11 +125,64 @@ public class ImageHelperEncodedFormatTests : IDisposable
     {
         string path = WritePng("corrupt.png");
         var bytes = File.ReadAllBytes(path);
-        // Keep the signature and IHDR (so the format is recognised) and cut the compressed pixel data short.
-        Array.Resize(ref bytes, 8 + 25 + 12);
+        // Keep the signature and IHDR (so the format is recognised) and cut the compressed pixel data short:
+        // the cut lands four bytes into IDAT's data, located from the chunk itself rather than assumed.
+        int idatType = IndexOf(bytes, System.Text.Encoding.ASCII.GetBytes("IDAT"));
+        Assert.True(idatType > 0, "the PNG has an IDAT chunk");
+        int idatLength = (bytes[idatType - 4] << 24) | (bytes[idatType - 3] << 16) | (bytes[idatType - 2] << 8) | bytes[idatType - 1];
+        Assert.True(idatLength > 4, "the cut must land inside the compressed data");
+        Array.Resize(ref bytes, idatType + 4 + 4);
         File.WriteAllBytes(path, bytes);
 
         Assert.Throws<InvalidDataException>(() => ImageHelper<double>.LoadImage(path));
+    }
+
+    [Fact]
+    public void LoadImage_HeaderDeclaringHugeDimensions_IsRejectedBeforeDecoding()
+    {
+        // A TGA header, because TGA is a format whose header stb accepts at this size: a 30000 x 30000
+        // image needs 3.6 GB of RGBA, more than any managed array, and the file itself is 18 bytes, so
+        // only ImageHelper's own size check stands between it and the decoder's allocation. (A PNG
+        // cannot test this: stb rejects any PNG header past roughly 1 GB itself, before the check.)
+        string path = Path.Combine(_dir, "huge.tga");
+        var header = new byte[18];
+        header[2] = 2;                                   // uncompressed true-colour
+        header[12] = 30000 & 0xFF; header[13] = 30000 >> 8;   // width, little-endian
+        header[14] = 30000 & 0xFF; header[15] = 30000 >> 8;   // height
+        header[16] = 32;                                 // bits per pixel
+        File.WriteAllBytes(path, header);
+
+        var error = Assert.Throws<InvalidDataException>(() => ImageHelper<double>.LoadImage(path));
+        Assert.Contains("too large", error.Message);
+    }
+
+    [Fact]
+    public void LoadImage_TgaWithinTheBound_LoadsAtItsDeclaredSize()
+    {
+        // The guard's negative control: the same header layout at 2 x 2 must pass the size check and
+        // load, so the test above fails because of the size and not because of the format.
+        string path = Path.Combine(_dir, "small.tga");
+        var file = new byte[18 + 2 * 2 * 4];
+        file[2] = 2;
+        file[12] = 2;
+        file[14] = 2;
+        file[16] = 32;
+        File.WriteAllBytes(path, file);
+
+        var tensor = ImageHelper<double>.LoadImage(path);
+
+        Assert.Equal(new[] { 1, 3, 2, 2 }, tensor.Shape.ToArray());
+    }
+
+    private static int IndexOf(byte[] haystack, byte[] needle)
+    {
+        for (int i = 0; i + needle.Length <= haystack.Length; i++)
+        {
+            int j = 0;
+            while (j < needle.Length && haystack[i + j] == needle[j]) j++;
+            if (j == needle.Length) return i;
+        }
+        return -1;
     }
 
     [Fact]

@@ -1263,8 +1263,11 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
 
         foreach (var layer in ReflectInstanceLayers(this))
         {
+            // GetTrainableParameters would allocate any lazy weight that never resolved: on the failure
+            // path after an out-of-memory forward that second allocation threw over the original error.
+            // The unmaterialized view still sees tensors a half-initialized layer already created.
             if (layer is not LayerBase<T> lb) continue;
-            foreach (var tensor in lb.GetTrainableParameters())
+            foreach (var tensor in lb.GetTrainableParametersWithoutMaterialization())
             {
                 if (tensor is null || tensor.Lifetime != WeightLifetime.Streaming) continue;
                 if (!includeRegistered && tensor.StreamingPoolHandle >= 0) continue;
