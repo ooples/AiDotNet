@@ -10104,39 +10104,6 @@ public static partial class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates default layers for ByteTrack multi-object tracking.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultByteTrackLayers(
-        int inputChannels = 3,
-        int inputHeight = 800,
-        int inputWidth = 1440,
-        int numFeatures = 256,
-        int numClasses = 1)
-    {
-        int h = inputHeight;
-        int w = inputWidth;
-
-        // Backbone (CSPDarknet-style)
-        yield return new ConvolutionalLayer<T>(32, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(64, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(128, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
-
-        // FPN neck for multi-scale features
-        yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0, new SiLUActivation<T>() as IActivationFunction<T>);
-
-        // Detection head (outputs: x, y, w, h, objectness, class)
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(5 + numClasses, 1, 1, 0); // bbox + obj + classes
-    }
-
-    /// <summary>
     /// Creates default layers for DIFRINT video stabilization.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultDIFRINTLayers(

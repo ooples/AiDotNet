@@ -5448,15 +5448,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Branchformer keeps the paper's parallel attention/CGMLP branch and
                 // merge path. Only the generated fixture width/depth is reduced after
                 // FP32 plus the 1-vs-2 cap still timed out in the exact B shard.
-                bool isConformerFamily = typeName.StartsWith(
-                    "AiDotNet.SpeechRecognition.ConformerFamily.", System.StringComparison.Ordinal);
-                string optionsExpr = isConformerFamily
-                    ? "new AiDotNet.SpeechRecognition.ConformerFamily.BranchformerOptions { " +
-                      "EncoderDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 4, " +
-                      "CgmlpDim = 64, NumMels = 32, VocabSize = 16 }"
-                    : "new AiDotNet.SpeechRecognition.CTCVariants.CTCBranchformerOptions { " +
-                      "EncoderDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 4, " +
-                      "NumMels = 32, VocabSize = 16, MaxTextLength = 8 }";
+                string optionsExpr = "new AiDotNet.SpeechRecognition.ConformerFamily.BranchformerOptions { " +
+                    "EncoderDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 4, " +
+                    "CgmlpDim = 64, NumMels = 32, VocabSize = 16 }";
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
@@ -6117,20 +6111,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumLayers = 1, NumHeads = 2, FeedForwardDim = 64, ConvKernelSize = 5, " +
                     "DownsampleFactor = 2, NumMels = 32, VocabSize = 4, DropoutRate = 0.0 }, " +
                     $"{conservativeSmokeAdamWOptimizer})";
-            }
-            else if (model.ClassName == "EBranchformer" && model.TypeParameterCount == 1
-                     && typeName.StartsWith("AiDotNet.SpeechRecognition.CTCVariants.", System.StringComparison.Ordinal))
-            {
-                // Preserve the released 512-wide, 18-layer defaults. Bound only the
-                // generated fixture while retaining the attention/convolution branches
-                // and CTC projection through the model's public options.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.CTCVariants.CTCEBranchformerOptions { " +
-                    "EncoderDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 2, " +
-                    "NumMels = 32, VocabSize = 4, MaxTextLength = 8, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "EfficientConformer" && model.TypeParameterCount == 1)
             {
@@ -7304,25 +7284,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 64, NumEncoderLayers = 1, " +
                     "NumLLMLayers = 2, NumHeads = 4, MaxTextLength = 8, MaxCodecFrames = 8, " +
                     "DropoutRate = 0.0 })";
-            }
-            else if (model.ClassName == "ByteTrack" && model.TypeParameterCount == 1
-                     && typeName.StartsWith(
-                         "AiDotNet.Video.Tracking.", System.StringComparison.Ordinal))
-            {
-                // Production ByteTrack uses a 256-channel CSP/FPN detector and
-                // focal loss for objectness/class labels. The generic generated
-                // regression fixture supplies arbitrary continuous targets;
-                // treating those as focal-label probabilities drives its finite
-                // loss steadily uphill (0.39 -> 4.75), while also materializing
-                // 2.3M parameters. Exercise the same five-stage backbone, FPN,
-                // and detection head at bounded width with the constructor's
-                // public regression loss hook, matching the generated task.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 6), " +
-                    "lossFunction: new AiDotNet.LossFunctions.MeanSquaredErrorLoss<double>(), " +
-                    "options: new AiDotNet.Video.Options.ByteTrackOptions { NumFeatures = 16, NumClasses = 1 }" + ")";
             }
             else if (model.ClassName == "ALIGN" && model.TypeParameterCount == 1)
             {
