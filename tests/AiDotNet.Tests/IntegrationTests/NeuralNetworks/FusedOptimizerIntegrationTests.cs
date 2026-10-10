@@ -258,7 +258,10 @@ public class FusedOptimizerIntegrationTests
         {
             classic.TrainPublic(input, target, classicOpt);
             fused.TrainPublic(input, target, fusedOpt);
-            Assert.Equal((double)classic.LastLossPublic, (double)fused.LastLossPublic, 3);
+            // An absolute 1e-3 tolerance, not Assert.Equal's 3-decimal ROUNDING: 0.63550001 and 0.63549989
+            // differ by 1.2e-7 yet round to 0.636 and 0.635, which failed CI on a loss pair that agreed.
+            Assert.True(Math.Abs((double)classic.LastLossPublic - (double)fused.LastLossPublic) <= 1e-3,
+                $"step {step}: classic loss {classic.LastLossPublic} vs fused {fused.LastLossPublic}");
         }
 
         var pc = SnapshotParameters(classic);
@@ -437,7 +440,10 @@ public class FusedOptimizerIntegrationTests
         {
             classic.TrainPublic(input, target, classicOpt);
             fused.TrainPublic(input, target, fusedOpt);
-            Assert.Equal((double)classic.LastLossPublic, (double)fused.LastLossPublic, 3);
+            // An absolute 1e-3 tolerance, not Assert.Equal's 3-decimal ROUNDING: 0.63550001 and 0.63549989
+            // differ by 1.2e-7 yet round to 0.636 and 0.635, which failed CI on a loss pair that agreed.
+            Assert.True(Math.Abs((double)classic.LastLossPublic - (double)fused.LastLossPublic) <= 1e-3,
+                $"step {step}: classic loss {classic.LastLossPublic} vs fused {fused.LastLossPublic}");
         }
 
         var pc = SnapshotParameters(classic);
