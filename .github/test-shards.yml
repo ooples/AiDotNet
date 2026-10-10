@@ -1686,6 +1686,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.SelfSupervisedLearning.ContrastiveObjectiveGradientTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.DiffusionParameterChunkHelperTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.DiTNoisePredictorResidentCloneTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.MVDreamCloneTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.NoisePredictorWeightStreamingTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.TimestepDependentLoraTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.StyleTransfer.UniVSTComponentTests.|

@@ -1,3 +1,5 @@
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -40,6 +42,11 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2023,
     Authors = "Betker"
 )]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, Beta1 = 0.9, Beta2 = 0.96, WeightDecay = 0.01,
+                WarmupSteps = 500, Schedule = LearningRateSchedulerType.LinearWarmup, ReferenceBatchSize = 1024,
+                Source = "Betker 2023, App. B.2, Table 2 (autoregressive prior): learning rate 1e-4, betas 0.9 "
+                        + "and 0.96, weight decay 0.01, 500 warmup steps, batch size 1024. The library's AdamW "
+                        + "default of 1e-3 drove the loss from 2.56 to 67.8 in one step (#2087).")]
 public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
 {
     private readonly TortoiseTTSOptions _options;
@@ -81,7 +88,9 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
     {
         _options = options ?? new TortoiseTTSOptions();
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;

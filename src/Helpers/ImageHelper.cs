@@ -499,14 +499,23 @@ public static class ImageHelper<T>
     /// <exception cref="InvalidDataException">The format is recognized but the content cannot be decoded.</exception>
     private static Tensor<T> LoadEncodedImage(string filePath, bool normalize)
     {
-        byte[] bytes = File.ReadAllBytes(filePath);
-        if (ImageInfo.FromStream(new MemoryStream(bytes, writable: false)) is null)
+        // THE HEADER FIRST, from the file rather than from memory: an unrecognized file is rejected
+        // before it is loaded whole, and a header declaring dimensions no managed array can hold is
+        // rejected before the decoder allocates 4 bytes per pixel for it.
+        ImageInfo? info;
+        using (var header = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+        {
+            info = ImageInfo.FromStream(header);
+        }
+        if (info is null)
         {
             throw new NotSupportedException(
                 $"Unsupported or unrecognized image format for file: {filePath}. Supported: BMP, PPM, PGM, PNG, JPEG, "
                 + "GIF, TGA, PSD and HDR.");
         }
+        RequireDecodableSize(info.Value.Width, info.Value.Height, filePath);
 
+        byte[] bytes = File.ReadAllBytes(filePath);
         ImageResult image;
         try
         {
@@ -523,6 +532,9 @@ public static class ImageHelper<T>
         var data = image.Data;
         if (width <= 0 || height <= 0 || data is null || data.Length < 4L * width * height)
             throw new InvalidDataException($"Image file decoded to no pixel data: {filePath}");
+        // Checked again on what was decoded: the loop below indexes with int arithmetic (3 * plane,
+        // 4 * i + 2), which the bound keeps in range.
+        RequireDecodableSize(width, height, filePath);
 
         var normFactor = normalize ? 255.0 : 1.0;
         int plane = height * width;
@@ -536,6 +548,24 @@ public static class ImageHelper<T>
         }
 
         return new Tensor<T>(pixelData, new[] { 1, 3, height, width });
+    }
+
+    /// <summary>
+    /// Rejects dimensions whose RGBA buffer could not be held in one managed array.
+    /// </summary>
+    /// <remarks>
+    /// Four bytes per pixel is the larger of the two buffers involved (the decoder's RGBA output
+    /// against the three-channel tensor), so this bound also keeps every <c>int</c> index the
+    /// conversion computes in range.
+    /// </remarks>
+    /// <exception cref="InvalidDataException">The dimensions are non-positive or too large.</exception>
+    private static void RequireDecodableSize(int width, int height, string filePath)
+    {
+        if (width <= 0 || height <= 0 || 4L * width * height > int.MaxValue)
+        {
+            throw new InvalidDataException(
+                $"Image dimensions {width}x{height} are invalid or too large to decode: {filePath}");
+        }
     }
 
     /// <summary>
