@@ -1,5 +1,8 @@
 ---
+import cpuBenchmarks from '../data/tensors-cpu-benchmarks.json';
+
 const base = import.meta.env.BASE_URL;
+const torch = cpuBenchmarks.results.find((r) => r.library === 'TorchSharp');
 ---
 
 <section class="relative min-h-screen flex items-center justify-center overflow-hidden pt-16">
@@ -49,8 +52,7 @@ const base = import.meta.env.BASE_URL;
         <span class="font-semibold text-slate-900 dark:text-white">RAG pipelines</span>,
         <span class="font-semibold text-slate-900 dark:text-white">computer vision</span> to
         <span class="font-semibold text-slate-900 dark:text-white">reinforcement learning</span> &mdash;
-        with custom GPU kernels that are
-        <span class="font-semibold text-slate-900 dark:text-white">up to 500x faster than PyTorch</span>.
+        with hand-written CPU and GPU kernels in pure C#.
         No Python. No wrappers. No compromises.
       </p>
 
@@ -91,8 +93,8 @@ const base = import.meta.env.BASE_URL;
       <!-- Animated stats -->
       <div class="gsap-fade-up mt-16 grid grid-cols-2 sm:grid-cols-4 gap-6">
         <div class="text-center">
-          <div class="counter text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white" data-target="500">0</div>
-          <div class="text-sm text-slate-500 dark:text-slate-400 mt-1">x GPU Speedup vs PyTorch</div>
+          <div class="counter text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white" data-target={torch?.wins ?? 0}>0</div>
+          <div class="text-sm text-slate-500 dark:text-slate-400 mt-1">of {torch ? torch.wins + torch.losses : 0} CPU benchmarks won vs TorchSharp</div>
         </div>
         <div class="text-center">
           <div class="counter text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white" data-target="8100">0</div>
