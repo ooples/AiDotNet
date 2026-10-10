@@ -49,7 +49,7 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
     [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _meanB;              // [actionDim, 1]
     private readonly IReadOnlyList<Tensor<T>> _trainable;
-    private readonly AdamOptimizer<T, Matrix<T>, Vector<T>> _optimizer;
+    private readonly AdamOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     // Per-episode recurrent state (eager act path).
     [AiDotNet.Attributes.Scratch]
@@ -90,8 +90,8 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
         trainable.Add(_meanB);
         _trainable = trainable;
 
-        _optimizer = new AdamOptimizer<T, Matrix<T>, Vector<T>>(
-            null, new AdamOptimizerOptions<T, Matrix<T>, Vector<T>> { InitialLearningRate = learningRate });
+        _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            null, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = learningRate });
 
         ResetHidden();
     }
@@ -191,42 +191,40 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
         var advantage = new double[n];
         for (int t = 0; t < n; t++) advantage[t] = (returns[t] - mean) / std;
 
-        // BPTT: replay the rollout through the LSTM under a tape; minimize Σ adv·½‖a−μ‖²/σ².
         double invSigma2 = 1.0 / (_sigma * _sigma);
-        using var tape = new GradientTape<T>();
-        var h = new Tensor<T>(new[] { _hidden, 1 });
-        var c = new Tensor<T>(new[] { _hidden, 1 });
-        Tensor<T>? loss = null;
-
-        for (int t = 0; t < n; t++)
+        // BPTT: replay the rollout through the LSTM and minimize sum adv * 0.5 * ||a - mu||^2 / sigma^2, on the shared
+        // eager tape step.
+        Tensor<T> PolicyLoss()
         {
-            var xt = new Tensor<T>(new[] { _stateDim, 1 });
-            for (int i = 0; i < _stateDim; i++) xt[i, 0] = _states[t][i];
-            var (hNew, cNew) = _cell.Step(xt, h, c);
-            h = hNew;
-            c = cNew;
+            var h = new Tensor<T>(new[] { _hidden, 1 });
+            var c = new Tensor<T>(new[] { _hidden, 1 });
+            Tensor<T>? loss = null;
 
-            var meanT = Engine.Tanh(Engine.TensorAdd(Engine.TensorMatMul(_meanW, h), _meanB)); // [A,1]
-            var actionT = new Tensor<T>(new[] { _actionDim, 1 });
-            for (int a = 0; a < _actionDim; a++) actionT[a, 0] = _actions[t][a];
+            for (int t = 0; t < n; t++)
+            {
+                var xt = new Tensor<T>(new[] { _stateDim, 1 });
+                for (int i = 0; i < _stateDim; i++) xt[i, 0] = _states[t][i];
+                var (hNew, cNew) = _cell.Step(xt, h, c);
+                h = hNew;
+                c = cNew;
 
-            var diff = Engine.TensorSubtract(actionT, meanT);
-            var sq = Engine.ReduceSum(Engine.TensorMultiply(diff, diff), new[] { 0, 1 }, keepDims: false); // scalar
-            // weight = advantage_t · 0.5 / σ²  (constant w.r.t. params)
-            var term = Engine.TensorMultiplyScalar(sq, NumOps.FromDouble(0.5 * invSigma2 * advantage[t]));
-            loss = loss is null ? term : Engine.TensorAdd(loss, term);
+                var meanT = Engine.Tanh(Engine.TensorAdd(Engine.TensorMatMul(_meanW, h), _meanB)); // [A,1]
+                var actionT = new Tensor<T>(new[] { _actionDim, 1 });
+                for (int a = 0; a < _actionDim; a++) actionT[a, 0] = _actions[t][a];
+
+                var diff = Engine.TensorSubtract(actionT, meanT);
+                var sq = Engine.ReduceSum(Engine.TensorMultiply(diff, diff), new[] { 0, 1 }, keepDims: false); // scalar
+                // weight = advantage_t * 0.5 / sigma^2  (constant w.r.t. params)
+                var term = Engine.TensorMultiplyScalar(sq, NumOps.FromDouble(0.5 * invSigma2 * advantage[t]));
+                loss = loss is null ? term : Engine.TensorAdd(loss, term);
+            }
+            return loss ?? new Tensor<T>(new[] { 1 });
         }
 
         T reported = NumOps.Zero;
-        if (loss is not null)
+        if (n > 0)
         {
-            var grads = tape.ComputeGradients(loss, sources: null);
-            var picked = new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-            foreach (var p in _trainable)
-                if (grads.TryGetValue(p, out var gr)) picked[p] = gr;
-
-            reported = loss.Length > 0 ? loss[0] : NumOps.Zero;
-            _optimizer.Step(new TapeStepContext<T>(_trainable, picked, reported));
+            reported = AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(_trainable, PolicyLoss, _optimizer);
         }
 
         _states.Clear();

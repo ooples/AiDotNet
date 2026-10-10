@@ -42,7 +42,7 @@ public sealed partial class FeedforwardPolicyAgent<T> : IPortfolioAgent<T>
     [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _meanB; // [actionDim, 1]
     private readonly IReadOnlyList<Tensor<T>> _trainable;
-    private readonly AdamOptimizer<T, Matrix<T>, Vector<T>> _optimizer;
+    private readonly AdamOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
     private readonly List<T[]> _states = new();
     private readonly List<T[]> _actions = new();
@@ -69,8 +69,8 @@ public sealed partial class FeedforwardPolicyAgent<T> : IPortfolioAgent<T>
         _meanB = new Tensor<T>(new[] { actionDim, 1 });
         _trainable = new List<Tensor<T>> { _w1, _b1, _meanW, _meanB };
 
-        _optimizer = new AdamOptimizer<T, Matrix<T>, Vector<T>>(
-            null, new AdamOptimizerOptions<T, Matrix<T>, Vector<T>> { InitialLearningRate = learningRate });
+        _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            null, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = learningRate });
     }
 
     private static Tensor<T> CreateRandom(int[] shape, double stddev, int seed)
@@ -153,33 +153,32 @@ public sealed partial class FeedforwardPolicyAgent<T> : IPortfolioAgent<T>
         for (int t = 0; t < n; t++) advantage[t] = (returns[t] - mean) / std;
 
         double invSigma2 = 1.0 / (_sigma * _sigma);
-        using var tape = new GradientTape<T>();
-        Tensor<T>? loss = null;
-        for (int t = 0; t < n; t++)
+        // Policy-gradient surrogate: sum over the rollout of adv_t * 0.5 * ||a_t - mu(s_t)||^2 / sigma^2, on the shared
+        // eager tape step.
+        Tensor<T> PolicyLoss()
         {
-            var xt = new Tensor<T>(new[] { _stateDim, 1 });
-            for (int i = 0; i < _stateDim; i++) xt[i, 0] = _states[t][i];
-            var meanT = MeanOf(xt); // memoryless: each step independent
+            Tensor<T>? loss = null;
+            for (int t = 0; t < n; t++)
+            {
+                var xt = new Tensor<T>(new[] { _stateDim, 1 });
+                for (int i = 0; i < _stateDim; i++) xt[i, 0] = _states[t][i];
+                var meanT = MeanOf(xt); // memoryless: each step independent
 
-            var actionT = new Tensor<T>(new[] { _actionDim, 1 });
-            for (int a = 0; a < _actionDim; a++) actionT[a, 0] = _actions[t][a];
+                var actionT = new Tensor<T>(new[] { _actionDim, 1 });
+                for (int a = 0; a < _actionDim; a++) actionT[a, 0] = _actions[t][a];
 
-            var diff = Engine.TensorSubtract(actionT, meanT);
-            var sq = Engine.ReduceSum(Engine.TensorMultiply(diff, diff), new[] { 0, 1 }, keepDims: false);
-            var term = Engine.TensorMultiplyScalar(sq, NumOps.FromDouble(0.5 * invSigma2 * advantage[t]));
-            loss = loss is null ? term : Engine.TensorAdd(loss, term);
+                var diff = Engine.TensorSubtract(actionT, meanT);
+                var sq = Engine.ReduceSum(Engine.TensorMultiply(diff, diff), new[] { 0, 1 }, keepDims: false);
+                var term = Engine.TensorMultiplyScalar(sq, NumOps.FromDouble(0.5 * invSigma2 * advantage[t]));
+                loss = loss is null ? term : Engine.TensorAdd(loss, term);
+            }
+            return loss ?? new Tensor<T>(new[] { 1 });
         }
 
         T reported = NumOps.Zero;
-        if (loss is not null)
+        if (n > 0)
         {
-            var grads = tape.ComputeGradients(loss, sources: null);
-            var picked = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
-            foreach (var p in _trainable)
-                if (grads.TryGetValue(p, out var gr)) picked[p] = gr;
-
-            reported = loss.Length > 0 ? loss[0] : NumOps.Zero;
-            _optimizer.Step(new TapeStepContext<T>(_trainable, picked, reported));
+            reported = AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(_trainable, PolicyLoss, _optimizer);
         }
 
         _states.Clear();

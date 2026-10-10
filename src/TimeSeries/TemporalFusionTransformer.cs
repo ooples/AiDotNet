@@ -74,8 +74,17 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     // Static-enrichment GRN.
     private GatedResidualNetwork<T> _enrichmentGrn;
 
-    // Interpretable multi-head attention: Q/K/V + output projection.
-    private Tensor<T> _queryWeight, _keyWeight, _valueWeight, _attnOutputWeight; // each [hiddenSize, hiddenSize]
+    // Interpretable multi-head attention: Q/K/V + output projection, each [hiddenSize, hiddenSize]. One attribute per
+    // declaration: these four (and the GRNs, parameter sources themselves) were missing from ParameterCount,
+    // GetParameters and SetParameters, so a clone or a saved model silently dropped most of the trained weights.
+    [AiDotNet.Attributes.TrainableParameter]
+    private Tensor<T> _queryWeight;
+    [AiDotNet.Attributes.TrainableParameter]
+    private Tensor<T> _keyWeight;
+    [AiDotNet.Attributes.TrainableParameter]
+    private Tensor<T> _valueWeight;
+    [AiDotNet.Attributes.TrainableParameter]
+    private Tensor<T> _attnOutputWeight;
 
     // Post-attention gated skip connection.
     private GatedResidualNetwork<T> _postAttentionGrn;
@@ -443,24 +452,63 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
         // In-sample: forecast each position from its proper lookback window of the observed
         // series (a genuine one-step forecast, not a memorized target).
         bool inSample = _trainingSeries.Length == n && n > 0;
+        var windows = new Vector<T>[n];
         for (int i = 0; i < n; i++)
         {
-            if (inSample)
+            int w = inSample ? Math.Min(lookback, i) : 0;
+            if (w > 0)
             {
-                int w = Math.Min(lookback, i);
-                if (w > 0)
-                {
-                    var window = new Vector<T>(w);
-                    for (int t = 0; t < w; t++) window[t] = _trainingSeries[i - w + t];
-                    var fc = ForwardEngine(window);
-                    predictions[i] = fc.Length > 0 ? fc[0] : NumOps.Zero;
-                    continue;
-                }
+                var window = new Vector<T>(w);
+                for (int t = 0; t < w; t++) window[t] = _trainingSeries[i - w + t];
+                windows[i] = window;
             }
-            predictions[i] = PredictSingle(input.GetRow(i));
+            else
+            {
+                windows[i] = input.GetRow(i);
+            }
         }
+
+        // One batched forward per (effective window length, chunk) instead of one ForwardEngine call per row:
+        // AiModelBuilder predicts the whole dataset after fitting, which made per-row inference a large share of a
+        // production fit. ForwardEngineQuantiles reads the LAST min(length, LookbackWindow) values of a window, and
+        // every op of ForwardBatch acts on each batch row independently, so the values match PredictSingle row by
+        // row (TftBatchedPredictTests). Empty windows keep the per-row path.
+        int horizon = _options.ForecastHorizon;
+        int outDim = horizon * _options.QuantileLevels.Length;
+        int pointCol = MedianQuantileIndex() * horizon;
+        foreach (var group in Enumerable.Range(0, n)
+                     .Where(i => windows[i].Length > 0)
+                     .GroupBy(i => Math.Min(windows[i].Length, lookback)))
+        {
+            int len = group.Key;
+            var all = group.ToArray();
+            for (int c0 = 0; c0 < all.Length; c0 += PredictChunkRows)
+            {
+                int rows = Math.Min(PredictChunkRows, all.Length - c0);
+                // A nested arena per chunk: its scratch is recycled when the chunk ends without touching any arena
+                // the caller has open (whose tensors may still be live).
+                using var chunkArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
+                var data = new T[rows * len];
+                for (int r = 0; r < rows; r++)
+                {
+                    var window = windows[all[c0 + r]];
+                    int off = window.Length - len;
+                    for (int t = 0; t < len; t++)
+                        data[r * len + t] = NumOps.Divide(NumOps.Subtract(window[off + t], _normMean), _normStd);
+                }
+                var outBHQ = ForwardBatch(new Tensor<T>([rows, len], new Vector<T>(data)), rows, len); // [rows, H*Q]
+                var outSpan = outBHQ.IsContiguous ? outBHQ.AsSpan() : outBHQ.Contiguous().AsSpan();
+                for (int r = 0; r < rows; r++)
+                    predictions[all[c0 + r]] = NumOps.Add(NumOps.Multiply(outSpan[r * outDim + pointCol], _normStd), _normMean);
+            }
+        }
+        for (int i = 0; i < n; i++)
+            if (windows[i].Length == 0) predictions[i] = PredictSingle(windows[i]);
         return predictions;
     }
+
+    // Rows per batched predict forward; bounds activation memory (rows x length x HiddenSize per GRN).
+    private const int PredictChunkRows = 256;
 
     public override T PredictSingle(Vector<T> input)
     {

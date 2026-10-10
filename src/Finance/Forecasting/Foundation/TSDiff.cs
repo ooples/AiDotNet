@@ -270,7 +270,6 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingObje
         SetTrainingMode(true);
         try
         {
-            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
 
             var conditioned = ApplyInstanceNormalization(input);
             var condHidden = conditioned.Rank == 2
@@ -316,35 +315,15 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingObje
                         NumOps.Multiply(sqrtOneMinus, noise));
                 }
             }
-            using var tape = new GradientTape<T>();
-            var epsilonPred = DenoiserForward(xt, condHidden, timesteps, dropConditioning);
-            var lossTensor = _lossFunction.ComputeTapeLoss(epsilonPred, epsilonTrue);
-
-            // Publish through the base rather than calling tape.ComputeGradients directly.
-            // GetParameterGradients() answers from the published surface, and with nothing
-            // published it falls back to the per-layer accessors, which fabricate an exact zero
-            // for every parameter - indistinguishable from a severed tape.
-            var grads = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParams);
-
-            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-            LastLoss = lossValue;
-
-            // All three closures are pinned to this step's (t, epsilon, conditioning). A
-            // line-searching optimizer that re-drew them would be comparing losses from two
-            // different noise levels and reading the difference as progress.
-            Tensor<T> ComputeForward(Tensor<T> _, Tensor<T> __) =>
-                DenoiserForward(xt, condHidden, timesteps, dropConditioning);
-            Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> __) =>
-                _lossFunction.ComputeTapeLoss(pred, epsilonTrue);
-
-            var context = new TapeStepContext<T>(
-                trainableParams, grads, lossValue,
-                input, expectedOutput, ComputeForward, RecomputeLoss);
-
-            MarkTrainMutationStarted();
-            _optimizer.Step(context);
-            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
-            StepSchedulerIfSupported(_optimizer);
+            // The network's shared eager step (TrainWithCustomObjective): it publishes the gradients through the base
+            // (so GetParameterGradients does not fall back to the layer accessors' fabricated zeros), applies the
+            // constructor's optimizer, and recomputes the objective pinned to this step's (t, epsilon, conditioning).
+            TrainWithCustomObjective(
+                input,
+                expectedOutput,
+                (_, _) => _lossFunction.ComputeTapeLoss(
+                    DenoiserForward(xt, condHidden, timesteps, dropConditioning), epsilonTrue),
+                _optimizer);
         }
         finally
         {

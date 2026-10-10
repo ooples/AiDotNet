@@ -297,47 +297,38 @@ public partial class Concerto<T> : Common.SemanticSegmentationBase<T>
                         UpdateParameters(studentParameters);
                     }
 
-                    using var tape = new GradientTape<T>();
-
-                    var studentIntra = FlattenSpatial(
-                        ForwardToDecoderLevel(sample.Input, _options.IntraModalUpcastLevel));
-                    var studentCross = FlattenSpatial(
-                        ForwardToDecoderLevel(sample.Input, _options.CrossModalUpcastLevel));
-
-                    ValidateCrossModalWidth(studentCross, sample);
-                    ValidatePointCount(studentCross, sample);
-                    ValidateViewCount(sample);
-
-                    var intraLoss = ConcertoIntraModalObjective<T>.ComputeTapeLoss(
-                        studentIntra, teacherLogits, center);
-                    var crossLoss = ConcertoCrossModalObjective<T>.ComputeTapeLoss(
-                        studentCross, sample.PointCoordinates, sample.Views,
-                        _options.VisibilityDepthToleranceMeters);
-
-                    var weighted = Engine.TensorAdd(
-                        Engine.TensorMultiplyScalar(intraLoss, NumOps.FromDouble(_options.IntraModalLossWeight)),
-                        Engine.TensorMultiplyScalar(crossLoss, NumOps.FromDouble(_options.CrossModalLossWeight)));
-
-                    T lossValue = weighted.Length > 0 ? weighted[0] : NumOps.Zero;
-                    epochLoss = NumOps.Add(epochLoss, lossValue);
-
-                    var trainable = CollectModelTrainableTensors();
-                    var allGradients = tape.ComputeGradients(weighted, sources: null);
-
-                    var gradients = new Dictionary<Tensor<T>, Tensor<T>>(
-                        AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-                    foreach (var parameter in trainable)
+                    // The student objective on the shared eager tape step. The teacher logits and the center are
+                    // this sample's constants, so a line-searching optimizer's re-evaluation sees the same objective.
+                    var teacherTargets = teacherLogits;
+                    var currentCenter = center;
+                    Tensor<T> StudentObjective()
                     {
-                        if (allGradients.TryGetValue(parameter, out var gradient))
-                        {
-                            gradients[parameter] = gradient;
-                        }
+                        var studentIntra = FlattenSpatial(
+                            ForwardToDecoderLevel(sample.Input, _options.IntraModalUpcastLevel));
+                        var studentCross = FlattenSpatial(
+                            ForwardToDecoderLevel(sample.Input, _options.CrossModalUpcastLevel));
+
+                        ValidateCrossModalWidth(studentCross, sample);
+                        ValidatePointCount(studentCross, sample);
+                        ValidateViewCount(sample);
+
+                        var intraLoss = ConcertoIntraModalObjective<T>.ComputeTapeLoss(
+                            studentIntra, teacherTargets, currentCenter);
+                        var crossLoss = ConcertoCrossModalObjective<T>.ComputeTapeLoss(
+                            studentCross, sample.PointCoordinates, sample.Views,
+                            _options.VisibilityDepthToleranceMeters);
+
+                        return Engine.TensorAdd(
+                            Engine.TensorMultiplyScalar(intraLoss, NumOps.FromDouble(_options.IntraModalLossWeight)),
+                            Engine.TensorMultiplyScalar(crossLoss, NumOps.FromDouble(_options.CrossModalLossWeight)));
                     }
 
-                    if (gradients.Count == 0) continue;
-
-                    MarkTrainMutationStarted();
-                    opt.Step(new TapeStepContext<T>(trainable, gradients, lossValue));
+                    T lossValue = AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
+                        CollectModelTrainableTensors,
+                        StudentObjective,
+                        opt,
+                        beforeUpdate: MarkTrainMutationStarted);
+                    epochLoss = NumOps.Add(epochLoss, lossValue);
                     InvalidateWeightCachesAfterSuccessfulWeightUpdate();
 
                     // EMA teacher and DINO centering, both AFTER the student moved -- updating the

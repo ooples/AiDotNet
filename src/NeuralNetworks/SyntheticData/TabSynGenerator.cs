@@ -694,10 +694,15 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     {
         // z = mean + exp(0.5*logVar) ⊙ eps, computed with tape-connected Engine ops
         // (eps is a sampled constant leaf) so gradients flow into mean and logVar.
-        var eps = new Tensor<T>(mean._shape);
-        for (int i = 0; i < eps.Length; i++) eps[i] = SampleStandardNormal();
+        // A per-step draw: the fused compiled plan redraws epsilon on every replay instead of reusing the traced one.
+        var eps = AiDotNet.Training.CompiledStepRandom<T>.Draw(mean._shape, FillStandardNormal);
         var std = Engine.TensorExp(Engine.TensorMultiplyScalar(logVar, NumOps.FromDouble(0.5)));
         return Engine.TensorAdd(mean, Engine.TensorMultiply(std, eps));
+    }
+
+    private void FillStandardNormal(Tensor<T> eps)
+    {
+        for (int i = 0; i < eps.Length; i++) eps[i] = SampleStandardNormal();
     }
 
     /// <summary>

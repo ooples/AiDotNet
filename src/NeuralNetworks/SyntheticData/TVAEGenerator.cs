@@ -558,8 +558,9 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
     /// </summary>
     private Tensor<T> Reparameterize(Tensor<T> mean, Tensor<T> logVar)
     {
-        var eps = new Tensor<T>(mean._shape);
-        for (int i = 0; i < eps.Length; i++) eps[i] = SampleStandardNormal();
+        // Declared as a per-step draw so the fused compiled plan redraws epsilon on every replay; drawn with a host
+        // loop alone, the plan would reuse the first step's epsilon for the whole run.
+        var eps = AiDotNet.Training.CompiledStepRandom<T>.Draw(mean._shape, FillStandardNormal);
 
         // std = exp(0.5 * logVar); z = mean + std ⊙ eps
         var std = Engine.TensorExp(Engine.TensorMultiplyScalar(logVar, NumOps.FromDouble(0.5)));
@@ -941,6 +942,11 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
     #endregion
 
     #region Random Sampling Utilities
+
+    private void FillStandardNormal(Tensor<T> tensor)
+    {
+        for (int i = 0; i < tensor.Length; i++) tensor[i] = SampleStandardNormal();
+    }
 
     private T SampleStandardNormal()
     {

@@ -377,7 +377,6 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
         SetTrainingMode(true);
         try
         {
-            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
             var windows = SplitWindows(input);
             var targets = SplitTargets(expectedOutput, windows.Count);
             var rand = RandomHelper.CreateSecureRandom();
@@ -390,27 +389,14 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
             // optimizer's recompute closure below so both see the same negatives.
             int negativeSeed = rand.Next();
 
-            using var tape = new GradientTape<T>();
-            var lossTensor = TrainingLoss(draws, RandomHelper.CreateSeededRandom(negativeSeed));
-            var grads = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParams);
-
-            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-            LastLoss = lossValue;
-
-            // Pinned to this step's draws: a line-searching optimizer that re-drew them would be
-            // comparing losses at different noise levels.
-            Tensor<T> ComputeForward(Tensor<T> _, Tensor<T> __) => DenoiseDraws(draws);
-            Tensor<T> RecomputeLoss(Tensor<T> _, Tensor<T> __) =>
-                TrainingLoss(draws, RandomHelper.CreateSeededRandom(negativeSeed));
-
-            var context = new TapeStepContext<T>(
-                trainableParams, grads, lossValue,
-                input, expectedOutput, ComputeForward, RecomputeLoss);
-
-            MarkTrainMutationStarted();
-            _optimizer.Step(context);
-            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
-            StepSchedulerIfSupported(_optimizer);
+            // The network's shared eager step (TrainWithCustomObjective): it publishes the gradients through the base,
+            // applies the constructor's optimizer, and recomputes the objective pinned to this step's draws and
+            // negatives (a line-searching optimizer that re-drew them would compare losses at different noise levels).
+            TrainWithCustomObjective(
+                input,
+                expectedOutput,
+                (_, _) => TrainingLoss(draws, RandomHelper.CreateSeededRandom(negativeSeed)),
+                _optimizer);
         }
         finally
         {

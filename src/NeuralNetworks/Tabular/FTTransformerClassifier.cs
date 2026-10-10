@@ -285,21 +285,11 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
         // gradient for every leaf tensor we collected. (Previously TrainStep had
         // only a "// Backward pass" comment, so UpdateParameters threw "Backward
         // pass must be called before updating parameters" — training never ran.)
-        using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>();
-        var logits = Forward(numericalFeatures, categoricalIndices);
-        var lossTensor = SoftmaxCrossEntropyLoss(logits, targets);
-        var grads = tape.ComputeGradients(lossTensor, trainable.ToArray());
-
-        // SGD: param -= lr * grad, written back into the live tensor in place.
-        foreach (var t in trainable)
-        {
-            if (t is null || !grads.TryGetValue(t, out var g) || g is null) continue;
-            var updated = Engine.TensorSubtract(t, Engine.TensorMultiplyScalar(g, learningRate));
-            int n = t.Length;
-            for (int i = 0; i < n; i++) t[i] = updated[i];
-        }
-
-        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+        // Plain SGD (p -= learningRate * grad) on the shared eager tape step.
+        T lossValue = AiDotNet.Training.TapeTrainingStepper<T>.EagerSgdObjectiveStep(
+            () => trainable,
+            () => SoftmaxCrossEntropyLoss(Forward(numericalFeatures, categoricalIndices), targets),
+            learningRate);
         ResetState();
         return lossValue;
     }

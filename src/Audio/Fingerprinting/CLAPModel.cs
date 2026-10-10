@@ -541,96 +541,37 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
             var trainableLayers = new List<ITrainableLayer<T>>();
             foreach (var l in Layers) if (l is ITrainableLayer<T> t) trainableLayers.Add(t);
             foreach (var l in TextEncoderLayers) if (l is ITrainableLayer<T> t) trainableLayers.Add(t);
-            var extras = new List<Tensor<T>> { _logTemperature };
-            if (trainableLayers.Count > 0 || extras.Count > 0)
+            // The contrastive loss depends on BOTH encoders + temperature: the forward closure embeds the audio and
+            // the loss closure re-runs the text side on this step's text batch (the target), so a compiled replay
+            // reads the refreshed batch.
+            Tensor<T> FwdCLAP(Tensor<T> audioIn) => EncodeAudio(audioIn); // audio embedding — the loss closure re-runs the text side.
+            Tensor<T> LossCLAP(Tensor<T> audioEmb, Tensor<T> textBatch)
             {
-                // The contrastive loss depends on BOTH encoders + temperature, so
-                // the forward closure runs the full symmetric-alignment computation
-                // and the loss closure just reduces its output. We pass the audio
-                // input as the primary and the text batch as target so the closure
-                // signature matches TryStep's contract.
-                Tensor<T> FwdCLAP(Tensor<T> audioIn) => EncodeAudio(audioIn); // audio embedding — the loss closure re-runs the text side.
-                Tensor<T> LossCLAP(Tensor<T> audioEmb, Tensor<T> textBatch)
-                {
-                    // Re-run text encoder on this replay's text batch.
-                    var textEmb = EncodeText(textBatch);
-                    int batchSize = audioEmb.Shape[0];
-                    int projDim = audioEmb.Shape[audioEmb.Shape.Length - 1];
-                    var audioEmb2D = audioEmb.Shape.Length == 2 ? audioEmb : Engine.Reshape(audioEmb, new[] { batchSize, projDim });
-                    var textEmb2D = textEmb.Shape.Length == 2 ? textEmb : Engine.Reshape(textEmb, new[] { batchSize, projDim });
-                    var textEmbT = Engine.TensorTranspose<T>(textEmb2D);
-                    var sim = Engine.TensorMatMul<T>(audioEmb2D, textEmbT);
-                    var tau = Engine.TensorExp<T>(_logTemperature);
-                    var tauBroadcast = Engine.TensorTile(Engine.Reshape(tau, new[] { 1, 1 }), new[] { batchSize, batchSize });
-                    var logitsA2T = Engine.TensorMultiply<T>(sim, tauBroadcast);
-                    var logitsT2A = Engine.TensorTranspose<T>(logitsA2T);
-                    var halfA2T = SymmetricRowCrossEntropy(logitsA2T, batchSize);
-                    var halfT2A = SymmetricRowCrossEntropy(logitsT2A, batchSize);
-                    return Engine.TensorAdd<T>(halfA2T, halfT2A);
-                }
-                if (AiDotNet.Training.FusedTrainingStep<T>.TryStep(
-                        trainableLayers, input, expected,
-                        forward: FwdCLAP, computeLoss: LossCLAP,
-                        optimizer: optimizer,
-                        out T fusedLoss, owner: this,
-                        extraTensors: extras,
-                        onGradients: gradients => PublishParameterGradients(gradients)))
-                {
-                    LastLoss = fusedLoss;
-                    return;
-                }
+                // Re-run text encoder on this replay's text batch.
+                var textEmb = EncodeText(textBatch);
+                int batchSize = audioEmb.Shape[0];
+                int projDim = audioEmb.Shape[audioEmb.Shape.Length - 1];
+                var audioEmb2D = audioEmb.Shape.Length == 2 ? audioEmb : Engine.Reshape(audioEmb, new[] { batchSize, projDim });
+                var textEmb2D = textEmb.Shape.Length == 2 ? textEmb : Engine.Reshape(textEmb, new[] { batchSize, projDim });
+                var textEmbT = Engine.TensorTranspose<T>(textEmb2D);
+                var sim = Engine.TensorMatMul<T>(audioEmb2D, textEmbT);
+                var tau = Engine.TensorExp<T>(_logTemperature);
+                var tauBroadcast = Engine.TensorTile(Engine.Reshape(tau, new[] { 1, 1 }), new[] { batchSize, batchSize });
+                var logitsA2T = Engine.TensorMultiply<T>(sim, tauBroadcast);
+                var logitsT2A = Engine.TensorTranspose<T>(logitsA2T);
+                var halfA2T = SymmetricRowCrossEntropy(logitsA2T, batchSize);
+                var halfT2A = SymmetricRowCrossEntropy(logitsT2A, batchSize);
+                return Engine.TensorAdd<T>(halfA2T, halfT2A);
             }
-
-            using var tape = new GradientTape<T>();
-            // Forward both encoders inside the same tape so gradients flow
-            // through every parameter. EncodeAudio / EncodeText already
-            // L2-normalise along the last axis so the dot product below is
-            // cosine similarity.
-            var audioEmb = EncodeAudio(input);
-            var textEmb = EncodeText(expected);
-
-            int batchSize = audioEmb.Shape[0];
-            int projDim = audioEmb.Shape[audioEmb.Shape.Length - 1];
-
-            var audioEmb2D = audioEmb.Shape.Length == 2
-                ? audioEmb
-                : Engine.Reshape(audioEmb, new[] { batchSize, projDim });
-            var textEmb2D = textEmb.Shape.Length == 2
-                ? textEmb
-                : Engine.Reshape(textEmb, new[] { batchSize, projDim });
-
-            // logits = audio @ text.T scaled by exp(_logTemperature).
-            var textEmbT = Engine.TensorTranspose<T>(textEmb2D);
-            var sim = Engine.TensorMatMul<T>(audioEmb2D, textEmbT);
-            // Broadcast scalar exp(logTemp) across the [batch, batch] grid.
-            var tau = Engine.TensorExp<T>(_logTemperature);
-            var tauBroadcast = Engine.TensorTile(
-                Engine.Reshape(tau, new[] { 1, 1 }), new[] { batchSize, batchSize });
-            var logitsA2T = Engine.TensorMultiply<T>(sim, tauBroadcast);
-
-            // Symmetric loss: 0.5 * (CE(logitsA2T, diag) + CE(logitsT2A, diag))
-            // where logitsT2A is the transpose of logitsA2T. Compute both
-            // directions explicitly (rather than relying on transpose-eq) so
-            // the autodiff graph is unambiguous on every backend.
-            var logitsT2A = Engine.TensorTranspose<T>(logitsA2T);
-
-            var halfLossA2T = SymmetricRowCrossEntropy(logitsA2T, batchSize);
-            var halfLossT2A = SymmetricRowCrossEntropy(logitsT2A, batchSize);
-            var lossSum = Engine.TensorAdd<T>(halfLossA2T, halfLossT2A);
-
-            // Manual gradient + optimizer step over the combined params.
-            var grads = ComputeAndPublishParameterGradients(tape, lossSum, allParams);
-
-            T lossValue = lossSum.Length > 0 ? lossSum[0] : NumOps.Zero;
-            LastLoss = lossValue;
-
-            Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => EncodeAudio(inp);
-            Tensor<T> RecomputeLoss(Tensor<T> _, Tensor<T> __) => lossSum;
-
-            var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
-                allParams, grads, lossValue,
-                input, input, ComputeForward, RecomputeLoss);
-            optimizer.Step(context);
+            // One step through the shared training step: the fused plan when it applies, otherwise the shared eager
+            // tape step with the same objective. Both encoders and the temperature are trained.
+            LastLoss = AiDotNet.Training.FusedTrainingStep<T>.Step(
+                this, trainableLayers, input, expected,
+                forward: FwdCLAP,
+                computeLoss: LossCLAP,
+                optimizer: optimizer,
+                extraTensors: allParams,
+                onGradients: gradients => PublishParameterGradients(gradients));
         }
         finally
         {

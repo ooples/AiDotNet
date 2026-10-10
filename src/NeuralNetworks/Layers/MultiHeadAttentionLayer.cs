@@ -1406,6 +1406,28 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 $"_queryWeights shape: [{string.Join(", ", _queryWeights._shape)}]");
         }
 
+        // Head-interleaved fused attention: Engine.MultiHeadAttentionCore reads the projected Q/K/V in their
+        // [batch, seq, heads*headDim] layout and returns the merged-head context, so the three head-split permutes,
+        // the decomposed SDPA and the merge permute become one differentiable op (on the CPU, one fused kernel each
+        // way, with no [batch, heads, seq, seq] score tensor). Taken whenever the layer needs nothing that op does not
+        // express: a positional bias (RoPE, ALiBi), grouped attention, the attention weights (auxiliary loss), or the
+        // manual backward's per-head caches (neither inference nor a compiled trace runs the manual backward).
+        if (_ropeLayer == null && _alibiLayer == null && _attentionGroupSize <= 1 && !UseAuxiliaryLoss
+            && (!cacheForManualBackward || !IsTrainingMode || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive))
+        {
+            int headsWidth = _headCount * _headDimension;
+            var fusedContext = Engine.MultiHeadAttentionCore(
+                Engine.Reshape(Q_flat, [batchSize, seqLengthQ, headsWidth]),
+                Engine.Reshape(K_flat, [batchSize, seqLengthKV, headsWidth]),
+                Engine.Reshape(V_flat, [batchSize, seqLengthKV, headsWidth]),
+                _headCount, 1.0 / Math.Sqrt(_headDimension), UseCausalMask);
+            _lastAttentionScores = null;
+            _lastHeadOutputs = null;
+            return ProjectAttentionContext(
+                Engine.Reshape(fusedContext, [batchSize * seqLengthQ, embeddingDimension]),
+                batchSize, seqLengthQ, embeddingDimension, cacheForManualBackward);
+        }
+
         // Every shape op must go through Engine so the gradient tape records the
         // transformation — direct Tensor<T>.Transpose bypasses the tape and breaks
         // gradient flow through Q/K/V projections and back to the weight tensors.
@@ -1575,10 +1597,22 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // [B, H, S, D] -> [B, S, H, D] -> [B, S, E] (Engine op keeps tape connected)
         var context_transposed = Engine.TensorPermute(context_4D, new[] { 0, 2, 1, 3 });
         var context_flat = Engine.Reshape(context_transposed, [batchSize * seqLengthQ, embeddingDimension]);
+        return ProjectAttentionContext(context_flat, batchSize, seqLengthQ, embeddingDimension, cacheForManualBackward);
+    }
 
-        // Cache pre-projection context for the manual weight-gradient backward.
-        if (cacheForManualBackward)
-            _lastAttentionContext = Engine.Reshape(context_transposed, [batchSize, seqLengthQ, embeddingDimension]);
+    /// <summary>
+    /// Output projection of the merged-head context <paramref name="context_flat"/> ([batch * seqQ, embedding]) and
+    /// the reshape back to the caller's batch dimensions.
+    /// </summary>
+    private Tensor<T> ProjectAttentionContext(
+        Tensor<T> context_flat, int batchSize, int seqLengthQ, int embeddingDimension, bool cacheForManualBackward)
+    {
+        // Cache pre-projection context for the manual weight-gradient backward. Not under a compiled trace: no manual
+        // backward runs there, and the cache's reshape would be a second consumer of context_flat, which turns the
+        // output projection's specialized backward into the generic accumulating one (measured: 2.1 ms of a 19 ms
+        // CPU Transformer step).
+        if (cacheForManualBackward && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+            _lastAttentionContext = Engine.Reshape(context_flat, [batchSize, seqLengthQ, embeddingDimension]);
 
         // Fused matmul+bias: collapses MatMul + Reshape + Reshape + BroadcastAdd
         // (4 engine dispatches) into FusedLinear + Reshape (2 dispatches). Same fused

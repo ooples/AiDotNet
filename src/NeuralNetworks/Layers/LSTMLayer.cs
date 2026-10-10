@@ -1312,17 +1312,21 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         //   - typeof(T) == float. The primitive's competitive perf comes from
         //     its float-specialized SimdGemm + AVX sigmoid/tanh path.
         //   - Engine is CpuEngine. The primitive lives there.
-        //   - GraphMode.IsActive == false. The primitive explicitly throws
-        //     under an active autograd tape (no fused backward yet).
+        //   - GraphMode.IsActive == false, EXCEPT compiled training on a host
+        //     engine: there LstmSequenceForward records ONE fused training node
+        //     (fused forward + fused BPTT backward) into the plan instead of the
+        //     per-timestep loop's ~30 primitives per step (AiDotNet.Tensors
+        //     RecordLstmSequenceTrainFloat). GPU engines keep the per-step trace.
         // If any condition fails the existing per-step loop below runs unchanged.
         // timeSteps > 0 guards the empty-sequence boundary: the per-step loop
-        // returns an empty output with zeroed final states, but the fused path's
-        // CopyLastTimestepHidden would slice at (seq - 1) = -1.
+        // returns an empty output with zeroed final states, and the fused training
+        // primitives require a non-empty sequence.
         if (timeSteps > 0
             && !_stateStepping
             && typeof(T) == typeof(float)
             && Engine is AiDotNet.Tensors.Engines.CpuEngine cpuEngForFused
-            && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+            && (!AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+                || (IsTrainingMode && Engine is not DirectGpuTensorEngine)))
         {
             // Inference takes the cached manual stack (allocation-free, detached).
             // Training builds the stacked wIh/wHh/bias via TAPE-CONNECTED Concat so
@@ -1349,13 +1353,14 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
             }
             if (fusedOutput is not null)
             {
-                // Stash the last hidden state so the public LastHiddenState
-                // property keeps returning a sensible value after this call.
-                // Cell state stays zero — its only consumers require training
-                // mode anyway.
-                _lastHiddenState = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
-                _lastCellState = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
-                CopyLastTimestepHidden(fusedOutput, _lastHiddenState, batchSize, timeSteps, _hiddenSize);
+                // The fused primitive returns no final (h, c), so record none rather than a
+                // fabricated one: a zero cell state, or (under a compiled trace, where the
+                // output is lazy and holds no values yet) a zero hidden state, would be a
+                // silently wrong answer. The only reader, ForwardFromState, sets
+                // _stateStepping, which keeps every such call on the per-step loop below;
+                // anything else reading these now fails loudly instead of reading zeros.
+                _lastHiddenState = null;
+                _lastCellState = null;
 
                 // Mirror the existing post-loop shape-restoration block.
                 var fusedShaped = fusedOutput;
@@ -1605,36 +1610,15 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         // weight gradients. Detect that and fall back to the per-timestep loop, which
         // records correctly. (On #587+ the output carries the fused BPTT node.)
         var result = (Tensor<T>)(object)resultF;
+        // Under a compiled trace the output is a lazy plan node whose backward the plan owns,
+        // so GradFn is null there by design; the check applies to the eager tape only.
         if (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
             && result.GradFn is null)
         {
             return null;
         }
         return result;
-    }
-
-    /// <summary>
-    /// Copies the final timestep's hidden state from a <c>[B, seq, hidden]</c>
-    /// tensor into a <c>[B, hidden]</c> destination so consumers reading
-    /// <see cref="LastHiddenState"/> after the fused fast path see the same
-    /// value the per-step loop would have stored.
-    /// </summary>
-    private static void CopyLastTimestepHidden(Tensor<T> source, Tensor<T> dest, int batch, int seq, int hidden)
-    {
-        // No last timestep to copy for an empty sequence — leave dest zeroed
-        // (the caller already gates on timeSteps > 0, this is defence in depth
-        // against a (seq - 1) = -1 slice).
-        if (seq <= 0)
-            return;
-
-        var src = source.AsSpan();
-        var dst = dest.AsWritableSpan();
-        for (int b = 0; b < batch; b++)
-        {
-            int srcOff = (b * seq + (seq - 1)) * hidden;
-            int dstOff = b * hidden;
-            src.Slice(srcOff, hidden).CopyTo(dst.Slice(dstOff, hidden));
-        }
     }
 
     /// <summary>

@@ -257,11 +257,12 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         }
 
         // Adam optimizer (Salinas et al. 2020 use Adam).
-        var adamOptions = new AdamOptimizerOptions<T, Matrix<T>, Vector<T>>
+        // Tensor-typed: the tape step updates the weight tensors directly, through the shared training step.
+        var adamOptions = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
         {
             InitialLearningRate = _options.LearningRate
         };
-        var optimizer = new AdamOptimizer<T, Matrix<T>, Vector<T>>(null, adamOptions);
+        var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(null, adamOptions);
 
         // Collect every registered weight/bias tensor from the LSTM stack and the head.
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(AllLayers(), -1);
@@ -349,34 +350,17 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
                 }
                 var batchTarget = new Tensor<T>(new[] { b, lookback }, new Vector<T>(targetData));
 
-                using var tape = new GradientTape<T>();
-
                 // Unroll the LSTM to per-step top hidden states, then let the selected distribution head
                 // build its own likelihood loss (the head owns the residual-mean skip + distribution math).
-                var hiddenSteps = ForwardHidden(lstmInputSteps, b);
-                var batchLoss = _head.ComputeBatchLoss(hiddenSteps, obsSteps, batchTarget);
+                // The batch is a list of per-timestep tensors whose batch size varies with the valid
+                // anchors, so it is not one input tensor: the shared objective step runs it eagerly.
+                T batchLoss = Training.TapeTrainingStepper<T>.EagerObjectiveStep(
+                    trainableParams,
+                    () => _head.ComputeBatchLoss(ForwardHidden(lstmInputSteps, b), obsSteps, batchTarget),
+                    optimizer);
 
-                var allGrads = tape.ComputeGradients(batchLoss, sources: null);
-                var grads = new Dictionary<Tensor<T>, Tensor<T>>(
-                    Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-                foreach (var param in trainableParams)
-                {
-                    if (allGrads.TryGetValue(param, out var grad))
-                        grads[param] = grad;
-                }
-
-                if (batchLoss.Length > 0)
-                {
-                    double bl = Convert.ToDouble(batchLoss[0]);
-                    epochLossSum += bl * b;
-                    epochSampleCount += b;
-                }
-
-                var context = new TapeStepContext<T>(
-                    trainableParams, grads,
-                    batchLoss.Length > 0 ? batchLoss[0] : NumOps.Zero);
-
-                optimizer.Step(context);
+                epochLossSum += Convert.ToDouble(batchLoss) * b;
+                epochSampleCount += b;
             }
 
             if (epochSampleCount > 0)
@@ -468,12 +452,73 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         }
 
         int n = input.Rows;
+        if (_options.CovariateSize == 0 && n > 1)
+            return PredictRowsBatched(input);
+
         var predictions = new Vector<T>(n);
 
         // Each input row is an independent lookback window — forecast it from its own content.
         for (int i = 0; i < n; i++)
         {
             predictions[i] = PredictSingle(input.GetRow(i));
+        }
+
+        return predictions;
+    }
+
+    /// <summary>
+    /// <see cref="Predict(Matrix{T})"/> for many rows: the same per-row computation as <see cref="PredictDistNorm"/>
+    /// (normalize, left-pad a short window with its first value, unroll the LSTM, head on the final hidden state),
+    /// with the LSTM unrolled ONCE for all rows -- each row is a column of the [H, B] state, the layout training already
+    /// batches -- instead of once per row at B = 1. The head still runs per row on that row's final hidden column, so
+    /// every distribution head keeps its exact point-forecast semantics. AiModelBuilder predicts the whole dataset after
+    /// fitting, and the per-row B = 1 unroll was about half of an Ooples production DeepAR fit (profiled).
+    /// </summary>
+    private Vector<T> PredictRowsBatched(Matrix<T> input)
+    {
+        int n = input.Rows, cols = input.Columns;
+        int steps = Math.Max(cols, _options.LookbackWindow), pad = steps - cols;
+        int layers = _lstmLayers.Count, h = _options.HiddenSize;
+
+        var hState = new Tensor<T>[layers];
+        var cState = new Tensor<T>[layers];
+        for (int l = 0; l < layers; l++)
+        {
+            hState[l] = new Tensor<T>(new[] { h, n });
+            cState[l] = new Tensor<T>(new[] { h, n });
+        }
+
+        var lastNorm = new T[n];
+        for (int t = 0; t < steps; t++)
+        {
+            var xt = new Tensor<T>(new[] { 1, n });
+            for (int i = 0; i < n; i++)
+            {
+                T raw = cols == 0 ? NumOps.Zero : input[i, t < pad ? 0 : t - pad];
+                T normValue = NumOps.Divide(NumOps.Subtract(raw, _normMean), _normStd);
+                xt[0, i] = normValue;
+                lastNorm[i] = normValue;
+            }
+
+            Tensor<T> layerInput = xt;
+            for (int l = 0; l < layers; l++)
+            {
+                var (hNew, cNew) = _lstmLayers[l].Step(layerInput, hState[l], cState[l]);
+                hState[l] = hNew;
+                cState[l] = cNew;
+                layerInput = hNew;
+            }
+        }
+
+        var top = hState[layers - 1];
+        var predictions = new Vector<T>(n);
+        var column = new Tensor<T>(new[] { h, 1 });
+        for (int i = 0; i < n; i++)
+        {
+            for (int r = 0; r < h; r++)
+                column[r, 0] = top[r, i];
+            var dist = _head.PredictNorm(column, lastNorm[i]);
+            predictions[i] = NumOps.Add(NumOps.Multiply(dist.MeanNorm, _normStd), _normMean);
         }
 
         return predictions;
