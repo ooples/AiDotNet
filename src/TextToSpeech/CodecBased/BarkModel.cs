@@ -139,7 +139,7 @@ public partial class BarkModel<T> : TtsModelBase<T>
     private BarkTransformerStageLayer<T> _semantic;
     private BarkTransformerStageLayer<T> _coarse;
     private BarkTransformerStageLayer<T> _fine;
-    private readonly BarkCodecLayer<T> _codec;
+    private readonly AudioCodecLayer<T> _codec;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private TrainingStage _trainingStage;
     private int _fineTrainingHead;
@@ -176,7 +176,7 @@ public partial class BarkModel<T> : TtsModelBase<T>
             _options.Fine,
             inputStreams: _options.NumCodebooks,
             outputHeads: _options.NumCodebooks - _options.NumberOfFineCodebooksGiven);
-        _codec = new BarkCodecLayer<T>(codec ?? CreateDefaultCodec(_options));
+        _codec = new AudioCodecLayer<T>(codec ?? CreateDefaultCodec(_options));
         InitializeLayers();
         StreamingTraining = StreamingTrainingMode.Auto;
     }
@@ -804,17 +804,33 @@ public partial class BarkModel<T> : TtsModelBase<T>
     private static IAudioCodec<T> CreateDefaultCodec(BarkOptions options)
     {
         bool tiny = options.Semantic.HiddenSize <= 32;
-        var codecOptions = new EnCodecOptions
-        {
-            SampleRate = options.SampleRate,
-            NumQuantizers = options.NumCodebooks,
-            CodebookSize = options.CodebookSize,
-            EncoderChannels = tiny ? [4, 8] : [32, 64, 128, 256, 512],
-            DownsampleRatios = tiny ? [4, 2] : [8, 5, 4, 2],
-            EncoderDim = tiny ? 8 : 128,
-            CodebookDim = tiny ? 8 : 128,
-        };
-        var architecture = new NeuralNetworkArchitecture<T>(inputFeatures: 1, outputSize: codecOptions.EncoderDim);
+        // Bark codes with EnCodec 24 kHz at 6 kbps: the released codec's 32 codebooks, of which the bandwidth selects the
+        // first NumCodebooks (0.75 kbps each at 75 frames per second), so the official checkpoint loads unchanged.
+        var codecOptions = tiny
+            ? new EnCodecOptions
+            {
+                SampleRate = options.SampleRate,
+                NumQuantizers = options.NumCodebooks,
+                CodebookSize = options.CodebookSize,
+                Filters = 4,
+                Ratios = [4, 2],
+                Dimension = 8,
+                ResidualKernelSizes = [3, 1],
+                DiscriminatorWindows = [32, 16],
+                DiscriminatorFilters = 4,
+                MelScales = [5, 6],
+                MelBins = 8,
+            }
+            : EnCodecOptions.OfficialCheckpoint24kHz();
+        if (!tiny) codecOptions.SampleRate = options.SampleRate;
+        codecOptions.CodebookSize = options.CodebookSize;
+        // Every requested codebook in the tiny codec; the first NumCodebooks of the full one.
+        double perCodebook = codecOptions.SampleRate / (double)codecOptions.Ratios.Aggregate(1, (a, b) => a * b)
+            * Math.Log(codecOptions.CodebookSize, 2) / 1000.0;
+        codecOptions.TargetBandwidthKbps = options.NumCodebooks * perCodebook;
+        // Bark only encodes and decodes with its codec, so the codec's training discriminators are never built.
+        codecOptions.IncludeDiscriminators = false;
+        var architecture = new NeuralNetworkArchitecture<T>(inputFeatures: 1, outputSize: codecOptions.Dimension);
         return new EnCodec<T>(architecture, codecOptions);
     }
 

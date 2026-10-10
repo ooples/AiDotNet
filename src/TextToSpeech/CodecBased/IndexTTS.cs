@@ -95,7 +95,7 @@ public partial class IndexTTS<T> : TtsModelBase<T>, ICodecTts<T>
     public int CodecFrameRate => _options.CodecFrameRate;
 
     /// <summary>Synthesizes speech. IndexTTS: text + reference -> LLM AR -> codec tokens -> BigVGAN decoder -> waveform.</summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         if (string.IsNullOrEmpty(text))

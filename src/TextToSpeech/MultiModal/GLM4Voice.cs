@@ -117,7 +117,7 @@ public partial class GLM4Voice<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts
     public bool HasMoreChunks => _streamPosition < _streamText.Length;
 
     /// Synthesizes speech using GLM4Voice's neural codec language model pipeline.
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

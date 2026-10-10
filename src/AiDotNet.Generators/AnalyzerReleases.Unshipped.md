@@ -37,6 +37,7 @@ ADN0057 | AiDotNet.Serialization | Info | LayerStateGenerator, Optional construc
 ADNTEST001 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Float test scaffold rewrite was a no-op
 ADNTEST002 | AiDotNet.TestScaffold | Warning | TestScaffoldGenerator, Generated scaffold architecture size disagrees with its InputShape
 ADNTEST003 | AiDotNet.TestScaffold | Error | TestScaffoldGenerator, Two models share a simple name with no registered owner
+ADNTEST004 | AiDotNet.TestScaffold | Error | TestScaffoldGenerator, A CollisionOwners entry no longer describes a collision
 ADNSHAPE001 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Two tensor layouts accept the same rank with different axis names
 ADNSHAPE002 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, A tensor layout repeats an axis role
 ADNSHAPE003 | AiDotNet.Shapes | Error | ShapeDeclarationValidationGenerator, Type implements IShapeContract but declares no input layout
@@ -92,7 +93,9 @@ AIDN102 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Every [PaperO
 AIDN103 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Paper optimizer variants must be unique across optimizer kinds
 AIDN104 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Declared paper recipe is never used, because the optimizer is still hardcoded
 AIDN105 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Citation URL claims to be arXiv but its identifier cannot exist
-AIDN106 | AiDotNet.PaperFidelity | Info | PaperOptimizerAnalyzer, Model cites a paper but does not declare the optimizer settings that paper specifies (Info while the backlog is large; promote per the AIDN087 ladder)
+AIDN107 | AiDotNet.PaperFidelity | Info | PaperOptimizerAnalyzer, Model cites a paper but does not declare the optimizer settings that paper specifies (Info while the backlog is large; promote per the AIDN087 ladder)
+AIDN108 | AiDotNet.ComponentMetadata | Warning | ComponentMetadataValidationGenerator, Component has [ComponentType] but is missing [PipelineStage]
+AIDN109 | AiDotNet.ComponentMetadata | Warning | ComponentMetadataValidationGenerator, Component has [PipelineStage] but is missing [ComponentType]
 ADNDEF001 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Two models implement the same paper
 ADNDEF002 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Transformer factory yields attention without a residual connection
 ADNDEF003 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Model reuses another paper's layer factory without declaring it

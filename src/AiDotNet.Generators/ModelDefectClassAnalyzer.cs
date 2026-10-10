@@ -3,7 +3,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -177,18 +176,50 @@ public sealed class ModelDefectClassAnalyzer : DiagnosticAnalyzer
             end.ReportDiagnostic(Diagnostic.Create(StaleBaseline, Location.None, entry, name));
     }
 
-    private static readonly TimeSpan RegexTimeout = TimeSpan.FromSeconds(1);
-
     // One key per paper whatever link form a model cites: arXiv ids (with or without the 10.48550 DOI
     // prefix and version suffix), then DOIs, then the bare URL.
+    //
+    // Plain string scanning, not Regex: the patterns were linear, but a Regex match timeout is a wall-clock budget,
+    // and on a saturated build machine the 1 s budget expired and failed the whole compile with AD0001
+    // (RegexMatchTimeoutException) - a nondeterministic build failure on a deterministic input.
     internal static string NormalizePaper(string url)
     {
         string u = url.Trim().ToLowerInvariant().TrimEnd('/');
-        var arxiv = Regex.Match(u, @"(?:arxiv\.org/(?:abs|pdf)/|arxiv\.)(\d{4}\.\d{4,5})", RegexOptions.None, RegexTimeout);
-        if (arxiv.Success) return "arxiv:" + arxiv.Groups[1].Value;
-        var doi = Regex.Match(u, @"doi\.org/(.+)$", RegexOptions.None, RegexTimeout);
-        if (doi.Success) return "doi:" + doi.Groups[1].Value;
-        return Regex.Replace(u, @"^https?://(www\.)?", string.Empty, RegexOptions.None, RegexTimeout);
+        // (?:arxiv\.org/(?:abs|pdf)/|arxiv\.)(\d{4}\.\d{4,5}), leftmost match.
+        for (int i = 0; i < u.Length; i++)
+        {
+            string? id = null;
+            if (string.CompareOrdinal(u, i, "arxiv.org/abs/", 0, 14) == 0 || string.CompareOrdinal(u, i, "arxiv.org/pdf/", 0, 14) == 0)
+                id = ArxivId(u, i + 14);
+            if (id is null && string.CompareOrdinal(u, i, "arxiv.", 0, 6) == 0)
+                id = ArxivId(u, i + 6);
+            if (id is not null) return "arxiv:" + id;
+        }
+        // doi\.org/(.+)$
+        int doi = u.IndexOf("doi.org/", StringComparison.Ordinal);
+        if (doi >= 0 && doi + 8 < u.Length) return "doi:" + u.Substring(doi + 8);
+        // ^https?://(www\.)?
+        int scheme = u.StartsWith("https://", StringComparison.Ordinal) ? 8 : u.StartsWith("http://", StringComparison.Ordinal) ? 7 : 0;
+        if (scheme == 0) return u;
+        string bare = u.Substring(scheme);
+        return bare.StartsWith("www.", StringComparison.Ordinal) ? bare.Substring(4) : bare;
+    }
+
+    // \d{4}\.\d{4,5} at position start (greedy), or null.
+    private static string? ArxivId(string u, int start)
+    {
+        int i = start;
+        for (int k = 0; k < 4; k++, i++)
+            if (i >= u.Length || u[i] < '0' || u[i] > '9') return null;
+        if (i >= u.Length || u[i] != '.') return null;
+        i++;
+        int digits = 0;
+        while (digits < 5 && i < u.Length && u[i] >= '0' && u[i] <= '9')
+        {
+            i++;
+            digits++;
+        }
+        return digits >= 4 ? u.Substring(start, i - start) : null;
     }
 
     /// <summary>

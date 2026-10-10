@@ -97,7 +97,7 @@ public partial class KaniTTS2<T> : TtsModelBase<T>, ICodecTts<T>
     /// Synthesizes speech from text.
     /// Improved dual-codebook codec TTS with 400M params and streaming support.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

@@ -97,7 +97,7 @@ public partial class KaniTTS<T> : TtsModelBase<T>, ICodecTts<T>
     /// Synthesizes speech from text.
     /// Efficient lightweight single-codebook codec TTS for on-device deployment.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

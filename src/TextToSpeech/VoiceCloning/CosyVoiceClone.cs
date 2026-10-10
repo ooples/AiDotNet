@@ -101,7 +101,7 @@ public partial class CosyVoiceClone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCl
     public double MinReferenceDuration => _options.MinReferenceDurationSec;
     public int SpeakerEmbeddingDim => _options.SpeakerEmbeddingDim;
 
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

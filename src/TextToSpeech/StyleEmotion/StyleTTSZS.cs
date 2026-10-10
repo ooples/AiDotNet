@@ -108,7 +108,7 @@ public partial class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// Synthesizes speech from text.
     /// Per Li et al. (2024): StyleTTS 2 extended for zero-shot cloning with diffusion-based style predictor.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

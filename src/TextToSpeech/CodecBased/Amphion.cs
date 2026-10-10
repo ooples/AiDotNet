@@ -101,7 +101,7 @@ public partial class Amphion<T> : TtsModelBase<T>, ICodecTts<T>
     public int CodecFrameRate => _options.CodecFrameRate;
 
     /// <summary>Synthesizes speech. Amphion TTS: text -> encoder -> LM/flow-matching -> codec/mel -> vocoder -> waveform.</summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

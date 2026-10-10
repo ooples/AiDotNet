@@ -1125,31 +1125,6 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
     }
 
     [Fact(Timeout = 120000)]
-    public async Task VoiceCraftModel_DefaultConstructor_CreatesValidModel()
-    {
-        var model = new VoiceCraftModel<float>();
-
-        Assert.NotNull(model);
-        Assert.NotNull(model.NoisePredictor);
-        Assert.NotNull(model.VAE);
-        Assert.Equal(8, model.LatentChannels);
-        Assert.True(model.SupportsTextToSpeech);
-        Assert.True(model.SupportsAudioToAudio);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task SoundStormModel_DefaultConstructor_CreatesValidModel()
-    {
-        var model = new SoundStormModel<float>();
-
-        Assert.NotNull(model);
-        Assert.NotNull(model.NoisePredictor);
-        Assert.NotNull(model.VAE);
-        Assert.Equal(8, model.LatentChannels);
-        Assert.True(model.SupportsTextToSpeech);
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task UdioModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new UdioModel<float>();
@@ -1373,15 +1348,6 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
         Assert.NotNull(model.NoisePredictor);
         Assert.NotNull(model.VAE);
         Assert.Equal(4, model.LatentChannels);
-        Assert.True(model.ParameterCount > 0);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task DiffWaveModel_DefaultConstructor_CreatesValidModel()
-    {
-        var model = new DiffWaveModel<float>();
-
-        Assert.NotNull(model);
         Assert.True(model.ParameterCount > 0);
     }
 

@@ -97,7 +97,7 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
     /// text+speaker conditioning embeddings → first-stage causal transformer → second-stage
     /// non-causal transformer → HiFi-GAN vocoder → waveform (metavoiceio/metavoice-src).
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null)

@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.Text;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 
 namespace AiDotNet.Helpers;
@@ -95,7 +96,34 @@ public static class AudioHelper<T>
     public static AudioLoadResult LoadWav(string filePath, bool normalize = true)
     {
         using var stream = File.OpenRead(filePath);
-        using var reader = new BinaryReader(stream);
+        return LoadWav(stream, normalize);
+    }
+
+    /// <summary>
+    /// Decodes a WAV file held in memory (for example the body of a text-to-speech API response).
+    /// </summary>
+    /// <param name="bytes">The bytes of the WAV file.</param>
+    /// <param name="normalize">Whether to normalize to [-1, 1].</param>
+    /// <returns>Audio tensor and metadata.</returns>
+    public static AudioLoadResult DecodeWav(byte[] bytes, bool normalize = true)
+    {
+        if (bytes is null) throw new ArgumentNullException(nameof(bytes));
+        using var stream = new MemoryStream(bytes, writable: false);
+        return LoadWav(stream, normalize);
+    }
+
+    /// <summary>
+    /// Reads a WAV file from a stream: PCM (8, 16, 24, 32 bits), IEEE float (32, 64 bits) and their
+    /// WAVE_FORMAT_EXTENSIBLE forms. RIFF chunks are word-aligned, so an odd-sized chunk is followed by a pad byte; a
+    /// data chunk whose size is unknown (0 or 0xFFFFFFFF, as streamed responses write it) extends to the end.
+    /// </summary>
+    /// <param name="stream">The stream positioned at the RIFF header; it is left open.</param>
+    /// <param name="normalize">Whether to normalize to [-1, 1].</param>
+    /// <returns>Audio tensor and metadata.</returns>
+    public static AudioLoadResult LoadWav(Stream stream, bool normalize = true)
+    {
+        if (stream is null) throw new ArgumentNullException(nameof(stream));
+        using var reader = new BinaryReader(stream, Encoding.ASCII, leaveOpen: true);
 
         // RIFF header
         var riff = Encoding.ASCII.GetString(reader.ReadBytes(4));
@@ -118,10 +146,11 @@ public static class AudioHelper<T>
         short audioFormat = 0;
         byte[]? audioData = null;
 
-        while (stream.Position < stream.Length)
+        while (stream.Length - stream.Position >= 8)
         {
             var chunkId = Encoding.ASCII.GetString(reader.ReadBytes(4));
-            var chunkSize = reader.ReadUInt32();
+            long chunkSize = reader.ReadUInt32();
+            long remaining = stream.Length - stream.Position;
 
             switch (chunkId)
             {
@@ -132,22 +161,43 @@ public static class AudioHelper<T>
                     reader.ReadInt32(); // Byte rate
                     reader.ReadInt16(); // Block align
                     bitsPerSample = reader.ReadInt16();
+                    long consumed = 16;
+                    // WAVE_FORMAT_EXTENSIBLE: the sub-format GUID's first two bytes are the actual format tag.
+                    if (audioFormat == unchecked((short)0xFFFE) && chunkSize >= 40)
+                    {
+                        reader.ReadInt16(); // cbSize
+                        reader.ReadInt16(); // Valid bits per sample
+                        reader.ReadInt32(); // Channel mask
+                        audioFormat = reader.ReadInt16();
+                        reader.ReadBytes(14); // Rest of the sub-format GUID
+                        consumed = 40;
+                    }
 
                     // Skip any extra format bytes
-                    if (chunkSize > 16)
+                    if (chunkSize > consumed)
                     {
-                        reader.ReadBytes((int)(chunkSize - 16));
+                        reader.ReadBytes((int)(chunkSize - consumed));
                     }
                     break;
 
                 case "data":
+                    if (chunkSize == 0 || chunkSize == 0xFFFFFFFF || chunkSize > remaining)
+                    {
+                        chunkSize = remaining;
+                    }
                     audioData = reader.ReadBytes((int)chunkSize);
                     break;
 
                 default:
                     // Skip unknown chunks
-                    reader.ReadBytes((int)chunkSize);
+                    reader.ReadBytes((int)Math.Min(chunkSize, remaining));
                     break;
+            }
+
+            // Chunks are word-aligned: an odd-sized chunk carries one pad byte.
+            if ((chunkSize & 1) == 1 && stream.Position < stream.Length)
+            {
+                reader.ReadByte();
             }
         }
 
@@ -405,45 +455,73 @@ public static class AudioHelper<T>
             return audio;
         }
 
+        // Band-limited (windowed-sinc) resampling per channel: plain interpolation folds everything above the target
+        // Nyquist frequency back into the band when downsampling.
         var shape = audio._shape;
-        int channels = shape.Length == 3 ? shape[1] : shape[0];
+        int channels = shape.Length == 3 ? shape[1] : shape.Length == 2 ? shape[0] : 1;
         int srcSamples = shape[^1];
-        int dstSamples = (int)((long)srcSamples * targetSampleRate / sourceSampleRate);
-
-        var result = new Tensor<T>(new[] { 1, channels, dstSamples });
-        var srcSpan = audio.AsSpan();
-        var dstSpan = result.AsWritableSpan();
-
-        double ratio = (double)(srcSamples - 1) / (dstSamples - 1);
-
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var source = audio.AsSpan();
+        Tensor<T>? result = null;
+        int dstSamples = 0;
         for (int c = 0; c < channels; c++)
         {
-            int srcOffset = c * srcSamples;
-            int dstOffset = c * dstSamples;
-
-            for (int i = 0; i < dstSamples; i++)
+            var channel = new Tensor<T>(new[] { srcSamples });
+            for (int i = 0; i < srcSamples; i++) channel[i] = source[c * srcSamples + i];
+            var resampled = ResampleBandLimited(engine, channel, sourceSampleRate, targetSampleRate);
+            if (result is null)
             {
-                double srcPos = i * ratio;
-                int srcIdx = (int)srcPos;
-                double frac = srcPos - srcIdx;
-
-                double sample;
-                if (srcIdx >= srcSamples - 1)
-                {
-                    sample = NumOps.ToDouble(srcSpan[srcOffset + srcSamples - 1]);
-                }
-                else
-                {
-                    double s0 = NumOps.ToDouble(srcSpan[srcOffset + srcIdx]);
-                    double s1 = NumOps.ToDouble(srcSpan[srcOffset + srcIdx + 1]);
-                    sample = s0 + frac * (s1 - s0);
-                }
-
-                dstSpan[dstOffset + i] = NumOps.FromDouble(sample);
+                dstSamples = resampled.Length;
+                result = new Tensor<T>(new[] { 1, channels, dstSamples });
             }
+            var destination = result.AsWritableSpan();
+            for (int i = 0; i < dstSamples; i++) destination[c * dstSamples + i] = resampled[i];
         }
 
-        return result;
+        return result!;
+    }
+
+    /// <summary>
+    /// Band-limited resampling as torchaudio's <c>transforms.Resample</c> (Hann-windowed sinc, 6 zero crossings,
+    /// roll-off 0.99) of <paramref name="audio"/> <c>[samples]</c> from <paramref name="from"/> Hz to <paramref name="to"/>
+    /// Hz, computed as a strided convolution so it is differentiable on the gradient tape. The output has
+    /// ⌈to · samples / from⌉ samples.
+    /// </summary>
+    public static Tensor<T> ResampleBandLimited(IEngine engine, Tensor<T> audio, int from, int to)
+    {
+        if (from <= 0 || to <= 0) throw new ArgumentOutOfRangeException(nameof(from), "Sample rates must be positive.");
+        if (from == to) return audio;
+        int gcd = Gcd(from, to), orig = from / gcd, target = to / gcd;
+        const int zeroCrossings = 6;
+        const double rolloff = 0.99;
+        double baseFrequency = Math.Min(orig, target) * rolloff;
+        int width = (int)Math.Ceiling(zeroCrossings * orig / baseFrequency);
+        int taps = 2 * width + orig;
+        var kernel = new Tensor<T>(new[] { target, 1, 1, taps });
+        for (int phase = 0; phase < target; phase++)
+            for (int j = 0; j < taps; j++)
+            {
+                double t = (-(double)phase / target + (double)(j - width) / orig) * baseFrequency;
+                t = Math.Max(-zeroCrossings, Math.Min(zeroCrossings, t));
+                double window = Math.Pow(Math.Cos(t * Math.PI / zeroCrossings / 2), 2);
+                double x = t * Math.PI;
+                double sinc = x == 0 ? 1.0 : Math.Sin(x) / x;
+                kernel[phase, 0, 0, j] = NumOps.FromDouble(sinc * window * baseFrequency / orig);
+            }
+        int length = audio.Length;
+        var flat = engine.Reshape(audio, new[] { 1, 1, 1, length });
+        var padded = engine.TensorConcatenate(new[] { new Tensor<T>(new[] { 1, 1, 1, width }), flat, new Tensor<T>(new[] { 1, 1, 1, width + orig }) }, 3);
+        var phases = engine.Conv2D(padded, kernel, new[] { 1, orig }, new[] { 0, 0 }, new[] { 1, 1 });         // [1, target, 1, n]
+        int n = phases.Shape[3];
+        var interleaved = engine.Reshape(engine.TensorTranspose(engine.Reshape(phases, new[] { target, n })), new[] { target * n });
+        int outLength = (int)Math.Ceiling((double)target * length / orig);
+        return engine.TensorSlice(interleaved, new[] { 0 }, new[] { Math.Min(outLength, target * n) });
+    }
+
+    private static int Gcd(int a, int b)
+    {
+        while (b != 0) (a, b) = (b, a % b);
+        return a;
     }
 
     /// <summary>

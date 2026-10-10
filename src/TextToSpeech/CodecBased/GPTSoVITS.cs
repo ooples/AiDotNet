@@ -91,7 +91,7 @@ public partial class GPTSoVITS<T> : TtsModelBase<T>, ICodecTts<T>
     public int CodecFrameRate => _options.CodecFrameRate;
 
     /// <summary>Synthesizes speech. GPT-SoVITS: text + 5s reference -> GPT AR codec tokens -> SoVITS decoder -> waveform.</summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

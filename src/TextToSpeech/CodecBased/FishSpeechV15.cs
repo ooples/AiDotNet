@@ -104,7 +104,7 @@ public partial class FishSpeechV15<T> : TtsModelBase<T>, ICodecTts<T>
     /// Synthesizes speech from text.
     /// Per Fish Audio (2025): Dual-AR (slow semantic + fast acoustic) with VQGAN decoder.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

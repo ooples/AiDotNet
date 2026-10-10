@@ -1090,27 +1090,22 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
         if (batchSize == 1)
             return PredictNoise(noisyBatch, timesteps[0]);
 
-        int perElement = noisyBatch.Length / batchSize;
         // batch > 1: keep each per-element slice at the SAME rank as noisyBatch by preserving a
         // leading batch dim of 1 ([B, C, H, W] -> [1, C, H, W]), NOT dropping it to [C, H, W].
-        var elemShape = new int[noisyBatch.Rank];
-        elemShape[0] = 1;
-        for (int i = 1; i < noisyBatch.Rank; i++) elemShape[i] = noisyBatch.Shape[i];
-        var result = new Tensor<T>(noisyBatch._shape);
-        var nbSpan = noisyBatch.AsSpan();
-        var resSpan = result.AsWritableSpan();
+        // Slice and concatenate through the Engine so the tape records both: copying elements
+        // through host spans into fresh tensors (as this did before) detached every prediction,
+        // so a batch of more than one trained with an all-zero gradient and never moved a weight.
+        var start = new int[noisyBatch.Rank];
+        var length = noisyBatch.Shape.ToArray();
+        length[0] = 1;
+        var predictions = new Tensor<T>[batchSize];
         for (int b = 0; b < batchSize; b++)
         {
-            var elem = new Tensor<T>(elemShape);
-            var elemSpan = elem.AsWritableSpan();
-            for (int j = 0; j < perElement; j++)
-                elemSpan[j] = nbSpan[b * perElement + j];
-            var pred = PredictNoise(elem, timesteps[b]);
-            var predSpan = pred.AsSpan();
-            for (int j = 0; j < perElement; j++)
-                resSpan[b * perElement + j] = predSpan[j];
+            start[0] = b;
+            var elem = Engine.TensorSlice(noisyBatch, start, length);
+            predictions[b] = PredictNoise(elem, timesteps[b]);
         }
-        return result;
+        return Engine.TensorConcatenate(predictions, axis: 0);
     }
 
     /// <summary>

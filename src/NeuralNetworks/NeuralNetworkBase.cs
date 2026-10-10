@@ -209,6 +209,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     internal IReadOnlyList<ILayer<T>> LayersReadOnly => _layers;
 
     /// <summary>
+    /// Every top-level layer the model runs: <see cref="Layers"/> followed by the trainable layers it owns outside that
+    /// stack (<see cref="GetExtraTrainableLayers"/>), each once, in a stable order.
+    /// </summary>
+    /// <remarks>A walk over <see cref="Layers"/> alone misses a model's component sub-networks — a post-net's
+    /// BatchNorm, a duration predictor — which take part in training, mode switching and serialization.</remarks>
+    internal IEnumerable<ILayer<T>> LayersIncludingComponents()
+    {
+        var seen = new HashSet<ILayer<T>>(ReferenceEqualityComparer<ILayer<T>>.Instance);
+        foreach (var layer in _layers)
+            if (seen.Add(layer)) yield return layer;
+        foreach (var layer in GetExtraTrainableLayers())
+            if (layer is not null && seen.Add(layer)) yield return layer;
+    }
+
+    /// <summary>
     /// Inserts a layer into the internal layer collection and invalidates the parameter count cache.
     /// </summary>
     /// <remarks>
@@ -5193,6 +5208,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     protected virtual IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(
         IReadOnlyList<Tensor<T>> parameters) => parameters;
+
+    /// <summary>
+    /// Parameter groups whose gradients a custom-objective training step clips to <c>MaxGradNorm</c> separately, or
+    /// null to clip the layer-owned parameters as one group.
+    /// </summary>
+    /// <remarks>Some papers clip parts of a model independently — Grad-TTS clips its encoder's and its decoder's
+    /// gradients to norm 1 each. Each group's norm is computed over that group alone and only its gradients are scaled.</remarks>
+    protected virtual IReadOnlyList<IReadOnlyList<Tensor<T>>>? GradientClippingGroups(IReadOnlyList<Tensor<T>> trainableParameters)
+        => null;
+
+    /// <summary>
+    /// A bound applied to every gradient component after the norm clip in a custom-objective training step, or 0 for
+    /// none. Deep Voice 3 states both a maximum gradient norm (100) and a gradient clipping value (5).
+    /// </summary>
+    protected virtual double GradientValueClip => 0.0;
 
     private bool? _hasCustomTrainableParameterSelection;
 
@@ -13680,12 +13710,54 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         try
         {
             var opt = optimizer ?? GetOrCreateBaseOptimizer();
+            // The step's own arena, as TrainWithTape has: the top-level tape's Dispose Resets the CURRENT arena
+            // (Tensors #1804), and without a step arena that was the caller's. A model that runs several steps on the
+            // same inputs in one Train call (a GAN's discriminator then generator step, VITS's discriminator, generator
+            // and duration steps) then had those inputs recycled between steps: the arena's tensor ring re-issued the
+            // same Tensor objects and reshaped them in place. Tensors escaping a nested arena are never re-issued.
+            using var stepArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
             using var tape = new GradientTape<T>();
             var lossTensor = RecomputeObjective(input, expected);
             var trainableParams = CollectModelTrainableTensors();
             var grads = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParams);
             T lossValue = lossTensor[0];
             LastLoss = lossValue;
+
+            // Global gradient-norm clipping at MaxGradNorm, over the same layer-owned set and in the same order as
+            // TrainWithTape and the gradient-accumulation step. This path used to skip it, so a model trained through
+            // its own objective (FastSpeech 2, AlignTTS, AdaSpeech) took unclipped steps that every other entry point
+            // would have clipped.
+            double maxGradNorm = MaxGradNormValue;
+            if (maxGradNorm > 0.0 && grads.Count > 0)
+            {
+                var groups = GradientClippingGroups(trainableParams);
+                if (groups is null)
+                {
+                    ApplyGradientClipping(grads, maxGradNorm, CollectLayerOwnedTrainableTensorsForClipping(trainableParams));
+                }
+                else
+                {
+                    foreach (var group in groups)
+                        ApplyGradientClipping(grads, maxGradNorm, group);
+                }
+                PublishParameterGradients(grads);
+            }
+            double clipValue = GradientValueClip;
+            if (clipValue > 0.0 && grads.Count > 0)
+            {
+                T lower = NumOps.FromDouble(-clipValue), upper = NumOps.FromDouble(clipValue);
+                foreach (var g in grads.Values)
+                {
+                    if (g is null || g.Length == 0) continue;
+                    var span = g.Data.Span;
+                    for (int i = 0; i < span.Length; i++)
+                    {
+                        if (NumOps.LessThan(span[i], lower)) span[i] = lower;
+                        else if (NumOps.GreaterThan(span[i], upper)) span[i] = upper;
+                    }
+                }
+                PublishParameterGradients(grads);
+            }
 
             Tensor<T> RecomputeObjective(Tensor<T> currentInput, Tensor<T> currentExpected)
             {

@@ -111,7 +111,7 @@ public partial class AudioPaLM<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// Synthesizes speech from text.
     /// Per Rubenstein et al. (2023): PaLM 2 fused with AudioLM for hierarchical audio token generation.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

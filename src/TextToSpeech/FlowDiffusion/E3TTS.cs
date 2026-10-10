@@ -98,7 +98,7 @@ public partial class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// Per the paper (Gao et al., 2023):
     /// Directly denoises mel spectrogram frames conditioned on character-level text,
     /// without explicit duration prediction or alignment modules.
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

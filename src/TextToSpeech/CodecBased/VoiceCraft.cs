@@ -109,7 +109,7 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
     /// Synthesizes speech from text.
     /// Per Peng et al. (2024): Token rearrangement with delayed stacking for speech editing + generation.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

@@ -105,7 +105,7 @@ public partial class SoundStorm<T> : TtsModelBase<T>, ICodecTts<T>
     /// Synthesizes speech using SoundStorm's parallel MaskGIT decoding.
     /// Per the paper (Borsos et al., 2023): Conditioned on semantic tokens from AudioLM, SoundStorm generates all SoundStream RVQ levels in parallel using confidence-based masking. Iterates: mask low-confidence tokens → re-predict → unmask high-confidence. Generates 30s audio in 0.5s (100x faster than AR).
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

@@ -18,7 +18,6 @@ using AiDotNet.Video.Options;
 using AiDotNet.Video.Restoration;
 using AiDotNet.Video.Segmentation;
 using AiDotNet.Video.Stabilization;
-using AiDotNet.Video.Tracking;
 using AiDotNet.Video.Understanding;
 using Xunit;
 using System.Threading.Tasks;
@@ -679,14 +678,6 @@ public class VideoExtendedIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task ByteTrack_Construction()
-    {
-        var arch = CreateArch(height: 64, width: 64);
-        var model = new ByteTrack<double>(arch, options: new ByteTrackOptions { NumFeatures = 64 });
-        Assert.True(model.SupportsTraining);
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task InternVideo2_Construction()
     {
         var arch = CreateArch();
@@ -871,13 +862,6 @@ public class VideoExtendedIntegrationTests
     public async Task SAM2Options_IsNeuralNetworkOptions()
     {
         var opts = new SAM2Options();
-        Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task ByteTrackOptions_IsNeuralNetworkOptions()
-    {
-        var opts = new ByteTrackOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 

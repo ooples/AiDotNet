@@ -112,7 +112,7 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
     /// Synthesizes speech from text.
     /// Per Betker (2023): DALL-E-inspired AR decoder + CLVP re-ranking + diffusion decoder.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

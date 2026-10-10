@@ -99,7 +99,7 @@ public partial class Zonos<T> : TtsModelBase<T>, ICodecTts<T>
     public int CodecFrameRate => _options.CodecFrameRate;
 
     /// <summary>Synthesizes speech. Zonos: text + speaker/emotion conditioning -> backbone transformer -> DAC decoder -> waveform.</summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

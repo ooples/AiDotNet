@@ -21,6 +21,12 @@ public class Tacotron2Options : AcousticModelOptions
         AttentionDimension = other.AttentionDimension;
         AttentionLocationChannels = other.AttentionLocationChannels;
         StopThreshold = other.StopThreshold;
+        EmbeddingDim = other.EmbeddingDim;
+        PrenetDropout = other.PrenetDropout;
+        ZoneoutProbability = other.ZoneoutProbability;
+        ConvolutionDropout = other.ConvolutionDropout;
+        AttentionKernelSize = other.AttentionKernelSize;
+        SamplingSeed = other.SamplingSeed;
     }
 
     public Tacotron2Options()
@@ -63,4 +69,22 @@ public class Tacotron2Options : AcousticModelOptions
 
     /// <summary>Gets or sets the inference stop-token probability threshold.</summary>
     public double StopThreshold { get; set; } = 0.5;
+
+    /// <summary>Gets or sets the character embedding width (512, §2.2).</summary>
+    public int EmbeddingDim { get; set; } = 512;
+
+    /// <summary>Gets or sets the decoder pre-net's dropout, applied in training and at inference (0.5, §2.2).</summary>
+    public double PrenetDropout { get; set; } = 0.5;
+
+    /// <summary>Gets or sets the decoder LSTMs' zoneout probability (0.1, §2.2).</summary>
+    public double ZoneoutProbability { get; set; } = 0.1;
+
+    /// <summary>Gets or sets the dropout after every encoder and post-net convolution (0.5, §2.2).</summary>
+    public double ConvolutionDropout { get; set; } = 0.5;
+
+    /// <summary>Gets or sets the location convolution's odd filter length (31, §2.2).</summary>
+    public int AttentionKernelSize { get; set; } = 31;
+
+    /// <summary>Gets or sets the seed of the inference pre-net dropout, so the same text synthesizes the same output.</summary>
+    public int SamplingSeed { get; set; }
 }

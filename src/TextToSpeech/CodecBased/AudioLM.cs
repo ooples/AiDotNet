@@ -124,7 +124,7 @@ public partial class AudioLM<T> : TtsModelBase<T>, ICodecTts<T>
     /// high-level semantic tokens (capturing what is said), then generating acoustic tokens
     /// (capturing how it sounds), and finally converting those tokens back into audio.</para>
     /// </remarks>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

@@ -1768,4 +1768,18 @@ shard:
       FullyQualifiedName~AiDotNetTests.IntegrationTests.SyntheticData.PrivBayesDifferentialPrivacyTests.|
       FullyQualifiedName~AiDotNetTests.IntegrationTests.Training.GradientCheckpointingTransformerIssue1341Tests.|
       FullyQualifiedName~AiDotNetTests.UnitTests.NeuralNetworks.GANs.GenerativeAdversarialNetworkTests.|
-      FullyQualifiedName~AiDotNetTests.UnitTests.NeuralNetworks.Layers.PatchEmbeddingLayerTests.)
+      FullyQualifiedName~AiDotNetTests.UnitTests.NeuralNetworks.Layers.PatchEmbeddingLayerTests.|
+      FullyQualifiedName~AiDotNet.Tests.Generators.ModelDefectPaperKeyTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Generated.TiedEmbeddingLayerTests.|
+      FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.TransformerDecoderCausalityTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.DiffusionBatchedNoisePredictionTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.BlipImageGroundingTests.)
+  # =====================================================================
+  # TEXT-TO-SPEECH PAPER TESTS - the per-model paper-fidelity suites (AiDotNet.Tests.TextToSpeech.*).
+  # =====================================================================
+  # One namespace clause, so a new paper test class is covered the moment it is added. 48 classes, about
+  # 219 tests; locally they run in a few minutes on net10.0 Release.
+  - name: TTS Paper Tests
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~AiDotNet.Tests.TextToSpeech.'

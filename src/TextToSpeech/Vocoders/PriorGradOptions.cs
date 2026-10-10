@@ -1,66 +1,51 @@
 namespace AiDotNet.TextToSpeech.Vocoders;
 
-/// <summary>Options for PriorGrad (diffusion vocoder with data-dependent prior for adaptive noise).</summary>
+/// <summary>Options for the PriorGrad vocoder (Lee et al. 2022): DiffWave with a data-dependent diagonal Gaussian
+/// prior whose standard deviation follows the mel spectrogram's frame energy.</summary>
 /// <remarks>
+/// <para>
+/// Defaults are the paper's vocoder (§4): the DiffWave BASE network and schedules it builds on (30 residual layers of 64
+/// channels, T = 50 with β linear from 1e-4 to 0.05, the six-step fast schedule 1e-4, 1e-3, 0.01, 0.05, 0.2, 0.5);
+/// 22.05 kHz audio, 80 log-mel bands from a 1024-point FFT with hop 256 between 80 Hz and 7.6 kHz; the prior's
+/// standard deviation the frame energy √Σ exp(mel) normalized to (0, 1] and clipped below at 0.1; Adam at 2e-4.
+/// </para>
+/// <para>What the paper leaves open follows microsoft/NeuralSpeech PriorGrad-vocoder: the HiFi-GAN feature pipeline
+/// (reflect padding, a 1024-sample Hann window, magnitude, librosa's Slaney bands, <c>ln(max(x, 1e-5))</c>); the energy
+/// normalized by training-set extremes with the maximum overridden to 4; batch 16; 62-frame crops; no gradient
+/// clipping; each sampling step clamped to [−1, 1]. Without fitted statistics (<see cref="EnergyMin"/> null) the
+/// minimum is the energy of silence, √(mel bands · 1e-5).</para>
 /// <para><b>For Beginners:</b> These options configure the PriorGrad model. Default values follow the original paper settings.</para>
 /// </remarks>
-public class PriorGradOptions : VocoderOptions
+public class PriorGradOptions : DiffWaveOptions
 {
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public PriorGradOptions(PriorGradOptions other)
-        : base(other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
     {
-        if (other == null)
-            throw new ArgumentNullException(nameof(other));
-
-        NumResBlocks = other.NumResBlocks;
-        OptimizerBatchSize = other.OptimizerBatchSize;
-        OptimizerBeta1 = other.OptimizerBeta1;
-        OptimizerBeta2 = other.OptimizerBeta2;
-        OptimizerEpsilon = other.OptimizerEpsilon;
-        MaxGradientNorm = other.MaxGradientNorm;
+        MelMaxFrequency = other.MelMaxFrequency;
+        EnergyMin = other.EnergyMin;
+        EnergyMax = other.EnergyMax;
+        MinStd = other.MinStd;
     }
 
+    /// <summary>Creates the paper's PriorGrad vocoder configuration.</summary>
     public PriorGradOptions()
     {
-        SampleRate = 22050;
-        MelChannels = 80;
-        HopSize = 256;
-        NumDiffusionSteps = 50;
-        HiddenDim = 64;
-        LearningRate = 2e-4;
-        WeightDecay = 0.0;
-
-        // PriorGrad's attention stack is 2 heads, and this has to be stated HERE rather than left
-        // to the base. PriorGrad.InitializeLayers used to pass a hardcoded 2 to
-        // CreateDefaultDiffusionVocoderLayers; replacing that with _options.NumHeads made the value
-        // configurable, but nothing assigned it, so it silently inherited TtsModelOptions.NumHeads =
-        // 8 and every default-constructed PriorGrad got a 4x wider attention stack than before.
-        // That is a change to the trained architecture, not a refactor: existing checkpoints no
-        // longer match the layer set they were trained into.
-        NumHeads = 2;
+        MelMinFrequency = 80;
     }
 
-    /// <summary>Gets or sets the number of residual layers. The paper default is 30.</summary>
-    public int NumResBlocks { get; set; } = 30;
+    /// <summary>Gets or sets the highest mel frequency (7.6 kHz).</summary>
+    public double MelMaxFrequency { get; set; } = 7600;
 
-    /// <summary>Gets or sets the Adam mini-batch size. The paper default is 16.</summary>
-    public int OptimizerBatchSize { get; set; } = 16;
+    /// <summary>Gets or sets the training set's lowest frame energy, or null for the energy of silence.</summary>
+    public double? EnergyMin { get; set; }
 
-    /// <summary>Gets or sets Adam's first-moment decay.</summary>
-    public double OptimizerBeta1 { get; set; } = 0.9;
+    /// <summary>Gets or sets the frame energy that maps to a standard deviation of 1; higher energies are clipped to it
+    /// (4, the reference's override of the training-set maximum).</summary>
+    public double EnergyMax { get; set; } = 4.0;
 
-    /// <summary>Gets or sets Adam's second-moment decay.</summary>
-    public double OptimizerBeta2 { get; set; } = 0.999;
-
-    /// <summary>Gets or sets Adam's numerical-stability epsilon.</summary>
-    public double OptimizerEpsilon { get; set; } = 1e-8;
-
-    /// <summary>
-    /// Gets or sets the gradient clipping norm. A value less than or equal to zero disables
-    /// clipping, matching the paper's default; users may set a positive value explicitly.
-    /// </summary>
-    public double MaxGradientNorm { get; set; } = 0.0;
+    /// <summary>Gets or sets the prior's minimum standard deviation (0.1).</summary>
+    public double MinStd { get; set; } = 0.1;
 }

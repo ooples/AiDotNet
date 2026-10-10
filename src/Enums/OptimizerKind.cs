@@ -78,4 +78,8 @@ public enum OptimizerKind
     /// with it.
     /// </remarks>
     ScheduleFreeAdamW,
+
+    /// <summary>RAdam, Adam with a rectified adaptive learning rate (Liu et al. 2020).</summary>
+    /// <remarks>Parallel WaveGAN trains with it (Yamamoto et al. 2020, §4.1.2).</remarks>
+    RAdam,
 }

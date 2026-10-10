@@ -10104,39 +10104,6 @@ public static partial class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates default layers for ByteTrack multi-object tracking.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultByteTrackLayers(
-        int inputChannels = 3,
-        int inputHeight = 800,
-        int inputWidth = 1440,
-        int numFeatures = 256,
-        int numClasses = 1)
-    {
-        int h = inputHeight;
-        int w = inputWidth;
-
-        // Backbone (CSPDarknet-style)
-        yield return new ConvolutionalLayer<T>(32, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(64, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(128, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
-        yield return new ConvolutionalLayer<T>(numFeatures * 2, 3, 2, 1, new SiLUActivation<T>() as IActivationFunction<T>);
-        h /= 2; w /= 2;
-
-        // FPN neck for multi-scale features
-        yield return new ConvolutionalLayer<T>(numFeatures, 1, 1, 0, new SiLUActivation<T>() as IActivationFunction<T>);
-
-        // Detection head (outputs: x, y, w, h, objectness, class)
-        yield return new ConvolutionalLayer<T>(numFeatures, 3, 1, 1, new SiLUActivation<T>() as IActivationFunction<T>);
-        yield return new ConvolutionalLayer<T>(5 + numClasses, 1, 1, 0); // bbox + obj + classes
-    }
-
-    /// <summary>
     /// Creates default layers for DIFRINT video stabilization.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultDIFRINTLayers(
@@ -10537,7 +10504,8 @@ public static partial class LayerHelper<T>
             yield return new TransformerEncoderLayer<T>(numHeads, hiddenDim * 4, hiddenDim);
         }
 
-        // Transformer decoder with object queries
+        // Transformer decoder with object queries. DETR decodes its queries in parallel, so their self-attention is
+        // bidirectional (Carion et al. 2020, §3.2).
         IActivationFunction<T>? nullActivation = null;
         for (int i = 0; i < numDecoderLayers; i++)
         {
@@ -10545,7 +10513,8 @@ public static partial class LayerHelper<T>
                 numHeads,
                 hiddenDim * 4,
                 numQueries,
-                nullActivation);
+                nullActivation,
+                causal: false);
         }
 
         // Detection head: 4 bbox coords + num_classes logits, per query. LINEAR
@@ -12143,9 +12112,9 @@ public static partial class LayerHelper<T>
             yield return new TransformerEncoderLayer<T>( numHeads, feedForwardDim);
 
             // Cross-attention from queries to vision features (decoder layer with
-            // self+cross attention).
+            // self+cross attention). The queries attend to each other bidirectionally (Li et al. 2023, §3.1).
             yield return new TransformerDecoderLayer<T>(
-                numHeads, feedForwardDim, ffnActivation: null);
+                numHeads, feedForwardDim, ffnActivation: null, causal: false);
 
             // Feed-forward
             yield return new DenseLayer<T>(qformerHiddenDim, (IActivationFunction<T>?)null);
@@ -20313,91 +20282,6 @@ public static partial class LayerHelper<T>
 
     #region Generation/Codec Models (Batch 9)
 
-    /// <summary>
-    /// Creates default EnCodec encoder-decoder layers.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultEnCodecLayers(
-        int[]? encoderChannels = null, int encoderDim = 128, double dropoutRate = 0.0)
-    {
-        encoderChannels ??= [32, 64, 128, 256, 512];
-        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-
-        // Encoder: progressive downsampling
-        int prevDim = 1;
-        foreach (int ch in encoderChannels)
-        {
-            yield return new DenseLayer<T>(ch, reluActivation);
-            yield return new BatchNormalizationLayer<T>();
-            yield return new DenseLayer<T>(ch, reluActivation);
-            yield return new DenseLayer<T>(ch, identityActivation);
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-            prevDim = ch;
-        }
-
-        // Bottleneck
-        yield return new DenseLayer<T>(encoderDim, identityActivation);
-
-        // Decoder (mirror of encoder)
-        prevDim = encoderDim;
-        for (int i = encoderChannels.Length - 1; i >= 0; i--)
-        {
-            int ch = encoderChannels[i];
-            yield return new DenseLayer<T>(ch, reluActivation);
-            yield return new BatchNormalizationLayer<T>();
-            yield return new DenseLayer<T>(ch, reluActivation);
-            yield return new DenseLayer<T>(ch, identityActivation);
-            prevDim = ch;
-        }
-
-        yield return new DenseLayer<T>(1, (IActivationFunction<T>)new TanhActivation<T>());
-    }
-
-    /// <summary>
-    /// Creates default SoundStream encoder-decoder layers.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultSoundStreamLayers(
-        int[]? encoderChannels = null, int encoderDim = 128, int numResBlocks = 3, double dropoutRate = 0.0)
-    {
-        encoderChannels ??= [32, 64, 128, 256];
-        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-
-        // Encoder with residual blocks
-        int prevDim = 1;
-        foreach (int ch in encoderChannels)
-        {
-            yield return new DenseLayer<T>(ch, reluActivation);
-            yield return new BatchNormalizationLayer<T>();
-            for (int r = 0; r < numResBlocks; r++)
-            {
-                yield return new DenseLayer<T>(ch, reluActivation);
-                yield return new DenseLayer<T>(ch, identityActivation);
-            }
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-            prevDim = ch;
-        }
-
-        yield return new DenseLayer<T>(encoderDim, identityActivation);
-
-        // Decoder (mirror)
-        prevDim = encoderDim;
-        for (int i = encoderChannels.Length - 1; i >= 0; i--)
-        {
-            int ch = encoderChannels[i];
-            yield return new DenseLayer<T>(ch, reluActivation);
-            yield return new BatchNormalizationLayer<T>();
-            for (int r = 0; r < numResBlocks; r++)
-            {
-                yield return new DenseLayer<T>(ch, reluActivation);
-                yield return new DenseLayer<T>(ch, identityActivation);
-            }
-            prevDim = ch;
-        }
-
-        yield return new DenseLayer<T>(1, (IActivationFunction<T>)new TanhActivation<T>());
-    }
-
     #endregion
 
     #region Foundation Model Layers
@@ -20803,165 +20687,6 @@ public static partial class LayerHelper<T>
     #endregion
 
     #region Text-to-Speech Layers
-
-    /// <summary>
-    /// Creates default layers for the StyleTTS 2 TTS model (Li et al., 2023).
-    /// Architecture: Text encoder (Transformer) → Style predictor → Decoder → Waveform output.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultStyleTTS2Layers(
-        int textEncoderDim = 512,
-        int numTextEncoderLayers = 6,
-        int styleDim = 128,
-        int prosodyDim = 512,
-        int numMels = 80,
-        int numAttentionHeads = 8,
-        double dropoutRate = 0.1,
-        int maxSequenceLength = 512)
-    {
-        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
-        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
-        int ffDim = textEncoderDim * 4;
-
-        // --- Text Encoder (Transformer) ---
-        yield return new DenseLayer<T>(textEncoderDim, geluActivation); // char embedding projection
-        yield return new LayerNormalizationLayer<T>();
-
-        for (int i = 0; i < numTextEncoderLayers; i++)
-        {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (textEncoderDim) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-
-            yield return new DenseLayer<T>(ffDim, geluActivation);
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-            yield return new DenseLayer<T>(textEncoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-        }
-
-        // --- Style Predictor ---
-        yield return new DenseLayer<T>(prosodyDim, geluActivation);
-        yield return new DenseLayer<T>(styleDim, identityActivation);
-        yield return new LayerNormalizationLayer<T>();
-
-        // --- Decoder (mel-spectrogram generation) ---
-        yield return new DenseLayer<T>(prosodyDim, geluActivation);
-        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-        yield return new DenseLayer<T>(prosodyDim, geluActivation);
-        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-        yield return new DenseLayer<T>(numMels, identityActivation);
-    }
-
-    /// <summary>
-    /// Creates default layers for the HiFi-GAN vocoder (Kong et al., 2020).
-    /// Architecture: Mel input → Upsampling blocks with MRF → Waveform output.
-    /// </summary>
-    /// <summary>
-    /// Creates the APNet2 amplitude branch (ASP) per Du et al., 2023,
-    /// "APNet2: High-Quality and High-Efficiency Neural Vocoder with Direct Prediction of
-    /// Amplitude and Phase Spectra" (arXiv:2311.11545).
-    /// </summary>
-    /// <remarks>
-    /// <para>APNet2 does NOT do time-domain upsampling. It predicts the log-amplitude and the
-    /// wrapped phase spectra directly and reconstructs the waveform with an inverse STFT. Routing
-    /// it through <see cref="CreateDefaultHiFiGANLayers"/> gave it exactly the upsampling
-    /// generator the paper sets out to replace.</para>
-    /// <para>ASP is: input convolution -&gt; k ConvNeXt v2 blocks -&gt; output convolution
-    /// producing <c>fftSize / 2 + 1</c> log-amplitude coefficients per frame.</para>
-    /// </remarks>
-    public static IEnumerable<ILayer<T>> CreateDefaultAPNet2AmplitudeLayers(
-        int numMels = 80,
-        int channels = 512,
-        int intermediateChannels = 1536,
-        int numBlocks = 8,
-        int kernelSize = 7,
-        int fftSize = 1024)
-    {
-        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
-
-        // Input projection from the mel band count to the backbone width.
-        yield return new DenseLayer<T>(channels, identity);
-        yield return new LayerNormalizationLayer<T>();
-
-        for (int i = 0; i < numBlocks; i++)
-            yield return new ConvNeXtV2Block<T>(channels, intermediateChannels, kernelSize);
-
-        // Log-amplitude coefficients, one per frequency bin. Linear: log-amplitude is unbounded.
-        yield return new DenseLayer<T>((fftSize / 2) + 1, identity);
-    }
-
-    /// <summary>
-    /// Creates the APNet2 phase branch (PSP) per Du et al., 2023 (arXiv:2311.11545).
-    /// </summary>
-    /// <remarks>
-    /// <para>PSP mirrors the amplitude branch but ends in the paper's <b>phase parallel
-    /// estimation architecture</b>: two parallel linear convolutional layers produce a
-    /// pseudo-real and a pseudo-imaginary part, and the phase calculation formula
-    /// <c>Phi = atan2(imaginary, real)</c> converts them into a directly wrapped phase. That
-    /// parallel pair is what lets the network output phase in <c>(-pi, pi]</c> without ever
-    /// needing an unwrapping step, and it is the branch's defining element.</para>
-    /// <para>The two heads are emitted as a single <c>2 * (fftSize / 2 + 1)</c> projection whose
-    /// first half is the real part and second half the imaginary part; the model applies the
-    /// arctangent when it reconstructs. Neither head takes an activation, since both parts are
-    /// unbounded and the wrapping comes from the arctangent rather than a squashing function.</para>
-    /// </remarks>
-    public static IEnumerable<ILayer<T>> CreateDefaultAPNet2PhaseLayers(
-        int numMels = 80,
-        int channels = 512,
-        int intermediateChannels = 1536,
-        int numBlocks = 8,
-        int kernelSize = 7,
-        int fftSize = 1024)
-    {
-        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
-
-        yield return new DenseLayer<T>(channels, identity);
-        yield return new LayerNormalizationLayer<T>();
-
-        for (int i = 0; i < numBlocks; i++)
-            yield return new ConvNeXtV2Block<T>(channels, intermediateChannels, kernelSize);
-
-        // Phase parallel estimation: [real | imaginary], each (fftSize / 2 + 1) wide.
-        yield return new DenseLayer<T>(2 * ((fftSize / 2) + 1), identity);
-    }
-
-    public static IEnumerable<ILayer<T>> CreateDefaultHiFiGANLayers(
-        int numMels = 80,
-        int upsampleInitialChannel = 512,
-        int[]? upsampleRates = null,
-        int numResBlocks = 3,
-        double dropoutRate = 0.0)
-    {
-        upsampleRates ??= new[] { 8, 8, 2, 2 };
-        var leakyReluActivation = (IActivationFunction<T>)new LeakyReLUActivation<T>();
-        var tanhActivation = (IActivationFunction<T>)new TanhActivation<T>();
-        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
-
-        // --- Input Projection ---
-        yield return new DenseLayer<T>(upsampleInitialChannel, leakyReluActivation);
-
-        // --- Upsampling Blocks ---
-        int ch = upsampleInitialChannel;
-        foreach (int rate in upsampleRates)
-        {
-            int nextCh = ch / 2;
-            if (nextCh < 1) nextCh = 1;
-
-            // Transposed conv approximation (upsample)
-            yield return new DenseLayer<T>(nextCh, leakyReluActivation);
-
-            // Multi-Receptive Field Fusion (MRF) - multiple residual blocks
-            for (int r = 0; r < numResBlocks; r++)
-            {
-                yield return new DenseLayer<T>(nextCh, leakyReluActivation);
-                yield return new DenseLayer<T>(nextCh, identityActivation);
-            }
-
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-            ch = nextCh;
-        }
-
-        // --- Output Projection ---
-        yield return new DenseLayer<T>(1, tanhActivation);
-    }
 
     #endregion
 
@@ -22271,136 +21996,6 @@ public static partial class LayerHelper<T>
 
     #endregion
 
-    #region TTS Batch 25
-
-    /// <summary>Creates default layers for Matcha-TTS (flow-matching TTS).</summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultMatchaTTSLayers(
-        int textEncoderDim = 192, int numTextEncoderLayers = 6,
-        int numTextEncoderHeads = 2, int decoderDim = 256,
-        int numDecoderLayers = 2, int numMels = 80,
-        double dropoutRate = 0.1)
-    {
-        foreach (var layer in CreateMatchaTextEncoderLayers(textEncoderDim, numTextEncoderLayers,
-                     numTextEncoderHeads, dropoutRate))
-            yield return layer;
-        foreach (var layer in CreateMatchaMelDecoderLayers(decoderDim, numDecoderLayers, numMels))
-            yield return layer;
-    }
-
-    /// <summary>
-    /// Creates Matcha's existing frame projection and token encoder as one ordered group.
-    /// Aligned token input enters after the initial frame projection, at the encoder width.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateMatchaTextEncoderLayers(
-        int textEncoderDim = 192, int numTextEncoderLayers = 6,
-        int numTextEncoderHeads = 2, double dropoutRate = 0.1)
-    {
-        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
-
-        // Text encoder (transformer-based)
-        yield return new FullyConnectedLayer<T>(textEncoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>();
-        for (int i = 0; i < numTextEncoderLayers; i++)
-        {
-            yield return new MultiHeadAttentionLayer<T>(numTextEncoderHeads, (textEncoderDim) / (numTextEncoderHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new FullyConnectedLayer<T>(textEncoderDim * 4, geluActivation);
-            yield return new FullyConnectedLayer<T>(textEncoderDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-        }
-
-        // The duration predictor belongs to AlignedTextToMelModelBase's parallel branch.
-    }
-
-    /// <summary>
-    /// Creates the existing framewise mel decoder. This stack is not a complete flow-matching
-    /// U-Net; alignment support does not change that independent architectural limitation.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateMatchaMelDecoderLayers(
-        int decoderDim = 256, int numDecoderLayers = 2, int numMels = 80)
-    {
-        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
-        yield return new FullyConnectedLayer<T>(decoderDim, geluActivation);
-        for (int i = 0; i < numDecoderLayers; i++)
-        {
-            yield return new FullyConnectedLayer<T>(decoderDim * 2, geluActivation);
-            yield return new LayerNormalizationLayer<T>();
-            yield return new FullyConnectedLayer<T>(decoderDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>();
-        }
-
-        // Output projection to mel-spectrogram
-        yield return new FullyConnectedLayer<T>(numMels, (IActivationFunction<T>?)null);
-    }
-
-    /// <summary>Creates default layers for BigVGAN universal vocoder.</summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultBigVGANLayers(
-        int numMels = 100, int upsampleInitialChannel = 1536,
-        int[]? upsampleRates = null, int numResBlocks = 3,
-        double dropoutRate = 0.0)
-    {
-        upsampleRates ??= new[] { 4, 4, 2, 2, 2, 2 };
-        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
-
-        // Input projection (mel-spectrogram to initial channels)
-        yield return new FullyConnectedLayer<T>(upsampleInitialChannel, geluActivation);
-
-        // Upsampling + MRF blocks with Snake-like activation
-        int ch = upsampleInitialChannel;
-        foreach (int rate in upsampleRates)
-        {
-            int nextCh = ch / 2;
-            if (nextCh < 32) nextCh = 32;
-
-            // Transposed convolution approximated by FC upsample
-            yield return new FullyConnectedLayer<T>(nextCh, geluActivation);
-            yield return new LayerNormalizationLayer<T>();
-
-            // Multi-Receptive Field Fusion (MRF) blocks
-            for (int b = 0; b < numResBlocks; b++)
-            {
-                yield return new FullyConnectedLayer<T>(nextCh, geluActivation);
-                yield return new LayerNormalizationLayer<T>();
-            }
-
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-            ch = nextCh;
-        }
-
-        // Output projection to waveform
-        yield return new FullyConnectedLayer<T>(1, (IActivationFunction<T>?)null);
-    }
-
-    /// <summary>Creates default layers for Vocos ISTFT vocoder.</summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultVocosLayers(
-        int numMels = 100, int hiddenDim = 512,
-        int numBackboneBlocks = 8, int intermediateDim = 1536,
-        int numFrequencyBins = 513, double dropoutRate = 0.0,
-        int hopLength = 256)
-    {
-        if (numFrequencyBins < 2)
-            throw new ArgumentOutOfRangeException(nameof(numFrequencyBins));
-        if (dropoutRate != 0.0)
-        {
-            throw new ArgumentException(
-                "The Vocos paper and reference generator do not use dropout in the ConvNeXt backbone. " +
-                "Supply Architecture.Layers to define a custom dropout architecture.",
-                nameof(dropoutRate));
-        }
-
-        int nFft = (numFrequencyBins - 1) * 2;
-        yield return new VocosGeneratorLayer<T>(
-            numMels,
-            hiddenDim,
-            numBackboneBlocks,
-            intermediateDim,
-            nFft,
-            hopLength);
-    }
-
-    #endregion
-
     #region Effects Batch 26
 
     /// <summary>
@@ -22516,46 +22111,6 @@ public static partial class LayerHelper<T>
         // Final conv -> 2 channels; the model sub-pixel-shuffles it to 1 channel at full length and
         // adds the input (additive residual).
         yield return new Conv1DLayer<T>(inputChannels: 2 * channels, outputChannels: 2, kernelSize: kernelSize, stride: 1, activation: null);
-    }
-
-    /// <summary>
-    /// Creates default layers for the DAC (Descript Audio Codec) model.
-    /// Architecture: Encoder with progressive downsampling -> RVQ bottleneck -> Decoder with Snake activations.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultDACLayers(
-        int encoderDim = 64, int[]? encoderChannels = null,
-        int codebookDim = 8, double dropoutRate = 0.0)
-    {
-        encoderChannels ??= [64, 128, 256, 512];
-        var geluActivation = (IActivationFunction<T>)new GELUActivation<T>();
-
-        // Encoder: progressive downsampling
-        int currentDim = 1; // mono audio input
-        foreach (int ch in encoderChannels)
-        {
-            yield return new FullyConnectedLayer<T>(ch, geluActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-            currentDim = ch;
-        }
-
-        // Bottleneck projection to codebook dimension
-        yield return new FullyConnectedLayer<T>(encoderDim, geluActivation);
-        yield return new FullyConnectedLayer<T>(codebookDim, (IActivationFunction<T>?)null);
-
-        // Decoder: progressive upsampling (mirror of encoder)
-        yield return new FullyConnectedLayer<T>(encoderDim, geluActivation);
-        currentDim = encoderDim;
-        for (int i = encoderChannels.Length - 1; i >= 0; i--)
-        {
-            yield return new FullyConnectedLayer<T>(encoderChannels[i], geluActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-            currentDim = encoderChannels[i];
-        }
-
-        // Output projection to mono waveform
-        yield return new FullyConnectedLayer<T>(1, (IActivationFunction<T>?)null);
     }
 
     #endregion
@@ -22906,52 +22461,6 @@ public static partial class LayerHelper<T>
         // Project each latent-frame token to the latent channel dim — the score-network
         // output ACE-Step's consistency objective is trained against.
         yield return new DenseLayer<T>(latentDim, (IActivationFunction<T>?)null);
-    }
-
-    /// <summary>Creates default layers for CosyVoice2 streaming TTS.</summary>
-    public static IEnumerable<ILayer<T>> CreateDefaultCosyVoice2Layers(
-        int textEncoderDim = 512, int numTextEncoderLayers = 6,
-        int decoderDim = 512, int numDecoderLayers = 6,
-        int numMels = 80, int speakerEmbeddingDim = 192, double dropoutRate = 0.1)
-    {
-        IActivationFunction<T> geluActivation = new GELUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-        // Conformer text encoder with speaker conditioning
-        int inputDim = textEncoderDim + speakerEmbeddingDim;
-        yield return new DenseLayer<T>(textEncoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>();
-        for (int i = 1; i < numTextEncoderLayers; i++)
-        {
-            // Feed-forward (first half)
-            yield return new DenseLayer<T>(textEncoderDim * 4, geluActivation);
-            yield return new DenseLayer<T>(textEncoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            // Multi-head self-attention
-            yield return new MultiHeadAttentionLayer<T>(8, (textEncoderDim) / (8));
-            yield return new LayerNormalizationLayer<T>();
-            // Convolution module (approximated with dense)
-            yield return new DenseLayer<T>(textEncoderDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>();
-            // Feed-forward (second half)
-            yield return new DenseLayer<T>(textEncoderDim * 4, geluActivation);
-            yield return new DenseLayer<T>(textEncoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-        }
-        // Flow-matching decoder with attention
-        yield return new DenseLayer<T>(decoderDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>();
-        for (int i = 1; i < numDecoderLayers; i++)
-        {
-            yield return new MultiHeadAttentionLayer<T>(8, (decoderDim) / (8));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(decoderDim * 4, geluActivation);
-            yield return new DenseLayer<T>(decoderDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-        }
-        // Mel output projection
-        yield return new DenseLayer<T>(numMels, (IActivationFunction<T>?)null);
     }
 
     /// <summary>Creates default layers for Audio Flamingo 2 multimodal audio-language model.</summary>
@@ -32040,67 +31549,6 @@ public static partial class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates Tacotron2 encoder, attention, decoder, and post-net layers.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateTacotron2Layers(
-        int vocabSize = 148,
-        int embeddingDim = 512,
-        int encoderDim = 256,
-        int decoderDim = 1024,
-        int attentionDim = 128,
-        int attentionFilters = 32,
-        int prenetDim = 256,
-        int numMels = 80,
-        int numMelsPerFrame = 1,
-        int numEncoderConvLayers = 3,
-        int numPostnetConvLayers = 5,
-        int postnetEmbeddingDim = 512)
-    {
-        IActivationFunction<T> relu = new ReLUActivation<T>();
-        IActivationFunction<T> tanh = (IActivationFunction<T>)new TanhActivation<T>();
-        IActivationFunction<T> sigmoid = new SigmoidActivation<T>();
-        IActivationFunction<T> identity = new IdentityActivation<T>();
-
-        // Encoder conv layers
-        for (int i = 0; i < numEncoderConvLayers; i++)
-        {
-            yield return new DenseLayer<T>(embeddingDim, relu);
-        }
-        // Encoder LSTM
-        yield return new DenseLayer<T>(encoderDim * 2, tanh);
-
-        // Attention layers
-        yield return new DenseLayer<T>(attentionDim, identity);
-        yield return new DenseLayer<T>(attentionDim, identity);
-        yield return new DenseLayer<T>(attentionDim, identity);
-        yield return new DenseLayer<T>(1, identity);
-
-        // Decoder pre-net
-        yield return new DenseLayer<T>(prenetDim, relu);
-        yield return new DenseLayer<T>(prenetDim, relu);
-
-        // Decoder LSTM layers
-        yield return new DenseLayer<T>(decoderDim, tanh);
-        yield return new DenseLayer<T>(decoderDim, tanh);
-
-        // Mel output
-        yield return new DenseLayer<T>(numMels * numMelsPerFrame, identity);
-
-        // Stop token
-        yield return new DenseLayer<T>(1, sigmoid);
-
-        // Post-net
-        for (int i = 0; i < numPostnetConvLayers; i++)
-        {
-            var isLast = i == numPostnetConvLayers - 1;
-            var activation = isLast ? identity : tanh;
-            yield return new DenseLayer<T>(
-                isLast ? numMels : postnetEmbeddingDim,
-                activation);
-        }
-    }
-
-    /// <summary>
     /// Creates Wav2Vec2 feature encoder, transformer, and CTC layers.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateWav2Vec2Layers(
@@ -33425,9 +32873,10 @@ public static partial class LayerHelper<T>
         for (int i = 0; i < numDecoderLayers; i++)
             yield return new TransformerDecoderLayer<T>(numHeads, mlpDim, ffnActivation: null);
 
-        // Cross-attention layers (6) — decoder layer surfaces self + cross attention.
+        // Image-grounded text encoder for ITM (6 blocks): self-attention over the text, which is bidirectional in an
+        // encoder (Li et al. 2022, §3.1), and cross-attention to the image patches.
         for (int i = 0; i < 6; i++)
-            yield return new TransformerDecoderLayer<T>(numHeads, mlpDim, ffnActivation: null);
+            yield return new TransformerDecoderLayer<T>(numHeads, mlpDim, ffnActivation: null, causal: false);
 
         // ITM head + LM head
         yield return new DenseLayer<T>(2, (IActivationFunction<T>?)null);
@@ -33462,9 +32911,10 @@ public static partial class LayerHelper<T>
         {
             // Self-attention for queries
             yield return new TransformerEncoderLayer<T>( numHeads, feedForwardDim);
-            // Cross-attention from queries to vision features (decoder block).
+            // Cross-attention from queries to vision features (decoder block). The queries attend to each other
+            // bidirectionally (Li et al. 2023, §3.1).
             yield return new TransformerDecoderLayer<T>(
-                numHeads, feedForwardDim, ffnActivation: null);
+                numHeads, feedForwardDim, ffnActivation: null, causal: false);
             yield return new DenseLayer<T>(qformerHiddenDim, (IActivationFunction<T>?)null);
         }
 
@@ -34383,6 +33833,13 @@ public static partial class LayerHelper<T>
     /// Creates default layers for acoustic TTS models (Tacotron 2, FastSpeech 2, Grad-TTS, etc.).
     /// Architecture: Text encoder (FFT blocks) -> projection -> Mel decoder (FFT blocks).
     /// </summary>
+    /// <remarks>
+    /// The concatenation of <see cref="CreateDefaultAcousticEncoderLayers"/> and
+    /// <see cref="CreateDefaultAcousticDecoderLayers"/>. A model that runs its own step between the two (a variance
+    /// adaptor, a length regulator, an alignment search) builds them separately through
+    /// <c>TtsModelBase.AddEncoderDecoderLayers</c>, which records where the encoder ends from the layers actually
+    /// built instead of from a per-block count that has to be kept in step with this factory by hand.
+    /// </remarks>
     internal static IEnumerable<ILayer<T>> CreateDefaultAcousticModelLayers(
         int encoderDim = 256,
         int decoderDim = 80,
@@ -34392,11 +33849,23 @@ public static partial class LayerHelper<T>
         int numHeads = 2,
         double dropoutRate = 0.1,
         int vocabSize = 256)
+        => CreateDefaultAcousticEncoderLayers(encoderDim, hiddenDim, numEncoderLayers, numHeads, dropoutRate, vocabSize)
+            .Concat(CreateDefaultAcousticDecoderLayers(decoderDim, hiddenDim, numDecoderLayers, numHeads, dropoutRate));
+
+    /// <summary>
+    /// Creates the text-encoder half of an acoustic TTS model: phoneme embedding, FFT blocks, and the projection to
+    /// the hidden width the variance adaptor and decoder work in.
+    /// </summary>
+    internal static IEnumerable<ILayer<T>> CreateDefaultAcousticEncoderLayers(
+        int encoderDim = 256,
+        int hiddenDim = 256,
+        int numEncoderLayers = 4,
+        int numHeads = 2,
+        double dropoutRate = 0.1,
+        int vocabSize = 256)
     {
-        IActivationFunction<T> geluActivation = new GELUActivation<T>();
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int encoderFfnDim = encoderDim * 4;
-        int decoderFfnDim = hiddenDim * 4;
 
         // === Phoneme Embedding (Ren et al. 2019 §3.1, FastSpeech Fig. 1) ===
         // Input is phoneme IDs [seq], embedding maps to [seq, encoderDim]. The
@@ -34412,9 +33881,7 @@ public static partial class LayerHelper<T>
         // prior flat MHA→Norm→FFN→Norm sequence had NO residual connections, so
         // each block replaced rather than refined the hidden state — washing out
         // the signal and diverging with more training (the #1380 collapse
-        // mechanism). NOTE: kept at ONE layer per block — TransformerTTS's
-        // encoder/decoder split (_encoderLayerEnd in ComputeEncoderDecoderBoundary)
-        // counts 1 block per layer now.
+        // mechanism).
         for (int i = 0; i < numEncoderLayers; i++)
         {
             yield return new TransformerEncoderBlock<T>(
@@ -34422,10 +33889,26 @@ public static partial class LayerHelper<T>
         }
 
         // === Projection (encoder dim -> hidden dim) ===
+        // Part of the encoder: the variance adaptor between the halves works at the hidden width.
         if (encoderDim != hiddenDim)
             yield return new DenseLayer<T>(hiddenDim, identityActivation);
+    }
 
-        // === Mel Decoder (FFT blocks; residual Pre-LN, as above) ===
+    /// <summary>
+    /// Creates the mel-decoder half of an acoustic TTS model: FFT blocks at the hidden width and the projection to
+    /// the mel channels.
+    /// </summary>
+    internal static IEnumerable<ILayer<T>> CreateDefaultAcousticDecoderLayers(
+        int decoderDim = 80,
+        int hiddenDim = 256,
+        int numDecoderLayers = 4,
+        int numHeads = 2,
+        double dropoutRate = 0.1)
+    {
+        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
+        int decoderFfnDim = hiddenDim * 4;
+
+        // === Mel Decoder (FFT blocks; residual Pre-LN, as in the encoder) ===
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new TransformerEncoderBlock<T>(
@@ -34437,272 +33920,113 @@ public static partial class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates default layers for GAN-based neural vocoders (HiFi-GAN, MelGAN, BigVGAN, etc.).
-    /// Architecture: Mel input -> upsampling blocks -> residual blocks -> waveform output.
+    /// Creates the FastSpeech phoneme encoder: phoneme embedding, sinusoidal positional encoding, and feed-forward
+    /// Transformer (FFT) blocks (Ren et al. 2019 §3.1; FastSpeech 2, Ren et al. 2021 App. A).
     /// </summary>
-    internal static IEnumerable<ILayer<T>> CreateDefaultVocoderLayers(
-        int melChannels = 80,
-        int hiddenDim = 512,
-        int outputDim = 1,
-        int numUpsampleBlocks = 4,
-        int numResBlocks = 3,
-        double dropoutRate = 0.0)
-    {
-        IActivationFunction<T> leakyRelu = new LeakyReLUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-        IActivationFunction<T> tanhActivation = new TanhActivation<T>();
-
-        // NOTE: GAN vocoder generators (HiFi-GAN, MelGAN, BigVGAN, UnivNet) use
-        // weight normalization on the (transposed-)conv weights and contain NO
-        // activation-normalization layers (LayerNorm/BatchNorm/InstanceNorm) in
-        // the main path. Earlier versions of this template inserted a LayerNorm
-        // after every block, which is BOTH non-paper-faithful and the cause of a
-        // forward-pass collapse: with zero-bias initialization the LeakyReLU path
-        // is positively homogeneous (leakyReLU(a*x) = a*leakyReLU(x), a>0), so a
-        // constant mel input produces only a SCALED activation; the terminal
-        // LayerNorm then divides out that scale, making the waveform identical for
-        // any constant input (DifferentInputs/ScaledInput/DifferentText collapse).
-        // Dropping LayerNorm restores input sensitivity through the final tanh.
-        //
-        // This builder is the dimension-flexible fallback used by vocoders whose
-        // mel-channel count or output representation does not fit the channels-
-        // first Conv1D contract (BigVGAN melChannels=100, Vocos Fourier output,
-        // WaveGlow flow, ParallelWaveGAN noise input). The HiFi-GAN-style
-        // waveform vocoders use the paper-faithful 1-D conv generator
-        // CreateDefaultHiFiGANLayers instead.
-
-        // === Input projection from mel to hidden ===
-        yield return new DenseLayer<T>(hiddenDim, leakyRelu);
-
-        // === Upsampling blocks ===
-        int currentDim = hiddenDim;
-        for (int i = 0; i < numUpsampleBlocks; i++)
-        {
-            int nextDim = currentDim / 2;
-            if (nextDim < 32) nextDim = 32;
-
-            // Transposed convolution equivalent (upsampling via dense)
-            yield return new DenseLayer<T>(nextDim, leakyRelu);
-
-            // Multi-receptive-field residual blocks
-            for (int r = 0; r < numResBlocks; r++)
-            {
-                yield return new DenseLayer<T>(nextDim, leakyRelu);
-            }
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-
-            currentDim = nextDim;
-        }
-
-        // === Output projection to waveform ===
-        yield return new DenseLayer<T>(outputDim, tanhActivation);
-    }
-
-    /// <summary>
-    /// Paper-faithful HiFi-GAN generator (Kong et al. 2020, "HiFi-GAN", §2.2),
-    /// operating on channels-first rank-3 <c>[B, melChannels, T]</c> tensors:
-    /// <list type="number">
-    /// <item><c>conv_pre</c>: 1-D conv mel -> hidden (kernel 7, "same" padding).</item>
-    /// <item>Upsample stages: each is a <see cref="Conv1DTransposeLayer{T}"/> that
-    /// EXPANDS the time axis by the stage's upsample rate and halves the channel
-    /// width — the paper's ConvTranspose1d (official v1
-    /// <c>upsample_rates=[8,8,2,2]</c>, <c>upsample_kernel_sizes=[16,16,4,4]</c>) —
-    /// each followed by a <see cref="HiFiGANResBlockLayer{T}"/> Multi-Receptive-Field
-    /// module that sums residual dilated convs over kernel sizes [3,7,11] and
-    /// dilations [1,3,5].</item>
-    /// <item><c>conv_post</c>: 1-D conv hidden -> 1 with tanh (waveform in
-    /// <c>[-1, 1]</c>).</item>
-    /// </list>
-    /// The output time resolution is <c>T · ∏ upsampleRates</c> — real
-    /// frame-&gt;sample upsampling (matching PyTorch <c>nn.ConvTranspose1d</c>), not
-    /// the previous T-preserving stand-in. Weight-normalized convs, NO
-    /// activation-normalization (matches the paper). Used by the HiFi-GAN-style
-    /// vocoders (HiFiGAN, MelGAN, UnivNet, MultiBandMelGAN, APNet, APNet2, ISTFTNet);
-    /// WaveGlow / ParallelWaveGAN use <see cref="CreateDefaultWaveNetVocoderLayers"/>.
-    /// </summary>
-    /// <param name="melChannels">Input mel-spectrogram channels (paper: 80).</param>
-    /// <param name="hiddenDim">conv_pre output / first upsample-stage input channels (paper: 512).</param>
-    /// <param name="outputDim">Waveform output channels (1).</param>
-    /// <param name="upsampleRates">Per-stage time-axis expansion factors (paper v1: [8,8,2,2]); the product is the total upsampling. Null defaults to [8,8,2,2].</param>
-    /// <param name="resBlockKernelSizes">MRF residual-block kernel sizes (paper v1: [3,7,11]). Null defaults to [3,7,11].</param>
-    /// <param name="resBlockDilations">MRF residual-block dilations (paper v1: [1,3,5]). Null defaults to [1,3,5].</param>
-    /// <returns>The ordered HiFi-GAN generator layer sequence.</returns>
     /// <remarks>
-    /// <para><b>For Beginners:</b> a vocoder turns a compact mel-spectrogram (a coarse,
-    /// frame-by-frame picture of sound) into an actual audio waveform (thousands of
-    /// samples). HiFi-GAN repeatedly "stretches" the time axis with transposed
-    /// convolutions (each stage makes the sequence several times longer) and, after
-    /// each stretch, refines the detail with a bank of small convolutions that look at
-    /// the signal over several window sizes at once (the Multi-Receptive-Field block).
-    /// The final tanh squashes the result into the [-1, 1] range a waveform lives in.</para>
+    /// FastSpeech 2's configuration is vocabulary 76 phonemes (LJSpeech), 4 FFT blocks of hidden 256 with 2 heads,
+    /// a convolutional FFN of 1024 filters with kernel sizes 9 and 1, and dropout 0.1. When the encoder width differs
+    /// from the hidden width the variance adaptor and decoder work in, a linear projection closes the encoder.
     /// </remarks>
-    internal static IEnumerable<ILayer<T>> CreateDefaultHiFiGANLayers(
-        int melChannels = 80,
-        int hiddenDim = 512,
-        int outputDim = 1,
-        int[]? upsampleRates = null,
-        int[]? resBlockKernelSizes = null,
-        int[]? resBlockDilations = null)
-    {
-        upsampleRates ??= new[] { 8, 8, 2, 2 };
-        resBlockKernelSizes ??= new[] { 3, 7, 11 };
-        resBlockDilations ??= new[] { 1, 3, 5 };
-        var identityActivation = (IActivationFunction<T>)new IdentityActivation<T>();
-        var leakyRelu = (IActivationFunction<T>)new LeakyReLUActivation<T>();
-        var tanhActivation = (IActivationFunction<T>)new TanhActivation<T>();
-
-        // === conv_pre: mel channels -> hidden (kernel 7, "same" padding) ===
-        yield return new Conv1DLayer<T>(
-            inputChannels: melChannels, outputChannels: hiddenDim,
-            kernelSize: 7, dilation: 1, stride: 1, padding: null,
-            activation: identityActivation);
-
-        int currentDim = hiddenDim;
-        foreach (int rate in upsampleRates)
-        {
-            int nextDim = currentDim / 2;
-            if (nextDim < 1) nextDim = 1;
-
-            // ConvTranspose1d upsample: kernel = 2*rate, stride = rate, padding = rate/2
-            // — the official HiFi-GAN pairing (rate 8 -> kernel 16), giving T_out = T*rate.
-            yield return new Conv1DTransposeLayer<T>(
-                inputChannels: currentDim, outputChannels: nextDim,
-                kernelSize: 2 * rate, stride: rate, padding: rate / 2,
-                outputPadding: 0, dilation: 1, activation: leakyRelu);
-
-            // MRF: parallel residual dilated convs summed over kernel sizes × dilations.
-            yield return new HiFiGANResBlockLayer<T>(nextDim, resBlockKernelSizes, resBlockDilations);
-
-            currentDim = nextDim;
-        }
-
-        // === conv_post: hidden -> waveform channel (kernel 7) + tanh ===
-        yield return new Conv1DLayer<T>(
-            inputChannels: currentDim, outputChannels: outputDim,
-            kernelSize: 7, dilation: 1, stride: 1, padding: null,
-            activation: tanhActivation);
-    }
-
-    /// <summary>
-    /// Paper-faithful WaveNet-style vocoder generator (Parallel WaveGAN, Yamamoto
-    /// et al. 2020 §2.1; WaveNet, van den Oord et al. 2016): a SINGLE stack of
-    /// dilated 1-D convolutional residual blocks at a constant channel width with
-    /// an exponential dilation cycle (dilation = 2^(i mod cycle)), operating on
-    /// channels-first rank-3 [B, melChannels, T] tensors. This differs from the
-    /// HiFi-GAN generator (which has explicit upsample groups that halve the
-    /// channel width) — Parallel WaveGAN keeps the channel width fixed through all
-    /// residual blocks and upsamples the mel conditioning separately, so the
-    /// 4-group HiFi-GAN builder is not faithful here.
-    ///
-    /// Convolutional weight-sharing keeps the deep stack stable (the previous
-    /// fully-connected fallback built ~120 Dense layers for the paper's 30 blocks,
-    /// whose pre-tanh activations saturated and collapsed the output to be
-    /// identical for any constant input — DifferentText_DifferentAudio). No
-    /// dropout / activation-normalization, matching the paper.
-    /// </summary>
-    /// <param name="melChannels">Input mel-spectrogram channels (paper: 80).</param>
-    /// <param name="hiddenChannels">Residual channel width held constant through the stack.</param>
-    /// <param name="numResBlocks">Number of gated residual blocks (paper: 30).</param>
-    /// <param name="dilationCycle">Dilation cycle length; block i uses dilation 2^(i mod cycle).</param>
-    /// <param name="outputDim">Waveform output channels (1).</param>
-    /// <returns>The ordered WaveNet/Parallel-WaveGAN generator layer sequence.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> WaveNet builds audio with a deep stack of dilated
-    /// convolutions (each block "sees" exponentially further back in time). The key
-    /// trick is the gated activation — two convolutions per block, one squashed with
-    /// tanh and one with sigmoid, multiplied together — which lets the network choose
-    /// how much of each pattern to let through. A residual shortcut around every block
-    /// keeps the deep stack trainable.</para>
-    /// </remarks>
-    internal static IEnumerable<ILayer<T>> CreateDefaultWaveNetVocoderLayers(
-        int melChannels = 80,
-        int hiddenChannels = 64,
-        int numResBlocks = 30,
-        int dilationCycle = 10,
-        int outputDim = 1)
-    {
-        if (melChannels <= 0) throw new ArgumentOutOfRangeException(nameof(melChannels));
-        if (hiddenChannels <= 0) throw new ArgumentOutOfRangeException(nameof(hiddenChannels));
-        if (numResBlocks < 0) throw new ArgumentOutOfRangeException(nameof(numResBlocks));
-        if (outputDim <= 0) throw new ArgumentOutOfRangeException(nameof(outputDim));
-        // dilation = 1 << (i % dilationCycle): dilationCycle <= 0 would be a mod-by-zero,
-        // and a cycle > 30 lets the shift reach/overflow the 32-bit signed int range.
-        if (dilationCycle <= 0 || dilationCycle > 30)
-            throw new ArgumentOutOfRangeException(nameof(dilationCycle),
-                "dilationCycle must be in [1, 30] so that 1 << (i % dilationCycle) stays within the int range.");
-
-        var leakyRelu = (IActivationFunction<T>)new LeakyReLUActivation<T>();
-        var linearOutput = (IActivationFunction<T>)new IdentityActivation<T>();
-
-        // Input 1x1 conv: mel channels -> hidden channels.
-        yield return new Conv1DLayer<T>(
-            inputChannels: melChannels, outputChannels: hiddenChannels,
-            kernelSize: 1, dilation: 1, stride: 1, padding: null,
-            activation: leakyRelu);
-
-        // WaveNet gated residual blocks: each = dilated tanh·sigmoid gated convolution
-        // + 1x1 residual projection (van den Oord 2016 §2.3; Yamamoto 2020 §2.1),
-        // dilation = 2^(i mod cycle). T is preserved within the stack (the mel
-        // conditioning is already at waveform rate); the gated activation + residual
-        // is the defining WaveNet structure, replacing the previous plain dilated stack.
-        for (int i = 0; i < numResBlocks; i++)
-        {
-            int dilation = 1 << (i % dilationCycle);
-            yield return new WaveNetResidualBlockLayer<T>(hiddenChannels, kernelSize: 3, dilation: dilation);
-        }
-
-        // Output 1x1 conv -> waveform channel(s), LINEAR.
-        //
-        // NO OUTPUT TANH, and that is the paper for both consumers of this factory. Parallel WaveGAN
-        // (Yamamoto 2020 Fig. 1) ends the generator with ReLU -> 1x1 conv -> ReLU -> 1x1 conv, and
-        // WaveGlow (Prenger 2019 Sec. 2) ends each coupling layer's WN with a zero-initialised 1x1
-        // conv emitting (log s, t). Neither squashes the output. Tanh belongs INSIDE the gated block
-        // (tanh . sigmoid), where WaveNetResidualBlockLayer already has it.
-        //
-        // It was also killing training outright, which is how it was found. Measured on WaveGlow: the
-        // untrained output spans [-0.859, 0.799] with 0% of samples saturated, and after a SINGLE
-        // Adam step EVERY output is exactly 1.0 - 100% saturated. tanh'(x) = 1 - tanh(x)^2 is then
-        // identically zero, so the gradient dies and the loss freezes at 0.38766 from step 2 through
-        // step 200 while Adam keeps stepping on zero gradients. Adam's first step moves every
-        // parameter by ~lr in the sign direction at once, which is more than enough to leave tanh's
-        // linear region, and once outside nothing brings it back. Same failure class as the
-        // StandardVAE decoder saturation.
-        yield return new Conv1DLayer<T>(
-            inputChannels: hiddenChannels, outputChannels: outputDim,
-            kernelSize: 1, dilation: 1, stride: 1, padding: null,
-            activation: linearOutput);
-    }
-
-    /// <summary>
-    /// Creates default layers for diffusion-based vocoders (DiffWave, WaveGrad, PriorGrad, FreGrad).
-    /// Architecture: Mel-conditioned noise input -> dilated residual blocks -> denoised waveform.
-    /// </summary>
-    internal static IEnumerable<ILayer<T>> CreateDefaultDiffusionVocoderLayers(
-        int melChannels = 80,
+    internal static IEnumerable<ILayer<T>> CreateDefaultFastSpeechEncoderLayers(
+        int vocabSize = 256,
+        int encoderDim = 256,
         int hiddenDim = 256,
-        int numResidualLayers = 30,
-        int numHeads = 4,
-        double dropoutRate = 0.0)
+        int numLayers = 4,
+        int numHeads = 2,
+        int filterSize = 1024,
+        int firstKernelSize = 9,
+        int secondKernelSize = 1,
+        double dropoutRate = 0.1,
+        int maxSequenceLength = 1000)
     {
-        IActivationFunction<T> geluActivation = new GELUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-        int ffnDim = hiddenDim * 2;
+        yield return new EmbeddingLayer<T>(vocabSize, encoderDim);
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, encoderDim);
+        for (int i = 0; i < numLayers; i++)
+            yield return new FeedForwardTransformerBlock<T>(encoderDim, numHeads, filterSize, firstKernelSize, secondKernelSize, dropoutRate);
+        if (encoderDim != hiddenDim)
+            yield return new DenseLayer<T>(hiddenDim, new IdentityActivation<T>() as IActivationFunction<T>);
+    }
 
-        // === Mel conditioning encoder ===
-        yield return new DenseLayer<T>(hiddenDim, geluActivation);
-        yield return new LayerNormalizationLayer<T>();
+    /// <summary>
+    /// Creates FastSpeech 2's variance adaptor and mel decoder: the adaptor (duration, pitch, energy), sinusoidal
+    /// positional encoding of the expanded sequence, FFT blocks, and the linear projection to mel channels
+    /// (Ren et al. 2021 §2.2-2.3, App. A).
+    /// </summary>
+    /// <remarks>The adaptor is the first layer returned, so a model built with
+    /// <c>TtsModelBase.AddEncoderDecoderLayers</c> finds it at <c>Layers[EncoderLayerCount]</c>.</remarks>
+    internal static IEnumerable<ILayer<T>> CreateDefaultFastSpeech2DecoderLayers(
+        int hiddenDim = 256,
+        int melChannels = 80,
+        int numLayers = 4,
+        int numHeads = 2,
+        int filterSize = 1024,
+        int firstKernelSize = 9,
+        int secondKernelSize = 1,
+        double dropoutRate = 0.1,
+        int maxMelLength = 1000,
+        int variancePredictorFilterSize = 256,
+        int variancePredictorKernelSize = 3,
+        double variancePredictorDropout = 0.5,
+        int pitchBins = 256,
+        double pitchMinHz = 71.0,
+        double pitchMaxHz = 800.0,
+        int energyBins = 256,
+        int stftSize = 1024,
+        bool usePitch = true,
+        bool useEnergy = true)
+    {
+        // Energy bins span every value the STFT frame energy can take for audio in [-1, 1].
+        yield return new VarianceAdaptorLayer<T>(hiddenDim, variancePredictorFilterSize, variancePredictorKernelSize,
+            variancePredictorDropout, pitchBins, pitchMinHz, pitchMaxHz, energyBins,
+            energyMin: 0.0, energyMax: VarianceAdaptorLayer<T>.MaxStftEnergy(stftSize),
+            usePitch: usePitch, useEnergy: useEnergy);
+        yield return new PositionalEncodingLayer<T>(maxMelLength, hiddenDim);
+        for (int i = 0; i < numLayers; i++)
+            yield return new FeedForwardTransformerBlock<T>(hiddenDim, numHeads, filterSize, firstKernelSize, secondKernelSize, dropoutRate);
+        yield return new DenseLayer<T>(melChannels, new IdentityActivation<T>() as IActivationFunction<T>);
+    }
 
-        // === Dilated residual blocks ===
-        for (int i = 0; i < numResidualLayers; i++)
-        {
-            yield return new DenseLayer<T>(ffnDim, geluActivation);
-            yield return new DenseLayer<T>(hiddenDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-        }
-
-        // === Output projection ===
-        yield return new DenseLayer<T>(1, identityActivation);
+    /// <summary>
+    /// Creates AdaSpeech's variance adaptor and mel decoder: FastSpeech 2's adaptor and positional encoding, FFT blocks
+    /// whose layer normalizations are conditioned on the speaker embedding, a final conditional layer normalization,
+    /// and the linear projection to mel channels (Chen et al. 2021 §2.2: <c>C = 2L + 1</c> conditional layer
+    /// normalizations for <c>L</c> decoder layers).
+    /// </summary>
+    /// <remarks>The adaptor is the first layer returned, so a model built with
+    /// <c>TtsModelBase.AddEncoderDecoderLayers</c> finds it at <c>Layers[EncoderLayerCount]</c>.</remarks>
+    internal static IEnumerable<ILayer<T>> CreateDefaultAdaSpeechDecoderLayers(
+        int hiddenDim,
+        int speakerEmbeddingDim,
+        int melChannels,
+        int numLayers,
+        int numHeads,
+        int filterSize,
+        int firstKernelSize,
+        int secondKernelSize,
+        double dropoutRate,
+        int maxMelLength,
+        int variancePredictorFilterSize,
+        int variancePredictorKernelSize,
+        double variancePredictorDropout,
+        int pitchBins,
+        double pitchMinHz,
+        double pitchMaxHz,
+        int energyBins,
+        int stftSize,
+        bool usePitch,
+        bool useEnergy)
+    {
+        yield return new VarianceAdaptorLayer<T>(hiddenDim, variancePredictorFilterSize, variancePredictorKernelSize,
+            variancePredictorDropout, pitchBins, pitchMinHz, pitchMaxHz, energyBins,
+            energyMin: 0.0, energyMax: VarianceAdaptorLayer<T>.MaxStftEnergy(stftSize),
+            usePitch: usePitch, useEnergy: useEnergy);
+        yield return new PositionalEncodingLayer<T>(maxMelLength, hiddenDim);
+        for (int i = 0; i < numLayers; i++)
+            yield return new FeedForwardTransformerBlock<T>(hiddenDim, numHeads, filterSize, firstKernelSize, secondKernelSize,
+                dropoutRate, conditionSize: speakerEmbeddingDim);
+        yield return new ConditionalLayerNormalizationLayer<T>(hiddenDim, speakerEmbeddingDim);
+        yield return new DenseLayer<T>(melChannels, new IdentityActivation<T>() as IActivationFunction<T>);
     }
 
     /// <summary>
@@ -34782,8 +34106,8 @@ public static partial class LayerHelper<T>
         // LeakyReLU activations (NOT GELU), NO dropout, and crucially NO TERMINAL
         // activation-normalization. It deliberately DIVERGES from pure HiFi-GAN in two
         // ways that the test invariants pin: (a) it is a dense dim-reducing stack (not
-        // the channels-first Conv1D ConvTranspose1d generator — that is
-        // CreateDefaultHiFiGANLayers, used by the standalone vocoders), and (b) it
+        // the channels-first Conv1D ConvTranspose1d generator the HiFiGAN vocoder
+        // class builds), and (b) it
         // RETAINS an INTERMEDIATE LayerNorm after each dense block (see the per-layer
         // note below) because the VAE-flow latent this decodes is unbounded and the
         // un-normalized dense stack otherwise diverges. The two failure modes this
@@ -35449,47 +34773,6 @@ public static partial class LayerHelper<T>
             yield return new TransformerEncoderBlock<T>(
                 hiddenSize: decoderDim, numHeads: numHeads, ffnDim: decoderDim * 4, dropoutRate: dropoutRate);
         yield return new DenseLayer<T>(melChannels, identity);
-    }
-
-    /// <summary>
-    /// Creates default layers for autoregressive vocoders (WaveNet, WaveRNN).
-    /// Architecture: Causal dilated convolution / recurrent blocks for sample-by-sample generation.
-    /// </summary>
-    internal static IEnumerable<ILayer<T>> CreateDefaultAutoRegressiveVocoderLayers(
-        int melChannels = 80,
-        int hiddenDim = 256,
-        int numResidualLayers = 20,
-        double dropoutRate = 0.0)
-    {
-        // Per Kalchbrenner et al. 2018 "Efficient Neural Audio Synthesis" and
-        // the fatchord/WaveRNN reference implementation:
-        // Architecture: MelConditioning → GRU1 → GRU2 → FC1 → FC2 → FC3(output)
-
-        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-
-        // === Mel conditioning: project mel features to hidden dim ===
-        yield return new DenseLayer<T>(hiddenDim, reluActivation);
-
-        // === GRU layers (paper: single large GRU; we stack multiple per numResidualLayers) ===
-        int gruCount = Math.Max(1, Math.Min(numResidualLayers, 4));
-        for (int i = 0; i < gruCount; i++)
-        {
-            // Only the final stacked GRU collapses the time axis. Intermediate
-            // GRUs must return sequences so the next layer sees [B, T, F].
-            bool isLast = i == gruCount - 1;
-            yield return new GRULayer<T>( hiddenDim, !isLast, (IActivationFunction<T>?)null);
-        }
-
-        // === Output FC chain (paper: fc1 → fc2 → fc3) ===
-        // fc1: hiddenDim → hiddenDim with ReLU
-        yield return new DenseLayer<T>(hiddenDim, reluActivation);
-        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-        // fc2: hiddenDim → hiddenDim with ReLU
-        yield return new DenseLayer<T>(hiddenDim, reluActivation);
-        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-        // fc3: hiddenDim → output (1 for waveform sample)
-        yield return new DenseLayer<T>(1, identityActivation);
     }
 
     #endregion

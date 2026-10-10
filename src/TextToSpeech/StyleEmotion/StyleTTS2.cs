@@ -111,7 +111,7 @@ public partial class StyleTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// Builds on StyleTTS with: (1) large-scale SLM discriminator (WavLM),
     /// (2) improved style diffusion prior, (3) end-to-end adversarial training.
     /// Achieves human-level quality on LJSpeech (MOS ≥ 4.5).
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

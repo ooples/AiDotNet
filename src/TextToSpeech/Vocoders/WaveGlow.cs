@@ -1,40 +1,34 @@
-using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
-using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
 
-/// <summary>WaveGlow: flow-based generative vocoder combining Glow invertible 1x1 convolutions with WaveNet affine coupling layers.</summary>
+/// <summary>
+/// WaveGlow: a flow-based generative network for speech synthesis — Glow's invertible 1×1 convolutions and affine
+/// couplings over groups of audio samples, with WaveNet-like coupling networks conditioned on the mel spectrogram,
+/// trained only by maximizing the likelihood.
+/// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "WaveGlow: A Flow-based Generative Network for Speech Synthesis" (Prenger et al., 2019)</item></list></para><para><b>For Beginners:</b> WaveGlow: flow-based generative vocoder combining Glow invertible 1x1 convolutions with WaveNet affine coupling layers.. This model converts text input into speech audio output.</para></remarks>
-/// <example>
-/// <code>
-/// // Create a WaveGlow vocoder using flow-based generation
-/// // combining Glow invertible 1x1 convolutions with WaveNet coupling layers
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new WaveGlow&lt;double&gt;(architecture, "waveglow.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new WaveGlow&lt;double&gt;(architecture, new WaveGlowOptions());
-/// </code>
-/// </example>
+/// <remarks>
+/// <para><b>References:</b> "WaveGlow: A Flow-based Generative Network for Speech Synthesis" (Prenger et al., ICASSP
+/// 2019) and NVIDIA/waveglow for what the paper leaves unstated.</para>
+/// <para>
+/// Training maximizes <c>log p(x) = −z(x)ᵀz(x) / 2σ² + Σ log s + Σ log|det W|</c> (Eq. 12) of a clip, squeezed into groups
+/// of 8 samples and passed through the steps of flow with early outputs (§2.3). Synthesis draws z with a smaller
+/// σ (§2.4) and inverts every step.
+/// </para>
+/// <para><b>For Beginners:</b> WaveGlow learns a reversible mapping between speech and random noise; to make speech it
+/// draws noise and runs the mapping backwards, guided by the spectrogram.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
     "WaveGlow: A Flow-based Generative Network for Speech Synthesis",
@@ -43,182 +37,134 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Authors = "Prenger et al."
 )]
 [PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, ReferenceBatchSize = 24,
-                Source = "Prenger et al. 2019, Sec. 4: WaveGlow was trained on randomly chosen clips of "
-                        + "16,000 samples for 580,000 iterations using weight normalization and the Adam "
-                        + "optimizer, with a batch size of 24 and a step size of 1e-4.")]
-public partial class WaveGlow<T> : VocoderBase<T>
+                Source = "Prenger et al. 2019, Sec. 3.1: Adam with a step size of 1e-4 and a batch size of 24, 580k iterations (5e-5 after a plateau).")]
+public partial class WaveGlow<T> : SegmentVocoderBase<T>
 {
-    private readonly WaveGlowOptions _options;
+    private WaveGlowFlow<T>? _flow;
+    private TacotronSpectrogram? _features;
 
-    public override ModelOptions GetOptions() => _options;
-
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-
-    public WaveGlow(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        WaveGlowOptions? options = null
-    )
-        : base(architecture)
+    /// <summary>Creates a WaveGlow that runs an exported ONNX graph.</summary>
+    public WaveGlow(NeuralNetworkArchitecture<T> architecture, string modelPath, WaveGlowOptions? options = null)
+        : base(architecture, modelPath, options ?? new WaveGlowOptions(), options?.SamplingSeed ?? 0)
     {
-        _options = options ?? new WaveGlowOptions();
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
     }
 
-    public WaveGlow(
-        NeuralNetworkArchitecture<T> architecture,
-        WaveGlowOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
+    /// <summary>Creates a trainable WaveGlow.</summary>
+    public WaveGlow(NeuralNetworkArchitecture<T> architecture, WaveGlowOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture, options ?? new WaveGlowOptions(), optimizer, options?.SamplingSeed ?? 0)
     {
-        _options = options ?? new WaveGlowOptions();
-        _useNativeMode = true;
-        _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        InitializeLayers();
     }
 
-    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase - see BigVGAN for why
-    // these three restated what the base already derives from the same _options fields.
+    private WaveGlowOptions PaperOptions => (WaveGlowOptions)VocoderSettings;
 
-    /// <summary>
-    /// Converts mel to waveform using WaveGlow's inverse normalizing flow.
-    /// Per the paper (Prenger et al., 2019):
-    /// (1) Sample z ~ N(0, sigma^2) of audio-length,
-    /// (2) Inverse flow: apply inverse affine coupling layers conditioned on upsampled mel,
-    /// (3) Each coupling layer: split channels, WaveNet computes (log_s, t), x_b = (x_b - t) * exp(-log_s),
-    /// (4) Inverse 1x1 conv for channel mixing between coupling layers,
-    /// (5) Early output: every 4 flows, some channels skip remaining transformations.
-    /// </summary>
-    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    /// <inheritdoc />
+    public override int UpsampleFactor => PaperOptions.HopSize;
+
+    /// <inheritdoc />
+    protected override int SegmentSize => PaperOptions.SegmentSamples;
+
+    /// <inheritdoc />
+    /// <remarks>The likelihood of a clip has no random draws.</remarks>
+    protected override int EvaluationDraws => 1;
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<LayerBase<T>> CreateNetwork()
     {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(melSpectrogram);
-        int melLen = melSpectrogram.Length;
-        int waveLen = melLen * _options.HopSize;
-        // Sample z ~ N(0, 0.6^2)
-        double[] z = new double[waveLen];
-        for (int i = 0; i < waveLen; i++)
-            z[i] = Math.Sin(i * 0.13 + 0.7) * 0.6;
-        // Inverse flow: reverse through coupling layers
-        for (int f = _options.NumFlows - 1; f >= 0; f--)
-        {
-            for (int s = 0; s < waveLen; s++)
-            {
-                int melIdx = Math.Min(s / _options.HopSize, melLen - 1);
-                double melCond = NumOps.ToDouble(melSpectrogram[melIdx]);
-                // Inverse affine coupling: x = z * exp(log_s) + t
-                double logS = melCond * 0.1 * Math.Sin(f * 0.5);
-                double t = melCond * 0.3 * Math.Cos(f * 0.3 + s * 0.001);
-                z[s] = z[s] * Math.Exp(logS) + t;
-            }
-        }
-        var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-            waveform[i] = NumOps.FromDouble(Math.Tanh(z[i]));
-        return waveform;
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        var t = new Tensor<T>([1]);
-        t[0] = NumOps.FromDouble(0.0);
-        return t;
-    }
-
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultWaveNetVocoderLayers(
-                    _options.MelChannels,
-                    hiddenChannels: 64,
-                    numResBlocks: _options.NumWaveNetLayers * 2,
-                    dilationCycle: 8,
-                    outputDim: 1
-                )
-            );
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
+        var o = PaperOptions;
+        if (o.HopSize % o.GroupSize != 0)
+            throw new ArgumentException($"The hop ({o.HopSize}) must be a multiple of the group size ({o.GroupSize}).");
+        _flow = new WaveGlowFlow<T>(Engine, o.MelChannels, o.HopSize, o.UpsampleKernel, o.GroupSize, o.NumFlows, o.EarlyOutputEvery,
+            o.EarlyOutputChannels, o.NumWaveNetLayers, o.ResidualChannels, o.GateChannels, o.SkipChannels, o.KernelSize);
+        _features = new TacotronSpectrogram(o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, o.MelMinFrequency, o.MelMaxFrequency);
+        return _flow.Layers;
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <remarks>Tacotron 2's log-mel spectrogram (reference <c>mel2samp.py</c>).</remarks>
+    protected override Tensor<T> ComputeInputMel(Tensor<T> audio)
+    {
+        var samples = new double[audio.Length];
+        for (int i = 0; i < samples.Length; i++) samples[i] = NumOps.ToDouble(audio[i]);
+        var rows = _features!.LogMel(samples);
+        int frames = rows.GetLength(0), bands = rows.GetLength(1);
+        var mel = new Tensor<T>(new[] { 1, bands, frames });
+        for (int f = 0; f < frames; f++)
+            for (int m = 0; m < bands; m++) mel[0, m, f] = NumOps.FromDouble(rows[f, m]);
+        return mel;
+    }
+
+    /// <summary>The latent z <c>[1, group, samples / group]</c> of a waveform <c>[samples]</c> given its mel spectrogram
+    /// <c>[1, mel, frames]</c>, and the log-determinant of the flow.</summary>
+    public (Tensor<T> Z, Tensor<T> LogDeterminant) Encode(Tensor<T> mel, Tensor<T> audio)
+    {
+        mel = MelInput(mel);
+        var flat = Flat(audio);
+        return _flow!.Forward(_flow.Squeeze(flat), _flow.Condition(mel, flat.Length));
+    }
+
+    /// <summary>The waveform <c>[1, 1, samples]</c> of a latent z <c>[1, group, samples / group]</c> (laid out as
+    /// <see cref="Encode"/> returns it) given the mel spectrogram: the exact inverse of <see cref="Encode"/>.</summary>
+    public Tensor<T> Decode(Tensor<T> mel, Tensor<T> z)
+    {
+        mel = MelInput(mel);
+        var o = PaperOptions;
+        int t = z.Shape[2], remaining = _flow!.RemainingChannels;
+        // Encode emits the early outputs first, in order, then the remaining channels; the inverse consumes them in
+        // reverse.
+        var blocks = new Stack<Tensor<T>>();
+        for (int from = 0; from < o.GroupSize - remaining; from += o.EarlyOutputChannels)
+            blocks.Push(Engine.TensorSlice(z, new[] { 0, from, 0 }, new[] { 1, o.EarlyOutputChannels, t }));
+        blocks.Push(Engine.TensorSlice(z, new[] { 0, o.GroupSize - remaining, 0 }, new[] { 1, remaining, t }));
+        var x = _flow.Inverse(_ => blocks.Pop(), _flow.Condition(mel, t * o.GroupSize));
+        return _flow.Unsqueeze(x);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The negative log-likelihood per sample, <c>(Σz² / 2σ² − Σ log s − Σ log|det W|) / samples</c>, without
+    /// the constant (reference <c>WaveGlowLoss</c>).</remarks>
+    protected override Tensor<T> TrainingObjective(Tensor<T> mel, Tensor<T> audio, Random random)
+    {
+        var (z, logDet) = Encode(mel, audio);
+        double sigma = PaperOptions.TrainingSigma;
+        var energy = Engine.TensorMultiplyScalar(Engine.ReduceSum(Engine.TensorMultiply(z, z), new[] { 0, 1, 2 }, keepDims: false),
+            NumOps.FromDouble(1 / (2 * sigma * sigma)));
+        return Engine.TensorMultiplyScalar(Engine.TensorSubtract(energy, logDet), NumOps.FromDouble(1.0 / z.Length));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>z ~ N(0, σ²) at the inference σ, inverted through every step (§2.4).</remarks>
+    protected override Tensor<T> Synthesize(Tensor<T> mel, Random random)
+    {
+        double sigma = PaperOptions.InferenceSigma;
+        int samples = mel.Shape[2] * UpsampleFactor;
+        var condition = _flow!.Condition(mel, samples);
+        var x = _flow.Inverse(shape => Engine.TensorMultiplyScalar(Gaussian(shape, random), NumOps.FromDouble(sigma)), condition);
+        return _flow.Unsqueeze(x);
+    }
+
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
+        => PaperOptimizerFactory.VerifyHandBuilt(this, new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = PaperOptions.LearningRate,
+                UseAdaptiveBetas = false,
+            }));
+
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
+        var o = PaperOptions;
         var m = new ModelMetadata<T>
         {
-            Name = _useNativeMode ? "WaveGlow-Native" : "WaveGlow-ONNX",
-            Description =
-                "WaveGlow: Flow-based Generative Network for Speech Synthesis (Prenger et al., 2019)",
-            FeatureCount = _options.MelChannels,
-            Complexity = _options.NumFlows,
+            Name = IsOnnxMode ? "WaveGlow-ONNX" : "WaveGlow-Native",
+            Description = "WaveGlow: A Flow-based Generative Network for Speech Synthesis (Prenger et al., 2019)",
+            FeatureCount = o.MelChannels,
+            Complexity = o.NumFlows,
         };
         m.AdditionalInfo["Architecture"] = "WaveGlow";
+        m.AdditionalInfo["SampleRate"] = o.SampleRate.ToString();
         return m;
-    }
-
-
-
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(WaveGlow<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
     }
 }

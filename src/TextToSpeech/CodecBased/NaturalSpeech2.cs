@@ -148,7 +148,7 @@ public partial class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// gradually refines it into speech, guided by the text content and optional speaker
     /// characteristics for zero-shot voice cloning.</para>
     /// </remarks>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

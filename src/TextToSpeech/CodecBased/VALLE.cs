@@ -1,41 +1,54 @@
 using AiDotNet.Attributes;
-using AiDotNet.Helpers;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
-using AiDotNet.Optimizers;
-using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.TextToSpeech.FrontEnd;
 
 namespace AiDotNet.TextToSpeech.CodecBased;
 
 /// <summary>
-/// VALL-E: neural codec language model for zero-shot text-to-speech using autoregressive and non-autoregressive transformers.
+/// VALL-E: a neural codec language model for zero-shot text-to-speech, which continues a 3-second recording of an unseen
+/// speaker by predicting EnCodec codes from phonemes.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "Neural Codec Language Models are Zero-Shot Text to Speech Synthesizers" (Wang et al., 2023)</item></list></para>
-/// <para><b>For Beginners:</b> VALL-E treats text-to-speech as a language modeling problem with audio tokens.
-/// Given just 3 seconds of a person's voice as a prompt, it can generate speech in that person's voice
-/// saying any text. It works in two stages: first predicting coarse audio tokens autoregressively (one at a time),
-/// then filling in fine detail tokens all at once (non-autoregressively).</para>
+/// <para>
+/// Reference: "Neural Codec Language Models are Zero-Shot Text to Speech Synthesizers" (Wang et al., 2023). Microsoft
+/// released no code; what the paper leaves open follows the reproduction lifeiteng/vall-e, against which this model is
+/// tested (see <see cref="VALLEOptions"/>).
+/// </para>
+/// <para>
+/// <b>Model</b> (§4): EnCodec turns 24 kHz speech into eight codebooks of codes at 75 frames a second. An
+/// autoregressive Transformer predicts the first codebook from the phonemes and the codes before it; a
+/// non-autoregressive Transformer, told the stage through adaptive layer norm, predicts each later codebook from the
+/// phonemes, the codebooks below it and an acoustic prompt — in training a random 3-second segment of the same
+/// utterance (§5.1). Each is trained on its own (<see cref="VallEModelBase{T}.CurrentStage"/>).
+/// </para>
+/// <para>
+/// <b>Synthesis</b> (§4.3, "VALL-E"): the prompt's transcript precedes the text, the prompt's first-codebook codes
+/// start the AR decoding (sampling until the end token, or 16 codes per phoneme token), the NAR fills the other
+/// codebooks greedily after the prompt (its text without the prompt's transcript, as the reference does), and EnCodec
+/// decodes the new frames. A voice without a transcript is an empty enrolled transcript.
+/// </para>
+/// <para>
+/// <b>Training data</b>: <see cref="TtsTrainingSample{T}.Tokens"/> are the phoneme ids
+/// (<see cref="VallEModelBase{T}.EncodePhonemes"/>), <see cref="TtsTrainingSample{T}.CodecTokens"/> the EnCodec codes
+/// <c>[frames, 8]</c> (or <see cref="TtsTrainingSample{T}.Audio"/> at 24 kHz, which the model encodes). The paper crops
+/// each utterance to a random 10–20 seconds together with its aligned phonemes; that needs the alignment, so it is the
+/// caller's.
+/// </para>
+/// <para><b>For Beginners:</b> VALL-E treats speech as text-like tokens. Given a few seconds of someone's voice and a
+/// sentence, it writes the tokens of that person saying the sentence, and a codec turns them into audio.</para>
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a VALL-E neural codec language model for zero-shot TTS
-/// // with autoregressive coarse and non-autoregressive fine token generation
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new VALLE&lt;double&gt;(architecture, "valle.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new VALLE&lt;double&gt;(architecture, new VALLEOptions());
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional,
+///     NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
+/// var valle = new VALLE&lt;float&gt;(architecture, new VALLEOptions());
+/// valle.Voice = valle.CreateVoice(promptAudio24kHz, "the prompt's transcript");
+/// var audio = valle.Synthesize("Hello there.");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
@@ -49,314 +62,81 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2023,
     Authors = "Wang et al."
 )]
-public partial class VALLE<T> : TtsModelBase<T>, ICodecTts<T>
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-4, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, WeightDecay = 0.01,
+    Schedule = LearningRateSchedulerType.LinearWarmup, WarmupSteps = 32_000,
+    PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
+    Component = "autoregressive", Provenance = RecipeProvenance.Stated,
+    Source = "Section 5.1: AdamW, the learning rate warmed up over the first 32k updates to a peak of 5e-4, then "
+             + "decayed linearly, for 800k steps. The paper names no betas or weight decay; these are PyTorch's AdamW "
+             + "defaults.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-4, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, WeightDecay = 0.01,
+    Schedule = LearningRateSchedulerType.LinearWarmup, WarmupSteps = 32_000,
+    PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
+    Component = "non-autoregressive", Provenance = RecipeProvenance.Stated,
+    Source = "Section 5.1: AdamW, the learning rate warmed up over the first 32k updates to a peak of 5e-4, then "
+             + "decayed linearly, for 800k steps. The paper names no betas or weight decay; these are PyTorch's AdamW "
+             + "defaults.")]
+public partial class VALLE<T> : VallEModelBase<T>
 {
-    private readonly VALLEOptions _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-    private int _encoderLayerEnd;
-
-    public override ModelOptions GetOptions() => _options;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="VALLE{T}"/> class in ONNX inference mode.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="modelPath">Path to the ONNX model file.</param>
-    /// <param name="options">Optional model configuration options.</param>
-    public VALLE(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        VALLEOptions? options = null
-    )
-        : base(architecture)
+    /// <summary>Creates an ONNX-backed VALL-E for inference.</summary>
+    public VALLE(NeuralNetworkArchitecture<T> architecture, string modelPath, VALLEOptions? options = null)
+        : base(architecture, modelPath, options ?? new VALLEOptions())
     {
-        _options = options ?? new VALLEOptions();
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.LLMDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
     }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="VALLE{T}"/> class in native training/inference mode.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="options">Optional model configuration options.</param>
-    /// <param name="optimizer">Optional gradient-based optimizer for training.</param>
-    public VALLE(
-        NeuralNetworkArchitecture<T> architecture,
-        VALLEOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
+    /// <summary>Creates a native, trainable VALL-E.</summary>
+    public VALLE(NeuralNetworkArchitecture<T> architecture, VALLEOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture, options ?? new VALLEOptions(), optimizer)
     {
-        _options = options ?? new VALLEOptions();
-        _useNativeMode = true;
-        _optimizer = optimizer ?? CreateDefaultOptimizer();
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.LLMDim;
-        InitializeLayers();
-    }
-
-    int ITtsModel<T>.SampleRate => _options.SampleRate;
-    public int MaxTextLength => _options.MaxTextLength;
-    public int NumCodebooks => _options.NumCodebooks;
-    public int CodebookSize => _options.CodebookSize;
-
-    /// <inheritdoc />
-    /// <remarks>Traced: InitializeLayers passes NumCodebooks * CodebookSize as the codec vocabulary.</remarks>
-    protected override int OutputFeatureWidth => _options.NumCodebooks * _options.CodebookSize;
-    public int CodecFrameRate => _options.CodecFrameRate;
-
-    /// <summary>
-    /// Synthesizes speech using VALL-E's two-stage codec language model.
-    /// </summary>
-    /// <param name="text">The input text to synthesize.</param>
-    /// <returns>A tensor containing the generated waveform.</returns>
-    /// <remarks>
-    /// <para>Per the paper (Wang et al., 2023):</para>
-    /// <para>(1) AR stage: autoregressive transformer predicts first codebook tokens conditioned on text + 3s prompt.</para>
-    /// <para>(2) NAR stage: non-autoregressive transformer predicts remaining 7 codebook layers conditioned on first.</para>
-    /// <para>(3) EnCodec decoder: converts 8-layer codec tokens to waveform.</para>
-    /// <para><b>For Beginners:</b> The model first generates a rough outline of the speech one token at a time,
-    /// then fills in all the fine audio details simultaneously, and finally converts everything
-    /// into an audio waveform using the EnCodec decoder.</para>
-    /// </remarks>
-    public Tensor<T> Synthesize(string text)
-    {
-        ThrowIfDisposed();
-        var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-
-        int textLen = Math.Min(text.Length, _options.MaxTextLength);
-        int codecFrames = textLen * 3; // approximate duration
-        int numCodebooks = _options.NumCodebooks;
-
-        // AR stage: predict first codebook autoregressively
-        double[] firstCodebook = new double[codecFrames];
-        double prev = 0;
-        for (int f = 0; f < codecFrames; f++)
-        {
-            int tIdx = Math.Min(f * textLen / codecFrames, textLen - 1);
-            double charVal = (text[tIdx] % 128) / 128.0;
-            double logit = charVal * 0.85 + prev * 0.1 + Math.Sin(f * 0.075) * 0.1;
-            firstCodebook[f] = Math.Tanh(logit);
-            prev = firstCodebook[f];
-        }
-
-        // NAR stage: predict remaining codebooks non-autoregressively
-        double[,] allCodebooks = new double[numCodebooks, codecFrames];
-        for (int f = 0; f < codecFrames; f++)
-            allCodebooks[0, f] = firstCodebook[f];
-        for (int q = 1; q < numCodebooks; q++)
-        {
-            for (int f = 0; f < codecFrames; f++)
-            {
-                double cond = allCodebooks[0, f];
-                allCodebooks[q, f] = cond * (1.0 - q * 0.1) + Math.Sin(f * 0.05 * (q + 1)) * 0.2;
-            }
-        }
-
-        // EnCodec decoder: codec tokens -> waveform
-        int waveLen = codecFrames * (SampleRate / _options.CodecFrameRate);
-        var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            int frame = Math.Min(i * _options.CodecFrameRate / SampleRate, codecFrames - 1);
-            double sample = 0;
-            for (int q = 0; q < numCodebooks; q++)
-                sample += allCodebooks[q, frame] * Math.Sin(i * (q + 1) * 0.005) / numCodebooks;
-            waveform[i] = NumOps.FromDouble(Math.Tanh(sample));
-        }
-        return waveform;
-    }
-
-    /// <summary>
-    /// Encodes audio into discrete codec tokens.
-    /// </summary>
-    /// <param name="audio">The input audio tensor.</param>
-    /// <returns>A tensor of discrete codec tokens.</returns>
-    public Tensor<T> EncodeToTokens(Tensor<T> audio)
-    {
-        int frames = audio.Length / (SampleRate / _options.CodecFrameRate);
-        var tokens = new Tensor<T>([Math.Max(1, frames)]);
-        for (int f = 0; f < tokens.Length; f++)
-        {
-            int sIdx = Math.Min(f * (SampleRate / _options.CodecFrameRate), audio.Length - 1);
-            tokens[f] = audio[sIdx];
-        }
-        return tokens;
-    }
-
-    /// <summary>
-    /// Decodes discrete codec tokens back into audio.
-    /// </summary>
-    /// <param name="tokens">The codec tokens to decode.</param>
-    /// <returns>A tensor containing the reconstructed audio.</returns>
-    public Tensor<T> DecodeFromTokens(Tensor<T> tokens)
-    {
-        int waveLen = tokens.Length * (SampleRate / _options.CodecFrameRate);
-        var wave = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            int f = Math.Min(i * _options.CodecFrameRate / SampleRate, tokens.Length - 1);
-            wave[i] = tokens[f];
-        }
-        return wave;
     }
 
     /// <inheritdoc />
-    protected override Tensor<T> PreprocessText(string text)
+    public override ModelOptions GetOptions() => Settings;
+
+    /// <inheritdoc />
+    /// <remarks>The espeak table of lifeiteng/vall-e's LibriTTS recipe (<see cref="LibriTtsPhonemeTable"/>).</remarks>
+    protected override IReadOnlyList<string> PhonemeTable => LibriTtsPhonemeTable.Symbols;
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<string> PhonemizeText(string text) => EnglishG2P.Default.Phonemize(text);
+
+    /// <inheritdoc />
+    /// <remarks>The paper's training prompt (§5.1): a random 3-second segment of the same utterance, at most a quarter
+    /// of it (the reference's <c>prefix_mode 2</c>).</remarks>
+    protected override Func<Tensor<T>, Tensor<T>, Tensor<T>> NonAutoRegressiveObjective(TtsTrainingSample<T> sample,
+        int[] text, int[,] codes, bool training, Random random)
     {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        int vocabSize = Math.Max(1, _options.VocabSize);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] % vocabSize);
-        return t;
+        int promptFrames = (int)Math.Round(Settings.PromptSeconds * CodecFrameRate);
+        return (_, _) => PaperCore.NarLoss(text, codes, promptFrames, training, random);
     }
 
     /// <inheritdoc />
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    /// <inheritdoc />
-    protected override void InitializeLayers()
+    /// <remarks>The AR model reads the prompt's transcript and the text; the NAR reads <c>&lt;bos&gt;</c> and the text
+    /// from the separator before it (the reference's <c>prefix_mode 2</c>, without the enrolled phonemes).</remarks>
+    protected override int[,] Generate(int[] target, int[] enrolled, int[,] prompt, TtsVoice<T> voice, Random random)
     {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultCodecLMLayers(
-                    _options.TextEncoderDim,
-                    _options.LLMDim,
-                    _options.NumCodebooks * _options.CodebookSize,
-                    _options.NumEncoderLayers,
-                    _options.NumLLMLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate,
-                    _options.VocabSize
-                )
-            );
-        ComputeEncoderDecoderBoundary();
+        var core = PaperCore;
+        var full = JoinPrompt(enrolled, target);
+        var first = core.ArGenerate(full, FirstCodebook(prompt), Settings.Temperature, Settings.TopK,
+            Settings.MaxCodesPerTextToken * full.Length + 1, random);
+        int enrolledLength = enrolled.Length + 2;
+        var narText = enrolled.Length > 0 ? new[] { BeginToken }.Concat(full.Skip(enrolledLength - 1)).ToArray() : full;
+        return core.NarGenerate(narText, prompt, first.ToArray(), random);
     }
 
-    private void ComputeEncoderDecoderBoundary()
-    {
-        int total = Layers.Count;
-        _encoderLayerEnd =
-            total > 4 ? total / 3
-            : total > 0 ? 1
-            : 0;
-    }
-
-    /// <inheritdoc />
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var metadata = new ModelMetadata<T>
         {
-            Name = _useNativeMode ? "VALL-E-Native" : "VALL-E-ONNX",
-            Description = "VALL-E: Neural Codec Language Model TTS (Wang et al., 2023)",
-            FeatureCount = _options.LLMDim,
-            AdditionalInfo = new Dictionary<string, object>
-            {
-                ["Architecture"] = "VALL-E",
-                ["Mode"] = _useNativeMode ? "Native" : "ONNX",
-                ["SampleRate"] = _options.SampleRate,
-                ["MelChannels"] = _options.MelChannels,
-                ["HopSize"] = _options.HopSize,
-                ["CodecFrameRate"] = _options.CodecFrameRate,
-                ["NumCodebooks"] = _options.NumCodebooks,
-                ["CodebookSize"] = _options.CodebookSize,
-                ["TextEncoderDim"] = _options.TextEncoderDim,
-                ["LLMDim"] = _options.LLMDim,
-                ["NumEncoderLayers"] = _options.NumEncoderLayers,
-                ["NumLLMLayers"] = _options.NumLLMLayers,
-                ["NumHeads"] = _options.NumHeads,
-                ["MaxTextLength"] = _options.MaxTextLength,
-                ["LayerCount"] = Layers.Count,
-            },
-            ModelDataProvider = () => SerializeForMetadata(),
+            Name = IsNative ? "VALL-E-Native" : "VALL-E-ONNX",
+            Description = "VALL-E: Neural Codec Language Models are Zero-Shot Text to Speech Synthesizers (Wang et al., 2023)",
+            FeatureCount = Settings.HiddenDim,
+            Complexity = Settings.NumEncoderLayers + Settings.NumDecoderLayers,
         };
-    }
-
-    /// <inheritdoc />
-
-
-    /// <inheritdoc />
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(VALLE<T>));
-    }
-
-    private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer() =>
-        new(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-                UseAdaptiveLearningRate = false,
-            }
-        );
-
-    /// <inheritdoc />
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
+        metadata.AdditionalInfo["Architecture"] = "VALL-E";
+        metadata.AdditionalInfo["SampleRate"] = Settings.SampleRate.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
     }
 }

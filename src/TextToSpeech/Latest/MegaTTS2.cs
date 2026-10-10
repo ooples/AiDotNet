@@ -98,7 +98,7 @@ public partial class MegaTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// Synthesizes speech from text.
     /// Per Jiang et al. (2024): Prosody LLM with arbitrary-length audio prompting.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

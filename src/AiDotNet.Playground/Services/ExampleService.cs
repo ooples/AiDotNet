@@ -2906,69 +2906,44 @@ Console.WriteLine(""Note: Train with network.Train(featureMatrix, labelVector)."
                     Description = "Configure TTS model for speech synthesis with AiModelBuilder",
                     Difficulty = "Advanced",
                     Tags = ["audio", "tts", "speech-synthesis"],
-                    Code = @"// Text-to-Speech with AiModelBuilder
+                    Code = @"// Text-to-Speech with FastSpeech 2
 using AiDotNet;
-using AiDotNet.Audio.TextToSpeech;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.TextToSpeech.Classic;
 using AiDotNet.Tensors.LinearAlgebra;
 
 Console.WriteLine(""Text-to-Speech Configuration"");
 Console.WriteLine();
 
-// TTS model parameters
-var sampleRate = 22050;
-var numMels = 80;
-var maxPhonemes = 256;
-
-// Create architecture for TTS
+// FastSpeech 2 (Ren et al. 2021) predicts a mel spectrogram from text; a vocoder turns it into audio.
+var options = new FastSpeech2Options();
 var architecture = new NeuralNetworkArchitecture<double>(
     inputType: InputType.OneDimensional,
     taskType: NeuralNetworkTaskType.SequenceToSequence,
     complexity: NetworkComplexity.Medium,
-    inputSize: maxPhonemes,
-    outputSize: numMels);
+    inputSize: options.MaxTextLength,
+    outputSize: options.MelChannels);
 
-// Create TTS model in native training mode
-var tts = new TtsModel<double>(
-    architecture: architecture,
-    options: new TtsOptions
-    {
-        SampleRate = sampleRate,
-        NumMels = numMels,
-        SpeakingRate = 1.0,
-        PitchShift = 0.0,
-        Energy = 1.0,
-        HiddenDim = 256,
-        NumHeads = 4,
-        NumEncoderLayers = 4,
-        NumDecoderLayers = 4,
-        MaxPhonemeLength = maxPhonemes
-    });
+var tts = new FastSpeech2<double>(architecture, options);
 
 Console.WriteLine(""TTS Model Configuration:"");
-Console.WriteLine($""  Sample Rate: {sampleRate} Hz"");
-Console.WriteLine($""  Mel Channels: {numMels}"");
-Console.WriteLine($""  Max Phoneme Length: {maxPhonemes}"");
-Console.WriteLine($""  Hidden Dimension: 256"");
-Console.WriteLine($""  Attention Heads: 4"");
-Console.WriteLine();
-
-Console.WriteLine(""TTS model initialized!"");
+Console.WriteLine($""  Sample Rate: {options.SampleRate} Hz"");
+Console.WriteLine($""  Mel Channels: {options.MelChannels}"");
+Console.WriteLine($""  Max Text Length: {options.MaxTextLength}"");
 Console.WriteLine();
 
 var sampleText = ""Hello, welcome to AiDotNet!"";
 Console.WriteLine($""Sample text: '{sampleText}'"");
-Console.WriteLine($""  Character count: {sampleText.Length}"");
 Console.WriteLine();
 Console.WriteLine(""Pipeline:"");
-Console.WriteLine(""  1. Text -> Phoneme tokenization"");
-Console.WriteLine(""  2. Phonemes -> Encoder (attention)"");
+Console.WriteLine(""  1. Text -> Phonemes"");
+Console.WriteLine(""  2. Phonemes -> Encoder and variance adaptor (duration, pitch, energy)"");
 Console.WriteLine(""  3. Decoder -> Mel spectrogram"");
 Console.WriteLine(""  4. Vocoder -> Audio waveform"");
 Console.WriteLine();
 Console.WriteLine(""Usage:"");
-Console.WriteLine(""  var audioSamples = await tts.SynthesizeAsync(text);"");
-Console.WriteLine(""  // Save as WAV file or play directly"");
+Console.WriteLine(""  var mel = tts.TextToMel(text);"");
+Console.WriteLine(""  // Pass the mel spectrogram to a vocoder such as HiFiGAN<double>"");
 "
                 },
                 new CodeExample
