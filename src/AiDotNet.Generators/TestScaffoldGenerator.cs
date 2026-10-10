@@ -11381,38 +11381,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName == "Tacotron2" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.TextToSpeech.Classic.", System.StringComparison.Ordinal))
             {
-                // Classic.Tacotron2 is a compatibility surface over the shared paper implementation,
-                // so exercise the same encoder/attention/autoregressive-decoder/post-net topology at
-                // the same bounded geometry as Tacotron2Model below. Keep the published Adam rate;
-                // only widths, vocabulary and maximum decoded length are smoke-scaled.
+                // Tacotron 2 (Shen et al. 2018) at CI-smoke widths: the paper's encoder, location-sensitive
+                // attention, autoregressive decoder and post-net. StopThreshold 1.0 means the sigmoid stop
+                // head can never fire early, so every Predict decodes exactly MaxMelLength = 8 frames of 80
+                // bins; vocabulary 1024 leaves headroom for the scaled token IDs of ScaledInput_ShouldChangeOutput.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 8, outputSize: 640), " +
                     "new AiDotNet.TextToSpeech.Classic.Tacotron2Options { " +
-                    "VocabSize = 1024, EncoderDim = 32, AttentionRnnDim = 32, DecoderRnnDim = 32, " +
+                    "VocabSize = 1024, EmbeddingDim = 32, EncoderDim = 32, AttentionRnnDim = 32, DecoderRnnDim = 32, " +
                     "AttentionDimension = 16, AttentionLocationChannels = 8, PrenetDim = 16, " +
                     "PostnetDim = 32, NumEncoderLayers = 1, PostnetLayers = 1, OutputsPerStep = 1, " +
                     "MaxMelLength = 8, StopThreshold = 1.0, DropoutRate = 0.0 })";
-            }
-            else if (model.ClassName == "Tacotron2Model" && model.TypeParameterCount == 1)
-            {
-                // Tacotron 2 (Shen et al. 2018) defaults to the paper config (embeddingDim=512,
-                // decoderDim=1024, maxDecoderSteps=1000). Two things made it untestable at that scale:
-                // the decoder ran up to 1000 steps per Predict, and because the stop head is randomly
-                // initialized the run length was effectively arbitrary — the clone invariant compared a
-                // 160000-element output against a 160-element one, i.e. 1000 steps versus 1. Build the
-                // SAME architecture at CI-smoke scale and pin stopThreshold to 1.0: the stop head is a
-                // sigmoid bounded in (0,1), so it can never fire early and every Predict returns
-                // exactly maxDecoderSteps(4) * numMelsPerFrame(2) = 8 mel frames of 80 bins. vocabSize
-                // 1024 leaves headroom above the [0, 64) token IDs the fixture generates, because
-                // ScaledInput_ShouldChangeOutput multiplies those IDs and would otherwise index past
-                // the embedding table (it reached 420).
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputSize: 8, outputSize: 640), " +
-                    "options: new AiDotNet.Models.Options.Tacotron2ModelOptions { VocabSize = 1024, EmbeddingDim = 32, EncoderDim = 32, DecoderDim = 32, AttentionDim = 16, AttentionFilters = 8, PrenetDim = 16, PostnetEmbeddingDim = 32, NumEncoderConvLayers = 1, NumPostnetConvLayers = 1, NumMelsPerFrame = 2, MaxDecoderSteps = 4, StopThreshold = 1.0 }" + ")";
             }
             else if (model.ClassName == "XMem" && model.TypeParameterCount == 1)
             {
@@ -15320,10 +15301,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (IsTextToMelTTS(model.ClassName))
             {
-                if (model.ClassName == "Tacotron2Model" || model.ClassName == "Tacotron2")
+                if (model.ClassName == "Tacotron2")
                 {
                     // Tacotron 2 is batched and autoregressive. The bounded constructor emits
-                    // four two-frame decoder steps, hence [1, 8, 80].
+                    // eight one-frame decoder steps, hence [1, 8, 80].
                     sb.AppendLine("    protected override int[] InputShape => new[] { 1, 8 };");
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 8, 80 };");
                 }
@@ -15715,14 +15696,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int MoreDataShortIterations => 10;");
                 sb.AppendLine("    protected override int MoreDataLongIterations => 30;");
             }
-            else if (model.ClassName == "VITSModel")
-            {
-                // VITSModel is a HiFi-GAN-style waveform generator. Its native compatibility
-                // forward consumes the generic audio fixture but returns the generated waveform
-                // (64 samples), not the generic four-value audio/classification placeholder.
-                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
-                sb.AppendLine("    protected override int[] OutputShape => new[] { 64 };");
-            }
             else if (model.ClassName == "DeepgramNova2")
             {
                 // The FP32 fixture's MoreData path was already capped, but its default training and
@@ -15847,39 +15820,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // count (axis 1), NOT the final embedding dim (fixed by the attention weights).
                 // DifferentInputLengths_ShouldNotCrash must halve the tokens, not the embedding.
                 sb.AppendLine("    protected override int VariableLengthAxis => 1;");
-            }
-            else if (model.ClassName == "VITSModel")
-            {
-                // VITS (Kim et al. 2021) is the same family as OpenVoiceV2 above: a conv encoder,
-                // normalizing flow and HiFi-GAN transposed-conv decoder that upsamples the time axis
-                // by 2 and projects to a single waveform channel. So a [1, 64, 32] spectrum becomes a
-                // [1, 1, 64] waveform, not the generic 4-wide vector — GeneratorOutput_ShouldHaveCorrectShape
-                // compared the declared 4 against the 64 samples it actually produces.
-                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
-                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 64 };");
-            }
-            else if (model.ClassName == "Tacotron2Model")
-            {
-                // Tacotron 2 (Shen et al. 2018) is a text-to-mel acoustic model, not a waveform or
-                // spectrogram model: its first layer is a phoneme EmbeddingLayer, so it needs integer
-                // token IDs, and it emits [1, steps * numMelsPerFrame, numMels] mel frames. The
-                // generic audio fallback below handed it a continuous [1, 64, 32] block, which the
-                // embedding could not consume and whose 64x32 trailing dims then reached
-                // ComputeAttention as a phantom batch — "Cannot reshape tensor with 32768 elements to
-                // shape [64, 32]". Its constructor special-case pins maxDecoderSteps=4 and
-                // numMelsPerFrame=2, so the output is exactly 8 frames of 80 bins.
-                // Batched [1, tokens], not a bare [tokens] vector: the phoneme embedding lifts the
-                // input by one rank, and ComputeAttention indexes Shape[1] and Shape[2] on the result,
-                // so a rank-1 input leaves it reading past the end of the shape.
-                // 16 tokens, not 8: DifferentInputLengths_ShouldNotCrash halves this axis, and the
-                // encoder's convolution stack needs the halved sequence to stay long enough to survive
-                // its receptive field before attention indexes the result.
-                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 16 };");
-                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 8, 80 };");
-                // [batch, tokens]: the variable-length axis is the token count, not the batch. Halving
-                // axis 0 would ask the model for a zero-row input.
-                sb.AppendLine("    protected override int VariableLengthAxis => 1;");
-                sb.AppendLine();
             }
             else if (model.ClassName == "MusicSourceSeparator")
             {
@@ -21067,9 +21007,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "E2TTS" => true,
             // Mega-TTS 2 consumes text/prosody tokens and predicts acoustic mel frames.
             "MegaTTS2" => true,
-            // Tacotron 2 is the canonical autoregressive text -> mel acoustic
-            // model (Shen et al. 2018), not a mel -> waveform vocoder.
-            "Tacotron2Model" => true,
             // Mega-TTS (v1) is the same contract as MegaTTS2 above and was simply missed here. Its
             // content branch is phoneme-embedding-first, so the harness must supply integer token
             // IDs; while it was absent from this list the generic path fed it continuous 0.1/0.9

@@ -1,5 +1,4 @@
 using System.Reflection;
-using AiDotNet.Audio.TextToSpeech;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -205,6 +204,7 @@ public class AudioPaperTrainingRecipeTests
             NumHeads = 1,
             DropoutRate = 0.0,
             VocabSize = 16,
+            EmbeddingDim = 4,
             PrenetDim = 4,
             AttentionRnnDim = 4,
             DecoderRnnDim = 4,
@@ -215,7 +215,7 @@ public class AudioPaperTrainingRecipeTests
             OutputsPerStep = 1,
         };
         using var model = new Tacotron2<double>(CreateArchitecture(), options);
-        var field = typeof(Tacotron2Model<double>).GetField("_optimizer", BindingFlags.Instance | BindingFlags.NonPublic);
+        var field = typeof(Tacotron2<double>).GetField("_optimizer", BindingFlags.Instance | BindingFlags.NonPublic);
         var optimizer = Assert.IsType<AdamOptimizer<double, Tensor<double>, Tensor<double>>>(field?.GetValue(model));
         var optimizerOptions = Assert.IsType<AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>>(optimizer.GetOptions());
 

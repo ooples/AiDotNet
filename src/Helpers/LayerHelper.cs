@@ -31582,47 +31582,6 @@ public static partial class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates Tacotron 2's spectrogram prediction network (Shen et al. 2018, §2.2) in the order
-    /// <c>Tacotron2Model</c> binds it: character embedding; 3 convolutions (512, kernel 5) with batch normalization,
-    /// ReLU and dropout; a bidirectional LSTM; the 2-layer bias-free pre-net; the attention LSTM cell; location-sensitive
-    /// attention (128-dim, 32 filters of length 31); the decoder LSTM cell; the mel and stop-token projections; and the
-    /// 5-layer post-net (tanh on all but the last convolution).
-    /// </summary>
-    /// <param name="encoderDim">Width of the encoder output, both LSTM directions together (512 = 2 × 256).</param>
-    public static IEnumerable<ILayer<T>> CreateTacotron2Layers(
-        int vocabSize = 148,
-        int embeddingDim = 512,
-        int encoderDim = 512,
-        int decoderDim = 1024,
-        int attentionDim = 128,
-        int attentionFilters = 32,
-        int prenetDim = 256,
-        int numMels = 80,
-        int numMelsPerFrame = 1,
-        int numEncoderConvLayers = 3,
-        int numPostnetConvLayers = 5,
-        int postnetEmbeddingDim = 512,
-        double convolutionDropout = 0.5,
-        int attentionKernelSize = 31)
-    {
-        if (encoderDim % 2 != 0) throw new ArgumentException("The encoder width is split over two LSTM directions; it must be even.", nameof(encoderDim));
-        IActivationFunction<T> identity = new IdentityActivation<T>();
-        yield return new EmbeddingLayer<T>(vocabSize, embeddingDim);
-        yield return new ConvBatchNormStackLayer<T>(embeddingDim, Enumerable.Repeat(embeddingDim, numEncoderConvLayers).ToArray(),
-            5, useTanh: false, linearLast: false, dropoutRate: convolutionDropout);
-        yield return new BidirectionalRecurrentLayer<T>(embeddingDim, encoderDim / 2, RecurrentCellType.Lstm);
-        yield return new BiasFreeLinearLayer<T>(numMels * numMelsPerFrame, prenetDim);
-        yield return new BiasFreeLinearLayer<T>(prenetDim, prenetDim);
-        yield return new LSTMCellLayer<T>(prenetDim + encoderDim, decoderDim);
-        yield return new LocationSensitiveAttentionLayer<T>(decoderDim, encoderDim, attentionDim, attentionFilters, attentionKernelSize);
-        yield return new LSTMCellLayer<T>(decoderDim + encoderDim, decoderDim);
-        yield return new DenseLayer<T>(numMels * numMelsPerFrame, identity);
-        yield return new DenseLayer<T>(1, identity);
-        var postnet = Enumerable.Repeat(postnetEmbeddingDim, Math.Max(0, numPostnetConvLayers - 1)).Append(numMels).ToArray();
-        yield return new ConvBatchNormStackLayer<T>(numMels, postnet, 5, useTanh: true, linearLast: true, dropoutRate: convolutionDropout);
-    }
-
-    /// <summary>
     /// Creates Wav2Vec2 feature encoder, transformer, and CTC layers.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateWav2Vec2Layers(

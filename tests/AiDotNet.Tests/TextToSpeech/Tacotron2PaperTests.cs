@@ -1,7 +1,7 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
-using AiDotNet.Audio.TextToSpeech;
+using AiDotNet.TextToSpeech.Classic;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
@@ -25,14 +25,15 @@ public class Tacotron2PaperTests
 {
     private const int MelBins = 8;
 
-    private static Tacotron2Model<double> CreateModel(int seed = 0) => new(
+    private static Tacotron2<double> CreateModel(int seed = 0) => new(
         new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
             inputSize: 8, outputSize: MelBins) { RandomSeed = 11 },
-        new Tacotron2ModelOptions
+        new Tacotron2Options
         {
-            VocabSize = 32, EmbeddingDim = 16, EncoderDim = 16, DecoderDim = 16, AttentionDim = 8, AttentionFilters = 4,
-            AttentionKernelSize = 5, PrenetDim = 8, PostnetEmbeddingDim = 8, NumMels = MelBins, NumMelsPerFrame = 1,
-            MaxDecoderSteps = 12, ConvolutionDropout = 0.0, ZoneoutProbability = 0.0, PrenetDropout = 0.5, SamplingSeed = seed,
+            VocabSize = 32, EmbeddingDim = 16, EncoderDim = 16, AttentionRnnDim = 16, DecoderRnnDim = 16, AttentionDimension = 8,
+            AttentionLocationChannels = 4, AttentionKernelSize = 5, PrenetDim = 8, PostnetDim = 8, NumEncoderLayers = 3,
+            PostnetLayers = 5, MelChannels = MelBins, OutputsPerStep = 1, MaxMelLength = 12, ConvolutionDropout = 0.0,
+            ZoneoutProbability = 0.0, PrenetDropout = 0.5, SamplingSeed = seed,
             // Never stop early: the first step reads the all-zero GO frame, on which the pre-net's dropout has no effect.
             StopThreshold = 1.0,
         },
