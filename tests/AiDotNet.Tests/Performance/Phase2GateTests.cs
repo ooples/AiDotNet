@@ -322,7 +322,15 @@ public class Phase2GateTests
         // object in the test host, so test classes running in parallel moved it: it failed in CI at
         // 5,714,840 bytes and passed on the immediate rerun, with no change to the pool. This loop
         // runs synchronously on one thread, so its own allocations are exactly what pooling saves.
+        // net471 has no per-thread counter, so it keeps the collected-heap measurement.
+#if NET5_0_OR_GREATER
         var allocsBefore = GC.GetAllocatedBytesForCurrentThread();
+#else
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+        var allocsBefore = GC.GetTotalMemory(true);
+#endif
 
         // Do many rent/return cycles
         for (int i = 0; i < 1000; i++)
@@ -331,7 +339,11 @@ public class Phase2GateTests
             pool.Return(tensor);
         }
 
+#if NET5_0_OR_GREATER
         var allocsAfter = GC.GetAllocatedBytesForCurrentThread();
+#else
+        var allocsAfter = GC.GetTotalMemory(true);
+#endif
         var allocsDelta = allocsAfter - allocsBefore;
 
         // With pooling, allocations should be minimal
