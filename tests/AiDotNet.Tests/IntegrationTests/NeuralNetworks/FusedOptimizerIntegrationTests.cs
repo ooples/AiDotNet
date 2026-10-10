@@ -285,6 +285,12 @@ public class FusedOptimizerIntegrationTests
         var input = CreateRandomTensor(new[] { 16, 4 }, seed: 42);
         var target = CreateRandomTensor(new[] { 16, 2 }, seed: 43);
 
+        // EPSILON IS LARGE ON PURPOSE. Adam's m/sqrt(v) is invariant to a constant gradient scale, and when the
+        // 0.5 network clip binds on every step every gradient has norm 0.5, so the optimizer's 1e-2 clip is the
+        // same x0.02 each step -- invisible to Adam at eps 1e-8. The positive control then failed whenever the
+        // unseeded init made the network clip bind on all 10 steps (seen in CI, passing on the rerun). With eps
+        // above the clipped per-element gradient (~1.3e-3) the step scales with the gradient, so the clip moves
+        // the parameters on every init: ~1.2e-3 per step clipped against ~8.7e-3 unclipped.
         AdamOptimizer<float, Tensor<float>, Tensor<float>> Optimizer(FusedTrainingTestNetwork network, bool clip) =>
             new(network, new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
             {
@@ -293,6 +299,7 @@ public class FusedOptimizerIntegrationTests
                 EnableGradientClipping = clip,
                 GradientClippingMethod = GradientClippingMethod.ByNorm,
                 MaxGradientNorm = 1e-2,
+                Epsilon = 1e-2,
             });
 
         var classic = BuildMlp();
