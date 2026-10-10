@@ -207,6 +207,24 @@ public abstract partial class SegmentVocoderBase<T> : VocoderBase<T>, ITrainingO
     /// <summary>The tensor as a vector.</summary>
     protected Tensor<T> Flat(Tensor<T> x) => Engine.Reshape(x, new[] { x.Length });
 
+    /// <summary>The conditioning tensor the network reads from a model input; the default is the mel spectrogram
+    /// <c>[1, mel, frames]</c> (<see cref="MelInput"/>). A model that generates without a spectrogram (DiffWave's
+    /// unconditional and class-conditional modes) reads its own conditioning here.</summary>
+    protected virtual Tensor<T> ConditionInput(Tensor<T> input) => MelInput(input);
+
+    /// <summary>The conditioning and audio a training step uses from a conditioning tensor and its recording; the
+    /// default is a frame-aligned crop of <see cref="SegmentSize"/> samples.</summary>
+    protected virtual (Tensor<T> Condition, Tensor<T> Audio) TrainingPair(Tensor<T> condition, Tensor<T> audio, Random random)
+        => AlignedSegment(condition, audio, random);
+
+    /// <summary>The conditioning tensor of a training sample whose recording is <paramref name="audio"/>; the default
+    /// is the recording's mel spectrogram.</summary>
+    protected virtual Tensor<T> SampleCondition(TtsTrainingSample<T> sample, Tensor<T> audio) => ComputeMel(audio);
+
+    /// <summary>The audio the training objective is evaluated against for a conditioning tensor and a target; the
+    /// default is the target's samples under the spectrogram's frames.</summary>
+    protected virtual Tensor<T> EvaluationAudio(Tensor<T> condition, Tensor<T> target) => AudioOfFrames(target, 0, condition.Shape[2]);
+
     /// <summary>The input as <c>[1, mel, frames]</c>.</summary>
     protected Tensor<T> MelInput(Tensor<T> input)
     {
@@ -256,7 +274,7 @@ public abstract partial class SegmentVocoderBase<T> : VocoderBase<T>, ITrainingO
             return c;
         }
         using var _ = new NoGradScope<T>();
-        return Synthesize(MelInput(input), AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_samplingSeed));
+        return Synthesize(ConditionInput(input), AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_samplingSeed));
     }
 
     // ---------------------------------------------------------------- training
@@ -274,7 +292,7 @@ public abstract partial class SegmentVocoderBase<T> : VocoderBase<T>, ITrainingO
             TrainWithTape(input, expectedOutput, _suppliedOptimizer);
             return;
         }
-        var (mel, audio) = AlignedSegment(MelInput(input), expectedOutput, _trainingRandom);
+        var (mel, audio) = TrainingPair(ConditionInput(input), expectedOutput, _trainingRandom);
         TrainStep(mel, audio);
     }
 
@@ -284,7 +302,7 @@ public abstract partial class SegmentVocoderBase<T> : VocoderBase<T>, ITrainingO
         ThrowIfDisposed();
         var audio = sample.Audio ?? throw new ArgumentException($"{GetType().Name} trains on recordings; set Audio.", nameof(sample));
         var flat = Flat(audio);
-        var (mel, segment) = AlignedSegment(ComputeMel(flat), flat, _trainingRandom);
+        var (mel, segment) = TrainingPair(SampleCondition(sample, flat), flat, _trainingRandom);
         TrainStep(mel, segment);
         return LastLoss ?? NumOps.Zero;
     }
@@ -332,8 +350,8 @@ public abstract partial class SegmentVocoderBase<T> : VocoderBase<T>, ITrainingO
     T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
     {
         ThrowIfDisposed();
-        var mel = MelInput(input);
-        var audio = AudioOfFrames(target, 0, mel.Shape[2]);
+        var mel = ConditionInput(input);
+        var audio = EvaluationAudio(mel, Flat(target));
         bool wasTraining = IsTrainingMode;
         SetTrainingMode(false);
         try

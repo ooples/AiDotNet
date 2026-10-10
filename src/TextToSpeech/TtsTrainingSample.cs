@@ -58,6 +58,9 @@ public sealed class TtsTrainingSample<T>
     /// <summary>Index of the language in a multilingual model's language table.</summary>
     public int? LanguageId { get; init; }
 
+    /// <summary>A global discrete label of the recording, such as the spoken word (DiffWave's class conditioner).</summary>
+    public int? ClassLabel { get; init; }
+
     /// <summary>Discrete codec tokens of the recording, <c>[frames, codebooks]</c>.</summary>
     public Tensor<T>? CodecTokens { get; init; }
 

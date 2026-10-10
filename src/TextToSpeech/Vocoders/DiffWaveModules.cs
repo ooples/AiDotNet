@@ -112,6 +112,11 @@ internal static class HaarWavelet
 /// <remarks>
 /// <para>Convolutions are Kaiming-normal initialized (biases keep PyTorch's default), as the reference's
 /// <c>Conv1d</c>; fully connected layers keep PyTorch's default.</para>
+/// <para>The conditioner is the mel spectrogram (vocoding), none (unconditional generation, §3.3: no upsampler and no
+/// conditioner projections, as the reference's <c>unconditional</c> mode) or a global discrete label (§3.2: a shared
+/// 128-wide label embedding and, per residual layer, a 1×1 projection to 2C channels added after the dilated
+/// convolution). The embedding table is a bias-free 1×1 convolution over a one-hot label, initialized N(0, 1) as
+/// PyTorch's <c>nn.Embedding</c>.</para>
 /// <para>FreGrad's variant (Nguyen et al. 2024, §3.1–3.2) takes and predicts several channels (the wavelet sub-bands)
 /// and replaces each dilated convolution with the frequency-aware dilated convolution Freq-DConv: the Haar transform of
 /// the hidden signal, the two bands concatenated along channels, one dilated convolution (PyTorch's default
@@ -129,14 +134,23 @@ internal sealed class DiffWaveNetwork<T>
     private readonly NormedConv1DLayer<T> _embed1;
     private readonly NormedConv1DLayer<T> _embed2;
     private readonly List<DiffWaveUpsampleLayer<T>> _upsamplers = new();
-    private readonly List<(NormedConv1DLayer<T> Dilated, NormedConv1DLayer<T> Step, NormedConv1DLayer<T> Condition, NormedConv1DLayer<T> Output)> _blocks = new();
+    private readonly List<(NormedConv1DLayer<T> Dilated, NormedConv1DLayer<T> Step, NormedConv1DLayer<T>? Condition, NormedConv1DLayer<T> Output)> _blocks = new();
+
+    /// <summary>The label embedding's width d_label (128, §3.2).</summary>
+    public const int LabelDimension = 128;
+    private readonly NormedConv1DLayer<T>? _labelEmbedding;
+    private readonly List<NormedConv1DLayer<T>> _labelProjections = new();
+    private readonly int _labelClasses;
     private readonly NormedConv1DLayer<T> _skip;
     private readonly NormedConv1DLayer<T> _output;
     private readonly bool _frequencyAware;
 
     public DiffWaveNetwork(IEngine engine, Random initialization, int melChannels, int channels, int layers, int cycle, int steps, int[] upsampleStrides,
-        int audioChannels = 1, bool frequencyAware = false)
+        int audioChannels = 1, bool frequencyAware = false, bool melConditioned = true, int labelClasses = 0)
     {
+        if (labelClasses > 0 && melConditioned)
+            throw new ArgumentException("A DiffWave is conditioned on a mel spectrogram or on a label, not both.", nameof(labelClasses));
+        _labelClasses = labelClasses;
         _engine = engine;
         _channels = channels;
         _steps = steps;
@@ -160,7 +174,17 @@ internal sealed class DiffWaveNetwork<T>
         _input = Conv(audioChannels, channels, 1, 1, 0, true);
         _embed1 = Conv(128, 512, 1, 1, 0, false);
         _embed2 = Conv(512, 512, 1, 1, 0, false);
-        foreach (int stride in upsampleStrides)
+        if (labelClasses > 0)
+        {
+            _labelEmbedding = new NormedConv1DLayer<T>(labelClasses, LabelDimension, 1, 1, 1, 1, 0, false, ConvolutionNormalization.None, useBias: false);
+            _labelEmbedding.Reinitialize(() =>
+            {
+                double u1 = 1.0 - initialization.NextDouble(), u2 = initialization.NextDouble();
+                return Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
+            }, keepBias: true);
+            _layers.Add(_labelEmbedding);
+        }
+        foreach (int stride in melConditioned ? upsampleStrides : Array.Empty<int>())
         {
             var up = new DiffWaveUpsampleLayer<T>(stride);
             _layers.Add(up);
@@ -171,7 +195,8 @@ internal sealed class DiffWaveNetwork<T>
             int d = 1 << (i % cycle);
             var dilated = frequencyAware ? Conv(2 * channels, 4 * channels, 3, d, d, false) : Conv(channels, 2 * channels, 3, d, d, true);
             _blocks.Add((dilated, Conv(512, channels, 1, 1, 0, false),
-                Conv(melChannels, 2 * channels, 1, 1, 0, true), Conv(channels, 2 * channels, 1, 1, 0, true)));
+                melConditioned ? Conv(melChannels, 2 * channels, 1, 1, 0, true) : null, Conv(channels, 2 * channels, 1, 1, 0, true)));
+            if (labelClasses > 0) _labelProjections.Add(Conv(LabelDimension, 2 * channels, 1, 1, 0, true));
         }
         _skip = Conv(channels, channels, 1, 1, 0, true);
         _output = Conv(channels, audioChannels, 1, 1, 0, false);
@@ -216,20 +241,47 @@ internal sealed class DiffWaveNetwork<T>
 
     /// <summary>ε_θ <c>[1, audio channels, samples]</c> for the noisy signal <c>[1, audio channels, samples]</c> at step
     /// <paramref name="step"/> given the mel spectrogram <c>[1, mel, frames]</c> (samples = frames · the upsampling).</summary>
-    public Tensor<T> Forward(Tensor<T> noisy, double step, Tensor<T> mel)
+    public Tensor<T> Forward(Tensor<T> noisy, double step, Tensor<T> mel) => Forward(noisy, step, mel, null);
+
+    /// <summary>ε_θ for a network without a mel conditioner: unconditional, or given the class
+    /// <paramref name="label"/> of a label-conditioned network.</summary>
+    public Tensor<T> Forward(Tensor<T> noisy, double step, int? label) => Forward(noisy, step, null, label);
+
+    private Tensor<T> Forward(Tensor<T> noisy, double step, Tensor<T>? mel, int? label)
     {
         int samples = noisy.Shape[2];
+        if ((mel is null) != (_blocks[0].Condition is null))
+            throw new ArgumentException(mel is null ? "This DiffWave is conditioned on a mel spectrogram." : "This DiffWave has no mel conditioner.");
+        if (_labelEmbedding is not null && (label is null || label < 0 || label >= _labelClasses))
+            throw new ArgumentOutOfRangeException(nameof(label), $"This DiffWave is conditioned on a class label in [0, {_labelClasses}), got {label?.ToString() ?? "none"}.");
+        if (_labelEmbedding is null && label is not null)
+            throw new ArgumentException("This DiffWave is not conditioned on a label.", nameof(label));
         var x = _engine.ReLU(_input.Forward(noisy));
         var embedding = Silu(_embed2.Forward(Silu(_embed1.Forward(StepEncoding(step)))));                     // [1, 512, 1]
-        int m = mel.Shape[1], frames = mel.Shape[2];
-        var c = _engine.Reshape(mel, new[] { 1, 1, m, frames });
-        foreach (var up in _upsamplers) c = VocoderOps.LeakyRelu(_engine, up.Forward(c), 0.4);
-        var condition = _engine.Reshape(c, new[] { 1, m, c.Shape[3] });
-        Tensor<T>? skips = null;
-        foreach (var (dilated, stepProjection, conditionProjection, output) in _blocks)
+        Tensor<T>? condition = null;
+        if (mel is not null)
         {
+            int m = mel.Shape[1], frames = mel.Shape[2];
+            var c = _engine.Reshape(mel, new[] { 1, 1, m, frames });
+            foreach (var up in _upsamplers) c = VocoderOps.LeakyRelu(_engine, up.Forward(c), 0.4);
+            condition = _engine.Reshape(c, new[] { 1, m, c.Shape[3] });
+        }
+        Tensor<T>? labelEmbedding = null;
+        if (_labelEmbedding is not null && label is int classIndex)
+        {
+            var oneHot = new Tensor<T>(new[] { 1, _labelClasses, 1 });
+            oneHot[0, classIndex, 0] = NumOps.One;
+            labelEmbedding = _labelEmbedding.Forward(oneHot);                                                   // [1, 128, 1]
+        }
+        Tensor<T>? skips = null;
+        for (int b = 0; b < _blocks.Count; b++)
+        {
+            var (dilated, stepProjection, conditionProjection, output) = _blocks[b];
             var y = _engine.TensorAdd(x, _engine.TensorTile(stepProjection.Forward(embedding), new[] { 1, 1, samples }));
-            y = _engine.TensorAdd(_frequencyAware ? FrequencyAware(dilated, y) : dilated.Forward(y), conditionProjection.Forward(condition));
+            y = _frequencyAware ? FrequencyAware(dilated, y) : dilated.Forward(y);
+            if (conditionProjection is not null && condition is not null) y = _engine.TensorAdd(y, conditionProjection.Forward(condition));
+            if (labelEmbedding is not null)
+                y = _engine.TensorAdd(y, _engine.TensorTile(_labelProjections[b].Forward(labelEmbedding), new[] { 1, 1, samples }));
             var gate = _engine.TensorSlice(y, new[] { 0, 0, 0 }, new[] { 1, _channels, samples });
             var filter = _engine.TensorSlice(y, new[] { 0, _channels, 0 }, new[] { 1, _channels, samples });
             y = output.Forward(_engine.TensorMultiply(_engine.Sigmoid(gate), _engine.Tanh(filter)));

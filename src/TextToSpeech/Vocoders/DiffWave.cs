@@ -25,6 +25,17 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// <para><b>For Beginners:</b> DiffWave learns to remove noise from audio a little at a time; to synthesize, it starts
 /// from noise and removes it step by step, guided by the spectrogram.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// // A vocoder: mel spectrogram in, waveform out.
+/// var vocoder = new DiffWave&lt;float&gt;(architecture);
+/// var speech = vocoder.MelToWaveform(mel);
+/// // Unconditional and class-conditional generation (§5.2, §5.3).
+/// var digits = new DiffWave&lt;float&gt;(architecture, DiffWaveOptions.ClassConditional(numClasses: 10));
+/// digits.Train(new TtsTrainingSample&lt;float&gt; { Tokens = none, Audio = clip, ClassLabel = 7 });
+/// var seven = digits.Generate(classLabel: 7);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]
@@ -79,15 +90,102 @@ public partial class DiffWave<T> : DiffusionVocoderBase<T>
         var o = PaperOptions;
         if (UpsampleFactor != o.HopSize)
             throw new ArgumentException($"The upsampler's strides ({string.Join("x", o.UpsampleStrides)}) must multiply to the hop ({o.HopSize}).");
+        if (o.Conditioner == DiffWaveConditioner.ClassLabel && o.NumClasses <= 0)
+            throw new ArgumentException("A class-conditional DiffWave needs NumClasses (the dataset's label count).");
+        if (o.Conditioner != DiffWaveConditioner.MelSpectrogram && o.UtteranceSamples <= 0)
+            throw new ArgumentException("A DiffWave without a spectrogram needs UtteranceSamples, the length it generates.");
         _network = new DiffWaveNetwork<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7),
-            o.MelChannels, o.ResChannels, o.NumResLayers, o.DilationCycle, o.NoiseSchedule.Length, o.UpsampleStrides);
+            o.MelChannels, o.ResChannels, o.NumResLayers, o.DilationCycle, o.NoiseSchedule.Length, o.UpsampleStrides,
+            melConditioned: o.Conditioner == DiffWaveConditioner.MelSpectrogram,
+            labelClasses: o.Conditioner == DiffWaveConditioner.ClassLabel ? o.NumClasses : 0);
         _features = new CenteredLogMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, o.MelMinFrequency,
             o.SampleRate / 2.0, 1e-5, htkScale: true, normalizedWindow: true);
         return _network.Layers;
     }
 
     /// <inheritdoc />
-    protected override Tensor<T> Denoise(Tensor<T> noisy, double level, Tensor<T> mel) => _network!.Forward(noisy, level, mel);
+    protected override Tensor<T> Denoise(Tensor<T> noisy, double level, Tensor<T> mel)
+    {
+        var network = _network ?? throw new InvalidOperationException("The DiffWave network has not been built.");
+        return PaperOptions.Conditioner switch
+        {
+            DiffWaveConditioner.MelSpectrogram => network.Forward(noisy, level, mel),
+            DiffWaveConditioner.Unconditional => network.Forward(noisy, level, (int?)null),
+            _ => network.Forward(noisy, level, LabelOf(mel)),
+        };
+    }
+
+    // A spectrogram-free condition is a one-element tensor holding the class label (ignored unconditionally).
+    private int LabelOf(Tensor<T> condition)
+    {
+        double value = NumOps.ToDouble(condition[0]);
+        int label = (int)Math.Round(value);
+        if (Math.Abs(value - label) > 1e-9)
+            throw new ArgumentException($"A class label must be an integer, got {value}.");
+        return label;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Without a spectrogram the input is the class label (a one-element tensor); unconditionally it is not
+    /// read.</remarks>
+    protected override Tensor<T> ConditionInput(Tensor<T> input)
+    {
+        if (PaperOptions.Conditioner == DiffWaveConditioner.MelSpectrogram) return MelInput(input);
+        var condition = new Tensor<T>(new[] { 1 });
+        if (PaperOptions.Conditioner == DiffWaveConditioner.ClassLabel)
+        {
+            if (input.Length != 1)
+                throw new ArgumentException($"A class-conditional DiffWave takes its class label as a one-element tensor, got [{string.Join(", ", input.Shape)}].", nameof(input));
+            condition[0] = input[0];
+            LabelOf(condition);
+        }
+        return condition;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Without a spectrogram the paper trains on full utterances, so the whole recording is used.</remarks>
+    protected override (Tensor<T> Condition, Tensor<T> Audio) TrainingPair(Tensor<T> condition, Tensor<T> audio, Random random)
+        => PaperOptions.Conditioner == DiffWaveConditioner.MelSpectrogram ? base.TrainingPair(condition, audio, random) : (condition, Flat(audio));
+
+    /// <inheritdoc />
+    /// <remarks>A class-conditional sample takes its label from <see cref="TtsTrainingSample{T}.ClassLabel"/>.</remarks>
+    protected override Tensor<T> SampleCondition(TtsTrainingSample<T> sample, Tensor<T> audio)
+    {
+        switch (PaperOptions.Conditioner)
+        {
+            case DiffWaveConditioner.MelSpectrogram:
+                return base.SampleCondition(sample, audio);
+            case DiffWaveConditioner.ClassLabel:
+                var label = new Tensor<T>(new[] { 1 });
+                label[0] = NumOps.FromDouble(sample.ClassLabel
+                    ?? throw new ArgumentException("A class-conditional DiffWave trains on labelled recordings; set ClassLabel.", nameof(sample)));
+                return ConditionInput(label);
+            default:
+                return new Tensor<T>(new[] { 1 });
+        }
+    }
+
+    /// <inheritdoc />
+    protected override Tensor<T> EvaluationAudio(Tensor<T> condition, Tensor<T> target)
+        => PaperOptions.Conditioner == DiffWaveConditioner.MelSpectrogram ? base.EvaluationAudio(condition, target) : target;
+
+    /// <inheritdoc />
+    protected override int SynthesisSamples(Tensor<T> mel)
+        => PaperOptions.Conditioner == DiffWaveConditioner.MelSpectrogram ? base.SynthesisSamples(mel) : PaperOptions.UtteranceSamples;
+
+    /// <summary>Generates an utterance of <see cref="DiffWaveOptions.UtteranceSamples"/> samples by the reverse process
+    /// (Algorithm 2): unconditionally, or of class <paramref name="classLabel"/> for a class-conditional model.</summary>
+    public Tensor<T> Generate(int? classLabel = null)
+    {
+        var conditioner = PaperOptions.Conditioner;
+        if (conditioner == DiffWaveConditioner.MelSpectrogram)
+            throw new InvalidOperationException("This DiffWave is a vocoder; convert a mel spectrogram with MelToWaveform.");
+        if ((conditioner == DiffWaveConditioner.ClassLabel) != classLabel.HasValue)
+            throw new ArgumentException(classLabel.HasValue ? "An unconditional DiffWave takes no class label." : "A class-conditional DiffWave needs a class label.", nameof(classLabel));
+        var input = new Tensor<T>(new[] { 1 });
+        input[0] = NumOps.FromDouble(classLabel ?? 0);
+        return Predict(input);
+    }
 
     /// <inheritdoc />
     /// <remarks><c>clamp((20 log10(max(mel, 1e-5)) − 20 + 100) / 100, 0, 1)</c> (reference <c>preprocess.py</c>).</remarks>

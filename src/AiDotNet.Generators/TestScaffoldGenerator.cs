@@ -1169,7 +1169,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "PlaygroundV3Model",
         "VRT",
         "Vocos",
-        "VoiceCraftModel",
         "VoiceFlow",
         "VoiceprintDeepfakeDetector",
         "VotingClassifier",

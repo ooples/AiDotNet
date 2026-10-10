@@ -25,8 +25,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// reshaped away on return.
 /// </para>
 /// <para>
-/// Used by <see cref="AiDotNet.Diffusion.Audio.DiffWaveModel{T}"/> for the
-/// dilated convolution stack from Kong et al. 2020 "DiffWave" §3 — kernel
+/// Suits the dilated convolution stack from Kong et al. 2020 "DiffWave" §3 — kernel
 /// size 3, dilation <c>2^(i % dilation_cycle)</c>. Also valid as a 1×1
 /// channel mixer (<c>kernelSize=1</c>) — the same shape used by DiffWave
 /// for the input/skip/output projections.

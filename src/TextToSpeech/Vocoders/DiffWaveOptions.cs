@@ -1,5 +1,18 @@
 namespace AiDotNet.TextToSpeech.Vocoders;
 
+/// <summary>What DiffWave's noise predictor is conditioned on (Kong et al. 2021, §3.2–3.3).</summary>
+public enum DiffWaveConditioner
+{
+    /// <summary>The mel spectrogram: DiffWave as a neural vocoder (§3.2 local conditioner, §5.1).</summary>
+    MelSpectrogram,
+
+    /// <summary>Nothing: unconditional waveform generation (§3.3, §5.2).</summary>
+    Unconditional,
+
+    /// <summary>A global discrete label such as a word or speaker ID (§3.2 global conditioner, §5.3).</summary>
+    ClassLabel,
+}
+
 /// <summary>Options for DiffWave (Kong et al. 2021): a diffusion vocoder whose noise predictor is a non-autoregressive,
 /// bidirectional dilated-convolution network conditioned on the mel spectrogram.</summary>
 /// <remarks>
@@ -14,6 +27,9 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// mel features from torchaudio (centred, window-normalized magnitude, HTK bands from 20 Hz to Nyquist, a 1024-sample
 /// window) as <c>clamp((20 log10(max(x, 1e-5)) − 20 + 100) / 100, 0, 1)</c>; each sampling step clamped to [−1, 1]; no
 /// gradient clipping. The paper's L2 noise loss is used (the reference's code uses L1).</para>
+/// <para>The paper's other two tasks have their own configurations: <see cref="Unconditional"/> (§5.2) and
+/// <see cref="ClassConditional"/> (§5.3). Both generate whole utterances (the paper trains on full one-second SC09
+/// clips), so a model input is the class label (or, unconditionally, ignored) rather than a spectrogram.</para>
 /// <para><b>For Beginners:</b> These options configure the DiffWave model. Default values follow the original paper settings.</para>
 /// </remarks>
 public class DiffWaveOptions : VocoderOptions
@@ -35,7 +51,48 @@ public class DiffWaveOptions : VocoderOptions
         WindowSize = other.WindowSize;
         MelMinFrequency = other.MelMinFrequency;
         SamplingSeed = other.SamplingSeed;
+        Conditioner = other.Conditioner;
+        NumClasses = other.NumClasses;
+        UtteranceSamples = other.UtteranceSamples;
     }
+
+    /// <summary>The paper's unconditional generation configuration (§5.2): 16 kHz one-second utterances
+    /// (L = 16,000), 36 residual layers of C = 256 channels, dilation cycle 1, 2, …, 2048, T = 200 steps with β linear
+    /// from 1e-4 to 0.02, sampled over the full schedule; Adam at 2e-4 with batch 16.</summary>
+    public static DiffWaveOptions Unconditional() => new()
+    {
+        Conditioner = DiffWaveConditioner.Unconditional,
+        SampleRate = 16000,
+        UtteranceSamples = 16000,
+        NumResLayers = 36,
+        ResChannels = 256,
+        DilationCycle = 12,
+        NoiseSchedule = Linear(1e-4, 0.02, 200),
+        NumDiffusionSteps = 200,
+        UseFastSampling = false,
+    };
+
+    /// <summary>The paper's class-conditional configuration (§5.3): the unconditional model's hyperparameters with a
+    /// shared 128-wide embedding of one of <paramref name="numClasses"/> labels (10 digits for SC09) added in every
+    /// residual layer.</summary>
+    public static DiffWaveOptions ClassConditional(int numClasses)
+    {
+        if (numClasses <= 0) throw new ArgumentOutOfRangeException(nameof(numClasses), "A class-conditional DiffWave needs at least one class.");
+        var options = Unconditional();
+        options.Conditioner = DiffWaveConditioner.ClassLabel;
+        options.NumClasses = numClasses;
+        return options;
+    }
+
+    /// <summary>Gets or sets what the noise predictor is conditioned on (the mel spectrogram).</summary>
+    public DiffWaveConditioner Conditioner { get; set; } = DiffWaveConditioner.MelSpectrogram;
+
+    /// <summary>Gets or sets the number of labels of the class conditioner (no default: it is the dataset's; SC09 has
+    /// 10 digits).</summary>
+    public int NumClasses { get; set; }
+
+    /// <summary>Gets or sets the length L of a generated utterance without a spectrogram (16,000 in §5.2).</summary>
+    public int UtteranceSamples { get; set; } = 16000;
 
     /// <summary>Creates the paper's DiffWave BASE (T = 50) configuration.</summary>
     public DiffWaveOptions()

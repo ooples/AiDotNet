@@ -94,6 +94,10 @@ public abstract partial class DiffusionVocoderBase<T> : SegmentVocoderBase<T>
         return Mean(Engine.TensorMultiply(d, d));
     }
 
+    /// <summary>The waveform length synthesized for a conditioning tensor; the default is the spectrogram's frames times
+    /// the hop.</summary>
+    protected virtual int SynthesisSamples(Tensor<T> mel) => mel.Shape[2] * UpsampleFactor;
+
     /// <summary>Whether each sampling step clamps the sample to [−1, 1] (the DiffWave, WaveGrad, PriorGrad and FreGrad
     /// references do).</summary>
     protected virtual bool ClampEachStep => false;
@@ -129,7 +133,7 @@ public abstract partial class DiffusionVocoderBase<T> : SegmentVocoderBase<T>
     /// <remarks>Ancestral sampling over the inference schedule (or the training one) from the prior noise.</remarks>
     protected override Tensor<T> Synthesize(Tensor<T> mel, Random random)
     {
-        int samples = mel.Shape[2] * UpsampleFactor;
+        int samples = SynthesisSamples(mel);
         var betas = InferenceBetas ?? TrainingBetas;
         var alphaBar = Cumulative(betas);
         var x = PriorNoise(mel, samples, random);
