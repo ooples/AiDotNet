@@ -135,6 +135,7 @@
     <Content Include="Audio\Pitch\ReferenceData\*.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Audio\Codecs\ReferenceData\*.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="TextToSpeech\ReferenceData\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Tokenization\ReferenceData\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!--

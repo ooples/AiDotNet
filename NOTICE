@@ -134,6 +134,16 @@ cn2an 0.5.24 (MIT, Copyright (c) 2017 Ailln)
   https://github.com/Ailln/cn2an
   MandarinG2P ports its an2cn numeral conversion.
 
+T5 (Apache-2.0, Copyright 2019 The T5 Authors)
+  https://github.com/google-research/text-to-text-transfer-transformer
+  t5-base's SentencePiece model is embedded as
+  src/Tokenization/Resources/t5_spiece.model.gz (T5TextTokenizer).
+
+SentencePiece (Apache-2.0, Copyright 2018 Google Inc.)
+  https://github.com/google/sentencepiece
+  SentencePieceUnigramModel ports its normalizer (precompiled character map,
+  darts-clone double-array trie) and unigram Viterbi segmentation.
+
 VALL-E X front end (MIT, Copyright (c) 2023 Songting)
   https://github.com/Plachtaa/VALL-E-X
   MandarinG2P ports utils/g2p/mandarin.py's bopomofo-to-IPA and Latin-to-bopomofo

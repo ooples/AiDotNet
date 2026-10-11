@@ -373,6 +373,7 @@
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\jieba_hmm.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.jieba_hmm.json.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\pypinyin_chars.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.pypinyin_chars.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\pypinyin_phrases.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.pypinyin_phrases.tsv.gz" />
+	  <EmbeddedResource Include="Tokenization\Resources\t5_spiece.model.gz" LogicalName="AiDotNet.Tokenization.t5_spiece.model.gz" />
 	</ItemGroup>
 
 </Project>
