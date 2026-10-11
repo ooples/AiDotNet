@@ -79,9 +79,6 @@ public partial class Transfusion<T>
             : RandomHelper.CreateSecureRandom();
     }
 
-    /// <summary>The image-patch grid side length this model patchifies to.</summary>
-    internal int PatchGridSide => Math.Max(1, _options.ImageSize / Math.Max(1, _patchSide));
-
     /// <summary>
     /// One optimizer step on the paper's objective. <paramref name="expected"/> is the caption's
     /// token ids when it is rank-1; any other shape carries no text, so the sequence is the image
