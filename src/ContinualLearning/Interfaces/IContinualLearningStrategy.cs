@@ -78,6 +78,8 @@ public interface IContinualLearningStrategy<T, TInput, TOutput>
     /// <summary>
     /// Adjusts gradients to prevent forgetting.
     /// </summary>
+    /// <param name="model">The model being trained, at the parameters the gradients were taken at. Penalty-based
+    /// strategies (EWC, MAS, SI) add the gradient of their penalty, which depends on the current parameters.</param>
     /// <param name="gradients">The gradients from the current task loss.</param>
     /// <returns>Adjusted gradients that respect previous task constraints.</returns>
     /// <remarks>
@@ -87,7 +89,7 @@ public interface IContinualLearningStrategy<T, TInput, TOutput>
     /// - OWM: Project gradients into orthogonal subspace
     /// </para>
     /// </remarks>
-    Vector<T> AdjustGradients(Vector<T> gradients);
+    Vector<T> AdjustGradients(IFullModel<T, TInput, TOutput> model, Vector<T> gradients);
 
     /// <summary>
     /// Finalizes the task after training is complete.
