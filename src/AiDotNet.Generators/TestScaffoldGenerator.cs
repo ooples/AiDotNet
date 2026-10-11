@@ -3596,6 +3596,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // #2139 asks for the residual to be stated rather than implied. Every uncovered model
                 // is named by one ADNGEN001 line, but 300-odd lines do not say WHERE the gap is; these
                 // counts do, and they come from the same skip sites that emit those lines.
+                // The buckets must ADD UP to the uncovered count, or the summary would be a partial
+                // census that reads like a complete one: not every skip in the loop above reports a
+                // reason (a namesake that does not own its test-class name is skipped silently), and
+                // those models are uncovered all the same. Anything the sites did not tally is named
+                // as such rather than dropped.
+                int tallied = 0;
+                foreach (int count in residual.Values) tallied += count;
+                int unaccounted = untestedModels.Count - tallied;
+                if (unaccounted > 0)
+                    residual["with no reason recorded (see ADNGEN001 / AIDN040)"] = unaccounted;
                 string residualSummary = residual.Count == 0
                     ? "none"
                     : string.Join(", ", residual.OrderByDescending(entry => entry.Value)
