@@ -69,7 +69,8 @@ public static class CompiledStepRandom<T>
     {
         Guard.NotNull(shape);
         Guard.NotNull(random);
-        if (!(max > min))
+        // NaN in either bound is rejected too: "max <= min" alone is false for NaN and would let it through.
+        if (double.IsNaN(min) || double.IsNaN(max) || max <= min)
             throw new ArgumentOutOfRangeException(nameof(max), "The upper bound must exceed the lower bound.");
         return Draw(shape, t => FillUniform(t, random, min, max));
     }

@@ -170,19 +170,16 @@ internal sealed class TapeTrainingStepper<T>
         foreach (var layer in request.Layers)
             layer.ZeroGrad();
 
-        var forward = request.Forward;
-        var computeLoss = request.ComputeLoss;
-        var input = request.Input;
-        var target = request.Target;
+        // The request's members are init-only, so the lambdas read them directly rather than through copies.
         return EagerTapeStep(
-            () => computeLoss(forward(input), target),
+            () => request.ComputeLoss(request.Forward(request.Input), request.Target),
             // Read after the forward: a lazily shaped layer allocates its weights on its first forward.
             () => TrainedParameters(request),
             OptimizerUpdate(request.Optimizer),
-            input,
-            target,
-            (x, _) => forward(x),
-            (predicted, y) => computeLoss(predicted, y),
+            request.Input,
+            request.Target,
+            (x, _) => request.Forward(x),
+            (predicted, y) => request.ComputeLoss(predicted, y),
             new EagerStepHooks { OnGradients = request.OnGradients, ModelGradientClip = request.ModelGradientClip });
     }
 
@@ -417,7 +414,8 @@ internal sealed class TapeTrainingStepper<T>
         if (parameters is null)
             throw new InvalidOperationException("A training step's parameter provider returned null.");
 
-        var sources = hooks?.GradientSources is { } widen ? widen(parameters) ?? parameters : parameters;
+        var widenSources = hooks?.GradientSources;
+        var sources = widenSources is null ? parameters : widenSources(parameters) ?? parameters;
         var all = tape.ComputeGradients(loss, sources);
         hooks?.OnTapeGradients?.Invoke(all);
         var reached = new List<Tensor<T>>(parameters.Count);
