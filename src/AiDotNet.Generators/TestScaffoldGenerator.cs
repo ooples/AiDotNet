@@ -7828,21 +7828,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                      && typeName.StartsWith(
                          "AiDotNet.Audio.Classification.", System.StringComparison.Ordinal))
             {
-                // LAION CLAP retains its 768-wide, 12-layer audio encoder,
-                // 512-dimensional joint projection and 527 AudioSet classes
-                // in production. Metadata shape warmup lazily materializes
-                // those weights, which can exhaust a loaded 16 GB shard.
-                // Exercise the same audio encoder -> shared projection ->
-                // fine-tuning head with the public audio/text configuration.
+                // The classification adapter over CLAPModel's network: the same mel -> HTSAT/Swin ->
+                // projection tower at the CLAPModel fixture's CI-smoke width/depth, plus the linear
+                // fine-tuning head over four custom labels. A 2048-sample waveform clears the
+                // 1024-sample STFT reflection pad.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.Audio.Classification.CLAPOptions { AudioEmbeddingDim = 32, " +
-                    "ProjectionDim = 16, NumAudioEncoderLayers = 2, NumAudioAttentionHeads = 4, " +
-                    "TextEmbeddingDim = 32, MaxTextLength = 8, DropoutRate = 0.0, " +
-                    "CustomLabels = new[] { \"class0\", \"class1\", \"class2\", \"class3\" }, " +
-                    "TextPrompts = new[] { \"class0\", \"class1\", \"class2\", \"class3\" } })";
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiLabelClassification, " +
+                    "inputSize: 2048, outputSize: 4), " +
+                    "new AiDotNet.Audio.Classification.CLAPOptions { Network = new AiDotNet.Models.Options.CLAPModelOptions { " +
+                    "AudioHiddenDim = 32, AudioEncoderLayers = 1, AudioEncoderHeads = 2, SwinWindowSize = 2, " +
+                    "TextHiddenDim = 32, TextEncoderLayers = 1, TextEncoderHeads = 2, " +
+                    "VocabSize = 64, MaxTextLength = 8, ProjectionDim = 4 }, " +
+                    "CustomLabels = new[] { \"class0\", \"class1\", \"class2\", \"class3\" } })";
             }
             else if (model.ClassName == "CLAPModel" && model.TypeParameterCount == 1
                 && typeName.StartsWith(
@@ -14577,11 +14575,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                  && typeName.StartsWith(
                      "AiDotNet.Audio.Classification.", System.StringComparison.Ordinal))
         {
-            // Native Classification.CLAP returns frame-level fine-tuning
-            // logits, not one pooled vector: [batch, frames, labels]. The
-            // bounded fixture has 64 frames and four custom labels.
-            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 64, 32 };");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 64, 4 };");
+            // A raw waveform batch; the fine-tuning head emits one row of four label
+            // probabilities per waveform.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 2048 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 4 };");
         }
         else if (model.ClassName == "CLAPModel"
                  && typeName.StartsWith(

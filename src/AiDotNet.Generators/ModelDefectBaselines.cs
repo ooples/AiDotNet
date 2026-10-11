@@ -43,7 +43,6 @@ internal static class ModelDefectBaselines
             "CreateDefaultBSRoFormerLayers",
             "CreateDefaultCanaryLayers",
             "CreateDefaultCIFEncoderLayers",
-            "CreateDefaultCLAPLayers",
             "CreateDefaultCMGANLayers",
             "CreateDefaultConformerFPLayers",
             "CreateDefaultCrossAttentionResamplerVLMLayers",

@@ -7549,57 +7549,6 @@ public static partial class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates default CLAP (Contrastive Language-Audio Pre-training) audio encoder layers.
-    /// </summary>
-    /// <param name="patchFeatureSize">Flattened patch dimension (default 256).</param>
-    /// <param name="embeddingDim">Audio encoder embedding dimension (default 768).</param>
-    /// <param name="projectionDim">Joint audio-text projection dimension (default 512).</param>
-    /// <param name="numEncoderLayers">Number of encoder layers (default 12).</param>
-    /// <param name="numAttentionHeads">Number of attention heads (default 12).</param>
-    /// <param name="feedForwardDim">Feed-forward dimension (default 3072).</param>
-    /// <param name="numClasses">Number of labels (default 527).</param>
-    /// <param name="maxSequenceLength">Maximum sequence length (default 1024).</param>
-    /// <param name="dropoutRate">Dropout rate (default 0.1).</param>
-    /// <returns>A collection of layers implementing the CLAP audio encoder.</returns>
-    public static IEnumerable<ILayer<T>> CreateDefaultCLAPLayers(
-        int patchFeatureSize = 256,
-        int embeddingDim = 768,
-        int projectionDim = 512,
-        int numEncoderLayers = 12,
-        int numAttentionHeads = 12,
-        int feedForwardDim = 3072,
-        int numClasses = 527,
-        int maxSequenceLength = 1024,
-        double dropoutRate = 0.1)
-    {
-        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-
-        // Audio encoder (HTS-AT style)
-        yield return new DenseLayer<T>(embeddingDim, identityActivation);
-        yield return new LayerNormalizationLayer<T>();
-        if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength, embeddingDim);
-
-        for (int i = 0; i < numEncoderLayers; i++)
-        {
-            yield return new MultiHeadAttentionLayer<T>(numAttentionHeads, (embeddingDim) / (numAttentionHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new DenseLayer<T>(feedForwardDim, reluActivation);
-            yield return new DenseLayer<T>(embeddingDim, identityActivation);
-            yield return new LayerNormalizationLayer<T>();
-            if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
-        }
-
-        // Projection to joint space
-        yield return new LayerNormalizationLayer<T>();
-        yield return new DenseLayer<T>(projectionDim, reluActivation);
-
-        // Classification head (for fine-tuned mode)
-        yield return new DenseLayer<T>(numClasses, identityActivation);
-    }
-
-    /// <summary>
     /// Creates default FullSubNet+ layers for speech enhancement.
     /// </summary>
     /// <param name="numFreqBins">Number of frequency bins (default: 257).</param>

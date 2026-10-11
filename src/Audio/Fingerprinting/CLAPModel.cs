@@ -211,31 +211,13 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
             // Callers wanting full control of BOTH stacks should switch to
             // AudioTextDualStreamArchitecture.
             Layers.AddRange(Architecture.Layers);
-            TextEncoderLayers.AddRange(LayerHelper<T>.CreateDefaultCLAPTextEncoderLayers(
-                vocabSize: _options.VocabSize,
-                maxTextLength: _options.MaxTextLength,
-                textHiddenDim: _options.TextHiddenDim,
-                textEncoderLayers: _options.TextEncoderLayers,
-                textEncoderHeads: _options.TextEncoderHeads,
-                projectionDim: _options.ProjectionDim));
+            TextEncoderLayers.AddRange(TextTower(_options));
         }
         else
         {
             // Default both stacks from the paper-faithful LayerHelper factories.
-            Layers.AddRange(LayerHelper<T>.CreateDefaultCLAPAudioEncoderLayers(
-                audioPatchSize: _options.AudioPatchSize,
-                audioHiddenDim: _options.AudioHiddenDim,
-                audioEncoderLayers: _options.AudioEncoderLayers,
-                audioEncoderHeads: _options.AudioEncoderHeads,
-                swinWindowSize: _options.SwinWindowSize,
-                projectionDim: _options.ProjectionDim));
-            TextEncoderLayers.AddRange(LayerHelper<T>.CreateDefaultCLAPTextEncoderLayers(
-                vocabSize: _options.VocabSize,
-                maxTextLength: _options.MaxTextLength,
-                textHiddenDim: _options.TextHiddenDim,
-                textEncoderLayers: _options.TextEncoderLayers,
-                textEncoderHeads: _options.TextEncoderHeads,
-                projectionDim: _options.ProjectionDim));
+            Layers.AddRange(AudioTower(_options));
+            TextEncoderLayers.AddRange(TextTower(_options));
         }
 
         // Learnable temperature τ in log space (CLIP / CLAP convention).
@@ -244,6 +226,28 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         _logTemperature = new Tensor<T>([1]);
         _logTemperature[0] = NumOps.FromDouble(Math.Log(1.0 / _options.InitialTemperature));
     }
+
+    /// <summary>The audio tower: HTSAT patches, Swin blocks, pooling and the projection into the joint space.</summary>
+    /// <remarks>Shared with the classification adapter <see cref="AiDotNet.Audio.Classification.CLAP{T}"/>, so CLAP
+    /// has one network.</remarks>
+    internal static IEnumerable<ILayer<T>> AudioTower(CLAPModelOptions o) =>
+        LayerHelper<T>.CreateDefaultCLAPAudioEncoderLayers(
+            audioPatchSize: o.AudioPatchSize,
+            audioHiddenDim: o.AudioHiddenDim,
+            audioEncoderLayers: o.AudioEncoderLayers,
+            audioEncoderHeads: o.AudioEncoderHeads,
+            swinWindowSize: o.SwinWindowSize,
+            projectionDim: o.ProjectionDim);
+
+    /// <summary>The text tower: token and position embeddings, transformer layers, pooling and the projection.</summary>
+    internal static IEnumerable<ILayer<T>> TextTower(CLAPModelOptions o) =>
+        LayerHelper<T>.CreateDefaultCLAPTextEncoderLayers(
+            vocabSize: o.VocabSize,
+            maxTextLength: o.MaxTextLength,
+            textHiddenDim: o.TextHiddenDim,
+            textEncoderLayers: o.TextEncoderLayers,
+            textEncoderHeads: o.TextEncoderHeads,
+            projectionDim: o.ProjectionDim);
 
     #endregion
 
@@ -261,37 +265,36 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     /// <returns>Log-mel spectrogram with shape <c>[batch, 1, numFrames, numMels]</c>,
     /// ready to feed into the HTSAT 2D patch encoder.</returns>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
+        => LogMel(Engine, rawAudio, _options, _hannWindow ??= BuildHannWindow(_options.StftWindowSize));
+
+    /// <summary>The log-mel image the audio tower reads, <c>[batch, 1, frames, mels]</c>.</summary>
+    internal static Tensor<T> LogMel(IEngine engine, Tensor<T> rawAudio, CLAPModelOptions options, Tensor<T> hannWindow)
     {
+        var numOps = MathHelper.GetNumericOperations<T>();
         if (rawAudio.Shape.Length == 1)
-            rawAudio = Engine.Reshape(rawAudio, [1, rawAudio.Shape[0]]);
+            rawAudio = engine.Reshape(rawAudio, [1, rawAudio.Shape[0]]);
 
         int batchSize = rawAudio.Shape[0];
-        int numSamples = rawAudio.Shape[1];
-        int windowSize = _options.StftWindowSize;
-        int hop = _options.HopLength;
-        int numMels = _options.NumMelBands;
-        int sampleRate = _options.SampleRate;
-
-        // Hann window built once via NumOps (T-generic; no double[] state).
-        _hannWindow ??= BuildHannWindow(windowSize);
+        int numMels = options.NumMelBands;
+        int sampleRate = options.SampleRate;
 
         // Single engine op: Hann × STFT → power → mel filterbank → log.
         // Returns [batch, numFrames, numMels]. Engine-resident throughout —
         // tape sees one node, BLAS / GPU paths take it when bound.
-        var mel = Engine.MelSpectrogram(
+        var mel = engine.MelSpectrogram(
             input: rawAudio,
             sampleRate: sampleRate,
-            nFft: windowSize,
-            hopLength: hop,
+            nFft: options.StftWindowSize,
+            hopLength: options.HopLength,
             nMels: numMels,
-            fMin: NumOps.Zero,
-            fMax: NumOps.FromDouble(sampleRate / 2.0),
-            window: _hannWindow,
+            fMin: numOps.Zero,
+            fMax: numOps.FromDouble(sampleRate / 2.0),
+            window: hannWindow,
             powerToDb: true);
 
         // Reshape to [batch, 1, numFrames, numMels] for the HTSAT 2D patch encoder.
         int numFrames = mel.Length / (batchSize * numMels);
-        return Engine.Reshape(mel, [batchSize, 1, numFrames, numMels]);
+        return engine.Reshape(mel, [batchSize, 1, numFrames, numMels]);
     }
 
     /// <inheritdoc/>
@@ -303,8 +306,9 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     /// Generic in <typeparamref name="T"/> via <see cref="LayerBase{T}.NumOps"/>;
     /// no <c>double[]</c> state.
     /// </summary>
-    private Tensor<T> BuildHannWindow(int windowSize)
+    internal static Tensor<T> BuildHannWindow(int windowSize)
     {
+        var NumOps = MathHelper.GetNumericOperations<T>();
         var window = new Tensor<T>([windowSize]);
         for (int n = 0; n < windowSize; n++)
         {
@@ -691,17 +695,20 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     /// reduces to a plain dot product downstream. Engine-routed to stay
     /// generic in <typeparamref name="T"/> and BLAS-accelerated.
     /// </summary>
-    private Tensor<T> L2Normalize(Tensor<T> x)
+    private Tensor<T> L2Normalize(Tensor<T> x) => L2Normalize(Engine, x);
+
+    /// <summary>Scales each row of <paramref name="x"/> to unit length along its last axis.</summary>
+    internal static Tensor<T> L2Normalize(IEngine engine, Tensor<T> x)
     {
         // ||x||² along the last axis, then 1/√(·+ε) via Sqrt + Reciprocal.
-        var sq = Engine.TensorMultiply(x, x);
+        var sq = engine.TensorMultiply(x, x);
         int lastAxis = x.Shape.Length - 1;
-        var sumSq = Engine.ReduceSum(sq, [lastAxis], keepDims: true);
-        var eps = NumOps.FromDouble(1e-12);
-        var sumSqPlusEps = Engine.TensorAddScalar(sumSq, eps);
-        var norm = Engine.TensorSqrt(sumSqPlusEps);
-        var invNorm = Engine.TensorReciprocal(norm);
-        return Engine.TensorMultiply(x, invNorm);
+        var sumSq = engine.ReduceSum(sq, [lastAxis], keepDims: true);
+        var eps = MathHelper.GetNumericOperations<T>().FromDouble(1e-12);
+        var sumSqPlusEps = engine.TensorAddScalar(sumSq, eps);
+        var norm = engine.TensorSqrt(sumSqPlusEps);
+        var invNorm = engine.TensorReciprocal(norm);
+        return engine.TensorMultiply(x, invNorm);
     }
 
     /// <summary>Cosine similarity between two row-aligned embeddings (already L2-normalised).</summary>
