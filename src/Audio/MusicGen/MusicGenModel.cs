@@ -181,8 +181,8 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         var o = _options;
         var (d, heads, layers) = Dimensions;
         var initialization = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Architecture.RandomSeed ?? o.Seed ?? 0);
-        _core = new MusicGenCore<T>(Engine, _lmLayers, new MusicGenConfiguration(o.Codec.NumQuantizers, o.Codec.CodebookSize, d,
-            heads, layers, o.FeedForwardScale * d, o.DropoutRate, o.Delays, CrossAttention: !o.MelodyConditioning));
+        _core = new MusicGenCore<T>(Engine, _lmLayers, new MusicGenConfiguration(o.ResolveDelays().Length, o.Codec.CodebookSize, d,
+            heads, layers, o.FeedForwardScale * d, o.DropoutRate, o.ResolveDelays(), CrossAttention: !o.MelodyConditioning));
         _core.InitializeLikeReference(initialization);
         _textEncoder = new T5Seq2Seq<T>(Engine, _textLayers, new T5Configuration(o.TextVocabularySize, o.TextModelDim,
             o.TextFeedForwardDim, o.TextKeyValueDim, o.TextHeads, o.TextLayers, DecoderLayers: 0, Dropout: 0.1));
@@ -211,8 +211,9 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         var codec = new EnCodec<T>(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
             inputSize: 1, outputSize: 1) { RandomSeed = Architecture.RandomSeed }, codecOptions);
         int codebooks = codec.QuantizersForBandwidth(codecOptions.TargetBandwidthKbps);
-        if (codebooks != o.Codec.NumQuantizers || o.Delays.Length != codebooks)
-            throw new ArgumentException($"MusicGen models {o.Delays.Length} delayed codebooks; the codec's bandwidth gives {codebooks}.");
+        int modelled = (o.Stereo ? 2 : 1) * codebooks;
+        if (codebooks != o.Codec.NumQuantizers || o.ResolveDelays().Length != modelled)
+            throw new ArgumentException($"MusicGen models {o.ResolveDelays().Length} delayed codebooks; the codec's bandwidth gives {modelled}.");
         _hopLength = codec.HopLength;
         _codec = new AudioCodecLayer<T>(codec);
         // Every stage owns its parameters through the layer list, the text encoder first: its token embedding is
@@ -289,7 +290,12 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
     /// <summary>The one-hot chromagram of a waveform (§2.3).</summary>
     private double[,] Chroma(Tensor<T> audio)
     {
-        var flat = audio.ToVector().ToArray().Select(v => NumOps.ToDouble(v)).ToArray();
+        var values = audio.ToVector().ToArray().Select(v => NumOps.ToDouble(v)).ToArray();
+        // Several channels [C, samples] are mixed down to mono, as audiocraft's convert_audio does.
+        int channels = audio.Rank == 2 ? audio.Shape[0] : 1, length = values.Length / channels;
+        var flat = new double[length];
+        for (int c = 0; c < channels; c++)
+            for (int i = 0; i < length; i++) flat[i] += values[c * length + i] / channels;
         return MusicGenChroma.Extract(flat, SampleRate, _options.ChromaWindow, _options.ChromaHop);
     }
 
@@ -353,7 +359,7 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
 
     private int[,] CodesOf(Tensor<T>? codes, Tensor<T>? audio)
     {
-        int k = _options.Delays.Length, n = _options.Codec.CodebookSize;
+        int k = Core.Configuration.Codebooks, n = _options.Codec.CodebookSize;
         if (codes is not null)
         {
             if (codes.Rank != 2 || codes.Shape[1] != k)
@@ -370,7 +376,22 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         }
         if (audio is null) throw new ArgumentException("MusicGen trains on codec codes or the recording.");
         using var _ = new NoGradScope<T>();
-        return Codec.Encode(audio.Rank == 1 ? audio : Engine.Reshape(audio, new[] { audio.Length }));
+        if (!_options.Stereo) return Codec.Encode(audio.Rank == 1 ? audio : Engine.Reshape(audio, new[] { audio.Length }));
+        // Stereo: each channel through the codec, interleaved [L0, R0, L1, R1, ...].
+        if (audio.Rank != 2 || audio.Shape[0] != 2)
+            throw new ArgumentException($"Stereo MusicGen audio is [2, samples], got [{string.Join(", ", audio.Shape)}].", nameof(audio));
+        int samples = audio.Shape[1];
+        var left = Codec.Encode(Engine.Reshape(Engine.TensorSlice(audio, new[] { 0, 0 }, new[] { 1, samples }), new[] { samples }));
+        var right = Codec.Encode(Engine.Reshape(Engine.TensorSlice(audio, new[] { 1, 0 }, new[] { 1, samples }), new[] { samples }));
+        int levels = left.GetLength(0), frames = left.GetLength(1);
+        var interleaved = new int[2 * levels, frames];
+        for (int q = 0; q < levels; q++)
+            for (int t = 0; t < frames; t++)
+            {
+                interleaved[2 * q, t] = left[q, t];
+                interleaved[2 * q + 1, t] = right[q, t];
+            }
+        return interleaved;
     }
 
     // ------------------------------------------------------------------ training
@@ -396,7 +417,7 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
     {
         ThrowIfDisposed();
         Guard.NotNull(expectedOutput);
-        bool codes = expectedOutput.Rank == 2 && expectedOutput.Shape[1] == _options.Delays.Length;
+        bool codes = expectedOutput.Rank == 2 && expectedOutput.Shape[1] == Core.Configuration.Codebooks;
         var c = CodesOf(codes ? expectedOutput : null, codes ? null : expectedOutput);
         TrainOnCodes(c, input, _options.MelodyConditioning ? Chroma(codes ? Decode(c) : expectedOutput) : null);
     }
@@ -444,7 +465,7 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
     /// <summary>The training objective on codes and token ids, deterministic and without dropout.</summary>
     public T EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
     {
-        bool codes = target.Rank == 2 && target.Shape[1] == _options.Delays.Length;
+        bool codes = target.Rank == 2 && target.Shape[1] == Core.Configuration.Codebooks;
         var c = CodesOf(codes ? target : null, codes ? null : target);
         bool wasTraining = IsTrainingMode;
         SetTrainingMode(false);
@@ -618,11 +639,27 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         return Array.FindLastIndex(probabilities, p => p > 0);
     }
 
+    // The waveform of codes: [samples], or for stereo [2, samples] from the de-interleaved channels.
     private Tensor<T> Decode(int[,] codes)
     {
         using var _ = new NoGradScope<T>();
-        var audio = Codec.Decode(codes);
-        return audio.Reshape(new[] { audio.Length });
+        if (!_options.Stereo)
+        {
+            var audio = Codec.Decode(codes);
+            return audio.Reshape(new[] { audio.Length });
+        }
+        int levels = codes.GetLength(0) / 2, frames = codes.GetLength(1);
+        var left = new int[levels, frames];
+        var right = new int[levels, frames];
+        for (int q = 0; q < levels; q++)
+            for (int t = 0; t < frames; t++)
+            {
+                left[q, t] = codes[2 * q, t];
+                right[q, t] = codes[2 * q + 1, t];
+            }
+        var l = Codec.Decode(left);
+        var r = Codec.Decode(right);
+        return Engine.TensorConcatenate(new[] { l.Reshape(new[] { 1, l.Length }), r.Reshape(new[] { 1, r.Length }) }, 0);
     }
 
     /// <inheritdoc />

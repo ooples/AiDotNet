@@ -40,7 +40,9 @@ public class MusicGenOptions : AiDotNet.Models.Options.ModelOptions
         NumLayers = other.NumLayers;
         FeedForwardScale = other.FeedForwardScale;
         DropoutRate = other.DropoutRate;
-        Delays = (int[])other.Delays.Clone();
+        Delays = other.Delays is null ? null : (int[])other.Delays.Clone();
+        Stereo = other.Stereo;
+        StereoPattern = other.StereoPattern;
         Codec = (EnCodecOptions)AiDotNet.Models.CloneEngine.CopyConfiguration(other.Codec);
         TextModelDim = other.TextModelDim;
         TextLayers = other.TextLayers;
@@ -96,8 +98,27 @@ public class MusicGenOptions : AiDotNet.Models.Options.ModelOptions
     /// <summary>Gets or sets the dropout inside the transformer (0, the reference's).</summary>
     public double DropoutRate { get; set; }
 
-    /// <summary>Gets or sets each codebook's delay in the interleaving pattern ([0, 1, 2, 3], Eq. 6).</summary>
-    public int[] Delays { get; set; } = [0, 1, 2, 3];
+    /// <summary>Gets or sets each modelled codebook's delay; null takes the pattern's ([0, 1, 2, 3], Eq. 6; for stereo,
+    /// the <see cref="StereoPattern"/>'s over the interleaved left and right codebooks).</summary>
+    public int[]? Delays { get; set; }
+
+    /// <summary>Gets or sets whether the model generates stereo (§4.3): EnCodec codes each channel separately, giving
+    /// twice the codebooks, interleaved left, right per level (audiocraft <c>InterleaveStereoCompressionModel</c>).</summary>
+    public bool Stereo { get; set; }
+
+    /// <summary>Gets or sets the stereo codebook pattern (partial delay: the better rated, Table 3).</summary>
+    public MusicGenStereoPattern StereoPattern { get; set; } = MusicGenStereoPattern.PartialDelay;
+
+    /// <summary>The delays in effect: <see cref="Delays"/>, or the pattern's.</summary>
+    public int[] ResolveDelays()
+    {
+        if (Delays is not null) return Delays;
+        int k = Codec.NumQuantizers;
+        if (!Stereo) return Enumerable.Range(0, k).ToArray();
+        // Interleaved [L0, R0, L1, R1, ...]: the partial delay gives both channels of a level the same delay; the
+        // stereo delay also delays the right channel by one step behind the left (Figure 2a).
+        return Enumerable.Range(0, 2 * k).Select(i => StereoPattern == MusicGenStereoPattern.PartialDelay ? i / 2 : i).ToArray();
+    }
 
     /// <summary>Gets or sets the audio tokenizer (EnCodec 32 kHz, §3.1).</summary>
     public EnCodecOptions Codec { get; set; } = EnCodec32kHz();
@@ -227,4 +248,14 @@ public class MusicGenOptions : AiDotNet.Models.Options.ModelOptions
         TargetBandwidthKbps = 2.2,
         IncludeDiscriminators = false,
     };
+}
+
+/// <summary>MusicGen's stereo codebook patterns (Copet et al. 2023, §4.3, Figure 2a).</summary>
+public enum MusicGenStereoPattern
+{
+    /// <summary>The left and right codebooks of a level share its delay (predicted in parallel).</summary>
+    PartialDelay,
+
+    /// <summary>The right codebook of a level is one step behind the left.</summary>
+    Delay,
 }

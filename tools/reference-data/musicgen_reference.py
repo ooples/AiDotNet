@@ -12,7 +12,9 @@ a tiny Hugging Face T5 encoder and audiocraft's text projection (T5Conditioner.o
 - the melody model (§2.3): audiocraft's ChromaExtractor (12 bins, 2^14 window, argmax) on a deterministic tone that
   moves from C4 to A4, its ChromaStemConditioner output projection, and an LMModel whose conditions are a prefix
   (the chroma2music fuser: prepend self_wav, then description; no cross-attention), with the same logits, loss and
-  guided greedy generation checks.
+  guided greedy generation checks;
+- the stereo model (§4.3): eight interleaved codebooks [L0, R0, L1, R1, ...] with the stereo partial delay
+  [0, 0, 1, 1, 2, 2, 3, 3], text cross-attention, the same checks.
 The reference runs in float64 from the float32 weights.
 Pass an audiocraft checkout with --audiocraft. Default: verify; --write: regenerate
 tests/AiDotNet.Tests/Audio/ReferenceData/musicgen_reference.json.
@@ -151,6 +153,43 @@ def compute(audiocraft):
         # The prefix as the fuser builds it: each prepended condition goes in front, so description, then self_wav.
         prefix = torch.cat([embeds, chroma_embeds], dim=1)
 
+    # ---- the stereo model ----
+    stereo_delays = [0, 0, 1, 1, 2, 2, 3, 3]
+    torch.manual_seed(77)
+    lm_stereo = LMModel(DelayedPatternProvider(n_q=8, delays=stereo_delays), ConditioningProvider({}), fuser, n_q=8, card=CARD,
+                        dim=DIM, num_heads=HEADS, num_layers=LAYERS, hidden_scale=4, norm="layer_norm", norm_first=True,
+                        bias_proj=False, bias_ff=False, bias_attn=False, cross_attention=True, causal=True, custom=True,
+                        activation="relu", dropout=0.0, weight_init="gaussian", depthwise_init="current", zero_bias_init=True,
+                        cfg_coef=3.0)
+    with torch.no_grad():
+        for p in lm_stereo.parameters():
+            p.copy_(p.float())
+    lm_stereo.double().eval()
+    with torch.no_grad():
+        g = torch.Generator().manual_seed(8)
+        stereo_codes = torch.randint(0, CARD, (1, 8, FRAMES), generator=g)
+        out = lm_stereo.compute_predictions(stereo_codes, [], condition_tensors={"description": (embeds, mask)})
+        stereo_logits, stereo_valid = out.logits, out.mask
+        stereo_ce = torch.zeros([], dtype=torch.float64)
+        for k in range(8):
+            m = stereo_valid[0, k]
+            stereo_ce += torch.nn.functional.cross_entropy(stereo_logits[0, k][m], stereo_codes[0, k][m])
+        stereo_ce = stereo_ce / 8
+        cfg = {"description": (torch.cat([embeds, torch.zeros_like(embeds)]), torch.cat([mask, torch.zeros_like(mask)]))}
+        stereo_pattern = lm_stereo.pattern_provider.get_pattern(GENERATED)
+        gen = torch.full((1, 8, GENERATED), -1, dtype=torch.long)
+        seq, _, smask = stereo_pattern.build_pattern_sequence(gen, lm_stereo.special_token_id)
+        with lm_stereo.streaming():
+            uncond_state = lm_stereo.get_streaming_state()
+            prev = 0
+            for offset in range(stereo_pattern.get_first_step_with_timesteps(0), seq.shape[-1]):
+                nxt = lm_stereo._sample_next_token(seq[..., prev:offset], cfg, uncond_state, use_sampling=False, cfg_coef=3.0)
+                valid_step = smask[..., offset:offset + 1].expand(1, -1, -1)
+                nxt[~valid_step] = lm_stereo.special_token_id
+                seq[..., offset:offset + 1] = torch.where(seq[..., offset:offset + 1] == -1, nxt, seq[..., offset:offset + 1])
+                prev = offset
+        stereo_generated, _, _ = stereo_pattern.revert_pattern_sequence(seq, special_token=-1)
+
     def state(module, prefix=""):
         return {prefix + k: v.float().flatten().tolist() for k, v in module.state_dict().items()}
 
@@ -167,6 +206,15 @@ def compute(audiocraft):
         "logits": torch.nan_to_num(logits[0], nan=0.0).tolist(),
         "loss": ce.item(),
         "generated": generated[0, :, :GENERATED].tolist(),
+        "stereo": {
+            "delays": stereo_delays,
+            "lm": state(lm_stereo),
+            "codes": stereo_codes[0].tolist(),
+            "mask": stereo_valid[0].int().tolist(),
+            "logits": torch.nan_to_num(stereo_logits[0], nan=0.0).tolist(),
+            "loss": stereo_ce.item(),
+            "generated": stereo_generated[0, :, :GENERATED].tolist(),
+        },
         "melody": {
             "tone": {"sample_rate": sr, "samples": n, "frequencies": [261.63, 440.0], "amplitude": 0.5},
             "chroma": chroma[0].tolist(),
@@ -197,7 +245,9 @@ def main():
         stored = json.load(f)
     same = (abs(stored["loss"] - result["loss"]) < 1e-12 and stored["generated"] == result["generated"]
             and abs(stored["melody"]["loss"] - result["melody"]["loss"]) < 1e-12
-            and stored["melody"]["generated"] == result["melody"]["generated"])
+            and stored["melody"]["generated"] == result["melody"]["generated"]
+            and abs(stored["stereo"]["loss"] - result["stereo"]["loss"]) < 1e-12
+            and stored["stereo"]["generated"] == result["stereo"]["generated"])
     print("match" if same else "MISMATCH")
     sys.exit(0 if same else 1)
 

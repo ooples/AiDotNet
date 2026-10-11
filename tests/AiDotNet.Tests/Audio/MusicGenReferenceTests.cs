@@ -225,4 +225,52 @@ public class MusicGenReferenceTests
         for (int q = 0; q < k; q++)
             for (int t = 0; t < expectedCodes.GetLength(1); t++) Assert.Equal(expectedCodes[q, t], generated[q, t]);
     }
+
+    [Fact(Timeout = 120000)]
+    public async Task StereoPartialDelayModel_Logits_Loss_AndGeneration_MatchTheReference()
+    {
+        await Task.Yield();
+        var f = Fixture();
+        var st = f.GetProperty("stereo");
+        var options = TinyOptions();
+        options.Stereo = true;
+        Assert.Equal(st.GetProperty("delays").EnumerateArray().Select(e => e.GetInt32()).ToArray(), options.ResolveDelays());
+        using var model = new MusicGenModel<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+            NeuralNetworkTaskType.Generative, inputSize: 1, outputSize: 1) { RandomSeed = 5 }, options);
+        double[] Read(JsonElement table, string name) => table.GetProperty(name).EnumerateArray().Select(e => e.GetDouble()).ToArray();
+        model.LoadLanguageModelWeights((name, shape) => name switch
+        {
+            "condition_provider.conditioners.description.output_proj.weight" => Read(f.GetProperty("projection"), "weight"),
+            "condition_provider.conditioners.description.output_proj.bias" => Read(f.GetProperty("projection"), "bias"),
+            _ => Read(st.GetProperty("lm"), name),
+        });
+        var core = model.CoreForTests;
+        Assert.Equal(8, core.Configuration.Codebooks);
+        var condition = ReferenceCondition(f);
+        var codes = Codes(st, "codes");
+        int frames = codes.GetLength(1);
+        var logits = core.Logits(MusicGenDelayPattern.TrainingSequence(codes, core.Configuration.Delays, core.Special), condition, false, new Random(0));
+        var mask = st.GetProperty("mask").EnumerateArray().Select(r => r.EnumerateArray().Select(e => e.GetInt32()).ToArray()).ToArray();
+        var expected = st.GetProperty("logits");
+        for (int q = 0; q < 8; q++)
+            for (int t = 0; t < frames; t++)
+            {
+                Assert.Equal(mask[q][t] == 1, MusicGenDelayPattern.Predicted(t, q, frames, core.Configuration.Delays));
+                if (mask[q][t] == 0) continue;
+                var row = expected[q][t].EnumerateArray().Select(e => e.GetDouble()).ToArray();
+                for (int v = 0; v < row.Length; v++) Assert.Equal(row[v], logits[q, t + core.Configuration.Delays[q], v], 9);
+            }
+        Assert.Equal(st.GetProperty("loss").GetDouble(), core.Loss(codes, condition, false, new Random(0))[0], 9);
+        var expectedCodes = Codes(st, "generated");
+        var generated = core.Generate(condition, model.ConditionForTests(null), 3.0, expectedCodes.GetLength(1), l =>
+        {
+            int best = 0;
+            for (int i = 1; i < l.Length; i++) if (l[i] > l[best]) best = i;
+            return best;
+        });
+        for (int q = 0; q < 8; q++)
+            for (int t = 0; t < expectedCodes.GetLength(1); t++) Assert.Equal(expectedCodes[q, t], generated[q, t]);
+        // Stereo output is [2, samples]: each channel's codes decoded separately.
+        Assert.Equal(new[] { 2, 5 * 640 }, model.GenerateMusic("a", durationSeconds: 0.1).Shape.ToArray());
+    }
 }
