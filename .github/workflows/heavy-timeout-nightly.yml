@@ -273,6 +273,23 @@ jobs:
             $duration = [int]((Get-Date) - $started).TotalSeconds
             Write-Host '::endgroup::'
 
+            # Weight streaming backs a model's weights with a file under /tmp (StreamingTensorPool's
+            # aidotnet-streaming-pool-<id>/backing.bin, several GB for a paper-scale UNet). A chunk
+            # that was killed, timed out or crashed never runs the pool's cleanup, so the file
+            # survives into the NEXT chunk and the runner's disk fills: run 38117342722 failed three
+            # Flux contract tests with "No space left on device" on exactly that path, so those
+            # tests measured the disk and not the model (#2087). Each chunk owns its own pools, so
+            # reclaiming them here is safe and keeps one chunk's leftovers out of the next one.
+            $pools = Get-ChildItem -Path ([System.IO.Path]::GetTempPath()) -Directory `
+              -Filter 'aidotnet-streaming-pool-*' -ErrorAction SilentlyContinue
+            foreach ($pool in $pools) {
+              Remove-Item -LiteralPath $pool.FullName -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            # DriveInfo, not Get-PSDrive: on the Linux runner the temp path's drive is '/', which
+            # Get-PSDrive does not expose under the name PowerShell reports for the location.
+            $freeMb = [int]([System.IO.DriveInfo]::new([System.IO.Path]::GetTempPath()).AvailableFreeSpace / 1MB)
+            Write-Host "$label -> reclaimed $($pools.Count) streaming pool(s); ${freeMb} MB free on the temp volume"
+
             # 124 is timeout's own exit after it stopped the chunk at the cap; 137 is a SIGKILL from any source (the
             # kill-after escalation, or the kernel OOM killer), so it is reported as such rather than as a timeout.
             if ($exit -eq 124) { $exit = "timeout after $($chunkCapMinutes) min" }
