@@ -323,6 +323,7 @@ public partial class Transfusion<T> : VisionLanguageModelBase<T>, IUnifiedVision
     {
         if (!_useNativeMode)
             return;
+        InitializeTrainingHeads();
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -385,13 +386,22 @@ public partial class Transfusion<T> : VisionLanguageModelBase<T>, IUnifiedVision
         );
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// One step on Transfusion's own objective, <c>L = L_LM + lambda * L_DDPM</c> (Zhou et al.
+    /// 2024, Eq. 4): next-token cross-entropy over the text positions of the mixed sequence plus
+    /// the weighted DDPM noise-prediction loss over the image's patches. <paramref name="input"/>
+    /// is the image; <paramref name="expected"/> is the caption's token ids when it is rank-1, and
+    /// any other shape carries no text, which leaves the diffusion term alone with no tokens to
+    /// score. See <see cref="TrainMixedModal"/> for the masks each term is read under.
+    /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (expected is null) throw new ArgumentNullException(nameof(expected));
+        TrainMixedModal(input, expected);
     }
 
     /// <inheritdoc />
@@ -418,7 +428,11 @@ public partial class Transfusion<T> : VisionLanguageModelBase<T>, IUnifiedVision
         long vision = (long)_options.NumVisionLayers * 12L * visionDim * visionDim;
         long decoder = (long)_options.NumDecoderLayers * 12L * decoderDim * decoderDim;
         long embeddings = (long)_options.VocabSize * decoderDim;
-        return vision + decoder + embeddings;
+        // The mixed-modal training path adds a vocabulary head (d x V) and the linear
+        // patchifier / noise head (patchDim x d each), all built in the constructor.
+        long lmHead = (long)_options.VocabSize * decoderDim;
+        long patchHeads = 2L * _patchDim * decoderDim;
+        return vision + decoder + embeddings + lmHead + patchHeads;
     }
 
     public override ModelMetadata<T> GetModelMetadata()
