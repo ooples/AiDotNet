@@ -1,207 +1,211 @@
-using AiDotNet.Onnx;
+using AiDotNet.Audio.Generation;
 
 namespace AiDotNet.Audio.MusicGen;
 
 /// <summary>
-/// Configuration options for MusicGen text-to-music generation.
+/// Options for MusicGen (Copet et al. 2023, "Simple and Controllable Music Generation"): a single-stage transformer
+/// language model over the four codebooks of a 32 kHz EnCodec, interleaved by the "delay" pattern and conditioned on
+/// T5 text embeddings through cross-attention.
 /// </summary>
 /// <remarks>
 /// <para>
-/// MusicGen is Meta's state-of-the-art music generation model that creates
-/// high-quality music from text descriptions. It uses a single-stage transformer
-/// language model operating over EnCodec audio codes.
+/// From the paper (§2–3): EnCodec at 32 kHz with stride 640 (50 Hz), four RVQ codebooks of 2048; the delay pattern;
+/// pre-norm layers of causal self-attention, cross-attention and a D → 4D → D ReLU block; a frozen T5 text encoder;
+/// AdamW (β = 0.9, 0.95), decoupled weight decay 0.1, gradient clipping 1.0, a cosine schedule with 4000 warmup steps,
+/// 1M steps, D-Adaptation for the 300M model, an EMA of decay 0.99; condition merging 0.25, description dropout 0.5
+/// and word dropout 0.3; condition dropout 0.2 and classifier-free guidance 3.0; top-k 250 at temperature 1.0.
 /// </para>
-/// <para><b>For Beginners:</b> MusicGen generates actual music from descriptions:
-///
-/// Example prompts:
-/// - "Upbeat electronic dance music with heavy bass"
-/// - "Calm acoustic guitar melody with soft drums"
-/// - "Epic orchestral piece with dramatic strings"
-/// - "Lo-fi hip hop beats for studying"
-///
-/// Tips for good prompts:
-/// - Be specific about genre, instruments, and mood
-/// - Include tempo hints (fast, slow, moderate)
-/// - Mention energy level (energetic, calm, building)
-/// </para>
+/// <para>What the paper leaves open follows audiocraft (<c>config/model/lm/musicgen_lm.yaml</c>, its model scales,
+/// <c>conditioner/text2music.yaml</c>, <c>solver/musicgen</c>): the widths and depths of the three sizes, t5-base as
+/// the text encoder, bias-free linear layers, the sinusoidal step embedding, the learning rate 1e-4 of the
+/// AdamW-trained sizes, the EMA taken every 10 updates, the dropout of other metadata fields 0.5 and 30-second
+/// generation.</para>
+/// <para><b>For Beginners:</b> MusicGen writes music the way a language model writes text, one short frame of
+/// compressed audio at a time, guided by a description such as "an upbeat 80s synth-pop track".</para>
 /// </remarks>
 public class MusicGenOptions : AiDotNet.Models.Options.ModelOptions
 {
-    /// <summary>Initializes a new instance with default values.</summary>
-    public MusicGenOptions() { }
+    /// <summary>Creates the paper's 1.5B ("medium") configuration.</summary>
+    public MusicGenOptions()
+    {
+    }
 
     /// <summary>Initializes a new instance by copying from another instance.</summary>
-    /// <param name="other">The options instance to copy from.</param>
-    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public MusicGenOptions(MusicGenOptions other)
     {
-        if (other == null)
-            throw new ArgumentNullException(nameof(other));
-
+        if (other is null) throw new ArgumentNullException(nameof(other));
         ModelSize = other.ModelSize;
-        SampleRate = other.SampleRate;
+        ModelDim = other.ModelDim;
+        NumHeads = other.NumHeads;
+        NumLayers = other.NumLayers;
+        FeedForwardScale = other.FeedForwardScale;
+        DropoutRate = other.DropoutRate;
+        Delays = (int[])other.Delays.Clone();
+        Codec = (EnCodecOptions)AiDotNet.Models.CloneEngine.CopyConfiguration(other.Codec);
+        TextModelDim = other.TextModelDim;
+        TextLayers = other.TextLayers;
+        TextHeads = other.TextHeads;
+        TextKeyValueDim = other.TextKeyValueDim;
+        TextFeedForwardDim = other.TextFeedForwardDim;
+        TextVocabularySize = other.TextVocabularySize;
+        FreezeTextEncoder = other.FreezeTextEncoder;
+        MaxTextLength = other.MaxTextLength;
         DurationSeconds = other.DurationSeconds;
-        MaxDurationSeconds = other.MaxDurationSeconds;
         Temperature = other.Temperature;
         TopK = other.TopK;
         TopP = other.TopP;
         GuidanceScale = other.GuidanceScale;
-        Stereo = other.Stereo;
-        NumCodebooks = other.NumCodebooks;
-        CodebookSize = other.CodebookSize;
-        UseDelayPattern = other.UseDelayPattern;
-        TextEncoderPath = other.TextEncoderPath;
-        LanguageModelPath = other.LanguageModelPath;
-        EnCodecDecoderPath = other.EnCodecDecoderPath;
-        OnnxOptions = other.OnnxOptions;
-        DropoutRate = other.DropoutRate;
-        MaxTextLength = other.MaxTextLength;
+        UseSampling = other.UseSampling;
+        ConditionDropout = other.ConditionDropout;
+        WordDropout = other.WordDropout;
+        MergeMetadataProbability = other.MergeMetadataProbability;
+        DropDescriptionProbability = other.DropDescriptionProbability;
+        KeepMetadataFieldProbability = other.KeepMetadataFieldProbability;
+        LearningRate = other.LearningRate;
+        UseDAdaptation = other.UseDAdaptation;
+        Beta1 = other.Beta1;
+        Beta2 = other.Beta2;
+        WeightDecay = other.WeightDecay;
+        GradientClipNorm = other.GradientClipNorm;
+        WarmupSteps = other.WarmupSteps;
+        TrainingSteps = other.TrainingSteps;
+        EmaDecay = other.EmaDecay;
+        EmaEveryUpdates = other.EmaEveryUpdates;
+        Seed = other.Seed;
     }
 
-    /// <summary>
-    /// Gets or sets the model size variant.
-    /// </summary>
-    /// <remarks>
-    /// Different sizes trade off quality vs speed.
-    /// Default is Medium which balances both well.
-    /// </remarks>
+    /// <summary>Gets or sets the size preset (Medium: 1.5B parameters).</summary>
     public MusicGenModelSize ModelSize { get; set; } = MusicGenModelSize.Medium;
 
-    /// <summary>
-    /// Gets or sets the output sample rate in Hz.
-    /// </summary>
-    /// <remarks>
-    /// MusicGen uses 32kHz by default, matching the EnCodec codec.
-    /// This produces high-quality audio suitable for music.
-    /// </remarks>
-    public int SampleRate { get; set; } = 32000;
+    /// <summary>Gets or sets the model width D; 0 takes the preset's (1024, 1536, 2048).</summary>
+    public int ModelDim { get; set; }
 
-    /// <summary>
-    /// Gets or sets the default duration of generated music in seconds.
-    /// </summary>
-    public double DurationSeconds { get; set; } = 8.0;
+    /// <summary>Gets or sets the attention heads; 0 takes the preset's (16, 24, 32).</summary>
+    public int NumHeads { get; set; }
 
-    /// <summary>
-    /// Gets or sets the maximum duration in seconds.
-    /// </summary>
-    /// <remarks>
-    /// MusicGen can generate up to 30 seconds of audio.
-    /// Longer durations require more memory and compute time.
-    /// </remarks>
-    public double MaxDurationSeconds { get; set; } = 30.0;
+    /// <summary>Gets or sets the transformer layers L; 0 takes the preset's (24, 48, 48).</summary>
+    public int NumLayers { get; set; }
 
-    /// <summary>
-    /// Gets or sets the sampling temperature.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Controls randomness in generation:
-    /// - Lower (0.5-0.8): More predictable, stable output
-    /// - Default (1.0): Balanced creativity
-    /// - Higher (1.2-2.0): More creative but potentially less coherent
-    /// </para>
-    /// </remarks>
+    /// <summary>Gets or sets the feed-forward width as a multiple of D (4, §2.4).</summary>
+    public int FeedForwardScale { get; set; } = 4;
+
+    /// <summary>Gets or sets the dropout inside the transformer (0, the reference's).</summary>
+    public double DropoutRate { get; set; }
+
+    /// <summary>Gets or sets each codebook's delay in the interleaving pattern ([0, 1, 2, 3], Eq. 6).</summary>
+    public int[] Delays { get; set; } = [0, 1, 2, 3];
+
+    /// <summary>Gets or sets the audio tokenizer (EnCodec 32 kHz, §3.1).</summary>
+    public EnCodecOptions Codec { get; set; } = EnCodec32kHz();
+
+    /// <summary>Gets or sets the T5 encoder width (768, t5-base).</summary>
+    public int TextModelDim { get; set; } = 768;
+
+    /// <summary>Gets or sets the T5 encoder layers (12, t5-base).</summary>
+    public int TextLayers { get; set; } = 12;
+
+    /// <summary>Gets or sets the T5 attention heads (12, t5-base).</summary>
+    public int TextHeads { get; set; } = 12;
+
+    /// <summary>Gets or sets the T5 key/value width per head (64, t5-base).</summary>
+    public int TextKeyValueDim { get; set; } = 64;
+
+    /// <summary>Gets or sets the T5 feed-forward width (3072, t5-base).</summary>
+    public int TextFeedForwardDim { get; set; } = 3072;
+
+    /// <summary>Gets or sets the T5 embedding rows (32128, t5-base; its tokenizer uses the first 32100).</summary>
+    public int TextVocabularySize { get; set; } = 32128;
+
+    /// <summary>Gets or sets whether the T5 encoder stays fixed during training (true: "pretrained", §2.3, and the
+    /// reference's <c>finetune: false</c>).</summary>
+    public bool FreezeTextEncoder { get; set; } = true;
+
+    /// <summary>Gets or sets the most text tokens read (512, T5's).</summary>
+    public int MaxTextLength { get; set; } = 512;
+
+    /// <summary>Gets or sets the default generation length in seconds (30, the reference's).</summary>
+    public double DurationSeconds { get; set; } = 30.0;
+
+    /// <summary>Gets or sets the sampling temperature (1.0, §3.1).</summary>
     public double Temperature { get; set; } = 1.0;
 
-    /// <summary>
-    /// Gets or sets the top-k sampling parameter.
-    /// </summary>
-    /// <remarks>
-    /// Limits sampling to the top K most likely tokens.
-    /// Default of 250 works well for diverse music generation.
-    /// </remarks>
+    /// <summary>Gets or sets top-k sampling's k (250, §3.1).</summary>
     public int TopK { get; set; } = 250;
 
-    /// <summary>
-    /// Gets or sets the top-p (nucleus) sampling parameter.
-    /// </summary>
-    /// <remarks>
-    /// If greater than 0, uses nucleus sampling instead of top-k.
-    /// Value of 0.0 disables nucleus sampling (uses top-k only).
-    /// </remarks>
-    public double TopP { get; set; } = 0.0;
+    /// <summary>Gets or sets nucleus sampling's p; 0 uses top-k (0).</summary>
+    public double TopP { get; set; }
 
-    /// <summary>
-    /// Gets or sets the classifier-free guidance scale.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Controls how closely the model follows the text prompt:
-    /// - Low (1.0-2.0): More variation, less prompt adherence
-    /// - Default (3.0): Good balance
-    /// - High (4.0-7.0): Stricter prompt following, less creativity
-    /// </para>
-    /// </remarks>
+    /// <summary>Gets or sets the classifier-free guidance scale (3.0, §3.1).</summary>
     public double GuidanceScale { get; set; } = 3.0;
 
-    /// <summary>
-    /// Gets or sets whether to generate stereo audio.
-    /// </summary>
-    /// <remarks>
-    /// Requires the Stereo model variant for best results.
-    /// When using non-stereo models, mono output is duplicated to stereo.
-    /// </remarks>
-    public bool Stereo { get; set; } = false;
+    /// <summary>Gets or sets whether generation samples (true) or takes the most likely code.</summary>
+    public bool UseSampling { get; set; } = true;
 
-    /// <summary>
-    /// Gets or sets the number of EnCodec codebooks to use.
-    /// </summary>
-    /// <remarks>
-    /// More codebooks = higher quality but slower generation.
-    /// Default of 4 is used by standard MusicGen models.
-    /// </remarks>
-    public int NumCodebooks { get; set; } = 4;
+    /// <summary>Gets or sets the probability of training a step without the condition (0.2, §3.1).</summary>
+    public double ConditionDropout { get; set; } = 0.2;
 
-    /// <summary>
-    /// Gets or sets the codebook vocabulary size.
-    /// </summary>
-    /// <remarks>
-    /// Must match the EnCodec model configuration.
-    /// Default of 2048 is standard for MusicGen.
-    /// </remarks>
-    public int CodebookSize { get; set; } = 2048;
+    /// <summary>Gets or sets the probability of dropping each word of the description (0.3, §3.1).</summary>
+    public double WordDropout { get; set; } = 0.3;
 
-    /// <summary>
-    /// Gets or sets whether to use the delay pattern.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The delay pattern is MusicGen's key innovation:
-    /// - Generates codebooks with temporal offset
-    /// - Reduces effective sequence length
-    /// - Improves generation efficiency
-    /// </para>
-    /// Should be true for standard MusicGen operation.
-    /// </remarks>
-    public bool UseDelayPattern { get; set; } = true;
+    /// <summary>Gets or sets the probability of merging the metadata into the description (0.25, §3.1).</summary>
+    public double MergeMetadataProbability { get; set; } = 0.25;
 
-    /// <summary>
-    /// Gets or sets the path to the text encoder ONNX model.
-    /// </summary>
-    public string? TextEncoderPath { get; set; }
+    /// <summary>Gets or sets the probability of dropping the description when metadata is merged (0.5, §3.1).</summary>
+    public double DropDescriptionProbability { get; set; } = 0.5;
 
-    /// <summary>
-    /// Gets or sets the path to the language model ONNX model.
-    /// </summary>
-    public string? LanguageModelPath { get; set; }
+    /// <summary>Gets or sets the probability of keeping each metadata field in a merge (0.5, the reference's
+    /// <c>drop_other_p</c>).</summary>
+    public double KeepMetadataFieldProbability { get; set; } = 0.5;
 
-    /// <summary>
-    /// Gets or sets the path to the EnCodec decoder ONNX model.
-    /// </summary>
-    public string? EnCodecDecoderPath { get; set; }
+    /// <summary>Gets or sets the learning rate; null takes the size's (1 for the D-Adaptation-trained Small, the
+    /// D-Adaptation multiplier; 1e-4 otherwise).</summary>
+    public double? LearningRate { get; set; }
 
-    /// <summary>
-    /// Gets or sets the ONNX execution options.
-    /// </summary>
-    public OnnxModelOptions OnnxOptions { get; set; } = new();
+    /// <summary>Gets or sets whether training uses D-Adaptation; null uses it for Small only (§3.1).</summary>
+    public bool? UseDAdaptation { get; set; }
 
-    /// <summary>
-    /// Gets or sets the dropout rate for training.
-    /// </summary>
-    public double DropoutRate { get; set; } = 0.1;
+    /// <summary>Gets or sets AdamW's β₁ (0.9).</summary>
+    public double Beta1 { get; set; } = 0.9;
 
-    /// <summary>
-    /// Gets or sets the maximum text sequence length.
-    /// </summary>
-    public int MaxTextLength { get; set; } = 256;
+    /// <summary>Gets or sets AdamW's β₂ (0.95).</summary>
+    public double Beta2 { get; set; } = 0.95;
+
+    /// <summary>Gets or sets the decoupled weight decay (0.1).</summary>
+    public double WeightDecay { get; set; } = 0.1;
+
+    /// <summary>Gets or sets the gradient-norm clip (1.0).</summary>
+    public double GradientClipNorm { get; set; } = 1.0;
+
+    /// <summary>Gets or sets the learning-rate warmup steps (4000).</summary>
+    public int WarmupSteps { get; set; } = 4000;
+
+    /// <summary>Gets or sets the training steps the cosine schedule spans (1,000,000).</summary>
+    public int TrainingSteps { get; set; } = 1_000_000;
+
+    /// <summary>Gets or sets the EMA decay (0.99, §3.1).</summary>
+    public double EmaDecay { get; set; } = 0.99;
+
+    /// <summary>Gets or sets how many optimizer updates pass between EMA updates (10, the reference's).</summary>
+    public int EmaEveryUpdates { get; set; } = 10;
+
+    /// <summary>The paper's 32 kHz EnCodec (§3.1; audiocraft <c>encodec_large_nq4_s640</c>): stride 640 (ratios 8, 5,
+    /// 4, 4), 64 initial filters doubling over the encoder, non-causal with constant padding, four quantizers of 2048
+    /// codes.</summary>
+    public static EnCodecOptions EnCodec32kHz() => new()
+    {
+        SampleRate = 32000,
+        Filters = 64,
+        Ratios = [8, 5, 4, 4],
+        Dimension = 128,
+        ResidualKernelSizes = [3, 1],
+        TrueSkip = true,
+        LstmLayers = 2,
+        Causal = false,
+        ReflectPadding = false,
+        NumQuantizers = 4,
+        CodebookSize = 2048,
+        TargetBandwidths = [2.2],
+        TargetBandwidthKbps = 2.2,
+        IncludeDiscriminators = false,
+    };
 }

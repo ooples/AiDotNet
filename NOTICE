@@ -149,6 +149,12 @@ VALL-E X front end (MIT, Copyright (c) 2023 Songting)
   MandarinG2P ports utils/g2p/mandarin.py's bopomofo-to-IPA and Latin-to-bopomofo
   tables and rewrite rules.
 
+audiocraft (MIT, Copyright (c) Meta Platforms, Inc. and affiliates)
+  https://github.com/facebookresearch/audiocraft
+  MusicGenCore ports LMModel's delay pattern, initialization and guided
+  generation; DAdaptAdamOptimizer ports optim/dadam.py (itself from
+  facebookresearch/dadaptation, MIT).
+
 NATSpeech utils/audio/cwt.py (MIT, Copyright (c) 2022 Yi Ren)
   https://github.com/NATSpeech/NATSpeech
   Vendored unchanged in tools/reference-data/natspeech_cwt.py (a test-data

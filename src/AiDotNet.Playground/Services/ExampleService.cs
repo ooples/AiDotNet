@@ -2979,14 +2979,11 @@ var architecture = new NeuralNetworkArchitecture<double>(
     inputSize: 512,  // Text embedding dimension
     outputSize: 2048);  // Audio token codebook size
 
-// Create MusicGen options
+// Create MusicGen options (the paper's 1.5B model: 32 kHz EnCodec with four codebooks of 2048)
 var options = new MusicGenOptions
 {
     ModelSize = MusicGenModelSize.Medium,
-    SampleRate = sampleRate,
-    DurationSeconds = duration,
-    NumCodebooks = 4,
-    CodebookSize = 2048
+    DurationSeconds = duration
 };
 
 // Create MusicGen model in native mode
@@ -2996,8 +2993,8 @@ var musicGen = new MusicGenModel<double>(
 
 Console.WriteLine(""MusicGen Model:"");
 Console.WriteLine($""  Model Size: {options.ModelSize}"");
-Console.WriteLine($""  Codebooks: {options.NumCodebooks}"");
-Console.WriteLine($""  Codebook Size: {options.CodebookSize}"");
+Console.WriteLine($""  Codebooks: {options.Codec.NumQuantizers}"");
+Console.WriteLine($""  Codebook Size: {options.Codec.CodebookSize}"");
 Console.WriteLine($""  Duration: {options.DurationSeconds}s"");
 Console.WriteLine();
 

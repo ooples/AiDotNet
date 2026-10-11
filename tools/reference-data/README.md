@@ -19,6 +19,9 @@ that produce those values, so you can check them yourself or regenerate them.
 | `mandarin_g2p_reference.py` | `TextToSpeech/ReferenceData/mandarin_g2p_reference.json` | Plachtaa/VALL-E-X's `chinese_to_ipa` and cn2an (needs `--vallex`, a checkout of Plachtaa/VALL-E-X) |
 | `mandarin_g2p_resources.py` | `src/TextToSpeech/FrontEnd/Resources/jieba_*` and `pypinyin_*` (the Mandarin G2P's data, not a test fixture) | jieba 0.42.1 and pypinyin 0.55.0 |
 | `vocos_encodec_reference.py` | `TextToSpeech/ReferenceData/vocos_encodec_reference.json` | the vocos package's `VocosBackbone` and `ISTFTHead` (VALL-E 2's decoder) |
+| `t5_tokenizer_reference.py` | `Tokenization/ReferenceData/t5_tokenizer_reference.json` | sentencepiece with google-t5/t5-base's `spiece.model` (MusicGen's T5 tokenizer) |
+| `dadapt_adam_reference.py` | `UnitTests/Optimizers/ReferenceData/dadapt_adam_reference.json` | audiocraft's `DAdaptAdam` (needs `--audiocraft`, a checkout of facebookresearch/audiocraft) |
+| `musicgen_reference.py` | `Audio/ReferenceData/musicgen_reference.json` | audiocraft's `LMModel` with the delay pattern, and a tiny Hugging Face T5 encoder (needs `--audiocraft`) |
 | `xvector_reference.py` | `TextToSpeech/ReferenceData/pyannote_xvector_reference.json` | pyannote.audio `XVectorSincNet` |
 | `espeak_g2p_reference.py` | `TextToSpeech/ReferenceData/espeak_arctic_phonemes.json` | espeak-ng through `phonemizer` (the front end Pheme was trained with) |
 | `g2p_resources.py` | `src/TextToSpeech/FrontEnd/Resources/cmudict.tsv.gz` and `nrl_rules.tsv` (the English G2P's data, not a test fixture) | CMUdict and NRL Report 7948's rules, from pinned sources |

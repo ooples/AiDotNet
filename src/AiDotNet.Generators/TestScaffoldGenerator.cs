@@ -437,6 +437,58 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         };
 
     /// <summary>
+    /// Emits text-sensitivity probes that compare a sampling model's deterministic training objective
+    /// (<c>MeasureLoss</c>, the teacher-forced loss, which reads the input) for two inputs against one target,
+    /// instead of its sampled output: at a tiny size two inputs shift the draws too little to change them under a
+    /// fixed seed, so identical output is a property of sampling, not a broken input path. Each probe is
+    /// (name, whether it trains first, "constant" | "random" | "text" inputs); text inputs go through
+    /// <paramref name="textToTokens"/>.
+    /// </summary>
+    private static void AppendObjectiveSensitivityProbes(StringBuilder sb, (string Name, bool Trains, string Inputs)[] probes,
+        string textToTokens)
+    {
+        foreach (var (name, trains, inputs) in probes)
+        {
+            sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
+            sb.AppendLine($"    public override async System.Threading.Tasks.Task {name}()");
+            sb.AppendLine("    {");
+            sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
+            sb.AppendLine("        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Create();");
+            sb.AppendLine("        var rng = AiDotNet.Tests.ModelFamilyTests.Base.ModelTestHelpers.CreateSeededRandom();");
+            sb.AppendLine("        using var network = CreateNetwork();");
+            sb.AppendLine("        var target = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);");
+            if (trains)
+            {
+                sb.AppendLine("        var trainInput = CreateRandomTensor(EffectiveInputShape, rng);");
+                sb.AppendLine("        int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);");
+                sb.AppendLine("        for (int i = 0; i < iterations; i++) TrainOn(network, trainInput, target);");
+            }
+            if (inputs == "constant")
+            {
+                sb.AppendLine("        var input1 = CreateConstantTensor(EffectiveInputShape, 0.1);");
+                sb.AppendLine("        var input2 = CreateConstantTensor(EffectiveInputShape, 0.9);");
+            }
+            else if (inputs == "random")
+            {
+                sb.AppendLine("        var input1 = CreateRandomTensor(EffectiveInputShape, rng);");
+                sb.AppendLine("        var input2 = CreateRandomTensor(EffectiveInputShape, rng);");
+            }
+            else
+            {
+                sb.AppendLine($"        var input1 = {textToTokens}(\"the quick brown fox\");");
+                sb.AppendLine($"        var input2 = {textToTokens}(\"a completely different sentence\");");
+            }
+            sb.AppendLine("        double loss1 = MeasureLoss(network, input1, target, target);");
+            sb.AppendLine("        double loss2 = MeasureLoss(network, input2, target, target);");
+            sb.AppendLine("        Xunit.Assert.True(global::AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(loss1) && global::AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(loss2), $\"Objective not finite: {loss1}, {loss2}.\");");
+            sb.AppendLine("        Xunit.Assert.True(System.Math.Abs(loss1 - loss2) > 1e-9 * System.Math.Max(1.0, System.Math.Abs(loss1)),");
+            sb.AppendLine("            $\"The training objective is identical for distinct inputs ({loss1:R}): the text never reaches the model.\");");
+            sb.AppendLine("    }");
+            sb.AppendLine();
+        }
+    }
+
+    /// <summary>
     /// Raised when two discovered models share a simple name and no owner is registered.
     /// </summary>
     /// <remarks>
@@ -7667,6 +7719,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.Audio.Emotion.Emotion2VecOptions { NumMels = 4, TransformerDim = 4, " +
                     "NumTransformerLayers = 1, NumAttentionHeads = 1, FeedForwardDim = 8, NumClasses = 4, " +
                     "SampleRate = 16000, FftSize = 16, HopLength = 8, DropoutRate = 0.0 })";
+            }
+            else if (model.ClassName == "MusicGenModel" && model.TypeParameterCount == 1)
+            {
+                // MusicGen (Copet et al. 2023): T5 conditioning, the delay-pattern LM over four EnCodec codebooks and
+                // the 32 kHz codec, at CI-smoke widths. Its input is T5 token ids (the text encoder's embedding comes
+                // first), and Predict generates DurationSeconds = 0.1 s (five frames) seeded by Seed.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, inputSize: 8, outputSize: 3200), " +
+                    "new AiDotNet.Audio.MusicGen.MusicGenOptions { ModelSize = AiDotNet.Audio.MusicGen.MusicGenModelSize.Small, " +
+                    "ModelDim = 16, NumHeads = 2, NumLayers = 2, TextVocabularySize = 64, TextModelDim = 8, TextLayers = 2, " +
+                    "TextHeads = 2, TextKeyValueDim = 4, TextFeedForwardDim = 16, DurationSeconds = 0.1, Seed = 42, " +
+                    "Codec = new AiDotNet.Audio.Generation.EnCodecOptions { SampleRate = 32000, Filters = 4, Ratios = new[] { 8, 5, 4, 4 }, " +
+                    "Dimension = 8, ResidualKernelSizes = new[] { 3, 1 }, TrueSkip = true, Causal = false, ReflectPadding = false, " +
+                    "NumQuantizers = 4, CodebookSize = 16, TargetBandwidths = new[] { 0.8 }, TargetBandwidthKbps = 0.8 } })";
             }
             else if (model.ClassName == "AudioGenModel" && model.TypeParameterCount == 1)
             {
@@ -15438,54 +15505,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // text path, so every text-sensitivity probe compares the model's deterministic training objective
                     // (MeasureLoss: the teacher-forced loss of the first stage, which reads the text) for two inputs
                     // against one target. Each model's paper tests check its synthesized audio after training.
-                    var probes = new[]
+                    AppendObjectiveSensitivityProbes(sb, new[]
                     {
                         ("DifferentText_DifferentAudio", false, "constant"),
                         ("DifferentInputs_ShouldProduceDifferentOutputs", false, "constant"),
                         ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
                         ("ScaledInput_ShouldChangeOutput", false, "random"),
                         ("Synthesize_DifferentText_DifferentOutput", false, "text"),
-                    };
-                    foreach (var (name, trains, inputs) in probes)
-                    {
-                        sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
-                        sb.AppendLine($"    public override async System.Threading.Tasks.Task {name}()");
-                        sb.AppendLine("    {");
-                        sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
-                        sb.AppendLine("        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Create();");
-                        sb.AppendLine("        var rng = AiDotNet.Tests.ModelFamilyTests.Base.ModelTestHelpers.CreateSeededRandom();");
-                        sb.AppendLine("        using var network = CreateNetwork();");
-                        sb.AppendLine("        var target = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);");
-                        if (trains)
-                        {
-                            sb.AppendLine("        var trainInput = CreateRandomTensor(EffectiveInputShape, rng);");
-                            sb.AppendLine("        int iterations = ResolveConformanceTrainingIterations(network, TrainingIterations);");
-                            sb.AppendLine("        for (int i = 0; i < iterations; i++) TrainOn(network, trainInput, target);");
-                        }
-                        if (inputs == "constant")
-                        {
-                            sb.AppendLine("        var input1 = CreateConstantTensor(EffectiveInputShape, 0.1);");
-                            sb.AppendLine("        var input2 = CreateConstantTensor(EffectiveInputShape, 0.9);");
-                        }
-                        else if (inputs == "random")
-                        {
-                            sb.AppendLine("        var input1 = CreateRandomTensor(EffectiveInputShape, rng);");
-                            sb.AppendLine("        var input2 = CreateRandomTensor(EffectiveInputShape, rng);");
-                        }
-                        else
-                        {
-                            sb.AppendLine("        var tts = (AiDotNet.TextToSpeech.TtsModelBase<double>)network;");
-                            sb.AppendLine("        var input1 = tts.TextToTokens(\"the quick brown fox\");");
-                            sb.AppendLine("        var input2 = tts.TextToTokens(\"a completely different sentence\");");
-                        }
-                        sb.AppendLine("        double loss1 = MeasureLoss(network, input1, target, target);");
-                        sb.AppendLine("        double loss2 = MeasureLoss(network, input2, target, target);");
-                        sb.AppendLine("        Xunit.Assert.True(global::AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(loss1) && global::AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(loss2), $\"Objective not finite: {loss1}, {loss2}.\");");
-                        sb.AppendLine("        Xunit.Assert.True(System.Math.Abs(loss1 - loss2) > 1e-9 * System.Math.Max(1.0, System.Math.Abs(loss1)),");
-                        sb.AppendLine("            $\"The training objective is identical for distinct inputs ({loss1:R}): the text never reaches the model.\");");
-                        sb.AppendLine("    }");
-                        sb.AppendLine();
-                    }
+                    }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
                 else if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS")
                 {
@@ -15661,6 +15688,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int MemorizationTaskIterations => 100;");
                 sb.AppendLine("    protected override int MoreDataShortIterations => 10;");
                 sb.AppendLine("    protected override int MoreDataLongIterations => 30;");
+            }
+            else if (model.ClassName == "MusicGenModel")
+            {
+                // MusicGen reads T5 token ids and trains on (and generates) waveforms: eight ids, and 3200 samples,
+                // five frames of the smoke codec's 640-sample hop (the generic [4] target is not a whole frame).
+                sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 3200 };");
+                // MusicGen samples its codes, so its input-sensitivity probes compare the training objective.
+                AppendObjectiveSensitivityProbes(sb, new[]
+                {
+                    ("DifferentInputs_ShouldProduceDifferentOutputs", false, "constant"),
+                    ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
+                    ("ScaledInput_ShouldChangeOutput", false, "random"),
+                }, "((AiDotNet.Audio.MusicGen.MusicGenModel<double>)network).TextToTokens");
             }
             else if (model.ClassName == "DeepgramNova2")
             {

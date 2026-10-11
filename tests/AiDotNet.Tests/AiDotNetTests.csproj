@@ -134,6 +134,7 @@
     <Content Include="IntegrationTests\Clustering\ReferenceData\*.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Audio\Pitch\ReferenceData\*.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Audio\Codecs\ReferenceData\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Audio\ReferenceData\*.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="TextToSpeech\ReferenceData\*.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Tokenization\ReferenceData\*.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="UnitTests\Optimizers\ReferenceData\*.json" CopyToOutputDirectory="PreserveNewest" />

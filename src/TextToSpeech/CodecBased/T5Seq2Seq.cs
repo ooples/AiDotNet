@@ -171,8 +171,12 @@ internal sealed class T5Seq2Seq<T>
         EncoderBias = T5Attention<T>.Own(layers, new TiedEmbeddingLayer<T>(c.RelativeBuckets, c.Heads));
         EncoderFinalNorm = T5Attention<T>.Own(layers, new RMSNormalizationLayer<T>(c.ModelDim, c.LayerNormEpsilon));
         for (int i = 0; i < c.DecoderLayers; i++) Decoder.Add(new T5Block<T>(engine, layers, c, decoder: true));
-        DecoderBias = T5Attention<T>.Own(layers, new TiedEmbeddingLayer<T>(c.RelativeBuckets, c.Heads));
-        DecoderFinalNorm = T5Attention<T>.Own(layers, new RMSNormalizationLayer<T>(c.ModelDim, c.LayerNormEpsilon));
+        // An encoder-only T5 (T5EncoderModel, as text conditioners use it) owns no decoder parameters.
+        if (c.DecoderLayers > 0)
+        {
+            DecoderBias = T5Attention<T>.Own(layers, new TiedEmbeddingLayer<T>(c.RelativeBuckets, c.Heads));
+            DecoderFinalNorm = T5Attention<T>.Own(layers, new RMSNormalizationLayer<T>(c.ModelDim, c.LayerNormEpsilon));
+        }
     }
 
     public T5Configuration Configuration { get; }
@@ -183,9 +187,9 @@ internal sealed class T5Seq2Seq<T>
     /// <c>encoder.block.0.layer.0.SelfAttention.relative_attention_bias</c>).</summary>
     public TiedEmbeddingLayer<T> EncoderBias { get; }
     public RMSNormalizationLayer<T> EncoderFinalNorm { get; }
-    /// <summary>The decoder's relative attention bias table <c>[buckets, heads]</c>.</summary>
-    public TiedEmbeddingLayer<T> DecoderBias { get; }
-    public RMSNormalizationLayer<T> DecoderFinalNorm { get; }
+    /// <summary>The decoder's relative attention bias table <c>[buckets, heads]</c>; null for an encoder-only T5.</summary>
+    public TiedEmbeddingLayer<T>? DecoderBias { get; }
+    public RMSNormalizationLayer<T>? DecoderFinalNorm { get; }
 
     internal static Tensor<T> Dropout(IEngine engine, Tensor<T> x, double rate, Random random)
     {
@@ -229,9 +233,11 @@ internal sealed class T5Seq2Seq<T>
     {
         int length = decoderIds.Length;
         var h = Drop(Shared.Forward(decoderIds), training, random);
-        var bias = PositionBias(DecoderBias, length, length, bidirectional: false, causal: true);
+        var decoderBias = DecoderBias ?? throw new InvalidOperationException("This T5 has no decoder.");
+        var decoderNorm = DecoderFinalNorm ?? throw new InvalidOperationException("This T5 has no decoder.");
+        var bias = PositionBias(decoderBias, length, length, bidirectional: false, causal: true);
         foreach (var block in Decoder) h = block.Forward(h, bias, memory, null, training, random);
-        h = Drop(DecoderFinalNorm.Forward(h), training, random);
+        h = Drop(decoderNorm.Forward(h), training, random);
         var scaled = _engine.TensorMultiplyScalar(h, NumOps.FromDouble(1.0 / Math.Sqrt(Configuration.ModelDim)));
         return Shared.Logits(scaled);
     }
@@ -333,7 +339,7 @@ internal sealed class T5Seq2Seq<T>
         }
         Shared.Reinitialize(() => Normal(1.0));
         EncoderBias.Reinitialize(() => Normal(Math.Pow(c.ModelDim, -0.5)));
-        DecoderBias.Reinitialize(() => Normal(Math.Pow(c.ModelDim, -0.5)));
+        DecoderBias?.Reinitialize(() => Normal(Math.Pow(c.ModelDim, -0.5)));
         foreach (var block in Encoder.Concat(Decoder))
         {
             Attention(block.SelfAttention);
@@ -394,7 +400,10 @@ internal sealed class T5Seq2Seq<T>
             Norm($"{block}.1.layer_norm", Decoder[i].CrossNorm!);
             FeedForward($"{block}.2", Decoder[i]);
         }
-        DecoderBias.LoadTable(read("decoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight", new[] { c.RelativeBuckets, c.Heads }));
-        Norm("decoder.final_layer_norm", DecoderFinalNorm);
+        if (DecoderBias is not null && DecoderFinalNorm is not null)
+        {
+            DecoderBias.LoadTable(read("decoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight", new[] { c.RelativeBuckets, c.Heads }));
+            Norm("decoder.final_layer_norm", DecoderFinalNorm);
+        }
     }
 }
