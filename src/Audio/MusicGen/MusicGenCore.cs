@@ -6,8 +6,11 @@ using AiDotNet.TextToSpeech.CodecBased;
 namespace AiDotNet.Audio.MusicGen;
 
 /// <summary>The sizes of MusicGen's language model.</summary>
+/// <remarks>With <c>CrossAttention</c> the conditioning is attended to by every layer (text-to-music); without it the
+/// conditioning is a prefix of the sequence (the melody model, §2.4: "we instead provide the conditioning tensor C as a
+/// prefix to the transformer input"), and the layers have no cross-attention.</remarks>
 internal sealed record MusicGenConfiguration(int Codebooks, int CodebookSize, int ModelDim, int Heads, int Layers,
-    int FeedForwardDim, double Dropout, int[] Delays);
+    int FeedForwardDim, double Dropout, int[] Delays, bool CrossAttention = true);
 
 /// <summary>
 /// The "delay" codebook interleaving pattern (Copet et al. 2023, §2.2, Eq. 6; audiocraft
@@ -66,11 +69,13 @@ internal sealed class MusicGenCore<T>
         for (int q = 0; q < c.Codebooks; q++) Embeddings.Add(Own(new TiedEmbeddingLayer<T>(c.CodebookSize + 1, c.ModelDim)));
         for (int i = 0; i < c.Layers; i++)
         {
-            Blocks.Add(new MusicGenBlock(
-                Own(new LayerNormalizationLayer<T>(c.ModelDim, 1e-5)), Own(new BiasFreeLinearLayer<T>(c.ModelDim, 3 * c.ModelDim)),
-                Own(new BiasFreeLinearLayer<T>(c.ModelDim, c.ModelDim)),
-                Own(new LayerNormalizationLayer<T>(c.ModelDim, 1e-5)), Own(new BiasFreeLinearLayer<T>(c.ModelDim, 3 * c.ModelDim)),
-                Own(new BiasFreeLinearLayer<T>(c.ModelDim, c.ModelDim)),
+            var norm1 = Own(new LayerNormalizationLayer<T>(c.ModelDim, 1e-5));
+            var selfIn = Own(new BiasFreeLinearLayer<T>(c.ModelDim, 3 * c.ModelDim));
+            var selfOut = Own(new BiasFreeLinearLayer<T>(c.ModelDim, c.ModelDim));
+            var normCross = c.CrossAttention ? Own(new LayerNormalizationLayer<T>(c.ModelDim, 1e-5)) : null;
+            var crossIn = c.CrossAttention ? Own(new BiasFreeLinearLayer<T>(c.ModelDim, 3 * c.ModelDim)) : null;
+            var crossOut = c.CrossAttention ? Own(new BiasFreeLinearLayer<T>(c.ModelDim, c.ModelDim)) : null;
+            Blocks.Add(new MusicGenBlock(norm1, selfIn, selfOut, normCross, crossIn, crossOut,
                 Own(new LayerNormalizationLayer<T>(c.ModelDim, 1e-5)), Own(new BiasFreeLinearLayer<T>(c.ModelDim, c.FeedForwardDim)),
                 Own(new BiasFreeLinearLayer<T>(c.FeedForwardDim, c.ModelDim))));
         }
@@ -81,7 +86,7 @@ internal sealed class MusicGenCore<T>
     /// <summary>One transformer layer's parameters.</summary>
     internal sealed record MusicGenBlock(
         LayerNormalizationLayer<T> Norm1, BiasFreeLinearLayer<T> SelfIn, BiasFreeLinearLayer<T> SelfOut,
-        LayerNormalizationLayer<T> NormCross, BiasFreeLinearLayer<T> CrossIn, BiasFreeLinearLayer<T> CrossOut,
+        LayerNormalizationLayer<T>? NormCross, BiasFreeLinearLayer<T>? CrossIn, BiasFreeLinearLayer<T>? CrossOut,
         LayerNormalizationLayer<T> Norm2, BiasFreeLinearLayer<T> Linear1, BiasFreeLinearLayer<T> Linear2);
 
     public MusicGenConfiguration Configuration { get; }
@@ -179,10 +184,13 @@ internal sealed class MusicGenCore<T>
         }
         var attended = Attend(Columns(projected, 0), keys, values, causal: true, queryOffset: offset, training, random);
         x = _engine.TensorAdd(x, Drop(b.SelfOut.Forward(attended), training, random));
-        var crossQueries = Columns(b.CrossIn.Forward(b.NormCross.Forward(x)), 0);
-        var crossMemory = b.CrossIn.Forward(memory);
-        var crossed = Attend(crossQueries, Columns(crossMemory, 1), Columns(crossMemory, 2), causal: false, 0, training, random);
-        x = _engine.TensorAdd(x, Drop(b.CrossOut.Forward(crossed), training, random));
+        if (b.NormCross is not null && b.CrossIn is not null && b.CrossOut is not null)
+        {
+            var crossQueries = Columns(b.CrossIn.Forward(b.NormCross.Forward(x)), 0);
+            var crossMemory = b.CrossIn.Forward(memory);
+            var crossed = Attend(crossQueries, Columns(crossMemory, 1), Columns(crossMemory, 2), causal: false, 0, training, random);
+            x = _engine.TensorAdd(x, Drop(b.CrossOut.Forward(crossed), training, random));
+        }
         var hidden = Drop(_engine.ReLU(b.Linear1.Forward(b.Norm2.Forward(x))), training, random);
         return _engine.TensorAdd(x, Drop(b.Linear2.Forward(hidden), training, random));
     }
@@ -200,11 +208,22 @@ internal sealed class MusicGenCore<T>
         return sum ?? throw new InvalidOperationException("MusicGen has no codebooks.");
     }
 
-    // The logits [K, L, N] of the new positions `sequence[:, from .. from + length)`.
+    // The logits [K, L, N] of the new positions `sequence[:, from .. from + length)`. In prefix mode the conditioning
+    // `memory` [P, D] precedes step 0, so the steps sit at positions P + s and the first call carries the prefix.
     private Tensor<T> Run(int[,] sequence, int from, int length, Tensor<T> memory, List<(Tensor<T>, Tensor<T>)>? cache, bool training, Random random)
     {
-        var x = _engine.TensorAdd(Embed(sequence, from, length), Positions(from, length));
-        for (int i = 0; i < Blocks.Count; i++) x = Block(Blocks[i], x, memory, from, cache, i, training, random);
+        int prefix = Configuration.CrossAttention ? 0 : memory.Shape[0];
+        var x = Embed(sequence, from, length);
+        int position = prefix + from;
+        if (prefix > 0 && from == 0)
+        {
+            x = _engine.TensorConcatenate(new[] { memory, x }, 0);
+            position = 0;
+        }
+        x = _engine.TensorAdd(x, Positions(position, x.Shape[0]));
+        for (int i = 0; i < Blocks.Count; i++) x = Block(Blocks[i], x, memory, position, cache, i, training, random);
+        if (x.Shape[0] > length)
+            x = _engine.TensorSlice(x, new[] { x.Shape[0] - length, 0 }, new[] { length, Configuration.ModelDim });
         var output = OutNorm.Forward(x);
         var perCodebook = new Tensor<T>[Configuration.Codebooks];
         for (int q = 0; q < perCodebook.Length; q++)
@@ -330,9 +349,9 @@ internal sealed class MusicGenCore<T>
             double depth = Math.Sqrt(2.0 * (i + 1));
             double uniform = 1 / Math.Sqrt(c.ModelDim);
             Fill(b.SelfIn, c.ModelDim, 3 * c.ModelDim, () => (2 * random.NextDouble() - 1) * uniform);
-            Fill(b.CrossIn, c.ModelDim, 3 * c.ModelDim, () => (2 * random.NextDouble() - 1) * uniform);
+            if (b.CrossIn is not null) Fill(b.CrossIn, c.ModelDim, 3 * c.ModelDim, () => (2 * random.NextDouble() - 1) * uniform);
             Fill(b.SelfOut, c.ModelDim, c.ModelDim, () => TruncatedNormal(1 / Math.Sqrt(c.ModelDim) / depth));
-            Fill(b.CrossOut, c.ModelDim, c.ModelDim, () => TruncatedNormal(1 / Math.Sqrt(c.ModelDim) / depth));
+            if (b.CrossOut is not null) Fill(b.CrossOut, c.ModelDim, c.ModelDim, () => TruncatedNormal(1 / Math.Sqrt(c.ModelDim) / depth));
             Fill(b.Linear1, c.ModelDim, c.FeedForwardDim, () => TruncatedNormal(1 / Math.Sqrt(c.ModelDim) / depth));
             Fill(b.Linear2, c.FeedForwardDim, c.ModelDim, () => TruncatedNormal(1 / Math.Sqrt(c.FeedForwardDim) / depth));
         }
@@ -351,12 +370,15 @@ internal sealed class MusicGenCore<T>
             string p = $"transformer.layers.{i}";
             TorchParameters.Linear(b.SelfIn, d, 3 * d, read($"{p}.self_attn.in_proj_weight", new[] { 3 * d, d }));
             TorchParameters.Linear(b.SelfOut, d, d, read($"{p}.self_attn.out_proj.weight", new[] { d, d }));
-            TorchParameters.Linear(b.CrossIn, d, 3 * d, read($"{p}.cross_attention.in_proj_weight", new[] { 3 * d, d }));
-            TorchParameters.Linear(b.CrossOut, d, d, read($"{p}.cross_attention.out_proj.weight", new[] { d, d }));
+            if (b.CrossIn is not null && b.CrossOut is not null && b.NormCross is not null)
+            {
+                TorchParameters.Linear(b.CrossIn, d, 3 * d, read($"{p}.cross_attention.in_proj_weight", new[] { 3 * d, d }));
+                TorchParameters.Linear(b.CrossOut, d, d, read($"{p}.cross_attention.out_proj.weight", new[] { d, d }));
+                TorchParameters.LayerNorm(_engine, b.NormCross, read($"{p}.norm_cross.weight", new[] { d }), read($"{p}.norm_cross.bias", new[] { d }));
+            }
             TorchParameters.Linear(b.Linear1, d, c.FeedForwardDim, read($"{p}.linear1.weight", new[] { c.FeedForwardDim, d }));
             TorchParameters.Linear(b.Linear2, c.FeedForwardDim, d, read($"{p}.linear2.weight", new[] { d, c.FeedForwardDim }));
             TorchParameters.LayerNorm(_engine, b.Norm1, read($"{p}.norm1.weight", new[] { d }), read($"{p}.norm1.bias", new[] { d }));
-            TorchParameters.LayerNorm(_engine, b.NormCross, read($"{p}.norm_cross.weight", new[] { d }), read($"{p}.norm_cross.bias", new[] { d }));
             TorchParameters.LayerNorm(_engine, b.Norm2, read($"{p}.norm2.weight", new[] { d }), read($"{p}.norm2.bias", new[] { d }));
         }
         TorchParameters.LayerNorm(_engine, OutNorm, read("out_norm.weight", new[] { d }), read("out_norm.bias", new[] { d }));

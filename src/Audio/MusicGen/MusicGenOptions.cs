@@ -71,6 +71,10 @@ public class MusicGenOptions : AiDotNet.Models.Options.ModelOptions
         TrainingSteps = other.TrainingSteps;
         EmaDecay = other.EmaDecay;
         EmaEveryUpdates = other.EmaEveryUpdates;
+        MelodyConditioning = other.MelodyConditioning;
+        MelodyDropout = other.MelodyDropout;
+        ChromaWindow = other.ChromaWindow;
+        ChromaHop = other.ChromaHop;
         Seed = other.Seed;
     }
 
@@ -187,6 +191,21 @@ public class MusicGenOptions : AiDotNet.Models.Options.ModelOptions
 
     /// <summary>Gets or sets how many optimizer updates pass between EMA updates (10, the reference's).</summary>
     public int EmaEveryUpdates { get; set; } = 10;
+
+    /// <summary>Gets or sets whether the model is conditioned on a melody as well as text (§2.3, the melody model):
+    /// the chromagram of the conditioning audio, quantized to its dominant pitch class, and the text are given as a
+    /// prefix of the sequence instead of through cross-attention (§2.4, audiocraft's chroma2music fuser).</summary>
+    public bool MelodyConditioning { get; set; }
+
+    /// <summary>Gets or sets the probability of training a step without the melody (0.5, audiocraft's
+    /// <c>attribute_dropout.wav.self_wav</c>; the paper does not say).</summary>
+    public double MelodyDropout { get; set; } = 0.5;
+
+    /// <summary>Gets or sets the chromagram window and FFT size (2¹⁴ = 16384, §3.1).</summary>
+    public int ChromaWindow { get; set; } = 1 << 14;
+
+    /// <summary>Gets or sets the chromagram hop (2¹² = 4096, §3.1).</summary>
+    public int ChromaHop { get; set; } = 1 << 12;
 
     /// <summary>The paper's 32 kHz EnCodec (§3.1; audiocraft <c>encodec_large_nq4_s640</c>): stride 640 (ratios 8, 5,
     /// 4, 4), 64 initial filters doubling over the encoder, non-causal with constant padding, four quantizers of 2048

@@ -154,4 +154,75 @@ public class MusicGenReferenceTests
         for (int q = 0; q < expected.GetLength(0); q++)
             for (int t = 0; t < frames; t++) Assert.Equal(expected[q, t], viaModel[q, t]);
     }
+
+    [Fact(Timeout = 120000)]
+    public async Task MelodyModel_Chroma_PrefixLogits_Loss_AndGeneration_MatchTheReference()
+    {
+        await Task.Yield();
+        var f = Fixture();
+        var m = f.GetProperty("melody");
+        // The chromagram of the C4-then-A4 tone, one-hot per frame.
+        var tone = m.GetProperty("tone");
+        int sr = tone.GetProperty("sample_rate").GetInt32(), n = tone.GetProperty("samples").GetInt32();
+        var frequencies = tone.GetProperty("frequencies").EnumerateArray().Select(e => e.GetDouble()).ToArray();
+        double amplitude = tone.GetProperty("amplitude").GetDouble();
+        var samples = Enumerable.Range(0, n).Select(i => amplitude * Math.Sin(2 * Math.PI * (i < n / 2 ? frequencies[0] : frequencies[1]) * i / sr)).ToArray();
+        var chroma = MusicGenChroma.Extract(samples, sr);
+        var expectedChroma = m.GetProperty("chroma").EnumerateArray().Select(r => r.EnumerateArray().Select(e => e.GetDouble()).ToArray()).ToArray();
+        Assert.Equal(expectedChroma.Length, chroma.GetLength(0));
+        for (int t = 0; t < expectedChroma.Length; t++)
+            for (int c = 0; c < 12; c++) Assert.Equal(expectedChroma[t][c], chroma[t, c]);
+
+        var options = TinyOptions();
+        options.MelodyConditioning = true;
+        using var model = new MusicGenModel<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+            NeuralNetworkTaskType.Generative, inputSize: 1, outputSize: 1) { RandomSeed = 5 }, options);
+        double[] Read(JsonElement table, string name, int[] shape) => table.GetProperty(name).EnumerateArray().Select(e => e.GetDouble()).ToArray();
+        var lm = m.GetProperty("lm");
+        model.LoadLanguageModelWeights((name, shape) => name switch
+        {
+            "condition_provider.conditioners.description.output_proj.weight" => Read(f.GetProperty("projection"), "weight", shape),
+            "condition_provider.conditioners.description.output_proj.bias" => Read(f.GetProperty("projection"), "bias", shape),
+            "condition_provider.conditioners.self_wav.output_proj.weight" => Read(m.GetProperty("projection"), "weight", shape),
+            "condition_provider.conditioners.self_wav.output_proj.bias" => Read(m.GetProperty("projection"), "bias", shape),
+            _ => Read(lm, name, shape),
+        });
+        model.LoadTextEncoderWeights((name, shape) => Read(f.GetProperty("t5"), name, shape));
+        // The prefix [text; chroma]: the chroma rows exactly, the text rows to T5LayerNorm's float32 rounding.
+        var rows = m.GetProperty("prefix").EnumerateArray().Select(r => r.EnumerateArray().Select(e => e.GetDouble()).ToArray()).ToArray();
+        var prefix = new Tensor<double>(new[] { rows.Length, 16 });
+        for (int i = 0; i < rows.Length; i++)
+            for (int j = 0; j < 16; j++) prefix[i, j] = rows[i][j];
+        var melodyTensor = new Tensor<double>(new[] { n }, new Vector<double>(samples));
+        var computed = model.MelodyConditionForTests(Tokens(f), melodyTensor);
+        Assert.Equal(prefix.Shape.ToArray(), computed.Shape.ToArray());
+        for (int i = 0; i < rows.Length; i++)
+            for (int j = 0; j < 16; j++) Assert.True(Math.Abs(prefix[i, j] - computed[i, j]) < 1e-6, $"prefix[{i}, {j}]");
+
+        var core = model.CoreForTests;
+        Assert.False(core.Configuration.CrossAttention);
+        var codes = Codes(f, "codes");
+        int k = codes.GetLength(0), frames = codes.GetLength(1);
+        var logits = core.Logits(MusicGenDelayPattern.TrainingSequence(codes, core.Configuration.Delays, core.Special), prefix, false, new Random(0));
+        Assert.Equal(frames + 1, logits.Shape[1]);
+        var mask = m.GetProperty("mask").EnumerateArray().Select(r => r.EnumerateArray().Select(e => e.GetInt32()).ToArray()).ToArray();
+        var expected = m.GetProperty("logits");
+        for (int q = 0; q < k; q++)
+            for (int t = 0; t < frames; t++)
+            {
+                if (mask[q][t] == 0) continue;
+                var row = expected[q][t].EnumerateArray().Select(e => e.GetDouble()).ToArray();
+                for (int v = 0; v < row.Length; v++) Assert.Equal(row[v], logits[q, t + core.Configuration.Delays[q], v], 9);
+            }
+        Assert.Equal(m.GetProperty("loss").GetDouble(), core.Loss(codes, prefix, false, new Random(0))[0], 9);
+        var expectedCodes = Codes(m, "generated");
+        var generated = core.Generate(prefix, new Tensor<double>(prefix.Shape.ToArray()), 3.0, expectedCodes.GetLength(1), l =>
+        {
+            int best = 0;
+            for (int i = 1; i < l.Length; i++) if (l[i] > l[best]) best = i;
+            return best;
+        });
+        for (int q = 0; q < k; q++)
+            for (int t = 0; t < expectedCodes.GetLength(1); t++) Assert.Equal(expectedCodes[q, t], generated[q, t]);
+    }
 }

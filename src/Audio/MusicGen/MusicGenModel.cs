@@ -72,6 +72,7 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
     private MusicGenCore<T>? _core;
     private T5Seq2Seq<T>? _textEncoder;
     private DenseLayer<T>? _projection;
+    private DenseLayer<T>? _melodyProjection;
     private AudioCodecLayer<T>? _codec;
     private int _hopLength;
     private Random _trainingRandom;
@@ -165,6 +166,10 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
 
     /// <summary>The conditioning <c>[L, D]</c> of token ids, for tests.</summary>
     internal Tensor<T> ConditionForTests(Tensor<T>? tokens) => Condition(tokens, false, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(0));
+
+    /// <summary>The prefix of token ids and a melody, for tests.</summary>
+    internal Tensor<T> MelodyConditionForTests(Tensor<T>? tokens, Tensor<T>? melody) =>
+        Condition(tokens, melody is null ? null : Chroma(melody), false, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(0));
     private T5Seq2Seq<T> TextEncoder => _textEncoder ?? throw new InvalidOperationException("The text encoder is not built.");
     private DenseLayer<T> Projection => _projection ?? throw new InvalidOperationException("The text projection is not built.");
     private AudioCodecLayer<T> Codec => _codec ?? throw new InvalidOperationException("The codec is not built.");
@@ -177,7 +182,7 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         var (d, heads, layers) = Dimensions;
         var initialization = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Architecture.RandomSeed ?? o.Seed ?? 0);
         _core = new MusicGenCore<T>(Engine, _lmLayers, new MusicGenConfiguration(o.Codec.NumQuantizers, o.Codec.CodebookSize, d,
-            heads, layers, o.FeedForwardScale * d, o.DropoutRate, o.Delays));
+            heads, layers, o.FeedForwardScale * d, o.DropoutRate, o.Delays, CrossAttention: !o.MelodyConditioning));
         _core.InitializeLikeReference(initialization);
         _textEncoder = new T5Seq2Seq<T>(Engine, _textLayers, new T5Configuration(o.TextVocabularySize, o.TextModelDim,
             o.TextFeedForwardDim, o.TextKeyValueDim, o.TextHeads, o.TextLayers, DecoderLayers: 0, Dropout: 0.1));
@@ -190,6 +195,17 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         for (int i = 0; i < weight.Length; i++) weight[i] = (2 * initialization.NextDouble() - 1) * bound;
         for (int i = 0; i < bias.Length; i++) bias[i] = (2 * initialization.NextDouble() - 1) * bound;
         TorchParameters.Linear(Engine, _projection, o.TextModelDim, d, weight, bias);
+        if (o.MelodyConditioning)
+        {
+            // audiocraft ChromaStemConditioner.output_proj: nn.Linear(12, D), PyTorch's default initialization.
+            _melodyProjection = new DenseLayer<T>(d, (IActivationFunction<T>)new AiDotNet.ActivationFunctions.IdentityActivation<T>());
+            double chromaBound = 1 / Math.Sqrt(MusicGenChroma.Bins);
+            var chromaWeight = new double[d * MusicGenChroma.Bins];
+            var chromaBias = new double[d];
+            for (int i = 0; i < chromaWeight.Length; i++) chromaWeight[i] = (2 * initialization.NextDouble() - 1) * chromaBound;
+            for (int i = 0; i < chromaBias.Length; i++) chromaBias[i] = (2 * initialization.NextDouble() - 1) * chromaBound;
+            TorchParameters.Linear(Engine, _melodyProjection, MusicGenChroma.Bins, d, chromaWeight, chromaBias);
+        }
         var codecOptions = (EnCodecOptions)AiDotNet.Models.CloneEngine.CopyConfiguration(o.Codec);
         codecOptions.IncludeDiscriminators = false;
         var codec = new EnCodec<T>(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
@@ -203,6 +219,7 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         // what the model's input (T5 ids) feeds.
         Layers.AddRange(_textLayers);
         Layers.Add(_projection);
+        if (_melodyProjection is not null) Layers.Add(_melodyProjection);
         Layers.AddRange(_lmLayers);
         Layers.Add(_codec);
     }
@@ -220,6 +237,7 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
     {
         foreach (var layer in _lmLayers) yield return layer;
         if (_projection is not null) yield return _projection;
+        if (_melodyProjection is not null) yield return _melodyProjection;
         if (!_options.FreezeTextEncoder) foreach (var layer in _textLayers) yield return layer;
     }
 
@@ -241,8 +259,40 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         return tensor;
     }
 
-    /// <summary>The conditioning <c>[L, D]</c> of token ids, or zeros <c>[1, D]</c> for no condition (the reference
-    /// masks an absent description to zero).</summary>
+    /// <summary>
+    /// The conditioning: for a text model the text's <c>[L, D]</c> (zeros <c>[1, D]</c> without text, as the reference
+    /// masks an absent description); for a melody model the prefix <c>[text; chroma]</c>, the melody's one-hot
+    /// chromagram projected to D (zeros when it is absent or dropped: the reference masks a nullified melody but keeps
+    /// its frames, five for a missing one, the chromagram of a window of silence).
+    /// </summary>
+    private Tensor<T> Condition(Tensor<T>? tokens, double[,]? chroma, bool training, Random random)
+    {
+        var text = Condition(tokens, training, random);
+        if (!_options.MelodyConditioning) return text;
+        int d = Dimensions.ModelDim;
+        int frames = chroma?.GetLength(0) ?? 1 + _options.ChromaWindow / _options.ChromaHop;
+        Tensor<T> melody;
+        if (chroma is null)
+        {
+            melody = new Tensor<T>(new[] { frames, d });
+        }
+        else
+        {
+            var oneHot = new Tensor<T>(new[] { frames, MusicGenChroma.Bins });
+            for (int f = 0; f < frames; f++)
+                for (int c = 0; c < MusicGenChroma.Bins; c++) oneHot[f, c] = NumOps.FromDouble(chroma[f, c]);
+            melody = (_melodyProjection ?? throw new InvalidOperationException("The melody projection is not built.")).Forward(oneHot);
+        }
+        return Engine.TensorConcatenate(new[] { text, melody }, 0);
+    }
+
+    /// <summary>The one-hot chromagram of a waveform (§2.3).</summary>
+    private double[,] Chroma(Tensor<T> audio)
+    {
+        var flat = audio.ToVector().ToArray().Select(v => NumOps.ToDouble(v)).ToArray();
+        return MusicGenChroma.Extract(flat, SampleRate, _options.ChromaWindow, _options.ChromaHop);
+    }
+
     private Tensor<T> Condition(Tensor<T>? tokens, bool training, Random random)
     {
         if (tokens is null || tokens.Length == 0) return new Tensor<T>(new[] { 1, Dimensions.ModelDim });
@@ -331,7 +381,11 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         Guard.NotNull(sample);
         var codes = CodesOf(sample.Codes, sample.Audio);
         string? description = AugmentDescription(sample, _trainingRandom);
-        return TrainStep(codes, description is null ? null : DropWords(description, _trainingRandom));
+        var words = description is null ? null : DropWords(description, _trainingRandom);
+        double[,]? chroma = null;
+        if (_options.MelodyConditioning)
+            chroma = Chroma(sample.Melody ?? sample.Audio ?? Decode(codes));
+        return TrainOnCodes(codes, words is null ? null : TextToTokens(words), chroma);
     }
 
     /// <inheritdoc />
@@ -343,18 +397,21 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         ThrowIfDisposed();
         Guard.NotNull(expectedOutput);
         bool codes = expectedOutput.Rank == 2 && expectedOutput.Shape[1] == _options.Delays.Length;
-        TrainOnCodes(CodesOf(codes ? expectedOutput : null, codes ? null : expectedOutput), input);
+        var c = CodesOf(codes ? expectedOutput : null, codes ? null : expectedOutput);
+        TrainOnCodes(c, input, _options.MelodyConditioning ? Chroma(codes ? Decode(c) : expectedOutput) : null);
     }
 
-    private T TrainStep(int[,] codes, string? description) =>
-        TrainOnCodes(codes, description is null ? null : TextToTokens(description));
-
-    private T TrainOnCodes(int[,] codes, Tensor<T>? tokens)
+    private T TrainOnCodes(int[,] codes, Tensor<T>? tokens, double[,]? chroma)
     {
         ThrowIfDisposed();
         // Classifier-free guidance dropout (§3.1): the whole condition is dropped for the step.
         bool dropped = _trainingRandom.NextDouble() < _options.ConditionDropout;
         var condition = dropped ? null : tokens;
+        // A melody model also drops the melody alone (attribute dropout); its frames stay, zeroed.
+        double[,]? melody = chroma;
+        if (melody is not null && (dropped || _trainingRandom.NextDouble() < _options.MelodyDropout))
+            melody = new double[melody.GetLength(0), MusicGenChroma.Bins];
+        bool zeroMelody = melody is not null && !ReferenceEquals(melody, chroma);
         int seed = _trainingRandom.Next();
         var placeholder = new Tensor<T>(new[] { 1 });
         SetTrainingMode(true);
@@ -363,7 +420,7 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
             TrainWithCustomObjective(placeholder, placeholder, (_, _) =>
             {
                 var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
-                return Core.Loss(codes, Condition(condition, true, random), true, random);
+                return Core.Loss(codes, ConditionWithMelody(condition, melody, zeroMelody, true, random), true, random);
             }, OptimizerFor());
         }
         finally
@@ -373,6 +430,15 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         _updates++;
         if (_options.EmaEveryUpdates > 0 && _updates % _options.EmaEveryUpdates == 0) UpdateEma();
         return LastLoss ?? NumOps.Zero;
+    }
+
+    // The conditioning with a melody that is absent, present, or present but zeroed (dropped: its frames are kept).
+    private Tensor<T> ConditionWithMelody(Tensor<T>? tokens, double[,]? chroma, bool zeroMelody, bool training, Random random)
+    {
+        if (!_options.MelodyConditioning) return Condition(tokens, training, random);
+        if (!zeroMelody || chroma is null) return Condition(tokens, chroma, training, random);
+        var text = Condition(tokens, training, random);
+        return Engine.TensorConcatenate(new[] { text, new Tensor<T>(new[] { chroma.GetLength(0), Dimensions.ModelDim }) }, 0);
     }
 
     /// <summary>The training objective on codes and token ids, deterministic and without dropout.</summary>
@@ -386,7 +452,8 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         {
             using var _ = new NoGradScope<T>();
             var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(0);
-            return Core.Loss(c, Condition(input, false, random), false, random)[0];
+            var chroma = _options.MelodyConditioning ? Chroma(codes ? Decode(c) : target) : null;
+            return Core.Loss(c, Condition(input, chroma, false, random), false, random)[0];
         }
         finally
         {
@@ -478,7 +545,13 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
     /// <summary>Generates codes <c>[codebooks, frames]</c> for token ids (empty for unconditional generation),
     /// continuing an optional prompt of codes <c>[codebooks, prompt frames]</c>.</summary>
     public int[,] GenerateCodes(Tensor<T>? tokens, int frames, int seed, double? guidanceScale = null, int[,]? prompt = null)
+        => GenerateCodes(tokens, null, frames, seed, guidanceScale, prompt);
+
+    /// <summary>Generates codes conditioned on token ids and, for a melody model, a melody waveform.</summary>
+    public int[,] GenerateCodes(Tensor<T>? tokens, Tensor<T>? melody, int frames, int seed, double? guidanceScale = null, int[,]? prompt = null)
     {
+        if (melody is not null && !_options.MelodyConditioning)
+            throw new InvalidOperationException("This MusicGen is a text model; set MelodyConditioning to condition on a melody.");
         ThrowIfDisposed();
         if (frames <= (prompt?.GetLength(1) ?? 0)) throw new ArgumentOutOfRangeException(nameof(frames), "Generate more frames than the prompt.");
         var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
@@ -489,9 +562,13 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
             try
             {
                 using var _ = new NoGradScope<T>();
-                var condition = Condition(tokens, false, random);
-                bool guided = tokens is { Length: > 0 };
-                return Core.Generate(condition, guided ? Condition(null, false, random) : null, guidanceScale ?? _options.GuidanceScale,
+                var chroma = melody is null ? null : Chroma(melody);
+                var condition = Condition(tokens, chroma, false, random);
+                bool guided = tokens is { Length: > 0 } || chroma is not null;
+                // The unconditional branch: the same prefix length, zeroed (the reference batches the two and pads).
+                var unconditional = !guided ? null
+                    : _options.MelodyConditioning ? new Tensor<T>(condition._shape) : Condition(null, false, random);
+                return Core.Generate(condition, unconditional, guidanceScale ?? _options.GuidanceScale,
                     frames, logits => Choose(logits, random), prompt);
             }
             finally
@@ -560,6 +637,16 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         return Decode(GenerateCodes(TextToTokens(prompt), frames, seed ?? _options.Seed ?? 0, guidanceScale));
     }
 
+    /// <summary>Generates music following a melody and a description (the melody model, §2.3): the melody's
+    /// chromagram, quantized to its dominant pitch class per frame, conditions the generation.</summary>
+    public Tensor<T> GenerateWithMelody(string prompt, Tensor<T> melody, double durationSeconds = 10.0, double guidanceScale = 3.0,
+        int? seed = null)
+    {
+        Guard.NotNull(melody);
+        int frames = Math.Max(1, (int)Math.Round(durationSeconds * FrameRate));
+        return Decode(GenerateCodes(TextToTokens(prompt), melody, frames, seed ?? _options.Seed ?? 0, guidanceScale));
+    }
+
     /// <inheritdoc />
     public Tensor<T> GenerateAudio(string prompt, string? negativePrompt = null, double durationSeconds = 5.0,
         int numInferenceSteps = 100, double guidanceScale = 3.0, int? seed = null)
@@ -620,6 +707,10 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
         TorchParameters.Linear(Engine, Projection, text, d,
             read("condition_provider.conditioners.description.output_proj.weight", new[] { d, text }),
             read("condition_provider.conditioners.description.output_proj.bias", new[] { d }));
+        if (_melodyProjection is not null)
+            TorchParameters.Linear(Engine, _melodyProjection, MusicGenChroma.Bins, d,
+                read("condition_provider.conditioners.self_wav.output_proj.weight", new[] { d, MusicGenChroma.Bins }),
+                read("condition_provider.conditioners.self_wav.output_proj.bias", new[] { d }));
         _ema = null;
     }
 

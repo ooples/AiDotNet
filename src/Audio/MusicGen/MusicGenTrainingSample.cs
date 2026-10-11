@@ -10,6 +10,10 @@ public sealed class MusicGenTrainingSample<T>
     /// <summary>The clip's EnCodec codes <c>[frames, codebooks]</c>, used instead of encoding <see cref="Audio"/>.</summary>
     public Tensor<T>? Codes { get; init; }
 
+    /// <summary>The melody to condition on, for a melody model; null uses the clip itself (<see cref="Audio"/>, as the
+    /// paper trains), decoding <see cref="Codes"/> when only they are given.</summary>
+    public Tensor<T>? Melody { get; init; }
+
     /// <summary>The text description; null trains the step unconditionally.</summary>
     public string? Description { get; init; }
 

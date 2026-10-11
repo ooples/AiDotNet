@@ -170,4 +170,43 @@ public class MusicGenPaperTests
         Assert.Throws<NotSupportedException>(() => model.GenerateMusic("a", negativePrompt: "b", durationSeconds: 0.02));
         Assert.Throws<NotSupportedException>(() => model.InpaintAudio(new Tensor<double>(new[] { 640 }), new Tensor<double>(new[] { 640 })));
     }
+
+    private static Tensor<double> Tone(double hz, int samples = 16000)
+        => new(new[] { samples }, new Vector<double>(Enumerable.Range(0, samples).Select(i => 0.5 * Math.Sin(2 * Math.PI * hz * i / 32000)).ToArray()));
+
+    [Fact(Timeout = 300000)]
+    public async Task MelodyModel_TrainsOnItsOwnChroma_AndTheMelodySteersGeneration()
+    {
+        await Task.Yield();
+        using var model = Create(o =>
+        {
+            o.MelodyConditioning = true;
+            o.ModelSize = MusicGenModelSize.Medium;
+            o.LearningRate = 3e-3;
+            o.WarmupSteps = 0;
+            o.ConditionDropout = 0;
+            o.MelodyDropout = 0;
+            o.UseSampling = false;
+        });
+        var clip = Tone(261.63, 3200);
+        var tokens = model.TextToTokens("a piano melody");
+        double before = model.EvaluateTrainingObjective(tokens, clip);
+        for (int i = 0; i < 25; i++) model.Train(new MusicGenTrainingSample<double> { Audio = clip, Description = "a piano melody" });
+        double after = model.EvaluateTrainingObjective(tokens, clip);
+        Assert.True(after < before, $"The objective did not fall ({before} -> {after}).");
+        // The melody is part of the condition: a C and an A melody give different prefixes.
+        var c = model.MelodyConditionForTests(tokens, Tone(261.63));
+        var a = model.MelodyConditionForTests(tokens, Tone(440.0));
+        Assert.Equal(c.Shape.ToArray(), a.Shape.ToArray());
+        Assert.NotEqual(c.ToArray(), a.ToArray());
+        Assert.Equal(5 * 640, model.GenerateWithMelody("a piano melody", Tone(440.0), durationSeconds: 0.1).Length);
+    }
+
+    [Fact(Timeout = 30000)]
+    public async Task TextModel_RefusesAMelody()
+    {
+        await Task.Yield();
+        using var model = Create();
+        Assert.Throws<InvalidOperationException>(() => model.GenerateWithMelody("a", Tone(440.0), durationSeconds: 0.02));
+    }
 }

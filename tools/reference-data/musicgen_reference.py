@@ -8,7 +8,11 @@ a tiny Hugging Face T5 encoder and audiocraft's text projection (T5Conditioner.o
   and the training cross-entropy (MusicGenSolver._compute_cross_entropy);
 - the conditioning again with T5LayerNorm's mean square taken in float64: Hugging Face computes it in float32 even
   in a float64 model, which puts ~1e-7 of rounding into the stock conditioning;
-- codes generated greedily with classifier-free guidance 3.0, following LMModel.generate's loop.
+- codes generated greedily with classifier-free guidance 3.0, following LMModel.generate's loop;
+- the melody model (§2.3): audiocraft's ChromaExtractor (12 bins, 2^14 window, argmax) on a deterministic tone that
+  moves from C4 to A4, its ChromaStemConditioner output projection, and an LMModel whose conditions are a prefix
+  (the chroma2music fuser: prepend self_wav, then description; no cross-attention), with the same logits, loss and
+  guided greedy generation checks.
 The reference runs in float64 from the float32 weights.
 Pass an audiocraft checkout with --audiocraft. Default: verify; --write: regenerate
 tests/AiDotNet.Tests/Audio/ReferenceData/musicgen_reference.json.
@@ -98,6 +102,55 @@ def compute(audiocraft):
                 prev = offset
         generated, _, _ = pattern.revert_pattern_sequence(seq, special_token=-1)
 
+    # ---- the melody model ----
+    from audiocraft.modules.chroma import ChromaExtractor
+    import math
+    sr, n = 32000, 24000
+    tone = torch.tensor([[0.5 * math.sin(2 * math.pi * (261.63 if i < n // 2 else 440.0) * i / sr) for i in range(n)]],
+                        dtype=torch.float64)
+    extractor = ChromaExtractor(sample_rate=sr, n_chroma=12, radix2_exp=14, argmax=True).double()
+    chroma = extractor(tone)                                                       # [1, frames, 12]
+    torch.manual_seed(99)
+    melody_fuser = ConditionFuser(fuse2cond={"cross": [], "prepend": ["self_wav", "description"], "sum": [],
+                                             "input_interpolate": []})
+    lm_melody = LMModel(DelayedPatternProvider(n_q=K, delays=DELAYS), ConditioningProvider({}), melody_fuser, n_q=K, card=CARD,
+                        dim=DIM, num_heads=HEADS, num_layers=LAYERS, hidden_scale=4, norm="layer_norm", norm_first=True,
+                        bias_proj=False, bias_ff=False, bias_attn=False, cross_attention=False, causal=True, custom=True,
+                        activation="relu", dropout=0.0, weight_init="gaussian", depthwise_init="current", zero_bias_init=True,
+                        cfg_coef=3.0)
+    chroma_proj = torch.nn.Linear(12, DIM)
+    for module in (lm_melody, chroma_proj):
+        with torch.no_grad():
+            for p in module.parameters():
+                p.copy_(p.float())
+        module.double().eval()
+    with torch.no_grad():
+        chroma_embeds = chroma_proj(chroma)
+        chroma_mask = torch.ones(1, chroma.shape[1], dtype=torch.long)
+        conditions = {"self_wav": (chroma_embeds, chroma_mask), "description": (embeds, mask)}
+        out = lm_melody.compute_predictions(codes, [], condition_tensors=conditions)
+        melody_logits, melody_valid = out.logits, out.mask
+        melody_ce = torch.zeros([], dtype=torch.float64)
+        for k in range(K):
+            m = melody_valid[0, k]
+            melody_ce += torch.nn.functional.cross_entropy(melody_logits[0, k][m], codes[0, k][m])
+        melody_ce = melody_ce / K
+        cfg = {name: (torch.cat([c, torch.zeros_like(c)]), torch.cat([m, torch.zeros_like(m)])) for name, (c, m) in conditions.items()}
+        gen = torch.full((1, K, GENERATED), -1, dtype=torch.long)
+        seq, _, smask = pattern.build_pattern_sequence(gen, lm_melody.special_token_id)
+        with lm_melody.streaming():
+            uncond_state = lm_melody.get_streaming_state()
+            prev = 0
+            for offset in range(start, seq.shape[-1]):
+                nxt = lm_melody._sample_next_token(seq[..., prev:offset], cfg, uncond_state, use_sampling=False, cfg_coef=3.0)
+                valid_step = smask[..., offset:offset + 1].expand(1, -1, -1)
+                nxt[~valid_step] = lm_melody.special_token_id
+                seq[..., offset:offset + 1] = torch.where(seq[..., offset:offset + 1] == -1, nxt, seq[..., offset:offset + 1])
+                prev = offset
+        melody_generated, _, _ = pattern.revert_pattern_sequence(seq, special_token=-1)
+        # The prefix as the fuser builds it: each prepended condition goes in front, so description, then self_wav.
+        prefix = torch.cat([embeds, chroma_embeds], dim=1)
+
     def state(module, prefix=""):
         return {prefix + k: v.float().flatten().tolist() for k, v in module.state_dict().items()}
 
@@ -114,6 +167,17 @@ def compute(audiocraft):
         "logits": torch.nan_to_num(logits[0], nan=0.0).tolist(),
         "loss": ce.item(),
         "generated": generated[0, :, :GENERATED].tolist(),
+        "melody": {
+            "tone": {"sample_rate": sr, "samples": n, "frequencies": [261.63, 440.0], "amplitude": 0.5},
+            "chroma": chroma[0].tolist(),
+            "lm": state(lm_melody),
+            "projection": {"weight": chroma_proj.weight.float().flatten().tolist(), "bias": chroma_proj.bias.float().flatten().tolist()},
+            "prefix": prefix[0].tolist(),
+            "mask": melody_valid[0].int().tolist(),
+            "logits": torch.nan_to_num(melody_logits[0], nan=0.0).tolist(),
+            "loss": melody_ce.item(),
+            "generated": melody_generated[0, :, :GENERATED].tolist(),
+        },
     }
 
 
@@ -131,7 +195,9 @@ def main():
         return
     with open(FIXTURE, encoding="utf-8") as f:
         stored = json.load(f)
-    same = abs(stored["loss"] - result["loss"]) < 1e-12 and stored["generated"] == result["generated"]
+    same = (abs(stored["loss"] - result["loss"]) < 1e-12 and stored["generated"] == result["generated"]
+            and abs(stored["melody"]["loss"] - result["melody"]["loss"]) < 1e-12
+            and stored["melody"]["generated"] == result["melody"]["generated"])
     print("match" if same else "MISMATCH")
     sys.exit(0 if same else 1)
 
