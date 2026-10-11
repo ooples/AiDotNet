@@ -9,7 +9,6 @@ using AiDotNet.Video.Denoising;
 using AiDotNet.Video.Depth;
 using AiDotNet.Video.Enhancement;
 using AiDotNet.Video.FrameInterpolation;
-using AiDotNet.Video.Generation;
 using AiDotNet.Video.Inpainting;
 using AiDotNet.Video.Interfaces;
 using AiDotNet.Video.Matting;
@@ -552,38 +551,6 @@ public class VideoExtendedIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task AnimateDiff_Construction()
-    {
-        var arch = CreateArch();
-        var model = new AnimateDiff<double>(arch, options: new AnimateDiffOptions { NumLayers = 2, NumFrames = 4 });
-        Assert.True(model.SupportsTraining);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task CogVideo_Construction()
-    {
-        var arch = CreateArch(height: 64, width: 64);
-        var model = new CogVideo<double>(arch);
-        Assert.True(model.SupportsTraining);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task OpenSora_Construction()
-    {
-        var arch = CreateArch();
-        var model = new OpenSora<double>(arch);
-        Assert.True(model.SupportsTraining);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task StableVideoDiffusion_Construction()
-    {
-        var arch = CreateArch(height: 64, width: 64);
-        var model = new StableVideoDiffusion<double>(arch);
-        Assert.True(model.SupportsTraining);
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task E2FGVI_Construction()
     {
         var arch = CreateArch();
@@ -869,34 +836,6 @@ public class VideoExtendedIntegrationTests
     public async Task VRTOptions_IsNeuralNetworkOptions()
     {
         var opts = new VRTOptions();
-        Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task AnimateDiffOptions_IsNeuralNetworkOptions()
-    {
-        var opts = new AnimateDiffOptions();
-        Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task CogVideoOptions_IsNeuralNetworkOptions()
-    {
-        var opts = new CogVideoOptions();
-        Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task OpenSoraOptions_IsNeuralNetworkOptions()
-    {
-        var opts = new OpenSoraOptions();
-        Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
-    }
-
-    [Fact(Timeout = 120000)]
-    public async Task StableVideoDiffusionOptions_IsNeuralNetworkOptions()
-    {
-        var opts = new StableVideoDiffusionOptions();
         Assert.IsAssignableFrom<AiDotNet.Models.Options.NeuralNetworkOptions>(opts);
     }
 

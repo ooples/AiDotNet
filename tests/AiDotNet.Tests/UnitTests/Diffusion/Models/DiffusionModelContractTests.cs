@@ -767,17 +767,6 @@ public class DiffusionModelContractTests : DiffusionUnitTestBase
     }
 
     [Fact(Timeout = 120000)]
-    public async Task RealESRGANModel_DefaultConstructor_CreatesValidModel()
-    {
-        var model = new RealESRGANModel<float>();
-
-        Assert.NotNull(model);
-        Assert.NotNull(model.NoisePredictor);
-        Assert.NotNull(model.VAE);
-        Assert.Equal(4, model.LatentChannels);
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task StableSRModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new StableSRModel<float>();
