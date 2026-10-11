@@ -405,19 +405,6 @@ public class DiffusionExtendedIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task MusicGenModel_Construction()
-    {
-        // FP32: same rationale as the diffusion family above. MusicGen wasn't
-        // on commit 1c21d67f9's standalone-OOM list — that probe covered only
-        // the diffusion / VAE families — but the local sweep after Kandinsky
-        // FP32 surfaced it as an OOM in the shared diffusion-shard process at
-        // FP64. Migrating to FP32 brings it under the same memory budget as
-        // the other paper-scale models in this file.
-        var model = new MusicGenModel<float>();
-        Assert.NotNull(model);
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task RiffusionModel_Construction()
     {
         var model = new RiffusionModel<float>();

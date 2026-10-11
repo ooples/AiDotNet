@@ -10,14 +10,10 @@ internal static class ModelDefectBaselines
     internal static readonly System.Collections.Generic.HashSet<string> DuplicatePapers =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
-            "AiDotNet.Audio.AudioLDM.AudioLDMModel<T>",
-            "AiDotNet.Audio.MusicGen.MusicGenModel<T>",
             "AiDotNet.Clustering.Neural.SelfOrganizingMap<T>",
             "AiDotNet.ComputerVision.Segmentation.Foundation.SAM<T>",
             "AiDotNet.ComputerVision.Segmentation.OpenVocabulary.GroundedSAM2<T>",
             "AiDotNet.ComputerVision.Segmentation.Referring.GLaMM<T>",
-            "AiDotNet.Diffusion.Audio.AudioLDMModel<T>",
-            "AiDotNet.Diffusion.Audio.MusicGenModel<T>",
             "AiDotNet.Diffusion.TextToImage.LuminaT2XModel<T>",
             "AiDotNet.Diffusion.Video.LuminaT2XModel<T>",
             "AiDotNet.Finance.Forecasting.Neural.WaveNet<T>",
