@@ -48,7 +48,8 @@ function Get-CancellationSummary {
     param(
         [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Jobs,
         [Parameter(Mandatory)] [AllowEmptyString()] [string] $RunUrl,
-        [AllowNull()] [object] $SupersededBy
+        [AllowNull()] [object] $SupersededBy,
+        [bool] $SuccessorLookupSucceeded = $true
     )
 
     $counts = Get-JobConclusionCounts -Jobs $Jobs
@@ -74,6 +75,15 @@ function Get-CancellationSummary {
         $lines.Add('check was stopped mid-flight.')
         $lines.Add('')
         $lines.Add("Read the newer run instead: [run $($SupersededBy.id) on ``$($SupersededBy.head_sha.Substring(0, [Math]::Min(9, $SupersededBy.head_sha.Length)))``]($($SupersededBy.html_url)).")
+    }
+    elseif (-not $SuccessorLookupSucceeded) {
+        # Saying "no newer run exists" on the strength of a request that FAILED is a claim from
+        # missing evidence - the same fault as counting one page of jobs as all of them.
+        $title = "Cancelled with 0 failures: $cancelledCount checks stopped, cause unverified"
+        $lines.Add('Nothing in this run failed, so the red-looking checks are cancellations.')
+        $lines.Add('')
+        $lines.Add('The run list could not be read, so this report **cannot say** whether a newer run')
+        $lines.Add('evicted this one. Treat the cause as unknown rather than as a manual cancel.')
     }
     else {
         $title = "Cancelled with 0 failures: $cancelledCount checks stopped"
@@ -135,6 +145,17 @@ function Invoke-SelfTest {
         throw 'The superseding run must be named in the summary.'
     }
 
+    $unverified = Get-CancellationSummary -RunUrl '' -SupersededBy $null `
+        -SuccessorLookupSucceeded $false -Jobs @(
+        [pscustomobject]@{ name = 'Tests A'; conclusion = 'cancelled'; html_url = 'https://example/job/7' }
+    )
+    if ($unverified.Title -notmatch 'cause unverified') {
+        throw "Failed-lookup title wrong: $($unverified.Title)"
+    }
+    if ($unverified.Summary -match 'No newer run was found') {
+        throw 'A failed lookup must not assert that no newer run exists.'
+    }
+
     $orphan = Get-CancellationSummary -RunUrl '' -SupersededBy $null -Jobs @(
         [pscustomobject]@{ name = 'Tests A'; conclusion = 'cancelled'; html_url = 'https://example/job/6' }
     )
@@ -142,7 +163,7 @@ function Invoke-SelfTest {
         throw "Orphan-cancellation title wrong: $($orphan.Title)"
     }
 
-    Write-Host '[OK] Report-CancelledRun self-test: deliberate, evicted and orphaned arms all report distinctly.'
+    Write-Host '[OK] Report-CancelledRun self-test: deliberate, evicted, unverified-lookup and orphaned arms all report distinctly.'
 }
 
 if ($SelfTest) {
@@ -186,13 +207,19 @@ if (-not [string]::IsNullOrWhiteSpace($jobsJson)) {
 # manually cancelled run is not reported as its successor. The API exposes no concurrency group, so
 # timing is the evidence; the summary words it as a newer run, not a proven cause.
 $supersededBy = $null
+$successorLookupSucceeded = $true
 $branch = [uri]::EscapeDataString([string] $run.head_branch)
 $cancelledAt = ConvertTo-Instant $run.updated_at
 $startedAt = ConvertTo-Instant $run.created_at
 $candidatesJson = gh api `
     "repos/$Repository/actions/workflows/$($run.workflow_id)/runs?branch=$branch&per_page=20" `
     --jq '.workflow_runs[] | {id, head_sha, html_url, run_number, created_at}' 2>$null
-if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($candidatesJson)) {
+if ($LASTEXITCODE -ne 0) {
+    # Missing evidence, not an absent successor: the summary must not conclude eviction either way.
+    $successorLookupSucceeded = $false
+    Write-Host "::warning::Could not list newer runs for workflow $($run.workflow_id); this report cannot rule out concurrency eviction."
+}
+elseif (-not [string]::IsNullOrWhiteSpace($candidatesJson)) {
     $candidates = @($candidatesJson -split "`n" |
         Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
         ForEach-Object { $_ | ConvertFrom-Json })
@@ -205,7 +232,8 @@ if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($candidatesJson))
         Select-Object -First 1
 }
 
-$summary = Get-CancellationSummary -Jobs $jobs -RunUrl ([string] $run.html_url) -SupersededBy $supersededBy
+$summary = Get-CancellationSummary -Jobs $jobs -RunUrl ([string] $run.html_url) `
+    -SupersededBy $supersededBy -SuccessorLookupSucceeded $successorLookupSucceeded
 
 Write-Host "Cancellation report for run ${RunId}: $($summary.Title)"
 $summary.Summary | Out-Host
