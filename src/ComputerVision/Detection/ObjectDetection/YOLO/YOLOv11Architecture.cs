@@ -232,10 +232,10 @@ public partial class PSABlock<T> : LayerBase<T>, IShapeContract
         // The fused attention op MultiHeadAttentionLayer uses. A hand-built BatchMatMul -> Softmax chain
         // left q and k with exactly zero gradient although a finite-difference probe showed they move the
         // output, so the tape was dropping them.
-        // #2312: weights discarded, so the fused kernel replaces the score matrix with one
-        // log-sum-exp per query row.
-        var context = engine.FlashAttention(
-            q, k, v, scale: 1.0 / Math.Sqrt(_keyDim), isCausal: false, out _, attentionBias: null);
+        // Not FlashAttention (#2312): PSA's query/key head dim (_keyDim, attn_ratio 0.5) is half its value head
+        // dim, and the fused kernel sizes the output by the query's head dim, so it returned half the context
+        // (a [B, 128, 2, 2] reshape of 256 elements). The score-materializing kernel takes V's own head dim.
+        var context = engine.ScaledDotProductAttention(q, k, v, mask: null, scale: 1.0 / Math.Sqrt(_keyDim), out _);
         var attended = engine.Reshape(engine.TensorPermute(context, new[] { 0, 1, 3, 2 }), new[] { batch, _channels, height, width });
         var x = BackboneOps<T>.AddResidual(_proj.Forward(engine.TensorAdd(attended, _pe.Forward(vMap))), input);
         return BackboneOps<T>.AddResidual(_ffn2.Forward(_ffn1.Forward(x)), x);
