@@ -14,6 +14,9 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers;
 /// fused, tape-aware <c>Engine.FlashAttention</c> kernel rather than the score-materializing
 /// <c>Engine.ScaledDotProductAttention</c>, and <c>UseCausalMask</c> must actually mask.
 /// </summary>
+/// <remarks>Not parallel: the allocation test measures <c>GC.GetTotalAllocatedBytes</c>, which counts every
+/// thread, and the engine's own work may run on worker threads, so a per-thread counter would undercount.</remarks>
+[Collection("NonParallelIntegration")]
 public sealed class MultiHeadAttentionFusedTrainingTests
 {
     private const int HeadCount = 4;

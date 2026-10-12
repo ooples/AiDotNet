@@ -56,11 +56,14 @@ public sealed class LayerFactoryArchitectureTests
     /// With the architecture's output size left unset the option default still decides, so the
     /// change cannot disturb a caller that passes no architecture sizing.
     /// </summary>
+    /// <remarks>The expected widths are each factory's own fallback for the options <see cref="Build"/> passes:
+    /// <c>predictionHorizon</c> (8) for PatchTST and iTransformer, <c>predictionHorizon * numFeatures</c> (8 * 4) for
+    /// ETSformer.</remarks>
     [Theory(Timeout = 60000)]
-    [InlineData("PatchTST")]
-    [InlineData("ITransformer")]
-    [InlineData("ETSformer")]
-    public async Task AnUnsetOutputSizeLeavesTheOptionDefaultInCharge(string factory)
+    [InlineData("PatchTST", 8)]
+    [InlineData("ITransformer", 8)]
+    [InlineData("ETSformer", 32)]
+    public async Task AnUnsetOutputSizeLeavesTheOptionDefaultInCharge(string factory, int expectedWidth)
     {
         await Task.Yield();
 
@@ -68,9 +71,7 @@ public sealed class LayerFactoryArchitectureTests
         var last = layers[layers.Count - 1] as DenseLayer<double>;
 
         Assert.True(last is not null, $"{factory}'s stack does not end in a projection.");
-        int width = last.GetOutputShape()[last.GetOutputShape().Length - 1];
-        Assert.True(width > 0, $"{factory} produced a zero-width projection from an unset architecture.");
-        Assert.NotEqual(5, width);
+        Assert.Equal(expectedWidth, last.GetOutputShape()[last.GetOutputShape().Length - 1]);
     }
 
     private static List<ILayer<double>> Build(

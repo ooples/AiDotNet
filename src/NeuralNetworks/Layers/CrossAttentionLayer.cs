@@ -103,9 +103,10 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
     /// Gets the attention kernel the most recent forward pass executed (#2312).
     /// </summary>
     /// <remarks>
-    /// The fused kernel cannot return the score matrix, so a forward whose manual backward will
-    /// read the attention weights reports <see cref="AttentionKernelPath.ScoreMaterializing"/>
-    /// instead. Exposed so the choice is assertable rather than only visible as allocation.
+    /// The CPU forward always runs the fused kernel (<see cref="AttentionKernelPath.FusedFlashAttention"/>);
+    /// the GPU forward runs the device scaled-dot-product kernel and reports
+    /// <see cref="AttentionKernelPath.ScoreMaterializing"/>. Exposed so the choice is assertable rather
+    /// than only visible as allocation.
     /// </remarks>
     public AttentionKernelPath LastAttentionKernelPath { get; private set; }
         = AttentionKernelPath.None;
@@ -862,6 +863,8 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
         Tensor<T> attended;
         Tensor<T>? attentionWeightsGpu = null;
 
+        // Both branches run the device scaled-dot-product kernel (training also returns its weights).
+        LastAttentionKernelPath = AttentionKernelPath.ScoreMaterializing;
         if (IsTrainingMode)
         {
             // Training mode: get attention weights for backward pass

@@ -1615,9 +1615,11 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
         // Cache attention weights — read by the manual backward (no tape) AND by
         // ComputeAuxiliaryLoss (entropy/diversity) when UseAuxiliaryLoss is on, so
-        // keep them whenever either consumer needs them.
+        // keep them whenever either consumer needs them. Only real weights: an eval-mode forward with
+        // the auxiliary loss on takes the fused branch, whose placeholder is empty, and caching that made
+        // the entropy read 0 and the diagnostics report scores that were never computed.
         if (cacheForManualBackward || UseAuxiliaryLoss)
-            _lastAttentionScores = attentionWeights4D;
+            _lastAttentionScores = attentionWeights4D.Length > 0 ? attentionWeights4D : null;
 
         // 3. Cache Head Outputs — only when the auxiliary loss path will
         // read them. ComputeAuxiliaryLoss is the sole consumer of

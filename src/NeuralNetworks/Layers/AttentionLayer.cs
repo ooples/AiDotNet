@@ -544,7 +544,10 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             var V4D = Engine.Reshape(V, [batchSize, 1, seqLen, _attentionSize]);
 
             Tensor<T> output4D;
-            if (cacheBwd)
+            // The weights are also the auxiliary attention-entropy loss's input: materialize them when that
+            // loss will read them, as MultiHeadAttentionLayer does (scoresNeeded), not only for the manual backward.
+            bool scoresNeeded = cacheBwd || (UseAuxiliaryLoss && IsTrainingMode);
+            if (scoresNeeded)
             {
                 output4D = Engine.ScaledDotProductAttention(
                     Q4D, K4D, V4D,
@@ -559,9 +562,9 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             }
             else
             {
-                // #2312: the manual backward is the only reader of the [B, 1, S, S] weights, so
-                // when it will not run (tape active, or inference) the fused tape-aware kernel
-                // computes the same softmax attention without materializing them.
+                // #2312: nothing reads the [B, 1, S, S] weights here (no manual backward, no auxiliary
+                // loss), so the fused tape-aware kernel computes the same softmax attention without
+                // materializing them.
                 output4D = Engine.FlashAttention(
                     Q4D,
                     K4D,

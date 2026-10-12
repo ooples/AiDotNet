@@ -69,8 +69,9 @@ function Get-CancellationSummary {
     }
     elseif ($null -ne $SupersededBy) {
         $title = "Superseded, not broken: 0 failures, $cancelledCount cancelled"
-        $lines.Add('This run was **evicted by a newer run**, not broken. Nothing in it failed; every')
-        $lines.Add('cancelled check was stopped mid-flight when a newer commit superseded it.')
+        $lines.Add('Nothing in this run failed. A **newer run** of this workflow started on the same branch')
+        $lines.Add('before this one was cancelled, the pattern concurrency eviction leaves; every cancelled')
+        $lines.Add('check was stopped mid-flight.')
         $lines.Add('')
         $lines.Add("Read the newer run instead: [run $($SupersededBy.id) on ``$($SupersededBy.head_sha.Substring(0, [Math]::Min(9, $SupersededBy.head_sha.Length)))``]($($SupersededBy.html_url)).")
     }
@@ -149,6 +150,13 @@ if ($SelfTest) {
     return
 }
 
+# ConvertFrom-Json turns GitHub's ISO-8601 timestamps into DateTime values; a string round-trip
+# through the current culture would be locale-dependent, so compare instants directly.
+function ConvertTo-Instant([object] $Value) {
+    if ($Value -is [datetime]) { return [datetimeoffset] $Value.ToUniversalTime() }
+    return [datetimeoffset]::Parse([string] $Value, [System.Globalization.CultureInfo]::InvariantCulture)
+}
+
 $runJson = gh api "repos/$Repository/actions/runs/$RunId" 2>$null
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($runJson)) {
     Write-Host "::warning::Could not read run $RunId; no cancellation report published."
@@ -160,25 +168,39 @@ $run = $runJson | ConvertFrom-Json
 # single page would undercount the cancellations the report exists to explain.
 $jobsJson = gh api --paginate "repos/$Repository/actions/runs/$RunId/jobs?per_page=100" `
     --jq '.jobs[] | {name, conclusion, html_url}' 2>$null
+# A failed request is missing evidence, not an empty run: reporting "0 failures" from it would hide
+# the failed jobs this report exists to point at.
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "::warning::Could not read jobs for run $RunId; no cancellation report published."
+    return
+}
 $jobs = @()
-if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($jobsJson)) {
+if (-not [string]::IsNullOrWhiteSpace($jobsJson)) {
     $jobs = @($jobsJson -split "`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
         ForEach-Object { $_ | ConvertFrom-Json })
 }
 
-# A newer run on the same branch for the same workflow is what concurrency eviction looks like
-# from outside: the dying run cannot name its successor, so it is looked up here.
+# Concurrency eviction looks like this from outside: a newer run of the same workflow on the same
+# branch that STARTED before this run was cancelled (eviction cancels the old run when the new one
+# is queued). A run started after the cancellation cannot have caused it, so a later re-run of a
+# manually cancelled run is not reported as its successor. The API exposes no concurrency group, so
+# timing is the evidence; the summary words it as a newer run, not a proven cause.
 $supersededBy = $null
 $branch = [uri]::EscapeDataString([string] $run.head_branch)
+$cancelledAt = ConvertTo-Instant $run.updated_at
+$startedAt = ConvertTo-Instant $run.created_at
 $candidatesJson = gh api `
     "repos/$Repository/actions/workflows/$($run.workflow_id)/runs?branch=$branch&per_page=20" `
-    --jq '.workflow_runs[] | {id, head_sha, html_url, run_number}' 2>$null
+    --jq '.workflow_runs[] | {id, head_sha, html_url, run_number, created_at}' 2>$null
 if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($candidatesJson)) {
     $candidates = @($candidatesJson -split "`n" |
         Where-Object { -not [string]::IsNullOrWhiteSpace($_) } |
         ForEach-Object { $_ | ConvertFrom-Json })
     $supersededBy = $candidates |
-        Where-Object { $_.run_number -gt $run.run_number } |
+        Where-Object {
+            $created = ConvertTo-Instant $_.created_at
+            $_.run_number -gt $run.run_number -and $created -ge $startedAt -and $created -le $cancelledAt
+        } |
         Sort-Object run_number |
         Select-Object -First 1
 }
