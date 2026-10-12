@@ -42,6 +42,8 @@ public class CLAPModelOptions : AudioNeuralNetworkOptions
         Seed = other.Seed;
         EncoderLayerCount = other.EncoderLayerCount;
         NumMelBands = other.NumMelBands;
+        MelMinFrequency = other.MelMinFrequency;
+        MelMaxFrequency = other.MelMaxFrequency;
         StftWindowSize = other.StftWindowSize;
         HopLength = other.HopLength;
         SampleRate = other.SampleRate;
@@ -82,6 +84,23 @@ public class CLAPModelOptions : AudioNeuralNetworkOptions
     /// <remarks><para><b>For Beginners:</b> Distance between successive
     /// STFT frames. Smaller = more frames per second, higher cost.</para></remarks>
     public int HopLength { get; init; } = 480;
+
+    /// <summary>Lowest mel-filterbank frequency in Hz.</summary>
+    /// <value>Default 50 (LAION-CLAP <c>model_configs/HTSAT-tiny.json</c>: <c>"fmin": 50</c>).</value>
+    /// <remarks><para><b>For Beginners:</b> Everything below this is dropped before the encoder
+    /// sees the spectrogram. The reference implementation starts at 50 Hz rather than 0 because
+    /// the bottom bins carry DC offset and rumble, not content; a filterbank starting at 0 spends
+    /// its lowest bands on that and shifts every other band away from the pretrained
+    /// checkpoint's.</para></remarks>
+    public double MelMinFrequency { get; init; } = 50.0;
+
+    /// <summary>Highest mel-filterbank frequency in Hz, clamped to the Nyquist rate.</summary>
+    /// <value>Default 14000 (LAION-CLAP <c>model_configs/HTSAT-tiny.json</c>: <c>"fmax": 14000</c>).</value>
+    /// <remarks><para><b>For Beginners:</b> The reference stops at 14 kHz, not at the 24 kHz
+    /// Nyquist limit of 48 kHz audio, so the mel bands concentrate where the content is. Using
+    /// the full Nyquist range spreads the same 64 bands over nearly twice the spectrum, which is
+    /// a different filterbank from the one the published weights were trained with.</para></remarks>
+    public double MelMaxFrequency { get; init; } = 14_000.0;
 
     /// <summary>Audio sample rate in Hz the encoder is configured for.</summary>
     /// <value>Default 48000 (CLAP training rate).</value>

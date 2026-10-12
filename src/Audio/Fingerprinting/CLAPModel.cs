@@ -228,7 +228,8 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
                 audioEncoderLayers: _options.AudioEncoderLayers,
                 audioEncoderHeads: _options.AudioEncoderHeads,
                 swinWindowSize: _options.SwinWindowSize,
-                projectionDim: _options.ProjectionDim));
+                projectionDim: _options.ProjectionDim,
+                melBins: _options.NumMelBands));
             TextEncoderLayers.AddRange(LayerHelper<T>.CreateDefaultCLAPTextEncoderLayers(
                 vocabSize: _options.VocabSize,
                 maxTextLength: _options.MaxTextLength,
@@ -284,8 +285,12 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
             nFft: windowSize,
             hopLength: hop,
             nMels: numMels,
-            fMin: NumOps.Zero,
-            fMax: NumOps.FromDouble(sampleRate / 2.0),
+            // #2313: the reference filterbank is 50 Hz to 14 kHz
+            // (LAION-CLAP model_configs/HTSAT-tiny.json), not 0 to Nyquist. At 48 kHz the
+            // 0-to-24-kHz range spreads the same 64 mel bands over nearly twice the spectrum, so
+            // every band lands somewhere other than where the published weights expect it.
+            fMin: NumOps.FromDouble(Math.Max(0.0, _options.MelMinFrequency)),
+            fMax: NumOps.FromDouble(Math.Min(_options.MelMaxFrequency, sampleRate / 2.0)),
             window: _hannWindow,
             powerToDb: true);
 
