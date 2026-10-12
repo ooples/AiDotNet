@@ -18373,6 +18373,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             }
         }
 
+        return ObservedLayerActivations(input, activations);
+    }
+
+    /// <summary>
+    /// The activations of every layer call made by <see cref="Predict"/> on <paramref name="input"/>, keyed by the
+    /// layer's position in <see cref="Layers"/> (or its call order when it is not a top-level layer).
+    /// </summary>
+    /// <remarks>For models whose forward is not a fold of <see cref="Layers"/> and whose family base folds anyway.</remarks>
+    protected Dictionary<string, Tensor<T>> ObservedLayerActivations(Tensor<T> input, Dictionary<string, Tensor<T>>? activations = null)
+    {
+        activations ??= new Dictionary<string, Tensor<T>>();
         // The observer is already wired into LayerBase.Forward and composes with an enclosing trace,
         // so this asks the model to run itself and writes down what actually happened. Correct for a
         // branched model, a custom PredictCore, and a plain chain alike.

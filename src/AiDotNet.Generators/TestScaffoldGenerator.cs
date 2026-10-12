@@ -8931,10 +8931,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TimeSeriesForecasting, " +
                     "inputSize: 4, outputSize: 4), " +
-                    "new AiDotNet.Models.Options.AutoformerOptions<double> { LookbackWindow = 16, " +
-                    "ForecastHorizon = 4, EmbeddingDim = 32, NumEncoderLayers = 1, " +
+                    "new AiDotNet.Models.Options.AutoformerOptions<double> { LookbackWindow = 16, LabelLength = 8, " +
+                    "ForecastHorizon = 4, EmbeddingDim = 32, FeedForwardDim = 64, NumEncoderLayers = 1, " +
                     "NumDecoderLayers = 1, NumAttentionHeads = 4, MovingAverageKernel = 3, " +
                     "AutoCorrelationFactor = 2, DropoutRate = 0.0, LearningRate = 0.0001 })";
+            }
+            else if (model.ClassName == "Informer" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Finance.", System.StringComparison.Ordinal))
+            {
+                // Informer production keeps the reference's 512-wide, 2048 feed-forward network (11 M parameters
+                // for one series), whose generated target-dependence probe took 98 s per repeat. Exercise the same
+                // ProbSparse encoder with distilling and the generative decoder over four series at CI scale.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TimeSeriesForecasting, " +
+                    "inputSize: 4, outputSize: 4), " +
+                    "new AiDotNet.Models.Options.InformerOptions<double> { LookbackWindow = 16, LabelLength = 8, " +
+                    "ForecastHorizon = 4, EmbeddingDim = 16, FeedForwardDim = 32, NumEncoderLayers = 2, " +
+                    "NumDecoderLayers = 1, NumAttentionHeads = 2, SamplingFactor = 2, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "RWKVForecaster" && model.TypeParameterCount == 1)
             {
@@ -17046,7 +17060,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             bool usesReducedLlmTimeFixture = model.ClassName == "LLMTime";
             bool usesReducedTimeGptFixture = model.ClassName == "TimeGPT";
             bool usesReducedRwkvFixture = model.ClassName == "RWKVForecaster";
-            bool usesReducedAutoformerFixture = model.ClassName == "Autoformer";
+            // Autoformer and Informer share the reduced [1, 16, 4] -> [1, 4, 4] fixture of their constructors below.
+            bool usesReducedAutoformerFixture = model.ClassName == "Autoformer" || model.ClassName == "Informer";
             int paperCtx = usesReducedChronosFixture
                 ? 64
                 : usesReducedChronosBoltFixture

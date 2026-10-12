@@ -141,9 +141,7 @@ internal sealed class VocosGenerator<T>
     }
 
     // GELU(x) = x · Φ(x) = ½ x erfc(−x / √2).
-    private Tensor<T> Gelu(Tensor<T> x)
-        => _engine.TensorMultiplyScalar(_engine.TensorMultiply(x, _engine.TensorErfc(_engine.TensorMultiplyScalar(x, NumOps.FromDouble(-1 / Math.Sqrt(2))))),
-            NumOps.FromDouble(0.5));
+    private Tensor<T> Gelu(Tensor<T> x) => ActivationHelper.ExactGelu(x, _engine);
 
     // AdaLayerNorm over channels of [1, C, T]: layer_norm(x) · scale[class] + shift[class] (ε = 1e-6, no affine).
     private Tensor<T> AdaptiveNorm(int index, int condition, Tensor<T> x)

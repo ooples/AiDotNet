@@ -126,9 +126,7 @@ internal sealed class ConvNeXtV2Predictor<T>
     }
 
     // GELU(x) = x · Φ(x) = ½ x erfc(−x / √2).
-    private Tensor<T> Gelu(Tensor<T> x)
-        => _engine.TensorMultiplyScalar(_engine.TensorMultiply(x, _engine.TensorErfc(_engine.TensorMultiplyScalar(x, NumOps.FromDouble(-1 / Math.Sqrt(2))))),
-            NumOps.FromDouble(0.5));
+    private Tensor<T> Gelu(Tensor<T> x) => ActivationHelper.ExactGelu(x, _engine);
 
     /// <summary>The output convolutions' maps <c>[1, bins, frames]</c> of a mel spectrogram <c>[1, mel, frames]</c>.</summary>
     public IReadOnlyList<Tensor<T>> Forward(Tensor<T> mel)

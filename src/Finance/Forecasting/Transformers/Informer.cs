@@ -16,6 +16,7 @@ using Microsoft.ML.OnnxRuntime;
 using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
 
 using AiDotNet.Finance.Base;
+using AiDotNet.TimeSeries;
 namespace AiDotNet.Finance.Forecasting.Transformers;
 
 /// <summary>
@@ -42,6 +43,12 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// <b>Reference:</b> Zhou et al., "Informer: Beyond Efficient Transformer for Long Sequence
 /// Time-Series Forecasting", AAAI 2021 (Best Paper). https://arxiv.org/abs/2012.07436
 /// </para>
+/// <para>
+/// The network is the official code's (<see cref="AiDotNet.TimeSeries.InformerNetwork{T}"/>, shared with
+/// <see cref="AiDotNet.TimeSeries.InformerModel{T}"/> and checked against Informer2020), forecasting every input
+/// series jointly. Standardize the data with training statistics first, as the reference does. The temporal
+/// embedding needs timestamps, which this interface does not carry, so it is not used.
+/// </para>
 /// </remarks>
 /// <example>
 /// <code>
@@ -50,9 +57,9 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 96, inputWidth: 7, inputDepth: 1, outputSize: 24);
+///     inputSize: 7, outputSize: 7);   // seven series (ETTh1), forecast jointly
 ///
-/// // Training mode with ProbSparse self-attention and distilling
+/// // Training mode with ProbSparse self-attention and distilling: [batch, 96, 7] in, [batch, 24, 7] out
 /// var model = new Informer&lt;double&gt;(architecture);
 ///
 /// // ONNX inference mode with pre-trained model
@@ -69,112 +76,33 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
 [ResearchPaper("Informer: Beyond Efficient Transformer for Long Sequence Time-Series Forecasting", "https://arxiv.org/abs/2012.07436", Year = 2021, Authors = "Haoyi Zhou, Shanghang Zhang, Jieqi Peng, Shuai Zhang, Jianxin Li, Hui Xiong, Wancai Zhang")]
 [PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4,
                 Schedule = LearningRateSchedulerType.Exponential, DecayRate = 0.5,
+                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
                 Source = "Zhou et al. 2021 (Experimental Details / Setup): Adam, 'learning rate starts from 1e-4, decaying two times smaller every epoch', batch size 32. Verified against the paper.")]
 public partial class Informer<T> : ForecastingModelBase<T>
 {
-    #region Execution Mode
-
-    /// <summary>
-    /// Indicates whether this network uses native layers (true) or ONNX model (false).
-    /// </summary>
     private readonly bool _useNativeMode;
-
-    #endregion
-
-    
-    #region Native Mode Fields
-
-    /// <summary>
-    /// Input embedding layer.
-    /// </summary>
-    private ILayer<T>? _inputEmbedding;
-
-    /// <summary>
-    /// Encoder layers with ProbSparse attention.
-    /// </summary>
-    private readonly List<ILayer<T>> _encoderLayers = [];
-
-    /// <summary>
-    /// Decoder layers.
-    /// </summary>
-    private readonly List<ILayer<T>> _decoderLayers = [];
-
-    /// <summary>
-    /// Final layer normalization.
-    /// </summary>
-    private ILayer<T>? _finalNorm;
-
-    /// <summary>
-    /// Output projection layer.
-    /// </summary>
-    private ILayer<T>? _outputProjection;
-
-    /// <summary>
-    /// Instance normalization mean (for RevIN).
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _instanceMean;
-
-    /// <summary>
-    /// Instance normalization standard deviation (for RevIN).
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _instanceStd;
-
-    #endregion
-
-    #region Shared Fields
-
-    /// <summary>
-    /// The optimizer for training the model.
-    /// </summary>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
-
-    /// <summary>
-    /// The loss function for computing prediction errors.
-    /// </summary>
-    private readonly ILossFunction<T> _lossFunction;
     private readonly InformerOptions<T> _options;
+    private readonly int _numFeatures;
+    private readonly Random _random;
+    private InformerNetwork<T>? _network;
 
-    /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
-
-    private int _sequenceLength;
-    private int _labelLength;
-    private int _predictionHorizon;
-    private int _numFeatures;
-    private int _numEncoderLayers;
-    private int _numDecoderLayers;
-    private int _numHeads;
-    private int _modelDimension;
-    private int _feedForwardDimension;
-    private int _distillingFactor;
-    private double _dropout;
-    private bool _useInstanceNormalization;
-
-    #endregion
 
     #region IForecastingModel Properties
 
-    /// <inheritdoc/>
-    public override int SequenceLength => _sequenceLength;
+    public override int SequenceLength => _options.LookbackWindow;
 
-    /// <inheritdoc/>
-    public override int PredictionHorizon => _predictionHorizon;
+    public override int PredictionHorizon => _options.ForecastHorizon;
 
-    /// <inheritdoc/>
     public override int NumFeatures => _numFeatures;
 
-    /// <inheritdoc/>
     public override int PatchSize => 1;
 
-    /// <inheritdoc/>
     public override int Stride => 1;
 
-    /// <inheritdoc/>
     public override bool IsChannelIndependent => false;
 
-    /// <inheritdoc/>
     public override bool UseNativeMode => _useNativeMode;
 
     #endregion
@@ -182,7 +110,7 @@ public partial class Informer<T> : ForecastingModelBase<T>
     #region Constructors
 
     /// <summary>
-    /// Creates an Informer model with default configuration for native training.
+    /// Creates an Informer with the reference's defaults for a single series.
     /// </summary>
     public Informer()
         : this(new NeuralNetworkArchitecture<T>(
@@ -194,18 +122,13 @@ public partial class Informer<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Creates an Informer network using a pretrained ONNX model.
+    /// Creates an Informer that runs a pre-trained ONNX model.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="onnxModelPath">Path to the ONNX model file.</param>
-    /// <param name="options">Configuration options for the model.</param>
-    /// <param name="optimizer">Optional optimizer.</param>
-    /// <param name="lossFunction">Optional loss function.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, Informer sets up the architecture and options. This prepares the model for training or inference.
-    /// </para>
-    /// </remarks>
+    /// <param name="architecture">The architecture; its input size is the number of series (channels).</param>
+    /// <param name="onnxModelPath">The ONNX model file.</param>
+    /// <param name="options">The Informer options.</param>
+    /// <param name="optimizer">Unused in ONNX mode; accepted for symmetry.</param>
+    /// <param name="lossFunction">The loss reported by evaluation (mean squared error by default).</param>
     public Informer(
         NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
@@ -218,51 +141,28 @@ public partial class Informer<T> : ForecastingModelBase<T>
             throw new ArgumentNullException(nameof(onnxModelPath));
         if (!File.Exists(onnxModelPath))
             throw new FileNotFoundException($"ONNX model file not found: {onnxModelPath}", onnxModelPath);
-
-        options ??= new InformerOptions<T>();
-        _options = options;
+        _options = options ?? new InformerOptions<T>();
         Options = _options;
-
         _useNativeMode = false;
         OnnxSession = new InferenceSession(onnxModelPath);
         OnnxModelPath = onnxModelPath;
-
-        // The rate this model publishes on its own options. Built bare, the optimizer
-        // would use its own default instead and LearningRate would be configuration that
-        // nothing reads — the defect that diverged MusicFlamingo's training.
+        _numFeatures = architecture.InputSize;
+        _random = RandomHelper.CreateSeededRandom(InformerNetwork<T>.Seeds(_options.Seed).Sampling);
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
                 new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
                 { InitialLearningRate = _options.LearningRate });
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-
-        _sequenceLength = options.LookbackWindow;
-        _labelLength = options.LookbackWindow / 2;
-        _predictionHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize;
-        _numEncoderLayers = options.NumEncoderLayers;
-        _numDecoderLayers = options.NumDecoderLayers;
-        _numHeads = options.NumAttentionHeads;
-        _modelDimension = options.EmbeddingDim;
-        _feedForwardDimension = options.EmbeddingDim * 4;
-        _distillingFactor = options.DistillingFactor;
-        _dropout = options.DropoutRate;
-        _useInstanceNormalization = true;
     }
 
     /// <summary>
-    /// Creates an Informer network in native mode for training from scratch.
+    /// Creates a trainable Informer.
     /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="options">Configuration options for the model.</param>
-    /// <param name="optimizer">Optional optimizer.</param>
-    /// <param name="lossFunction">Optional loss function.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, Informer sets up the architecture and options. This prepares the model for training or inference.
-    /// </para>
-    /// </remarks>
+    /// <param name="architecture">The architecture; its input size is the number of series (channels), which the
+    /// model forecasts jointly (the reference's <c>features='M'</c>).</param>
+    /// <param name="options">The Informer options.</param>
+    /// <param name="optimizer">The optimizer; the paper's Adam with the per-epoch halving when null.</param>
+    /// <param name="lossFunction">The training loss (mean squared error by default, as in the reference).</param>
     public Informer(
         NeuralNetworkArchitecture<T> architecture,
         InformerOptions<T>? options = null,
@@ -270,37 +170,18 @@ public partial class Informer<T> : ForecastingModelBase<T>
         ILossFunction<T>? lossFunction = null)
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
-        options ??= new InformerOptions<T>();
-        _options = options;
+        _options = options ?? new InformerOptions<T>();
         Options = _options;
-
         _useNativeMode = true;
         OnnxSession = null;
         OnnxModelPath = null;
-
-        // The rate this model publishes on its own options. Built bare, the optimizer
-        // would use its own default instead and LearningRate would be configuration that
-        // nothing reads — the defect that diverged MusicFlamingo's training.
+        _numFeatures = architecture.InputSize;
+        _random = RandomHelper.CreateSeededRandom(InformerNetwork<T>.Seeds(_options.Seed).Sampling);
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
                 new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
                 { InitialLearningRate = _options.LearningRate });
-        _lossFunction = lossFunction ?? new MeanSquaredErrorLoss<T>();
-
-        _sequenceLength = options.LookbackWindow;
-        _labelLength = options.LookbackWindow / 2;
-        _predictionHorizon = options.ForecastHorizon;
-        _numFeatures = architecture.InputSize;
-        _numEncoderLayers = options.NumEncoderLayers;
-        _numDecoderLayers = options.NumDecoderLayers;
-        _numHeads = options.NumAttentionHeads;
-        _modelDimension = options.EmbeddingDim;
-        _feedForwardDimension = options.EmbeddingDim * 4;
-        _distillingFactor = options.DistillingFactor;
-        _dropout = options.DropoutRate;
-        _useInstanceNormalization = true;
-
         InitializeLayers();
     }
 
@@ -308,162 +189,70 @@ public partial class Informer<T> : ForecastingModelBase<T>
 
     #region Initialization
 
-    /// <summary>
-    /// Initializes the layers for native mode operation.
-    /// </summary>
+    /// <inheritdoc />
     /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, InitializeLayers builds and wires up model components. This sets up the Informer architecture before use.
-    /// </para>
+    /// Builds the shared <see cref="InformerNetwork{T}"/> (the official code's model) and initializes it as the
+    /// reference does; every one of its layers is in <c>Layers</c>.
     /// </remarks>
     protected override void InitializeLayers()
     {
+        if (!_useNativeMode) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayersWithOwnershipRollback(Layers);
-        }
-        else if (_useNativeMode)
-        {
-            Layers.AddRange(LayerHelper<T>.CreateDefaultInformerLayers(
-                Architecture,
-                _sequenceLength,
-                _predictionHorizon,
-                _numFeatures,
-                _numEncoderLayers,
-                _numDecoderLayers,
-                _numHeads,
-                _modelDimension,
-                _feedForwardDimension));
-
-            ExtractLayerReferences();
-        }
-    }
-
-    /// <summary>
-    /// Extracts references to specific layers.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, ExtractLayerReferences performs a supporting step in the workflow. It keeps the Informer architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    private void ExtractLayerReferences()
-    {
-        if (Layers.Count == 0)
-            return;
-
-        // Idempotent: runs in the ctor AND after deserialize; clear the encoder/
-        // decoder lists first so the second call rebinds rather than appending a
-        // doubled stack (which makes a clone diverge from the original).
-        _encoderLayers.Clear();
-        _decoderLayers.Clear();
-
-        _inputEmbedding = Layers[0];
-
-        int encoderStartIndex = 1;
-        int encoderEndIndex = encoderStartIndex + _numEncoderLayers;
-        for (int i = encoderStartIndex; i < encoderEndIndex && i < Layers.Count; i++)
-        {
-            _encoderLayers.Add(Layers[i]);
-        }
-
-        int decoderStartIndex = encoderEndIndex;
-        int decoderEndIndex = decoderStartIndex + _numDecoderLayers;
-        for (int i = decoderStartIndex; i < decoderEndIndex && i < Layers.Count; i++)
-        {
-            _decoderLayers.Add(Layers[i]);
-        }
-
-        int normIndex = decoderEndIndex;
-        if (normIndex < Layers.Count)
-            _finalNorm = Layers[normIndex];
-
-        int projIndex = normIndex + 1;
-        if (projIndex < Layers.Count)
-            _outputProjection = Layers[projIndex];
-    }
-
-    /// <summary>
-    /// Validates custom layers.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, ValidateCustomLayers checks inputs and configuration. This protects the Informer architecture from mismatches and errors.
-    /// </para>
-    /// </remarks>
-    protected override void ValidateCustomLayers(List<ILayer<T>> layers)
-    {
-        base.ValidateCustomLayers(layers);
-
-        if (layers.Count < 3)
-            throw new ArgumentException("Informer requires at least 3 layers: embedding, encoder, and output.");
+            throw new ArgumentException(
+                "Informer builds its own encoder-decoder network; custom layers in the architecture are not supported.");
+        var o = _options;
+        var layers = new List<LayerBase<T>>();
+        _network = new InformerNetwork<T>(Engine, layers, new InformerConfiguration(
+            _numFeatures, _numFeatures, _numFeatures, o.EmbeddingDim, o.NumAttentionHeads, o.NumEncoderLayers,
+            o.NumDecoderLayers, o.FeedForwardDim, o.SamplingFactor, o.DropoutRate, o.Distil, o.Mix, o.Attention, o.UseGelu,
+            TimeFeatures: 0, o.LabelLength, o.ForecastHorizon));
+        _network.InitializeLikeReference(RandomHelper.CreateSeededRandom(InformerNetwork<T>.Seeds(o.Seed).Initialization));
+        Layers.AddRange(layers);
     }
 
     #endregion
 
     #region NeuralNetworkBase Overrides
 
-    /// <inheritdoc/>
     public override bool SupportsTraining => _useNativeMode;
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, Predict produces predictions from input data. This is the main inference step of the Informer architecture.
-    /// </para>
-    /// </remarks>
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        return Forecast(input);
-    }
+    /// <inheritdoc />
+    /// <remarks>ProbSparse attention chooses its queries from the current values, so a traced graph replayed on later
+    /// steps would keep the first step's choice; training runs the true forward every step.</remarks>
+    protected override bool SupportsFusedCompiledTraining => false;
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, Train performs a training step. This updates the Informer architecture so it learns from data.
-    /// </para>
-    /// </remarks>
+    /// <inheritdoc />
+    /// <remarks>The forward is not a fold of <c>Layers</c> (decomposition, attention and the decoder branch off the
+    /// list), so the activations are those the forecast actually computes.</remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+        => _useNativeMode ? ObservedLayerActivations(input) : new Dictionary<string, Tensor<T>>();
+
+    protected override Tensor<T> PredictCore(Tensor<T> input) => Forecast(input);
+
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
-
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
         base.Train(input, expectedOutput);
     }
 
-    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
-    // exactly the same enumeration, so this said nothing the base does not already say.
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, GetModelMetadata performs a supporting step in the workflow. It keeps the Informer architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
     public override ModelMetadata<T> GetModelMetadata()
     {
+        var o = _options;
         return new ModelMetadata<T>
         {
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "NetworkType", "Informer" },
-                { "SequenceLength", _sequenceLength },
-                { "LabelLength", _labelLength },
-                { "PredictionHorizon", _predictionHorizon },
+                { "SequenceLength", o.LookbackWindow },
+                { "LabelLength", o.LabelLength },
+                { "PredictionHorizon", o.ForecastHorizon },
                 { "NumFeatures", _numFeatures },
-                { "NumEncoderLayers", _numEncoderLayers },
-                { "NumDecoderLayers", _numDecoderLayers },
-                { "NumHeads", _numHeads },
-                { "ModelDimension", _modelDimension },
-                { "DistillingFactor", _distillingFactor },
+                { "NumEncoderLayers", o.NumEncoderLayers },
+                { "NumDecoderLayers", o.NumDecoderLayers },
+                { "NumHeads", o.NumAttentionHeads },
+                { "ModelDimension", o.EmbeddingDim },
+                { "Attention", o.Attention.ToString() },
                 { "UseNativeMode", _useNativeMode },
                 { "ParameterCount", GetParameterCount() }
             },
@@ -471,136 +260,73 @@ public partial class Informer<T> : ForecastingModelBase<T>
         };
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, SerializeNetworkSpecificData saves or restores model-specific settings. This lets the Informer architecture be reused later.
-    /// </para>
-    /// </remarks>
-
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, DeserializeNetworkSpecificData saves or restores model-specific settings. This lets the Informer architecture be reused later.
-    /// </para>
-    /// </remarks>
-
-
     #endregion
 
     #region IForecastingModel Implementation
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, Forecast produces predictions from input data. This is the main inference step of the Informer architecture.
-    /// </para>
-    /// </remarks>
     public override Tensor<T> Forecast(Tensor<T> input, double[]? quantiles = null)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
-
         return _useNativeMode ? ForecastNative(input, quantiles) : ForecastOnnx(input);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, AutoregressiveForecast produces predictions from input data. This is the main inference step of the Informer architecture.
-    /// </para>
-    /// </remarks>
     public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
         if (steps < 1)
             throw new ArgumentOutOfRangeException(nameof(steps), "Steps must be at least 1.");
-
         var currentInput = input;
         var allPredictions = new List<Tensor<T>>();
-
         int stepsRemaining = steps;
         while (stepsRemaining > 0)
         {
             var forecast = Forecast(currentInput);
-            int stepsToUse = Math.Min(stepsRemaining, _predictionHorizon);
+            int stepsToUse = Math.Min(stepsRemaining, PredictionHorizon);
             allPredictions.Add(forecast);
             stepsRemaining -= stepsToUse;
-
             if (stepsRemaining > 0)
-            {
                 currentInput = ShiftInputWithPredictions(currentInput, forecast, stepsToUse);
-            }
         }
-
         return ConcatenatePredictions(allPredictions, steps);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, Evaluate performs a supporting step in the workflow. It keeps the Informer architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
     public override Dictionary<string, T> Evaluate(Tensor<T> inputs, Tensor<T> targets)
     {
         if (inputs is null)
             throw new ArgumentNullException(nameof(inputs));
         if (targets is null)
             throw new ArgumentNullException(nameof(targets));
-
         var predictions = Forecast(inputs);
-        var metrics = new Dictionary<string, T>();
-
-        T maeSum = NumOps.Zero;
+        T maeSum = NumOps.Zero, mseSum = NumOps.Zero;
         int count = predictions.Length;
         for (int i = 0; i < count; i++)
         {
             T diff = NumOps.Subtract(predictions.Data.Span[i], targets.Data.Span[i]);
             maeSum = NumOps.Add(maeSum, NumOps.Abs(diff));
-        }
-        metrics["MAE"] = NumOps.Divide(maeSum, NumOps.FromDouble(count));
-
-        T mseSum = NumOps.Zero;
-        for (int i = 0; i < count; i++)
-        {
-            T diff = NumOps.Subtract(predictions.Data.Span[i], targets.Data.Span[i]);
             mseSum = NumOps.Add(mseSum, NumOps.Multiply(diff, diff));
         }
-        metrics["MSE"] = NumOps.Divide(mseSum, NumOps.FromDouble(count));
-        metrics["RMSE"] = NumOps.Sqrt(metrics["MSE"]);
-
-        return metrics;
+        var mse = NumOps.Divide(mseSum, NumOps.FromDouble(count));
+        return new Dictionary<string, T>
+        {
+            ["MAE"] = NumOps.Divide(maeSum, NumOps.FromDouble(count)),
+            ["MSE"] = mse,
+            ["RMSE"] = NumOps.Sqrt(mse),
+        };
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, ApplyInstanceNormalization performs a supporting step in the workflow. It keeps the Informer architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
-    {
-        if (!_useInstanceNormalization)
-            return input;
+    /// <inheritdoc />
+    /// <remarks>Informer normalizes nothing per instance: the reference standardizes the whole dataset with training
+    /// statistics before the model sees it, so the input is returned unchanged.</remarks>
+    public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input) => input;
 
-        return ApplyRevIN(input, normalize: true);
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, GetFinancialMetrics calculates evaluation metrics. This summarizes how the Informer architecture is performing.
-    /// </para>
-    /// </remarks>
     public override Dictionary<string, T> GetFinancialMetrics()
     {
         return new Dictionary<string, T>
         {
-            ["SequenceLength"] = NumOps.FromDouble(_sequenceLength),
-            ["PredictionHorizon"] = NumOps.FromDouble(_predictionHorizon),
+            ["SequenceLength"] = NumOps.FromDouble(SequenceLength),
+            ["PredictionHorizon"] = NumOps.FromDouble(PredictionHorizon),
             ["NumFeatures"] = NumOps.FromDouble(_numFeatures),
             ["ParameterCount"] = NumOps.FromDouble(GetParameterCount())
         };
@@ -608,115 +334,39 @@ public partial class Informer<T> : ForecastingModelBase<T>
 
     #endregion
 
-    #region Forward/Backward Pass
+    #region Forward
 
-    /// <summary>
-    /// Performs the forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, Forward runs the forward pass through the layers. This moves data through the Informer architecture to compute outputs.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> Forward(Tensor<T> input)
+    // [L, F] or [B, L, F] history → [B, H, F] forecast (the decoder reads [last LabelLength steps; zeros]).
+    private Tensor<T> Forward(Tensor<T> input, bool training)
     {
-        var current = _useInstanceNormalization ? ApplyRevIN(input, normalize: true) : input;
-
-        if (_inputEmbedding is not null)
-        {
-            current = _inputEmbedding.Forward(current);
-        }
-
-        foreach (var layer in _encoderLayers)
-        {
-            current = layer.Forward(current);
-            current = ApplyDistilling(current);
-        }
-
-        var encoderOutput = current;
-        var decoderInput = PrepareDecoderInput(input, encoderOutput);
-
-        current = decoderInput;
-        foreach (var layer in _decoderLayers)
-        {
-            current = layer.Forward(current);
-        }
-
-        if (_finalNorm is not null)
-        {
-            current = _finalNorm.Forward(current);
-        }
-
-        if (_outputProjection is not null)
-        {
-            current = _outputProjection.Forward(current);
-        }
-
-        current = ExtractPrediction(current);
-
-        if (_useInstanceNormalization)
-        {
-            current = ApplyRevIN(current, normalize: false);
-        }
-
-        return current;
+        if (_network is null) throw new InvalidOperationException("The native network is not initialized.");
+        var history = input.Rank == 2 ? Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1] }) : input;
+        if (history.Rank != 3 || history.Shape[2] != _numFeatures)
+            throw new ArgumentException(
+                $"Informer expects [batch, length, {_numFeatures}] (or [length, {_numFeatures}]), got [{string.Join(", ", input.Shape.ToArray())}].",
+                nameof(input));
+        return _network.Forward(history, null, _network.DecoderInput(history), null, training,
+            training ? _random : InformerNetwork<T>.InferenceRandom(_options.Seed));
     }
 
-    /// <summary>
-    /// Performs native mode forecasting.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, ForecastNative produces predictions from input data. This is the main inference step of the Informer architecture.
-    /// </para>
-    /// </remarks>
     protected override Tensor<T> ForecastNative(Tensor<T> input, double[]? quantiles)
     {
         SetTrainingMode(false);
-        return Forward(input);
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        return Forward(input, training: false);
     }
 
-    /// <summary>
-    /// Tape-aware training forward. The base <c>ForwardNativeForTraining</c>
-    /// would call <see cref="Forecast"/>, which routes through
-    /// <see cref="ForecastNative"/> and flips the network to eval mode via
-    /// <c>SetTrainingMode(false)</c> mid-training-step — silently disabling
-    /// dropout during training (the exact seam the base-class documents:
-    /// models whose <c>Forecast</c> calls <c>SetTrainingMode(false)</c> MUST
-    /// override this). Route training through <see cref="Forward"/> directly —
-    /// the genuine tape-connected forward run under training mode — as the
-    /// other custom-forward finance transformers (TFT, Autoformer, FEDformer)
-    /// do.
-    /// </summary>
-    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input)
-    {
-        return Forward(input);
-    }
+    protected override Tensor<T> ForwardNativeForTraining(Tensor<T> input) => Forward(input, training: true);
 
-    /// <summary>
-    /// Performs ONNX mode forecasting.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, ForecastOnnx produces predictions from input data. This is the main inference step of the Informer architecture.
-    /// </para>
-    /// </remarks>
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (OnnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
-
         var inputName = OnnxSession.InputMetadata.Keys.First();
-        var inputShape = input._shape.Select(d => (long)d).ToArray();
         var onnxInput = new OnnxTensors.DenseTensor<float>(
             input.ToArray().Select(x => Convert.ToSingle(x)).ToArray(),
-            inputShape.Select(d => (int)d).ToArray());
-
-        var inputs = new List<NamedOnnxValue>
-        {
-            NamedOnnxValue.CreateFromTensor(inputName, onnxInput)
-        };
-
+            input._shape.ToArray());
+        var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
         using var results = OnnxSession.Run(inputs);
         var output = results.First().AsTensor<float>();
         var outputArray = output.ToArray().Select(x => NumOps.FromDouble(x)).ToArray();
@@ -725,243 +375,38 @@ public partial class Informer<T> : ForecastingModelBase<T>
 
     #endregion
 
-    #region Model-Specific Processing
-
-    /// <summary>
-    /// Applies RevIN normalization/denormalization.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, ApplyRevIN performs a supporting step in the workflow. It keeps the Informer architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ApplyRevIN(Tensor<T> input, bool normalize)
-    {
-        if (normalize)
-        {
-            int batchSize = input.Shape[0];
-            int seqLen = input.Shape[1];
-            int features = input.Shape[2];
-
-            _instanceMean = new Tensor<T>(new[] { batchSize, 1, features });
-            _instanceStd = new Tensor<T>(new[] { batchSize, 1, features });
-
-            var normalized = new Tensor<T>(input._shape);
-            T epsilon = NumOps.FromDouble(1e-5);
-
-            for (int b = 0; b < batchSize; b++)
-            {
-                for (int f = 0; f < features; f++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int t = 0; t < seqLen; t++)
-                    {
-                        sum = NumOps.Add(sum, input[b, t, f]);
-                    }
-                    T mean = NumOps.Divide(sum, NumOps.FromDouble(seqLen));
-                    _instanceMean[b, 0, f] = mean;
-
-                    T varSum = NumOps.Zero;
-                    for (int t = 0; t < seqLen; t++)
-                    {
-                        var diff = NumOps.Subtract(input[b, t, f], mean);
-                        varSum = NumOps.Add(varSum, NumOps.Multiply(diff, diff));
-                    }
-                    T std = NumOps.Sqrt(NumOps.Add(NumOps.Divide(varSum, NumOps.FromDouble(seqLen)), epsilon));
-                    _instanceStd[b, 0, f] = std;
-
-                    for (int t = 0; t < seqLen; t++)
-                    {
-                        normalized[b, t, f] = NumOps.Divide(NumOps.Subtract(input[b, t, f], mean), std);
-                    }
-                }
-            }
-
-            return normalized;
-        }
-        else
-        {
-            if (_instanceMean is null || _instanceStd is null)
-                return input;
-
-            // Tape-connected denormalization (output * std + mean, stats [B,1,F]
-            // broadcast across time). Manual per-element copy detached the graph
-            // before the loss, zeroing gradients. Stats are constants (paper-faithful).
-            var scaled = Engine.TensorMultiply(input, _instanceStd);
-            return Engine.TensorAdd(scaled, _instanceMean);
-        }
-    }
-
-    /// <summary>
-    /// Applies self-attention distilling.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, ApplyDistilling performs a supporting step in the workflow. It keeps the Informer architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ApplyDistilling(Tensor<T> input)
-    {
-        int batchSize = input.Shape[0];
-        int seqLen = input.Shape[1];
-        int features = input.Shape[2];
-        int factor = _distillingFactor;
-        int newSeqLen = (seqLen + factor - 1) / factor;
-
-        // Tape-connected distilling max-pool (stride = factor): pad the time axis
-        // up to newSeqLen*factor by repeating the last frame (matches the old
-        // idx2 clamp), reshape into [batch, newSeqLen, factor, features] and
-        // max over the window. The previous manual element copy built a detached
-        // tensor mid-encoder, so the loss had no gradient path back to the
-        // encoder layers (Informer distilling, Zhou et al. 2021).
-        var x = input;
-        int padded = newSeqLen * factor;
-        if (padded != seqLen)
-        {
-            var last = Engine.TensorNarrow(input, 1, seqLen - 1, 1);
-            var parts = new List<Tensor<T>> { input };
-            for (int i = 0; i < padded - seqLen; i++) parts.Add(last);
-            x = Engine.Concat(parts.ToArray(), 1);
-        }
-
-        var windows = Engine.Reshape(x, new[] { batchSize, newSeqLen, factor, features });
-        return Engine.ReduceMax(windows, new[] { 2 }, false, out _);
-    }
-
-    /// <summary>
-    /// Prepares decoder input.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, PrepareDecoderInput performs a supporting step in the workflow. It keeps the Informer architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> PrepareDecoderInput(Tensor<T> input, Tensor<T> encoderOutput)
-    {
-        int batchSize = input.Shape[0];
-        int features = encoderOutput.Shape[2];
-        int decoderLen = _labelLength + _predictionHorizon;
-
-        int encoderLen = encoderOutput.Shape[1];
-        int labelStart = Math.Max(0, encoderLen - _labelLength);
-        int copyLen = Math.Min(_labelLength, encoderLen);
-
-        // Tape-connected decoder-input assembly: the leading copyLen steps are the
-        // encoder's label window (tape-connected slice so its gradient — and thus
-        // the encoder's — flows), the prediction window is zero-initialised (the
-        // Informer "start token" placeholder). The previous manual element copy
-        // built a detached tensor, so the decoder's input carried no gradient and
-        // (with this tape requiring tracked inputs) the encoder never trained.
-        var labelSlice = Engine.TensorNarrow(encoderOutput, 1, labelStart, copyLen); // [b, copyLen, f]
-        if (copyLen >= decoderLen)
-            return Engine.TensorNarrow(labelSlice, 1, 0, decoderLen);
-
-        var placeholder = new Tensor<T>(new[] { batchSize, decoderLen - copyLen, features });
-        return Engine.Concat(new[] { labelSlice, placeholder }, 1);
-    }
-
-    /// <summary>
-    /// Extracts prediction portion from decoder output.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, ExtractPrediction produces predictions from input data. This is the main inference step of the Informer architecture.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> ExtractPrediction(Tensor<T> decoderOutput)
-    {
-        int batchSize = decoderOutput.Shape[0];
-        int decoderLen = decoderOutput.Shape[1];
-        int features = decoderOutput.Shape[2];
-
-        int predStart = Math.Max(0, decoderLen - _predictionHorizon);
-        int predLen = Math.Min(_predictionHorizon, decoderLen);
-
-        // Tape-connected extraction of the last predictionHorizon steps. This sits
-        // BETWEEN the output projection and the loss, so the previous manual copy
-        // detached the entire forward graph — every parameter got a zero gradient.
-        var slice = Engine.TensorNarrow(decoderOutput, 1, predStart, predLen); // [b, predLen, f]
-        if (predLen >= _predictionHorizon)
-            return slice;
-
-        var pad = new Tensor<T>(new[] { batchSize, _predictionHorizon - predLen, features });
-        return Engine.Concat(new[] { slice, pad }, 1);
-    }
-
-    #endregion
-
     #region Helper Methods
 
-    /// <summary>
-    /// Shifts input and appends predictions.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, ShiftInputWithPredictions produces predictions from input data. This is the main inference step of the Informer architecture.
-    /// </para>
-    /// </remarks>
     protected override Tensor<T> ShiftInputWithPredictions(Tensor<T> input, Tensor<T> predictions, int steps)
     {
-        int batchSize = input.Shape[0];
-        int features = input.Shape[2];
-        var newInput = new Tensor<T>(new[] { batchSize, _sequenceLength, features });
-
-        int keepLen = _sequenceLength - steps;
+        int batchSize = input.Shape[0], length = input.Shape[1], features = input.Shape[2];
+        var newInput = new Tensor<T>(new[] { batchSize, length, features });
+        int keepLen = length - steps;
         for (int b = 0; b < batchSize; b++)
         {
             for (int t = 0; t < keepLen; t++)
-            {
-                for (int f = 0; f < features; f++)
-                {
-                    newInput[b, t, f] = input[b, t + steps, f];
-                }
-            }
-
+                for (int f = 0; f < features; f++) newInput[b, t, f] = input[b, t + steps, f];
             for (int t = 0; t < steps; t++)
-            {
-                for (int f = 0; f < features; f++)
-                {
-                    newInput[b, keepLen + t, f] = predictions[b, t, f];
-                }
-            }
+                for (int f = 0; f < features; f++) newInput[b, keepLen + t, f] = predictions[b, t, f];
         }
-
         return newInput;
     }
 
-    /// <summary>
-    /// Concatenates prediction tensors.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, ConcatenatePredictions produces predictions from input data. This is the main inference step of the Informer architecture.
-    /// </para>
-    /// </remarks>
     protected override Tensor<T> ConcatenatePredictions(List<Tensor<T>> predictions, int totalSteps)
     {
         if (predictions.Count == 0)
             return new Tensor<T>(new[] { 1, totalSteps, _numFeatures });
-
         int batchSize = predictions[0].Shape[0];
         var result = new Tensor<T>(new[] { batchSize, totalSteps, _numFeatures });
-
         int currentStep = 0;
         foreach (var pred in predictions)
         {
             int stepsToAdd = Math.Min(pred.Shape[1], totalSteps - currentStep);
             for (int b = 0; b < batchSize; b++)
-            {
                 for (int t = 0; t < stepsToAdd; t++)
-                {
-                    for (int f = 0; f < _numFeatures; f++)
-                    {
-                        result[b, currentStep + t, f] = pred[b, t, f];
-                    }
-                }
-            }
+                    for (int f = 0; f < _numFeatures; f++) result[b, currentStep + t, f] = pred[b, t, f];
             currentStep += stepsToAdd;
         }
-
         return result;
     }
 
@@ -969,25 +414,11 @@ public partial class Informer<T> : ForecastingModelBase<T>
 
     #region IDisposable
 
-    /// <summary>
-    /// Releases resources.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Informer model, Dispose performs a supporting step in the workflow. It keeps the Informer architecture pipeline consistent.
-    /// </para>
-    /// </remarks>
     protected override void Dispose(bool disposing)
     {
-        if (disposing)
-        {
-            OnnxSession?.Dispose();
-        }
-
+        if (disposing) OnnxSession?.Dispose();
         base.Dispose(disposing);
     }
 
     #endregion
 }
-
-
