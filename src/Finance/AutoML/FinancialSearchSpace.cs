@@ -167,8 +167,8 @@ public sealed class FinancialSearchSpace
         {
             Type = ParameterType.Integer,
             MinValue = 50,
-            MaxValue = 200,
-            DefaultValue = 100
+            MaxValue = 400,
+            DefaultValue = 200
         };
         searchSpace["LikelihoodType"] = new ParameterRange
         {

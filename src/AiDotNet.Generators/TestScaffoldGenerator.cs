@@ -8936,6 +8936,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumDecoderLayers = 1, NumAttentionHeads = 4, MovingAverageKernel = 3, " +
                     "AutoCorrelationFactor = 2, DropoutRate = 0.0, LearningRate = 0.0001 })";
             }
+            else if (model.ClassName == "DeepAR" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Finance.", System.StringComparison.Ordinal))
+            {
+                // The generated probes feed signed random series, outside the paper's 1 + mean(z) scale (which
+                // assumes non-negative data and refuses a non-positive scale); its signed-data scale is MeanAbsolute.
+                // The 96-step context matches the fixture shape.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TimeSeriesForecasting, " +
+                    "inputSize: 1, outputSize: 1), " +
+                    "new AiDotNet.Models.Options.DeepAROptions<double> { LookbackWindow = 96, " +
+                    "ScaleHandling = AiDotNet.Enums.DeepARScaleHandling.MeanAbsolute, NumSamples = 50 })";
+            }
             else if (model.ClassName == "Informer" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Finance.", System.StringComparison.Ordinal))
             {
