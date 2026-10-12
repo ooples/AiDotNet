@@ -98,6 +98,17 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _lastContext;
     [Scratch]
     private Tensor<T>? _lastAttentionScores;
+
+    /// <summary>
+    /// Gets the attention kernel the most recent forward pass executed (#2312).
+    /// </summary>
+    /// <remarks>
+    /// The fused kernel cannot return the score matrix, so a forward whose manual backward will
+    /// read the attention weights reports <see cref="AttentionKernelPath.ScoreMaterializing"/>
+    /// instead. Exposed so the choice is assertable rather than only visible as allocation.
+    /// </remarks>
+    public AttentionKernelPath LastAttentionKernelPath { get; private set; }
+        = AttentionKernelPath.None;
     [Scratch]
     private Tensor<T>? _lastOutput;
 
@@ -515,16 +526,21 @@ public partial class CrossAttentionLayer<T> : LayerBase<T>, IShapeContract
         K = ReshapeToHeads(K, batch, contextLen, _headCount, _headDim);
         V = ReshapeToHeads(V, batch, contextLen, _headCount, _headDim);
 
-        // Compute scaled dot-product attention using the Engine
-        // ScaledDotProductAttention handles: Q @ K^T / sqrt(d_k), softmax, scores @ V
-        var attended = Engine.ScaledDotProductAttention(
-            Q, K, V,
-            mask: null,
+        // #2312: the fused tape-aware kernel computes the same softmax attention
+        // (Q @ K^T / sqrt(d_k), softmax, scores @ V) while keeping one log-sum-exp per query
+        // row instead of the [B, heads, queryLen, contextLen] score matrix. Nothing in this
+        // layer reads those scores — the field below was written on every forward and only ever
+        // cleared — so materializing them cost cross-attention memory for no consumer.
+        var attended = Engine.FlashAttention(
+            Q,
+            K,
+            V,
             scale: 1.0 / Math.Sqrt(_headDim),
-            out var attentionWeights);
-
-        // Cache post-softmax attention weights for any downstream use
-        _lastAttentionScores = attentionWeights;
+            isCausal: false,
+            out _,
+            attentionBias: null);
+        _lastAttentionScores = null;
+        LastAttentionKernelPath = AttentionKernelPath.FusedFlashAttention;
 
         // Reshape back: [B, numHeads, queryLen, headDim] -> [B, queryLen, queryDim]
         attended = ReshapeFromHeads(attended, batch, queryLen, _headCount, _headDim);
