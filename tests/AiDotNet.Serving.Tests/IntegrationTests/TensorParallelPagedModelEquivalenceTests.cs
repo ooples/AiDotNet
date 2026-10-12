@@ -83,7 +83,7 @@ public sealed class TensorParallelPagedModelEquivalenceTests
             for (int i = 0; i < PromptLen; i++) prompt[0, i] = i + 1;
 
             var prefillLogits = model.PredictWithContext(prompt, new InferenceForwardContext(seqId, 0));
-            AppendSpan(collected, prefillLogits.AsSpan());
+            AppendSpan(collected, prefillLogits.ToArray());
 
             for (int step = 0; step < decodeTokens.Length; step++)
             {
@@ -91,7 +91,7 @@ public sealed class TensorParallelPagedModelEquivalenceTests
                 var input = new Tensor<double>(new[] { 1, 1 });
                 input[0, 0] = decodeTokens[step];
                 var stepLogits = model.PredictWithContext(input, new InferenceForwardContext(seqId, pos));
-                AppendSpan(collected, stepLogits.AsSpan());
+                AppendSpan(collected, stepLogits.ToArray());
             }
         }
         finally

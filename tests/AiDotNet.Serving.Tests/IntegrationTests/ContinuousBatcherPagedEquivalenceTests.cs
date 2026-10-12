@@ -507,7 +507,7 @@ public class ContinuousBatcherPagedEquivalenceTests
         int seq = rank >= 3 ? logits.Shape[rank - 2] : 1;
         int perBatch = seq * vocab;
         int baseOffset = b * perBatch + (seq - 1) * vocab;
-        var s = logits.AsSpan();
+        var s = logits.ToArray();
         var row = new float[vocab];
         for (int v = 0; v < vocab; v++) row[v] = s[baseOffset + v];
         return row;
@@ -622,7 +622,7 @@ public class ContinuousBatcherPagedEquivalenceTests
         int positions = 1;
         for (int d = 0; d < rank - 1; d++) positions *= logits.Shape[d];
         int baseOffset = (positions - 1) * vocab;
-        var s = logits.AsSpan();
+        var s = logits.ToArray();
         int best = 0;
         for (int v = 1; v < vocab; v++)
         {
