@@ -282,13 +282,22 @@ jobs:
             # reclaiming them here is safe and keeps one chunk's leftovers out of the next one.
             $pools = Get-ChildItem -Path ([System.IO.Path]::GetTempPath()) -Directory `
               -Filter 'aidotnet-streaming-pool-*' -ErrorAction SilentlyContinue
+            $removed = 0
+            $stillThere = @()
             foreach ($pool in $pools) {
               Remove-Item -LiteralPath $pool.FullName -Recurse -Force -ErrorAction SilentlyContinue
+              # Report what the deletion ACHIEVED, not what it attempted: SilentlyContinue hides a
+              # locked or partially deleted pool, and a count of pools FOUND would claim the disk
+              # was reclaimed while the next chunk inherits the backing file.
+              if (Test-Path -LiteralPath $pool.FullName) { $stillThere += $pool.Name } else { $removed++ }
             }
             # DriveInfo, not Get-PSDrive: on the Linux runner the temp path's drive is '/', which
             # Get-PSDrive does not expose under the name PowerShell reports for the location.
             $freeMb = [int]([System.IO.DriveInfo]::new([System.IO.Path]::GetTempPath()).AvailableFreeSpace / 1MB)
-            Write-Host "$label -> reclaimed $($pools.Count) streaming pool(s); ${freeMb} MB free on the temp volume"
+            Write-Host "$label -> removed $removed of $($pools.Count) streaming pool(s); ${freeMb} MB free on the temp volume"
+            if ($stillThere.Count -gt 0) {
+              Write-Host "::warning::$label could not remove $($stillThere.Count) streaming pool(s): $($stillThere -join ', ')"
+            }
 
             # 124 is timeout's own exit after it stopped the chunk at the cap; 137 is a SIGKILL from any source (the
             # kill-after escalation, or the kernel OOM killer), so it is reported as such rather than as a timeout.
