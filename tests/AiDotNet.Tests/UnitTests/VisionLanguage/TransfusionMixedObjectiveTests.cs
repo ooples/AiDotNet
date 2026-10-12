@@ -142,7 +142,9 @@ public class TransfusionMixedObjectiveTests
         Assert.True(withoutText > 0.0, $"The diffusion term must be positive; got {withoutText}.");
         Assert.True(markerOnly > 0.0,
             $"The EOI marker is a token and must be scored; got {markerOnly}.");
-        // Five caption tokens plus BOI plus EOI cost more cross-entropy than EOI alone.
+        // The two objectives differ: one scores six targets (five caption tokens and BOI, then
+        // EOI), the other scores EOI alone. Which MEAN cross-entropy is larger is not fixed, so
+        // the assertion is inequality rather than an ordering.
         Assert.NotEqual(withText, withoutText, 6);
     }
 
@@ -251,6 +253,22 @@ public class TransfusionMixedObjectiveTests
         double bordered = model.EvaluateMixedObjective(withBorder, caption, 400);
 
         Assert.NotEqual(untouched, bordered, 6);
+    }
+
+    [Fact]
+    public void AnImageOfTheWrongSizeIsRejected()
+    {
+        using var model = CreateModel();
+        var caption = Caption(4, 9, 13, 21, 2);
+        var wrongSize = new Tensor<float>([1, 3, ImageSide, ImageSide / 2]);
+
+        // The objective's patch grid follows the image it is given, while the sampler and the
+        // unpatchifier follow the configured square grid: a mismatch would train one patch
+        // sequence and generate from another, silently.
+        var exception = Assert.Throws<ArgumentException>(
+            () => model.Train(wrongSize, caption));
+        Assert.Contains($"{ImageSide}x{ImageSide}", exception.Message);
+        Assert.Contains($"{ImageSide}x{ImageSide / 2}", exception.Message);
     }
 
     [Fact]

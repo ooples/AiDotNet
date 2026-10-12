@@ -443,6 +443,17 @@ public partial class Transfusion<T>
         int channels = shape.Length >= 3 ? shape[^3] : 3;
         int height = shape[^2];
         int width = shape[^1];
+        if (height != _options.ImageSize || width != _options.ImageSize)
+        {
+            // The grid the objective builds comes from the image in hand, while the sampler and
+            // Unpatchify use the configured square grid, so a differently sized image would train
+            // one patch sequence and generate from another without ever saying so.
+            throw new ArgumentException(
+                $"Transfusion is configured for {_options.ImageSize}x{_options.ImageSize} images; "
+                    + $"got {height}x{width}. Resize the image before training on it.",
+                nameof(image));
+        }
+
         int rows = Math.Max(1, (height + _patchSide - 1) / _patchSide);
         int columns = Math.Max(1, (width + _patchSide - 1) / _patchSide);
         var patches = new Tensor<T>([1, rows * columns, _patchDim]);
