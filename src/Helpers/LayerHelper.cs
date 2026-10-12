@@ -12873,7 +12873,7 @@ public static partial class LayerHelper<T>
 
         // Output projection: maps to prediction horizon
         yield return new DenseLayer<T>(
-            outputSize: EffectiveOutputSize(architecture, predictionHorizon * numFeatures),
+            outputSize: predictionHorizon * numFeatures,
             activationFunction: null);
     }
 
@@ -12956,7 +12956,7 @@ public static partial class LayerHelper<T>
 
         // Output projection to prediction horizon
         yield return new DenseLayer<T>(
-            outputSize: EffectiveOutputSize(architecture, predictionHorizon * numFeatures),
+            outputSize: predictionHorizon * numFeatures,
             activationFunction: null);
     }
 
