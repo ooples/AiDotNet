@@ -172,6 +172,7 @@ public sealed class MultiHeadAttentionFusedTrainingTests
         Assert.Equal(AttentionKernelPath.ScoreMaterializing, layer.LastAttentionKernelPath);
     }
 
+#if NET6_0_OR_GREATER // GC.GetTotalAllocatedBytes does not exist on .NET Framework (the compat build's net471)
     /// <summary>
     /// The fused kernel's point is the memory it does not spend. Both arms are measured in this
     /// process, and the gap must be at least the score matrix the fused arm never allocates.
@@ -225,6 +226,7 @@ public sealed class MultiHeadAttentionFusedTrainingTests
                 + $"{materialized:N0}; the gap {materialized - fused:N0} is below the "
                 + $"{scoreBytes:N0}-byte score matrix the fused kernel is supposed to avoid.");
     }
+#endif
 
     private static MultiHeadAttentionLayer<double> NewLayer(bool causal)
     {
