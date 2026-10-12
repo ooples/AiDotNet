@@ -4,11 +4,10 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-// HeavyTimeout (#1706): foundation-scale Point-E point-cloud diffusion. Verified genuine OOM — throws
-// System.OutOfMemoryException during CONSTRUCTION under a 16 GB DOTNET_GCHeapHardLimit reproducing the CI
-// runner ceiling (Metadata_ShouldExist alone OOMs), OS-OOM-killing the Diffusion N-R shard. Runs in the
-// nightly heavy lane. Drop once weight streaming lets it fit.
-[Xunit.Trait("Category", "HeavyTimeout")]
+// #1714: back in the default gate. The HeavyTimeout deferral here was measured away: in the
+// nightly lane (run 38117342722, one class per process under a managed heap cap of 70% of
+// runner RAM) this class ran 13 of 13 tests green, slowest 3.8 s and no OutOfMemoryException
+// -- far inside the 120 s per-test gate. Re-defer only against a fresh measurement.
 public class PointEModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 6, 32, 32];
