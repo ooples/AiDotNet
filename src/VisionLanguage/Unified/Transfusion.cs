@@ -72,7 +72,8 @@ namespace AiDotNet.VisionLanguage.Unified;
                         + "rate of 3e-4 warmed up over 4000 steps and decaying to 1.5e-5 under a cosine "
                         + "scheduler. The stated batch of 4M tokens is not declared as a reference batch "
                         + "size, which counts examples rather than tokens.")]
-public partial class Transfusion<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
+public partial class Transfusion<T>
+    : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>, ITrainingObjectiveProvider<T>
 {
     private readonly TransfusionOptions _options;
 

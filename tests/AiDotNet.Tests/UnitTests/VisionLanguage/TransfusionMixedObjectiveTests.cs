@@ -96,7 +96,7 @@ public class TransfusionMixedObjectiveTests
         double Measure(Transfusion<float> target, double lambda)
         {
             ((TransfusionOptions)target.GetOptions()).DiffusionLossWeight = lambda;
-            return target.MixedObjectiveValueForTest(image, caption, timestep: 400);
+            return target.EvaluateMixedObjective(image, caption, timestep: 400);
         }
     }
 
@@ -106,8 +106,8 @@ public class TransfusionMixedObjectiveTests
         using var model = CreateModel();
         var image = Image(0.6);
 
-        double first = model.MixedObjectiveValueForTest(image, Caption(4, 9, 13, 21, 2), 400);
-        double second = model.MixedObjectiveValueForTest(image, Caption(31, 5, 60, 7, 44), 400);
+        double first = model.EvaluateMixedObjective(image, Caption(4, 9, 13, 21, 2), 400);
+        double second = model.EvaluateMixedObjective(image, Caption(31, 5, 60, 7, 44), 400);
 
         Assert.NotEqual(first, second, 6);
     }
@@ -118,8 +118,8 @@ public class TransfusionMixedObjectiveTests
         using var model = CreateModel();
         var caption = Caption(4, 9, 13, 21, 2);
 
-        double first = model.MixedObjectiveValueForTest(Image(0.2), caption, 400);
-        double second = model.MixedObjectiveValueForTest(Image(0.9), caption, 400);
+        double first = model.EvaluateMixedObjective(Image(0.2), caption, 400);
+        double second = model.EvaluateMixedObjective(Image(0.9), caption, 400);
 
         Assert.NotEqual(first, second, 6);
     }
@@ -131,10 +131,10 @@ public class TransfusionMixedObjectiveTests
         var image = Image(0.6);
         var imageShapedTarget = new Tensor<float>([1, 64]);
 
-        double withText = model.MixedObjectiveValueForTest(image, Caption(4, 9, 13, 21, 2), 400);
-        double withoutText = model.MixedObjectiveValueForTest(image, imageShapedTarget, 400);
+        double withText = model.EvaluateMixedObjective(image, Caption(4, 9, 13, 21, 2), 400);
+        double withoutText = model.EvaluateMixedObjective(image, imageShapedTarget, 400);
         ((TransfusionOptions)model.GetOptions()).DiffusionLossWeight = 0.0;
-        double markerOnly = model.MixedObjectiveValueForTest(image, imageShapedTarget, 400);
+        double markerOnly = model.EvaluateMixedObjective(image, imageShapedTarget, 400);
 
         // With no caption the sequence is [BOI, patches, EOI]: the diffusion term is unchanged and
         // the LM term keeps exactly one token to score, the EOI the last patch row predicts --
@@ -153,9 +153,9 @@ public class TransfusionMixedObjectiveTests
         var image = Image(0.6);
         var caption = Caption(4, 9, 13, 21, 2);
 
-        double before = model.MixedObjectiveValueForTest(image, caption, 400);
+        double before = model.EvaluateMixedObjective(image, caption, 400);
         for (int step = 0; step < 40; step++) model.Train(image, caption);
-        double after = model.MixedObjectiveValueForTest(image, caption, 400);
+        double after = model.EvaluateMixedObjective(image, caption, 400);
 
         Assert.True(after < before,
             $"40 steps on one pair must lower the objective it minimizes: {before} -> {after}.");
@@ -219,9 +219,9 @@ public class TransfusionMixedObjectiveTests
         double DiffusionTerm()
         {
             options.DiffusionLossWeight = 0.0;
-            double atZero = model.MixedObjectiveValueForTest(image, caption, 400);
+            double atZero = model.EvaluateMixedObjective(image, caption, 400);
             options.DiffusionLossWeight = 5.0;
-            double atFive = model.MixedObjectiveValueForTest(image, caption, 400);
+            double atFive = model.EvaluateMixedObjective(image, caption, 400);
             return (atFive - atZero) / 5.0;
         }
     }
@@ -247,8 +247,8 @@ public class TransfusionMixedObjectiveTests
             }
         }
 
-        double untouched = model.MixedObjectiveValueForTest(plain, caption, 400);
-        double bordered = model.MixedObjectiveValueForTest(withBorder, caption, 400);
+        double untouched = model.EvaluateMixedObjective(plain, caption, 400);
+        double bordered = model.EvaluateMixedObjective(withBorder, caption, 400);
 
         Assert.NotEqual(untouched, bordered, 6);
     }

@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
@@ -146,13 +147,49 @@ public partial class Transfusion<T>
 
     private int ClampTokenId(int id) => Math.Min(Math.Max(id, 0), _options.VocabSize - 1);
 
+    /// <summary>Gets the kind of objective this model optimizes: two losses at once.</summary>
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind =>
+        TrainingObjectiveKind.MultiTask;
+
+    /// <summary>The supplied target is the caption when it is rank-1, and carries no text
+    /// otherwise; either way the objective reads it directly.</summary>
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(
+        Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
+
     /// <summary>
-    /// Test-only hook: the objective's value for one fixed timestep, with the noise drawn from a
-    /// generator seeded by that timestep, and no optimizer step. Two calls that differ only in
+    /// <c>L = L_LM + lambda * L_DDPM</c> averaged over a fixed quadrature of three timesteps with
+    /// the noise seeded per timestep, under a no-gradient scope and with no optimizer step.
+    /// </summary>
+    /// <remarks>
+    /// A training step draws ONE random timestep, so two reported step losses cannot show a trend;
+    /// this returns the same value for the same parameters, which is what makes a before/after
+    /// comparison meaningful. It is also the only honest loss for this model: <c>Train</c>
+    /// minimizes the mixed-modal objective and never regresses <c>Predict(input)</c> onto the
+    /// target, so measuring that regression would measure a quantity nothing optimizes.
+    /// </remarks>
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        if (!_useNativeMode)
+        {
+            throw new InvalidOperationException(
+                "Transfusion's training objective is only defined in native mode.");
+        }
+
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        int timesteps = Math.Max(1, _options.DiffusionTimesteps);
+        double total = 0.0;
+        for (int quarter = 1; quarter <= 3; quarter++)
+            total += EvaluateMixedObjective(input, target, quarter * timesteps / 4);
+        return NumOps.FromDouble(total / 3.0);
+    }
+
+    /// <summary>
+    /// The objective's value for one fixed timestep, with the noise drawn from a generator seeded
+    /// by that timestep, and no optimizer step. Two calls that differ only in
     /// <see cref="TransfusionOptions.DiffusionLossWeight"/> therefore differ only through
     /// <c>lambda</c>, which is what makes <c>L = L_LM + lambda * L_DDPM</c> checkable.
     /// </summary>
-    internal double MixedObjectiveValueForTest(Tensor<T> image, Tensor<T> expected, int timestep)
+    internal double EvaluateMixedObjective(Tensor<T> image, Tensor<T> expected, int timestep)
     {
         var heads = MixedModalHeads();
         int[] caption = expected.Rank == 1
