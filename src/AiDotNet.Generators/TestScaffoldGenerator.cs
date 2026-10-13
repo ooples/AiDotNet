@@ -1453,7 +1453,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // branch's smoke-iteration caps (auto-emitted for every Fp32 member) fit them to budget while
         // preserving the self-relative training invariants. (Data2VecASR / UniSpeech are excluded from
         // generation — they have manual reduced-scale scaffolds — so they are not listed here.)
-        "HuBERTASR", "WavLMASR", "BESTRQ", "W2vBERT", "SPIRAL", "AVHuBERT",
+        "HuBERTASR", "WavLMASR", "BESTRQ", "SPIRAL", "AVHuBERT",
         "WavLMRobust", "OmnilangualASR", "MMS", "USM", "XLSR",
         // MedicalASR (SpeechRecognition/Specialized): carried no mitigation at all. On the J-M shard
         // every single-forward, gradient and determinism invariant passes and only the
@@ -1479,7 +1479,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // get a CI-smoke constructor (below) + <float> here, whose Fp32-gated audio-branch smoke-iteration
         // caps fit them to budget — the same recipe as Wav2Vec2ASR, and WITHOUT the MoreDataTolerance
         // double-define that HeavyTrainingTimeoutClassNames would cause (the audio branch already emits it).
-        "Wav2Vec2", "Wav2Vec2Model", "HuBERT", "WavLM",
+        "Wav2Vec2", "Wav2Vec2Model", "HuBERT", "WavLM", "W2vBert",
         // ConvTransformer (SpeechRecognition/ConformerFamily): same deep conv+attention ASR encoder;
         // routes to the audio branch and already gets its relaxed MoreDataTolerance there, but without
         // this membership it missed the smoke-iteration caps and MoreData (250 iters) timed out solo.
@@ -9461,24 +9461,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumTimbreLayers = 1, NumPLLMLayers = 1, NumHeads = 2, NumPLLMHeads = 2, " +
                     "VocabSize = 64, DropoutRate = 0.0 })";
             }
-            else if (model.ClassName == "W2vBERT" && model.TypeParameterCount == 1)
-            {
-                // W2vBERT keeps its production w2v-BERT stack by default — a 1024-wide, 24-layer
-                // conformer encoder over 30 s of 16 kHz audio. On the T-Z shard it measured 251 s of
-                // test time, one of six classes that consumed roughly 24 of the shard's 45 minutes
-                // before it hit the job timeout having run only 23 classes.
-                // Same option surface and same remedy as its MMS / OmnilangualASR neighbours below:
-                // exercise the identical feature-projection -> conformer -> CTC path through the
-                // public options at runner-safe scale. Production defaults are unchanged.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
-                    "new AiDotNet.SpeechRecognition.Foundation.W2vBERTOptions { " +
-                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 2, " +
-                    "NumAttentionHeads = 4, NumMels = 32, VocabSize = 64, " +
-                    "MaxTextLength = 16, DropoutRate = 0.0 })";
-            }
             else if (model.ClassName == "MMS" && model.TypeParameterCount == 1)
             {
                 // MMS (Pratap et al. 2023) keeps its production wav2vec2-large stack by default:
@@ -11196,6 +11178,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // training invariants see a deterministic objective; the paper's values remain the defaults.
                     "options: new AiDotNet.Models.Options.Wav2Vec2ModelOptions { HiddenDim = 64, NumTransformerLayers = 2, NumHeads = 4, FfDim = 128, " +
                     "HiddenDropout = 0.0, AttentionDropout = 0.0, ActivationDropout = 0.0, LayerDrop = 0.0, MaskTimeProbability = 0.0, FinalDropout = 0.0 }" + ")";
+            }
+            else if (model.ClassName == "W2vBert" && model.TypeParameterCount == 1)
+            {
+                // w2v-BERT XL is 0.6B parameters (two 12-block Conformer modules 1024 wide); keep every component
+                // (log-mel front end, two stride-2 convolutions, contrastive and masked-prediction Conformers, the
+                // quantizer) at 16 wide with one block per module and a 64-entry codebook. Half a second of audio is
+                // 48 mel frames, 11 encoder frames.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 8000, outputSize: 16), " +
+                    "new AiDotNet.Audio.Foundations.W2vBertOptions { ModelDim = 16, NumHeads = 2, FeedForwardMultiplier = 2, " +
+                    "ContrastiveLayers = 1, MaskedLayers = 1, CodebookSize = 64, CodeDim = 16, Negatives = 4, " +
+                    "MaskProbability = 0.3, MaskLength = 2, SemanticLayer = 1, SemanticClusters = 4, WarmupSteps = 1, LearningRate = 1e-3 })";
             }
             else if ((model.ClassName is "Wav2Vec2" or "HuBERT" or "WavLM") && model.TypeParameterCount == 1)
             {
@@ -16073,6 +16069,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // overstates recurrent work while violating the public streaming input contract.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 512 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1 };");
+            }
+            else if (model.ClassName == "W2vBert")
+            {
+                // w2v-BERT reads waveforms: half a second at 16 kHz. Its pre-training objective is self-supervised, so
+                // the target only has to exist.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 8000 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
             }
             else
             {
