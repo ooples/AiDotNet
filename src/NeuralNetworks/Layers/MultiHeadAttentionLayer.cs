@@ -1461,7 +1461,11 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // way, with no [batch, heads, seq, seq] score tensor). Taken whenever the layer needs nothing that op does not
         // express: a positional bias (RoPE, ALiBi), grouped attention, the attention weights (auxiliary loss), or the
         // manual backward's per-head caches (neither inference nor a compiled trace runs the manual backward).
-        if (_ropeLayer == null && _alibiLayer == null && _attentionGroupSize <= 1 && !UseAuxiliaryLoss
+        // Only for float: the engine fuses this op on the host for float alone and composes it from
+        // ScaledDotProductAttention (which materializes the score matrix) for every other element type, while
+        // the FlashAttention path below is fused for every precision.
+        if (typeof(T) == typeof(float)
+            && _ropeLayer == null && _alibiLayer == null && _attentionGroupSize <= 1 && !UseAuxiliaryLoss
             && (!cacheForManualBackward || !IsTrainingMode || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive))
         {
             int headsWidth = _headCount * _headDimension;
@@ -1472,6 +1476,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 _headCount, 1.0 / Math.Sqrt(_headDimension), UseCausalMask);
             _lastAttentionScores = null;
             _lastHeadOutputs = null;
+            LastAttentionKernelPath = AttentionKernelPath.FusedMultiHeadCore;
             return ProjectAttentionContext(
                 Engine.Reshape(fusedContext, [batchSize * seqLengthQ, embeddingDimension]),
                 batchSize, seqLengthQ, embeddingDimension, cacheForManualBackward);
