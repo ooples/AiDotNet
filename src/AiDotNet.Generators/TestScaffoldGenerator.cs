@@ -1617,7 +1617,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // both halves of the established mitigation (float values plus bounded training probes), and
         // keeps all other implicated fixtures in float if shard boundaries change. Production
         // constructors, research-paper defaults, and public customization surfaces are untouched.
-        "AudioLM", "BayesianNeuralNetwork", "DeCLIP", "Dessurt", "DocGCN", "E2TTS",
+        "BayesianNeuralNetwork", "DeCLIP", "Dessurt", "DocGCN", "E2TTS",
         "IndexTTS2", "LayoutLMv2", "LLM2CLIP", "Mamba2LanguageModel", "NemotronSpeech", "PatchTST", "TimeGPT",
         // PR #1789 generated-shard failures: these training-bound models either exhausted the
         // runner or overflowed numerically in their FP64 generated fixtures. Apply the project's
@@ -9702,22 +9702,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumHeads = 4, NumCodebooks = 1, CodebookSize = 80, " +
                     "MaxTextLength = 8, MaxCodecFrames = 8, DropoutRate = 0.0 })";
             }
-            else if (model.ClassName == "AudioLM" && model.TypeParameterCount == 1
-                     && typeName.StartsWith(
-                         "AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
+            else if (model.ClassName == "AudioLM" && model.TypeParameterCount == 1)
             {
-                // AudioLM keeps the paper's three-stage scale in production: each
-                // decoder-only Transformer is 1024-wide with 12 layers, 16 heads,
-                // and a 12x1024 SoundStream vocabulary. The generated invariant
-                // exercises that codec-LM topology through public options at CPU scale.
+                // AudioLM's paper stages are three 12-layer 1024-wide decoder-only Transformers over a 12-level
+                // SoundStream; keep all three stages and the codec at 16 wide with one layer each, three levels of 16
+                // codes (one coarse) and a 400-sample hop (40 frames a second, semantic tokens at 20). Its input is
+                // semantic token ids; Predict renders them (acoustic generation), eight tokens to 16 frames, 6400 samples.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 80), " +
-                    "new AiDotNet.TextToSpeech.CodecBased.AudioLMOptions { TextEncoderDim = 32, LLMDim = 32, " +
-                    "NumEncoderLayers = 0, NumLLMLayers = 2, NumHeads = 4, VocabSize = 64, " +
-                    "NumCodebooks = 1, CodebookSize = 80, MaxTextLength = 8, MaxCodecFrames = 8, " +
-                    "DropoutRate = 0.0, LearningRate = 1e-4 })";
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, inputSize: 8, outputSize: 6400), " +
+                    "new AiDotNet.Audio.Generation.AudioLMOptions { SemanticCodes = 16, SemanticFrameRate = 20, " +
+                    "NumCodebooks = 3, CoarseCodebooks = 1, CodebookSize = 16, ModelDim = 16, NumLayers = 1, NumHeads = 2, " +
+                    "KeyValueDim = 8, FeedForwardDim = 32, DropoutRate = 0.0, FineCropSeconds = 0.2, LearningRate = 3e-3, Seed = 42, " +
+                    "SoundStream = new AiDotNet.Audio.Generation.SoundStreamOptions { SampleRate = 16000, Filters = 4, " +
+                    "Dimension = 8, Ratios = [8, 5, 5, 2], NumQuantizers = 3, CodebookSize = 16, TargetBandwidthKbps = 0.48 } })";
             }
             else if (model.ClassName == "StepAudio" && model.TypeParameterCount == 1)
             {
@@ -15815,7 +15813,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // and stays clear at 10, 15 and 20, and the whole 15-step probe still runs in
                     // under a second, so the added steps are free. Fifteen matches the window its
                     // twelve siblings above already use. The DEFAULT 1 % threshold is untouched.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName is "AudioLM" or "IndexTTS2" or "SpeechT5" or "StyleTTS" or "StyleTTS2" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName is "IndexTTS2" or "SpeechT5" or "StyleTTS" or "StyleTTS2" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
                     if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS")
                     {
                         // A VITS-family training step draws the posterior noise, the decoder window and the duration
@@ -15911,6 +15909,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int MemorizationTaskIterations => 100;");
                 sb.AppendLine("    protected override int MoreDataShortIterations => 10;");
                 sb.AppendLine("    protected override int MoreDataLongIterations => 30;");
+            }
+            else if (model.ClassName == "AudioLM")
+            {
+                // AudioLM reads semantic token ids and trains on (and renders) waveforms: eight tokens, 16 frames of the
+                // smoke codec's 400-sample hop. It samples its codes, so its input-sensitivity probes compare the
+                // coarse stage's training objective, which reads the semantic tokens.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 6400 };");
+                AppendObjectiveSensitivityProbes(sb, new[]
+                {
+                    ("DifferentInputs_ShouldProduceDifferentOutputs", false, "constant"),
+                    ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
+                    ("ScaledInput_ShouldChangeOutput", false, "random"),
+                }, textToTokens: "unused: AudioLM has no text probe");
             }
             else if (model.ClassName == "MusicGenModel")
             {

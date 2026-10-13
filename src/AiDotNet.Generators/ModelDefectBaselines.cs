@@ -240,7 +240,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.TextToSpeech.Classic.FastSpeech<T>",
             "AiDotNet.TextToSpeech.Classic.FastSpeech2<T>",
             "AiDotNet.TextToSpeech.CodecBased.Amphion<T>",
-            "AiDotNet.TextToSpeech.CodecBased.AudioLM<T>",
             "AiDotNet.TextToSpeech.CodecBased.ChatTTS<T>",
             "AiDotNet.TextToSpeech.CodecBased.CosyVoice<T>",
             "AiDotNet.TextToSpeech.CodecBased.CosyVoice2<T>",
