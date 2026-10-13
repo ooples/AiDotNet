@@ -313,7 +313,7 @@ jobs:
 
       - name: Initialize CodeQL (build-less, pull requests)
         if: github.event_name == 'pull_request'
-        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
+        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
         with:
           languages: csharp
           build-mode: none
@@ -322,7 +322,7 @@ jobs:
 
       - name: Initialize CodeQL (build-less, whole library)
         if: github.event_name != 'pull_request'
-        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
+        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
         with:
           languages: csharp
           build-mode: none
@@ -330,7 +330,7 @@ jobs:
           queries: security-and-quality
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
+        uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
         with:
           category: "/language:csharp"
           upload: always
@@ -400,7 +400,7 @@ jobs:
       # files it changes; master pushes and the schedule still analyze everything, traced. A PR that
       # changes no analyzed C# extracts one fixed small file, so the ruleset still gets its result.
       - name: Initialize CodeQL (traced build)
-        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
+        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
         with:
           languages: csharp
           build-mode: manual
@@ -422,7 +422,7 @@ jobs:
           dotnet build src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj -c Release --no-restore
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
+        uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
         with:
           category: "/language:csharp-traced"
           upload: always
@@ -541,7 +541,7 @@ jobs:
 
       - name: Upload build artifacts
         id: upload-build-artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         # net471 is COMPILED in the step above and deliberately not shipped here. Compiling it
         # is the check -- it catches net471-only breakage a net10.0 build cannot see -- but no
         # job RUNS it: every consumer of this artifact (the test shards, the shape-conformance
@@ -605,7 +605,7 @@ jobs:
 
       - name: Upload test-level selection plan
         if: always() && hashFiles('type-impact-plan.json') != ''
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: type-impact-plan
           path: |
@@ -701,7 +701,7 @@ jobs:
 
       - name: Upload NuGet package
         if: github.event_name != 'pull_request'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: nuget-packages
           path: ./artifacts/*.nupkg
@@ -1468,7 +1468,7 @@ jobs:
         if: always()
         # Report-only: a transient artifact-service failure must not fail Select shards and block the matrix.
         continue-on-error: true
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: shard-selection-report
           path: |
@@ -1480,7 +1480,7 @@ jobs:
 
       - name: Upload carried digests
         if: ${{ inputs.collect_coverage_everywhere }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: impact-digest-carried
           path: carried-digests/*.digest.json
@@ -1490,7 +1490,7 @@ jobs:
 
       - name: Upload coverage-source marker
         if: ${{ inputs.collect_coverage_everywhere }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: test-impact-coverage-source
           path: coverage-source.json
@@ -1694,7 +1694,7 @@ jobs:
       - name: Download compact retry baseline ledger
         if: always() && steps.retry-baseline.outputs.baseline_mode == 'ledger'
         id: retry-ledger-download
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
         with:
           name: ${{ steps.retry-baseline.outputs.baseline_artifact_name }}
           path: retry-baseline-ledger
@@ -1705,7 +1705,7 @@ jobs:
       - name: Download legacy retry baseline shard TRX
         if: always() && steps.retry-baseline.outputs.baseline_mode == 'trx'
         id: retry-trx-download
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
         with:
           name: ${{ steps.retry-baseline.outputs.baseline_artifact_name }}
           path: retry-baseline-results
@@ -1833,7 +1833,7 @@ jobs:
               -OutFile "impact-digest/$slug.digest.json"
 
       - name: Upload test-impact digest
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         if: always() && steps.download-build-artifacts.outcome == 'success'
         continue-on-error: true
         with:
@@ -1843,7 +1843,7 @@ jobs:
           retention-days: 7
 
       - name: Upload coverage + test results
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         if: always() && steps.download-build-artifacts.outcome == 'success'
         continue-on-error: true  # Prevent transient GitHub artifact service issues from failing the job
         with:
@@ -1863,7 +1863,7 @@ jobs:
       # the enterprise CI license key. Sequence.xml is the hang spelling; Sequence_<guid>.xml is
       # the crash spelling, so the glob must cover both.
       - name: Upload crash evidence
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         if: always() && steps.download-build-artifacts.outcome == 'success'
         continue-on-error: true
         with:
@@ -1878,7 +1878,7 @@ jobs:
       # TRX results makes the final reporter needlessly slow and expensive, while this artifact also
       # retains hang-sequence evidence that the coverage artifact intentionally omits.
       - name: Upload compact test diagnostics
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         if: always() && steps.download-build-artifacts.outcome == 'success'
         continue-on-error: true
         with:
@@ -1919,7 +1919,7 @@ jobs:
         run: ./.github/scripts/test-regression-analysis.tests.ps1
 
       - name: Download current shard results
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
         continue-on-error: true
         with:
           pattern: coverage-${{ github.sha }}-*
@@ -1930,7 +1930,7 @@ jobs:
       # so the landed commit's ledger covers every shard the pull request validated.
       - name: Download pull-request shard results for delta import
         if: needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
         with:
           pattern: coverage-${{ needs.validation-source.outputs.import_sha }}-*
           path: delta-import-staging
@@ -1999,7 +1999,7 @@ jobs:
         if: steps.baseline.outputs.baseline_available == 'true' && steps.baseline.outputs.baseline_mode == 'ledger'
         id: baseline-ledger-download
         continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
         with:
           name: test-outcome-ledger-${{ steps.baseline.outputs.baseline_sha }}
           path: baseline-ledger
@@ -2011,7 +2011,7 @@ jobs:
         if: steps.baseline.outputs.baseline_available == 'true' && steps.baseline.outputs.baseline_mode == 'promoted'
         id: promoted-analysis-download
         continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
         with:
           name: ci-test-analysis-${{ steps.baseline.outputs.baseline_sha }}
           path: promoted-baseline-analysis
@@ -2040,7 +2040,7 @@ jobs:
         if: steps.baseline.outputs.baseline_available == 'true' && steps.baseline.outputs.baseline_mode == 'promoted' && steps.promoted-baseline.outcome == 'success'
         id: promoted-trx-download
         continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
         with:
           pattern: coverage-${{ steps.promoted-baseline.outputs.tested_sha }}-*
           path: promoted-baseline-test-results
@@ -2053,7 +2053,7 @@ jobs:
         if: steps.baseline.outputs.baseline_available == 'true' && steps.baseline.outputs.baseline_mode == 'trx'
         id: baseline-trx-download
         continue-on-error: true
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
         with:
           pattern: coverage-${{ steps.baseline.outputs.baseline_sha }}-*
           path: baseline-test-results
@@ -2172,7 +2172,7 @@ jobs:
         # Missing/invalid selection output cannot prove which shards were dispatched. Do not
         # publish a partial ledger that a later run could mistake for a complete baseline.
         if: always() && steps.analyze.outputs.inventory_valid == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: test-outcome-ledger-${{ github.sha }}
           path: test-regression-analysis/
@@ -2282,7 +2282,7 @@ jobs:
 
       - name: Download current-run coverage artifacts
         if: ${{ fromJSON(env.SONAR_ANALYZE) && needs.validation-source.outputs.reuse != 'true' }}
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
         with:
           pattern: coverage-${{ github.sha }}-*
           path: TestResults
@@ -2290,7 +2290,7 @@ jobs:
 
       - name: Download certified coverage artifacts
         if: ${{ fromJSON(env.SONAR_ANALYZE) && needs.validation-source.outputs.reuse == 'true' }}
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
         with:
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
@@ -2301,7 +2301,7 @@ jobs:
 
       - name: Download pull-request coverage for delta import
         if: ${{ fromJSON(env.SONAR_ANALYZE) && needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false' }}
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
         with:
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
@@ -2519,7 +2519,7 @@ jobs:
         run: New-Item -ItemType Directory -Path TestDiagnostics -Force | Out-Null
 
       - name: Download compact test diagnostics
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
         continue-on-error: true
         with:
           pattern: test-results-${{ github.sha }}-*
@@ -2527,7 +2527,7 @@ jobs:
 
       - name: Download pull-request diagnostics for delta import
         if: needs.validation-source.outputs.import_run_id != '' && needs.select-shards.outputs.escalated == 'false'
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
         with:
           pattern: test-results-${{ needs.validation-source.outputs.import_sha }}-*
           path: delta-import-staging
@@ -2636,7 +2636,7 @@ jobs:
 
       - name: Upload aggregate test analysis
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           # The PR head remains queryable after merge, whereas refs/pull/*/merge is temporary.
           # A master-push promotion below also publishes the same report under the landed SHA.
@@ -2712,7 +2712,7 @@ jobs:
             -OutFile validation-certificate.json
 
       - name: Upload validation certificate
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: ci-expensive-validation-certificate-${{ github.event.pull_request.head.sha || github.sha }}
           path: validation-certificate.json
@@ -2735,7 +2735,7 @@ jobs:
 
     steps:
       - name: Download certified PR analysis
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
         with:
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
@@ -2745,7 +2745,7 @@ jobs:
           merge-multiple: true
 
       - name: Download certified PR outcome ledger
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
         with:
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
@@ -2770,7 +2770,7 @@ jobs:
             > TestAnalysis/promotion.json
 
       - name: Upload master-keyed analysis
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: ci-test-analysis-${{ github.sha }}
           path: TestAnalysis/
@@ -2778,7 +2778,7 @@ jobs:
           retention-days: 90
 
       - name: Upload master-keyed outcome ledger
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: test-outcome-ledger-${{ github.sha }}
           path: TestOutcomeLedger/
@@ -2866,7 +2866,7 @@ jobs:
             -OutFile validation-certificate.json
 
       - name: Upload validation certificate
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: ci-validation-certificate-${{ github.event.pull_request.head.sha || github.sha }}
           path: validation-certificate.json
