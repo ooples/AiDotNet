@@ -34,4 +34,10 @@ public enum TrainingObjectiveKind
 
     /// <summary>Several explicitly structured task objectives are optimized together.</summary>
     MultiTask,
+
+    /// <summary>
+    /// A self-supervised objective defined on the input alone (for example masked prediction of quantized
+    /// targets among distractors); a supplied target is not used.
+    /// </summary>
+    SelfSupervised,
 }

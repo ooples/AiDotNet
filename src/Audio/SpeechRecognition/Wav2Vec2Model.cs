@@ -96,26 +96,10 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
 
     #region Native Mode Fields
 
-    /// <summary>
-    /// Convolutional feature encoder layers.
-    /// </summary>
-    private List<ILayer<T>> _featureEncoderLayers = [];
-
-    /// <summary>
-    /// Convolutional positional-embedding layer (depthwise Conv1D over time). Sits between the feature
-    /// projection and the transformer; RunModel applies it as a residual: x = x + posConv(x).
-    /// </summary>
-    private ILayer<T>? _posConv;
-
-    /// <summary>
-    /// Transformer encoder layers.
-    /// </summary>
-    private List<ILayer<T>> _transformerLayers = [];
-
-    /// <summary>
-    /// CTC projection layer.
-    /// </summary>
-    private ILayer<T>? _ctcProjection;
+    // The shared wav2vec 2.0 network and the CTC head (transformers Wav2Vec2ForCTC: dropout, then lm_head).
+    private Audio.Foundations.Wav2Vec2Network<T>? _network;
+    private DenseLayer<T>? _ctcHead;
+    private readonly Random _random;
 
     #endregion
 
@@ -160,14 +144,6 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     /// Feed-forward dimension (non-readonly for deserialization support).
     /// </summary>
     private int _ffDim;
-
-    /// <summary>
-    /// Number of Conv1D layers in the feature encoder (wav2vec 2.0 uses 7). The first
-    /// <c>FeatureConvCount</c> entries of <see cref="_featureEncoderLayers"/> are the temporal
-    /// convolutions (run BEFORE the channels-&gt;time transpose in <see cref="RunModel"/>); any
-    /// remaining entries are the post-transpose feature projection.
-    /// </summary>
-    private const int FeatureConvCount = 7;
 
     /// <summary>
     /// Vocabulary size for CTC output (non-readonly for deserialization support).
@@ -270,6 +246,7 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
 
         _useNativeMode = false;
         _modelPath = modelPath;
+        _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
         _language = _options.Language;
         _maxAudioLengthSeconds = _options.MaxAudioLengthSeconds;
 
@@ -360,6 +337,7 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
             throw new ArgumentNullException(nameof(architecture));
 
         _useNativeMode = true;
+        _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
         _language = _options.Language;
         _maxAudioLengthSeconds = _options.MaxAudioLengthSeconds;
         _hiddenDim = _options.HiddenDim;
@@ -412,83 +390,30 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     /// </summary>
     private void InitializeNativeLayers()
     {
-        var layers = (Architecture.Layers != null && Architecture.Layers.Count > 0)
-            ? Architecture.Layers.ToList()
-            : LayerHelper<T>.CreateWav2Vec2Layers(
-                hiddenDim: _hiddenDim, numTransformerLayers: _numTransformerLayers,
-                numHeads: _numHeads, ffDim: _ffDim, vocabSize: _vocabSize,
-                sampleRate: SampleRate, maxAudioLengthSeconds: _maxAudioLengthSeconds).ToList();
-
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+            throw new ArgumentException("Wav2Vec2Model builds the wav2vec 2.0 network; custom layers in the architecture are not supported.");
+        var layers = new List<LayerBase<T>>();
+        _network = new Audio.Foundations.Wav2Vec2Network<T>(Engine, layers, _options.ToConfiguration());
+        _ctcHead = new DenseLayer<T>(_vocabSize, (IActivationFunction<T>)new ActivationFunctions.IdentityActivation<T>());
+        layers.Add(_ctcHead);
+        var seed = Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.Seed ?? 42);
+        _network.InitializeLikeReference(seed);
+        // Wav2Vec2ForCTC's lm_head: N(0, 0.02) weights, zero biases.
+        var head = new double[_vocabSize * _options.HiddenDim];
+        for (int i = 0; i < head.Length; i++)
+            head[i] = 0.02 * Math.Sqrt(-2.0 * Math.Log(1.0 - seed.NextDouble())) * Math.Cos(2.0 * Math.PI * seed.NextDouble());
+        TextToSpeech.CodecBased.TorchParameters.Linear(Engine, _ctcHead, _options.HiddenDim, _vocabSize, head, new double[_vocabSize]);
         Layers.Clear();
         Layers.AddRange(layers);
-
-        // Feature encoder: 7 Conv1D + 1 feature-projection Dense + 1 feature-projection LayerNorm = 9
-        // (see CreateWav2Vec2Layers — the LayerNorm was added for paper-faithful feature projection).
-        int featureEncoderCount = 9;
-        // 1 convolutional positional-embedding layer (depthwise Conv1D) between projection and transformer.
-        int posConvCount = 1;
-        // Transformer layers: numTransformerLayers residual TransformerEncoderBlocks (one per layer;
-        // each block internally does MHA + FFN + the two LayerNorms), + 1 CTC projection.
-        int transformerCount = _numTransformerLayers;
-        int expectedTotal = featureEncoderCount + posConvCount + transformerCount + 1;
-
-        if (Architecture.Layers != null && layers.Count != expectedTotal)
-        {
-            System.Diagnostics.Debug.WriteLine(
-                $"[Wav2Vec2] Warning: Expected {expectedTotal} layers (9 encoder + 1 pos-conv + {transformerCount} transformer + 1 CTC), " +
-                $"but got {layers.Count}. Layer distribution may be incorrect.");
-        }
-
-        DistributeLayersToSubLists();
     }
 
-    // Re-links the typed forward-path sub-lists (_featureEncoderLayers / _posConv / _transformerLayers /
-    // _ctcProjection) to the CURRENT contents of Layers. The forward reads these fields, NOT Layers,
-    // so they must be rebuilt whenever Layers is replaced — critically after deserialization, where the
-    // base clears Layers and adds freshly-deserialized (trained) layers. Without this, a cloned/loaded
-    // model keeps its ctor's random-init sub-list layers and predicts as if untrained (#1221 class:
-    // Clone_AfterTraining). Distribution order matches CreateWav2Vec2Layers: [0..8]=feature encoder,
-    // [9]=positional conv, [10..10+N-1]=transformer (one residual TransformerEncoderBlock each),
-    // [^1]=CTC projection.
-    private void DistributeLayersToSubLists()
+    /// <summary>Loads a transformers <c>Wav2Vec2ForCTC</c> state dict (<c>wav2vec2.*</c> and <c>lm_head.*</c>).</summary>
+    public void LoadTorchWeights(Func<string, int[], double[]> read)
     {
-        _featureEncoderLayers.Clear();
-        _transformerLayers.Clear();
-        _posConv = null;
-
-        int featureEncoderCount = 9;
-        int transformerCount = _numTransformerLayers;
-
-        // CHECKED BEFORE DISTRIBUTING, because every loop below is bounded by `i < Layers.Count` and
-        // therefore cannot fail. With too few layers each loop simply stops early: _transformerLayers
-        // ends up short, _posConv stays null, and _ctcProjection is taken from Layers[^1] -- which is
-        // then a transformer block rather than the projection. Nothing throws. The model runs and
-        // produces logits from a stack that is missing pieces, and the only visible symptom is poor
-        // recognition. The expected count is the feature encoder, the positional convolution, the
-        // transformer blocks, and the CTC projection.
-        int expectedLayerCount = featureEncoderCount + 1 + transformerCount + 1;
-        if (Layers.Count != expectedLayerCount)
-        {
-            throw new InvalidOperationException(
-                $"Wav2Vec2 native mode expects exactly {expectedLayerCount} layers " +
-                $"({featureEncoderCount} feature encoder + 1 positional conv + {transformerCount} " +
-                $"transformer + 1 CTC projection) but found {Layers.Count}. Distributing them anyway " +
-                "would bind a partial stack and degrade recognition with no error.");
-        }
-
-        for (int i = 0; i < featureEncoderCount && i < Layers.Count; i++)
-            _featureEncoderLayers.Add(Layers[i]);
-
-        int posConvIndex = featureEncoderCount;
-        if (posConvIndex < Layers.Count)
-            _posConv = Layers[posConvIndex];
-
-        int transformerStart = featureEncoderCount + 1; // +1 for the positional conv
-        for (int i = 0; i < transformerCount && transformerStart + i < Layers.Count; i++)
-            _transformerLayers.Add(Layers[transformerStart + i]);
-
-        if (Layers.Count > 0)
-            _ctcProjection = Layers[^1];
+        if (_network is null || _ctcHead is null) throw new InvalidOperationException("Weights load into the native network.");
+        _network.LoadTorchWeights((name, shape) => read($"wav2vec2.{name}", shape));
+        TextToSpeech.CodecBased.TorchParameters.Linear(Engine, _ctcHead, _options.HiddenDim, _vocabSize,
+            read("lm_head.weight", new[] { _vocabSize, _options.HiddenDim }), read("lm_head.bias", new[] { _vocabSize }));
     }
 
     private static string[] GetDefaultVocabulary()
@@ -654,132 +579,65 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     // Minimum waveform length fed to the Conv1D encoder. The 7 paper strides downsample by 320x, so a
     // clip shorter than this collapses to zero frames ("Invalid output dimensions (1x0)"). Short inputs
     // (e.g. minimal-input invariants) are zero-padded up to this length before the encoder.
-    private const int MinEncoderSamples = 1024;
-
-    private bool _shapesProbed;
-
-    /// <inheritdoc/>
-    protected override void ResolveLazyLayerShapes()
+    // CTC logits: [frames, vocab] for a waveform [samples], [batch, frames, vocab] for [batch, samples]. A waveform
+    // shorter than the feature encoder's receptive field is zero-padded to it.
+    private Tensor<T> RunModel(Tensor<T> waveform, bool training = false)
     {
-        // The real forward (RunModel) reshapes the waveform to [1, 1, T] before the Conv1D encoder, so
-        // the first conv must resolve to in_channels = 1. The base linear walk instead feeds the
-        // architecture input shape ([1, 64, 32]) straight into the first conv, resolving it to
-        // in_channels = 64 — after which the real forward throws "Input channels (1) must match kernel
-        // in_channels (64)". Probe the real forward once on a tiny dummy waveform so every lazy layer
-        // resolves to what RunModel actually feeds it.
-        if (_shapesProbed || !_useNativeMode || _featureEncoderLayers.Count == 0) return;
-        _shapesProbed = true;
-        _ = RunModel(new Tensor<T>(new[] { MinEncoderSamples }));
-    }
-
-    private Tensor<T> RunModel(Tensor<T> waveform)
-    {
-        // Zero-pad clips shorter than the encoder's receptive field so the 320x downsample leaves at
-        // least a few frames instead of collapsing to length 0.
-        if (waveform.Length < MinEncoderSamples)
+        if (_network is null || _ctcHead is null) throw new InvalidOperationException("The native network is not initialized.");
+        if (waveform.Rank > 2) waveform = Engine.Reshape(waveform, new[] { waveform.Shape[0], waveform.Length / waveform.Shape[0] });
+        int field = ReceptiveField();
+        if (waveform.Shape[^1] < field)
         {
-            var padded = new Tensor<T>(new[] { MinEncoderSamples });
-            waveform.Data.Span.CopyTo(padded.Data.Span);
+            var padded = new Tensor<T>(waveform.Rank == 1 ? new[] { field } : new[] { waveform.Shape[0], field });
+            int length = waveform.Shape[^1], rows = waveform.Rank == 1 ? 1 : waveform.Shape[0];
+            for (int r = 0; r < rows; r++)
+                for (int i = 0; i < length; i++) padded[r * field + i] = waveform[r * length + i];
             waveform = padded;
         }
-
-        // Reshape the flat waveform [T] to [B=1, C=1, T] for the Conv1D feature encoder.
-        var x = Engine.Reshape(waveform, new[] { 1, 1, waveform.Length });
-
-        // Conv feature encoder: _featureEncoderLayers[0..FeatureConvCount-1] : [1,1,T] -> [1,512,T'].
-        int convCount = Math.Min(FeatureConvCount, _featureEncoderLayers.Count);
-        for (int i = 0; i < convCount; i++)
-            x = _featureEncoderLayers[i].Forward(x);
-
-        // Transpose channels<->time: [1,512,T'] -> [1,T',512] so the transformer attends over frames.
-        x = Engine.TensorPermute(x, new[] { 0, 2, 1 });
-
-        // Feature projection: remaining _featureEncoderLayers : [1,T',512] -> [1,T',hidden].
-        for (int i = convCount; i < _featureEncoderLayers.Count; i++)
-            x = _featureEncoderLayers[i].Forward(x);
-
-        // Convolutional positional embedding (Baevski et al. 2020 §2), added as a residual so the
-        // otherwise position-agnostic self-attention sees relative position: x = x + GELU(conv(x)).
-        // _posConv is a depthwise Conv1D over time and consumes [B, C, T], so transpose in and out.
-        if (_posConv is not null)
+        var output = _network.Forward(waveform, training, _random, freezeFeatureEncoder: training && _options.FreezeFeatureEncoder);
+        var hidden = output.Hidden;
+        if (training && _options.FinalDropout > 0)
         {
-            var xt = Engine.TensorPermute(x, new[] { 0, 2, 1 });   // [1, hidden, T'] channels-major
-            var pos = _posConv.Forward(xt);                        // depthwise conv + GELU -> [1, hidden, T']
-            pos = Engine.TensorPermute(pos, new[] { 0, 2, 1 });    // [1, T', hidden]
-            x = Engine.TensorAdd(x, pos);
+            var mask = new Tensor<T>(hidden._shape);
+            var keep = NumOps.FromDouble(1.0 / (1.0 - _options.FinalDropout));
+            for (int i = 0; i < mask.Length; i++) mask[i] = _random.NextDouble() < _options.FinalDropout ? NumOps.Zero : keep;
+            hidden = Engine.TensorMultiply(hidden, mask);
         }
-
-        // Transformer encoder (residual TransformerEncoderBlocks, walked in order as they were emitted).
-        foreach (var layer in _transformerLayers)
-            x = layer.Forward(x);
-
-        // CTC projection: [1,T',hidden] -> [1,T',vocab].
-        if (_ctcProjection is not null)
-            x = _ctcProjection.Forward(x);
-
-        return x;
+        int batch = hidden.Shape[0], frames = hidden.Shape[1];
+        var logits = Engine.Reshape(_ctcHead.Forward(Engine.Reshape(hidden, new[] { batch * frames, hidden.Shape[2] })), new[] { batch, frames, _vocabSize });
+        return waveform.Rank == 1 ? Engine.Reshape(logits, new[] { frames, _vocabSize }) : logits;
     }
 
-    /// <inheritdoc/>
+    // The fewest samples that give one frame.
+    private int ReceptiveField()
+    {
+        int field = 1;
+        var c = _network!.Configuration;
+        for (int i = c.ConvKernels.Length - 1; i >= 0; i--) field = (field - 1) * c.ConvStrides[i] + c.ConvKernels[i];
+        return field;
+    }
+
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
-        => RunModel(input);
+        => RunModel(input, training: true);
 
-    /// <inheritdoc/>
-    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    /// <inheritdoc />
+    /// <remarks>With <see cref="Wav2Vec2ModelOptions.FreezeFeatureEncoder"/> the convolutional feature encoder's
+    /// parameters are frozen: fine-tuning does not train them (and the forward computes no gradient for them).</remarks>
+    protected override AiDotNet.Models.Parameters.ParameterSlotRole ResolveLayerParameterRole(int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared)
     {
-        // The base walks Layers linearly feeding the raw [1, 64, 32] input, which the Conv1D encoder
-        // rejects (it expects [B, 1, T] and would resolve to the wrong channel count / collapse to 0
-        // frames). Replay the real custom forward (RunModel) instead, capturing each layer's output.
-        var activations = new Dictionary<string, Tensor<T>>();
-        if (!_useNativeMode)
-            return activations;
-
-        var waveform = PreprocessAudio(input);
-        if (waveform.Length < MinEncoderSamples)
-        {
-            var padded = new Tensor<T>(new[] { MinEncoderSamples });
-            waveform.Data.Span.CopyTo(padded.Data.Span);
-            waveform = padded;
-        }
-
-        var x = Engine.Reshape(waveform, new[] { 1, 1, waveform.Length });
-        int idx = 0;
-        int convCount = Math.Min(FeatureConvCount, _featureEncoderLayers.Count);
-        for (int i = 0; i < convCount; i++)
-        {
-            x = _featureEncoderLayers[i].Forward(x);
-            activations[$"Layer_{idx++}_{_featureEncoderLayers[i].GetType().Name}"] = x.Clone();
-        }
-        x = Engine.TensorPermute(x, new[] { 0, 2, 1 });
-        for (int i = convCount; i < _featureEncoderLayers.Count; i++)
-        {
-            x = _featureEncoderLayers[i].Forward(x);
-            activations[$"Layer_{idx++}_{_featureEncoderLayers[i].GetType().Name}"] = x.Clone();
-        }
-        // Convolutional positional embedding residual (matches RunModel): x = x + posConv(x).
-        if (_posConv is not null)
-        {
-            var xt = Engine.TensorPermute(x, new[] { 0, 2, 1 });
-            var pos = Engine.TensorPermute(_posConv.Forward(xt), new[] { 0, 2, 1 });
-            x = Engine.TensorAdd(x, pos);
-            activations[$"Layer_{idx++}_{_posConv.GetType().Name}"] = x.Clone();
-        }
-        foreach (var layer in _transformerLayers)
-        {
-            x = layer.Forward(x);
-            activations[$"Layer_{idx++}_{layer.GetType().Name}"] = x.Clone();
-        }
-        if (_ctcProjection is not null)
-        {
-            x = _ctcProjection.Forward(x);
-            activations[$"Layer_{idx}_{_ctcProjection.GetType().Name}"] = x.Clone();
-        }
-        return activations;
+        if (declared != AiDotNet.Models.Parameters.ParameterSlotRole.Trainable || !_options.FreezeFeatureEncoder || _network is null)
+            return declared;
+        var layer = Layers[layerIndex];
+        return _network.ConvLayers.Any(c => ReferenceEquals(c.Conv, layer) || ReferenceEquals(c.Norm, layer))
+            ? AiDotNet.Models.Parameters.ParameterSlotRole.Frozen
+            : declared;
     }
 
     /// <inheritdoc />
-    /// <remarks>The weights belong to the loaded graph in this mode. The base refuses
-    /// the write on every parameter surface, so the guard is stated once, here.</remarks>
+    /// <remarks>The forward is not a fold of <c>Layers</c>; the activations are those the recognizer computes.</remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+        => _useNativeMode ? ObservedLayerActivations(input) : new Dictionary<string, Tensor<T>>();
+
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <summary>
     /// Trains the model on a single batch.
@@ -862,6 +720,11 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
         int prevToken = -1;
         int blankIdx = 0; // Blank token is first in vocabulary
 
+        if (logits.Rank == 3)
+        {
+            if (logits.Shape[0] != 1) throw new ArgumentException("Greedy CTC decoding takes one utterance's logits.", nameof(logits));
+            logits = Engine.Reshape(logits, new[] { logits.Shape[1], logits.Shape[2] });
+        }
         int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1;
         int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0];
 

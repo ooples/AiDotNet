@@ -1011,6 +1011,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // decrease assertion and iteration count remain unchanged.
             { "VMamba", new WarmupIterationOverride(deterministicMemorizationLoss: true) },
 
+            // wav2vec 2.0 pre-training draws a new time mask, new distractors and new Gumbel noise at every step, and
+            // its paper schedule warms the rate up from zero, so the fixed-mask probe of its contrastive objective can
+            // rise across the first two steps while the model is learning. Judge it after the warm-up transient.
+            { "Wav2Vec2", new WarmupIterationOverride(memorization: 15) },
+
             // DeepAR's default stack inserts DropoutLayer instances between its recurrent layers.
             // GetLastLoss is therefore one training-mode dropout draw at each endpoint, so it can
             // reverse even when the fixed example's evaluation loss decreases. Measure the same
@@ -1426,7 +1431,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // branch's smoke-iteration caps (auto-emitted for every Fp32 member) fit them to budget while
         // preserving the self-relative training invariants. (Data2VecASR / UniSpeech are excluded from
         // generation — they have manual reduced-scale scaffolds — so they are not listed here.)
-        "HuBERTASR", "Wav2Vec2ASR", "WavLMASR", "BESTRQ", "W2vBERT", "SPIRAL", "AVHuBERT",
+        "HuBERTASR", "WavLMASR", "BESTRQ", "W2vBERT", "SPIRAL", "AVHuBERT",
         "WavLMRobust", "OmnilangualASR", "MMS", "USM", "XLSR",
         // MedicalASR (SpeechRecognition/Specialized): carried no mitigation at all. On the J-M shard
         // every single-forward, gradient and determinism invariant passes and only the
@@ -5470,7 +5475,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName is "FunASRNano" or "HuBERTASR" or "InterCTC" or "RobustConformer" or "SALM"
                     or "SpeakerDiarizedASR" or "SPIRAL"
                     or "StreamingConformer" or "StreamingZipformer" or "TDTDecoder"
-                    or "Wav2Vec2ASR" or "WavLMASR" or "WavLMRobust" or "XLSR"
+                    or "WavLMASR" or "WavLMRobust" or "XLSR"
                 && model.TypeParameterCount == 1)
             {
                 // These ASR encoders have already exhausted the first two timeout rungs:
@@ -5490,7 +5495,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "StreamingConformer" => "AiDotNet.SpeechRecognition.Streaming.StreamingConformerOptions",
                     "StreamingZipformer" => "AiDotNet.SpeechRecognition.Streaming.StreamingZipformerOptions",
                     "TDTDecoder" => "AiDotNet.SpeechRecognition.Streaming.TDTDecoderOptions",
-                    "Wav2Vec2ASR" => "AiDotNet.SpeechRecognition.Foundation.Wav2Vec2ASROptions",
                     "WavLMASR" => "AiDotNet.SpeechRecognition.Foundation.WavLMASROptions",
                     "WavLMRobust" => "AiDotNet.SpeechRecognition.Robust.WavLMRobustOptions",
                     _ => "AiDotNet.SpeechRecognition.Multilingual.XLSROptions"
@@ -10992,7 +10996,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "options: new AiDotNet.Models.Options.Wav2Vec2ModelOptions { HiddenDim = 64, NumTransformerLayers = 2, NumHeads = 4, FfDim = 128 }" + ")";
+                    // Fine-tuning's regularizers (SpecAugment masking, LayerDrop, dropout) are switched off so the
+                    // training invariants see a deterministic objective; the paper's values remain the defaults.
+                    "options: new AiDotNet.Models.Options.Wav2Vec2ModelOptions { HiddenDim = 64, NumTransformerLayers = 2, NumHeads = 4, FfDim = 128, " +
+                    "HiddenDropout = 0.0, AttentionDropout = 0.0, ActivationDropout = 0.0, LayerDrop = 0.0, MaskTimeProbability = 0.0, FinalDropout = 0.0 }" + ")";
             }
             else if ((model.ClassName is "Wav2Vec2" or "HuBERT" or "WavLM") && model.TypeParameterCount == 1)
             {
