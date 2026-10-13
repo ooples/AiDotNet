@@ -491,17 +491,17 @@ internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private Tensor<T> _logVarBias;    // [latentDim]
 
     // Gradient accumulators
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T> _weightsGrad;
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T> _biasGrad;
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T> _meanWeightsGrad;
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T> _meanBiasGrad;
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T> _logVarWeightsGrad;
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T> _logVarBiasGrad;
 
     public override bool SupportsTraining => true;
@@ -792,12 +792,13 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private Tensor<T> _outputBias;    // [outputSize]
 
     // Gradient accumulators
+    [Scratch]
     private Tensor<T> _weightsGrad;
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T> _biasGrad;
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T> _outputWeightsGrad;
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T> _outputBiasGrad;
 
     [Scratch]

@@ -199,6 +199,8 @@ public class LSTMVAETests
 
             // [W_d 2x2 | b_d 2 | W_o 2x2 | b_o 2]: db_o = dOutput per example, summed over two.
             Assert.Equal(12, gradients.Length);
+            // The accumulators are scratch, not weights: counting them doubled the parameter vector.
+            Assert.Equal(decoder.ParameterCount, gradients.Length);
             Assert.Equal(1.0, gradients[10], 12);
             Assert.Equal(-0.5, gradients[11], 12);
 
@@ -230,6 +232,8 @@ public class LSTMVAETests
 
             // [W 2x3 | b 2 | W_mu 2x2 | b_mu 2 | W_logVar 2x2 | b_logVar 2]
             Assert.Equal(20, gradients.Length);
+            // The accumulators are scratch, not weights: counting them doubled the parameter vector.
+            Assert.Equal(encoder.ParameterCount, gradients.Length);
             Assert.Equal(0.75, gradients[12], 12);
             Assert.Equal(-0.125, gradients[13], 12);
             Assert.Equal(0.0625, gradients[18], 12);
