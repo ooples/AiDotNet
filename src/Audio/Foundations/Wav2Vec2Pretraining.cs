@@ -96,7 +96,7 @@ internal sealed class Wav2Vec2Pretraining<T>
         => Temperature = Math.Max(Temperature * Configuration.TemperatureDecay, Configuration.MinTemperature);
 
     /// <summary>The loss terms of one batch.</summary>
-    internal sealed record Losses(Tensor<T> Total, Tensor<T> Contrastive, Tensor<T> Diversity, Tensor<T> FeaturePenalty, int Masked);
+    internal sealed record Losses(Tensor<T> Total, Tensor<T> Contrastive, Tensor<T> Diversity, Tensor<T> FeaturePenalty, int Masked, int[,] CodeIds);
 
     private Tensor<T> Dense(LayerBase<T> layer, Tensor<T> x)
     {
@@ -108,7 +108,7 @@ internal sealed class Wav2Vec2Pretraining<T>
     private static Tensor<T> Constant(Tensor<T> x) => new(x._shape, new Vector<T>(x.ToArray()));
 
     // The quantized features [B, L, d] and the codebook perplexity (Σ_g exp(entropy of the masked marginal)).
-    private (Tensor<T> Quantized, Tensor<T> Perplexity) Quantize(Tensor<T> features, bool[,] mask, bool training, Random random)
+    private (Tensor<T> Quantized, Tensor<T> Perplexity, int[,] Ids) Quantize(Tensor<T> features, bool[,] mask, bool training, Random random)
     {
         var c = Configuration;
         int batch = features.Shape[0], length = features.Shape[1], rows = batch * length, v = c.EntriesPerGroup;
@@ -123,6 +123,9 @@ internal sealed class Wav2Vec2Pretraining<T>
                     maskedCount++;
                 }
         var parts = new Tensor<T>[c.Groups];
+        // Each step's assigned entry, the groups' indices combined as one id (sum over g of id_g * V^g).
+        var ids = new int[batch, length];
+        int place = 1;
         Tensor<T>? perplexity = null;
         for (int g = 0; g < c.Groups; g++)
         {
@@ -142,6 +145,7 @@ internal sealed class Wav2Vec2Pretraining<T>
                     int best = 0;
                     for (int j = 1; j < v; j++) if (NumOps.ToDouble(sv[r * v + j]) > NumOps.ToDouble(sv[r * v + best])) best = j;
                     hard[r, best] = NumOps.One;
+                    ids[r / length, r % length] += best * place;
                 }
                 probabilities = _engine.TensorAdd(soft, _engine.TensorSubtract(hard, Constant(soft)));
                 marginalSource = _engine.Softmax(group, axis: 1);
@@ -153,6 +157,7 @@ internal sealed class Wav2Vec2Pretraining<T>
                     int best = 0;
                     for (int j = 1; j < v; j++) if (NumOps.ToDouble(values[r * v + j]) > NumOps.ToDouble(values[r * v + best])) best = j;
                     hard[r, best] = NumOps.One;
+                    ids[r / length, r % length] += best * place;
                 }
                 probabilities = hard;
                 marginalSource = hard;
@@ -170,9 +175,10 @@ internal sealed class Wav2Vec2Pretraining<T>
             var entropy = _engine.TensorMultiplyScalar(_engine.ReduceSum(_engine.TensorMultiply(marginal, _engine.TensorLog(safe)), new[] { 0 }, keepDims: false), NumOps.FromDouble(-1.0));
             var term = _engine.TensorExp(entropy);
             perplexity = perplexity is null ? term : _engine.TensorAdd(perplexity, term);
+            place *= v;
         }
         var quantized = _engine.Reshape(c.Groups == 1 ? parts[0] : _engine.TensorConcatenate(parts, 1), new[] { batch, length, c.CodevectorDim });
-        return (quantized, perplexity!);
+        return (quantized, perplexity ?? throw new InvalidOperationException("The quantizer has no codebooks."), ids);
     }
 
     /// <summary>
@@ -206,7 +212,7 @@ internal sealed class Wav2Vec2Pretraining<T>
         var mask = output.Mask ?? throw new ArgumentException("Pre-training needs the forward's time mask.");
         int batch = output.Hidden.Shape[0], length = output.Hidden.Shape[1], k = negatives.GetLength(2), p = c.ProjectedDim;
         var predicted = Dense(ProjectHidden, output.Hidden);                                                       // [B, L, P]
-        var (quantized, perplexity) = Quantize(output.Features, mask, training, random);
+        var (quantized, perplexity, ids) = Quantize(output.Features, mask, training, random);
         var targets = Dense(ProjectQuantized, quantized);                                                           // [B, L, P]
 
         // Candidates [B, L, 1 + K, P]: the step's own target, then its distractors.
@@ -277,7 +283,7 @@ internal sealed class Wav2Vec2Pretraining<T>
             NumOps.FromDouble(masked));
         var total = _engine.TensorAdd(_engine.TensorAdd(contrastive, _engine.TensorMultiplyScalar(diversity, NumOps.FromDouble(c.DiversityWeight))),
             _engine.TensorMultiplyScalar(penalty, NumOps.FromDouble(c.FeaturePenaltyWeight)));
-        return new Losses(total, contrastive, diversity, penalty, masked);
+        return new Losses(total, contrastive, diversity, penalty, masked, ids);
     }
 
     /// <summary>The reference's initialization: weight_proj N(0, 1) with zero bias, codevectors U(0, 1), the two
