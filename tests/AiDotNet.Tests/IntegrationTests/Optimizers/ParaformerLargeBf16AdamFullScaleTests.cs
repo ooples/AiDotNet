@@ -87,6 +87,11 @@ public class ParaformerLargeBf16AdamFullScaleTests : IDisposable
                     UseAMSGrad = false,
                 });
             using var model = new ParaformerLarge<float>(architecture, options, optimizer);
+            // Streaming training must be off. At this size StreamingTraining=Auto engages it (weights + grads +
+            // two fp32 moments exceed half the available heap), and the streaming path maps Adam8BitOptimizer
+            // to StreamingAdam8Bit, so the BF16 Adam8BitOptimizer.StepCore this test exists for never runs:
+            // heavy-lane run 38469063434 trained two steps with zero tape steps on the optimizer.
+            model.StreamingTraining = StreamingTrainingMode.ForceOff;
 
             var input = Random(1767, 1, Frames, options.NumMels);
             var predicted = model.Predict(input);
