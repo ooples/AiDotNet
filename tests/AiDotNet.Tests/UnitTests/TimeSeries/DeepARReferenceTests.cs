@@ -36,6 +36,11 @@ public class DeepARReferenceTests
 
     private static double[] Values(JsonElement e) => e.EnumerateArray().Select(v => v.GetDouble()).ToArray();
 
+    // The non-generic overload: Enum.Parse<TEnum> does not exist on net471, which this project also targets.
+    private static TEnum ParseEnum<TEnum>(JsonElement e, string property) where TEnum : struct, Enum
+        => (TEnum)Enum.Parse(typeof(TEnum),
+            e.GetProperty(property).GetString() ?? throw new InvalidDataException($"Fixture field '{property}' is null."));
+
     [Theory(Timeout = 120000)]
     [InlineData(0)]
     [InlineData(1)]
@@ -48,8 +53,8 @@ public class DeepARReferenceTests
         int hidden = c.GetProperty("hidden").GetInt32(), depth = c.GetProperty("layers").GetInt32(), cov = c.GetProperty("covariates").GetInt32();
         int steps = c.GetProperty("steps").GetInt32(), conditioning = c.GetProperty("conditioning").GetInt32(), batch = c.GetProperty("batch").GetInt32();
         var k = f.GetProperty("cases")[index];
-        var likelihood = Enum.Parse<DeepARLikelihood>(k.GetProperty("likelihood").GetString()!);
-        var scaling = Enum.Parse<DeepARScaleHandling>(k.GetProperty("scaling").GetString()!);
+        var likelihood = ParseEnum<DeepARLikelihood>(k, "likelihood");
+        var scaling = ParseEnum<DeepARScaleHandling>(k, "scaling");
         var layers = new List<LayerBase<double>>();
         var net = new DeepARNetwork<double>(AiDotNetEngine.Current, layers, new DeepARConfiguration(cov, hidden, depth, 0.0, likelihood, scaling));
         var state = k.GetProperty("state");
