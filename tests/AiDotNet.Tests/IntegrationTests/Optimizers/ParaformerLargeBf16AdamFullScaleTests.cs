@@ -94,11 +94,10 @@ public class ParaformerLargeBf16AdamFullScaleTests : IDisposable
             // Predict's derived weight packs would otherwise sit beside the training state for the whole test.
             AiDotNet.Tensors.Engines.InferenceWeightCache.InvalidateAll();
 
-            // One full parameter vector is ~2.6 GB at this scale, so keep a strided sample rather than a copy.
-            Vector<float>? initialParameters = model.GetParameters();
-            long parameterCount = initialParameters.Length;
-            var before = Sample(initialParameters);
-            initialParameters = null;
+            // Parameters are read layer by layer. model.GetParameters() concatenates all of them into one
+            // ~2.6 GB vector, and after two steps that allocation alone ran out of memory on the 16 GB
+            // runner (run 38464974347) once the training state was resident.
+            var (before, parameterCount, _) = ScanParameters(model);
             Line(log, $"ParaformerLarge<float>: {parameterCount:N0} parameters, input [{string.Join(",", input.Shape.ToArray())}], " +
                 $"output [{string.Join(",", predicted.Shape.ToArray())}], streaming={model.StreamingTraining}, " +
                 $"setup {started.Elapsed.TotalSeconds:F1}s, managed heap {GC.GetTotalMemory(false) / (1024 * 1024):N0} MB");
@@ -128,10 +127,15 @@ public class ParaformerLargeBf16AdamFullScaleTests : IDisposable
             _recording = false;
 
             Assert.True(steps >= MinSteps, $"Only {steps} step(s) ran.");
-            var trained = model.GetParameters();
-            for (int i = 0; i < trained.Length; i++)
-                if (!float.IsFinite(trained[i])) Assert.Fail($"Parameter {i} became non-finite ({trained[i]}) after {steps} steps.");
-            Assert.NotEqual(before, Sample(trained));
+            // The eager BF16 branch is the path under test: prove Adam8BitOptimizer.StepCore ran once per step,
+            // rather than some other optimizer or a fused kernel standing in for it.
+            var tapeStep = typeof(Adam8BitOptimizer<float, Tensor<float>, Tensor<float>>)
+                .GetField("_tapeStep", BindingFlags.NonPublic | BindingFlags.Instance)?.GetValue(optimizer);
+            Line(log, $"Adam8BitOptimizer tape steps: {tapeStep}");
+            Assert.Equal(steps, Assert.IsType<int>(tapeStep));
+            var (after, _, firstNonFinite) = ScanParameters(model);
+            Assert.True(firstNonFinite is null, $"A parameter became non-finite after {steps} steps: {firstNonFinite}.");
+            Assert.NotEqual(before, after);
         }
         finally
         {
@@ -217,13 +221,28 @@ public class ParaformerLargeBf16AdamFullScaleTests : IDisposable
         catch (UnauthorizedAccessException) { }
     }
 
-    private static float[] Sample(Vector<float> parameters)
+    /// <summary>
+    /// Walks every layer's parameters once: a strided sample (every 10,007th value), the total count, and the
+    /// first non-finite value found, if any. No allocation larger than one layer's parameters.
+    /// </summary>
+    private static (float[] Sample, long Count, string? FirstNonFinite) ScanParameters(ParaformerLarge<float> model)
     {
-        const int SampleSize = 65_536;
-        int stride = Math.Max(1, parameters.Length / SampleSize);
-        var sample = new float[Math.Min(SampleSize, parameters.Length)];
-        for (int i = 0; i < sample.Length; i++) sample[i] = parameters[i * stride];
-        return sample;
+        const int Stride = 10_007;
+        var sample = new List<float>();
+        long index = 0;
+        string? firstNonFinite = null;
+        for (int layer = 0; layer < model.Layers.Count; layer++)
+        {
+            var parameters = model.Layers[layer].GetParameters();
+            for (int i = 0; i < parameters.Length; i++, index++)
+            {
+                float value = parameters[i];
+                if (firstNonFinite is null && !float.IsFinite(value))
+                    firstNonFinite = $"layer {layer} ({model.Layers[layer].GetType().Name}) index {i}: {value}";
+                if (index % Stride == 0) sample.Add(value);
+            }
+        }
+        return (sample.ToArray(), index, firstNonFinite);
     }
 
     private static Tensor<float> Random(int seed, params int[] shape)
