@@ -8,7 +8,8 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 internal sealed record T5Configuration(
     int VocabularySize, int ModelDim, int FeedForwardDim, int KeyValueDim, int Heads, int EncoderLayers,
     int DecoderLayers, int RelativeBuckets = 32, int RelativeMaxDistance = 128, double Dropout = 0.1,
-    double LayerNormEpsilon = 1e-6, int DecoderStartTokenId = 0, int EndTokenId = 2);
+    double LayerNormEpsilon = 1e-6, int DecoderStartTokenId = 0, int EndTokenId = 2, bool GatedGelu = false,
+    bool TieWordEmbeddings = true);
 
 /// <summary>
 /// The relative position buckets of T5 (Raffel et al. 2020, §2.1; Hugging Face <c>T5Attention._relative_position_bucket</c>):
@@ -100,8 +101,9 @@ internal sealed class T5Attention<T>
 }
 
 /// <summary>A T5 block (Hugging Face <c>T5Block</c>): pre-norm residual self-attention, cross-attention in the decoder,
-/// and the bias-free ReLU feed-forward <c>wo · dropout(relu(wi · x))</c>, each sublayer's output dropped out before its
-/// residual add.</summary>
+/// and the bias-free feed-forward, each sublayer's output dropped out before its residual add. The feed-forward is
+/// T5 v1.0's <c>wo · dropout(relu(wi · x))</c>, or with <see cref="T5Configuration.GatedGelu"/> T5 v1.1's
+/// <c>wo · dropout(gelu(wi_0 · x) ⊙ wi_1 · x)</c> (<c>T5DenseGatedActDense</c>, GELU's tanh form).</summary>
 internal sealed class T5Block<T>
 {
     private readonly IEngine _engine;
@@ -120,6 +122,8 @@ internal sealed class T5Block<T>
         }
         FeedForwardNorm = T5Attention<T>.Own(layers, new RMSNormalizationLayer<T>(c.ModelDim, c.LayerNormEpsilon));
         Wi = T5Attention<T>.Own(layers, new BiasFreeLinearLayer<T>(c.ModelDim, c.FeedForwardDim));
+        if (c.GatedGelu)
+            WiLinear = T5Attention<T>.Own(layers, new BiasFreeLinearLayer<T>(c.ModelDim, c.FeedForwardDim));
         Wo = T5Attention<T>.Own(layers, new BiasFreeLinearLayer<T>(c.FeedForwardDim, c.ModelDim));
     }
 
@@ -128,19 +132,25 @@ internal sealed class T5Block<T>
     public RMSNormalizationLayer<T>? CrossNorm { get; }
     public T5Attention<T>? CrossAttention { get; }
     public RMSNormalizationLayer<T> FeedForwardNorm { get; }
+    /// <summary><c>wi</c>, or under the gated feed-forward <c>wi_0</c> (the GELU branch).</summary>
     public BiasFreeLinearLayer<T> Wi { get; }
+    /// <summary><c>wi_1</c>, the gated feed-forward's linear branch; null in T5 v1.0.</summary>
+    public BiasFreeLinearLayer<T>? WiLinear { get; }
     public BiasFreeLinearLayer<T> Wo { get; }
 
     public Tensor<T> Forward(Tensor<T> h, Tensor<T> selfBias, Tensor<T>? memory, Tensor<T>? crossBias, bool training, Random random)
     {
         var normed = SelfNorm.Forward(h);
         h = _engine.TensorAdd(h, Drop(SelfAttention.Forward(normed, normed, selfBias, training, random), training, random));
-        if (CrossAttention is not null && memory is not null)
+        if (CrossAttention is not null && CrossNorm is not null && memory is not null)
         {
-            var crossNormed = CrossNorm!.Forward(h);
+            var crossNormed = CrossNorm.Forward(h);
             h = _engine.TensorAdd(h, Drop(CrossAttention.Forward(crossNormed, memory, crossBias, training, random), training, random));
         }
-        var hidden = _engine.ReLU(Wi.Forward(FeedForwardNorm.Forward(h)));
+        var feedForwardInput = FeedForwardNorm.Forward(h);
+        var hidden = WiLinear is null
+            ? _engine.ReLU(Wi.Forward(feedForwardInput))
+            : _engine.TensorMultiply(_engine.GELU(Wi.Forward(feedForwardInput)), WiLinear.Forward(feedForwardInput));
         hidden = Drop(hidden, training, random);
         return _engine.TensorAdd(h, Drop(Wo.Forward(hidden), training, random));
     }
@@ -154,7 +164,9 @@ internal sealed class T5Block<T>
 /// ReLU feed-forward and tied embeddings): a shared token embedding; an encoder and a decoder stack whose first block
 /// holds the relative position bias table the rest of the stack shares (bidirectional buckets in the encoder,
 /// unidirectional with a causal mask in the decoder); RMS layer norms (ε = 1e-6) and a final norm on each stack;
-/// logits from the shared embedding applied to the decoder output scaled by <c>d_model^-1/2</c>.
+/// logits from the shared embedding applied to the decoder output scaled by <c>d_model^-1/2</c>. With
+/// <see cref="T5Configuration.GatedGelu"/> and without <see cref="T5Configuration.TieWordEmbeddings"/> it is T5 v1.1
+/// (the gated-GELU feed-forward and an unscaled, untied <c>lm_head</c>), the form ByT5 (Xue et al. 2022) uses.
 /// </summary>
 internal sealed class T5Seq2Seq<T>
 {
@@ -176,8 +188,14 @@ internal sealed class T5Seq2Seq<T>
         {
             DecoderBias = T5Attention<T>.Own(layers, new TiedEmbeddingLayer<T>(c.RelativeBuckets, c.Heads));
             DecoderFinalNorm = T5Attention<T>.Own(layers, new RMSNormalizationLayer<T>(c.ModelDim, c.LayerNormEpsilon));
+            if (!c.TieWordEmbeddings)
+                LanguageModelHead = T5Attention<T>.Own(layers, new BiasFreeLinearLayer<T>(c.ModelDim, c.VocabularySize));
         }
     }
+
+    /// <summary>The untied output projection <c>lm_head</c> (T5 v1.1); null when the logits reuse the shared
+    /// embedding.</summary>
+    public BiasFreeLinearLayer<T>? LanguageModelHead { get; }
 
     public T5Configuration Configuration { get; }
     public TiedEmbeddingLayer<T> Shared { get; }
@@ -238,6 +256,8 @@ internal sealed class T5Seq2Seq<T>
         var bias = PositionBias(decoderBias, length, length, bidirectional: false, causal: true);
         foreach (var block in Decoder) h = block.Forward(h, bias, memory, null, training, random);
         h = Drop(decoderNorm.Forward(h), training, random);
+        // Tied embeddings rescale the decoder output by d_model^-1/2 first; an untied lm_head does not.
+        if (LanguageModelHead is not null) return LanguageModelHead.Forward(h);
         var scaled = _engine.TensorMultiplyScalar(h, NumOps.FromDouble(1.0 / Math.Sqrt(Configuration.ModelDim)));
         return Shared.Logits(scaled);
     }
@@ -345,8 +365,11 @@ internal sealed class T5Seq2Seq<T>
             Attention(block.SelfAttention);
             if (block.CrossAttention is not null) Attention(block.CrossAttention);
             Fill(block.Wi, c.ModelDim, c.FeedForwardDim, Math.Pow(c.ModelDim, -0.5));
+            if (block.WiLinear is not null) Fill(block.WiLinear, c.ModelDim, c.FeedForwardDim, Math.Pow(c.ModelDim, -0.5));
             Fill(block.Wo, c.FeedForwardDim, c.ModelDim, Math.Pow(c.FeedForwardDim, -0.5));
         }
+        // An untied lm_head is drawn from N(0, 1).
+        if (LanguageModelHead is not null) Fill(LanguageModelHead, c.ModelDim, c.VocabularySize, 1.0);
     }
 
     /// <summary>
@@ -376,7 +399,15 @@ internal sealed class T5Seq2Seq<T>
         }
         void FeedForward(string name, T5Block<T> block)
         {
-            Linear(name + ".DenseReluDense.wi", block.Wi, c.FeedForwardDim, c.ModelDim);
+            if (block.WiLinear is null)
+            {
+                Linear(name + ".DenseReluDense.wi", block.Wi, c.FeedForwardDim, c.ModelDim);
+            }
+            else
+            {
+                Linear(name + ".DenseReluDense.wi_0", block.Wi, c.FeedForwardDim, c.ModelDim);
+                Linear(name + ".DenseReluDense.wi_1", block.WiLinear, c.FeedForwardDim, c.ModelDim);
+            }
             Linear(name + ".DenseReluDense.wo", block.Wo, c.ModelDim, c.FeedForwardDim);
             Norm(name + ".layer_norm", block.FeedForwardNorm);
         }
@@ -396,8 +427,10 @@ internal sealed class T5Seq2Seq<T>
             string block = $"decoder.block.{i}.layer";
             Attention($"{block}.0.SelfAttention", Decoder[i].SelfAttention);
             Norm($"{block}.0.layer_norm", Decoder[i].SelfNorm);
-            Attention($"{block}.1.EncDecAttention", Decoder[i].CrossAttention!);
-            Norm($"{block}.1.layer_norm", Decoder[i].CrossNorm!);
+            var cross = Decoder[i].CrossAttention ?? throw new InvalidOperationException("A decoder block has cross-attention.");
+            var crossNorm = Decoder[i].CrossNorm ?? throw new InvalidOperationException("A decoder block has cross-attention.");
+            Attention($"{block}.1.EncDecAttention", cross);
+            Norm($"{block}.1.layer_norm", crossNorm);
             FeedForward($"{block}.2", Decoder[i]);
         }
         if (DecoderBias is not null && DecoderFinalNorm is not null)
@@ -405,5 +438,6 @@ internal sealed class T5Seq2Seq<T>
             DecoderBias.LoadTable(read("decoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight", new[] { c.RelativeBuckets, c.Heads }));
             Norm("decoder.final_layer_norm", DecoderFinalNorm);
         }
+        if (LanguageModelHead is not null) Linear("lm_head", LanguageModelHead, c.VocabularySize, c.ModelDim);
     }
 }
