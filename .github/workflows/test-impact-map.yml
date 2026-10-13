@@ -379,7 +379,7 @@ jobs:
 
       - name: Upload candidate map
         if: steps.source.outputs.found == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: candidate-shard-map
           path: shard-map.json
@@ -567,7 +567,7 @@ jobs:
 
       - name: Upload typed audit decision
         if: ${{ always() && steps.source.outputs.found == 'true' && hashFiles('map-audit-decision.json') != '' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: shard-map-audit-decision
           path: map-audit-decision.json
@@ -576,7 +576,7 @@ jobs:
 
       - name: Upload certified map
         if: steps.audit.outputs.certified == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: certified-shard-map
           path: certified-map/
