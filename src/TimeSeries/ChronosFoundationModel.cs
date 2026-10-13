@@ -111,11 +111,6 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _finalLayerNormBeta;   // [embeddingDim]
 
-    // Gradient accumulators for batch training
-    [Scratch]
-    private readonly Dictionary<string, Tensor<T>> _gradientAccumulators;
-    private int _gradientCount;
-
     /// <summary>
     /// Initializes a new instance of the Chronos foundation model.
     /// </summary>
@@ -137,8 +132,6 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         _vocabularySize = _options.VocabularySize;
         _binWidth = (_binMax - _binMin) / _vocabularySize;
         _transformerLayers = new List<ChronosTransformerLayerTensor<T>>();
-        _gradientAccumulators = new Dictionary<string, Tensor<T>>();
-        _gradientCount = 0;
 
         // Initialize with empty tensors - will be properly initialized in InitializeModel
         _tokenEmbeddings = new Tensor<T>(new[] { 1, 1 });
@@ -214,7 +207,6 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         _outputBias = new Tensor<T>(new[] { _vocabularySize });
 
         // Initialize gradient accumulators
-        InitializeGradientAccumulators();
     }
 
     private void InitializeTensorXavier(Tensor<T> tensor, double stddev)
@@ -223,22 +215,6 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         {
             tensor[i] = _numOps.FromDouble((_random.NextDouble() * 2 - 1) * stddev);
         }
-    }
-
-    private void InitializeGradientAccumulators()
-    {
-        _gradientAccumulators.Clear();
-        _gradientAccumulators["tokenEmbeddings"] = new Tensor<T>(_tokenEmbeddings._shape);
-        _gradientAccumulators["outputProjection"] = new Tensor<T>(_outputProjection._shape);
-        _gradientAccumulators["outputBias"] = new Tensor<T>(_outputBias._shape);
-        _gradientAccumulators["finalLayerNormGamma"] = new Tensor<T>(_finalLayerNormGamma._shape);
-        _gradientAccumulators["finalLayerNormBeta"] = new Tensor<T>(_finalLayerNormBeta._shape);
-
-        for (int l = 0; l < _transformerLayers.Count; l++)
-        {
-            _transformerLayers[l].InitializeGradientAccumulators(_gradientAccumulators, l);
-        }
-        _gradientCount = 0;
     }
 
     private Tensor<T> CreateSinusoidalPositionalEncoding(int maxLen, int embeddingDim)
@@ -321,6 +297,7 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         T learningRate = _numOps.FromDouble(_options.LearningRate);
         int batchSize = Math.Min(32, Math.Max(1, trainInputs.Count));
 
+        var parameters = NamedTrainableTensors().Select(p => p.Param).ToList();
         for (int epoch = 0; epoch < _options.Epochs; epoch++)
         {
             TrainingCancellationToken.ThrowIfCancellationRequested();
@@ -330,14 +307,12 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
             {
                 int actualBatchSize = Math.Min(batchSize, indices.Count - batch);
 
-                // Reset gradient accumulators
-                ResetGradientAccumulators();
-
-                // Batch gradient: one tape forward/backward per group of equal-length windows (the first
-                // ContextLength-1 training windows are shorter than the context). Mathematically the sum of the
-                // per-sample gradients, computed batched -- and correct: the previous hand-written per-sample
-                // backprop disagreed with finite differences on every transformer-layer parameter
-                // (ChronosGradientFiniteDifferenceTests).
+                // One shared-step SGD update per mini-batch. The objective is the mean per-sample next-token
+                // cross-entropy, built from one batched forward per group of equal-length windows (the first
+                // ContextLength-1 training windows are shorter than the context), so its gradient is the per-sample
+                // gradient sum divided by the batch size -- the update the former accumulate-then-average loop
+                // applied. The step's tape disposal resets the TensorArena TimeSeriesModelBase.Train opens around
+                // TrainCore, so each mini-batch's Engine-op scratch is recycled.
                 var groups = new Dictionary<int, (List<Vector<T>> Windows, List<T> Targets)>();
                 for (int b = 0; b < actualBatchSize; b++)
                 {
@@ -349,22 +324,12 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
                     group.Targets.Add(trainTargets[idx]);
                 }
 
-                foreach (var group in groups.Values)
-                {
-                    TrainingCancellationToken.ThrowIfCancellationRequested();
-                    var gradients = ComputeBatchGradientsTape(group.Windows, group.Targets);
-                    AccumulateGradients(gradients);
+                T batchScale = _numOps.FromDouble(1.0 / actualBatchSize);
+                Tensor<T> BatchObjective() => Engine.TensorMultiplyScalar(
+                    groups.Values.Select(group => GroupLoss(group.Windows, group.Targets)).Aggregate(Engine.TensorAdd),
+                    batchScale);
 
-                    // Recycle this group's Engine-op scratch. TimeSeriesModelBase.Train runs TrainCore inside one
-                    // TensorArena; the gradient tape's disposal resets it, and this explicit Reset keeps that true even
-                    // if the group's work is ever done without a tape (the hand-written backprop that preceded this
-                    // retained ~220 MB/s, 74 GB on an Ooples-sized fit). The gradients are heap copies already folded
-                    // into the accumulators, so nothing arena-backed outlives the group.
-                    AiDotNet.Tensors.Helpers.TensorArena.Current?.Reset();
-                }
-
-                // Apply accumulated gradients
-                ApplyGradients(learningRate, actualBatchSize);
+                Training.TapeTrainingStepper<T>.EagerSgdObjectiveStep(() => parameters, BatchObjective, learningRate);
             }
         }
     }
@@ -416,13 +381,11 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     }
 
     /// <summary>
-    /// Summed gradient of the per-sample next-token cross-entropy over a group of training windows that all have the
-    /// same length, computed in one batched tape forward/backward. Same model and loss as <see cref="ComputeGradients"/>
-    /// (each sample: tokenize the window with its own scale, embed + positional encoding, the transformer stack, final
-    /// layer norm on the LAST position, logits = W h + b, cross-entropy against the tokenized target), so the result
-    /// equals the sum of ComputeGradients over the group; keys match the gradient accumulators.
+    /// Summed next-token cross-entropy of a group of equal-length training windows, as one batched forward: each
+    /// window is tokenized with its own scale, embedded with positional encoding, run through the transformer stack,
+    /// and its LAST position is layer-normed and projected to the vocabulary logits.
     /// </summary>
-    internal Dictionary<string, Tensor<T>> ComputeBatchGradientsTape(IReadOnlyList<Vector<T>> windows, IReadOnlyList<T> targets)
+    private Tensor<T> GroupLoss(IReadOnlyList<Vector<T>> windows, IReadOnlyList<T> targets)
     {
         int b = windows.Count, l = Math.Min(windows[0].Length, _options.ContextLength), e = _options.EmbeddingDim;
         var tokenIdx = new int[b * l];
@@ -436,16 +399,6 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
             targetTokens[s] = _numOps.FromDouble(Tokenize(targets[s], scale));
         }
 
-        var named = new List<(string Key, Tensor<T> Param)>
-        {
-            ("tokenEmbeddings", _tokenEmbeddings), ("outputProjection", _outputProjection), ("outputBias", _outputBias),
-            ("finalLayerNormGamma", _finalLayerNormGamma), ("finalLayerNormBeta", _finalLayerNormBeta),
-        };
-        for (int layerIndex = 0; layerIndex < _transformerLayers.Count; layerIndex++)
-            foreach (var (key, param) in _transformerLayers[layerIndex].NamedParameters())
-                named.Add(($"layer{layerIndex}_{key}", param));
-
-        using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>();
         var indices = new Tensor<int>(tokenIdx, new[] { b * l });
         var embedded = Engine.Reshape(Engine.TensorGather(_tokenEmbeddings, indices, 0), new[] { b, l, e });
         var positions = Engine.TensorNarrow(_positionalEncoding, 0, 0, l);              // [L, E], constant
@@ -458,8 +411,22 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
         var logits = Engine.TensorAdd(Engine.TensorMatMulTransposed(normalized, _outputProjection), _outputBias);
         var logProbs = Engine.TensorLogSoftmax(logits, 1);
         var picked = Engine.TensorGatherClassValues(logProbs, targetTokens);           // [B]
-        var loss = Engine.TensorNegate(Engine.ReduceSum(picked, null));               // summed, like the per-sample sum
+        return Engine.TensorNegate(Engine.ReduceSum(picked, null));                   // summed, like the per-sample sum
+    }
 
+    /// <summary>
+    /// Summed gradient of the per-sample next-token cross-entropy over a group of training windows that all have the
+    /// same length, computed in one batched tape forward/backward. Same model and loss as <see cref="ComputeGradients"/>
+    /// (each sample: tokenize the window with its own scale, embed + positional encoding, the transformer stack, final
+    /// layer norm on the LAST position, logits = W h + b, cross-entropy against the tokenized target), so the result
+    /// equals the sum of ComputeGradients over the group; keys are those of <see cref="NamedTrainableTensors"/>.
+    /// Training steps the same <see cref="GroupLoss"/> through the shared step; this is its gradient oracle.
+    /// </summary>
+    internal Dictionary<string, Tensor<T>> ComputeBatchGradientsTape(IReadOnlyList<Vector<T>> windows, IReadOnlyList<T> targets)
+    {
+        var named = NamedTrainableTensors().ToList();
+        using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>();
+        var loss = GroupLoss(windows, targets);
         var grads = tape.ComputeGradients(loss, named.Select(p => p.Param).ToArray());
         // Heap copies: disposing the tape resets the training arena, which would recycle arena-backed gradients
         // under the caller.
@@ -472,18 +439,6 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
             result[key] = copy;
         }
         return result;
-    }
-
-    private void ResetGradientAccumulators()
-    {
-        // Whole-buffer clears: the per-element indexer form (one interface call and one version bump per element,
-        // over every parameter-sized accumulator, every batch) was a measurable share of a training step.
-        foreach (var tensor in _gradientAccumulators.Values)
-        {
-            tensor.AsWritableSpan().Clear();
-            tensor.IncrementVersion();
-        }
-        _gradientCount = 0;
     }
 
     private (Tensor<T> output, LayerNormCache cache) ApplyLayerNormWithCache(Tensor<T> input, Tensor<T> gamma, Tensor<T> beta)
@@ -523,62 +478,6 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
             Variance = variance,
             Stddev = stddev
         });
-    }
-
-    private void AccumulateGradients(Dictionary<string, Tensor<T>> gradients)
-    {
-        foreach (var kvp in gradients)
-        {
-            if (_gradientAccumulators.TryGetValue(kvp.Key, out var accumulator))
-            {
-                // Vectorized accumulate (same per-element sum as the former indexer loop).
-                int n = Math.Min(accumulator.Length, kvp.Value.Length);
-                var acc = accumulator.AsWritableSpan().Slice(0, n);
-                _numOps.Add(acc, kvp.Value.AsSpan().Slice(0, n), acc);
-                accumulator.IncrementVersion();
-            }
-            else
-            {
-                // A heap copy, never the gradient itself: the gradient may be an arena tensor that the per-group
-                // TensorArena.Reset in TrainCore recycles, and an accumulator must outlive the group.
-                var accumulatorCopy = new Tensor<T>(kvp.Value._shape);
-                kvp.Value.AsSpan().CopyTo(accumulatorCopy.AsWritableSpan());
-                _gradientAccumulators[kvp.Key] = accumulatorCopy;
-            }
-        }
-        _gradientCount++;
-    }
-
-    private void ApplyGradients(T learningRate, int batchSize)
-    {
-        T batchSizeT = _numOps.FromDouble(batchSize);
-
-        // Apply to token embeddings
-        ApplyGradientToTensor(_tokenEmbeddings, _gradientAccumulators["tokenEmbeddings"], learningRate, batchSizeT);
-
-        // Apply to output projection
-        ApplyGradientToTensor(_outputProjection, _gradientAccumulators["outputProjection"], learningRate, batchSizeT);
-        ApplyGradientToTensor(_outputBias, _gradientAccumulators["outputBias"], learningRate, batchSizeT);
-
-        // Apply to final layer norm
-        ApplyGradientToTensor(_finalLayerNormGamma, _gradientAccumulators["finalLayerNormGamma"], learningRate, batchSizeT);
-        ApplyGradientToTensor(_finalLayerNormBeta, _gradientAccumulators["finalLayerNormBeta"], learningRate, batchSizeT);
-
-        // Apply to transformer layers
-        for (int l = 0; l < _transformerLayers.Count; l++)
-        {
-            _transformerLayers[l].ApplyGradients(_gradientAccumulators, l, learningRate, batchSizeT, Engine);
-        }
-    }
-
-    private void ApplyGradientToTensor(Tensor<T> tensor, Tensor<T> gradient, T learningRate, T batchSize)
-    {
-        // Average gradient over batch and apply
-        var avgGrad = Engine.TensorDivideScalar(gradient, batchSize);
-        var scaledGrad = Engine.TensorMultiplyScalar(avgGrad, learningRate);
-        var result = Engine.TensorSubtract(tensor, scaledGrad);
-        result.AsSpan().CopyTo(tensor.AsWritableSpan());      // one bulk copy, not one indexer call per element
-        tensor.IncrementVersion();
     }
 
     /// <summary>
@@ -1145,23 +1044,6 @@ internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.
         return tensor;
     }
 
-    public void InitializeGradientAccumulators(Dictionary<string, Tensor<T>> accumulators, int layerIndex)
-    {
-        string prefix = $"layer{layerIndex}_";
-        accumulators[prefix + "queryProj"] = new Tensor<T>(_queryProj._shape);
-        accumulators[prefix + "keyProj"] = new Tensor<T>(_keyProj._shape);
-        accumulators[prefix + "valueProj"] = new Tensor<T>(_valueProj._shape);
-        accumulators[prefix + "outputProj"] = new Tensor<T>(_outputProj._shape);
-        accumulators[prefix + "ffn1"] = new Tensor<T>(_ffn1._shape);
-        accumulators[prefix + "ffn1Bias"] = new Tensor<T>(_ffn1Bias._shape);
-        accumulators[prefix + "ffn2"] = new Tensor<T>(_ffn2._shape);
-        accumulators[prefix + "ffn2Bias"] = new Tensor<T>(_ffn2Bias._shape);
-        accumulators[prefix + "layerNorm1Gamma"] = new Tensor<T>(_layerNorm1Gamma._shape);
-        accumulators[prefix + "layerNorm1Beta"] = new Tensor<T>(_layerNorm1Beta._shape);
-        accumulators[prefix + "layerNorm2Gamma"] = new Tensor<T>(_layerNorm2Gamma._shape);
-        accumulators[prefix + "layerNorm2Beta"] = new Tensor<T>(_layerNorm2Beta._shape);
-    }
-
     /// <summary>
     /// Forward pass through the transformer layer with caching for backprop.
     /// </summary>
@@ -1388,34 +1270,6 @@ internal partial class ChronosTransformerLayerTensor<T> : NeuralNetworks.Layers.
     private T DotProduct(Tensor<T> a, Tensor<T> b)
     {
         return VectorHelper.DotProduct(a.ToVector(), b.ToVector());
-    }
-
-    public void ApplyGradients(Dictionary<string, Tensor<T>> accumulators, int layerIndex,
-        T learningRate, T batchSize, IEngine engine)
-    {
-        string prefix = $"layer{layerIndex}_";
-
-        ApplyGradient(_queryProj, accumulators[prefix + "queryProj"], learningRate, batchSize, engine);
-        ApplyGradient(_keyProj, accumulators[prefix + "keyProj"], learningRate, batchSize, engine);
-        ApplyGradient(_valueProj, accumulators[prefix + "valueProj"], learningRate, batchSize, engine);
-        ApplyGradient(_outputProj, accumulators[prefix + "outputProj"], learningRate, batchSize, engine);
-        ApplyGradient(_ffn1, accumulators[prefix + "ffn1"], learningRate, batchSize, engine);
-        ApplyGradient(_ffn1Bias, accumulators[prefix + "ffn1Bias"], learningRate, batchSize, engine);
-        ApplyGradient(_ffn2, accumulators[prefix + "ffn2"], learningRate, batchSize, engine);
-        ApplyGradient(_ffn2Bias, accumulators[prefix + "ffn2Bias"], learningRate, batchSize, engine);
-        ApplyGradient(_layerNorm1Gamma, accumulators[prefix + "layerNorm1Gamma"], learningRate, batchSize, engine);
-        ApplyGradient(_layerNorm1Beta, accumulators[prefix + "layerNorm1Beta"], learningRate, batchSize, engine);
-        ApplyGradient(_layerNorm2Gamma, accumulators[prefix + "layerNorm2Gamma"], learningRate, batchSize, engine);
-        ApplyGradient(_layerNorm2Beta, accumulators[prefix + "layerNorm2Beta"], learningRate, batchSize, engine);
-    }
-
-    private void ApplyGradient(Tensor<T> tensor, Tensor<T> gradient, T learningRate, T batchSize, IEngine engine)
-    {
-        var avgGrad = engine.TensorDivideScalar(gradient, batchSize);
-        var scaledGrad = engine.TensorMultiplyScalar(avgGrad, learningRate);
-        var result = engine.TensorSubtract(tensor, scaledGrad);
-        result.AsSpan().CopyTo(tensor.AsWritableSpan());      // one bulk copy, not one indexer call per element
-        tensor.IncrementVersion();
     }
 
     private void SerializeTensor(BinaryWriter writer, Tensor<T> tensor)
