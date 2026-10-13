@@ -1,0 +1,14 @@
+{
+  "$comment": "Measured CPU results published in the AiDotNet.Tensors README (CPU Benchmarks summary). scripts/check-performance-claims.mjs fails CI when these differ from that README, so update them from a new Tensors run, never by hand-picking numbers.",
+  "source": "https://github.com/ooples/AiDotNet.Tensors#cpu-benchmarks",
+  "run": "2026-10-08-threadripper-3990x",
+  "machine": "AMD Ryzen Threadripper 3990X",
+  "date": "2026-10-08",
+  "results": [
+    { "library": "TorchSharp", "label": "TorchSharp 0.107 (libtorch)", "wins": 73, "losses": 9 },
+    { "library": "NumSharp", "label": "NumSharp 0.70", "wins": 45, "losses": 3 },
+    { "library": "MathNet.Numerics", "label": "MathNet.Numerics 5.0", "wins": 33, "losses": 0 },
+    { "library": "ML.NET", "label": "ML.NET 5.0", "wins": 6, "losses": 0 },
+    { "library": "TensorFlow.NET", "label": "TensorFlow.NET 0.150", "wins": 11, "losses": 0 }
+  ]
+}

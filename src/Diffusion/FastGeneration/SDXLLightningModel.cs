@@ -68,6 +68,9 @@ public partial class SDXLLightningModel<T> : LatentDiffusionModelBase<T>
     private const double DEFAULT_GUIDANCE = 0.0;
     private const int DEFAULT_STEPS = 4;
 
+    /// <summary>Adam learning rate of the MSE distillation stage (Lin et al. 2024, Sec. 4).</summary>
+    private const double SDXL_LIGHTNING_LEARNING_RATE = 1e-5;
+
     private UNetNoisePredictor<T> _predictor;
     private StandardVAE<T> _vae;
     private readonly IConditioningModule<T>? _conditioner;
@@ -98,7 +101,14 @@ public partial class SDXLLightningModel<T> : LatentDiffusionModelBase<T>
             {
                 TrainTimesteps = 1000, BetaStart = 0.00085,
                 BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear,
-                DefaultInferenceSteps = DEFAULT_STEPS
+                DefaultInferenceSteps = DEFAULT_STEPS,
+                // Lin et al. 2024, Sec. 4 (Implementation): "For the first 128 -> 32 stage with
+                // MSE loss, we use learning rate 1e-5 with Adam beta1 = 0.9, beta2 = 0.999" --
+                // the noise-prediction stage this model's Train runs. The base class's default
+                // (Adam at 1e-3) diverges on an SDXL-scale UNet: the nightly heavy lane measured
+                // the averaged noise-prediction objective going non-finite (NaN) after training
+                // on runs 38117342722 and 37736539236 (#2087).
+                LearningRate = SDXL_LIGHTNING_LEARNING_RATE,
             },
             scheduler ?? new EulerDiscreteScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             architecture)

@@ -220,7 +220,7 @@ jobs:
 
       - name: Upload immutable test bundle
         if: steps.inventory.outputs.count != '0'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: perf-test-bundle
           path: artifacts/model-performance/test-bundle
@@ -228,7 +228,7 @@ jobs:
           retention-days: 1
 
       - name: Upload fixture inventory
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: model-performance-inventory
           path: artifacts/model-performance/inventory
@@ -253,7 +253,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Download immutable test bundle
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
         with:
           name: perf-test-bundle
           path: test-bundle
@@ -276,7 +276,7 @@ jobs:
 
       - name: Upload shard records
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: model-performance-${{ matrix.shard }}
           path: artifacts/model-performance/shard-${{ matrix.shard }}
@@ -307,7 +307,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Download all shard records
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
         with:
           pattern: model-performance-*
           path: artifacts/model-performance/all
@@ -454,7 +454,7 @@ jobs:
 
       - name: Upload summary
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: model-performance-summary
           path: artifacts/model-performance
@@ -462,7 +462,7 @@ jobs:
 
       - name: Upload environment-qualified baseline
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: model-performance-baseline
           path: artifacts/model-performance/baseline.json

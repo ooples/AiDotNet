@@ -12126,6 +12126,24 @@ public static partial class LayerHelper<T>
     #region Finance Model Layers
 
     /// <summary>
+    /// The output width a factory should build, taking the architecture's when it is meaningfully
+    /// set and the caller's option only as the fallback (#2147).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This is the shape the 87 factories that already read their architecture use verbatim
+    /// (<c>architecture.OutputSize &gt; 0 ? architecture.OutputSize : fallback</c>). It is a no-op
+    /// when the architecture leaves <c>OutputSize</c> unset, so it cannot disturb a model whose
+    /// caller passes nothing; it only stops a factory from ignoring an output width the model was
+    /// explicitly constructed with.
+    /// </para>
+    /// </remarks>
+    private static int EffectiveOutputSize(NeuralNetworkArchitecture<T> architecture, int fallback)
+        => architecture.OutputSize > 0
+            ? architecture.OutputSize
+            : fallback;
+
+    /// <summary>
     /// Creates the default layers for a PatchTST (Patch Time Series Transformer) network.
     /// </summary>
     /// <param name="architecture">The neural network architecture configuration.</param>
@@ -12202,7 +12220,7 @@ public static partial class LayerHelper<T>
 
         // Output projection: maps from (numPatches * modelDimension) to predictionHorizon
         yield return new DenseLayer<T>(
-            outputSize: predictionHorizon,
+            outputSize: EffectiveOutputSize(architecture, predictionHorizon),
             activationFunction: null);
     }
 
@@ -12280,7 +12298,7 @@ public static partial class LayerHelper<T>
         // Output projection: maps from model dimension to prediction horizon
         // Each variable token produces its own forecast
         yield return new DenseLayer<T>(
-            outputSize: predictionHorizon,
+            outputSize: EffectiveOutputSize(architecture, predictionHorizon),
             activationFunction: null);
     }
 
@@ -12743,7 +12761,7 @@ public static partial class LayerHelper<T>
 
         // Output projection: maps to prediction horizon
         yield return new DenseLayer<T>(
-            outputSize: predictionHorizon * numFeatures,
+            outputSize: EffectiveOutputSize(architecture, predictionHorizon * numFeatures),
             activationFunction: null);
     }
 

@@ -25,7 +25,6 @@ internal static class DefectBaselines
         {
             "global::AiDotNet.AutoML.AutoMLEnsembleModel<T>",
             "global::AiDotNet.AutoML.DiffusionAutoML<T>",
-            "global::AiDotNet.ComputerVision.Segmentation.Referring.GLaMM<T>",
             "global::AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer<T, TInput, TOutput>",
             "global::AiDotNet.Diffusion.NoisePredictors.AsymmDiTPredictor<T>",
             "global::AiDotNet.Diffusion.NoisePredictors.DiTNoisePredictor<T>",
@@ -120,8 +119,5 @@ internal static class DefectBaselines
             "global::AiDotNet.SelfSupervisedLearning.MoCoV3<T>",
             "global::AiDotNet.SelfSupervisedLearning.SimCLR<T>",
             "global::AiDotNet.SelfSupervisedLearning.SimSiam<T>",
-            "global::AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>",
-            "global::AiDotNet.TextToSpeech.Vocoders.WaveNet<T>",
-            "global::AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>",
         };
 }

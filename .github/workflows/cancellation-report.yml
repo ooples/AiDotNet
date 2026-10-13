@@ -1,0 +1,47 @@
+name: Cancellation report
+
+# Issue #2131: a cancelled job renders exactly like a failed one, so a PR can show dozens of red
+# checks with nothing failing anywhere. The run being cancelled cannot explain itself - GitHub
+# stops its jobs too, which is why `cancel-after-build-failure`'s annotation only reaches readers
+# of a DELIBERATE cancellation and never reaches an evicted one. This workflow runs after the
+# fact, from outside, and publishes one check run on the same head SHA saying which of the two
+# happened and what, if anything, actually failed.
+
+on:
+  workflow_run:
+    workflows: ['Build & SonarCloud']
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+  checks: write
+
+concurrency:
+  group: cancellation-report-${{ github.event.workflow_run.id }}
+  cancel-in-progress: false
+
+jobs:
+  report:
+    name: Explain the cancelled checks
+    # Only a cancelled run needs explaining. A failing run already has a red job to read, and a
+    # green one needs nothing.
+    if: ${{ github.event.workflow_run.conclusion == 'cancelled' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # workflow_run is privileged: check out the default branch, never the triggering PR's code.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - name: Publish the cancellation report
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CI_REPOSITORY: ${{ github.repository }}
+          CI_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          ./tools/TestImpact/Report-CancelledRun.ps1 `
+            -Repository $env:CI_REPOSITORY -RunId ([long] $env:CI_RUN_ID)
