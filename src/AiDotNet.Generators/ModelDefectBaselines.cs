@@ -260,7 +260,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3<T>",
             "AiDotNet.TextToSpeech.CodecBased.OrpheusTTS<T>",
             "AiDotNet.TextToSpeech.CodecBased.SeedTTS<T>",
-            "AiDotNet.TextToSpeech.CodecBased.SoundStorm<T>",
             "AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>",
             "AiDotNet.TextToSpeech.CodecBased.SPEARTTS<T>",
             "AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>",

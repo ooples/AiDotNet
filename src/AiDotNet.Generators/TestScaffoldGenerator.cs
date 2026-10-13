@@ -9772,18 +9772,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "SoundStorm" && model.TypeParameterCount == 1)
             {
-                // SoundStorm retains its paper-scale 1024-wide, 12-layer, 12x1024
-                // SoundStream-token model in production. That graph exhausted the 16 GB
-                // runner during training and clone invariants. Exercise the same embedding
-                // -> text transformer -> parallel codec-token head through public options
-                // at generated-test scale.
+                // SoundStorm's paper model is a 1024-wide 12-layer Conformer over 12 SoundStream levels with a
+                // ByT5-large text-to-semantic model; keep every component (ByT5 v1.1, Conformer with per-level heads,
+                // SoundStream) at 16 wide, two levels of 16 codes and a short generation. The codec's hop is 1600
+                // (10 frames a second, semantic tokens at 5), so the 16-frame training utterances are 8 semantic
+                // tokens each.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 4, outputSize: 16), " +
-                    "new AiDotNet.TextToSpeech.CodecBased.SoundStormOptions { TextEncoderDim = 32, LLMDim = 32, VocabSize = 64, " +
-                    "NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, NumCodebooks = 1, " +
-                    "CodebookSize = 16, MaxTextLength = 8, MaxCodecFrames = 16, DropoutRate = 0.0 })";
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 1, outputSize: 1), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.SoundStormOptions { HiddenDim = 16, NumHeads = 2, ConformerLayers = 1, " +
+                    "ConformerHeadDim = 8, FeedForwardMultiplier = 2, NumCodebooks = 2, CodebookSize = 16, SemanticCodes = 16, " +
+                    "SemanticFrameRate = 5, FirstLevelIterations = 3, TextModelDim = 16, TextFeedForwardDim = 32, " +
+                    "TextKeyValueDim = 8, NumEncoderLayers = 1, NumDecoderLayers = 1, TextDropoutRate = 0.0, TopK = 8, " +
+                    "MaxNewSemanticTokens = 4, MaxTextLength = 32, LearningRate = 3e-3, DropoutRate = 0.0, HopSize = 1600, " +
+                    "SoundStream = new AiDotNet.Audio.Generation.SoundStreamOptions { SampleRate = 16000, Filters = 4, " +
+                    "Dimension = 8, Ratios = [8, 5, 5, 4, 2], NumQuantizers = 2, CodebookSize = 16, TargetBandwidthKbps = 0.08 } })";
             }
             else if (model.ClassName == "SeedTTS" && model.TypeParameterCount == 1)
             {
@@ -15497,7 +15501,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 bool useCodecSmokeIterations =
                     model.ClassName is "Bark" or "BarkModel" or "FishSpeech" or "Llasa" or "MegaTTS3"
                         or "XTTSv2Clone"
-                        or "GLM4Voice" or "IndexTTS2" or "SeedTTS" or "SoundStorm";
+                        or "GLM4Voice" or "IndexTTS2" or "SeedTTS";
                 sb.AppendLine(useCodecSmokeIterations
                     ? "    protected override int MoreDataShortIterations => 1;"
                     : "    protected override int MoreDataShortIterations => 3;");
@@ -15505,7 +15509,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     ? "    protected override int MoreDataLongIterations => 2;"
                     : "    protected override int MoreDataLongIterations => 10;");
                 if (model.ClassName is "Bark" or "BarkModel" or "Llasa" or "MegaTTS3"
-                    or "GLM4Voice" or "IndexTTS2" or "SeedTTS" or "SoundStorm"
+                    or "GLM4Voice" or "IndexTTS2" or "SeedTTS"
                     || IsValleCodecLMModel(model.ClassName))
                 {
                     sb.AppendLine("    protected override int TrainingIterations => 2;");
@@ -15710,9 +15714,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine("    protected override int[] InputShape => new[] { 8, 16 };");
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 16 };");
                 }
-                else if (model.ClassName is "Pheme" or "VALLE" or "VALLEX" or "VALLE2")
+                else if (model.ClassName is "Pheme" or "VALLE" or "VALLEX" or "VALLE2" or "SoundStorm")
                 {
-                    // Pheme and VALL-E read phoneme ids and train on codec tokens, one frame per target row (the TTS
+                    // Pheme and VALL-E read phoneme ids (SoundStorm text bytes) and train on codec tokens, one frame per target row (the TTS
                     // base synthesizes [16, codebooks] tokens from a [16, 1] target).
                     sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 16, 1 };");
@@ -21121,7 +21125,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             or "CosyVoiceClone" or "Chatterbox"
             or "IndexTTS" or "IndexTTS2" or "OuteTTS"
             or "KaniTTS" or "KaniTTS2" or "SeedTTS" or "SeedTTSClone"
-            or "SpeechGPT" or "SpiritLM" or "SoundStorm"
+            or "SpeechGPT" or "SpiritLM"
             or "Amphion" or "Dia" or "GLM4Voice" or "WhisperSpeech"
             // SparkTTS and SPEAR-TTS expose the same discrete codec-token contract.
             or "SparkTTS" or "SPEARTTS" or "Llasa" or "MegaTTS3"
@@ -21148,7 +21152,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "SeedTTSClone" => 16,
             "SpeechGPT" => 16,
             "SpiritLM" => 16,
-            "SoundStorm" => 16,
             "Amphion" => 32,
             "Dia" => 32,
             "Bark" or "BarkModel" => 32,
@@ -21192,7 +21195,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             || className is "Bark" or "BarkModel"
             || className is "GLM4Voice" or "IndexTTS" or "IndexTTS2" or "OuteTTS"
                 or "KaniTTS" or "KaniTTS2" or "SeedTTS" or "SeedTTSClone"
-                or "SpeechGPT" or "SpiritLM" or "SoundStorm" or "Zonos"
+                or "SpeechGPT" or "SpiritLM" or "Zonos"
                 or "Llasa" or "MegaTTS3" ? 64 : 256;
     }
 

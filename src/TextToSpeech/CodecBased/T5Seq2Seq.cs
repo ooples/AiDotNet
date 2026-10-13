@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.TextToSpeech.CodecBased;
 
@@ -265,11 +266,20 @@ internal sealed class T5Seq2Seq<T>
     /// <summary>
     /// The teacher-forced cross-entropy of <paramref name="labels"/> given <paramref name="inputIds"/>, as
     /// <c>T5ForConditionalGeneration(labels=...)</c> computes it: the decoder reads the labels shifted right behind the
-    /// start token, and the loss averages the token cross-entropies.
+    /// start token, and the loss averages the token cross-entropies. With <paramref name="freezeEncoder"/> the encoder
+    /// runs in inference mode outside the tape, so only the decoder (and the embedding rows it reads) learn.
     /// </summary>
-    public Tensor<T> Loss(Tensor<T> inputIds, int[] labels, bool training, Random random)
+    public Tensor<T> Loss(Tensor<T> inputIds, int[] labels, bool training, Random random, bool freezeEncoder = false)
     {
-        var memory = Encode(inputIds, training, random);
+        Tensor<T> memory;
+        if (freezeEncoder)
+        {
+            using (new NoGradScope<T>()) memory = Encode(inputIds, training: false, random);
+        }
+        else
+        {
+            memory = Encode(inputIds, training, random);
+        }
         var decoderIds = new Tensor<T>(new[] { labels.Length });
         decoderIds[0] = NumOps.FromDouble(Configuration.DecoderStartTokenId);
         for (int i = 1; i < labels.Length; i++) decoderIds[i] = NumOps.FromDouble(labels[i - 1]);
@@ -375,8 +385,10 @@ internal sealed class T5Seq2Seq<T>
     /// <summary>
     /// Loads a Hugging Face <c>T5ForConditionalGeneration</c> state dict; <paramref name="read"/> returns the named
     /// tensor's values, row-major, after checking its shape. Linear weights are <c>[out, in]</c> in the checkpoint.
+    /// With <paramref name="encoderOnly"/> only the encoder stack is read (not <c>shared</c>, the decoder or
+    /// <c>lm_head</c>).
     /// </summary>
-    public void LoadHuggingFaceWeights(Func<string, int[], double[]> read)
+    public void LoadHuggingFaceWeights(Func<string, int[], double[]> read, bool encoderOnly = false)
     {
         var c = Configuration;
         int inner = c.Heads * c.KeyValueDim;
@@ -412,7 +424,7 @@ internal sealed class T5Seq2Seq<T>
             Norm(name + ".layer_norm", block.FeedForwardNorm);
         }
 
-        Shared.LoadTable(read("shared.weight", new[] { c.VocabularySize, c.ModelDim }));
+        if (!encoderOnly) Shared.LoadTable(read("shared.weight", new[] { c.VocabularySize, c.ModelDim }));
         for (int i = 0; i < Encoder.Count; i++)
         {
             string block = $"encoder.block.{i}.layer";
@@ -422,6 +434,7 @@ internal sealed class T5Seq2Seq<T>
         }
         EncoderBias.LoadTable(read("encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight", new[] { c.RelativeBuckets, c.Heads }));
         Norm("encoder.final_layer_norm", EncoderFinalNorm);
+        if (encoderOnly) return;
         for (int i = 0; i < Decoder.Count; i++)
         {
             string block = $"decoder.block.{i}.layer";
@@ -439,5 +452,19 @@ internal sealed class T5Seq2Seq<T>
             Norm("decoder.final_layer_norm", DecoderFinalNorm);
         }
         if (LanguageModelHead is not null) Linear("lm_head", LanguageModelHead, c.VocabularySize, c.ModelDim);
+    }
+
+    /// <summary>
+    /// Loads only the encoder of a Hugging Face T5 checkpoint whose vocabulary is the first
+    /// <paramref name="pretrainedVocabulary"/> rows of this model's: those rows of <c>shared</c>, the encoder blocks,
+    /// its relative bias table and final norm. The decoder and the remaining embedding rows keep their values.
+    /// </summary>
+    public void LoadHuggingFaceEncoderWeights(Func<string, int[], double[]> read, int pretrainedVocabulary)
+    {
+        var c = Configuration;
+        if (pretrainedVocabulary <= 0 || pretrainedVocabulary > c.VocabularySize)
+            throw new ArgumentOutOfRangeException(nameof(pretrainedVocabulary));
+        Shared.LoadLeadingRows(read("shared.weight", new[] { pretrainedVocabulary, c.ModelDim }));
+        LoadHuggingFaceWeights(read, encoderOnly: true);
     }
 }
