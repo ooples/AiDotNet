@@ -47,61 +47,30 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
 public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 {
     // UpdateParameters delegated straight to SetParameters. The base does that now.
-    private readonly ConvolutionalLayer<T> _conv1;
-    private readonly List<ResNetStage<T>> _stages;
     private readonly ResNetVariant _variant;
-    private readonly int _inChannels;
-    /// <summary>
-    /// Activation between stages. Defaults to ReLU per the He et al. 2016 paper;
-    /// callers can override with any <see cref="IActivationFunction{T}"/>.
-    /// </summary>
-    private readonly IActivationFunction<T> _activation;
+    private ResNetTrunk<T>? _trunk;
+    private readonly ResNetTrunkConfiguration _trunkConfiguration;
 
     public bool IsFrozen { get; private set; }
     public string Name => $"ResNet-{GetLayerCount(_variant)}";
     public IReadOnlyList<int> OutputChannels { get; }
     public IReadOnlyList<int> Strides => new[] { 4, 8, 16, 32 };
 
+    /// <summary>The convolutional trunk, shared with <see cref="ResNetNetwork{T}"/>.</summary>
+    internal ResNetTrunk<T> Trunk => _trunk ?? throw new InvalidOperationException("The backbone is not initialized.");
+
     /// <summary>
-    /// Creates a new ResNet backbone.
+    /// Creates a new ResNet backbone: the classifier's trunk (torchvision's ResNet without its pooling and fully
+    /// connected layer), producing the C2–C5 feature pyramid.
     /// </summary>
-    /// <param name="activation">
-    /// Activation applied between stages and at the stem. <c>null</c> resolves to the
-    /// He et al. 2016 paper default <see cref="ReLUActivation{T}"/>.
-    /// </param>
-    public ResNet(IActivationFunction<T>? activation = null,
-        ResNetBackboneOptions? options = null)
+    public ResNet(ResNetBackboneOptions? options = null)
         : base(DetectionBackboneArchitecture<T>.Create((options ??= new ResNetBackboneOptions()).InChannels),
               new MeanSquaredErrorLoss<T>())
     {
         _variant = options.Variant;
-        _inChannels = options.InChannels;
-        _activation = activation ?? new ReLUActivation<T>();
-        _stages = new List<ResNetStage<T>>();
-
-        bool useBottleneck = options.Variant >= ResNetVariant.ResNet50;
-        int expansion = useBottleneck ? 4 : 1;
-        int[] baseChannels = { 64, 128, 256, 512 };
-        OutputChannels = baseChannels.Select(c => c * expansion).ToArray();
-
-        // Stem 7×7 conv stride=2. The input channel count is a constructor argument, so give it to
-        // the layer instead of making it re-derive the same number from the first batch — this is
-        // torchvision's nn.Conv2d(in_channels, 64, kernel_size=7, ...). Sizing it here means
-        // ParameterCount and GetParameters are exact before any data flows, and the weights are
-        // allocated once rather than materialized mid-forward.
-        _conv1 = ConvolutionalLayer<T>.WithInputDepth(
-            inputDepth: options.InChannels, outputDepth: 64, kernelSize: 7, stride: 2, padding: 3);
-
-        int[] blockCounts = GetBlockCounts(options.Variant);
-        int currentChannels = 64;
-        for (int i = 0; i < 4; i++)
-        {
-            int outChannels = baseChannels[i];
-            int stride = i == 0 ? 1 : 2;
-            var stage = new ResNetStage<T>(currentChannels, outChannels, blockCounts[i], stride, useBottleneck, _activation);
-            _stages.Add(stage);
-            currentChannels = outChannels * expansion;
-        }
+        _trunkConfiguration = ResNetTrunkConfiguration.For(options.Variant, options.InChannels);
+        OutputChannels = _trunkConfiguration.OutputChannels;
+        InitializeLayers();
     }
 
     private static int GetLayerCount(ResNetVariant variant) => variant switch
@@ -111,117 +80,73 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         ResNetVariant.ResNet50 => 50,
         ResNetVariant.ResNet101 => 101,
         ResNetVariant.ResNet152 => 152,
-        _ => 50
+        _ => throw new NotSupportedException($"ResNet variant {variant} is not supported.")
     };
 
-    private static int[] GetBlockCounts(ResNetVariant variant) => variant switch
-    {
-        ResNetVariant.ResNet18 => new[] { 2, 2, 2, 2 },
-        ResNetVariant.ResNet34 => new[] { 3, 4, 6, 3 },
-        ResNetVariant.ResNet50 => new[] { 3, 4, 6, 3 },
-        ResNetVariant.ResNet101 => new[] { 3, 4, 23, 3 },
-        ResNetVariant.ResNet152 => new[] { 3, 8, 36, 3 },
-        _ => new[] { 3, 4, 6, 3 }
-    };
-
-    public List<Tensor<T>> ExtractFeatures(Tensor<T> input)
+    private static Tensor<T> Batched(Tensor<T> input)
     {
         // Backbones accept a single [C,H,W] image or a batched [N,C,H,W] tensor.
-        // MaxPool2D and the residual stages operate on rank-4 NCHW (MaxPool2D
-        // reads Shape[3]), so promote a rank-3 single image to [1,C,H,W]
-        // (matching SwinTransformer.EnsureBatchedNchw).
         if (input.Shape.Length == 3)
-            input = input.Reshape(new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
-        else if (input.Shape.Length != 4)
+            return input.Reshape(new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
+        if (input.Shape.Length != 4)
             throw new ArgumentException(
                 $"ResNet expects a [C,H,W] or [N,C,H,W] image tensor, but got rank-{input.Shape.Length} " +
                 $"[{string.Join(",", input.Shape.ToArray())}].", nameof(input));
-
-        var features = new List<Tensor<T>>();
-        var x = _conv1.Forward(input);
-        x = _activation.Activate(x);
-        x = CvTensorOps<T>.MaxPoolPadded(x, kernelSize: 3, stride: 2, padding: 1);
-        for (int i = 0; i < _stages.Count; i++)
-        {
-            x = _stages[i].Forward(x);
-            features.Add(x); // C2..C5
-        }
-        return features;
+        return input;
     }
+
+    public List<Tensor<T>> ExtractFeatures(Tensor<T> input) => Trunk.Forward(Batched(input));
 
     public IReadOnlyList<Tensor<T>> GetFeatureMaps(Tensor<T> input) => ExtractFeatures(input);
 
     /// <summary>
-    /// Returns the per-layer activations produced by a forward pass, keyed by a
-    /// human-readable name. ResNet organizes its layers as a stem convolution
-    /// plus residual stages (the <see cref="IDetectionBackbone{T}"/> feature
-    /// pyramid) rather than the flat base <c>Layers</c> collection, so the base
-    /// <see cref="NeuralNetworkBase{T}.GetNamedLayerActivations"/> — which iterates
-    /// <c>Layers</c> — would return an empty map. Mirror <see cref="ExtractFeatures"/>'s
-    /// forward path exactly and expose the stem output plus each residual stage's
-    /// output (the C2..C5 pyramid), so interpretability/activation consumers get
-    /// the network's real intermediate features.
+    /// Returns the stem output and each residual stage's output (the C2..C5 pyramid), keyed by name.
     /// </summary>
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
     {
-        // Promote a single [C,H,W] image to [1,C,H,W] exactly as ExtractFeatures does.
-        if (input.Shape.Length == 3)
-            input = input.Reshape(new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
-        else if (input.Shape.Length != 4)
-            throw new ArgumentException(
-                $"ResNet expects a [C,H,W] or [N,C,H,W] image tensor, but got rank-{input.Shape.Length} " +
-                $"[{string.Join(",", input.Shape.ToArray())}].", nameof(input));
-
-        var activations = new Dictionary<string, Tensor<T>>();
-        var x = _conv1.Forward(input);
-        x = _activation.Activate(x);
-        x = CvTensorOps<T>.MaxPoolPadded(x, kernelSize: 3, stride: 2, padding: 1);
-        activations["Stem"] = x.Clone();
-        for (int i = 0; i < _stages.Count; i++)
-        {
-            x = _stages[i].Forward(x);
-            activations[$"Stage{i + 1}_C{i + 2}"] = x.Clone(); // C2..C5
-        }
+        var x = Batched(input);
+        var activations = new Dictionary<string, Tensor<T>> { ["Stem"] = Trunk.Stem(x).Clone() };
+        var features = Trunk.Forward(x);
+        for (int i = 0; i < features.Count; i++)
+            activations[$"Stage{i + 1}_C{i + 2}"] = features[i].Clone();
         return activations;
     }
 
+    /// <summary>Loads a torchvision ResNet state dict (its <c>fc</c> entries are not read).</summary>
+    internal void LoadTorchWeights(Func<string, int[], double[]> read) => Trunk.LoadTorchWeights(read);
 
     public void WriteParameters(BinaryWriter writer)
     {
         writer.Write((int)_variant);
-        writer.Write(_stages.Count);
-        BackboneSerialization.WriteLayerParameters(writer, _conv1);
-        foreach (var stage in _stages) stage.WriteParameters(writer);
+        writer.Write(Layers.Count);
+        foreach (var layer in Layers) BackboneSerialization.WriteLayerParameters(writer, (LayerBase<T>)layer);
     }
 
     public void ReadParameters(BinaryReader reader)
     {
         var variant = (ResNetVariant)reader.ReadInt32();
-        int stageCount = reader.ReadInt32();
+        int layerCount = reader.ReadInt32();
         if (variant != _variant)
             throw new InvalidOperationException($"ResNet variant mismatch: expected {_variant}, got {variant}.");
-        if (stageCount != _stages.Count)
-            throw new InvalidOperationException($"ResNet stage count mismatch: expected {_stages.Count}, got {stageCount}.");
-        BackboneSerialization.ReadLayerParameters(reader, _conv1);
-        foreach (var stage in _stages) stage.ReadParameters(reader);
+        if (layerCount != Layers.Count)
+            throw new InvalidOperationException($"ResNet layer count mismatch: expected {Layers.Count}, got {layerCount}.");
+        foreach (var layer in Layers) BackboneSerialization.ReadLayerParameters(reader, (LayerBase<T>)layer);
     }
 
     public virtual void Freeze() => IsFrozen = true;
     public virtual void Unfreeze() => IsFrozen = false;
     public (int Height, int Width) GetExpectedInputSize() => (640, 640);
 
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        var features = ExtractFeatures(input);
-        if (features.Count == 0)
-            throw new InvalidOperationException(
-                $"{GetType().Name}.ExtractFeatures returned no feature maps. A backbone must produce at least one feature map.");
-        return features[features.Count - 1];
-    }
+    protected override Tensor<T> PredictCore(Tensor<T> input) => ExtractFeatures(input)[3];
 
     protected override void InitializeLayers()
     {
-        // Backbones own their per-stage layers directly; the inherited Layers list stays empty.
+        // The base constructor calls this before the configuration is set; the constructor calls it again.
+        if (_trunkConfiguration is null || _trunk is not null) return;
+        var layers = new List<LayerBase<T>>();
+        _trunk = new ResNetTrunk<T>(Engine, layers, _trunkConfiguration);
+        _trunk.InitializeLikeReference(LayerInitializationSeedScope.NextRandom());
+        Layers.AddRange(layers);
     }
 
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
@@ -241,160 +166,8 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
             "(FasterRCNN, YOLOv8, DETR, …) which orchestrates the joint forward/backward pass. " +
             "Train the parent detection model instead.");
 
-
-
-
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
         throw new NotSupportedException(
             $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on backbones. " +
             "Use ReadParameters(BinaryReader) on a fresh instance.");
-}
-
-/// <summary>
-/// A stage in ResNet containing multiple residual blocks.
-/// </summary>
-internal class ResNetStage<T>
-{
-    /// <summary>The layers of every block in this stage, in order.</summary>
-    internal IEnumerable<LayerBase<T>> EnumerateLayers()
-        => _blocks.SelectMany(b => b.EnumerateLayers());
-
-    private readonly List<ResidualBlock<T>> _blocks;
-
-    public ResNetStage(int inChannels, int outChannels, int numBlocks, int stride, bool useBottleneck, IActivationFunction<T> activation)
-    {
-        _blocks = new List<ResidualBlock<T>>();
-        int expansion = useBottleneck ? 4 : 1;
-
-        _blocks.Add(new ResidualBlock<T>(
-            inChannels, outChannels, stride, useBottleneck,
-            downsample: inChannels != outChannels * expansion || stride != 1,
-            activation: activation));
-
-        for (int i = 1; i < numBlocks; i++)
-        {
-            _blocks.Add(new ResidualBlock<T>(
-                outChannels * expansion, outChannels, 1, useBottleneck, downsample: false, activation: activation));
-        }
-    }
-
-    public Tensor<T> Forward(Tensor<T> input)
-    {
-        var x = input;
-        foreach (var block in _blocks) x = block.Forward(x);
-        return x;
-    }
-
-    public long GetParameterCount()
-    {
-        long count = 0;
-        foreach (var block in _blocks) count += block.GetParameterCount();
-        return count;
-    }
-
-    public void WriteParameters(BinaryWriter writer)
-    {
-        writer.Write(_blocks.Count);
-        foreach (var block in _blocks) block.WriteParameters(writer);
-    }
-
-    public void ReadParameters(BinaryReader reader)
-    {
-        int blockCount = reader.ReadInt32();
-        if (blockCount != _blocks.Count)
-            throw new InvalidOperationException($"ResNetStage block count mismatch: expected {_blocks.Count}, got {blockCount}.");
-        foreach (var block in _blocks) block.ReadParameters(reader);
-    }
-}
-
-/// <summary>
-/// Individual residual block in ResNet.
-/// </summary>
-internal class ResidualBlock<T>
-{
-    /// <summary>The convolutional layers this block owns, in forward order.</summary>
-    internal IEnumerable<LayerBase<T>> EnumerateLayers()
-    {
-        yield return _conv1;
-        yield return _conv2;
-        if (_conv3 is not null) yield return _conv3;
-        if (_downsample is not null) yield return _downsample;
-    }
-
-    private readonly ConvolutionalLayer<T> _conv1;
-    private readonly ConvolutionalLayer<T> _conv2;
-    private readonly ConvolutionalLayer<T>? _conv3;
-    private readonly ConvolutionalLayer<T>? _downsample;
-    private readonly bool _useBottleneck;
-    private readonly IActivationFunction<T> _activation;
-
-    public ResidualBlock(int inChannels, int outChannels, int stride, bool useBottleneck, bool downsample, IActivationFunction<T> activation)
-    {
-        _useBottleneck = useBottleneck;
-        _activation = activation;
-        int expansion = useBottleneck ? 4 : 1;
-
-        // Every fan-in here is already known from inChannels and the block's own widths, so size the
-        // convolutions up front rather than deferring to the first forward (torchvision's
-        // BasicBlock / Bottleneck pass in_channels explicitly for exactly these convs).
-        if (useBottleneck)
-        {
-            _conv1 = ConvolutionalLayer<T>.WithInputDepth(inChannels, outChannels, kernelSize: 1, stride: 1, padding: 0);
-            _conv2 = ConvolutionalLayer<T>.WithInputDepth(outChannels, outChannels, kernelSize: 3, stride: stride, padding: 1);
-            _conv3 = ConvolutionalLayer<T>.WithInputDepth(outChannels, outChannels * expansion, kernelSize: 1, stride: 1, padding: 0);
-        }
-        else
-        {
-            _conv1 = ConvolutionalLayer<T>.WithInputDepth(inChannels, outChannels, kernelSize: 3, stride: stride, padding: 1);
-            _conv2 = ConvolutionalLayer<T>.WithInputDepth(outChannels, outChannels * expansion, kernelSize: 3, stride: 1, padding: 1);
-        }
-
-        if (downsample)
-            _downsample = ConvolutionalLayer<T>.WithInputDepth(
-                inChannels, outChannels * expansion, kernelSize: 1, stride: stride, padding: 0);
-    }
-
-    public Tensor<T> Forward(Tensor<T> input)
-    {
-        var identity = _downsample is not null ? _downsample.Forward(input) : input;
-        var x = _conv1.Forward(input);
-        x = _activation.Activate(x);
-        x = _conv2.Forward(x);
-        x = _activation.Activate(x);
-        if (_useBottleneck && _conv3 is not null) x = _conv3.Forward(x);
-        x = BackboneOps<T>.AddResidual(x, identity);
-        return _activation.Activate(x);
-    }
-
-    public long GetParameterCount()
-    {
-        long count = _conv1.ParameterCount + _conv2.ParameterCount;
-        if (_conv3 is not null) count += _conv3.ParameterCount;
-        if (_downsample is not null) count += _downsample.ParameterCount;
-        return count;
-    }
-
-    public void WriteParameters(BinaryWriter writer)
-    {
-        writer.Write(_useBottleneck);
-        writer.Write(_downsample is not null);
-        BackboneSerialization.WriteLayerParameters(writer, _conv1);
-        BackboneSerialization.WriteLayerParameters(writer, _conv2);
-        if (_useBottleneck && _conv3 is not null) BackboneSerialization.WriteLayerParameters(writer, _conv3);
-        if (_downsample is not null) BackboneSerialization.WriteLayerParameters(writer, _downsample);
-    }
-
-    public void ReadParameters(BinaryReader reader)
-    {
-        bool useBottleneck = reader.ReadBoolean();
-        bool hasDownsample = reader.ReadBoolean();
-        if (useBottleneck != _useBottleneck)
-            throw new InvalidOperationException("ResidualBlock bottleneck mismatch.");
-        if (hasDownsample != (_downsample is not null))
-            throw new InvalidOperationException("ResidualBlock downsample mismatch.");
-        BackboneSerialization.ReadLayerParameters(reader, _conv1);
-        BackboneSerialization.ReadLayerParameters(reader, _conv2);
-        if (_useBottleneck && _conv3 is not null) BackboneSerialization.ReadLayerParameters(reader, _conv3);
-        if (_downsample is not null) BackboneSerialization.ReadLayerParameters(reader, _downsample);
-    }
 }

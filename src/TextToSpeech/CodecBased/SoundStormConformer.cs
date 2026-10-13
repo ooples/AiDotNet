@@ -71,6 +71,24 @@ internal sealed partial class ChannelLayerNormLayer<T> : LayerBase<T>
 /// <summary>Loads PyTorch <c>nn.Linear</c> and <c>nn.LayerNorm</c> parameters into the repository's layers.</summary>
 internal static class TorchParameters
 {
+    /// <summary>
+    /// <paramref name="count"/> draws from N(0, <paramref name="std"/>²), using both values of each Box–Muller pair:
+    /// initializing ResNet-18's 11.7M weights one value per pair cost most of a second.
+    /// </summary>
+    public static Vector<T> Gaussian<T>(Random random, int count, double std)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        var v = new Vector<T>(count);
+        for (int i = 0; i < count; i += 2)
+        {
+            double radius = std * Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble()));
+            double angle = 2.0 * Math.PI * random.NextDouble();
+            v[i] = ops.FromDouble(radius * Math.Cos(angle));
+            if (i + 1 < count) v[i + 1] = ops.FromDouble(radius * Math.Sin(angle));
+        }
+        return v;
+    }
+
     /// <summary>Loads <c>weight [out, in]</c> (and <c>bias [out]</c>) into a dense layer, materializing it first.</summary>
     public static void Linear<T>(IEngine engine, DenseLayer<T> layer, int inputs, int outputs, double[] weight, double[]? bias)
     {

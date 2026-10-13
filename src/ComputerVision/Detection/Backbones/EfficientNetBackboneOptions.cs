@@ -36,5 +36,7 @@ public class EfficientNetBackboneOptions : DetectionBackboneOptions
     public void Validate()
     {
         ValidateBackboneCore();
+        if (Variant == EfficientNetVariant.Custom)
+            throw new ArgumentException("A detection backbone is one of the published sizes, B0 to B7.", nameof(Variant));
     }
 }
