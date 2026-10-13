@@ -49,10 +49,9 @@ public class MemoryBenchmarks
     public void IterationSetup()
     {
         // Reset scratch tensor before each iteration so in-place ops don't accumulate.
-        // AsWritableSpan is internal on Tensor<T>, so use TensorAdd with an implicit
-        // zero: actually fastest to materialize through AsSpan() + indexer.
-        var srcSpan = _inputA.AsSpan();
-        for (int i = 0; i < srcSpan.Length; i++) _scratchA[i] = srcSpan[i];
+        // Tensor<T>.AsSpan is internal since AiDotNet.Tensors 0.136, so copy through the
+        // indexer, as Setup does; this runs outside the measured region.
+        for (int i = 0; i < _inputA.Length; i++) _scratchA[i] = _inputA[i];
     }
 
     [Benchmark(Description = "TensorAdd (allocating)")]
