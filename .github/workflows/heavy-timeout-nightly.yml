@@ -23,6 +23,14 @@ on:
         description: 'Test classes per test-host process. Lower bounds peak memory; higher spends less time re-discovering the assembly.'
         required: false
         default: '1'
+      class_filter:
+        description: 'Run only the HeavyTimeout classes whose full name contains this, in one job instead of 30 slices. Empty runs the whole lane.'
+        required: false
+        default: ''
+      tensors_ref:
+        description: 'AiDotNet.Tensors branch, tag or SHA to build against from source instead of the package (diagnostic builds). Empty uses the package.'
+        required: false
+        default: ''
 
 # Don't fight the PR test workflow's concurrency group; this is its own long-running lane.
 concurrency:
@@ -34,8 +42,13 @@ permissions:
 
 jobs:
   heavy-timeout:
-    name: Heavy Timeout Models (${{ matrix.slice }}/30)
+    name: Heavy Timeout Models (${{ matrix.slice }}/${{ inputs.class_filter && '1' || '30' }})
     runs-on: ubuntu-latest
+    # tensors_ref builds against an AiDotNet.Tensors source checkout (src/AiDotNet.csproj's UseLocalTensors).
+    # MSBuild reads environment variables as properties, so restore, build and the test runs all see the same
+    # value; empty keeps the package reference.
+    env:
+      UseLocalTensors: ${{ inputs.tensors_ref && 'true' || '' }}
     timeout-minutes: 350   # generous budget; these models are the slow ones by definition
     # SLICED ACROSS PARALLEL JOBS (#2087). With one class per process the lane takes about 11 minutes per class,
     # and 220 classes do not fit one 350-minute job: the first capped run finished 8 before the timeout cancelled it.
@@ -49,8 +62,8 @@ jobs:
       fail-fast: false
       max-parallel: 10
       matrix:
-        slice: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
-                20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
+        # A class_filter dispatch is one targeted run, so it takes a single slice.
+        slice: ${{ fromJSON(inputs.class_filter && '[0]' || '[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
@@ -63,6 +76,24 @@ jobs:
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
         with:
           dotnet-version: '10.0.x'
+
+      - name: Check out AiDotNet.Tensors source (tensors_ref only)
+        if: ${{ inputs.tensors_ref }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          repository: ooples/AiDotNet.Tensors
+          ref: ${{ inputs.tensors_ref }}
+          path: _tensors
+          persist-credentials: false
+
+      - name: Place AiDotNet.Tensors beside the repository (tensors_ref only)
+        # UseLocalTensors references ../AiDotNet.Tensors, and that checkout must sit OUTSIDE this repository so
+        # this repository's Directory.Packages.props (central package management) does not apply to it.
+        if: ${{ inputs.tensors_ref }}
+        shell: bash
+        run: |
+          mv _tensors ../AiDotNet.Tensors
+          echo "Building against AiDotNet.Tensors $(git -C ../AiDotNet.Tensors rev-parse HEAD)"
 
       - name: Restore dependencies
         run: dotnet restore tests/AiDotNet.Tests/AiDotNetTests.csproj
@@ -115,6 +146,10 @@ jobs:
           AIDOTNET_LICENSE_KEY: ${{ secrets.AIDOTNET_LICENSE_KEY }}
           HEAVY_CHUNK_SIZE: ${{ inputs.chunk_size }}
           HEAVY_SLICE: ${{ matrix.slice }}
+          HEAVY_SLICE_COUNT: ${{ inputs.class_filter && '1' || '30' }}
+          HEAVY_CLASS_FILTER: ${{ inputs.class_filter }}
+          # Tests that write a diagnostic file put it here, so the results upload carries it.
+          AIDOTNET_DIAG_DIR: ${{ github.workspace }}/artifacts/heavy-timeout
           # Lengthens only HeavyTimeout tests' [Fact(Timeout)] (the PR gate's 120 s budget) by this factor; see
           # tests/AiDotNet.Tests/TestInfrastructure/HeavyTimeoutScalingExecutor.cs. Assertions are unchanged, and a real
           # hang is still stopped by --blame-hang (10 min) and the per-chunk cap below.
@@ -191,8 +226,16 @@ jobs:
           # HeavyTimeoutTestClassNames set -- so any list written here would drift out of step with
           # the generator the first time a model is added to it.
           Write-Host '--- discovering HeavyTimeout test classes ---'
+          $discoveryFilter = 'Category=HeavyTimeout'
+          if ($env:HEAVY_CLASS_FILTER) {
+            if ($env:HEAVY_CLASS_FILTER -notmatch '^[A-Za-z0-9_.]+$') {
+              Write-Host "::error title=Invalid class_filter::'$($env:HEAVY_CLASS_FILTER)' must be a class or namespace name."
+              exit 1
+            }
+            $discoveryFilter += "&FullyQualifiedName~$($env:HEAVY_CLASS_FILTER)"
+          }
           $listed = @(dotnet test $testProject -c Release --framework net10.0 --no-build --no-restore `
-            --filter 'Category=HeavyTimeout' --list-tests 2>&1)
+            --filter $discoveryFilter --list-tests 2>&1)
           $discoveryExit = $LASTEXITCODE
 
           if ($discoveryExit -ne 0) {
@@ -216,7 +259,7 @@ jobs:
             exit 1
           }
 
-          $sliceCount = 30
+          $sliceCount = [int]$env:HEAVY_SLICE_COUNT
           $slice = [int]$env:HEAVY_SLICE
           $classes = @(for ($c = 0; $c -lt $classes.Count; $c++) { if ($c % $sliceCount -eq $slice) { $classes[$c] } })
           Write-Host "--- slice $($slice) of $($sliceCount): $($classes.Count) class(es) ---"

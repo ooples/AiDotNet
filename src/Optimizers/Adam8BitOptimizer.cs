@@ -594,35 +594,44 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             // at 2 bytes/element while the math runs at full precision.
             if (_options.UseBFloat16MomentStorage)
             {
-                // Moments expanded to transient full-precision tensors; update them IN PLACE to avoid
-                // ~7 extra full-size scratch allocations per parameter (#1688 Fix 2). Math identical.
-                // AllocateTapeState always allocates both BF16 buffers when UseBFloat16MomentStorage is
-                // set, so they are non-null on this path; capture into locals (no null-forgiving operator).
-                ushort[] mBf16 = state.MBf16 ?? throw new InvalidOperationException("BF16 moment buffer M was not allocated.");
-                ushort[] vBf16 = state.VBf16 ?? throw new InvalidOperationException("BF16 moment buffer V was not allocated.");
+                // AiDotNet#1767 diagnostic (branch only): name the parameter, its gradient and its
+                // moment state on any failure in this step, keeping the original exception and its frames.
+                try
+                {
+                    // Moments expanded to transient full-precision tensors; update them IN PLACE to avoid
+                    // ~7 extra full-size scratch allocations per parameter (#1688 Fix 2). Math identical.
+                    // AllocateTapeState always allocates both BF16 buffers when UseBFloat16MomentStorage is
+                    // set, so they are non-null on this path; capture into locals (no null-forgiving operator).
+                    ushort[] mBf16 = state.MBf16 ?? throw new InvalidOperationException("BF16 moment buffer M was not allocated.");
+                    ushort[] vBf16 = state.VBf16 ?? throw new InvalidOperationException("BF16 moment buffer V was not allocated.");
 
-                Tensor<T> mB = Bf16ToTensor(mBf16, param._shape);
-                Tensor<T> vB = Bf16ToTensor(vBf16, param._shape);
+                    Tensor<T> mB = Bf16ToTensor(mBf16, param._shape);
+                    Tensor<T> vB = Bf16ToTensor(vBf16, param._shape);
 
-                var gradScaledB = Engine.TensorMultiplyScalar(grad, oneMinusBeta1); // (1-beta1)·g
-                Engine.TensorMultiplyScalarInPlace(mB, beta1);                      // mB *= beta1
-                Engine.TensorAddInPlace(mB, gradScaledB);                           // mB := m_t
-                var gradSqB = Engine.TensorMultiply(grad, grad);                    // g²
-                Engine.TensorMultiplyScalarInPlace(gradSqB, oneMinusBeta2);         // (1-beta2)·g²
-                Engine.TensorMultiplyScalarInPlace(vB, beta2);                      // vB *= beta2
-                Engine.TensorAddInPlace(vB, gradSqB);                               // vB := v_t
+                    var gradScaledB = Engine.TensorMultiplyScalar(grad, oneMinusBeta1); // (1-beta1)·g
+                    Engine.TensorMultiplyScalarInPlace(mB, beta1);                      // mB *= beta1
+                    Engine.TensorAddInPlace(mB, gradScaledB);                           // mB := m_t
+                    var gradSqB = Engine.TensorMultiply(grad, grad);                    // g²
+                    Engine.TensorMultiplyScalarInPlace(gradSqB, oneMinusBeta2);         // (1-beta2)·g²
+                    Engine.TensorMultiplyScalarInPlace(vB, beta2);                      // vB *= beta2
+                    Engine.TensorAddInPlace(vB, gradSqB);                               // vB := v_t
 
-                // mB/vB were updated in place above, so they hold m_t/v_t — pack them straight back into
-                // the null-safe BF16 buffers (no separate newMB/newVB tensors, no null-forgiving operator).
-                TensorToBf16(mB, mBf16);
-                TensorToBf16(vB, vBf16);
+                    // mB/vB were updated in place above, so they hold m_t/v_t — pack them straight back into
+                    // the null-safe BF16 buffers (no separate newMB/newVB tensors, no null-forgiving operator).
+                    TensorToBf16(mB, mBf16);
+                    TensorToBf16(vB, vBf16);
 
-                var mHatB = Engine.TensorDivideScalar(mB, biasCorrection1);
-                var vHatB = Engine.TensorDivideScalar(vB, biasCorrection2);
-                var denomB = Engine.TensorAddScalar(Engine.TensorSqrt(vHatB), epsilon);
-                var updateB = Engine.TensorMultiplyScalar(Engine.TensorDivide(mHatB, denomB), CurrentLearningRate);
-                Engine.TensorSubtractInPlace(param, updateB);
-                continue;
+                    var mHatB = Engine.TensorDivideScalar(mB, biasCorrection1);
+                    var vHatB = Engine.TensorDivideScalar(vB, biasCorrection2);
+                    var denomB = Engine.TensorAddScalar(Engine.TensorSqrt(vHatB), epsilon);
+                    var updateB = Engine.TensorMultiplyScalar(Engine.TensorDivide(mHatB, denomB), CurrentLearningRate);
+                    Engine.TensorSubtractInPlace(param, updateB);
+                    continue;
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    throw new InvalidOperationException(DescribeBf16StepFailure(parameterIndex, param, grad, state), ex);
+                }
             }
 
             // Below Min8BitSize: plain Adam on full-precision moments (bitsandbytes' min_8bit_size).
@@ -929,6 +938,37 @@ public class Adam8BitOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase<
             }
         });
         return result;
+    }
+
+    /// <summary>
+    /// AiDotNet#1767 diagnostic (branch only): describes the BF16 step's inputs for a failure message.
+    /// Never throws.
+    /// </summary>
+    private string DescribeBf16StepFailure(int parameterIndex, Tensor<T> param, Tensor<T> grad, QuantizedTapeState state)
+    {
+        try
+        {
+            static string Describe(Tensor<T> t)
+            {
+                Array? backing;
+                try { backing = t.GetCpuData(); }
+                catch (Exception e) { return "[" + string.Join(",", t._shape) + "] (backing unavailable: " + e.GetType().Name + ")"; }
+                return "[" + string.Join(",", t._shape) + "] length=" + t.Length +
+                    " contiguous=" + t.IsContiguous + " view=" + t.IsView + " offset=" + t._storageOffset +
+                    " backingLength=" + (backing?.Length ?? -1);
+            }
+
+            return "Adam8BitOptimizer BF16 step failed: tapeStep=" + _tapeStep +
+                ", parameterIndex=" + parameterIndex + ", T=" + typeof(T).Name +
+                ", param=" + Describe(param) + ", grad=" + Describe(grad) +
+                ", state.Length=" + state.Length + ", mBf16=" + (state.MBf16?.Length ?? -1) +
+                ", vBf16=" + (state.VBf16?.Length ?? -1) +
+                ", thread=" + Environment.CurrentManagedThreadId;
+        }
+        catch (Exception e)
+        {
+            return "Adam8BitOptimizer BF16 step failed (description unavailable: " + e.GetType().Name + ")";
+        }
     }
 
     /// <summary>

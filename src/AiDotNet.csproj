@@ -278,7 +278,11 @@
 	  <PackageReference Include="AiDotNet.Tensors" />
 	</ItemGroup>
 	<ItemGroup Condition="'$(UseLocalTensors)' == 'true'">
-	  <ProjectReference Include="$(MSBuildThisFileDirectory)..\..\AiDotNet.Tensors\src\AiDotNet.Tensors\AiDotNet.Tensors.csproj" />
+	  <!-- LocalTensorsProject overrides the sibling path, so a second checkout (a worktree, or the
+	       heavy lane's checkout of a diagnostic Tensors branch) can be built without touching the
+	       main sibling checkout. -->
+	  <ProjectReference Include="$(LocalTensorsProject)" Condition="'$(LocalTensorsProject)' != ''" />
+	  <ProjectReference Include="$(MSBuildThisFileDirectory)..\..\AiDotNet.Tensors\src\AiDotNet.Tensors\AiDotNet.Tensors.csproj" Condition="'$(LocalTensorsProject)' == ''" />
 	</ItemGroup>
 
 	<!-- Generic quality-diversity engine extracted to the AiDotNet.Evolution package. -->
