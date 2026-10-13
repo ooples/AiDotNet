@@ -4,11 +4,10 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-// Foundation-scale-at-default: the model's full-scale default config has a Training peak (weights +
-// gradients + Adam state + activations ~ 4x the ~1 GB SD/DiT-scale weights) that OOMs the 16 GB CI
-// runner (verified via the CI logs — testhost/runner OOM at default scale; fits only on a larger box).
-// Moved to the HeavyTimeout nightly lane so the default PR-gate shard fits and passes (#1706/#1305).
-[Xunit.Trait("Category", "HeavyTimeout")]
+// #1714: back in the default gate. The HeavyTimeout deferral here was measured away: in the
+// nightly lane (run 38117342722, one class per process under a managed heap cap of 70% of
+// runner RAM) this class ran 13 of 13 tests green, slowest 3.2 s and no OutOfMemoryException
+// -- far inside the 120 s per-test gate. Re-defer only against a fresh measurement.
 [Xunit.Collection("FoundationScaleSerial")] // dedicated cores (#1622 L4)
 public class CycleGANTurboModelTests : DiffusionModelTestBase<float>
 {

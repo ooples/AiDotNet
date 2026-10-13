@@ -6,10 +6,10 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
-// HeavyTimeout (#1706): foundation-scale diffusion — verified OOM (System.OutOfMemoryException at
-// CONSTRUCTION under a 16 GB DOTNET_GCHeapHardLimit reproducing the CI ceiling; Metadata_ShouldExist
-// alone OOMs), OS-OOM-kills the Diffusion SE-SP shard. Nightly heavy lane; drop once streaming fits it.
-[Xunit.Trait("Category", "HeavyTimeout")]
+// #1714: back in the default gate. The HeavyTimeout deferral here was measured away: in the
+// nightly lane (run 38117342722, one class per process under a managed heap cap of 70% of
+// runner RAM) this class ran 13 of 13 tests green, slowest 5.1 s and no OutOfMemoryException
+// -- far inside the 120 s per-test gate. Re-defer only against a fresh measurement.
 public class SpotDiffusionModelTests : DiffusionModelTestBase<float>
 {
     // Per Ataev et al. 2024: latent diffusion with spatial tiling

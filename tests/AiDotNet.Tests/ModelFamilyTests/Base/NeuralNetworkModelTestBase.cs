@@ -5208,6 +5208,18 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         double relTol = isDouble ? 1e-3 : 5e-2;
         double absFloor = isDouble ? 1e-7 : 1e-3;
 
+        // The per-coordinate atol, scaled to THIS model's gradients and capped at absFloor. A fixed
+        // 1e-3 would wave through a model whose gradients are all ~1e-4 - a 2x scale defect there errs
+        // by only 1e-4 - so atol is relTol of the gradient's RMS whenever that is smaller.
+        double analyticalSumSquares = 0.0;
+        for (int gradientIndex = 0; gradientIndex < analytical.Length; gradientIndex++)
+        {
+            double value = ConvertToDouble(analytical[gradientIndex]);
+            if (IsFinite(value)) analyticalSumSquares += value * value;
+        }
+        double analyticalRms = analytical.Length == 0 ? 0.0 : System.Math.Sqrt(analyticalSumSquares / analytical.Length);
+        double coordinateAbsTol = System.Math.Min(absFloor, relTol * analyticalRms);
+
         // Cost cap: each sampled parameter costs two forward passes. Large vision / segmentation /
         // VLM models have multi-second forwards, so a fixed sweep blows the 120 s xUnit budget
         // (InternImage, GrokVision timed out — not a correctness failure). Scale the sample count
@@ -5378,8 +5390,47 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 }
             }
 
+            // A SMALL GRADIENT ON AN FP32 OBJECTIVE. Every secant above is two loss evaluations, and
+            // when the coordinate moves the loss by only a few times its rounding noise, each secant
+            // is mostly noise: RAFT's flat-0 coordinate (analytic -2.106E-3, loss ~3.107) gave
+            // -1.83E-3, -2.03E-3, -3.07E-3 on adjacent ladder rungs, and the ladder kept -3.07E-3.
+            // Fitting y = a + b*x + c*x^2 through the base loss and 16 probes spanning the ladder's own
+            // finest rungs (+-eps/32 .. +-eps/4) averages that noise; the quadratic term absorbs
+            // curvature, so b is the local derivative. Measured on that coordinate: b = -2.244E-3,
+            // 3.2% from analytic, where every single secant was 9-46% off. The fit is deliberately
+            // NARROW: widened to +-eps/2 or +-eps the same coordinate settles 15-18% away, because the
+            // network is non-smooth at that scale, so a wide fit measures a secant, not a derivative.
+            // The tolerance is unchanged, and a coordinate whose fitted slope still disagrees is
+            // reported as a mismatch exactly as before.
+            if (relErr > relTol && gradCheckClock.Elapsed.TotalSeconds < GradCheckBudgetSeconds)
+            {
+                var fit = GradientCheckLocalSlopeFit(
+                    nn, loss, input, target, theta, i, orig, eps / 32.0, 8, objectiveAfterParameterRoundTrip);
+                // Replaces the ladder's estimate outright, never "whichever agrees better": choosing
+                // between estimators by their distance to the analytical answer would teach the oracle
+                // the answer it is checking.
+                if (fit.HasValue)
+                {
+                    numericalDetail += $", localFit={fit.Value.Slope:E4}+-{fit.Value.StandardError:E2}/{fit.Value.Points}";
+                    numeric = fit.Value.Slope;
+                    denom = System.Math.Max(absFloor, System.Math.Abs(numeric) + System.Math.Abs(analytic));
+                    relErr = System.Math.Abs(numeric - analytic) / denom;
+                }
+            }
+
             checkedCount++;
-            if (relErr > relTol)
+            // THE COMBINED atol + rtol CRITERION, as the directional check below already applies it
+            // (and as torch.autograd.gradcheck does). Pure rtol is unattainable for a small coordinate
+            // on an FP32 network, because the ANALYTICAL side is itself imprecise there: rebuilt in
+            // double with the same weights and input, RAFT's flat-0 gradient is exactly -2.348E-3
+            // (finite differences agree to 0.000% at h = 1e-6), while the FP32 backward reports
+            // -2.106E-3 - 10% off from accumulated rounding, since a 2E-3 coordinate is the residue of
+            // cancelling terms when its neighbours are 0.1-0.66. atol (coordinateAbsTol) is at most the
+            // type's absFloor and shrinks with the model's gradient RMS, so a dropped path (analytic 0
+            // against 2E-3) or a sign flip still fails, coordinates above ~atol/rtol keep the unchanged
+            // rtol, and a model whose gradients are all tiny is not let off by a fixed floor.
+            double absErr = System.Math.Abs(numeric - analytic);
+            if (relErr > relTol && absErr > coordinateAbsTol)
             {
                 double originalParameter = ConvertToDouble(orig);
                 double rightSpan = usedPlusParameter - originalParameter;
@@ -5852,7 +5903,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             : System.Math.Max(2, checkedCount / 3);
         Assert.True(mismatches <= allowedMismatches && directionAgrees,
             $"Analytical gradients disagree with the finite difference on {mismatches}/{checkedCount} " +
-            $"sampled parameters (tol {relTol:P0}, allowed {allowedMismatches}). First: {firstFail}. The " +
+            $"sampled parameters (rtol {relTol:P0}, atol {coordinateAbsTol:E2}, allowed {allowedMismatches}). First: {firstFail}. The " +
             "backward pass is likely incorrect (sign, scale, missing term, or a dropped gradient)." +
             directionFailure);
     }
@@ -5891,6 +5942,79 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         {
             network.UpdateParameters(originalParameters);
         }
+    }
+
+    /// <summary>
+    /// The local derivative of the objective along one coordinate, from a least-squares quadratic
+    /// y = a + b*x + c*x^2 through the base loss and the losses at +-1..+-<paramref name="pointsPerSide"/>
+    /// multiples of <paramref name="unit"/>. Returns b, its standard error, and the number of points;
+    /// null when too few distinct, finite points survive. x is the parameter value actually stored
+    /// (T may round the requested offset), so quantization cannot bias the slope.
+    /// </summary>
+    private (double Slope, double StandardError, int Points)? GradientCheckLocalSlopeFit(
+        AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network,
+        AiDotNet.LossFunctions.LossFunctionBase<T> loss,
+        Tensor<T> input,
+        Tensor<T> target,
+        Vector<T> originalParameters,
+        int flatIndex,
+        T originalValue,
+        double unit,
+        int pointsPerSide,
+        double baseLoss)
+    {
+        double origin = ConvertToDouble(originalValue);
+        var xs = new List<double> { 0.0 };
+        var ys = new List<double> { baseLoss };
+        for (int k = 1; k <= pointsPerSide; k++)
+        {
+            var pair = GradientCheckLossPairAt(network, loss, input, target, originalParameters, flatIndex, originalValue, k * unit);
+            if (IsFinite(pair.Plus) && pair.PlusParameter != origin) { xs.Add(pair.PlusParameter - origin); ys.Add(pair.Plus); }
+            if (IsFinite(pair.Minus) && pair.MinusParameter != origin) { xs.Add(pair.MinusParameter - origin); ys.Add(pair.Minus); }
+        }
+        int m = xs.Count;
+        if (m < 5 || !IsFinite(baseLoss)) return null;
+
+        // Scale x to O(1) before forming the normal equations, so x^4 sums do not lose precision.
+        double scale = 0.0;
+        foreach (var x in xs) scale = System.Math.Max(scale, System.Math.Abs(x));
+        if (scale == 0.0) return null;
+        double s1 = 0, s2 = 0, s3 = 0, s4 = 0, t0 = 0, t1 = 0, t2 = 0;
+        for (int j = 0; j < m; j++)
+        {
+            double x = xs[j] / scale, y = ys[j];
+            s1 += x; s2 += x * x; s3 += x * x * x; s4 += x * x * x * x;
+            t0 += y; t1 += x * y; t2 += x * x * y;
+        }
+        double[,] a = { { m, s1, s2 }, { s1, s2, s3 }, { s2, s3, s4 } };
+        double determinant = Determinant3(a);
+        if (determinant == 0.0 || !IsFinite(determinant)) return null;
+        double[] rhs = { t0, t1, t2 };
+        var coefficients = new double[3];
+        for (int column = 0; column < 3; column++)
+        {
+            var replaced = (double[,])a.Clone();
+            for (int row = 0; row < 3; row++) replaced[row, column] = rhs[row];
+            coefficients[column] = Determinant3(replaced) / determinant;
+        }
+
+        double sse = 0.0;
+        for (int j = 0; j < m; j++)
+        {
+            double x = xs[j] / scale;
+            double residual = ys[j] - (coefficients[0] + coefficients[1] * x + coefficients[2] * x * x);
+            sse += residual * residual;
+        }
+        // Var(b) = sigma^2 * (A^-1)[1,1]; (A^-1)[1,1] is the [1,1] cofactor over the determinant.
+        double inverse11 = ((a[0, 0] * a[2, 2]) - (a[0, 2] * a[2, 0])) / determinant;
+        double standardError = System.Math.Sqrt(System.Math.Max(0.0, sse / (m - 3) * inverse11)) / scale;
+        double slope = coefficients[1] / scale;
+        return IsFinite(slope) ? (slope, standardError, m) : null;
+
+        static double Determinant3(double[,] q) =>
+            q[0, 0] * ((q[1, 1] * q[2, 2]) - (q[1, 2] * q[2, 1]))
+            - q[0, 1] * ((q[1, 0] * q[2, 2]) - (q[1, 2] * q[2, 0]))
+            + q[0, 2] * ((q[1, 0] * q[2, 1]) - (q[1, 1] * q[2, 0]));
     }
 
     private (double Plus, double Minus, double PredictedSpan, int ChangedCoordinates) GradientCheckDirectionalLossPairAt(

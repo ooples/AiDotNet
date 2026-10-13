@@ -369,12 +369,16 @@ Bumped 0.134.0 to 0.134.3 for AiDotNet.Tensors #1085 and #1087: MathHelper.Tanh 
 Bumped 0.134.4 to 0.135.0 for AiDotNet.Tensors #1095: TapeStepContext.ValidateBufferAlignment counts a
          sparse leaf's buffer slot as its NonZeroCount. 0.134.4 counted the dense size, so every sparse model's
          tape step threw "ParameterBuffer total size (110) does not match parameter total (210)" once sparse
-         parameters kept their pattern in the contiguous buffer (SparseNeuralNetwork, #1804). -->
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.135.0" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.135.0" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.135.0" />
+         parameters kept their pattern in the contiguous buffer (SparseNeuralNetwork, #1804).
+
+Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv input gradient was served a stale
+         transposed kernel on Linux (a recycled flipped-kernel buffer hit the im2col conv's identity-keyed transpose
+         cache), so DiffCut, DiffSeg, SegNeXt and RAFT trained on wrong input gradients in CI only. -->
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.136.0" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.136.0" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.136.0" />
     <PackageVersion Include="AiDotNet.Evolution" Version="0.2.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.135.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.136.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />

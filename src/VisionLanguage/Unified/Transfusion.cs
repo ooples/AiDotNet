@@ -72,7 +72,8 @@ namespace AiDotNet.VisionLanguage.Unified;
                         + "rate of 3e-4 warmed up over 4000 steps and decaying to 1.5e-5 under a cosine "
                         + "scheduler. The stated batch of 4M tokens is not declared as a reference batch "
                         + "size, which counts examples rather than tokens.")]
-public partial class Transfusion<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>
+public partial class Transfusion<T>
+    : VisionLanguageModelBase<T>, IUnifiedVisionModel<T>, ITrainingObjectiveProvider<T>
 {
     private readonly TransfusionOptions _options;
 
@@ -189,19 +190,20 @@ public partial class Transfusion<T> : VisionLanguageModelBase<T>, IUnifiedVision
     }
 
     /// <summary>
-    /// Generates an image from text using Transfusion's diffusion-within-transformer approach.
-    /// Per the paper (Meta, 2024), Transfusion uniquely combines two loss functions in
-    /// one model: autoregressive loss for text, diffusion loss for images. For generation:
-    /// (1) Text tokens are processed autoregressively by the shared transformer,
-    /// (2) When BOI (beginning of image) token is predicted, the model switches to
-    ///     diffusion mode for the next 256 positions (image patches),
-    /// (3) Image patches are generated via DDPM diffusion: iterative denoising from
-    ///     Gaussian noise, with the transformer acting as the denoising network,
-    /// (4) Each denoising step uses bidirectional attention over image patches but
-    ///     causal attention from text context,
-    /// (5) After EOI token, the model can continue generating text.
-    /// Output: image tensor of size OutputImageSize * OutputImageSize * 3.
+    /// Generates an image from text with the model the objective trains (Zhou et al. 2024,
+    /// Sec. 3): the caption is embedded, a BOI marker opens the image block, and the image's
+    /// patches are denoised from Gaussian noise by the shared trunk under bidirectional
+    /// attention, reading the noise prediction from the same head the diffusion term of
+    /// <see cref="Train"/> minimizes.
     /// </summary>
+    /// <remarks>
+    /// Sampling is DDIM (Song et al. 2021) with <c>eta = 0</c> over a strided subset of the
+    /// trained cosine schedule -- <see cref="TransfusionOptions.DiffusionInferenceSteps"/> steps
+    /// of the <see cref="TransfusionOptions.DiffusionTimesteps"/> the objective trains -- so a
+    /// training step that lowers the diffusion loss is a training step that changes this output.
+    /// The result is <c>OutputImageSize * OutputImageSize * 3</c> values in <c>[0, 1]</c>,
+    /// interleaved per pixel, resampled from the patch grid at the training resolution.
+    /// </remarks>
     public Tensor<T> GenerateImage(string textDescription)
     {
         ThrowIfDisposed();
@@ -209,120 +211,17 @@ public partial class Transfusion<T> : VisionLanguageModelBase<T>, IUnifiedVision
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(tokens);
 
-        int outSize = _options.OutputImageSize;
-        int outPixels = outSize * outSize * 3;
-        int numPatches = _options.NumVisualTokens;
-        int dim = _options.DecoderDim;
-
-        // Step 1: Process text prefix autoregressively
-        var textHidden = tokens;
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-            textHidden = Layers[i].Forward(textHidden);
-        int hiddenDim = textHidden.Length;
-
-        // Step 2: Initialize noisy image patches from Gaussian
-        var patchLatents = new double[numPatches];
-        for (int pt = 0; pt < numPatches; pt++)
-        {
-            // Pseudo-Gaussian via CLT (sum of uniform approximation)
-            double noise = 0;
-            for (int k = 0; k < 12; k++)
-                noise += Math.Sin((pt + 1) * (k + 1) * 0.37) * 0.5 + 0.5;
-            patchLatents[pt] = (noise / 12.0 - 0.5) * 2.0; // Approximate N(0,1)
-        }
-
-        // Step 3: DDPM diffusion denoising using the shared transformer
-        int numDiffSteps = 50;
-        for (int step = 0; step < numDiffSteps; step++)
-        {
-            double t = 1.0 - (double)step / numDiffSteps;
-            // Linear beta schedule
-            double beta = 0.0001 + (0.02 - 0.0001) * t;
-            double alpha = 1.0 - beta;
-            double alphaCum = Math.Pow(alpha, step + 1);
-
-            // Create input: text context + noisy patches
-            var stepInput = new Tensor<T>([dim]);
-            for (int d = 0; d < dim; d++)
-            {
-                int patchIdx = d % numPatches;
-                double noisy = patchLatents[patchIdx];
-                // Text conditioning via cross-attention
-                double textCond = NumOps.ToDouble(textHidden[d % hiddenDim]) * 0.1;
-                // Timestep embedding
-                double timeEmb = Math.Sin(t * (d + 1) * 0.05) * 0.1;
-                stepInput[d] = NumOps.FromDouble(noisy + textCond + timeEmb);
-            }
-
-            // Transformer denoising step (bidirectional over patches)
-            var noisePred = stepInput;
-            for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-                noisePred = Layers[i].Forward(noisePred);
-
-            int predDim = noisePred.Length;
-
-            // DDPM update: x_{t-1} = (1/sqrt(alpha)) * (x_t - beta/sqrt(1-alpha_cum) * noise_pred)
-            for (int pt = 0; pt < numPatches; pt++)
-            {
-                double pred = NumOps.ToDouble(noisePred[pt % predDim]);
-                double sqrtAlpha = Math.Sqrt(alpha);
-                double coeff = beta / Math.Sqrt(Math.Max(1.0 - alphaCum, 1e-8));
-                patchLatents[pt] = (patchLatents[pt] - coeff * pred) / Math.Max(sqrtAlpha, 1e-8);
-            }
-        }
-
-        // Step 4: Unpatchify - convert patches to pixel grid
-        int gridSize = (int)Math.Sqrt(numPatches);
-        if (gridSize < 4)
-            gridSize = 4;
-        int patchPixelSize = outSize / gridSize;
-        if (patchPixelSize < 1)
-            patchPixelSize = 1;
-
-        var result = new Tensor<T>([outPixels]);
-        for (int gy = 0; gy < gridSize; gy++)
-        {
-            for (int gx = 0; gx < gridSize; gx++)
-            {
-                int patchIdx = gy * gridSize + gx;
-                if (patchIdx >= numPatches)
-                    break;
-
-                double patchVal = patchLatents[patchIdx];
-                double r = 1.0 / (1.0 + Math.Exp(-patchVal));
-                double g = 1.0 / (1.0 + Math.Exp(-patchVal * 1.1 + 0.2));
-                double b = 1.0 / (1.0 + Math.Exp(-patchVal * 0.9 - 0.2));
-
-                for (int py = 0; py < patchPixelSize; py++)
-                {
-                    for (int px = 0; px < patchPixelSize; px++)
-                    {
-                        int imgY = gy * patchPixelSize + py;
-                        int imgX = gx * patchPixelSize + px;
-                        if (imgY >= outSize || imgX >= outSize)
-                            continue;
-                        int pixelIdx = (imgY * outSize + imgX) * 3;
-                        if (pixelIdx + 2 >= outPixels)
-                            continue;
-                        double smooth =
-                            0.95
-                            + 0.05
-                                * Math.Cos((double)px / patchPixelSize * Math.PI)
-                                * Math.Cos((double)py / patchPixelSize * Math.PI);
-                        result[pixelIdx] = NumOps.FromDouble(r * smooth);
-                        result[pixelIdx + 1] = NumOps.FromDouble(g * smooth);
-                        result[pixelIdx + 2] = NumOps.FromDouble(b * smooth);
-                    }
-                }
-            }
-        }
-        return result;
+        int[] caption = NeuralNetworkBase<T>.TokenIds(
+            tokens, ClampTokenId, _options.MaxSequenceLength);
+        var patches = SampleImagePatches(caption, _options.DiffusionInferenceSteps);
+        return Unpatchify(patches, Math.Max(1, _options.OutputImageSize));
     }
 
     protected override void InitializeLayers()
     {
         if (!_useNativeMode)
             return;
+        InitializeTrainingHeads();
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
             Layers.AddRange(Architecture.Layers);
@@ -385,13 +284,22 @@ public partial class Transfusion<T> : VisionLanguageModelBase<T>, IUnifiedVision
         );
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// One step on Transfusion's own objective, <c>L = L_LM + lambda * L_DDPM</c> (Zhou et al.
+    /// 2024, Eq. 4): next-token cross-entropy over the text positions of the mixed sequence plus
+    /// the weighted DDPM noise-prediction loss over the image's patches. <paramref name="input"/>
+    /// is the image; <paramref name="expected"/> is the caption's token ids when it is rank-1, and
+    /// any other shape carries no text, which leaves the diffusion term alone with no tokens to
+    /// score. See <see cref="TrainMixedModal"/> for the masks each term is read under.
+    /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (expected is null) throw new ArgumentNullException(nameof(expected));
+        TrainMixedModal(input, expected);
     }
 
     /// <inheritdoc />
@@ -418,7 +326,11 @@ public partial class Transfusion<T> : VisionLanguageModelBase<T>, IUnifiedVision
         long vision = (long)_options.NumVisionLayers * 12L * visionDim * visionDim;
         long decoder = (long)_options.NumDecoderLayers * 12L * decoderDim * decoderDim;
         long embeddings = (long)_options.VocabSize * decoderDim;
-        return vision + decoder + embeddings;
+        // The mixed-modal training path adds a vocabulary head (d x V) and the linear
+        // patchifier / noise head (patchDim x d each), all built in the constructor.
+        long lmHead = (long)_options.VocabSize * decoderDim;
+        long patchHeads = 2L * _patchDim * decoderDim;
+        return vision + decoder + embeddings + lmHead + patchHeads;
     }
 
     public override ModelMetadata<T> GetModelMetadata()

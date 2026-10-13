@@ -1,0 +1,10 @@
+{
+  "$comment": "Lines that match the performance-claim patterns but make no claim about AiDotNet's speed. Each entry needs a reason; an entry that stops matching fails the check.",
+  "entries": [
+    { "file": "src/content/docs/tutorials/audio.md", "text": "`Tiny` (fastest) to `Large` (most accurate)", "reason": "Compares Whisper model sizes with each other, not AiDotNet with another library." },
+    { "file": "src/content/docs/tutorials/llm-fine-tuning.md", "text": "`alpha` ≈ 2 × `rank`", "reason": "A LoRA hyperparameter ratio." },
+    { "file": "src/pages/account/licenses/index.astro", "text": "30s is 3-5x the p99", "reason": "Code comment sizing a client timeout." },
+    { "file": "src/pages/admin/licenses/index.astro", "text": "clicking 3× would fire 3 send requests", "reason": "Code comment about repeated clicks." },
+    { "file": "src/pages/security.astro", "text": "This is the fastest path and gives us a structured audit trail.", "reason": "Fastest way to report a vulnerability, not a performance claim." }
+  ]
+}
