@@ -174,6 +174,68 @@ public class LSTMVAETests
         }
     }
 
+    [Fact]
+    public void DecoderAccumulateGradients_PublishesTheAccumulatedGradients()
+    {
+        // The decoder trains outside the autodiff tape, so nothing scatters into its gradient
+        // surface. Without publishing, GetParameterGradients reported an empty "never computed"
+        // vector after a step that had computed real gradients (PR #2295 review).
+        using var decoder = new LSTMDecoderTensor<double>(latentDim: 2, outputSize: 2, hiddenSize: 2);
+        using var latent = new Tensor<double>([2]);
+        latent[0] = 0.25;
+        latent[1] = -0.5;
+
+        var (output, hidden) = decoder.DecodeWithCache(latent);
+        using (output)
+        using (hidden)
+        using (var dOutput = new Tensor<double>([2]))
+        {
+            dOutput[0] = 0.5;
+            dOutput[1] = -0.25;
+            using (decoder.AccumulateGradients(latent, hidden, dOutput)) { }
+            using (decoder.AccumulateGradients(latent, hidden, dOutput)) { }
+
+            var gradients = decoder.GetParameterGradients();
+
+            // [W_d 2x2 | b_d 2 | W_o 2x2 | b_o 2]: db_o = dOutput per example, summed over two.
+            Assert.Equal(12, gradients.Length);
+            Assert.Equal(1.0, gradients[10], 12);
+            Assert.Equal(-0.5, gradients[11], 12);
+
+            decoder.ResetGradients();
+            Assert.Equal(0, decoder.GetParameterGradients().Length);
+        }
+    }
+
+    [Fact]
+    public void EncoderAccumulateGradients_PublishesTheAccumulatedGradients()
+    {
+        using var encoder = new LSTMEncoderTensor<double>(inputSize: 3, latentDim: 2, hiddenSize: 2);
+        var input = new Vector<double>(new[] { 0.1, -0.2, 0.3 });
+
+        var (mean, logVar, hidden) = encoder.EncodeWithCache(input);
+        using (mean)
+        using (logVar)
+        using (hidden)
+        using (var dMean = new Tensor<double>([2]))
+        using (var dLogVar = new Tensor<double>([2]))
+        {
+            dMean[0] = 0.75;
+            dMean[1] = -0.125;
+            dLogVar[0] = 0.0625;
+            dLogVar[1] = -1.5;
+            encoder.AccumulateGradients(input, hidden, dMean, dLogVar);
+
+            var gradients = encoder.GetParameterGradients();
+
+            // [W 2x3 | b 2 | W_mu 2x2 | b_mu 2 | W_logVar 2x2 | b_logVar 2]
+            Assert.Equal(20, gradients.Length);
+            Assert.Equal(0.75, gradients[12], 12);
+            Assert.Equal(-0.125, gradients[13], 12);
+            Assert.Equal(0.0625, gradients[18], 12);
+            Assert.Equal(-1.5, gradients[19], 12);
+        }
+    }
     #endregion
 
     #region Prediction Tests

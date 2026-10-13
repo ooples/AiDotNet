@@ -60,7 +60,7 @@ internal static class FusedTrainingStep<T>
     /// runs its eager fallback). Throws when a plan that already trained this owner cannot continue, unless the cause
     /// is a device out-of-memory or transient fault (then the plan is dropped and false returned).
     /// </summary>
-    /// <param name="maxGradNorm">Global-norm clip for the fused step (0 = none); combined with the optimizer's own.</param>
+    /// <param name="maxGradNorm">Global-norm clip for the fused step (0 = none, the default); combined with the optimizer's own. No clip is implied: the callers' eager fallbacks hand gradients to the optimizer unclipped, so a non-zero default would change optimization only when compilation picked the fused branch.</param>
     /// <param name="owner">The model; keys its compiled plan and fused session. Defaults to the first layer.</param>
     public static bool TryStep(
         IReadOnlyList<ITrainableLayer<T>> layers,
@@ -70,7 +70,7 @@ internal static class FusedTrainingStep<T>
         Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss,
         object? optimizer,
         out T lossValue,
-        double maxGradNorm = 1.0,
+        double maxGradNorm = 0.0,
         IReadOnlyList<Tensor<T>>? extraTensors = null,
         Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients = null,
         object? owner = null)
