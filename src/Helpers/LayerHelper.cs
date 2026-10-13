@@ -37560,21 +37560,8 @@ public static partial class LayerHelper<T>
         int audioEncoderHeads,
         int swinWindowSize,
         int projectionDim,
-        int audioPatchSize = 4,
-        int melBins = 64)
+        int audioPatchSize = 4)
     {
-        // #2313: HTSAT normalizes the mel image over its FREQUENCY bins before patching
-        // (htsat.py: self.bn0 = nn.BatchNorm2d(mel_bins), applied to the mel-as-channel
-        // transpose). Without it the encoder's first projection sees raw decibels - a range of
-        // roughly -100..0 with a large negative mean - and saturates, which is what made
-        // fine-tuning stall rather than converge. The mel tensor arriving here is
-        // [B, 1, frames, melBins], so the bins ARE the trailing axis and ChannelsLast names
-        // exactly the axis BatchNorm2d(mel_bins) normalizes in the reference.
-        yield return new BatchNormalizationLayer<T>(numFeatures: melBins)
-        {
-            Layout = BatchNormDataLayout.ChannelsLast,
-        };
-
         // HTSAT begins by dividing the log-mel image into learned 2-D patches.
         // This converts [B, 1, frames, melBins] into [B, patchCount, hiddenDim],
         // the token layout consumed by SwinTransformerBlockLayer. Keeping the
@@ -37597,13 +37584,6 @@ public static partial class LayerHelper<T>
         // Mean-pool across the spectrogram patch sequence to get a single
         // audio embedding, then project into the shared CLAP space.
         yield return new GlobalPoolingLayer<T>(poolingType: PoolingType.Average);
-
-        // #2313: the reference projection is an MLP, not one linear map
-        // (model.py: audio_projection = Sequential(Linear, ReLU, Linear)). A single DenseLayer
-        // can only apply a rotation and scale to the tower's output, so the audio and text
-        // towers were being matched in the shared space by two linear maps with no capacity to
-        // reshape either manifold.
-        yield return new DenseLayer<T>(outputSize: projectionDim, activationFunction: new ReLUActivation<T>());
         yield return new DenseLayer<T>(outputSize: projectionDim, activationFunction: new IdentityActivation<T>());
     }
 
@@ -37630,12 +37610,8 @@ public static partial class LayerHelper<T>
         // Token embedding: maps token IDs → hidden vectors.
         yield return new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: textHiddenDim);
 
-        // #2313: RoBERTa learns its position embeddings (Liu 2019 follows Devlin 2018's learned
-        // table, not Vaswani's sinusoid), and the sinusoidal encoding this replaces contributed
-        // no parameters at all, so position carried a fixed signal the text tower could not
-        // adapt. LearnedPositionalEmbeddingLayer is the same table shape the checkpoint holds.
-        yield return new LearnedPositionalEmbeddingLayer<T>(
-            maxSequenceLength: maxTextLength, embeddingDim: textHiddenDim);
+        // Positional encoding adds sequence-position information.
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength: maxTextLength, embeddingSize: textHiddenDim);
 
         // Standard transformer encoder stack. Each block is pre-LN MHA + FFN.
         // FFN expansion is 4x per Liu 2019 §3.2 / Vaswani 2017 §3.3.
@@ -37647,15 +37623,8 @@ public static partial class LayerHelper<T>
                 embeddingSize: textHiddenDim);
         }
 
-        // Pool tokens → single text embedding, then project into the shared space through the
-        // reference's two-layer MLP (model.py: text_projection = Sequential(Linear, ReLU, Linear)).
-        //
-        // The reference reads RoBERTa's pooled <s> output rather than a mean over tokens. That
-        // remains a divergence: this stack has no pooler head, and adding one without the
-        // RoBERTa BPE tokenizer (callers still supply their own Func<string, int[]>) would place
-        // the <s> token wherever the caller's tokenizer happens to put it.
+        // Mean-pool tokens → single text embedding, then project into shared space.
         yield return new GlobalPoolingLayer<T>(poolingType: PoolingType.Average);
-        yield return new DenseLayer<T>(outputSize: projectionDim, activationFunction: new ReLUActivation<T>());
         yield return new DenseLayer<T>(outputSize: projectionDim, activationFunction: new IdentityActivation<T>());
     }
 
