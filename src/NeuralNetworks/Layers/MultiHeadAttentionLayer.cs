@@ -1063,6 +1063,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             { "UseAttentionRegularization", UseAuxiliaryLoss.ToString() },
             { "NumberOfHeads", _headCount.ToString() },
             { "AttentionScoresCached", (_lastAttentionScores != null).ToString() },
+            { "AttentionKernelPath", LastAttentionKernelPath.ToString() },
             { "HeadOutputsCached", (_lastHeadOutputs != null).ToString() }
         };
     }
@@ -1148,6 +1149,54 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         if (inputs.Length == 2) return ForwardInternal(inputs[0], inputs[1], inputs[1]); // Q, K=V (Cross Attention)
         if (inputs.Length == 3) return ForwardInternal(inputs[0], inputs[1], inputs[2]); // Q, K, V
         throw new ArgumentException("MultiHeadAttentionLayer supports 1, 2, or 3 inputs.");
+    }
+
+    /// <summary>
+    /// Gets the attention kernel the most recent forward pass executed.
+    /// </summary>
+    /// <remarks>
+    /// The fused kernel cannot return the score matrix, so a forward that needs the scores
+    /// (auxiliary losses, or a manual tape-free backward) reports
+    /// <see cref="AttentionKernelPath.ScoreMaterializing"/> instead. Exposed so the choice is
+    /// assertable rather than only visible as a change in allocation (#2312).
+    /// </remarks>
+    public AttentionKernelPath LastAttentionKernelPath { get; private set; }
+        = AttentionKernelPath.None;
+
+    /// <summary>
+    /// Materializes the <c>[batch, heads, seq_q, seq_kv]</c> boolean causal mask that
+    /// <c>Engine.ScaledDotProductAttention</c> consumes, where <c>true</c> means "attend here".
+    /// </summary>
+    /// <remarks>
+    /// The fused kernel does not broadcast the batch and head dimensions, so the plane is built
+    /// once and block-copied across them. The fused FlashAttention path does not need this at
+    /// all — it takes <c>isCausal</c> and masks in-kernel — so this is only built for the
+    /// auxiliary-loss / manual-backward forwards that still need the score matrix.
+    /// </remarks>
+    private static Tensor<bool> CausalAttentionMask(int batch, int heads, int seqQ, int seqKv)
+    {
+        var plane = new bool[seqQ * seqKv];
+
+        // A query at position i (over the last seqQ keys) attends to keys [0 .. keyOffset + i].
+        int keyOffset = seqKv - seqQ;
+        for (int i = 0; i < seqQ; i++)
+        {
+            int lastAllowed = Math.Min(keyOffset + i, seqKv - 1);
+            int rowBase = i * seqKv;
+            for (int j = 0; j <= lastAllowed; j++)
+            {
+                plane[rowBase + j] = true;
+            }
+        }
+
+        int planeLength = seqQ * seqKv;
+        var data = new bool[batch * heads * planeLength];
+        for (int k = 0; k < batch * heads; k++)
+        {
+            Array.Copy(plane, 0, data, k * planeLength, planeLength);
+        }
+
+        return new Tensor<bool>(data, [batch, heads, seqQ, seqKv]);
     }
 
     private int[] _originalQueryShape = [];
@@ -1499,6 +1548,12 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         Tensor<T> context_4D;
         Tensor<T> attentionWeights4D;
 
+        // Whether anything will READ the [B, H, seq_q, seq_kv] score matrix. Only two consumers
+        // do: the manual (tape-free) backward, and the training-time auxiliary losses
+        // (attention entropy / head diversity). When neither will, the fused kernel below
+        // computes the same attention without ever materializing it.
+        bool scoresNeeded = cacheForManualBackward || (UseAuxiliaryLoss && IsTrainingMode);
+
         if (_alibiLayer != null)
         {
             // Use FlashAttention with ALiBi bias injection.
@@ -1518,45 +1573,57 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             context_4D = flashOutput;
             attentionWeights4D = flashWeights ?? new Tensor<T>(
                 [batchSize, _headCount, attentionSeqLengthQ, attentionSeqLengthKV]);
+            LastAttentionKernelPath = AttentionKernelPath.AdditiveBias;
         }
-        else if (!IsTrainingMode
-                 && typeof(T) != typeof(double)
-                 && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null)
+        else if (!scoresNeeded)
         {
-            // FLOAT-ONLY inference fast path. FlashAttention's fused kernel converts its
-            // inputs to float (FusedAttention.DoubleToFloat), so on a T=double model it
-            // would silently compute attention in single precision — a ~1e-7 error that is
-            // also sensitive to buffer layout, so two instances with bit-identical weights
-            // (a model and its clone) diverge at ~1e-7 (Clone_ShouldProduceIdenticalOutput).
-            // Double models therefore fall through to the exact double Engine.SDPA below;
-            // they are small (tests/research), so the O(seq^2) score tensor FlashAttention
-            // avoids is not a memory concern. Large-sequence foundation models are float and
-            // keep the fast path.
-            // Inference fast path (#1622 / #1630 fused attention): FlashAttention's online
-            // softmax computes softmax(QKᵀ/scale)·V WITHOUT ever materializing the
-            // [B, H, seq, seq] score tensor that Engine.ScaledDotProductAttention returns —
-            // that O(seq²) tensor is the attention memory behind foundation-model forward OOM
-            // (large-sequence diffusion cross-attention / VLM decoders). Same math as the SDPA
-            // call it replaces (no causal mask here — matches the mask:null below); the score
-            // weights are only needed by the backward/aux-loss paths, which don't run in
-            // inference, so we discard them. FlashAttention needs contiguous inputs; the
-            // permuted Q/K/V views are O(B·H·seq·dH) to copy — far smaller than the scores.
-            var qContig = queries.Contiguous();
-            var kContig = keys.Contiguous();
-            var vContig = values.Contiguous();
-            var flashConfig = FlashAttentionConfig.Default;
-            flashConfig.ReturnAttentionWeights = false; // no O(seq²) materialization
-            var (flashOutput, _) = FlashAttention<T>.Forward(qContig, kContig, vContig, flashConfig);
-            context_4D = flashOutput;
+            // #2312: ONE fused kernel for inference AND training. Engine.FlashAttention is the
+            // tape-aware FlashAttention-2 kernel: it saves one log-sum-exp per query row instead
+            // of the [B, H, seq_q, seq_kv] score tensor Engine.ScaledDotProductAttention returns,
+            // so attention memory is O(seq) per head, and BackwardFunctions<T>.FlashAttentionBackward
+            // recomputes the probability tiles from that log-sum-exp when the tape unwinds. The
+            // score tensor was the only reason training could not take this path (#1622 / #1630
+            // fused attention shipped it for inference alone), and it is the attention memory
+            // behind foundation-model training OOM at long sequence lengths.
+            //
+            // It also replaces the managed FlashAttention<T> wrapper this branch used to call,
+            // which converted its inputs to float (FusedAttention.DoubleToFloat) and so had to
+            // exclude T = double to keep a model and its clone bit-identical. The engine kernel
+            // has a native double path (CpuEngine.FlashAttentionDouble), so every precision now
+            // runs the same exact kernel, and it reads strided [B, H, seq, dH] views without the
+            // Contiguous() copies that conversion needed.
+            //
+            // Causal masking is applied IN-KERNEL here. It used to be applied nowhere on this
+            // path: UseCausalMask was read only by the ALiBi branch's bias and by the fused
+            // inference eligibility check, so a decoder self-attention layer with
+            // UseCausalMask = true attended to its own future (measured: perturbing the last
+            // token of a 6-token sequence moved row 3 by 2.5e-2).
+            context_4D = Engine.FlashAttention(
+                queries,
+                keys,
+                values,
+                scale: 1.0 / Math.Sqrt(attentionHeadDimension),
+                isCausal: UseCausalMask,
+                out _,
+                attentionBias: null);
             attentionWeights4D = Tensor<T>.Empty();
+            LastAttentionKernelPath = AttentionKernelPath.FusedFlashAttention;
         }
         else
         {
+            // The auxiliary-loss terms and the manual (tape-free) backward read the score
+            // matrix, so those forwards keep the score-materializing kernel. The causal mask
+            // has to be built explicitly here because this kernel takes a mask rather than a
+            // flag; true means "attend to this position".
             context_4D = Engine.ScaledDotProductAttention(
                 queries, keys, values,
-                mask: null,
+                mask: UseCausalMask
+                    ? CausalAttentionMask(
+                        batchSize, _headCount, attentionSeqLengthQ, attentionSeqLengthKV)
+                    : null,
                 scale: 1.0 / Math.Sqrt(attentionHeadDimension),
                 out attentionWeights4D);
+            LastAttentionKernelPath = AttentionKernelPath.ScoreMaterializing;
         }
 
         if (_attentionGroupSize > 1)
@@ -1570,9 +1637,11 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
         // Cache attention weights — read by the manual backward (no tape) AND by
         // ComputeAuxiliaryLoss (entropy/diversity) when UseAuxiliaryLoss is on, so
-        // keep them whenever either consumer needs them.
+        // keep them whenever either consumer needs them. Only real weights: an eval-mode forward with
+        // the auxiliary loss on takes the fused branch, whose placeholder is empty, and caching that made
+        // the entropy read 0 and the diagnostics report scores that were never computed.
         if (cacheForManualBackward || UseAuxiliaryLoss)
-            _lastAttentionScores = attentionWeights4D;
+            _lastAttentionScores = attentionWeights4D.Length > 0 ? attentionWeights4D : null;
 
         // 3. Cache Head Outputs — only when the auxiliary loss path will
         // read them. ComputeAuxiliaryLoss is the sole consumer of

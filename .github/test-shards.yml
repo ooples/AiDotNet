@@ -1559,6 +1559,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.TransformerEncoderBlockNormPlacementTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.LayerNormalizationCacheSkipParityTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.MultiHeadAttentionCacheSkipParityTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.MultiHeadAttentionFusedTrainingTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.NonFiniteAndStatefulComparisonRegressionTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.QkvTransformHookTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.ShapeOracleIssue1370Tests.|
