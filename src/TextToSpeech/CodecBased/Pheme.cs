@@ -123,13 +123,17 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
     private readonly int[] _semanticIds;
 
     private T5Seq2Seq<T>? _textToSemantic;
+
+    private T5Seq2Seq<T> TextToSemantic =>
+        _textToSemantic ?? throw new InvalidOperationException("Pheme's text-to-semantic network exists in native mode only.");
+
     private readonly List<LayerBase<T>> _textLayers = new();
     private readonly List<LayerBase<T>> _acousticLayers = new();
-    private readonly List<TiedEmbeddingLayer<T>> _levelEmbeddings = new();
-    private TiedEmbeddingLayer<T>? _semanticEmbedding;
-    private DenseLayer<T>? _speakerProjection;
-    private SoundStormConformer<T>? _conformer;
-    private readonly List<DenseLayer<T>> _heads = new();
+    private SoundStormCore<T>? _acoustic;
+
+    private SoundStormCore<T> Acoustic =>
+        _acoustic ?? throw new InvalidOperationException("Pheme's acoustic network exists in native mode only.");
+
     private readonly List<LayerBase<T>> _speakerLayers = new();
     private PyannoteXVector<T>? _speakerEncoder;
     private AudioCodecLayer<T>? _codec;
@@ -254,23 +258,19 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
             double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
             return 0.02 * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
         }
-        for (int l = 0; l < o.AcousticCodebooks; l++)
-        {
-            var embedding = Own(_acousticLayers, new TiedEmbeddingLayer<T>(codeRows, o.HiddenDim));
-            embedding.Reinitialize(Normal002, o.CodebookSize);
-            _levelEmbeddings.Add(embedding);
-        }
-        _semanticEmbedding = Own(_acousticLayers, new TiedEmbeddingLayer<T>(semanticRows, o.HiddenDim));
-        _semanticEmbedding.Reinitialize(Normal002, o.SemanticCodes);
-        if (o.UseSpeakerEmbedding)
-            _speakerProjection = Own(_acousticLayers, new DenseLayer<T>(o.HiddenDim, new IdentityActivation<T>() as IActivationFunction<T>));
-        _conformer = new SoundStormConformer<T>(Engine, _acousticLayers, new SoundStormConformerConfiguration(
-            Dim: o.HiddenDim, Layers: o.AcousticLayers, Heads: o.AcousticHeads, HeadDim: o.AcousticHeadDim,
-            FeedForwardMultiplier: o.AcousticFeedForwardMultiplier, ConvExpansion: o.AcousticConvExpansion,
-            ConvKernel: o.AcousticConvKernel, Dropout: o.DropoutRate));
-        for (int l = 0; l < o.AcousticCodebooks; l++)
-            _heads.Add(Own(_acousticLayers, new DenseLayer<T>(codeRows, new IdentityActivation<T>() as IActivationFunction<T>)));
-        InitializeAcousticWeights(Normal002);
+        // Pheme's reference conventions: masked tokens contribute zero, the prompt is start ~ U{1, T − 2}, only levels up
+        // to the predicted one are read, and every MaskGIT iteration samples.
+        _acoustic = new SoundStormCore<T>(Engine, _acousticLayers, new SoundStormCoreConfiguration(
+            Levels: o.AcousticCodebooks, CodebookSize: o.CodebookSize, EmbeddingRows: codeRows, HeadOutputs: codeRows,
+            PaddingRow: o.CodebookSize, ConditioningCodes: semanticRows, ConditioningPaddingRow: o.SemanticCodes,
+            Conformer: new SoundStormConformerConfiguration(
+                Dim: o.HiddenDim, Layers: o.AcousticLayers, Heads: o.AcousticHeads, HeadDim: o.AcousticHeadDim,
+                FeedForwardMultiplier: o.AcousticFeedForwardMultiplier, ConvExpansion: o.AcousticConvExpansion,
+                ConvKernel: o.AcousticConvKernel, Dropout: o.DropoutRate),
+            GlobalConditioningDim: o.UseSpeakerEmbedding ? SpeakerEmbeddingDim : 0,
+            GlobalConditioningDropout: o.SpeakerEmbeddingDropout,
+            MaskInput: SoundStormMaskInput.Zero, Prompt: SoundStormPromptSampling.PhemeReference,
+            FinerPromptLevelsVisible: false, GreedyLastIteration: false), Normal002);
 
         if (o.UseSpeakerEmbedding)
         {
@@ -304,60 +304,6 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
         ComponentLayers.Add(_codec);
     }
 
-    private static TLayer Own<TLayer>(List<LayerBase<T>> layers, TLayer layer) where TLayer : LayerBase<T>
-    {
-        layers.Add(layer);
-        return layer;
-    }
-
-    // Pheme.init_weights: Linear and Conv1d weights from N(0, 0.02) with zero biases; LayerNorm at one and zero.
-    private void InitializeAcousticWeights(Func<double> normal)
-    {
-        foreach (var layer in _acousticLayers)
-        {
-            switch (layer)
-            {
-                case DenseLayer<T> dense:
-                {
-                    using (new NoGradScope<T>()) dense.Forward(new Tensor<T>(new[] { 1, InputWidth(dense) }));
-                    var w = dense.GetWeights();
-                    for (int i = 0; i < w.Length; i++) w[i] = NumOps.FromDouble(normal());
-                    Engine.InvalidatePersistentTensor(w);
-                    var b = dense.GetBiases();
-                    for (int i = 0; i < b.Length; i++) b[i] = NumOps.Zero;
-                    Engine.InvalidatePersistentTensor(b);
-                    break;
-                }
-                case BiasFreeLinearLayer<T> linear:
-                {
-                    var values = new Vector<T>(linear.InputSize * linear.OutputSize);
-                    for (int i = 0; i < values.Length; i++) values[i] = NumOps.FromDouble(normal());
-                    linear.SetParameters(values);
-                    break;
-                }
-                case NormedConv1DLayer<T> conv:
-                    conv.Reinitialize(normal);
-                    break;
-            }
-        }
-    }
-
-    private int InputWidth(DenseLayer<T> dense) =>
-        ReferenceEquals(dense, _speakerProjection) ? SpeakerEmbeddingDim
-        : _heads.Contains(dense) ? _options.HiddenDim
-        : InputWidthInConformer(dense);
-
-    private int InputWidthInConformer(DenseLayer<T> dense)
-    {
-        var o = _options;
-        foreach (var block in _conformer!.Blocks)
-        {
-            if (ReferenceEquals(dense, block.Ff1In) || ReferenceEquals(dense, block.Ff2In)) return o.HiddenDim;
-            if (ReferenceEquals(dense, block.Ff1Out) || ReferenceEquals(dense, block.Ff2Out)) return o.HiddenDim * o.AcousticFeedForwardMultiplier;
-            if (ReferenceEquals(dense, block.ToOut)) return o.AcousticHeads * o.AcousticHeadDim;
-        }
-        throw new InvalidOperationException("Unknown dense layer in Pheme's acoustic model.");
-    }
 
     // ---------------------------------------------------------------- vocabulary and front end
 
@@ -466,46 +412,10 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
     internal Tensor<T> AcousticLogits(int[,] acoustic, int[] semantic, int level, bool[]? masked, Tensor<T>? speaker,
         bool training, Random random)
     {
-        int frames = semantic.Length;
-        Tensor<T>? sum = null;
-        for (int l = 0; l <= level; l++)
-        {
-            var ids = new Tensor<T>(new[] { frames });
-            var keep = new Tensor<T>(new[] { frames, _options.HiddenDim });
-            for (int t = 0; t < frames; t++)
-            {
-                ids[t] = NumOps.FromDouble(acoustic[l, t]);
-                // The padding row (1024) contributes zero and gets no gradient; at the current level, so do masked positions.
-                bool zero = acoustic[l, t] == _options.CodebookSize || (l == level && masked is not null && masked[t]);
-                if (!zero)
-                    for (int d = 0; d < _options.HiddenDim; d++) keep[t, d] = NumOps.One;
-            }
-            var embedded = Engine.TensorMultiply(_levelEmbeddings[l].Forward(ids), keep);
-            sum = sum is null ? embedded : Engine.TensorAdd(sum, embedded);
-        }
-        var semanticIds = new Tensor<T>(new[] { frames });
-        var semanticKeep = new Tensor<T>(new[] { frames, _options.HiddenDim });
-        for (int t = 0; t < frames; t++)
-        {
-            semanticIds[t] = NumOps.FromDouble(semantic[t]);
-            if (semantic[t] != _options.SemanticCodes)
-                for (int d = 0; d < _options.HiddenDim; d++) semanticKeep[t, d] = NumOps.One;
-        }
-        var x = Engine.TensorAdd(sum!, Engine.TensorMultiply(_semanticEmbedding!.Forward(semanticIds), semanticKeep));
-        if (_speakerProjection is not null && speaker is not null)
-        {
-            // F.dropout(spkr_emb, p) without the training flag: active at inference too, as in the reference.
-            var dropped = T5Seq2Seq<T>.Dropout(Engine, Engine.Reshape(speaker, new[] { 1, SpeakerEmbeddingDim }),
-                _options.SpeakerEmbeddingDropout, random);
-            var projected = _speakerProjection.Forward(dropped);                                               // [1, hidden]
-            x = Engine.TensorAdd(x, Engine.TensorTile(projected, new[] { frames, 1 }));
-        }
-        var hidden = _conformer!.Forward(x, training, random);
-        return _heads[level].Forward(hidden);
+        var core = Acoustic;
+        return core.Logits(acoustic, core.Visibility(semantic.Length, level, masked, promptFrames: 0), semantic, level,
+            speaker, training, random);
     }
-
-    // masking_logic.schedule("cosine"): cos(r · π / 2), clipped to [1e-6, 1].
-    private static double CosineSchedule(double ratio) => Math.Min(1.0, Math.Max(1e-6, Math.Cos(ratio * Math.PI / 2)));
 
     // ---------------------------------------------------------------- training
 
@@ -566,7 +476,7 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
             for (int f = 0; f < frames; f++) labels[f + 2] = _semanticIds[codes[0, f]];
             labels[frames + 2] = EndToken;
             var framed = JoinPrompt(sample.Tokens, null);
-            return (_, _) => _textToSemantic!.Loss(framed, labels, training, random);
+            return (_, _) => TextToSemantic.Loss(framed, labels, training, random);
         }
 
         if (frames < 3)
@@ -584,24 +494,8 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
                 ?? throw new ArgumentException("Pheme's speaker embedding needs a recording.", nameof(sample)));
 
         // Pheme.training_step / TTSConformer.create_mask, for one utterance.
-        int level = random.Next(levels);
-        int start = 1 + random.Next(frames - 2);                                        // randint(1, min_len − 1)
-        double ratio = CosineSchedule(random.NextDouble());
-        var masked = new bool[frames];
-        bool any = false;
-        for (int t = start; t < frames; t++)
-            any |= masked[t] = random.NextDouble() < ratio;
-        if (!any) masked[start + random.Next(frames - start)] = true;
-        var positions = Enumerable.Range(0, frames).Where(t => masked[t] && acoustic[level, t] != o.CodebookSize).ToArray();
-
-        return (_, _) =>
-        {
-            var logits = AcousticLogits(acoustic, semantic, level, masked, speaker, training, random);         // [T, V]
-            var logProbabilities = Engine.TensorLogSoftmax(logits, axis: -1);
-            var target = new Tensor<T>(logits._shape);
-            foreach (int t in positions) target[t, acoustic[level, t]] = NumOps.FromDouble(-1.0 / positions.Length);
-            return Engine.ReduceSum(Engine.TensorMultiply(logProbabilities, target), new[] { 0, 1 }, keepDims: false);
-        };
+        var objective = Acoustic.TrainingObjective(acoustic, semantic, speaker, training, random);
+        return (_, _) => objective();
     }
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? StageOptimizer()
@@ -666,7 +560,7 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
         try
         {
             using var _ = new NoGradScope<T>();
-            var promptAudio = voice.ReferenceAudio!;
+            var promptAudio = voice.ReferenceAudio ?? throw new InvalidOperationException("Pheme needs a voice with a prompt recording.");
             var promptCodes = Codec.Encode(promptAudio);                                                     // [8, P]
             int promptFrames = promptCodes.GetLength(1);
             var textIds = JoinPrompt(input, voice.ReferenceTokens);
@@ -710,7 +604,7 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
         for (int f = 0; f < promptFrames; f++) prefix.Add(_semanticIds[promptCodes[0, f]]);
         for (int attempt = 0; ; attempt++)
         {
-            var output = _textToSemantic!.Generate(textIds, prefix, _options.Temperature, _options.TopK, _options.MaxNewSemanticTokens, random);
+            var output = TextToSemantic.Generate(textIds, prefix, _options.Temperature, _options.TopK, _options.MaxNewSemanticTokens, random);
             int longest = 0, run = 0;
             for (int i = 0; i < output.Count; i++)
             {
@@ -747,28 +641,9 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
         }
         int start = promptFrames;                                     // start_t = len(acoustic_prompt), before the SPKR_1 pad
 
-        for (int level = 0; level < levels; level++)
-        {
-            bool maskGit = o.AcousticDecoding == PhemeAcousticDecoding.MaskGitFirstLevel ? level == 0 : level > 0;
-            if (maskGit)
-            {
-                MaskGit(acoustic, semantic, speaker, start, level, random);
-                continue;
-            }
-            // TTSConformer.one_step_inference: one greedy pass over the level.
-            var logits = AcousticLogits(acoustic, semantic, level, null, speaker, training: false, random);
-            for (int t = start; t < frames; t++)
-            {
-                int best = 0;
-                double bestValue = double.NegativeInfinity;
-                for (int v = 0; v < logits.Shape[1]; v++)
-                {
-                    double value = NumOps.ToDouble(logits[t, v]);
-                    if (value > bestValue) { bestValue = value; best = v; }
-                }
-                acoustic[level, t] = best;
-            }
-        }
+        Acoustic.Decode(acoustic, semantic, start, level =>
+            (o.AcousticDecoding == PhemeAcousticDecoding.MaskGitFirstLevel ? level == 0 : level > 0) ? o.MaskGitSteps : 1,
+            speaker, random);
 
         // Special tokens become code 0; the result keeps the frames from start_t on, semantic codebook first.
         int kept = frames - start;
@@ -781,63 +656,6 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
         return codes;
     }
 
-    // TTSConformer.multi_step_inference (MaskGIT, Chang et al. 2022) on one acoustic codebook.
-    private void MaskGit(int[,] acoustic, int[] semantic, Tensor<T>? speaker, int start, int level, Random random)
-    {
-        var o = _options;
-        int frames = semantic.Length, mask = o.CodebookSize, steps = o.MaskGitSteps;
-        var current = new int[frames];
-        for (int t = 0; t < frames; t++) current[t] = t < start ? acoustic[level, t] : mask;
-        int maskedAtStart = frames - start;
-        var final = (int[])current.Clone();
-        for (int step = 0; step < steps; step++)
-        {
-            for (int t = 0; t < frames; t++) acoustic[level, t] = current[t];
-            var logits = AcousticLogits(acoustic, semantic, level, null, speaker, training: false, random);
-            int vocabulary = logits.Shape[1];
-            var sampled = new int[frames];
-            var confidence = new double[frames];
-            int unknown = 0;
-            double ratio = (step + 1.0) / steps, temperature = 1.0 * (1.0 - ratio);
-            for (int t = 0; t < frames; t++)
-            {
-                var row = new double[vocabulary];
-                double max = double.NegativeInfinity;
-                for (int v = 0; v < vocabulary; v++) max = Math.Max(max, row[v] = NumOps.ToDouble(logits[t, v]));
-                double total = 0;
-                for (int v = 0; v < vocabulary; v++) total += row[v] = Math.Exp(row[v] - max);
-                // Categorical(logits).sample()
-                double draw = random.NextDouble() * total;
-                int choice = vocabulary - 1;
-                for (int v = 0; v < vocabulary; v++)
-                {
-                    draw -= row[v];
-                    if (draw <= 0) { choice = v; break; }
-                }
-                bool isUnknown = current[t] == mask;
-                sampled[t] = isUnknown ? choice : current[t];
-                if (isUnknown)
-                {
-                    unknown++;
-                    double gumbel = -Math.Log(-Math.Log(Math.Max(1e-20, random.NextDouble())));
-                    confidence[t] = Math.Log(row[sampled[t]] / total) + temperature * gumbel;
-                }
-                else
-                {
-                    confidence[t] = double.PositiveInfinity;
-                }
-            }
-            final = (int[])sampled.Clone();
-            int toMask = (int)Math.Floor(maskedAtStart * CosineSchedule(ratio));
-            toMask = Math.Max(1, Math.Min(unknown - 1, toMask));
-            // mask_by_random_topk: everything below the toMask-th smallest confidence is masked again.
-            var order = Enumerable.Range(0, frames).OrderBy(t => confidence[t]).ToArray();
-            double cutOff = confidence[order[Math.Min(toMask, frames - 1)]];
-            for (int t = 0; t < frames; t++) current[t] = confidence[t] < cutOff ? mask : sampled[t];
-        }
-        for (int t = 0; t < frames; t++) acoustic[level, t] = final[t];
-    }
-
     /// <inheritdoc />
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
@@ -848,26 +666,13 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
     /// model with the matching options (<see cref="PhemeOptions.OfficialSmallCheckpoint"/> or
     /// <see cref="PhemeOptions.OfficialLargeCheckpoint"/>).</summary>
     public void LoadTextToSemanticWeights(string path) =>
-        _textToSemantic!.LoadHuggingFaceWeights(Reader(path, prefix: ""));
+        TextToSemantic.LoadHuggingFaceWeights(Reader(path, prefix: ""));
 
     /// <summary>Loads the released acoustic model: the <c>state_dict</c> of <c>s2a.ckpt</c> (its <c>model.*</c>
     /// tensors) saved as safetensors or <c>.pt</c>; the Lightning checkpoint itself also holds optimizer state and is
     /// not read directly.</summary>
-    public void LoadSemanticToAcousticWeights(string path)
-    {
-        var read = Reader(path, prefix: "model.");
-        var o = _options;
-        int rows = o.CodebookSize + 3;
-        for (int l = 0; l < _levelEmbeddings.Count; l++) _levelEmbeddings[l].LoadTable(read($"embedding.{l}.weight", new[] { rows, o.HiddenDim }));
-        _semanticEmbedding!.LoadTable(read("semantic_embedding.weight", new[] { o.SemanticCodes + 3, o.HiddenDim }));
-        if (_speakerProjection is not null)
-            TorchParameters.Linear(Engine, _speakerProjection, SpeakerEmbeddingDim, o.HiddenDim,
-                read("spkr_linear.weight", new[] { o.HiddenDim, SpeakerEmbeddingDim }), read("spkr_linear.bias", new[] { o.HiddenDim }));
-        _conformer!.LoadTorchWeights(Engine, "conformer", read);
-        for (int l = 0; l < _heads.Count; l++)
-            TorchParameters.Linear(Engine, _heads[l], o.HiddenDim, rows, read($"heads.{l}.weight", new[] { rows, o.HiddenDim }),
-                read($"heads.{l}.bias", new[] { rows }));
-    }
+    public void LoadSemanticToAcousticWeights(string path) =>
+        Acoustic.LoadTorchWeights(Reader(path, prefix: "model."), conditioningName: "semantic_embedding", globalName: "spkr_linear");
 
     /// <summary>Loads the pyannote/embedding speaker model's state dictionary (safetensors or <c>.pt</c>).</summary>
     public void LoadSpeakerEncoderWeights(string path) =>
