@@ -1316,7 +1316,9 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         //     engine: there LstmSequenceForward records ONE fused training node
         //     (fused forward + fused BPTT backward) into the plan instead of the
         //     per-timestep loop's ~30 primitives per step (AiDotNet.Tensors
-        //     RecordLstmSequenceTrainFloat). GPU engines keep the per-step trace.
+        //     RecordLstmSequenceTrainFloat). A GPU engine that records its own fused
+        //     node (persistent-RNN forward + BPTT kernels) takes it too; one that cannot
+        //     keeps the per-step trace, whose CUDA graph replays ~2,000 kernels a step.
         // If any condition fails the existing per-step loop below runs unchanged.
         // timeSteps > 0 guards the empty-sequence boundary: the per-step loop
         // returns an empty output with zeroed final states, and the fused training
@@ -1326,7 +1328,8 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
             && typeof(T) == typeof(float)
             && Engine is AiDotNet.Tensors.Engines.CpuEngine cpuEngForFused
             && (!AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
-                || (IsTrainingMode && Engine is not DirectGpuTensorEngine)))
+                || (IsTrainingMode && (Engine is not DirectGpuTensorEngine gpuForFused
+                                       || gpuForFused.RecordsFusedLstmSequenceTraining))))
         {
             // Inference takes the cached manual stack (allocation-free, detached).
             // Training builds the stacked wIh/wHh/bias via TAPE-CONNECTED Concat so
