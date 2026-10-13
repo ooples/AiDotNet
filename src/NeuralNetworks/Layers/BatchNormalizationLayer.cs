@@ -915,7 +915,11 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
                 var scaledBatchMean = Engine.TensorMultiplyScalar(batchMean, oneMinusMomentum);
                 Engine.TensorAddInPlace(_runningMean, scaledBatchMean);
                 Engine.TensorMultiplyScalarInPlace(_runningVariance, momentum);
-                var scaledBatchVar = Engine.TensorMultiplyScalar(batchVariance, oneMinusMomentum);
+                // The batch normalizes with its biased variance, but the inference statistic is the unbiased
+                // estimate m/(m-1)·σ²_B over the m values per feature (Ioffe & Szegedy 2015, Algorithm 2; PyTorch's
+                // running_var).
+                T unbiased = NumOps.FromDouble(valuesPerFeature / (valuesPerFeature - 1.0));
+                var scaledBatchVar = Engine.TensorMultiplyScalar(batchVariance, NumOps.Multiply(oneMinusMomentum, unbiased));
                 Engine.TensorAddInPlace(_runningVariance, scaledBatchVar);
             }
 

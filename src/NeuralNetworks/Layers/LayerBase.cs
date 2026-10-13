@@ -7757,6 +7757,15 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 or DeclaredParameterComponentKind.Buffer)
             {
                 int count = ParameterComponentScalarCount(component);
+                if (component.LowPrecisionTensor is null && component.Tensor is { } dense
+                    && dense is not SparseTensor<T> && dense.Length == count)
+                {
+                    // One span copy for a dense slot, as the slot's own CopyFrom does. Writing it a scalar at a time
+                    // through SetFlat cost about 150 ns per value: 1.6 s to load ResNet-18's 11.7M weights.
+                    source.AsSpan().Slice(offset, count).CopyTo(dense.AsWritableSpan());
+                    offset += count;
+                    continue;
+                }
                 for (int j = 0; j < count; j++)
                     WriteParameterComponentScalar(component, j, source[offset++]);
                 continue;
