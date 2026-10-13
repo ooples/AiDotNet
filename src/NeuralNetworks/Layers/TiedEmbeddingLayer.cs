@@ -124,6 +124,16 @@ public partial class TiedEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>Loads the table from a row-major <c>[vocabulary, dimension]</c> array.</summary>
+    /// <summary>Loads the first <c>values.Length / dimension</c> rows from a row-major array, leaving the rest as they
+    /// are (a pretrained vocabulary inside a larger one).</summary>
+    internal void LoadLeadingRows(double[] values)
+    {
+        if (values.Length % _dimension != 0 || values.Length > _table.Length)
+            throw new ArgumentException($"Expected whole rows of {_dimension}, at most {_table.Length} values; got {values.Length}.", nameof(values));
+        for (int i = 0; i < values.Length; i++) _table[i] = NumOps.FromDouble(values[i]);
+        Engine.InvalidatePersistentTensor(_table);
+    }
+
     internal void LoadTable(double[] values)
     {
         if (values.Length != _table.Length)

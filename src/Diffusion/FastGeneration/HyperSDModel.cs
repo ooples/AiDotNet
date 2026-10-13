@@ -66,6 +66,9 @@ public partial class HyperSDModel<T> : LatentDiffusionModelBase<T>
     private const int LATENT_CHANNELS = 4;
     private const double DEFAULT_GUIDANCE = 0.0;
 
+    /// <summary>TSCD distillation learning rate (Ren et al. 2024, Sec. 4.1).</summary>
+    private const double HYPER_SD_LEARNING_RATE = 1e-6;
+
     private UNetNoisePredictor<T> _predictor;
     private StandardVAE<T> _vae;
     private readonly IConditioningModule<T>? _conditioner;
@@ -103,7 +106,13 @@ public partial class HyperSDModel<T> : LatentDiffusionModelBase<T>
             options ?? new DiffusionModelOptions<T>
             {
                 TrainTimesteps = 1000, BetaStart = 0.00085,
-                BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear
+                BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear,
+                // Ren et al. 2024, Sec. 4.1 (Training Setting): TSCD runs "512 batch size and
+                // learning rate 1e-6 across 32 NVIDIA A100 80GB GPUs". The base class's default
+                // (Adam at 1e-3) diverges on an SDXL-scale UNet: the nightly heavy lane measured
+                // the averaged noise-prediction objective blowing up from 1.64 to 4.4e12 on run
+                // 38117342722 (#2087).
+                LearningRate = HYPER_SD_LEARNING_RATE,
             },
             scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             architecture)

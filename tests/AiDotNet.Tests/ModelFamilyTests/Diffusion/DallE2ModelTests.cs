@@ -24,9 +24,10 @@ namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 /// smoke/invariant tests can run a short sampler while quality-sensitive
 /// callers pass a larger step count to <c>Generate</c> / <c>GenerateFromText</c>.
 /// </remarks>
-// HeavyTimeout (#1706): correct but too slow for the default per-test gate (foundation-scale diffusion,
-// ~100 s/forward x N-step Generate); runs in the nightly lane. Drop this trait once it fits the budget.
-[Xunit.Trait("Category", "HeavyTimeout")]
+// #1714: back in the default gate. The HeavyTimeout deferral here was measured away: in the
+// nightly lane (run 38117342722, one class per process under a managed heap cap of 70% of
+// runner RAM) this class ran 13 of 13 tests green, slowest 5.1 s and no OutOfMemoryException
+// -- far inside the 120 s per-test gate. Re-defer only against a fresh measurement.
 public class DallE2ModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 3, 16, 16];

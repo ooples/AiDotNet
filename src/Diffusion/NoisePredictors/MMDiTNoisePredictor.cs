@@ -948,7 +948,10 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
         var k4 = ToHeads4D(k, batch, keyLen, _numHeads, headDim);
         var v4 = ToHeads4D(v, batch, keyLen, _numHeads, headDim);
 
-        var attn4 = Engine.ScaledDotProductAttention<T>(q4, k4, v4, mask: null, scale: scale, out _);
+        // #2312: weights discarded. MMDiT's joint text+image sequence is the longest
+        // attention in the diffusion stack, so this is where the score matrix cost most.
+        var attn4 = Engine.FlashAttention<T>(
+            q4, k4, v4, scale: scale, isCausal: false, out _, attentionBias: null);
 
         // [B, H, queryLen, D] -> [B, queryLen, H, D] -> [B, queryLen, hidden]
         var attnBshd = Engine.TensorPermute<T>(attn4, new[] { 0, 2, 1, 3 });

@@ -273,6 +273,32 @@ jobs:
             $duration = [int]((Get-Date) - $started).TotalSeconds
             Write-Host '::endgroup::'
 
+            # Weight streaming backs a model's weights with a file under /tmp (StreamingTensorPool's
+            # aidotnet-streaming-pool-<id>/backing.bin, several GB for a paper-scale UNet). A chunk
+            # that was killed, timed out or crashed never runs the pool's cleanup, so the file
+            # survives into the NEXT chunk and the runner's disk fills: run 38117342722 failed three
+            # Flux contract tests with "No space left on device" on exactly that path, so those
+            # tests measured the disk and not the model (#2087). Each chunk owns its own pools, so
+            # reclaiming them here is safe and keeps one chunk's leftovers out of the next one.
+            $pools = Get-ChildItem -Path ([System.IO.Path]::GetTempPath()) -Directory `
+              -Filter 'aidotnet-streaming-pool-*' -ErrorAction SilentlyContinue
+            $removed = 0
+            $stillThere = @()
+            foreach ($pool in $pools) {
+              Remove-Item -LiteralPath $pool.FullName -Recurse -Force -ErrorAction SilentlyContinue
+              # Report what the deletion ACHIEVED, not what it attempted: SilentlyContinue hides a
+              # locked or partially deleted pool, and a count of pools FOUND would claim the disk
+              # was reclaimed while the next chunk inherits the backing file.
+              if (Test-Path -LiteralPath $pool.FullName) { $stillThere += $pool.Name } else { $removed++ }
+            }
+            # DriveInfo, not Get-PSDrive: on the Linux runner the temp path's drive is '/', which
+            # Get-PSDrive does not expose under the name PowerShell reports for the location.
+            $freeMb = [int]([System.IO.DriveInfo]::new([System.IO.Path]::GetTempPath()).AvailableFreeSpace / 1MB)
+            Write-Host "$label -> removed $removed of $($pools.Count) streaming pool(s); ${freeMb} MB free on the temp volume"
+            if ($stillThere.Count -gt 0) {
+              Write-Host "::warning::$label could not remove $($stillThere.Count) streaming pool(s): $($stillThere -join ', ')"
+            }
+
             # 124 is timeout's own exit after it stopped the chunk at the cap; 137 is a SIGKILL from any source (the
             # kill-after escalation, or the kernel OOM killer), so it is reported as such rather than as a timeout.
             if ($exit -eq 124) { $exit = "timeout after $($chunkCapMinutes) min" }
@@ -322,7 +348,7 @@ jobs:
 
       - name: Upload results
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v4
         with:
           name: heavy-timeout-results-${{ matrix.slice }}
           path: artifacts/heavy-timeout

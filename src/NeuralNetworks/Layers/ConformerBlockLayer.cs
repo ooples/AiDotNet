@@ -131,7 +131,8 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
     /// Depthwise convolution kernel size. The Conformer paper uses 31/32; USM reports a 5-frame
     /// kernel for its Conformer encoders (arXiv:2303.01037 §2.1).
     /// </param>
-    /// <param name="ropeTheta">Rotary base frequency for the relative positional encoding.</param>
+    /// <param name="ropeTheta">Rotary base frequency for the relative positional encoding; zero or less builds the
+    /// attention without one.</param>
     /// <param name="maxSequenceLength">Maximum sequence length the positional encoding supports.</param>
     /// <param name="attentionGroupSize">
     /// Number of adjacent projected frames combined into one attention position. EfficientConformer
@@ -184,7 +185,10 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
         _attnNorm = new LayerNormalizationLayer<T>(modelDim);
         _attention = new MultiHeadAttentionLayer<T>(numHeads, modelDim / numHeads)
             .ConfigureAttentionGrouping(attentionGroupSize);
-        _attention.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, ropeTheta, maxSequenceLength);
+        // ropeTheta ≤ 0 builds the block without a positional encoding: w2v-BERT (Chung et al. 2021, Table 1,
+        // "Relative Attention: N") leaves position to the convolution module.
+        if (ropeTheta > 0)
+            _attention.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, ropeTheta, maxSequenceLength);
 
         // --- Convolution module (paper §2.2) ---
         // Pointwise conv to 2*dim so the GLU can gate one half with the other, then a depthwise

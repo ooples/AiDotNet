@@ -66,6 +66,9 @@ public partial class PCMModel<T> : LatentDiffusionModelBase<T>
     private const int LATENT_CHANNELS = 4;
     private const double DEFAULT_GUIDANCE = 5.0;
 
+    /// <summary>Multi-step SDXL training learning rate (Wang et al. 2024, Sec. 5.1).</summary>
+    private const double PCM_LEARNING_RATE = 5e-6;
+
     private UNetNoisePredictor<T> _predictor;
     private StandardVAE<T> _vae;
     private readonly IConditioningModule<T>? _conditioner;
@@ -98,7 +101,13 @@ public partial class PCMModel<T> : LatentDiffusionModelBase<T>
             options ?? new DiffusionModelOptions<T>
             {
                 TrainTimesteps = 1000, BetaStart = 0.00085,
-                BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear
+                BetaEnd = 0.012, BetaSchedule = BetaSchedule.ScaledLinear,
+                // Wang et al. 2024, Sec. 5.1 (Implementation): "For models based on SDXL, we used
+                // a learning rate of 5e-6" for the multi-step models this default configures
+                // (single-step SDXL uses 1e-6). The base class's default (Adam at 1e-3) diverges
+                // on an SDXL-scale UNet: the nightly heavy lane measured the averaged
+                // noise-prediction objective going non-finite (NaN) after training (#2087).
+                LearningRate = PCM_LEARNING_RATE,
             },
             scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             architecture)

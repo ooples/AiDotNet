@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.TextToSpeech.CodecBased;
 
@@ -8,7 +9,8 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 internal sealed record T5Configuration(
     int VocabularySize, int ModelDim, int FeedForwardDim, int KeyValueDim, int Heads, int EncoderLayers,
     int DecoderLayers, int RelativeBuckets = 32, int RelativeMaxDistance = 128, double Dropout = 0.1,
-    double LayerNormEpsilon = 1e-6, int DecoderStartTokenId = 0, int EndTokenId = 2);
+    double LayerNormEpsilon = 1e-6, int DecoderStartTokenId = 0, int EndTokenId = 2, bool GatedGelu = false,
+    bool TieWordEmbeddings = true);
 
 /// <summary>
 /// The relative position buckets of T5 (Raffel et al. 2020, §2.1; Hugging Face <c>T5Attention._relative_position_bucket</c>):
@@ -100,8 +102,9 @@ internal sealed class T5Attention<T>
 }
 
 /// <summary>A T5 block (Hugging Face <c>T5Block</c>): pre-norm residual self-attention, cross-attention in the decoder,
-/// and the bias-free ReLU feed-forward <c>wo · dropout(relu(wi · x))</c>, each sublayer's output dropped out before its
-/// residual add.</summary>
+/// and the bias-free feed-forward, each sublayer's output dropped out before its residual add. The feed-forward is
+/// T5 v1.0's <c>wo · dropout(relu(wi · x))</c>, or with <see cref="T5Configuration.GatedGelu"/> T5 v1.1's
+/// <c>wo · dropout(gelu(wi_0 · x) ⊙ wi_1 · x)</c> (<c>T5DenseGatedActDense</c>, GELU's tanh form).</summary>
 internal sealed class T5Block<T>
 {
     private readonly IEngine _engine;
@@ -120,6 +123,8 @@ internal sealed class T5Block<T>
         }
         FeedForwardNorm = T5Attention<T>.Own(layers, new RMSNormalizationLayer<T>(c.ModelDim, c.LayerNormEpsilon));
         Wi = T5Attention<T>.Own(layers, new BiasFreeLinearLayer<T>(c.ModelDim, c.FeedForwardDim));
+        if (c.GatedGelu)
+            WiLinear = T5Attention<T>.Own(layers, new BiasFreeLinearLayer<T>(c.ModelDim, c.FeedForwardDim));
         Wo = T5Attention<T>.Own(layers, new BiasFreeLinearLayer<T>(c.FeedForwardDim, c.ModelDim));
     }
 
@@ -128,19 +133,25 @@ internal sealed class T5Block<T>
     public RMSNormalizationLayer<T>? CrossNorm { get; }
     public T5Attention<T>? CrossAttention { get; }
     public RMSNormalizationLayer<T> FeedForwardNorm { get; }
+    /// <summary><c>wi</c>, or under the gated feed-forward <c>wi_0</c> (the GELU branch).</summary>
     public BiasFreeLinearLayer<T> Wi { get; }
+    /// <summary><c>wi_1</c>, the gated feed-forward's linear branch; null in T5 v1.0.</summary>
+    public BiasFreeLinearLayer<T>? WiLinear { get; }
     public BiasFreeLinearLayer<T> Wo { get; }
 
     public Tensor<T> Forward(Tensor<T> h, Tensor<T> selfBias, Tensor<T>? memory, Tensor<T>? crossBias, bool training, Random random)
     {
         var normed = SelfNorm.Forward(h);
         h = _engine.TensorAdd(h, Drop(SelfAttention.Forward(normed, normed, selfBias, training, random), training, random));
-        if (CrossAttention is not null && memory is not null)
+        if (CrossAttention is not null && CrossNorm is not null && memory is not null)
         {
-            var crossNormed = CrossNorm!.Forward(h);
+            var crossNormed = CrossNorm.Forward(h);
             h = _engine.TensorAdd(h, Drop(CrossAttention.Forward(crossNormed, memory, crossBias, training, random), training, random));
         }
-        var hidden = _engine.ReLU(Wi.Forward(FeedForwardNorm.Forward(h)));
+        var feedForwardInput = FeedForwardNorm.Forward(h);
+        var hidden = WiLinear is null
+            ? _engine.ReLU(Wi.Forward(feedForwardInput))
+            : _engine.TensorMultiply(_engine.GELU(Wi.Forward(feedForwardInput)), WiLinear.Forward(feedForwardInput));
         hidden = Drop(hidden, training, random);
         return _engine.TensorAdd(h, Drop(Wo.Forward(hidden), training, random));
     }
@@ -154,7 +165,9 @@ internal sealed class T5Block<T>
 /// ReLU feed-forward and tied embeddings): a shared token embedding; an encoder and a decoder stack whose first block
 /// holds the relative position bias table the rest of the stack shares (bidirectional buckets in the encoder,
 /// unidirectional with a causal mask in the decoder); RMS layer norms (ε = 1e-6) and a final norm on each stack;
-/// logits from the shared embedding applied to the decoder output scaled by <c>d_model^-1/2</c>.
+/// logits from the shared embedding applied to the decoder output scaled by <c>d_model^-1/2</c>. With
+/// <see cref="T5Configuration.GatedGelu"/> and without <see cref="T5Configuration.TieWordEmbeddings"/> it is T5 v1.1
+/// (the gated-GELU feed-forward and an unscaled, untied <c>lm_head</c>), the form ByT5 (Xue et al. 2022) uses.
 /// </summary>
 internal sealed class T5Seq2Seq<T>
 {
@@ -176,8 +189,14 @@ internal sealed class T5Seq2Seq<T>
         {
             DecoderBias = T5Attention<T>.Own(layers, new TiedEmbeddingLayer<T>(c.RelativeBuckets, c.Heads));
             DecoderFinalNorm = T5Attention<T>.Own(layers, new RMSNormalizationLayer<T>(c.ModelDim, c.LayerNormEpsilon));
+            if (!c.TieWordEmbeddings)
+                LanguageModelHead = T5Attention<T>.Own(layers, new BiasFreeLinearLayer<T>(c.ModelDim, c.VocabularySize));
         }
     }
+
+    /// <summary>The untied output projection <c>lm_head</c> (T5 v1.1); null when the logits reuse the shared
+    /// embedding.</summary>
+    public BiasFreeLinearLayer<T>? LanguageModelHead { get; }
 
     public T5Configuration Configuration { get; }
     public TiedEmbeddingLayer<T> Shared { get; }
@@ -199,9 +218,15 @@ internal sealed class T5Seq2Seq<T>
         return engine.TensorMultiply(x, mask);
     }
 
-    private Tensor<T> PositionBias(TiedEmbeddingLayer<T> table, int queries, int keys, bool bidirectional, bool causal)
+    private Tensor<T> PositionBias(TiedEmbeddingLayer<T> table, int queries, int keys, bool bidirectional, bool causal) =>
+        RelativeBias(_engine, Configuration, table, queries, keys, bidirectional, causal);
+
+    /// <summary>The relative position bias <c>[heads, queries, keys]</c> from a bucket table, with −1e9 above the
+    /// diagonal when <paramref name="causal"/>.</summary>
+    internal static Tensor<T> RelativeBias(IEngine engine, T5Configuration c, TiedEmbeddingLayer<T> table, int queries, int keys,
+        bool bidirectional, bool causal)
     {
-        var c = Configuration;
+        var _engine = engine;
         var buckets = new Tensor<T>(new[] { queries * keys });
         for (int i = 0; i < queries; i++)
             for (int j = 0; j < keys; j++)
@@ -238,6 +263,8 @@ internal sealed class T5Seq2Seq<T>
         var bias = PositionBias(decoderBias, length, length, bidirectional: false, causal: true);
         foreach (var block in Decoder) h = block.Forward(h, bias, memory, null, training, random);
         h = Drop(decoderNorm.Forward(h), training, random);
+        // Tied embeddings rescale the decoder output by d_model^-1/2 first; an untied lm_head does not.
+        if (LanguageModelHead is not null) return LanguageModelHead.Forward(h);
         var scaled = _engine.TensorMultiplyScalar(h, NumOps.FromDouble(1.0 / Math.Sqrt(Configuration.ModelDim)));
         return Shared.Logits(scaled);
     }
@@ -245,11 +272,20 @@ internal sealed class T5Seq2Seq<T>
     /// <summary>
     /// The teacher-forced cross-entropy of <paramref name="labels"/> given <paramref name="inputIds"/>, as
     /// <c>T5ForConditionalGeneration(labels=...)</c> computes it: the decoder reads the labels shifted right behind the
-    /// start token, and the loss averages the token cross-entropies.
+    /// start token, and the loss averages the token cross-entropies. With <paramref name="freezeEncoder"/> the encoder
+    /// runs in inference mode outside the tape, so only the decoder (and the embedding rows it reads) learn.
     /// </summary>
-    public Tensor<T> Loss(Tensor<T> inputIds, int[] labels, bool training, Random random)
+    public Tensor<T> Loss(Tensor<T> inputIds, int[] labels, bool training, Random random, bool freezeEncoder = false)
     {
-        var memory = Encode(inputIds, training, random);
+        Tensor<T> memory;
+        if (freezeEncoder)
+        {
+            using (new NoGradScope<T>()) memory = Encode(inputIds, training: false, random);
+        }
+        else
+        {
+            memory = Encode(inputIds, training, random);
+        }
         var decoderIds = new Tensor<T>(new[] { labels.Length });
         decoderIds[0] = NumOps.FromDouble(Configuration.DecoderStartTokenId);
         for (int i = 1; i < labels.Length; i++) decoderIds[i] = NumOps.FromDouble(labels[i - 1]);
@@ -345,15 +381,20 @@ internal sealed class T5Seq2Seq<T>
             Attention(block.SelfAttention);
             if (block.CrossAttention is not null) Attention(block.CrossAttention);
             Fill(block.Wi, c.ModelDim, c.FeedForwardDim, Math.Pow(c.ModelDim, -0.5));
+            if (block.WiLinear is not null) Fill(block.WiLinear, c.ModelDim, c.FeedForwardDim, Math.Pow(c.ModelDim, -0.5));
             Fill(block.Wo, c.FeedForwardDim, c.ModelDim, Math.Pow(c.FeedForwardDim, -0.5));
         }
+        // An untied lm_head is drawn from N(0, 1).
+        if (LanguageModelHead is not null) Fill(LanguageModelHead, c.ModelDim, c.VocabularySize, 1.0);
     }
 
     /// <summary>
     /// Loads a Hugging Face <c>T5ForConditionalGeneration</c> state dict; <paramref name="read"/> returns the named
     /// tensor's values, row-major, after checking its shape. Linear weights are <c>[out, in]</c> in the checkpoint.
+    /// With <paramref name="encoderOnly"/> only the encoder stack is read (not <c>shared</c>, the decoder or
+    /// <c>lm_head</c>).
     /// </summary>
-    public void LoadHuggingFaceWeights(Func<string, int[], double[]> read)
+    public void LoadHuggingFaceWeights(Func<string, int[], double[]> read, bool encoderOnly = false)
     {
         var c = Configuration;
         int inner = c.Heads * c.KeyValueDim;
@@ -376,12 +417,20 @@ internal sealed class T5Seq2Seq<T>
         }
         void FeedForward(string name, T5Block<T> block)
         {
-            Linear(name + ".DenseReluDense.wi", block.Wi, c.FeedForwardDim, c.ModelDim);
+            if (block.WiLinear is null)
+            {
+                Linear(name + ".DenseReluDense.wi", block.Wi, c.FeedForwardDim, c.ModelDim);
+            }
+            else
+            {
+                Linear(name + ".DenseReluDense.wi_0", block.Wi, c.FeedForwardDim, c.ModelDim);
+                Linear(name + ".DenseReluDense.wi_1", block.WiLinear, c.FeedForwardDim, c.ModelDim);
+            }
             Linear(name + ".DenseReluDense.wo", block.Wo, c.ModelDim, c.FeedForwardDim);
             Norm(name + ".layer_norm", block.FeedForwardNorm);
         }
 
-        Shared.LoadTable(read("shared.weight", new[] { c.VocabularySize, c.ModelDim }));
+        if (!encoderOnly) Shared.LoadTable(read("shared.weight", new[] { c.VocabularySize, c.ModelDim }));
         for (int i = 0; i < Encoder.Count; i++)
         {
             string block = $"encoder.block.{i}.layer";
@@ -391,13 +440,16 @@ internal sealed class T5Seq2Seq<T>
         }
         EncoderBias.LoadTable(read("encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight", new[] { c.RelativeBuckets, c.Heads }));
         Norm("encoder.final_layer_norm", EncoderFinalNorm);
+        if (encoderOnly) return;
         for (int i = 0; i < Decoder.Count; i++)
         {
             string block = $"decoder.block.{i}.layer";
             Attention($"{block}.0.SelfAttention", Decoder[i].SelfAttention);
             Norm($"{block}.0.layer_norm", Decoder[i].SelfNorm);
-            Attention($"{block}.1.EncDecAttention", Decoder[i].CrossAttention!);
-            Norm($"{block}.1.layer_norm", Decoder[i].CrossNorm!);
+            var cross = Decoder[i].CrossAttention ?? throw new InvalidOperationException("A decoder block has cross-attention.");
+            var crossNorm = Decoder[i].CrossNorm ?? throw new InvalidOperationException("A decoder block has cross-attention.");
+            Attention($"{block}.1.EncDecAttention", cross);
+            Norm($"{block}.1.layer_norm", crossNorm);
             FeedForward($"{block}.2", Decoder[i]);
         }
         if (DecoderBias is not null && DecoderFinalNorm is not null)
@@ -405,5 +457,164 @@ internal sealed class T5Seq2Seq<T>
             DecoderBias.LoadTable(read("decoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight", new[] { c.RelativeBuckets, c.Heads }));
             Norm("decoder.final_layer_norm", DecoderFinalNorm);
         }
+        if (LanguageModelHead is not null) Linear("lm_head", LanguageModelHead, c.VocabularySize, c.ModelDim);
+    }
+
+    /// <summary>
+    /// Loads only the encoder of a Hugging Face T5 checkpoint whose vocabulary is the first
+    /// <paramref name="pretrainedVocabulary"/> rows of this model's: those rows of <c>shared</c>, the encoder blocks,
+    /// its relative bias table and final norm. The decoder and the remaining embedding rows keep their values.
+    /// </summary>
+    public void LoadHuggingFaceEncoderWeights(Func<string, int[], double[]> read, int pretrainedVocabulary)
+    {
+        var c = Configuration;
+        if (pretrainedVocabulary <= 0 || pretrainedVocabulary > c.VocabularySize)
+            throw new ArgumentOutOfRangeException(nameof(pretrainedVocabulary));
+        Shared.LoadLeadingRows(read("shared.weight", new[] { pretrainedVocabulary, c.ModelDim }));
+        LoadHuggingFaceWeights(read, encoderOnly: true);
+    }
+}
+
+/// <summary>
+/// A decoder-only T5 language model: a token embedding, a causal stack of T5 blocks without cross-attention sharing one
+/// unidirectional relative position bias table (held by the first block in Hugging Face's layout), a final RMS norm,
+/// and an output head. AudioLM's three stages (Borsos et al. 2022, §IV-B: decoder-only Transformers with T5-style
+/// relative positional embeddings) are this model.
+/// </summary>
+internal sealed class T5DecoderOnly<T>
+{
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+    private readonly IEngine _engine;
+
+    public T5DecoderOnly(IEngine engine, List<LayerBase<T>> layers, T5Configuration configuration)
+    {
+        _engine = engine ?? throw new ArgumentNullException(nameof(engine));
+        Configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
+        var c = configuration;
+        Embedding = T5Attention<T>.Own(layers, new TiedEmbeddingLayer<T>(c.VocabularySize, c.ModelDim));
+        for (int i = 0; i < c.DecoderLayers; i++) Blocks.Add(new T5Block<T>(engine, layers, c, decoder: false));
+        Bias = T5Attention<T>.Own(layers, new TiedEmbeddingLayer<T>(c.RelativeBuckets, c.Heads));
+        FinalNorm = T5Attention<T>.Own(layers, new RMSNormalizationLayer<T>(c.ModelDim, c.LayerNormEpsilon));
+        if (!c.TieWordEmbeddings)
+            Head = T5Attention<T>.Own(layers, new BiasFreeLinearLayer<T>(c.ModelDim, c.VocabularySize));
+    }
+
+    public T5Configuration Configuration { get; }
+    public TiedEmbeddingLayer<T> Embedding { get; }
+    public List<T5Block<T>> Blocks { get; } = new();
+    public TiedEmbeddingLayer<T> Bias { get; }
+    public RMSNormalizationLayer<T> FinalNorm { get; }
+    public BiasFreeLinearLayer<T>? Head { get; }
+
+    private Tensor<T> Drop(Tensor<T> x, bool training, Random random) =>
+        training && Configuration.Dropout > 0 ? T5Seq2Seq<T>.Dropout(_engine, x, Configuration.Dropout, random) : x;
+
+    /// <summary>The next-token logits <c>[L, vocabulary]</c> of ids <c>[L]</c>: row i predicts token i + 1.</summary>
+    public Tensor<T> Logits(IReadOnlyList<int> ids, bool training, Random random)
+    {
+        int length = ids.Count;
+        var tensor = new Tensor<T>(new[] { length });
+        for (int i = 0; i < length; i++) tensor[i] = NumOps.FromDouble(ids[i]);
+        var h = Drop(Embedding.Forward(tensor), training, random);
+        var bias = T5Seq2Seq<T>.RelativeBias(_engine, Configuration, Bias, length, length, bidirectional: false, causal: true);
+        foreach (var block in Blocks) h = block.Forward(h, bias, null, null, training, random);
+        h = Drop(FinalNorm.Forward(h), training, random);
+        if (Head is not null) return Head.Forward(h);
+        return Embedding.Logits(_engine.TensorMultiplyScalar(h, NumOps.FromDouble(1.0 / Math.Sqrt(Configuration.ModelDim))));
+    }
+
+    /// <summary>The mean cross-entropy of the tokens from position <paramref name="firstTarget"/> on, each predicted
+    /// from the tokens before it.</summary>
+    public Tensor<T> Loss(IReadOnlyList<int> ids, int firstTarget, bool training, Random random)
+    {
+        if (firstTarget < 1 || firstTarget >= ids.Count)
+            throw new ArgumentOutOfRangeException(nameof(firstTarget), "At least one token must be predicted from a non-empty prefix.");
+        var input = ids.Take(ids.Count - 1).ToArray();
+        var logits = Logits(input, training, random);                                                          // [L−1, V]
+        var logProbabilities = _engine.TensorLogSoftmax(logits, axis: -1);
+        var target = new Tensor<T>(logits._shape);
+        int count = ids.Count - firstTarget;
+        for (int i = firstTarget; i < ids.Count; i++) target[i - 1, ids[i]] = NumOps.FromDouble(-1.0 / count);
+        return _engine.ReduceSum(_engine.TensorMultiply(logProbabilities, target), new[] { 0, 1 }, keepDims: false);
+    }
+
+    /// <summary>
+    /// Samples a continuation of <paramref name="prefix"/> at <paramref name="temperature"/> (pure temperature sampling,
+    /// greedy at 0). <paramref name="allowed"/>(position, token) restricts each step's choices; generation stops after
+    /// <paramref name="maxNewTokens"/> or at <paramref name="stopToken"/>, which is not returned.
+    /// </summary>
+    public List<int> Generate(IReadOnlyList<int> prefix, double temperature, int maxNewTokens, Func<int, int, bool> allowed,
+        int stopToken, Random random)
+    {
+        var sequence = new List<int>(prefix);
+        var generated = new List<int>();
+        for (int step = 0; step < maxNewTokens; step++)
+        {
+            var logits = Logits(sequence, training: false, random);
+            int vocabulary = logits.Shape[1], last = sequence.Count - 1;
+            var scores = new double[vocabulary];
+            double max = double.NegativeInfinity;
+            for (int v = 0; v < vocabulary; v++)
+            {
+                scores[v] = allowed(step, v) ? NumOps.ToDouble(logits[last, v]) : double.NegativeInfinity;
+                max = Math.Max(max, scores[v]);
+            }
+            if (double.IsNegativeInfinity(max)) throw new InvalidOperationException("No token is allowed at this step.");
+            int next;
+            if (temperature <= 0)
+            {
+                next = Array.IndexOf(scores, max);
+            }
+            else
+            {
+                double total = 0;
+                for (int v = 0; v < vocabulary; v++) total += scores[v] = double.IsNegativeInfinity(scores[v]) ? 0 : Math.Exp((scores[v] - max) / temperature);
+                double draw = random.NextDouble() * total;
+                next = vocabulary - 1;
+                for (int v = 0; v < vocabulary; v++)
+                {
+                    if (scores[v] <= 0) continue;
+                    draw -= scores[v];
+                    if (draw <= 0) { next = v; break; }
+                }
+                while (scores[next] <= 0) next--;
+            }
+            if (next == stopToken) break;
+            sequence.Add(next);
+            generated.Add(next);
+        }
+        return generated;
+    }
+
+    /// <summary>Initializes as Hugging Face's T5 does (initializer factor 1); an untied head from N(0, 1).</summary>
+    public void InitializeLikeHuggingFace(Random random)
+    {
+        var c = Configuration;
+        int inner = c.Heads * c.KeyValueDim;
+        double Normal(double std)
+        {
+            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
+            return std * Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
+        }
+        void Fill(BiasFreeLinearLayer<T> layer, int inputs, int outputs, double std)
+        {
+            var values = new Vector<T>(inputs * outputs);
+            for (int i = 0; i < values.Length; i++) values[i] = NumOps.FromDouble(Normal(std));
+            layer.SetParameters(values);
+        }
+        Embedding.Reinitialize(() => Normal(1.0));
+        Bias.Reinitialize(() => Normal(Math.Pow(c.ModelDim, -0.5)));
+        foreach (var block in Blocks)
+        {
+            var a = block.SelfAttention;
+            Fill(a.Query, c.ModelDim, inner, Math.Pow(c.ModelDim * c.KeyValueDim, -0.5));
+            Fill(a.Key, c.ModelDim, inner, Math.Pow(c.ModelDim, -0.5));
+            Fill(a.Value, c.ModelDim, inner, Math.Pow(c.ModelDim, -0.5));
+            Fill(a.Output, inner, c.ModelDim, Math.Pow(inner, -0.5));
+            Fill(block.Wi, c.ModelDim, c.FeedForwardDim, Math.Pow(c.ModelDim, -0.5));
+            if (block.WiLinear is not null) Fill(block.WiLinear, c.ModelDim, c.FeedForwardDim, Math.Pow(c.ModelDim, -0.5));
+            Fill(block.Wo, c.FeedForwardDim, c.ModelDim, Math.Pow(c.FeedForwardDim, -0.5));
+        }
+        if (Head is not null) Fill(Head, c.ModelDim, c.VocabularySize, 1.0);
     }
 }

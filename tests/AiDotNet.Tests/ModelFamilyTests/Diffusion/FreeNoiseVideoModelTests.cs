@@ -7,9 +7,10 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 namespace AiDotNet.Tests.ModelFamilyTests.Diffusion;
 
 [Xunit.Collection("FoundationScaleSerial")]
-// HeavyTimeout: foundation-scale diffusion (video / paper-scale); correct but a single
-// forward x N-step Generate exceeds the 120 s per-test gate. Runs in the nightly lane.
-[Xunit.Trait("Category", "HeavyTimeout")]
+// #1714: back in the default gate. The HeavyTimeout deferral here was measured away: in the
+// nightly lane (run 38117342722, one class per process under a managed heap cap of 70% of
+// runner RAM) this class ran 13 of 13 tests green, slowest 5.5 s and no OutOfMemoryException
+// -- far inside the 120 s per-test gate. Re-defer only against a fresh measurement.
 public class FreeNoiseVideoModelTests : DiffusionModelTestBase<float>
 {
     protected override int[] InputShape => [1, 4, 16, 16];
