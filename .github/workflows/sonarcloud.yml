@@ -946,6 +946,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Receive-RequiredArtifact self-test failed' }
           ./tools/TestImpact/Invoke-GitHubApiWithRetry.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'GitHub API retry self-test failed' }
+          # #2131: the cancellation reporter only ever runs on a cancelled run, so its three
+          # arms (a build failure, an eviction by a newer run, and neither) are proved here.
+          ./tools/TestImpact/Report-CancelledRun.ps1 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw 'Report-CancelledRun self-test failed' }
           ./.github/scripts/Set-ShardEnvironment.ps1 -SelfTest
           if ($LASTEXITCODE -ne 0) { throw 'Set-ShardEnvironment self-test failed' }
           ./.github/scripts/New-CoverageRunSettings.ps1 -SelfTest
