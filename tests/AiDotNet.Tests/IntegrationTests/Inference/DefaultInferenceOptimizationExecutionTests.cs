@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.Inference;
@@ -69,9 +70,17 @@ public sealed class DefaultInferenceOptimizationExecutionTests
             EnableWeightOnlyQuantization = false,
         });
 
+        var layersBefore = model.Layers.ToArray();
+
         var (optimized, applied) = optimizer.OptimizeForInference(model);
 
         Assert.False(applied, "An opted-out config still reported optimizations as applied.");
+
+        // With every rewrite flag off the optimizer must hand back the model it was given, not a
+        // clone: cloning costs a full parameter copy for nothing. Asserting the instance and the
+        // layer sequence also catches a layer added or removed, which the type checks below cannot.
+        Assert.Same(model, optimized);
+        Assert.Equal(layersBefore, optimized.Layers.ToArray());
         Assert.Contains(optimized.Layers, layer => layer is MultiHeadAttentionLayer<double>);
         Assert.DoesNotContain(optimized.Layers, layer =>
             layer is CachedMultiHeadAttention<double> or PagedCachedMultiHeadAttention<double>);

@@ -24,6 +24,12 @@ public sealed class NestedOptionsCloneSharingTests
     /// <summary>
     /// A copied configuration must not share its nested options object with the original.
     /// </summary>
+    /// <remarks>
+    /// Control arm. <c>QuantileRegressionOptions</c> has a copy constructor that deep-copies
+    /// <c>SolverOptions</c>, so this passed before the fix too; it is here to show the fix did not
+    /// break the path that already worked. The new fallback is exercised by
+    /// <see cref="APlainOptionsClassAlsoGetsAnIndependentNestedCopy"/>, which fails without it.
+    /// </remarks>
     [Fact(Timeout = 60000)]
     public async Task ACopiedConfigurationDoesNotShareItsNestedOptions()
     {
@@ -58,25 +64,6 @@ public sealed class NestedOptionsCloneSharingTests
 
         Assert.NotNull(copy.SolverOptions);
         Assert.Equal(123, copy.SolverOptions.MaxIterations);
-    }
-
-    /// <summary>
-    /// The same property must also be a distinct instance, which is the structural statement of
-    /// the first test and is what a by-reference plan entry violates.
-    /// </summary>
-    [Fact(Timeout = 60000)]
-    public async Task TheNestedOptionsInstanceIsNotTheSameObject()
-    {
-        await Task.Yield();
-
-        var original = new QuantileRegressionOptions<double>
-        {
-            SolverOptions = new SimplexSolverOptions { MaxIterations = 123 },
-        };
-
-        var copy = (QuantileRegressionOptions<double>)CloneEngine.CopyConfiguration(original);
-
-        Assert.NotSame(original.SolverOptions, copy.SolverOptions);
     }
 
     /// <summary>
