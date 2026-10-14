@@ -21,7 +21,7 @@ public class ForecasterFusedTrainingTests
 
     public static TheoryData<string> Models => new()
     {
-        "DeepAR", "NBEATS", "NHiTS", "TFT", "Informer",
+        "DeepAR", "NBEATS", "NHiTS", "TFT", "Informer", "Autoformer",
     };
 
     private static TimeSeriesModelBase<double> Create(string model, int epochs, int batch) => model switch
@@ -35,6 +35,8 @@ public class ForecasterFusedTrainingTests
         "TFT" => new TemporalFusionTransformer<double>(new TemporalFusionTransformerOptions<double>
             { LookbackWindow = 8, ForecastHorizon = 2, HiddenSize = 8, NumAttentionHeads = 2, Epochs = epochs, BatchSize = batch, Seed = 5 }),
         "Informer" => new InformerModel<double>(new InformerOptions<double>
+            { LookbackWindow = 8, ForecastHorizon = 2, EmbeddingDim = 8, NumAttentionHeads = 2, Epochs = epochs, BatchSize = batch, Seed = 5 }),
+        "Autoformer" => new AutoformerModel<double>(new AutoformerOptions<double>
             { LookbackWindow = 8, ForecastHorizon = 2, EmbeddingDim = 8, NumAttentionHeads = 2, Epochs = epochs, BatchSize = batch, Seed = 5 }),
         _ => throw new ArgumentOutOfRangeException(nameof(model)),
     };

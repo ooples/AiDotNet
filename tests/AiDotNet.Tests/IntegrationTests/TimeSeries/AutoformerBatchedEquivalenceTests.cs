@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.TimeSeries;
@@ -103,11 +104,11 @@ public class AutoformerBatchedEquivalenceTests
     {
         const double MatmulTolerance = 1e-9;
         var model = Model(dim);
-        var q2 = Rand([seq, dim], seed: 5);
-        var k2 = Rand([seq, dim], seed: 9);
+        var q2 = Rand([1, seq, dim], seed: 5);
+        var k2 = Rand([1, seq, dim], seed: 9);
 
-        var spectrum = model.CorrelationSpectrumMatmul(q2, k2, seq, dim);
-        Assert.Equal(seq, spectrum.Shape[0]);
+        var spectrum = model.CorrelationSpectrumBatched(q2, k2, seq, dim);
+        Assert.Equal(seq, spectrum.Shape[1]);
 
         for (int lag = 0; lag < seq; lag++)
         {
@@ -115,10 +116,10 @@ public class AutoformerBatchedEquivalenceTests
             double sum = 0.0;
             for (int t = 0; t < valid; t++)
                 for (int d = 0; d < dim; d++)
-                    sum += q2[[t, d]] * k2[[t + lag, d]];
+                    sum += q2[[0, t, d]] * k2[[0, t + lag, d]];
 
             double expected = sum / (valid * dim);
-            double actual = spectrum[[lag]];
+            double actual = spectrum[[0, lag]];
             Assert.True(
                 Math.Abs(expected - actual) <= MatmulTolerance * Math.Max(1.0, Math.Abs(expected)),
                 $"matmul spectrum mismatch at lag={lag}: expected {expected}, got {actual}");
@@ -131,14 +132,14 @@ public class AutoformerBatchedEquivalenceTests
         const int seq = 12;
         const int dim = 8;
         var model = Model(dim);
-        var q = Rand([seq, dim], seed: 13);
-        var k = Rand([seq, dim], seed: 17);
+        var q = Rand([1, seq, dim], seed: 13);
+        var k = Rand([1, seq, dim], seed: 17);
 
-        var shortSpectrum = model.CorrelationSpectrumMatmul(q, k, corrLen: 6, d: dim);
-        var fullSpectrum = model.CorrelationSpectrumMatmul(q, k, corrLen: seq, d: dim);
+        var shortSpectrum = model.CorrelationSpectrumBatched(q, k, corrLen: 6, d: dim);
+        var fullSpectrum = model.CorrelationSpectrumBatched(q, k, corrLen: seq, d: dim);
 
-        Assert.Equal(6, shortSpectrum.Shape[0]);
-        Assert.Equal(seq, fullSpectrum.Shape[0]);
+        Assert.Equal(6, shortSpectrum.Shape[1]);
+        Assert.Equal(seq, fullSpectrum.Shape[1]);
     }
 
     /// <summary>
@@ -187,6 +188,66 @@ public class AutoformerBatchedEquivalenceTests
                         Math.Abs(expected - actual) <= Tolerance,
                         $"moving-average mismatch at b={b} t={t} d={d}: expected {expected}, got {actual}");
                 }
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData(1, 12, 4, 8)]
+    [InlineData(5, 12, 4, 8)]
+    [InlineData(3, 24, 6, 16)]
+    [InlineData(4, 8, 12, 8)]
+    public void Batched_forward_equals_each_window_forwarded_alone(int batch, int lookback, int horizon, int embDim)
+    {
+        // Each window picks its own top-k delays; the batched forward must not share a selection across windows.
+        var model = new AutoformerModel<double>(new AutoformerOptions<double>
+        {
+            LookbackWindow = lookback, ForecastHorizon = horizon, EmbeddingDim = embDim, NumAttentionHeads = 2,
+            NumEncoderLayers = 2, NumDecoderLayers = 1, Seed = 11,
+        });
+        var input = Rand(new[] { batch, lookback }, seed: 23);
+
+        var batched = model.ForwardBatched(input);
+        var perSample = new Tensor<double>(new[] { batch, horizon });
+        for (int b = 0; b < batch; b++)
+        {
+            var window = new Tensor<double>(new[] { 1, lookback });
+            for (int t = 0; t < lookback; t++) window[[0, t]] = input[[b, t]];
+            var alone = model.ForwardBatched(window);
+            for (int h = 0; h < horizon; h++) perSample[[b, h]] = alone[[0, h]];
+        }
+
+        Assert.Equal(new[] { batch, horizon }, batched.Shape.ToArray());
+        double worst = 0.0;
+        for (int i = 0; i < perSample.Length; i++) worst = Math.Max(worst, Math.Abs(batched[i] - perSample[i]));
+        Assert.True(worst <= 1e-9, $"batched forward differs from the per-sample forward by {worst:G6}");
+    }
+
+    [Theory]
+    [InlineData(1, 12, 3)]
+    [InlineData(4, 12, 7)]
+    [InlineData(3, 6, 6)]
+    [InlineData(2, 9, 1)]
+    public void TopK_lag_weights_equal_a_stable_sort_then_softmax(int batch, int lags, int topK)
+    {
+        var model = Model();
+        var corr = Rand([batch, lags], seed: 31);
+        // Ties: an equal value at a later lag must lose to the earlier one, as a stable descending sort orders them.
+        if (lags > 4) for (int b = 0; b < batch; b++) corr[[b, 4]] = corr[[b, 1]];
+
+        var weights = model.TopKLagWeights(corr, topK);
+
+        for (int b = 0; b < batch; b++)
+        {
+            var values = Enumerable.Range(0, lags).Select(i => corr[[b, i]]).ToArray();
+            var chosen = Enumerable.Range(0, lags).OrderByDescending(i => values[i]).Take(topK).ToArray();
+            double max = chosen.Max(i => values[i]);
+            double norm = chosen.Sum(i => Math.Exp(values[i] - max));
+            for (int lag = 0; lag < lags; lag++)
+            {
+                double expected = chosen.Contains(lag) ? Math.Exp(values[lag] - max) / norm : 0.0;
+                Assert.True(Math.Abs(expected - weights[[b, lag]]) <= 1e-12,
+                    $"b={b} lag={lag}: expected {expected}, got {weights[[b, lag]]}");
             }
         }
     }
