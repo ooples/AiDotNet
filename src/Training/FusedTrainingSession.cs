@@ -175,8 +175,23 @@ internal sealed class FusedTrainingSession<T>
     /// <summary>Runs one fused step, or says why it cannot.</summary>
     public FusedStepOutcome TryStep(FusedTrainingStepRequest<T> request, out T loss)
     {
+        var outcome = TryStep(request, out loss, out var lossTensor);
+        if (lossTensor is not null)
+            loss = ReadLoss(loss, lossTensor);
+        return outcome;
+    }
+
+    /// <summary>
+    /// Runs one fused step, or says why it cannot. A compiled step returns its loss as <paramref name="lossTensor"/>
+    /// (and <paramref name="loss"/> is then zero) without reading it: reading the scalar waits for the device to
+    /// finish the step, so a caller that defers the read lets the host prepare the next step meanwhile. Null when
+    /// the step produced only a scalar.
+    /// </summary>
+    public FusedStepOutcome TryStep(FusedTrainingStepRequest<T> request, out T loss, out Tensor<T>? lossTensor)
+    {
         Guard.NotNull(request);
         loss = NumOps.Zero;
+        lossTensor = null;
         LastFallbackException = null;
 
         // The compiled plan carries the optimizer's moments. A different optimizer instance (a new Train call, a
@@ -275,6 +290,7 @@ internal sealed class FusedTrainingSession<T>
         // (#1624 / #1640). Disposed before result handling so a fallback starts from a clean ring.
         bool ran;
         T stepLoss;
+        var deferredLoss = new System.Runtime.CompilerServices.StrongBox<Tensor<T>?>();
         var stepArena = TensorArena.Create();
         try
         {
@@ -300,7 +316,8 @@ internal sealed class FusedTrainingSession<T>
                 onGradients: OnGradients,
                 trainableSelection: request.Selection,
                 owner: _owner,
-                l2Regularization: l2);
+                l2Regularization: l2,
+                deferredLoss: deferredLoss);
         }
         finally
         {
@@ -320,7 +337,7 @@ internal sealed class FusedTrainingSession<T>
 
         if (checkReplay && snapshot is not null)
         {
-            double replayLoss = NumOps.ToDouble(stepLoss);
+            double replayLoss = NumOps.ToDouble(ReadLoss(stepLoss, deferredLoss.Value));
             double scale = Math.Max(1.0, Math.Max(Math.Abs(eagerLoss), Math.Abs(replayLoss)));
             bool agree = (double.IsNaN(eagerLoss) && double.IsNaN(replayLoss))
                 || Math.Abs(eagerLoss - replayLoss) <= ReplayAgreementTolerance * scale;
@@ -377,7 +394,7 @@ internal sealed class FusedTrainingSession<T>
             }
             else if (!persisted || detached)
             {
-                string reason = "fused compiled step ran (loss " + NumOps.ToDouble(stepLoss).ToString("G6")
+                string reason = "fused compiled step ran (loss " + NumOps.ToDouble(ReadLoss(stepLoss, deferredLoss.Value)).ToString("G6")
                     + ") but did not persist a parameter update; the plan is decoupled from the model's live "
                     + "parameter tensors, so training continues on the eager tape (ooples/AiDotNet#1822)";
                 Warn(reason);
@@ -397,6 +414,7 @@ internal sealed class FusedTrainingSession<T>
         IsCommitted = true;
         LastMissReason = null;
         loss = stepLoss;
+        lossTensor = deferredLoss.Value;
 
         // The plan wrote the weights in place, past the version counters an eager optimizer step bumps, so every
         // derived weight copy (CPU packed inference weights, GPU-resident uploads) is stale. Inference read those
@@ -407,6 +425,10 @@ internal sealed class FusedTrainingSession<T>
             scheduled.OnBatchEnd();
         return FusedStepOutcome.Stepped;
     }
+
+    // The step's loss as a scalar: the deferred tensor's value when the step returned one, else the scalar it produced.
+    private static T ReadLoss(T scalar, Tensor<T>? deferred)
+        => deferred is null ? scalar : deferred.Length > 0 ? deferred[0] : NumOps.Zero;
 
     /// <summary>Maps an optimizer to its fused kernel configuration, when it has one.</summary>
     // Drops every cached derived copy of the weights after the plan updated them in place.
