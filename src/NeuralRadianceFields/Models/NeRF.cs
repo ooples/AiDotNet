@@ -135,6 +135,12 @@ public partial class NeRF<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>,
 {
     private readonly NeRFOptions _options;
 
+    // The ray-sampling draws (stratified jitter, importance samples). A seeded model draws from its own generator, so
+    // its rendering and training are reproducible; otherwise from the shared thread-safe one.
+    private readonly Random? _seededSamplingRandom;
+
+    private Random SamplingRandom => _seededSamplingRandom ?? Random;
+
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
@@ -367,6 +373,7 @@ public partial class NeRF<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>,
     {
         _options = options;
         Options = _options;
+        if (options.Seed.HasValue) _seededSamplingRandom = RandomHelper.CreateSeededRandom(options.Seed.Value);
         // Validate parameters
         if (options.PositionEncodingLevels <= 0)
         {
@@ -683,27 +690,51 @@ public partial class NeRF<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>,
         T nearBound,
         T farBound)
     {
-        int numRays = rayOrigins.Shape[0];
+        var samples = SampleRays(rayOrigins, rayDirections, numSamples, nearBound, farBound);
+        return RenderSamples(samples.Positions, samples.Directions, samples.Spacings);
+    }
 
-        // Sample points along rays
+    /// <summary>
+    /// Where a batch of rays is sampled: stratified samples along each ray and, with hierarchical sampling, the fine
+    /// samples the coarse pass's densities place. Returns the sample positions and view directions
+    /// (<c>[rays·samples, 3]</c> each) and the spacings (<c>[rays, samples]</c>).
+    /// </summary>
+    /// <remarks>
+    /// Only the render over the final samples is differentiated: the coarse pass decides where to look, its
+    /// densities are read on the host to build the importance distribution, and its own output never reaches the
+    /// rendered color. It therefore runs without recording, and a training step can take the samples as data.
+    /// </remarks>
+    private (Tensor<T> Positions, Tensor<T> Directions, Tensor<T> Spacings) SampleRays(
+        Tensor<T> rayOrigins, Tensor<T> rayDirections, int numSamples, T nearBound, T farBound)
+    {
+        int numRays = rayOrigins.Shape[0];
         var (samplePositions, sampleDirections, sampleTs, rayNear, rayFar) = SamplePointsAlongRays(
             rayOrigins, rayDirections, numSamples, nearBound, farBound, stratified: true);
 
-        // Query radiance field
-        var (rgb, density) = QueryField(samplePositions, sampleDirections);
-
         if (_useHierarchicalSampling && _hierarchicalSamples > 0 && numSamples > 1)
         {
+            Tensor<T> density;
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+                (_, density) = QueryField(samplePositions, sampleDirections);
+
             var weights = ComputeSampleWeights(density, numRays, numSamples, rayNear, rayFar, sampleTs);
             var fineTs = SampleImportance(sampleTs, weights, numRays, numSamples, _hierarchicalSamples);
             var mergedTs = MergeSampleTs(sampleTs, fineTs, numRays, numSamples, _hierarchicalSamples);
             var (mergedPositions, mergedDirections) = BuildSamplePositions(rayOrigins, rayDirections, mergedTs);
-            var (mergedRgb, mergedDensity) = QueryField(mergedPositions, mergedDirections);
-            return VolumeRendering(mergedRgb, mergedDensity, numRays, numSamples + _hierarchicalSamples, rayNear, rayFar, mergedTs);
+            return (mergedPositions, mergedDirections,
+                NeuralRadianceFields.Helpers.VolumeRenderer<T>.Spacings(
+                    numRays, numSamples + _hierarchicalSamples, rayNear, rayFar, mergedTs));
         }
 
-        // Perform volume rendering
-        return VolumeRendering(rgb, density, numRays, numSamples, rayNear, rayFar, sampleTs);
+        return (samplePositions, sampleDirections,
+            NeuralRadianceFields.Helpers.VolumeRenderer<T>.Spacings(numRays, numSamples, rayNear, rayFar, sampleTs));
+    }
+
+    /// <summary>Queries the field at the samples and composites one color per ray, <c>[rays, 3]</c>.</summary>
+    private Tensor<T> RenderSamples(Tensor<T> positions, Tensor<T> directions, Tensor<T> spacings)
+    {
+        var (rgb, density) = QueryField(positions, directions);
+        return NeuralRadianceFields.Helpers.VolumeRenderer<T>.Render(Engine, rgb, density, spacings);
     }
 
     #endregion
@@ -717,10 +748,7 @@ public partial class NeRF<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>,
     /// <param name="numLevels">Number of frequency levels for encoding.</param>
     /// <returns>Encoded tensor of shape [N, D * 2 * numLevels].</returns>
     private Tensor<T> PositionalEncoding(Tensor<T> input, int numLevels)
-    {
-        // Use vectorized Engine implementation for CPU/GPU acceleration
-        return Engine.PositionalEncoding(input, numLevels);
-    }
+        => NeuralRadianceFields.Helpers.PositionalEncoder<T>.Encode(Engine, input, numLevels);
 
     /// <summary>
     /// Computes the backward pass for positional encoding using vectorized Engine operations.
@@ -869,7 +897,7 @@ public partial class NeRF<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>,
         double near = numOps.ToDouble(nearBound);
         double far = numOps.ToDouble(farBound);
         double step = numSamples > 0 ? (far - near) / numSamples : 0.0;
-        var random = Random;
+        var random = SamplingRandom;
 
         for (int r = 0; r < numRays; r++)
         {
@@ -945,17 +973,6 @@ public partial class NeRF<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>,
             new Tensor<T>(directions, [numRays * numSamples, 3]));
     }
 
-    private Tensor<T> VolumeRendering(
-        Tensor<T> rgb,
-        Tensor<T> density,
-        int numRays,
-        int numSamples,
-        double[] rayNear,
-        double[] rayFar,
-        double[]? sampleTs = null)
-        => NeuralRadianceFields.Helpers.VolumeRenderer<T>.Render(
-            Engine, rgb, density, numRays, numSamples, rayNear, rayFar, sampleTs);
-
     private double[] ComputeSampleWeights(
         Tensor<T> density,
         int numRays,
@@ -1009,7 +1026,7 @@ public partial class NeRF<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>,
         int numFineSamples)
     {
         var fineTs = new double[numRays * numFineSamples];
-        var random = Random;
+        var random = SamplingRandom;
 
         for (int r = 0; r < numRays; r++)
         {
@@ -1183,23 +1200,25 @@ public partial class NeRF<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>,
         var targetColors = NeuralRadianceFields.Helpers.ImageTrainingHelpers.ApplyPriorToRayTargets(
             Engine, pixels.TargetColors, view, imageTrainingOptions?.PriorConfidenceOverride);
 
-        // Tape-recorded forward + photometric MSE → BackwardAndStepOnPrecomputedLoss drives a
-        // real gradient step through RenderRays into the MLP weights.
+        // The samples are drawn first (stratified jitter and the coarse pass's importance sampling are both host
+        // work) and travel in the step's input with their spacings, so the shared fused session's compiled plan
+        // renders each batch's own samples. The step differentiates the photometric MSE through the volume-rendering
+        // integral into the MLP weights.
         SetTrainingMode(true);
         try
         {
-            using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>();
-            var rendered = RenderRays(
-                pixels.RayOrigins,
-                pixels.RayDirections,
-                numSamples: numSamples,
-                near,
-                far);
-            var diff = Engine.TensorSubtract(rendered, targetColors);
-            var squared = Engine.TensorMultiply(diff, diff);
-            var allAxes = System.Linq.Enumerable.Range(0, squared.Shape.Length).ToArray();
-            var meanLoss = Engine.ReduceMean(squared, allAxes, keepDims: false);
-            return BackwardAndStepOnPrecomputedLoss(tape, meanLoss);
+            var samples = SampleRays(pixels.RayOrigins, pixels.RayDirections, numSamples, near, far);
+            int[] pointShape = samples.Positions._shape;
+            int[] spacingShape = samples.Spacings._shape;
+            int pointLength = samples.Positions.Length;
+            return TrainCustomTapeStep(
+                Training.StepInputPacking<T>.Pack(samples.Positions, samples.Directions, samples.Spacings),
+                targetColors,
+                packed => RenderSamples(
+                    Training.StepInputPacking<T>.Slice(packed, 0, pointShape),
+                    Training.StepInputPacking<T>.Slice(packed, pointLength, pointShape),
+                    Training.StepInputPacking<T>.Slice(packed, 2 * pointLength, spacingShape)),
+                NeuralRadianceFields.Helpers.ImageTrainingHelpers.PhotometricLoss);
         }
         finally
         {
