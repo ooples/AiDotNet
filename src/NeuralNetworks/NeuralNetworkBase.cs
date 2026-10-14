@@ -11448,24 +11448,39 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // exist when it is built. A custom objective can reach layers the network's own forward never does (a
         // pretraining decoder), so each distinct objective runs one forward outside the tape before its first step;
         // otherwise those layers are created during the trace and never trained.
+        // The warm-up runs in inference mode: it resolves shapes, and must not count as a training forward
+        // (a BatchNorm would update its running statistics, a Dropout would consume its random stream).
         if (_warmedCustomForwards.Add(forward.Method))
         {
-            using (new NoGradScope<T>())
-                forward(input);
+            bool wasTraining = IsTrainingMode;
+            SetTrainingMode(false);
+            try
+            {
+                using (new NoGradScope<T>())
+                    forward(input);
+            }
+            finally
+            {
+                SetTrainingMode(wasTraining);
+            }
         }
 
         var collect = parameterProvider ?? CollectModelTrainableTensors;
         var parameters = collect();
 
+        // The network's layers ride along so the compiled step's own lazy-init forward runs them in inference mode
+        // (with none, that forward ran in training mode and a BatchNorm updated its running statistics an extra
+        // time). Selection keeps the trained set exactly the one collected above.
         var request = new Training.FusedTrainingStepRequest<T>
         {
-            Layers = Array.Empty<ITrainableLayer<T>>(),
+            Layers = Layers.OfType<ITrainableLayer<T>>().ToList(),
             Input = input,
             Target = target,
             Forward = forward,
             ComputeLoss = loss,
             Optimizer = resolvedOptimizer,
             ExtraParameters = parameters,
+            Selection = parameters,
             ModelGradientClip = MaxGradNormValue,
             OnGradients = ScatterFusedGradients,
         };
