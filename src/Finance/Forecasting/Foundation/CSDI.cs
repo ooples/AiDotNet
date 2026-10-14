@@ -348,12 +348,11 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
             // by host-sampling a fresh (t, eps) pair and copying values into the
             // slot tensors -- the compiled forward reads the CURRENT slot data on
             // every replay. See ooples/AiDotNet#1846.
-            if (trainableParams.Length > 0
-                && NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
-                    _optimizer,
-                    out var mfsCfg))
+            // The fused step resolves lazily created weights itself, so it is tried from the first step: an eager
+            // first step would leave its optimizer moments behind when the plan takes over.
+            if (NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(_optimizer, out _))
             {
-                var multiSlotStep = _fusedMultiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>();
+                var multiSlotStep = _fusedMultiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>(this);
                 Tensor<T> ForwardFromSlots(IReadOnlyList<Tensor<T>> s) => DenoiserForwardFromSlots(s);
                 Tensor<T> ComputeLossFromSlots(Tensor<T> pred, IReadOnlyList<Tensor<T>> s)
                 {
@@ -367,14 +366,7 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
                         freshSlotData: slots,
                         forward: ForwardFromSlots,
                         computeLoss: ComputeLossFromSlots,
-                        optimizerType: mfsCfg.Type,
-                        learningRate: mfsCfg.LearningRate,
-                        beta1: mfsCfg.Beta1,
-                        beta2: mfsCfg.Beta2,
-                        epsilon: mfsCfg.Epsilon,
-                        weightDecay: mfsCfg.WeightDecay,
-                        lrSchedule: mfsCfg.Schedule,
-                        extras: mfsCfg.Extras,
+                        optimizer: _optimizer,
                         out T fusedLoss))
                 {
                     LastLoss = fusedLoss;
