@@ -114,6 +114,23 @@ internal static class TorchParameters
         layer.SetParameters(transposed);
     }
 
+    /// <summary>Loads an <c>nn.BatchNorm</c>'s weight, bias and running statistics (the layer's vector is gamma, beta,
+    /// then the running mean and variance buffers).</summary>
+    public static void BatchNorm<T>(BatchNormalizationLayer<T> norm, double[] gamma, double[] beta, double[] mean, double[] variance)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        int c = gamma.Length;
+        var v = new Vector<T>(4 * c);
+        for (int j = 0; j < c; j++)
+        {
+            v[j] = ops.FromDouble(gamma[j]);
+            v[c + j] = ops.FromDouble(beta[j]);
+            v[2 * c + j] = ops.FromDouble(mean[j]);
+            v[3 * c + j] = ops.FromDouble(variance[j]);
+        }
+        norm.SetParameters(v);
+    }
+
     /// <summary>Loads an <c>nn.LayerNorm</c>'s weight and bias.</summary>
     public static void LayerNorm<T>(IEngine engine, LayerNormalizationLayer<T> layer, double[] weight, double[] bias)
     {

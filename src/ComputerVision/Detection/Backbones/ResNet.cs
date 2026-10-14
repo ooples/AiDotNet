@@ -44,6 +44,7 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+[TaskVariantOf(typeof(AiDotNet.NeuralNetworks.ResNetNetwork<>), "detection backbone")]
 public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 {
     // UpdateParameters delegated straight to SetParameters. The base does that now.
@@ -71,6 +72,9 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         _trunkConfiguration = ResNetTrunkConfiguration.For(options.Variant, options.InChannels);
         OutputChannels = _trunkConfiguration.OutputChannels;
         InitializeLayers();
+        // A backbone starts in inference mode: its parent detector switches it to training when it trains, and the
+        // base default (training) would otherwise normalize every detection with the batch's own statistics.
+        SetTrainingMode(false);
     }
 
     private static int GetLayerCount(ResNetVariant variant) => variant switch
@@ -147,6 +151,13 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         _trunk = new ResNetTrunk<T>(Engine, layers, _trunkConfiguration);
         _trunk.InitializeLikeReference(LayerInitializationSeedScope.NextRandom());
         Layers.AddRange(layers);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Every layer is sized at construction and <see cref="NeuralNetworkBase{T}.Layers"/> is not a chain (a
+    /// projection shortcut reads its block's input).</remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
     }
 
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>

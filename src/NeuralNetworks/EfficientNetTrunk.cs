@@ -281,7 +281,7 @@ internal sealed class EfficientNetTrunk<T>
             int k = conv.KernelSize, outputs = conv.OutputDepth;
             conv.SetParameters(TextToSpeech.CodecBased.TorchParameters.Gaussian<T>(random, outputs * KernelInputs(conv) * k * k,
                 Math.Sqrt(2.0 / (k * k * outputs / conv.Groups))));
-            LoadNorm(norm, Enumerable.Repeat(1.0, outputs).ToArray(), new double[outputs], new double[outputs],
+            TextToSpeech.CodecBased.TorchParameters.BatchNorm(norm, Enumerable.Repeat(1.0, outputs).ToArray(), new double[outputs], new double[outputs],
                 Enumerable.Repeat(1.0, outputs).ToArray());
         }
         foreach (var block in Stages.SelectMany(s => s))
@@ -301,7 +301,7 @@ internal sealed class EfficientNetTrunk<T>
             int k = conv.KernelSize, outputs = conv.OutputDepth;
             LoadConv(conv, read($"{name}.weight", new[] { outputs, KernelInputs(conv), k, k }));
             var shape = new[] { outputs };
-            LoadNorm(norm, read($"{normName}.weight", shape), read($"{normName}.bias", shape),
+            TextToSpeech.CodecBased.TorchParameters.BatchNorm(norm, read($"{normName}.weight", shape), read($"{normName}.bias", shape),
                 read($"{normName}.running_mean", shape), read($"{normName}.running_var", shape));
         }
         for (int s = 0; s < Stages.Count; s++)
@@ -323,20 +323,5 @@ internal sealed class EfficientNetTrunk<T>
         var v = new Vector<T>(weight.Length);
         for (int i = 0; i < weight.Length; i++) v[i] = NumOps.FromDouble(weight[i]);
         conv.SetParameters(v);
-    }
-
-    private static void LoadNorm(BatchNormalizationLayer<T> norm, double[] gamma, double[] beta, double[] mean, double[] variance)
-    {
-        // The layer's vector is gamma, beta, then the running mean and variance buffers.
-        int c = gamma.Length;
-        var v = new Vector<T>(4 * c);
-        for (int j = 0; j < c; j++)
-        {
-            v[j] = NumOps.FromDouble(gamma[j]);
-            v[c + j] = NumOps.FromDouble(beta[j]);
-            v[2 * c + j] = NumOps.FromDouble(mean[j]);
-            v[3 * c + j] = NumOps.FromDouble(variance[j]);
-        }
-        norm.SetParameters(v);
     }
 }

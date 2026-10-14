@@ -175,13 +175,13 @@ internal sealed class ResNetTrunk<T>
             int outputs = conv.OutputDepth, inputs = conv.InputDepth, k = conv.KernelSize;
             conv.SetParameters(TextToSpeech.CodecBased.TorchParameters.Gaussian<T>(random, outputs * inputs * k * k,
                 Math.Sqrt(2.0 / (outputs * k * k))));
-            LoadNorm(norm, Fill(norm, 1.0), new double[outputs], new double[outputs], Fill(norm, 1.0));
+            TextToSpeech.CodecBased.TorchParameters.BatchNorm(norm, Fill(norm, 1.0), new double[outputs], new double[outputs], Fill(norm, 1.0));
         }
         if (Configuration.ZeroInitResidual)
             foreach (var block in Stages.SelectMany(s => s))
             {
                 int channels = block.LastNorm.GetGamma().Length;
-                LoadNorm(block.LastNorm, new double[channels], new double[channels], new double[channels], Fill(block.LastNorm, 1.0));
+                TextToSpeech.CodecBased.TorchParameters.BatchNorm(block.LastNorm, new double[channels], new double[channels], new double[channels], Fill(block.LastNorm, 1.0));
             }
         double[] Fill(BatchNormalizationLayer<T> norm, double value)
             => Enumerable.Repeat(value, norm.GetGamma().Length).ToArray();
@@ -197,7 +197,7 @@ internal sealed class ResNetTrunk<T>
             LoadConv(conv, read($"{name}.weight", new[] { outputs, inputs, k, k }));
             string n = NormName(name);
             var shape = new[] { outputs };
-            LoadNorm(norm, read($"{n}.weight", shape), read($"{n}.bias", shape), read($"{n}.running_mean", shape),
+            TextToSpeech.CodecBased.TorchParameters.BatchNorm(norm, read($"{n}.weight", shape), read($"{n}.bias", shape), read($"{n}.running_mean", shape),
                 read($"{n}.running_var", shape));
         }
     }
@@ -208,21 +208,5 @@ internal sealed class ResNetTrunk<T>
         var v = new Vector<T>(weight.Length);
         for (int i = 0; i < weight.Length; i++) v[i] = ops.FromDouble(weight[i]);
         conv.SetParameters(v);
-    }
-
-    private static void LoadNorm(BatchNormalizationLayer<T> norm, double[] gamma, double[] beta, double[] mean, double[] variance)
-    {
-        // The layer's vector is gamma, beta, then the running mean and variance buffers.
-        var ops = MathHelper.GetNumericOperations<T>();
-        int c = gamma.Length;
-        var v = new Vector<T>(4 * c);
-        for (int j = 0; j < c; j++)
-        {
-            v[j] = ops.FromDouble(gamma[j]);
-            v[c + j] = ops.FromDouble(beta[j]);
-            v[2 * c + j] = ops.FromDouble(mean[j]);
-            v[3 * c + j] = ops.FromDouble(variance[j]);
-        }
-        norm.SetParameters(v);
     }
 }
