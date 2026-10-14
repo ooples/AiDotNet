@@ -136,6 +136,10 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
     /// <summary>Seed of the negatives in the deterministic objective (paper arXiv id 2410.02168).</summary>
     private const int ObjectiveNegativeSeed = 241002168;
 
+    // The training draws: steps, noise and negatives. One generator for the model's lifetime, seeded from Options.Seed
+    // when set, so a seeded model trains reproducibly while every step still draws fresh values.
+    private readonly Random _trainingRandom = RandomHelper.CreateSecureRandom();
+
     private const int LayersPerMlpResidual = 5;
     private const int LayersPerDiTBlock = 9;
 
@@ -177,6 +181,7 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
         options ??= new CCDMOptions<T>(); _options = options; Options = _options;
+        if (options.Seed.HasValue) _trainingRandom = RandomHelper.CreateSeededRandom(options.Seed.Value);
         _useNativeMode = true; OnnxSession = null; OnnxModelPath = null;
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
@@ -361,9 +366,10 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
     /// loss (mean squared error by default, as the reference).
     /// </para>
     /// <para>
-    /// The draws are deliberately NOT seeded from <c>Options.Seed</c>. That seed makes inference
-    /// reproducible; reusing it here would hand every call the same steps and the same noise, so the
-    /// model would be fitted at a fixed set of noise levels.
+    /// The draws come from one generator kept for the model's lifetime, seeded from <c>Options.Seed</c> when
+    /// set. Re-seeding on every call would hand each step the same steps and the same noise, so the model would
+    /// be fitted at a fixed set of noise levels; advancing one generator keeps a seeded run reproducible and every
+    /// step fresh.
     /// </para>
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
@@ -377,39 +383,24 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
         SetTrainingMode(true);
         try
         {
-            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
             var windows = SplitWindows(input);
             var targets = SplitTargets(expectedOutput, windows.Count);
-            var rand = RandomHelper.CreateSecureRandom();
+            var rand = _trainingRandom;
 
             var draws = new List<DenoisingDraw>(windows.Count);
             for (int w = 0; w < windows.Count; w++)
                 draws.Add(DrawDenoisingBatch(windows[w], targets[w], rand, antithetic: true));
 
-            // One seed for this step's contrastive negatives, shared by the gradient pass and the
-            // optimizer's recompute closure below so both see the same negatives.
-            int negativeSeed = rand.Next();
-
-            using var tape = new GradientTape<T>();
-            var lossTensor = TrainingLoss(draws, RandomHelper.CreateSeededRandom(negativeSeed));
-            var grads = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParams);
-
-            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-            LastLoss = lossValue;
-
-            // Pinned to this step's draws: a line-searching optimizer that re-drew them would be
-            // comparing losses at different noise levels.
-            Tensor<T> ComputeForward(Tensor<T> _, Tensor<T> __) => DenoiseDraws(draws);
-            Tensor<T> RecomputeLoss(Tensor<T> _, Tensor<T> __) =>
-                TrainingLoss(draws, RandomHelper.CreateSeededRandom(negativeSeed));
-
-            var context = new TapeStepContext<T>(
-                trainableParams, grads, lossValue,
-                input, expectedOutput, ComputeForward, RecomputeLoss);
-
-            MarkTrainMutationStarted();
-            _optimizer.Step(context);
-            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+            // Everything this step draws (steps, noise, contrastive negatives) travels in the packed input and target,
+            // so the shared fused session's compiled plan replays this step's draws instead of the first step's. The
+            // layout depends only on the input shape and the options, so it is the same on every replay.
+            var batch = BuildTrainingBatch(draws, RandomHelper.CreateSeededRandom(rand.Next()));
+            var layout = batch.Layout;
+            TrainCustomTapeStep(batch.Input, batch.Target,
+                packed => ForwardTrainingBatch(packed, layout),
+                (predicted, packedTarget) => TrainingBatchLoss(predicted, packedTarget, layout),
+                _optimizer,
+                () => Training.TapeTrainingStep<T>.CollectParameters(Layers));
             StepSchedulerIfSupported(_optimizer);
         }
         finally
@@ -660,6 +651,10 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
     /// shared by every row).
     /// </summary>
     private Tensor<T> Denoise(Tensor<T> contextTokens, Tensor<T> yk, IReadOnlyList<int> steps, int rows)
+        => Denoise(contextTokens, yk, StepFrequencies(steps, rows), rows);
+
+    /// <summary>The denoiser with the steps given as their [rows, 256] sinusoidal encoding.</summary>
+    private Tensor<T> Denoise(Tensor<T> contextTokens, Tensor<T> yk, Tensor<T> stepFrequencies, int rows)
     {
         var parts = Parts();
         var context = rows == 1 ? contextTokens : Engine.TensorTile(contextTokens, new[] { rows, 1, 1 });
@@ -667,7 +662,7 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
         var future = ApplyMlpStack(parts.FutureEmbedding, Engine.TensorPermute(yk, new[] { 0, 2, 1 })); // [R, D, e]
         var h = Engine.TensorConcatenate(new[] { past, future }, axis: 2);              // [R, D, 2e]
 
-        var c = StepEmbedding(parts, steps, rows);                                      // [R, e]
+        var c = parts.StepOutput.Forward(parts.StepProjection.Forward(stepFrequencies)); // [R, e]
         foreach (var block in parts.Blocks) h = DiTBlockForward(h, c, block, rows);
 
         var decoded = Decode(parts, h, c, rows);                                        // [R, D, H]
@@ -686,8 +681,11 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
         return x;
     }
 
-    /// <summary>The reference StepEmbedding: 256 sinusoidal frequencies -> Linear + SiLU -> Linear.</summary>
-    private Tensor<T> StepEmbedding(DenoiserParts parts, IReadOnlyList<int> steps, int rows)
+    /// <summary>
+    /// The 256 sinusoidal frequencies of the reference StepEmbedding, one row per step; the Linear + SiLU -> Linear
+    /// that follows runs inside <see cref="Denoise(Tensor{T}, Tensor{T}, Tensor{T}, int)"/>.
+    /// </summary>
+    private Tensor<T> StepFrequencies(IReadOnlyList<int> steps, int rows)
     {
         var frequencies = new Tensor<T>(new[] { rows, StepFrequencyDim });
         var span = frequencies.Data.Span;
@@ -696,7 +694,7 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
             int step = steps.Count == 1 ? steps[0] : steps[r];
             WriteDiffusionTimestepEmbedding(span.Slice(r * StepFrequencyDim, StepFrequencyDim), step);
         }
-        return parts.StepOutput.Forward(parts.StepProjection.Forward(frequencies));
+        return frequencies;
     }
 
     /// <summary>LayerNorm without learned affine (reference elementwise_affine=False, eps 1e-6).</summary>
@@ -843,12 +841,136 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
         return clean;
     }
 
-    private Tensor<T> DenoiseDraws(List<DenoisingDraw> draws)
+    /// <summary>How a packed training batch is laid out: windows, rows per window, negatives per row and family.</summary>
+    private readonly struct TrainingLayout
     {
-        var predictions = new Tensor<T>[draws.Count];
-        for (int w = 0; w < draws.Count; w++)
-            predictions[w] = Denoise(draws[w].Window.Tokens, draws[w].Noisy, draws[w].Steps, draws[w].Steps.Length);
-        return predictions.Length == 1 ? predictions[0] : Engine.TensorConcatenate(predictions, axis: 0);
+        public TrainingLayout(int windows, int rows, int negatives)
+        { Windows = windows; Rows = rows; Negatives = negatives; }
+        public int Windows { get; }
+        public int Rows { get; }
+        public int Negatives { get; }
+    }
+
+    /// <summary>One training step's denoiser inputs and the noise they must predict, packed.</summary>
+    private sealed class TrainingBatch
+    {
+        public TrainingBatch(Tensor<T> input, Tensor<T> target, TrainingLayout layout)
+        { Input = input; Target = target; Layout = layout; }
+        public Tensor<T> Input { get; }
+        public Tensor<T> Target { get; }
+        public TrainingLayout Layout { get; }
+    }
+
+    /// <summary>
+    /// Packs the draws, and the contrastive negatives when ContrastiveWeight is positive, into one input row and
+    /// one target row. Input: per window its context tokens [1, D, L], noised futures [R, H, D] and step encodings
+    /// [R, 256]; then per negative family (patch-shuffled, rescaled) and window the negatives' noised futures
+    /// [R*n, H, D] and step encodings [R*n, 256]. Target: the matching noise rows, in the order
+    /// <see cref="ForwardTrainingBatch"/> emits its predictions.
+    /// </summary>
+    private TrainingBatch BuildTrainingBatch(List<DenoisingDraw> draws, Random negativeRandom)
+    {
+        int rows = draws[0].Steps.Length;
+        foreach (var draw in draws)
+        {
+            if (draw.Steps.Length != rows)
+                throw new InvalidOperationException("Every window of a CCDM training batch must draw the same number of rows.");
+        }
+
+        int n = _contrastiveWeight > 0 ? _numNegatives : 0;
+        int perRow = _forecastHorizon * _numFeatures;
+        var inputs = new List<Tensor<T>>();
+        var targets = new List<Tensor<T>>();
+        foreach (var draw in draws)
+        {
+            inputs.Add(draw.Window.Tokens);
+            inputs.Add(draw.Noisy);
+            inputs.Add(StepFrequencies(draw.Steps, rows));
+            targets.Add(draw.Noise);
+        }
+
+        if (n > 0)
+        {
+            foreach (var mode in new[] { false, true })
+            {
+                foreach (var draw in draws)
+                {
+                    var negNoisy = new Tensor<T>(new[] { rows * n, _forecastHorizon, _numFeatures });
+                    var negNoise = new Tensor<T>(new[] { rows * n, _forecastHorizon, _numFeatures });
+                    var negSteps = new int[rows * n];
+                    var noisySpan = negNoisy.Data.Span;
+                    var noiseSpan = negNoise.Data.Span;
+                    for (int j = 0; j < n; j++)
+                    {
+                        var augmented = mode
+                            ? ScaledNegative(draw.CleanNormalized, j, n, negativeRandom)
+                            : ShuffledNegative(draw.CleanNormalized, negativeRandom);
+                        for (int r = 0; r < rows; r++)
+                        {
+                            int row = r * n + j;
+                            negSteps[row] = draw.Steps[r];
+                            double a = NumOps.ToDouble(_sqrtAlphasCumprod[draw.Steps[r]]);
+                            double b = NumOps.ToDouble(_sqrtOneMinusAlphasCumprod[draw.Steps[r]]);
+                            for (int i = 0; i < perRow; i++)
+                            {
+                                T epsilon = SampleStandardNormal(negativeRandom);
+                                noiseSpan[row * perRow + i] = epsilon;
+                                noisySpan[row * perRow + i] = NumOps.FromDouble(a * augmented[i] + b * NumOps.ToDouble(epsilon));
+                            }
+                        }
+                    }
+                    inputs.Add(negNoisy);
+                    inputs.Add(StepFrequencies(negSteps, rows * n));
+                    targets.Add(negNoise);
+                }
+            }
+        }
+
+        return new TrainingBatch(
+            Training.StepInputPacking<T>.Pack(inputs.ToArray()),
+            Training.StepInputPacking<T>.Pack(targets.ToArray()),
+            new TrainingLayout(draws.Count, rows, n));
+    }
+
+    /// <summary>
+    /// The denoiser over a packed batch: the draws' predictions, then each negative family's, as [rows, H, D].
+    /// </summary>
+    private Tensor<T> ForwardTrainingBatch(Tensor<T> packed, TrainingLayout layout)
+    {
+        int rows = layout.Rows;
+        int negativeRows = rows * layout.Negatives;
+        int offset = 0;
+        Tensor<T> Next(int[] shape)
+        {
+            var part = Training.StepInputPacking<T>.Slice(packed, offset, shape);
+            offset += part.Length;
+            return part;
+        }
+
+        var tokens = new Tensor<T>[layout.Windows];
+        var predictions = new List<Tensor<T>>();
+        for (int w = 0; w < layout.Windows; w++)
+        {
+            tokens[w] = Next(new[] { 1, _numFeatures, _contextLength });
+            var noisy = Next(new[] { rows, _forecastHorizon, _numFeatures });
+            var frequencies = Next(new[] { rows, StepFrequencyDim });
+            predictions.Add(Denoise(tokens[w], noisy, frequencies, rows));
+        }
+
+        if (layout.Negatives > 0)
+        {
+            for (int family = 0; family < 2; family++)
+            {
+                for (int w = 0; w < layout.Windows; w++)
+                {
+                    var negNoisy = Next(new[] { negativeRows, _forecastHorizon, _numFeatures });
+                    var negFrequencies = Next(new[] { negativeRows, StepFrequencyDim });
+                    predictions.Add(Denoise(tokens[w], negNoisy, negFrequencies, negativeRows));
+                }
+            }
+        }
+
+        return predictions.Count == 1 ? predictions[0] : Engine.TensorConcatenate(predictions.ToArray(), axis: 0);
     }
 
     /// <summary>
@@ -857,12 +979,21 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
     /// </summary>
     private Tensor<T> TrainingLoss(List<DenoisingDraw> draws, Random negativeRandom)
     {
-        var predicted = DenoiseDraws(draws);
-        var noise = draws.Count == 1 ? draws[0].Noise : Engine.TensorConcatenate(draws.Select(x => x.Noise).ToArray(), axis: 0);
-        var loss = TapeLoss(predicted, noise);
-        if (_contrastiveWeight <= 0) return loss;
+        var batch = BuildTrainingBatch(draws, negativeRandom);
+        return TrainingBatchLoss(ForwardTrainingBatch(batch.Input, batch.Layout), batch.Target, batch.Layout);
+    }
 
-        var contrast = ContrastiveLoss(draws, predicted, noise, negativeRandom);
+    /// <summary>Equation 6 over a packed batch's predictions and noise.</summary>
+    private Tensor<T> TrainingBatchLoss(Tensor<T> predicted, Tensor<T> packedTarget, TrainingLayout layout)
+    {
+        var noise = Engine.Reshape(packedTarget, predicted._shape);
+        int positiveRows = layout.Windows * layout.Rows;
+        var positivePredicted = Engine.TensorNarrow(predicted, 0, 0, positiveRows);
+        var positiveNoise = Engine.TensorNarrow(noise, 0, 0, positiveRows);
+        var loss = TapeLoss(positivePredicted, positiveNoise);
+        if (layout.Negatives == 0) return loss;
+
+        var contrast = ContrastiveLoss(positivePredicted, positiveNoise, predicted, noise, layout);
         return Engine.TensorAdd(loss, Engine.TensorMultiplyScalar(contrast, NumOps.FromDouble(_contrastiveWeight)));
     }
 
@@ -879,44 +1010,25 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
     /// real future against NumNegatives patch-shuffled and NumNegatives rescaled ones, each noised
     /// with fresh noise at the same step, and InfoNCE with temperature tau picks out the real one.
     /// </summary>
-    private Tensor<T> ContrastiveLoss(List<DenoisingDraw> draws, Tensor<T> predicted, Tensor<T> noise, Random rand)
+    private Tensor<T> ContrastiveLoss(
+        Tensor<T> positivePredicted, Tensor<T> positiveNoise, Tensor<T> predicted, Tensor<T> noise, TrainingLayout layout)
     {
         int perRow = _forecastHorizon * _numFeatures;
-        var positive = CosineSimilarity(predicted, noise, perRow);                      // [R, 1]
+        int rows = layout.Rows;
+        int n = layout.Negatives;
+        var positive = CosineSimilarity(positivePredicted, positiveNoise, perRow);      // [R, 1]
         var logits = new List<Tensor<T>> { positive };
 
-        foreach (var mode in new[] { false, true })
+        int offset = layout.Windows * rows;
+        for (int family = 0; family < 2; family++)
         {
-            var negatives = new Tensor<T>[draws.Count];
-            for (int w = 0; w < draws.Count; w++)
+            var negatives = new Tensor<T>[layout.Windows];
+            for (int w = 0; w < layout.Windows; w++)
             {
-                var draw = draws[w];
-                int rows = draw.Steps.Length;
-                int n = _numNegatives;
-                var negNoisy = new Tensor<T>(new[] { rows * n, _forecastHorizon, _numFeatures });
-                var negNoise = new Tensor<T>(new[] { rows * n, _forecastHorizon, _numFeatures });
-                var negSteps = new int[rows * n];
-                var noisySpan = negNoisy.Data.Span;
-                var noiseSpan = negNoise.Data.Span;
-                for (int j = 0; j < n; j++)
-                {
-                    var augmented = mode ? ScaledNegative(draw.CleanNormalized, j, n, rand) : ShuffledNegative(draw.CleanNormalized, rand);
-                    for (int r = 0; r < rows; r++)
-                    {
-                        int row = r * n + j;
-                        negSteps[row] = draw.Steps[r];
-                        double a = NumOps.ToDouble(_sqrtAlphasCumprod[draw.Steps[r]]);
-                        double b = NumOps.ToDouble(_sqrtOneMinusAlphasCumprod[draw.Steps[r]]);
-                        for (int i = 0; i < perRow; i++)
-                        {
-                            T epsilon = SampleStandardNormal(rand);
-                            noiseSpan[row * perRow + i] = epsilon;
-                            noisySpan[row * perRow + i] = NumOps.FromDouble(a * augmented[i] + b * NumOps.ToDouble(epsilon));
-                        }
-                    }
-                }
-                var negPredicted = Denoise(draw.Window.Tokens, negNoisy, negSteps, rows * n);
+                var negPredicted = Engine.TensorNarrow(predicted, 0, offset, rows * n);
+                var negNoise = Engine.TensorNarrow(noise, 0, offset, rows * n);
                 negatives[w] = Engine.Reshape(CosineSimilarity(negPredicted, negNoise, perRow), new[] { rows, n });
+                offset += rows * n;
             }
             logits.Add(negatives.Length == 1 ? negatives[0] : Engine.TensorConcatenate(negatives, axis: 0));
         }

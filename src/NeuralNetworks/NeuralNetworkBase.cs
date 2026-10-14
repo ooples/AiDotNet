@@ -11484,6 +11484,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             OnGradients = ScatterFusedGradients,
         };
 
+        // Both the plan and the eager step write the weights in place; an OOM from here on must not be retried.
+        MarkTrainMutationStarted();
         T lossValue = NumOps.Zero;
         var outcome = parameters.Count == 0
             ? Training.FusedStepOutcome.Declined

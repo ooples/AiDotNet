@@ -1,4 +1,4 @@
-﻿using System.Linq;
+using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -28,7 +28,7 @@ public class CustomObjectiveFusedTrainingTests
     // by a few 1e-8 of the parameter scale per step; a step on baked data moves weights by far more.
     private const double RelativeTolerance = 1e-5;
 
-    public static TheoryData<string> Scenarios => new() { "VideoMAE", "DeepONet", "FNO", "MQCNN", "CodeSwitchingASR" };
+    public static TheoryData<string> Scenarios => new() { "VideoMAE", "DeepONet", "FNO", "MQCNN", "CodeSwitchingASR", "CCDM" };
 
     private sealed record RunResult(Vector<double> Parameters, int FusedSteps, int EagerSteps);
 
@@ -42,6 +42,7 @@ public class CustomObjectiveFusedTrainingTests
         "FNO" => Warm(BuildFno(), new Tensor<double>([1, 2, 4])),
         "MQCNN" => Warm(BuildMqcnn(), new Tensor<double>([1, 8, 1])),
         "CodeSwitchingASR" => Warm(BuildAsr(), new Tensor<double>([4, 8])),
+        "CCDM" => Warm(BuildCcdm(), new Tensor<double>([1, 8, 1])),
         _ => throw new ArgumentOutOfRangeException(nameof(scenario)),
     };
 
@@ -69,6 +70,8 @@ public class CustomObjectiveFusedTrainingTests
             case "FNO": TrainFno((FourierNeuralOperator<double>)model); break;
             case "MQCNN": TrainOnChangingBatches(model, [1, 8, 1], [1, 2 * MqcnnQuantiles]); break;
             case "CodeSwitchingASR": TrainOnChangingBatches(model, [4, 8], [4, AsrOptions().VocabSize]); break;
+            // Every step draws its own diffusion steps, noise and contrastive negatives.
+            case "CCDM": TrainOnChangingBatches(model, [1, 8, 1], [1, 4]); break;
         }
     }
 
@@ -154,6 +157,18 @@ public class CustomObjectiveFusedTrainingTests
         {
             LookbackWindow = 8, ForecastHorizon = 2, EncoderChannels = 4, DecoderChannels = 4,
             NumEncoderLayers = 1, NumDecoderLayers = 1, DropoutRate = 0.0,
+        });
+
+    // The contrastive term is on, so the packed batch carries both negative families. Seed gives the two arms the
+    // same training draws.
+    private static AiDotNet.Finance.Forecasting.Foundation.CCDM<double> BuildCcdm() => new(
+        new NeuralNetworkArchitecture<double>(inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 8, outputSize: 4),
+        new AiDotNet.Models.Options.CCDMOptions<double>
+        {
+            ContextLength = 8, ForecastHorizon = 4, HiddenDimension = 8, NumLayers = 1, NumHeads = 2, EmbeddingLayers = 2,
+            DiffusionSteps = 10, NumSamples = 2, TrainingBatchSize = 2, DropoutRate = 0.0, AttentionDropoutRate = 0.0,
+            ContrastiveWeight = 0.5, NumNegatives = 2, Seed = 11,
         });
 
     private static AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASROptions AsrOptions() => new()
