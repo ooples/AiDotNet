@@ -565,13 +565,18 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
             }
             // One step through the shared training step: the fused plan when it applies, otherwise the shared eager
             // tape step with the same objective. Both encoders and the temperature are trained.
-            LastLoss = AiDotNet.Training.FusedTrainingStep<T>.Step(
-                this, trainableLayers, input, expected,
-                forward: FwdCLAP,
-                computeLoss: LossCLAP,
-                optimizer: optimizer,
-                extraTensors: allParams,
-                onGradients: gradients => PublishParameterGradients(gradients));
+            LastLoss = AiDotNet.Training.TapeTrainingStepper<T>.ForOwner(this).Step(new AiDotNet.Training.FusedTrainingStepRequest<T>
+            {
+                Layers = trainableLayers,
+                Input = input,
+                Target = expected,
+                Forward = FwdCLAP,
+                ComputeLoss = LossCLAP,
+                Optimizer = optimizer,
+                ExtraParameters = allParams,
+                OnGradients = gradients => PublishParameterGradients(gradients),
+                VerifyReplayAgreement = true,
+            });
         }
         finally
         {
