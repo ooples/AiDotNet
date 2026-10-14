@@ -37536,96 +37536,166 @@ public static partial class LayerHelper<T>
     #region CLAP (Contrastive Language-Audio Pretraining)
 
     /// <summary>
-    /// Creates the default audio-encoder layers for CLAP (Wu et al. 2023). The
-    /// audio side is HTSAT (Chen et al. 2022 "HTS-AT: A Hierarchical
-    /// Token-Semantic Audio Transformer"), built on the Swin Transformer
-    /// (Liu et al. 2021 §3.2). The encoder consumes a mel-spectrogram patch
-    /// sequence and produces a single audio embedding via global pooling +
-    /// projection.
+    /// Creates LAION-CLAP's audio tower (Wu et al. 2023): HTS-AT (Chen et al. 2022, "HTS-AT: A Hierarchical
+    /// Token-Semantic Audio Transformer") up to its pooled embedding, then the <c>Linear → ReLU → Linear</c> audio
+    /// projection. Input: the log-mel views <c>[batch, views, frames, mels]</c>; output: <c>[batch, projectionDim]</c>.
     /// </summary>
-    /// <param name="audioHiddenDim">Hidden / embedding dim of the Swin blocks (paper §3.1 HTSAT-S: 768).</param>
-    /// <param name="audioEncoderLayers">Number of Swin Transformer blocks (paper §3.1 HTSAT-S: 4).</param>
-    /// <param name="audioEncoderHeads">Attention heads per block (paper §3.1 HTSAT-S: 12).</param>
-    /// <param name="swinWindowSize">W-MSA / SW-MSA window size (Liu 2021 §3.2: 7).</param>
-    /// <param name="projectionDim">Shared embedding-space dimension (CLAP §3.2: 512).</param>
-    /// <param name="audioPatchSize">HTSAT log-mel patch size (paper §3.1: 4).</param>
+    /// <param name="numMelBands">Mel bands of the input (HTSAT-tiny: 64).</param>
+    /// <param name="specSize">Side of the square spectrogram image (256).</param>
+    /// <param name="patchSize">Patch size and stride (4).</param>
+    /// <param name="embedDim">First-stage width; doubles at each patch merging (96).</param>
+    /// <param name="stageDepths">Swin blocks per stage ([2, 2, 6, 2]).</param>
+    /// <param name="stageHeads">Attention heads per stage ([4, 8, 16, 32]).</param>
+    /// <param name="windowSize">Swin window (8).</param>
+    /// <param name="mlpRatio">Swin MLP ratio (4).</param>
+    /// <param name="dropPathRate">Stochastic depth of the last block, rising linearly from 0 (0.1).</param>
+    /// <param name="featureFusion">Whether the patch embedding fuses the three local views (§3.3).</param>
+    /// <param name="projectionDim">Joint embedding width (512).</param>
+    /// <param name="specAugmentTimeDropWidth">SpecAugment time-stripe width bound (64).</param>
+    /// <param name="specAugmentTimeStripes">SpecAugment time stripes (2).</param>
+    /// <param name="specAugmentFreqDropWidth">SpecAugment frequency-stripe width bound (8).</param>
+    /// <param name="specAugmentFreqStripes">SpecAugment frequency stripes (2).</param>
     /// <remarks>
-    /// Alternating W-MSA / SW-MSA layers per Swin paper §3.2 — even-indexed
-    /// blocks use regular windowed attention, odd-indexed blocks use the
-    /// shifted-window variant to mix information across window boundaries.
+    /// <para>The stack, in reference order (<c>htsat.HTSAT_Swin_Transformer.forward</c>):</para>
+    /// <list type="number">
+    /// <item><c>bn0</c>: BatchNorm over the mel bins (<c>nn.BatchNorm2d(mel_bins)</c> on the transposed input).</item>
+    /// <item><c>spec_augmenter</c>: time and frequency stripes zeroed while training.</item>
+    /// <item><c>reshape_wav2img</c>: bicubic stretch to <c>specSize · r</c> frames and fold into a
+    /// <c>specSize²</c> image, <c>r = specSize / mels</c>.</item>
+    /// <item>Patch embedding: a <c>p × p</c> convolution and LayerNorm, with feature fusion when enabled.</item>
+    /// <item>Stages of Swin blocks (W-MSA, then SW-MSA with shift <c>window / 2</c>; exact-GELU MLP), each followed by
+    /// a patch merging except the last. A stage whose resolution is no larger than the window uses the resolution
+    /// as its window and does not shift, as the reference's <c>SwinTransformerBlock</c> does.</item>
+    /// <item>LayerNorm and the mean over all tokens: the <c>embedding</c> output CLAP reads.</item>
+    /// <item><c>audio_projection</c>: <c>Linear(width, D) → ReLU → Linear(D, D)</c>.</item>
+    /// </list>
+    /// <para>HTS-AT's token-semantic head (<c>tscam_conv</c>, <c>head</c>) produces AudioSet event scores, not the
+    /// embedding: CLAP never reads it, so it is not part of the tower.</para>
+    /// <para>Every layer is sized here, so the parameter count is final before the first forward.</para>
     /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultCLAPAudioEncoderLayers(
-        int audioHiddenDim,
-        int audioEncoderLayers,
-        int audioEncoderHeads,
-        int swinWindowSize,
+        int numMelBands,
+        int specSize,
+        int patchSize,
+        int embedDim,
+        int[] stageDepths,
+        int[] stageHeads,
+        int windowSize,
+        int mlpRatio,
+        double dropPathRate,
+        bool featureFusion,
         int projectionDim,
-        int audioPatchSize = 4)
+        int specAugmentTimeDropWidth = 64,
+        int specAugmentTimeStripes = 2,
+        int specAugmentFreqDropWidth = 8,
+        int specAugmentFreqStripes = 2)
     {
-        // HTSAT begins by dividing the log-mel image into learned 2-D patches.
-        // This converts [B, 1, frames, melBins] into [B, patchCount, hiddenDim],
-        // the token layout consumed by SwinTransformerBlockLayer. Keeping the
-        // patch size explicit also makes CLAPModelOptions.AudioPatchSize effective.
-        yield return new PatchEmbeddingLayer<T>(audioPatchSize, audioHiddenDim);
+        Guard.NotNull(stageDepths);
+        Guard.NotNull(stageHeads);
+        if (stageDepths.Length == 0 || stageDepths.Length != stageHeads.Length)
+            throw new ArgumentException("stageDepths and stageHeads need one entry per stage.", nameof(stageHeads));
 
-        // Stack of Swin blocks. Each pair alternates W-MSA (shift=0) and
-        // SW-MSA (shift=windowSize/2) per Liu 2021 §3.2.
-        for (int i = 0; i < audioEncoderLayers; i++)
+        var layers = new List<ILayer<T>>();
+        var bn0 = new BatchNormalizationLayer<T>(numMelBands) { Layout = BatchNormDataLayout.ChannelsLast };
+        layers.Add(bn0);
+        layers.Add(new SpectrogramStripeDropLayer<T>(specAugmentTimeDropWidth, specAugmentTimeStripes,
+            specAugmentFreqDropWidth, specAugmentFreqStripes));
+        layers.Add(new HtsatSpectrogramImageLayer<T>(specSize, specSize / numMelBands));
+
+        if (featureFusion)
         {
-            int shiftSize = (i % 2 == 0) ? 0 : swinWindowSize / 2;
-            yield return new SwinTransformerBlockLayer<T>(
-                dim: audioHiddenDim,
-                numHeads: audioEncoderHeads,
-                windowSize: swinWindowSize,
-                shiftSize: shiftSize,
-                mlpRatio: 4);
+            var embed = new HtsatFusionPatchEmbeddingLayer<T>(patchSize, embedDim);
+            embed.ResolveFromShape(new[] { 1, 4, specSize, specSize });
+            layers.Add(embed);
+        }
+        else
+        {
+            var embed = new SwinPatchEmbeddingLayer<T>(patchSize, embedDim);
+            embed.ResolveFromShape(new[] { 1, 1, specSize, specSize });
+            layers.Add(embed);
         }
 
-        // Mean-pool across the spectrogram patch sequence to get a single
-        // audio embedding, then project into the shared CLAP space.
-        yield return new GlobalPoolingLayer<T>(poolingType: PoolingType.Average);
-        yield return new DenseLayer<T>(outputSize: projectionDim, activationFunction: new IdentityActivation<T>());
+        int totalBlocks = stageDepths.Sum();
+        int block = 0;
+        int resolution = specSize / patchSize;
+        int width = embedDim;
+        for (int stage = 0; stage < stageDepths.Length; stage++)
+        {
+            bool fitsInOneWindow = resolution <= windowSize;
+            int stageWindow = fitsInOneWindow ? resolution : windowSize;
+            for (int i = 0; i < stageDepths[stage]; i++)
+            {
+                // torch.linspace(0, drop_path_rate, sum(depths)).
+                double rate = totalBlocks > 1 ? dropPathRate * block / (totalBlocks - 1) : 0.0;
+                int shift = fitsInOneWindow || i % 2 == 0 ? 0 : windowSize / 2;
+                var swin = new SwinTransformerBlockLayer<T>(width, stageHeads[stage], stageWindow, shift, mlpRatio, rate,
+                    exactGelu: true);
+                swin.ResolveFromShape(new[] { 1, resolution * resolution, width });
+                layers.Add(swin);
+                block++;
+            }
+            if (stage < stageDepths.Length - 1)
+            {
+                var merge = new SwinPatchMergingLayer<T>(width);
+                merge.ResolveFromShape(new[] { 1, resolution * resolution, width });
+                layers.Add(merge);
+                resolution /= 2;
+                width *= 2;
+            }
+        }
+
+        layers.Add(new LayerNormalizationLayer<T>(width));
+        layers.Add(new GlobalPoolingLayer<T>(poolingType: PoolingType.Average));
+        foreach (var layer in CreateCLAPProjectionLayers(width, projectionDim)) layers.Add(layer);
+        return layers;
     }
 
     /// <summary>
-    /// Creates the default text-encoder layers for CLAP (Wu et al. 2023 §3.2).
-    /// The text side is a RoBERTa-style transformer stack (Liu et al. 2019)
-    /// over BPE token IDs: token + positional embedding → N transformer
-    /// encoder layers → mean pool → projection.
+    /// Creates LAION-CLAP's text tower: RoBERTa (Liu et al. 2019) up to its pooled <c>&lt;s&gt;</c> output, then the
+    /// <c>Linear → ReLU → Linear</c> text projection. Input: token ids <c>[batch, length]</c>; output:
+    /// <c>[batch, projectionDim]</c>.
     /// </summary>
-    /// <param name="vocabSize">BPE vocabulary size (RoBERTa-base: 50,265).</param>
-    /// <param name="maxTextLength">Maximum token sequence length (CLAP §3.2: 77).</param>
-    /// <param name="textHiddenDim">Hidden dim of the transformer (RoBERTa-base: 768).</param>
-    /// <param name="textEncoderLayers">Number of transformer encoder layers (RoBERTa-base: 12).</param>
-    /// <param name="textEncoderHeads">Attention heads per layer (RoBERTa-base: 12).</param>
-    /// <param name="projectionDim">Shared embedding-space dimension (CLAP §3.2: 512).</param>
+    /// <param name="vocabSize">BPE vocabulary size (RoBERTa-base: 50265).</param>
+    /// <param name="maxPositions">Position-table rows (514).</param>
+    /// <param name="textHiddenDim">Hidden width (768).</param>
+    /// <param name="textEncoderLayers">Encoder layers (12).</param>
+    /// <param name="textEncoderHeads">Attention heads (12).</param>
+    /// <param name="intermediateDim">Feed-forward width (3072).</param>
+    /// <param name="paddingTokenId">Padding id (1).</param>
+    /// <param name="dropoutRate">Dropout (0.1).</param>
+    /// <param name="layerNormEpsilon">LayerNorm epsilon (1e-5).</param>
+    /// <param name="projectionDim">Joint embedding width (512).</param>
     public static IEnumerable<ILayer<T>> CreateDefaultCLAPTextEncoderLayers(
         int vocabSize,
-        int maxTextLength,
+        int maxPositions,
         int textHiddenDim,
         int textEncoderLayers,
         int textEncoderHeads,
+        int intermediateDim,
+        int paddingTokenId,
+        double dropoutRate,
+        double layerNormEpsilon,
         int projectionDim)
     {
-        // Token embedding: maps token IDs → hidden vectors.
-        yield return new EmbeddingLayer<T>(vocabularySize: vocabSize, embeddingDimension: textHiddenDim);
+        var encoder = new RobertaEncoderLayer<T>(vocabSize, textHiddenDim, textEncoderLayers, textEncoderHeads,
+            intermediateDim, maxPositions, paddingTokenId, dropoutRate, layerNormEpsilon);
+        encoder.ResolveFromShape(new[] { 1, 1 });
+        var layers = new List<ILayer<T>> { encoder };
+        foreach (var layer in CreateCLAPProjectionLayers(textHiddenDim, projectionDim)) layers.Add(layer);
+        return layers;
+    }
 
-        // Positional encoding adds sequence-position information.
-        yield return new PositionalEncodingLayer<T>(maxSequenceLength: maxTextLength, embeddingSize: textHiddenDim);
-
-        // Standard transformer encoder stack. Each block is pre-LN MHA + FFN.
-        // FFN expansion is 4x per Liu 2019 §3.2 / Vaswani 2017 §3.3.
-        for (int i = 0; i < textEncoderLayers; i++)
-        {
-            yield return new TransformerEncoderLayer<T>(
-                numHeads: textEncoderHeads,
-                feedForwardDim: textHiddenDim * 4,
-                embeddingSize: textHiddenDim);
-        }
-
-        // Mean-pool tokens → single text embedding, then project into shared space.
-        yield return new GlobalPoolingLayer<T>(poolingType: PoolingType.Average);
-        yield return new DenseLayer<T>(outputSize: projectionDim, activationFunction: new IdentityActivation<T>());
+    /// <summary>LAION-CLAP's projection into the joint space (<c>audio_projection</c> / <c>text_projection</c> in
+    /// <c>model.py</c>): <c>Linear(input, D) → ReLU → Linear(D, D)</c>, both layers sized here.</summary>
+    /// <param name="inputDim">Width of the tower's pooled output.</param>
+    /// <param name="projectionDim">Joint embedding width <c>D</c>.</param>
+    public static IEnumerable<ILayer<T>> CreateCLAPProjectionLayers(int inputDim, int projectionDim)
+    {
+        var first = new DenseLayer<T>(projectionDim, (IActivationFunction<T>)new ReLUActivation<T>());
+        first.ResolveFromShape(new[] { 1, inputDim });
+        var second = new DenseLayer<T>(projectionDim, (IActivationFunction<T>)new IdentityActivation<T>());
+        second.ResolveFromShape(new[] { 1, projectionDim });
+        return new ILayer<T>[] { first, second };
     }
 
     #endregion
