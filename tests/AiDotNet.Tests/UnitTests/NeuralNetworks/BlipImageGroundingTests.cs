@@ -63,6 +63,9 @@ public sealed class BlipImageGroundingTests
         using var model = CreateModel();
         float first = model.ComputeImageTextMatch(Image(0.0), "a");
         float second = model.ComputeImageTextMatch(Image(1.3), "a");
+        // float.IsFinite does not exist on net471, so the check is spelled out.
+        Assert.True(!float.IsNaN(first) && !float.IsInfinity(first), $"The first ITM score is not finite: {first}.");
+        Assert.True(!float.IsNaN(second) && !float.IsInfinity(second), $"The second ITM score is not finite: {second}.");
         Assert.NotEqual(first, second);
     }
 

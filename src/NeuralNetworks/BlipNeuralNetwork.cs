@@ -519,6 +519,16 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
                 _numLayers, _numDecoderLayers, _numHeads, _mlpDim, _vocabularySize));
         }
 
+        // A custom Architecture.Layers must have exactly the layout CreateBlipLayers produces; a short list would
+        // otherwise fail below with an index error that names no expected count.
+        int expectedLayerCount = (1 + _numLayers + 1) + (1 + _numLayers + 1) + _numDecoderLayers + 2;
+        if (Layers.Count != expectedLayerCount)
+        {
+            throw new InvalidOperationException(
+                $"BLIP expects {expectedLayerCount} layers for {_numLayers} encoder and {_numDecoderLayers} decoder " +
+                $"blocks (image encoder, text encoder, text decoder, ITM head, LM head); got {Layers.Count}.");
+        }
+
         // Distribute layers to internal fields
         int idx = 0;
 

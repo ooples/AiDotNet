@@ -877,7 +877,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// <para><b>For Beginners:</b> The same layer can read text on its own, or read text while looking at another
     /// input (an image). This is the "text on its own" version; the weights used are the same either way.</para>
     /// </remarks>
-    public Tensor<T> ForwardWithoutCrossAttention(Tensor<T> input)
+    internal Tensor<T> ForwardWithoutCrossAttention(Tensor<T> input)
     {
         if (input is null)
         {
