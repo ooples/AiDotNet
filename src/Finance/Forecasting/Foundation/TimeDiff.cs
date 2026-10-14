@@ -347,8 +347,6 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
         SetTrainingMode(true);
         try
         {
-            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
-
             var conditioned = ApplyInstanceNormalization(input);
             if (conditioned.Rank == 1)
                 conditioned = Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
@@ -395,34 +393,13 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
                 }
             }
 
-            using var tape = new GradientTape<T>();
-            var predicted = DenoiserForward(noised, mixed, autoregressiveInit, timesteps, rows, outputLen);
-            var lossTensor = _lossFunction.ComputeTapeLoss(predicted, clean);
-
-            // Publish through the base rather than calling tape.ComputeGradients directly.
-            // GetParameterGradients() answers from the published surface, and with nothing
-            // published it falls back to the per-layer accessors, which fabricate an exact zero
-            // for every parameter - indistinguishable from a severed tape.
-            var grads = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParams);
-
-            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-            LastLoss = lossValue;
-
-            // Both closures are pinned to this step's draws. A line-searching optimizer that
-            // re-drew them would be comparing losses from two different noise levels and
-            // reading the difference as progress.
-            Tensor<T> ComputeForward(Tensor<T> _, Tensor<T> __) =>
-                DenoiserForward(noised, mixed, autoregressiveInit, timesteps, rows, outputLen);
-            Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> __) =>
-                _lossFunction.ComputeTapeLoss(pred, clean);
-
-            var context = new TapeStepContext<T>(
-                trainableParams, grads, lossValue,
-                input, expectedOutput, ComputeForward, RecomputeLoss);
-
-            MarkTrainMutationStarted();
-            _optimizer.Step(context);
-            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+            // The denoiser's input rows carry no parameter dependency, so they are built here and handed to the shared
+            // fused session as the step's input: a compiled plan replays each step's own draws.
+            var packedRows = BuildDenoiserInput(noised, mixed, autoregressiveInit, timesteps, rows, outputLen);
+            TrainCustomTapeStep(packedRows, clean, DenoiseRows,
+                (predicted, target) => _lossFunction.ComputeTapeLoss(predicted, target),
+                _optimizer,
+                () => Training.TapeTrainingStep<T>.CollectParameters(Layers));
             StepSchedulerIfSupported(_optimizer);
         }
         finally
@@ -625,6 +602,12 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
     private Tensor<T> DenoiserForward(
         Tensor<T> xk, Tensor<T> mixed, T[] autoregressiveInit,
         IReadOnlyList<int> timesteps, int rows, int outputLen)
+        => DenoiseRows(BuildDenoiserInput(xk, mixed, autoregressiveInit, timesteps, rows, outputLen));
+
+    /// <summary>The denoiser's packed [x_k | z_mix | z_ar | step embedding] rows.</summary>
+    private Tensor<T> BuildDenoiserInput(
+        Tensor<T> xk, Tensor<T> mixed, T[] autoregressiveInit,
+        IReadOnlyList<int> timesteps, int rows, int outputLen)
     {
         int rowLen = outputLen + outputLen + outputLen + DiffusionTimestepEmbeddingDim;
         var packed = new Tensor<T>(new[] { rows, rowLen });
@@ -645,6 +628,12 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
                 destination.Slice(baseIndex + 3 * outputLen, DiffusionTimestepEmbeddingDim), step);
         }
 
+        return packed;
+    }
+
+    /// <summary>The denoiser's layer chain over packed input rows, returning the predicted x_0.</summary>
+    private Tensor<T> DenoiseRows(Tensor<T> packed)
+    {
         var hidden = packed;
         if (_inputProjection is not null) hidden = _inputProjection.Forward(hidden);
         foreach (var layer in _transformerLayers) hidden = layer.Forward(hidden);
