@@ -33415,6 +33415,21 @@ public static partial class LayerHelper<T>
     /// Creates layers for the BLIP native mode.
     /// Architecture from "BLIP: Bootstrapping Language-Image Pre-Training" (Li et al., 2022).
     /// </summary>
+    /// <remarks>
+    /// <para>The layers, in order:</para>
+    /// <list type="number">
+    /// <item><description>Image encoder: a patch embedding, <paramref name="numLayers"/> ViT blocks and the ITC
+    /// projection.</description></item>
+    /// <item><description>Text encoder: the token embedding, <paramref name="numLayers"/> BERT blocks and the ITC
+    /// projection. Each block carries a cross-attention sublayer between its self-attention and its feed-forward
+    /// network, and its self-attention is bidirectional. The same blocks are both of the paper's encoders (§3.1): run
+    /// without the cross-attention they are the unimodal text encoder (ITC); run with it, attending to the image, they
+    /// are the image-grounded text encoder (ITM).</description></item>
+    /// <item><description>Image-grounded text decoder: <paramref name="numDecoderLayers"/> blocks with causal
+    /// self-attention and cross-attention to the image in every block (captioning, VQA).</description></item>
+    /// <item><description>The ITM head (2-way) and the language-model head.</description></item>
+    /// </list>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateBlipLayers(
         int imageSize = 384,
         int patchSize = 16,
@@ -33432,20 +33447,18 @@ public static partial class LayerHelper<T>
             yield return new TransformerEncoderLayer<T>( numHeads, mlpDim);
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
 
-        // Text encoder: EmbeddingLayer + numLayers × TransformerEncoder + projection
+        // Text encoder: EmbeddingLayer + numLayers × BERT block + projection. Each block has bidirectional
+        // self-attention, a cross-attention sublayer and a feed-forward network; the cross-attention is skipped for
+        // the unimodal encoder and attends to the image for the image-grounded encoder (Li et al. 2022, §3.1).
         yield return LayerGraphContract.FromExternalInput(
             new EmbeddingLayer<T>(vocabularySize, hiddenDim));
         for (int i = 0; i < numLayers; i++)
-            yield return new TransformerEncoderLayer<T>( numHeads, mlpDim);
+            yield return new TransformerDecoderLayer<T>(numHeads, mlpDim, ffnActivation: null, causal: false);
         yield return new DenseLayer<T>(embeddingDimension, (IActivationFunction<T>?)null);
 
-        // Text decoder layers (causal self-attention, autoregressive generation)
+        // Image-grounded text decoder: causal self-attention and cross-attention to the image in every block.
         for (int i = 0; i < numDecoderLayers; i++)
-            yield return new TransformerDecoderLayer<T>(numHeads, mlpDim, ffnActivation: null);
-
-        // Cross-attention layers (6) — decoder layer surfaces self + cross attention.
-        for (int i = 0; i < 6; i++)
-            yield return new TransformerDecoderLayer<T>(numHeads, mlpDim, ffnActivation: null);
+            yield return new TransformerDecoderLayer<T>(numHeads, mlpDim, ffnActivation: null, causal: true);
 
         // ITM head + LM head
         yield return new DenseLayer<T>(2, (IActivationFunction<T>?)null);

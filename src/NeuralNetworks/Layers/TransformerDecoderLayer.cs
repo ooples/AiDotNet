@@ -555,11 +555,14 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// <param name="feedForwardDim">Hidden dimension of the FFN (default 2048).</param>
     /// <param name="sequenceLength">Maximum sequence length (default 512).</param>
     /// <param name="ffnActivation">FFN activation (default GELU).</param>
+    /// <param name="causal">Whether the self-attention is masked so position i sees only positions up to i; see
+    /// <see cref="IsCausal"/>. Defaults to false, the behavior every existing caller was built with.</param>
     public TransformerDecoderLayer(
         [LayerState] int numHeads,
         [LayerState] int feedForwardDim,
         [LayerState] int sequenceLength = 512,
-        IActivationFunction<T>? ffnActivation = null)
+        IActivationFunction<T>? ffnActivation = null,
+        [LayerState] bool causal = false)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, -1 })
     {
         if (numHeads <= 0)
@@ -572,6 +575,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _feedForwardDim = feedForwardDim;
         _sequenceLength = sequenceLength;
         _lazyFfnActivation = ffnActivation;
+        _causal = causal;
 
         _selfAttention = null!;
         _norm1 = null!;
@@ -592,6 +596,20 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
     /// <summary>FFN activation captured by the lazy ctor for later sublayer construction.</summary>
     private IActivationFunction<T>? _lazyFfnActivation;
+
+    /// <summary>Whether the self-attention is masked so position i sees only positions up to i.</summary>
+    private readonly bool _causal;
+
+    /// <summary>
+    /// Whether the self-attention is causal: position i attends only to positions up to i.
+    /// </summary>
+    /// <remarks>
+    /// An autoregressive decoder is causal (Vaswani et al. 2017, §3.1), so a token cannot see the tokens it is trained
+    /// to predict. A block that reads a whole sequence at once is bidirectional: BLIP's image-grounded text encoder is
+    /// bidirectional and its image-grounded text decoder is causal, with the same block structure (Li et al. 2022,
+    /// §3.1).
+    /// </remarks>
+    public bool IsCausal => _causal;
 
     /// <summary>
     /// Resolves <see cref="_embeddingSize"/> from <c>input.Shape[^1]</c>.
@@ -654,7 +672,10 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             {
                 var activation = _lazyFfnActivation ?? new GELUActivation<T>();
 
-                _selfAttention = new MultiHeadAttentionLayer<T>(_numHeads, _embeddingSize / _numHeads, activation);
+                _selfAttention = new MultiHeadAttentionLayer<T>(_numHeads, _embeddingSize / _numHeads, activation)
+                {
+                    UseCausalMask = _causal,
+                };
                 _norm1 = new LayerNormalizationLayer<T>();
                 _crossAttention = new MultiHeadAttentionLayer<T>(_numHeads, _embeddingSize / _numHeads, activation);
                 _norm2 = new LayerNormalizationLayer<T>();
@@ -836,6 +857,54 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         var output = _norm3.Forward(residual3);
 
         return output;
+    }
+
+    /// <summary>
+    /// Runs the block with its cross-attention sublayer skipped: self-attention, then the feed-forward network, each
+    /// with its residual connection and layer normalization.
+    /// </summary>
+    /// <param name="input">The text hidden states, <c>[batch, sequence, embedding]</c> or <c>[sequence, embedding]</c>.</param>
+    /// <returns>The block's output, the same shape as <paramref name="input"/>.</returns>
+    /// <remarks>
+    /// <para>
+    /// A BERT block with a cross-attention sublayer serves two roles in BLIP (Li et al. 2022, §3.1). The unimodal text
+    /// encoder runs it without the image; the image-grounded text encoder runs the same block, with the same weights,
+    /// and inserts cross-attention to the image between the self-attention and the feed-forward network
+    /// (<see cref="Forward(Tensor{T}, Tensor{T})"/>). This method is the first role. The cross-attention's residual and
+    /// layer normalization are skipped with it, as in the reference implementation's <c>BertLayer</c>, so the result is
+    /// exactly a cross-attention-free post-LN transformer block.
+    /// </para>
+    /// <para><b>For Beginners:</b> The same layer can read text on its own, or read text while looking at another
+    /// input (an image). This is the "text on its own" version; the weights used are the same either way.</para>
+    /// </remarks>
+    internal Tensor<T> ForwardWithoutCrossAttention(Tensor<T> input)
+    {
+        if (input is null)
+        {
+            throw new ArgumentNullException(nameof(input));
+        }
+
+        EnsureInitializedFromInput(input);
+
+        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
+        _lastEncoderOutput = null;
+
+        _lastSelfAttentionOutput = _selfAttention.Forward(input);
+
+        // residual1 = input + selfAttentionOutput
+        var residual1 = Engine.TensorAdd(input, _lastSelfAttentionOutput);
+        _lastNormalized1 = _norm1.Forward(residual1);
+
+        // No cross-attention sublayer on this path, so nothing of it is cached.
+        _lastCrossAttentionOutput = null;
+        _lastNormalized2 = null;
+
+        var feedForwardHidden = _feedForward.Forward(_lastNormalized1);
+        _lastFeedForwardOutput = _feedForwardProjection.Forward(feedForwardHidden);
+
+        // residual = normalized1 + feedForwardOutput
+        var residual = Engine.TensorAdd(_lastNormalized1, _lastFeedForwardOutput);
+        return _norm3.Forward(residual);
     }
 
     /// <summary>
