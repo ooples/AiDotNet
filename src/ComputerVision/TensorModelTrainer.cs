@@ -67,7 +67,55 @@ internal static class TensorModelTrainer<T>
         Func<Tensor<T>, Tensor<T>> forward,
         Func<Tensor<T>, Tensor<T>, Tensor<T>>? loss = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        => StepWithTargets(model, input, target, learningRate, forward, loss ?? MeanSquaredError, optimizer);
+    {
+        var objective = loss ?? MeanSquaredError;
+        return optimizer is not null && TryFusedStep(model, input, target, forward, objective, optimizer, out T fusedLoss)
+            ? fusedLoss
+            : StepWithTargets(model, input, target, learningRate, forward, objective, optimizer);
+    }
+
+    // One fused session per model: the compiled plan owns the optimizer moments across steps.
+    private static readonly ConditionalWeakTable<object, AiDotNet.Training.FusedTrainingSession<T>> Sessions = new();
+
+    /// <summary>
+    /// Forward, loss, backward and the optimizer update as one compiled plan, on the shared session every base
+    /// class trains through, when it applies. Only a tensor target can be a plan input; a typed target is read by
+    /// the loss closure on the host, so <see cref="StepWithTargets{TPrediction, TTarget}"/> stays eager.
+    /// </summary>
+    private static bool TryFusedStep(
+        ModelBase<T, Tensor<T>, Tensor<T>> model,
+        Tensor<T> input,
+        Tensor<T> target,
+        Func<Tensor<T>, Tensor<T>> forward,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> loss,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
+        out T lossValue)
+    {
+        lossValue = MathHelper.GetNumericOperations<T>().Zero;
+        if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
+            return false;
+
+        EnsureWarm(model, forward, input);
+        var parameters = LiveTrainableTensors(model);
+        if (parameters.Length == 0)
+            return false;
+
+        var session = Sessions.GetValue(model, static m => new AiDotNet.Training.FusedTrainingSession<T>(m));
+        var outcome = session.TryStep(new AiDotNet.Training.FusedTrainingStepRequest<T>
+        {
+            Layers = Array.Empty<ITrainableLayer<T>>(),
+            Input = input,
+            Target = target,
+            Forward = forward,
+            ComputeLoss = loss,
+            Optimizer = optimizer,
+            ExtraParameters = parameters,
+        }, out lossValue);
+
+        if (outcome == AiDotNet.Training.FusedStepOutcome.CommittedFailure)
+            session.DropAfterCommittedFailure();
+        return outcome == AiDotNet.Training.FusedStepOutcome.Stepped;
+    }
 
     /// <summary>
     /// Runs the same single update for structured heads and typed task targets, without flattening
@@ -88,21 +136,8 @@ internal static class TensorModelTrainer<T>
         // adapter infer their input depth on first Forward and own no parameters until then, so the
         // registry would report none and the step would silently do nothing. No tape is active here,
         // so this records nothing.
-        var warmup = Warmed.GetValue(model, static _ => new WarmupState());
-        if (!System.Threading.Volatile.Read(ref warmup.Complete))
-        {
-            // GetValue may invoke competing factories; its returned state is the one shared by
-            // every caller. Serialize initialization, not the whole training step. A failed forward
-            // leaves Complete false so a later call retries instead of caching the exception.
-            lock (warmup)
-            {
-                if (!warmup.Complete)
-                {
-                    forward(input);
-                    System.Threading.Volatile.Write(ref warmup.Complete, true);
-                }
-            }
-        }
+        EnsureWarm(model, forward, input);
+
 
         var parameters = LiveTrainableTensors(model);
         if (parameters.Length == 0)
@@ -163,6 +198,27 @@ internal static class TensorModelTrainer<T>
         }
     }
 
+    // Runs one forward the first time a model trains, so lazily shaped layers own their parameters before the
+    // registry is read.
+    private static void EnsureWarm<TPrediction>(
+        ModelBase<T, Tensor<T>, Tensor<T>> model, Func<Tensor<T>, TPrediction> forward, Tensor<T> input)
+    {
+        var warmup = Warmed.GetValue(model, static _ => new WarmupState());
+        if (System.Threading.Volatile.Read(ref warmup.Complete))
+            return;
+
+        // GetValue may invoke competing factories; its returned state is the one shared by every caller. Serialize
+        // initialization, not the whole training step. A failed forward leaves Complete false so a later call
+        // retries instead of caching the exception.
+        lock (warmup)
+        {
+            if (!warmup.Complete)
+            {
+                forward(input);
+                System.Threading.Volatile.Write(ref warmup.Complete, true);
+            }
+        }
+    }
     private static bool SameShape(Tensor<T> a, Tensor<T> b)
     {
         if (a._shape.Length != b._shape.Length)
