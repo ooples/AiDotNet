@@ -74,6 +74,9 @@ internal static class TensorModelTrainer<T>
             : StepWithTargets(model, input, target, learningRate, forward, objective, optimizer);
     }
 
+    /// <summary>Steps this process has run on the fused compiled plan, for tests that must see the plan engage.</summary>
+    internal static int FusedStepCount;
+
     // One fused session per model: the compiled plan owns the optimizer moments across steps.
     private static readonly ConditionalWeakTable<object, AiDotNet.Training.FusedTrainingSession<T>> Sessions = new();
 
@@ -114,7 +117,10 @@ internal static class TensorModelTrainer<T>
 
         if (outcome == AiDotNet.Training.FusedStepOutcome.CommittedFailure)
             session.DropAfterCommittedFailure();
-        return outcome == AiDotNet.Training.FusedStepOutcome.Stepped;
+        if (outcome != AiDotNet.Training.FusedStepOutcome.Stepped)
+            return false;
+        System.Threading.Interlocked.Increment(ref FusedStepCount);
+        return true;
     }
 
     /// <summary>
