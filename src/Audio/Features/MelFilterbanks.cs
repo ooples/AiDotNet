@@ -53,7 +53,7 @@ public static class MelFilterbanks
         Validate(sampleRate, nFft, mels, fMin, fMax);
         int bins = nFft / 2 + 1;
         // torch.linspace(0, sample_rate // 2, n_freqs): the integer Nyquist, as torchaudio writes it.
-        double nyquist = sampleRate / 2;
+        double nyquist = Math.Floor(sampleRate / 2.0);
         var fftFrequencies = new double[bins];
         for (int k = 0; k < bins; k++) fftFrequencies[k] = k * nyquist / (bins - 1);
         var edges = MelPoints(mels, fMin, fMax, HtkHzToMel, HtkMelToHz);

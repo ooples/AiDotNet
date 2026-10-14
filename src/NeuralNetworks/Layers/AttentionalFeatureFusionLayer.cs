@@ -139,7 +139,7 @@ public partial class AttentionalFeatureFusionLayer<T> : LayerBase<T>, IShapeCont
         var local = _localExpandNorm.Forward(_localExpand.Forward(
             Engine.ReLU(_localReduceNorm.Forward(_localReduce.Forward(sum)))));
         var pooled = Engine.TensorMultiplyScalar(
-            Engine.ReduceSum(sum, new[] { 2, 3 }, keepDims: true), NumOps.FromDouble(1.0 / (height * width)));
+            Engine.ReduceSum(sum, new[] { 2, 3 }, keepDims: true), NumOps.FromDouble(1.0 / ((double)height * width)));
         var global = _globalExpandNorm.Forward(_globalExpand.Forward(
             Engine.ReLU(_globalReduceNorm.Forward(_globalReduce.Forward(pooled)))));
 
