@@ -115,6 +115,7 @@ internal sealed class FusedTrainingSession<T>
     private bool _persistenceVerified;
     private int _stepsSincePersistenceCheck;
     private bool _replayAgreementVerified;
+    private bool _zeroGradientCrossChecked;
 
     // Relative tolerance for the replay-agreement check: fusion reassociates sums, so float losses differ in the
     // last few digits; a plan replaying stale host-side decisions differs at the scale of the loss itself.
@@ -155,6 +156,7 @@ internal sealed class FusedTrainingSession<T>
         _persistenceVerified = false;
         _stepsSincePersistenceCheck = 0;
         _replayAgreementVerified = false;
+        _zeroGradientCrossChecked = false;
     }
 
     /// <summary>Re-enables the fused path after an explicit model reset (new layers, new optimizer).</summary>
@@ -165,6 +167,7 @@ internal sealed class FusedTrainingSession<T>
         _persistenceVerified = false;
         _stepsSincePersistenceCheck = 0;
         _replayAgreementVerified = false;
+        _zeroGradientCrossChecked = false;
         LastMissReason = null;
         LastFallbackException = null;
     }
@@ -344,6 +347,27 @@ internal sealed class FusedTrainingSession<T>
             // No sample means no trained tensor held an element before the step: lazily shaped weights materialize on
             // the first forward, so there was nothing to compare against. That is inconclusive, not a failed update.
             bool sampled = probe is { Length: > 0 };
+
+            // An all-zero plan gradient reads as "nothing could have moved", which is right for a model at a stationary
+            // point and wrong for a plan whose trace lost the path from the loss to the parameters: such a plan stepped
+            // a VAE forever without moving a weight. Once per plan, ask the eager tape. The plan moved nothing, so
+            // dropping it here loses no update; this step then runs on the eager tape.
+            if (!persisted && !detached && gradientsObserved && !gradientNonZero && !_zeroGradientCrossChecked)
+            {
+                _zeroGradientCrossChecked = true;
+                if (EagerGradientNonZero(request))
+                {
+                    string reason = "fused compiled step produced an all-zero gradient where the eager tape's is not "
+                        + "zero; the plan is decoupled from the loss, so training continues on the eager tape";
+                    Warn(reason);
+                    if (IsCommitted)
+                        Reset(stickyDisable: true);
+                    else
+                        IsDisabled = true;
+                    return Decline(reason);
+                }
+            }
+
             if (!persisted && !detached
                 && (!sampled || !StepCouldHaveMovedParameters(config, gradientsObserved, gradientNonZero, attached == true)))
             {
@@ -469,6 +493,16 @@ internal sealed class FusedTrainingSession<T>
 
     // Reduced on the engine to ONE scalar, like AnySampleChanged: reading each gradient on the host downloaded the
     // whole gradient set every probed step (on a GPU MLP, most of the per-step device-to-host copies).
+    // The eager tape's gradient of the request's loss, with the same random draws suppressed as the replay check.
+    private static bool EagerGradientNonZero(FusedTrainingStepRequest<T> request)
+    {
+        using var noDraws = CompiledStepRandom<T>.SuppressDraws();
+        using var tape = new GradientTape<T>();
+        var loss = request.ComputeLoss(request.Forward(request.Input), request.Target);
+        var parameters = ((IEnumerable<Tensor<T>>?)request.Selection ?? EnumerateLiveParameters(request)).ToArray();
+        return AnyGradientNonZero(tape.ComputeGradients(loss, parameters));
+    }
+
     private static bool AnyGradientNonZero(IReadOnlyDictionary<Tensor<T>, Tensor<T>> gradients)
     {
         var engine = AiDotNetEngine.Current;
