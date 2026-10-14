@@ -521,12 +521,21 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
 
         // A custom Architecture.Layers must have exactly the layout CreateBlipLayers produces; a short list would
         // otherwise fail below with an index error that names no expected count.
+        //
+        // BREAKING CHANGE (#2297): the layout changed when the matching and decoding paths were made to read the
+        // image. The six separate image-text-matching blocks are gone (the text encoder's own blocks serve both the
+        // unimodal and the image-grounded encoder, as in the paper), and every text block must be a
+        // TransformerDecoderLayer<T>: bidirectional (IsCausal false) in the text encoder, causal in the decoder. A
+        // custom list built for the previous layout no longer matches and is rejected here, by count, with the
+        // expected layout named; rebuild it from LayerHelper<T>.CreateBlipLayers.
         int expectedLayerCount = (1 + _numLayers + 1) + (1 + _numLayers + 1) + _numDecoderLayers + 2;
         if (Layers.Count != expectedLayerCount)
         {
             throw new InvalidOperationException(
                 $"BLIP expects {expectedLayerCount} layers for {_numLayers} encoder and {_numDecoderLayers} decoder " +
-                $"blocks (image encoder, text encoder, text decoder, ITM head, LM head); got {Layers.Count}.");
+                $"blocks (image encoder, text encoder, text decoder, ITM head, LM head); got {Layers.Count}. " +
+                "Since #2297 there are no separate image-text-matching blocks; build a custom list from " +
+                "LayerHelper<T>.CreateBlipLayers.");
         }
 
         // Distribute layers to internal fields

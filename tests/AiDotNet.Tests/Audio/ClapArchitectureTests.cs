@@ -179,7 +179,8 @@ public class ClapArchitectureTests
             model.Train(audio, captions);
             last = model.GetLastLoss();
         }
-        Assert.True(double.IsFinite(last));
+        // double.IsFinite does not exist on net471, so the check is spelled out.
+        Assert.False(double.IsNaN(last) || double.IsInfinity(last), $"Contrastive loss is not finite: {last}.");
         Assert.True(last < first, $"Contrastive loss went from {first:G6} to {last:G6} over 15 steps on two pairs.");
     }
 

@@ -609,7 +609,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// bidirectional and its image-grounded text decoder is causal, with the same block structure (Li et al. 2022,
     /// §3.1).
     /// </remarks>
-    public bool IsCausal => _causal;
+    internal bool IsCausal => _causal;
 
     /// <summary>
     /// Resolves <see cref="_embeddingSize"/> from <c>input.Shape[^1]</c>.

@@ -17,7 +17,7 @@ namespace AiDotNet.Audio.Features;
 /// the way human hearing is. Different libraries draw those bands slightly differently, and a trained model
 /// only understands the ones it was trained on.</para>
 /// </remarks>
-public static class MelFilterbanks
+internal static class MelFilterbanks
 {
     /// <summary>librosa <c>filters.mel(sr, n_fft, n_mels, fmin, fmax, htk=False, norm='slaney')</c>.</summary>
     /// <param name="sampleRate">Sample rate in Hz.</param>

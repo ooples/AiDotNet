@@ -125,28 +125,36 @@ public class CLAPModelOptions : AudioNeuralNetworkOptions
 
     /// <summary>STFT window (and FFT) size in samples.</summary>
     /// <value>Default 1024.</value>
+    /// <remarks><para><b>For Beginners:</b> Audio is cut into overlapping windows this many samples long before measuring which frequencies each contains; longer windows resolve pitch more finely but blur timing.</para></remarks>
     public int StftWindowSize { get; set; }
 
     /// <summary>STFT hop length in samples.</summary>
     /// <value>Default 480 (10 ms at 48 kHz).</value>
+    /// <remarks><para><b>For Beginners:</b> How far each STFT window moves forward; it sets how many spectrogram frames a second of audio becomes.</para></remarks>
     public int HopLength { get; set; }
 
     /// <summary>Number of mel-frequency bands.</summary>
     /// <value>Default 64.</value>
+    /// <remarks><para><b>For Beginners:</b> How many frequency bands, spaced the way human hearing spaces pitch, the spectrogram keeps; it is the height of the spectrogram image.</para></remarks>
     public int NumMelBands { get; set; }
 
     /// <summary>Lowest frequency of the mel filterbank, in Hz.</summary>
     /// <value>Default 50 (HTSAT-tiny.json <c>fmin</c>).</value>
+    /// <remarks><para><b>For Beginners:</b> Sound below this frequency is ignored by the mel filterbank.</para></remarks>
     public double MelMinFrequency { get; set; }
 
     /// <summary>Highest frequency of the mel filterbank, in Hz.</summary>
     /// <value>Default 14000 (HTSAT-tiny.json <c>fmax</c>).</value>
-    /// <remarks>Clamped to the Nyquist frequency when the sample rate is lower.</remarks>
+    /// <remarks>
+    /// <para>Clamped to the Nyquist frequency when the sample rate is lower.</para>
+    /// <para><b>For Beginners:</b> Sound above this frequency is ignored by the mel filterbank.</para>
+    /// </remarks>
     public double MelMaxFrequency { get; set; }
 
     /// <summary>Samples per clip: shorter audio is repeated and zero-padded to this length, longer audio is
     /// cropped (no fusion) or fused (feature fusion).</summary>
     /// <value>Default 480000 (10 s at 48 kHz).</value>
+    /// <remarks><para><b>For Beginners:</b> The model always looks at one fixed-length clip; this is that length in samples, and shorter or longer audio is fitted to it.</para></remarks>
     public int ClipSamples { get; set; }
 
     /// <summary>
@@ -158,6 +166,9 @@ public class CLAPModelOptions : AudioNeuralNetworkOptions
     /// The two published variants also differ in their front end, and this follows them: the fusion models read
     /// mels computed by torchaudio (HTK mel scale, unnormalized filters) in the data pipeline, the non-fusion
     /// models compute their own with torchlibrosa (librosa's Slaney scale and normalization).
+    /// <para><b>For Beginners:</b> With fusion on, a long recording is summarized by a shrunk view of the whole thing
+    /// plus three close-up crops, so the model sees both the overall shape and some detail; with it off, a long
+    /// recording is simply cut to one clip.</para>
     /// </remarks>
     public bool EnableFeatureFusion { get; set; }
 
@@ -165,92 +176,114 @@ public class CLAPModelOptions : AudioNeuralNetworkOptions
 
     /// <summary>Side of the square spectrogram image HTS-AT reads.</summary>
     /// <value>Default 256. With 64 mel bands the clip is folded into 256 / 64 = 4 stacked time chunks.</value>
+    /// <remarks><para><b>For Beginners:</b> The spectrogram is stretched and folded into a square image of this side length before the vision-style encoder reads it.</para></remarks>
     public int SpecSize { get; set; }
 
     /// <summary>Patch size (and stride) of the patch embedding.</summary>
     /// <value>Default 4.</value>
+    /// <remarks><para><b>For Beginners:</b> The spectrogram image is cut into square patches of this size; each patch becomes one token.</para></remarks>
     public int AudioPatchSize { get; set; }
 
     /// <summary>Embedding width of the first stage; it doubles at every patch merging.</summary>
     /// <value>Default 96 (HTS-AT tiny), so the final width is 96 · 2³ = 768.</value>
+    /// <remarks><para><b>For Beginners:</b> How many numbers describe each patch token in the first stage; deeper stages use more.</para></remarks>
     public int AudioEmbedDim { get; set; }
 
     /// <summary>Swin blocks per stage; one stage per entry, with a patch merging between consecutive stages.</summary>
     /// <value>Default [2, 2, 6, 2].</value>
+    /// <remarks><para><b>For Beginners:</b> How many transformer blocks each stage stacks; more blocks give more capacity at more cost.</para></remarks>
     public int[] AudioStageDepths { get; set; }
 
     /// <summary>Attention heads per stage; one entry per stage.</summary>
     /// <value>Default [4, 8, 16, 32].</value>
+    /// <remarks><para><b>For Beginners:</b> How many attention heads each stage uses; more heads let a block attend to several patterns at once.</para></remarks>
     public int[] AudioStageHeads { get; set; }
 
     /// <summary>Swin window size (W-MSA / SW-MSA).</summary>
     /// <value>Default 8 (HTS-AT).</value>
+    /// <remarks><para><b>For Beginners:</b> Attention is computed inside small square windows of this many patches, which keeps it affordable on large images.</para></remarks>
     public int SwinWindowSize { get; set; }
 
     /// <summary>Ratio of the Swin MLP's hidden width to the block width.</summary>
     /// <value>Default 4.</value>
+    /// <remarks><para><b>For Beginners:</b> How much wider the feed-forward part of each block is than the block itself.</para></remarks>
     public int AudioMlpRatio { get; set; }
 
     /// <summary>Stochastic-depth rate of the last Swin block; the rate grows linearly from 0 across blocks.</summary>
     /// <value>Default 0.1 (HTS-AT <c>drop_path_rate</c>).</value>
+    /// <remarks><para><b>For Beginners:</b> During training, whole blocks are randomly skipped with up to this probability, which regularizes a deep network.</para></remarks>
     public double AudioDropPathRate { get; set; }
 
     /// <summary>Exclusive upper bound of the width, in frames, of a time stripe zeroed during training.</summary>
     /// <value>Default 64 (HTS-AT's SpecAugmentation).</value>
+    /// <remarks><para><b>For Beginners:</b> SpecAugment hides short spans of time during training so the model does not rely on any single moment; this bounds how long each hidden span can be.</para></remarks>
     public int SpecAugmentTimeDropWidth { get; set; }
 
     /// <summary>Time stripes zeroed per training sample; 0 turns time masking off.</summary>
     /// <value>Default 2.</value>
+    /// <remarks><para><b>For Beginners:</b> How many spans of time SpecAugment hides in each training example.</para></remarks>
     public int SpecAugmentTimeStripes { get; set; }
 
     /// <summary>Exclusive upper bound of the width, in mel bins, of a frequency stripe zeroed during training.</summary>
     /// <value>Default 8.</value>
+    /// <remarks><para><b>For Beginners:</b> SpecAugment also hides narrow frequency bands during training; this bounds how wide each band can be.</para></remarks>
     public int SpecAugmentFreqDropWidth { get; set; }
 
     /// <summary>Frequency stripes zeroed per training sample; 0 turns frequency masking off.</summary>
     /// <value>Default 2.</value>
+    /// <remarks><para><b>For Beginners:</b> How many frequency bands SpecAugment hides in each training example.</para></remarks>
     public int SpecAugmentFreqStripes { get; set; }
 
     // ── RoBERTa text encoder ───────────────────────────────────────────────────────────────────────
 
     /// <summary>Text vocabulary size — RoBERTa BPE vocab.</summary>
     /// <value>Default 50265.</value>
+    /// <remarks><para><b>For Beginners:</b> How many distinct word pieces the text tokenizer knows; it must match the tokenizer you use.</para></remarks>
     public int VocabSize { get; set; }
 
     /// <summary>Token length captions are truncated / padded to.</summary>
     /// <value>Default 77 (LAION-CLAP's tokenizer call: <c>max_length=77</c>).</value>
+    /// <remarks><para><b>For Beginners:</b> Captions are cut or padded to this many tokens before encoding.</para></remarks>
     public int MaxTextLength { get; set; }
 
     /// <summary>Rows of RoBERTa's position table (positions start after the padding id).</summary>
     /// <value>Default 514.</value>
+    /// <remarks><para><b>For Beginners:</b> How many token positions the text encoder has learned embeddings for; longer inputs cannot be encoded.</para></remarks>
     public int TextMaxPositions { get; set; }
 
     /// <summary>Hidden width of the text encoder.</summary>
     /// <value>Default 768 (RoBERTa-base).</value>
+    /// <remarks><para><b>For Beginners:</b> How many numbers describe each token inside the text encoder.</para></remarks>
     public int TextHiddenDim { get; set; }
 
     /// <summary>Number of text encoder layers.</summary>
     /// <value>Default 12 (RoBERTa-base).</value>
+    /// <remarks><para><b>For Beginners:</b> How many transformer layers the text encoder stacks.</para></remarks>
     public int TextEncoderLayers { get; set; }
 
     /// <summary>Attention heads per text encoder layer.</summary>
     /// <value>Default 12 (RoBERTa-base).</value>
+    /// <remarks><para><b>For Beginners:</b> How many attention heads each text encoder layer uses.</para></remarks>
     public int TextEncoderHeads { get; set; }
 
     /// <summary>Width of the text encoder's feed-forward intermediate projection.</summary>
     /// <value>Default 3072 (RoBERTa-base).</value>
+    /// <remarks><para><b>For Beginners:</b> How wide the feed-forward part of each text encoder layer is.</para></remarks>
     public int TextIntermediateDim { get; set; }
 
     /// <summary>RoBERTa's padding token id (<c>&lt;pad&gt;</c>).</summary>
     /// <value>Default 1.</value>
+    /// <remarks><para><b>For Beginners:</b> The token id used to fill short captions up to the fixed length; positions holding it are ignored by attention.</para></remarks>
     public int TextPaddingTokenId { get; set; }
 
     /// <summary>Hidden and attention-probability dropout of the text encoder.</summary>
     /// <value>Default 0.1 (RoBERTa-base).</value>
+    /// <remarks><para><b>For Beginners:</b> During training, this fraction of activations is randomly zeroed to reduce overfitting; it has no effect at inference.</para></remarks>
     public double TextDropoutRate { get; set; }
 
     /// <summary>LayerNorm epsilon of the text encoder.</summary>
     /// <value>Default 1e-5 (RoBERTa-base).</value>
+    /// <remarks><para><b>For Beginners:</b> A tiny constant added inside layer normalization so it never divides by zero.</para></remarks>
     public double TextLayerNormEpsilon { get; set; }
 
     // ── Shared projection + contrastive learning ───────────────────────────────────────────────────
@@ -263,11 +296,14 @@ public class CLAPModelOptions : AudioNeuralNetworkOptions
 
     /// <summary>Initial temperature τ for the contrastive softmax; the model learns <c>log(1/τ)</c>.</summary>
     /// <value>Default 0.07.</value>
+    /// <remarks><para><b>For Beginners:</b> Controls how sharply the model separates matching from non-matching audio-caption pairs; lower values sharpen it, and the model keeps learning it during training.</para></remarks>
     public double InitialTemperature { get; set; }
 
     /// <summary>
     /// Gets or sets the text encoder path.
     /// </summary>
+    /// <value>Default null (the built-in RoBERTa tower).</value>
+    /// <remarks><para><b>For Beginners:</b> Path to an exported ONNX text encoder. Leave it unset to use the built-in RoBERTa tower.</para></remarks>
     public string? TextEncoderPath { get; set; }
 
     /// <summary>Number of HTS-AT stages.</summary>

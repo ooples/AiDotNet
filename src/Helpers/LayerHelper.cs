@@ -37585,7 +37585,13 @@ public static partial class LayerHelper<T>
     /// <para>HTS-AT's token-semantic head (<c>tscam_conv</c>, <c>head</c>) produces AudioSet event scores, not the
     /// embedding: CLAP never reads it, so it is not part of the tower.</para>
     /// <para>Every layer is sized here, so the parameter count is final before the first forward.</para>
+    /// <para><b>For Beginners:</b> this builds the part of CLAP that turns a log-mel spectrogram into one vector. The
+    /// spectrogram is treated as an image, cut into patches, and passed through Swin Transformer stages that look at
+    /// small windows and then progressively coarser ones; the result is averaged and projected into the space the text
+    /// tower also maps into, so audio and text can be compared directly.</para>
     /// </remarks>
+    /// <returns>The audio tower's layers in forward order, every one sized.</returns>
+    /// <exception cref="ArgumentException">A stage count mismatch, or a non-positive size, depth or head count.</exception>
     public static IEnumerable<ILayer<T>> CreateDefaultCLAPAudioEncoderLayers(
         int numMelBands,
         int specSize,
@@ -37607,25 +37613,65 @@ public static partial class LayerHelper<T>
         Guard.NotNull(stageHeads);
         if (stageDepths.Length == 0 || stageDepths.Length != stageHeads.Length)
             throw new ArgumentException("stageDepths and stageHeads need one entry per stage.", nameof(stageHeads));
+        // Validated here, not in the iterator, so a bad argument fails at the call rather than at the first MoveNext.
+        // A zero or negative depth would otherwise build a stage with no Swin blocks and still return a tower.
+        for (int stage = 0; stage < stageDepths.Length; stage++)
+        {
+            if (stageDepths[stage] <= 0)
+                throw new ArgumentException($"stageDepths[{stage}] must be positive (got {stageDepths[stage]}).", nameof(stageDepths));
+            if (stageHeads[stage] <= 0)
+                throw new ArgumentException($"stageHeads[{stage}] must be positive (got {stageHeads[stage]}).", nameof(stageHeads));
+        }
+        Guard.Positive(numMelBands, nameof(numMelBands));
+        Guard.Positive(specSize, nameof(specSize));
+        Guard.Positive(patchSize, nameof(patchSize));
+        Guard.Positive(embedDim, nameof(embedDim));
+        Guard.Positive(windowSize, nameof(windowSize));
+        Guard.Positive(mlpRatio, nameof(mlpRatio));
+        Guard.Positive(projectionDim, nameof(projectionDim));
 
-        var layers = new List<ILayer<T>>();
-        var bn0 = new BatchNormalizationLayer<T>(numMelBands) { Layout = BatchNormDataLayout.ChannelsLast };
-        layers.Add(bn0);
-        layers.Add(new SpectrogramStripeDropLayer<T>(specAugmentTimeDropWidth, specAugmentTimeStripes,
-            specAugmentFreqDropWidth, specAugmentFreqStripes));
-        layers.Add(new HtsatSpectrogramImageLayer<T>(specSize, specSize / numMelBands));
+        return CLAPAudioEncoderLayers(numMelBands, specSize, patchSize, embedDim, stageDepths, stageHeads, windowSize,
+            mlpRatio, dropPathRate, featureFusion, projectionDim, specAugmentTimeDropWidth, specAugmentTimeStripes,
+            specAugmentFreqDropWidth, specAugmentFreqStripes);
+    }
 
+    private static IEnumerable<ILayer<T>> CLAPAudioEncoderLayers(
+        int numMelBands,
+        int specSize,
+        int patchSize,
+        int embedDim,
+        int[] stageDepths,
+        int[] stageHeads,
+        int windowSize,
+        int mlpRatio,
+        double dropPathRate,
+        bool featureFusion,
+        int projectionDim,
+        int specAugmentTimeDropWidth,
+        int specAugmentTimeStripes,
+        int specAugmentFreqDropWidth,
+        int specAugmentFreqStripes)
+    {
+        // bn0: BatchNorm over the mel bins, reading the mel axis last.
+        yield return new BatchNormalizationLayer<T>(numMelBands) { Layout = BatchNormDataLayout.ChannelsLast };
+        // SpecAugment: time and frequency stripes zeroed while training.
+        yield return new SpectrogramStripeDropLayer<T>(specAugmentTimeDropWidth, specAugmentTimeStripes,
+            specAugmentFreqDropWidth, specAugmentFreqStripes);
+        // reshape_wav2img: stretch and fold the spectrogram into a square image.
+        yield return new HtsatSpectrogramImageLayer<T>(specSize, specSize / numMelBands);
+
+        // Patch embedding, with the fusion of the three local views when enabled (§3.3).
         if (featureFusion)
         {
             var embed = new HtsatFusionPatchEmbeddingLayer<T>(patchSize, embedDim);
             embed.ResolveFromShape(new[] { 1, 4, specSize, specSize });
-            layers.Add(embed);
+            yield return embed;
         }
         else
         {
             var embed = new SwinPatchEmbeddingLayer<T>(patchSize, embedDim);
             embed.ResolveFromShape(new[] { 1, 1, specSize, specSize });
-            layers.Add(embed);
+            yield return embed;
         }
 
         int totalBlocks = stageDepths.Sum();
@@ -37641,26 +37687,29 @@ public static partial class LayerHelper<T>
                 // torch.linspace(0, drop_path_rate, sum(depths)).
                 double rate = totalBlocks > 1 ? dropPathRate * block / (totalBlocks - 1) : 0.0;
                 int shift = fitsInOneWindow || i % 2 == 0 ? 0 : windowSize / 2;
+                // Swin block: windowed attention, shifted on every second block of a stage.
                 var swin = new SwinTransformerBlockLayer<T>(width, stageHeads[stage], stageWindow, shift, mlpRatio, rate,
                     exactGelu: true);
                 swin.ResolveFromShape(new[] { 1, resolution * resolution, width });
-                layers.Add(swin);
+                yield return swin;
                 block++;
             }
             if (stage < stageDepths.Length - 1)
             {
+                // Patch merging: halve the resolution, double the width.
                 var merge = new SwinPatchMergingLayer<T>(width);
                 merge.ResolveFromShape(new[] { 1, resolution * resolution, width });
-                layers.Add(merge);
+                yield return merge;
                 resolution /= 2;
                 width *= 2;
             }
         }
 
-        layers.Add(new LayerNormalizationLayer<T>(width));
-        layers.Add(new GlobalPoolingLayer<T>(poolingType: PoolingType.Average));
-        foreach (var layer in CreateCLAPProjectionLayers(width, projectionDim)) layers.Add(layer);
-        return layers;
+        // Final LayerNorm and the mean over tokens: the embedding CLAP reads.
+        yield return new LayerNormalizationLayer<T>(width);
+        yield return new GlobalPoolingLayer<T>(poolingType: PoolingType.Average);
+        // audio_projection into the joint space.
+        foreach (var layer in CreateCLAPProjectionLayers(width, projectionDim)) yield return layer;
     }
 
     /// <summary>
@@ -37678,6 +37727,12 @@ public static partial class LayerHelper<T>
     /// <param name="dropoutRate">Dropout (0.1).</param>
     /// <param name="layerNormEpsilon">LayerNorm epsilon (1e-5).</param>
     /// <param name="projectionDim">Joint embedding width (512).</param>
+    /// <returns>The RoBERTa encoder followed by the two projection layers, every one sized.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> this builds the part of CLAP that turns a caption into one vector: RoBERTa reads the
+    /// tokens and summarizes the sentence in its first (<c>&lt;s&gt;</c>) position, and two small layers project that
+    /// summary into the space the audio tower maps into, so a caption and a sound can be compared directly.</para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultCLAPTextEncoderLayers(
         int vocabSize,
         int maxPositions,
@@ -37690,25 +37745,28 @@ public static partial class LayerHelper<T>
         double layerNormEpsilon,
         int projectionDim)
     {
+        // RoBERTa up to its pooled <s> output.
         var encoder = new RobertaEncoderLayer<T>(vocabSize, textHiddenDim, textEncoderLayers, textEncoderHeads,
             intermediateDim, maxPositions, paddingTokenId, dropoutRate, layerNormEpsilon);
         encoder.ResolveFromShape(new[] { 1, 1 });
-        var layers = new List<ILayer<T>> { encoder };
-        foreach (var layer in CreateCLAPProjectionLayers(textHiddenDim, projectionDim)) layers.Add(layer);
-        return layers;
+        yield return encoder;
+        // text_projection into the joint space.
+        foreach (var layer in CreateCLAPProjectionLayers(textHiddenDim, projectionDim)) yield return layer;
     }
 
     /// <summary>LAION-CLAP's projection into the joint space (<c>audio_projection</c> / <c>text_projection</c> in
     /// <c>model.py</c>): <c>Linear(input, D) → ReLU → Linear(D, D)</c>, both layers sized here.</summary>
     /// <param name="inputDim">Width of the tower's pooled output.</param>
     /// <param name="projectionDim">Joint embedding width <c>D</c>.</param>
-    public static IEnumerable<ILayer<T>> CreateCLAPProjectionLayers(int inputDim, int projectionDim)
+    /// <returns>The two projection layers, sized.</returns>
+    internal static IEnumerable<ILayer<T>> CreateCLAPProjectionLayers(int inputDim, int projectionDim)
     {
         var first = new DenseLayer<T>(projectionDim, (IActivationFunction<T>)new ReLUActivation<T>());
         first.ResolveFromShape(new[] { 1, inputDim });
+        yield return first;
         var second = new DenseLayer<T>(projectionDim, (IActivationFunction<T>)new IdentityActivation<T>());
         second.ResolveFromShape(new[] { 1, projectionDim });
-        return new ILayer<T>[] { first, second };
+        yield return second;
     }
 
     #endregion

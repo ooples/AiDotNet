@@ -231,11 +231,36 @@ def main():
         return
     with open(path, encoding="utf-8") as f:
         stored = json.load(f)
-    same = all(np.allclose(np.asarray(stored[k]), np.asarray(result[k]), rtol=0, atol=1e-12)
-               for k in ("plain_audio_embedding", "fusion_short_audio_embedding", "fusion_long_audio_embedding",
-                         "text_embeddings", "logits"))
-    print("match" if same else "MISMATCH")
-    sys.exit(0 if same else 1)
+    # Every generated key, not only the final outputs: the weights, the mels and the fusion views are what the C#
+    # tests read, so drift in any of them must fail here too. Only the provenance written by --write is skipped.
+    provenance = ("generator", "torch")
+    missing = sorted(set(result) - set(stored))
+    extra = sorted(set(stored) - set(result) - set(provenance))
+    mismatched = [k for k in sorted(result) if k in stored and not same_value(stored[k], result[k])]
+    for k in missing:
+        print(f"missing from fixture: {k}")
+    for k in extra:
+        print(f"no longer generated: {k}")
+    for k in mismatched:
+        print(f"differs: {k}")
+    ok = not (missing or extra or mismatched)
+    print("match" if ok else "MISMATCH")
+    sys.exit(0 if ok else 1)
+
+
+def same_value(stored, generated):
+    """Exact for structure and text, within 1e-12 for numbers, recursing through dicts (the state dict, the shapes)."""
+    if isinstance(generated, dict):
+        return (isinstance(stored, dict) and set(stored) == set(generated)
+                and all(same_value(stored[k], generated[k]) for k in generated))
+    if isinstance(generated, str):
+        return stored == generated
+    stored_array, generated_array = np.asarray(stored), np.asarray(generated)
+    if stored_array.shape != generated_array.shape:
+        return False
+    if generated_array.dtype.kind in "biuf":
+        return bool(np.allclose(stored_array, generated_array, rtol=0, atol=1e-12))
+    return stored == generated
 
 
 if __name__ == "__main__":

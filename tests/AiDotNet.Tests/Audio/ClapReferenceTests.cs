@@ -125,12 +125,14 @@ public class ClapReferenceTests
         Assert.Equal(8192 / 64 + 1, chunk);
 
         // View 0: torchvision Resize (antialiased bilinear) of the whole mel to the clip's frame count.
-        var shrink = ClapAudioFrontEnd<double>.AntialiasedBilinearMatrix(chunk, total);
+        var melTensor = new Tensor<double>(new[] { total, mels });
+        for (int s = 0; s < total; s++)
+            for (int m = 0; m < mels; m++) melTensor[s, m] = mel[s][m];
+        var shrunk = ClapAudioFrontEnd<double>.AntialiasedBilinearShrink(melTensor, chunk);
         for (int t = 0; t < chunk; t++)
             for (int m = 0; m < mels; m++)
             {
-                double value = 0;
-                for (int s = 0; s < total; s++) value += shrink[t, s] * mel[s][m];
+                double value = shrunk[t, m];
                 Assert.True(Math.Abs(views[0][t][m] - value) <= Tolerance, $"shrunk view [{t}, {m}]: {value:R} vs {views[0][t][m]:R}");
             }
 

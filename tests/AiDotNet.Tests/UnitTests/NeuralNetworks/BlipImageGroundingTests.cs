@@ -107,9 +107,10 @@ public sealed class BlipImageGroundingTests
         Assert.Equal(0.0, LargestDifference(unimodalBefore, unimodalAfter));
     }
 
-    [Fact]
-    public void TextBlocks_FollowThePaperStructure()
+    [Fact(Timeout = 120000)]
+    public async Task TextBlocks_FollowThePaperStructure()
     {
+        await Task.Yield();
         using var model = CreateModel();
         var blocks = model.Layers.OfType<TransformerDecoderLayer<float>>().ToArray();
 

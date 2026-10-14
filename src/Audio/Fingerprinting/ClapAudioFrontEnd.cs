@@ -96,13 +96,12 @@ internal sealed class ClapAudioFrontEnd<T>
         if (total == chunk) return (FourViews(engine, full), longer);      // longer than the clip by under one hop
 
         var views = new Tensor<T>(new[] { batch, 4, chunk, mels });
-        var shrink = AntialiasedBilinearMatrix(chunk, total);
         var ranges = SplitOffsets(total - chunk + 1);
         for (int b = 0; b < batch; b++)
         {
             longer[b] = NumOps.One;
             var row = engine.Reshape(engine.TensorSlice(full, new[] { b, 0, 0 }, new[] { 1, total, mels }), new[] { total, mels });
-            var shrunk = engine.TensorMatMul(shrink, row);
+            var shrunk = AntialiasedBilinearShrink(row, chunk);
             Copy(shrunk, 0, views, b, 0, chunk, mels);
             for (int part = 0; part < 3; part++)
             {
@@ -168,17 +167,26 @@ internal sealed class ClapAudioFrontEnd<T>
     }
 
     /// <summary>
-    /// The <c>[outputs, inputs]</c> matrix of PyTorch's antialiased bilinear resampling along one axis
-    /// (<c>_upsample_bilinear2d_aa</c>, which torchvision's <c>Resize</c> uses on tensors): a triangle filter whose
-    /// support widens by the downsampling factor, centred at <c>scale · (i + 0.5)</c>, normalized per output.
+    /// Resamples the rows of <paramref name="rows"/> (<c>[inputs, mels]</c>) to <paramref name="outputs"/> rows with
+    /// PyTorch's antialiased bilinear filter along that axis (<c>_upsample_bilinear2d_aa</c>, which torchvision's
+    /// <c>Resize</c> uses on tensors): a triangle filter whose support widens by the downsampling factor, centred at
+    /// <c>scale · (i + 0.5)</c>, normalized per output.
     /// </summary>
-    internal static Tensor<T> AntialiasedBilinearMatrix(int outputs, int inputs)
+    /// <remarks>
+    /// Each output reads only its filter window, about <c>2 · inputs / outputs</c> rows, so the cost is
+    /// <c>O(inputs · mels)</c>. A dense <c>[outputs, inputs]</c> resampling matrix grew with the clip length: a
+    /// ten-minute clip at the default 1001-frame chunk built a matrix of about 60 million entries.
+    /// </remarks>
+    internal static Tensor<T> AntialiasedBilinearShrink(Tensor<T> rows, int outputs)
     {
+        int inputs = rows.Shape[0], mels = rows.Shape[1];
         double scale = inputs / (double)outputs;
         double support = scale >= 1.0 ? scale : 1.0;
         double invScale = scale >= 1.0 ? 1.0 / scale : 1.0;
-        var matrix = new Tensor<T>(new[] { outputs, inputs });
-        var w = new double[inputs];
+        var result = new Tensor<T>(new[] { outputs, mels });
+        var source = rows.ToArray();
+        var accumulator = new double[mels];
+        var weights = new double[inputs];
         for (int i = 0; i < outputs; i++)
         {
             double center = scale * (i + 0.5);
@@ -188,11 +196,20 @@ internal sealed class ClapAudioFrontEnd<T>
             for (int x = xmin; x < xmax; x++)
             {
                 double arg = Math.Abs((x - center + 0.5) * invScale);
-                w[x] = arg < 1.0 ? 1.0 - arg : 0.0;
-                total += w[x];
+                weights[x] = arg < 1.0 ? 1.0 - arg : 0.0;
+                total += weights[x];
             }
-            for (int x = xmin; x < xmax; x++) matrix[i, x] = NumOps.FromDouble(total > 0 ? w[x] / total : 0.0);
+
+            Array.Clear(accumulator, 0, mels);
+            for (int x = xmin; x < xmax; x++)
+            {
+                double weight = total > 0 ? weights[x] / total : 0.0;
+                if (weight == 0.0) continue;
+                int offset = x * mels;
+                for (int m = 0; m < mels; m++) accumulator[m] += weight * NumOps.ToDouble(source[offset + m]);
+            }
+            for (int m = 0; m < mels; m++) result[i, m] = NumOps.FromDouble(accumulator[m]);
         }
-        return matrix;
+        return result;
     }
 }

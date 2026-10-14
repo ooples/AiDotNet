@@ -1229,7 +1229,7 @@ public static class DeserializationHelper
             // The [LayerState] key is the parameter name. A model saved before the flag existed has no entry and
             // was built bidirectional, which is the constructor default.
             bool? parsedCausal = TryGetBool(additionalParams, "causal");
-            if (additionalParams?.ContainsKey("causal") == true && !parsedCausal.HasValue)
+            if (additionalParams is not null && additionalParams.ContainsKey("causal") && !parsedCausal.HasValue)
             {
                 throw new InvalidOperationException(
                     $"TransformerDecoderLayer has invalid 'causal' metadata '{additionalParams["causal"]}'; expected true or false.");

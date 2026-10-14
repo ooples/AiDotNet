@@ -72,6 +72,11 @@ public partial class BertEmbeddingLayer<T> : LayerBase<T>, IShapeContract
             throw new ArgumentOutOfRangeException(nameof(maxSequenceLength));
         if (tokenTypeVocabularySize <= 0)
             throw new ArgumentOutOfRangeException(nameof(tokenTypeVocabularySize));
+        // With a padding index, positions are numbered from paddingTokenId + 1, so a sequence of length L reads rows up
+        // to L + paddingTokenId. Even one token needs paddingTokenId + 1 to be a row: anything higher rejects every input.
+        if (paddingTokenId > maxSequenceLength - 2)
+            throw new ArgumentOutOfRangeException(nameof(paddingTokenId),
+                $"Positions start after the padding index, so it must be at most maxSequenceLength - 2 ({maxSequenceLength - 2}); got {paddingTokenId}.");
 
         _vocabularySize = vocabularySize;
         _hiddenSize = hiddenSize;
@@ -79,9 +84,6 @@ public partial class BertEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         _tokenTypeVocabularySize = tokenTypeVocabularySize;
         _dropoutProbability = dropoutProbability;
         _layerNormEpsilon = layerNormEpsilon;
-        if (paddingTokenId >= maxSequenceLength)
-            throw new ArgumentOutOfRangeException(nameof(paddingTokenId),
-                "The padding index addresses a row of the position table, so it must be below maxSequenceLength.");
         _paddingTokenId = paddingTokenId;
         _wordEmbedding = new EmbeddingLayer<T>(vocabularySize, hiddenSize);
         _positionEmbedding = new EmbeddingLayer<T>(maxSequenceLength, hiddenSize);

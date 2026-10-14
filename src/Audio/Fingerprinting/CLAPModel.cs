@@ -327,9 +327,36 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         var (features, longer) = PrepareAudio(audio);
         if (!_useNativeMode && OnnxEncoder is not null)
         {
-            return PostprocessOutput(OnnxEncoder.Run(features));
+            return PostprocessOutput(RunOnnxAudioEncoder(OnnxEncoder, features, longer));
         }
         return L2Normalize(RunAudioTower(features, longer));
+    }
+
+    /// <summary>
+    /// Runs an exported audio encoder. The features go to the graph's first input that is not the mask; a graph that
+    /// also declares an input whose name contains <c>longer</c> (LAION-CLAP's fusion mask, <c>[batch]</c>, 1 where a
+    /// sample's local views are fused) receives the mask there, so a fusion export behaves like the native tower.
+    /// </summary>
+    /// <remarks>
+    /// The ONNX input contract: input one is <c>[batch, views, frames, mels]</c> (one view, or the four fusion views);
+    /// an optional input named with <c>longer</c> is the mask. A graph without the mask input receives only the
+    /// features, as before; for a fusion graph that means every sample is treated as short.
+    /// </remarks>
+    private static Tensor<T> RunOnnxAudioEncoder(OnnxModel<T> encoder, Tensor<T> features, Tensor<T> longer)
+    {
+        var inputs = encoder.Metadata.Inputs;
+        var maskInput = inputs.FirstOrDefault(
+            input => input.Name.IndexOf("longer", System.StringComparison.OrdinalIgnoreCase) >= 0);
+        if (maskInput is null)
+            return encoder.Run(features);
+
+        var featureInput = inputs.First(input => !ReferenceEquals(input, maskInput));
+        var outputs = encoder.Run(new System.Collections.Generic.Dictionary<string, Tensor<T>>
+        {
+            [featureInput.Name] = features,
+            [maskInput.Name] = longer,
+        });
+        return outputs.Values.First();
     }
 
     /// <summary>
@@ -594,7 +621,10 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         var loader = new TorchStateDictLoader<T>(read, Engine);
 
         int index = 0;
-        ILayer<T> Next() => Layers[index++];
+        ILayer<T> Next() => index < Layers.Count
+            ? Layers[index++]
+            : throw new InvalidOperationException(
+                $"LoadLaionWeights expects the default CLAP audio tower; it ended after {Layers.Count} layers, before the checkpoint's layers were all placed.");
         TLayer Expect<TLayer>(ILayer<T> layer) where TLayer : class =>
             layer as TLayer ?? throw new InvalidOperationException(
                 $"LoadLaionWeights expects the default CLAP audio tower; found {layer.GetType().Name} where {typeof(TLayer).Name} belongs.");
@@ -653,6 +683,9 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         Expect<GlobalPoolingLayer<T>>(Next());
         loader.Linear(Expect<DenseLayer<T>>(Next()), "audio_projection.0");
         loader.Linear(Expect<DenseLayer<T>>(Next()), "audio_projection.2");
+        if (index != Layers.Count)
+            throw new InvalidOperationException(
+                $"LoadLaionWeights expects the default CLAP audio tower; {Layers.Count - index} layer(s) after the projection have no checkpoint weights.");
 
         if (TextEncoderLayers.Count != 3 || TextEncoderLayers[0] is not RobertaEncoderLayer<T> roberta)
             throw new InvalidOperationException("LoadLaionWeights expects the default CLAP text tower (RoBERTa and its projection).");
