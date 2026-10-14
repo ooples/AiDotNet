@@ -164,7 +164,7 @@ shard:
   - name: Unit - 08c NN-VLM (Blip/Blip2/Clip)
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
-    filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~BlipNeuralNetworkTests|FullyQualifiedName~Blip2NeuralNetworkTests|FullyQualifiedName~ClipNeuralNetworkTests)'
+    filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~UnitTests.NeuralNetworks&(FullyQualifiedName~BlipNeuralNetworkTests|FullyQualifiedName~BlipImageGroundingTests|FullyQualifiedName~Blip2NeuralNetworkTests|FullyQualifiedName~ClipNeuralNetworkTests)'
   - name: Unit - 08d NN-Adapters/Other
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
