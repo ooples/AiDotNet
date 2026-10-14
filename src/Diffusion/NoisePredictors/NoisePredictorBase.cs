@@ -408,8 +408,7 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         // train step (CompiledModelHost.Predict + LazyNode.Realize) — on top of the eager op
         // record the backward needs anyway. Eager records the identical ops on the tape, so the
         // gradients are unchanged; inference (no tape / NoGradScope) still gets the fast replay.
-        if (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
-            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed)
+        if (AiDotNet.Autodiff.GradientRecording.IsRecording<T>())
             return eagerFallback();
 
         // Compiled inference replay is opt-in (see s_autoCompiledInferenceEnabled): the verify pass

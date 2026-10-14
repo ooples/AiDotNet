@@ -298,12 +298,25 @@ internal sealed class FusedTrainingSession<T>
         IsCommitted = true;
         LastMissReason = null;
         loss = stepLoss;
+
+        // The plan wrote the weights in place, past the version counters an eager optimizer step bumps, so every
+        // derived weight copy (CPU packed inference weights, GPU-resident uploads) is stale. Inference read those
+        // copies and kept predicting with the pre-training weights for every caller but NeuralNetworkBase, which
+        // invalidated on its own. One place, so no caller of the session can miss it.
+        InvalidateDerivedWeightCaches();
         if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> scheduled)
             scheduled.OnBatchEnd();
         return FusedStepOutcome.Stepped;
     }
 
     /// <summary>Maps an optimizer to its fused kernel configuration, when it has one.</summary>
+    // Drops every cached derived copy of the weights after the plan updated them in place.
+    private static void InvalidateDerivedWeightCaches()
+    {
+        (AiDotNet.Tensors.Engines.AiDotNetEngine.Current as AiDotNet.Tensors.Engines.DirectGpuTensorEngine)?.InvalidateAllWeightCaches();
+        AiDotNet.Tensors.Engines.InferenceWeightCache.InvalidateAll();
+    }
+
     internal static bool TryMapToFusedOptimizerConfig(
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
         out Optimizers.Fused.FusedOptimizerConfig config)

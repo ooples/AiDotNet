@@ -270,8 +270,7 @@ public partial class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutB
         if (input is null) return false;
 
         // Inference-only: the fused kernels bypass the gradient tape.
-        if (Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
-            && !Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed)
+        if (AiDotNet.Autodiff.GradientRecording.IsRecording<T>())
             return false;
 
         var layers = Layers;

@@ -277,8 +277,7 @@ public partial class DiTNoisePredictor<T> : NoisePredictorBase<T>
     private static bool UseForwardScratch()
     {
         if (!AiDotNet.Helpers.ForwardScratchGate.AdaLn) return false;
-        bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
-            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        bool tapeActive = AiDotNet.Autodiff.GradientRecording.IsRecording<T>();
         return !tapeActive;
     }
 
@@ -580,8 +579,7 @@ public partial class DiTNoisePredictor<T> : NoisePredictorBase<T>
     /// </summary>
     private bool UseLowPrecisionResidentEval()
     {
-        bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
-            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        bool tapeActive = AiDotNet.Autodiff.GradientRecording.IsRecording<T>();
         return !tapeActive && ParameterCount > EffectiveResidentThreshold;
     }
 
@@ -727,8 +725,7 @@ public partial class DiTNoisePredictor<T> : NoisePredictorBase<T>
         // multi-GB DiT fits a 16 GB host without disk paging or slow Half arithmetic. Flagged here,
         // before the blocks' first forward, so DenseLayer downcasts its fp32 weights on first use.
         // Gated OFF while a tape is active (training needs the fp32 master for backward).
-        bool tapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
-            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        bool tapeActive = AiDotNet.Autodiff.GradientRecording.IsRecording<T>();
         if (!tapeActive && ParameterCount > EffectiveResidentThreshold)
         {
             foreach (var b in _blocks) b.EnableLowPrecisionResident();

@@ -15,4 +15,14 @@ internal static class GradientRecording
 {
     /// <summary>True while the forward is being traced for a compiled training plan.</summary>
     public static bool IsTrainingTrace => GraphMode.IsActive && !GraphMode.IsInferenceTrace;
+
+    /// <summary>
+    /// True while the current forward is being differentiated: an active gradient tape that is not suppressed, or
+    /// a compiled training plan's trace. A fast path that the backward cannot differentiate (an in-place or
+    /// pooled-buffer kernel, an inference compile host) must stay off while this is true.
+    /// </summary>
+    public static bool IsRecording<T>() =>
+        (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed)
+        || IsTrainingTrace;
 }

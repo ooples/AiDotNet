@@ -517,9 +517,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
         // active (training-time sampling) so eager backward state is retained. Restored in
         // the finally so the model's steady-state (training) is preserved for the next step.
         bool evalForInference = !LayerBase<T>.IsInferringShapes
-            && !AiDotNet.Autodiff.GradientRecording.IsTrainingTrace
-            && (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
-                || AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed);
+            && !AiDotNet.Autodiff.GradientRecording.IsRecording<T>();
         if (evalForInference) SetAllLayersTrainingMode(false);
         try
         {
@@ -1114,9 +1112,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
         // decoder loops - that is what keeps the eager and the skip-returning forward in step.
         a = AlignSpatialToSkip(a, b);
 
-        bool useInPlace = (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
-                           || AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed)
-                          && !AiDotNet.Autodiff.GradientRecording.IsTrainingTrace;
+        bool useInPlace = !AiDotNet.Autodiff.GradientRecording.IsRecording<T>();
         if (!useInPlace || a.Rank != 4 || b.Rank != 4
             || a._shape[0] != b._shape[0]
             || a._shape[2] != b._shape[2]
