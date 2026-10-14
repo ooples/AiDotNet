@@ -364,30 +364,23 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
                 int end = Math.Min(start + batchSize, shuffled.Count);
                 int b = end - start;
 
-                // Mini-batch gradient from ONE tape over the whole batch (ForwardBatched), through the shared
-                // TapeTrainingStepper objective step. The training loss is mean-reduced over the [B * horizon]
-                // forecasts; with every sample sharing the horizon that is the mean of the per-sample losses, so the
-                // gradient is exactly the per-sample gradients averaged -- what a loop of one tape per sample would
-                // compute, at one batched graph instead of B small ones (AutoformerBatchedForwardTests). Each sample
-                // still picks its top-k delays from its own correlation spectrum.
-                var windowData = new Vector<T>(b * lookback);
-                var targetData = new Vector<T>(b * horizon);
+                // Input [B, L], target [B, H]. The batched forward runs every window at once, each still choosing
+                // its own top-k delays on the device; the loss, backward and Adam update are one fused compiled
+                // plan when it applies (CPU or GPU), the eager tape otherwise (TrainTapeBatch).
+                var inputData = new T[b * lookback];
+                var targetData = new T[b * horizon];
                 for (int bi = 0; bi < b; bi++)
                 {
                     int idx = shuffled[start + bi];
-                    for (int t = 0; t < lookback; t++) windowData[bi * lookback + t] = yNorm[idx - lookback + t];
+                    for (int t = 0; t < lookback; t++) inputData[bi * lookback + t] = yNorm[idx - lookback + t];
                     for (int h = 0; h < horizon; h++) targetData[bi * horizon + h] = yNorm[idx + h];
                 }
+                var batchInput = new Tensor<T>(new[] { b, lookback }, new Vector<T>(inputData));
+                var batchTarget = new Tensor<T>(new[] { b, horizon }, new Vector<T>(targetData));
 
-                int batchRows = b;
-                Tensor<T> BatchObjective()
-                {
-                    var pred = Engine.Reshape(
-                        ForwardBatched(new Tensor<T>(new[] { batchRows, lookback }, windowData)), new[] { batchRows * horizon, 1 });
-                    return mseLoss.ComputeTapeLoss(pred, new Tensor<T>(new[] { batchRows * horizon, 1 }, targetData));
-                }
-
-                T lossValue = Training.TapeTrainingStepper<T>.EagerObjectiveStep(allParams, BatchObjective, optimizer);
+                T lossValue = TrainTapeBatch(
+                    Array.Empty<ITrainableLayer<T>>(), batchInput, batchTarget,
+                    ForwardBatched, mseLoss.ComputeTapeLoss, optimizer, extraParameters: allParams);
 
                 epochLossSum += Convert.ToDouble(lossValue) * b;
                 epochCount += b;
@@ -441,241 +434,246 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
         return result;
     }
 
-    internal Tensor<T> AccumulateGradient(Tensor<T>? accumulated, Tensor<T> gradient)
+    // Forward on ONE already z-normalized lookback window: the batched forward with a batch of one, returned as
+    // the normalized [forecastHorizon, 1] forecast. Training and inference run the same graph.
+    internal Tensor<T> ForwardCore(Vector<T> input)
     {
-        var sum = accumulated is null ? gradient : Engine.TensorAdd(accumulated, gradient);
-        // ToArray copies logical values; this constructor owns that array and copies the shape.
-        return new Tensor<T>(sum.ToArray(), sum.Shape.ToArray());
+        int seqLen = Math.Min(input.Length, _options.LookbackWindow);
+        var inData = new Vector<T>(seqLen);
+        for (int t = 0; t < seqLen; t++) inData[t] = input[t];
+        var forecast = ForwardBatched(new Tensor<T>(new[] { 1, seqLen }, inData));
+        return Engine.Reshape(forecast, new[] { _options.ForecastHorizon, 1 });
     }
-
-    // ── Batched forward ─────────────────────────────────────────────────────────────────
-    // ForwardCore for B windows at once, op for op, so one tape covers a whole mini-batch instead of one tape (and
-    // hundreds of tiny tensors) per sample -- the per-sample loop made an Ooples-sized Autoformer fit take minutes per
-    // epoch. Each sample's top-k delays are still chosen from ITS OWN correlation spectrum (Autoformer's defining,
-    // data-dependent selection); the aggregation over those delays is expressed as a weighted sum of constant shift
-    // matrices so it batches into one matmul while staying differentiable through the weights and the values.
-
-    // [B, n, e] x W[e, e2] -> [B, n, e2]
-    private Tensor<T> MatMulRows(Tensor<T> x, Tensor<T> w)
-    {
-        int b = x.Shape[0], n = x.Shape[1], e = x.Shape[2];
-        var r = Engine.TensorMatMul(Engine.Reshape(x, new[] { b * n, e }), w);
-        return Engine.Reshape(r, new[] { b, n, w.Shape[1] });
-    }
-
-    // [B, n, e] x W[e2, e]^T + bias[e2] -> [B, n, e2]
-    private Tensor<T> LinearRows(Tensor<T> x, Tensor<T> w, Tensor<T> bias)
-    {
-        int b = x.Shape[0], n = x.Shape[1], e = x.Shape[2];
-        var r = Engine.TensorMatMulTransposed(Engine.Reshape(x, new[] { b * n, e }), w);
-        r = Engine.TensorAdd(r, Engine.Reshape(bias, new[] { 1, bias.Shape[0] }));
-        return Engine.Reshape(r, new[] { b, n, w.Shape[0] });
-    }
-
-    private Tensor<T> LayerNormRows(Tensor<T> x, Tensor<T> gamma, Tensor<T> beta)
-    {
-        int b = x.Shape[0], n = x.Shape[1], e = x.Shape[2];
-        var r = Engine.LayerNorm(Engine.Reshape(x, new[] { b * n, e }), gamma, beta, 1e-6, out _, out _);
-        return Engine.Reshape(r, new[] { b, n, e });
-    }
-
-    /// <summary>Batched <see cref="AutoCorrelationEngine"/> over q [B, lq, d], k and v [B, lk, d].</summary>
-    internal Tensor<T> AutoCorrelationBatched(Tensor<T> q, Tensor<T> k, Tensor<T> v)
-    {
-        int b = q.Shape[0], lq = q.Shape[1], d = q.Shape[2], lk = k.Shape[1];
-        int corrLen = Math.Min(lq, lk);
-        if (corrLen <= 0) return v;
-        int topK = Math.Max(1, (int)Math.Round(_options.AutoCorrelationFactor * Math.Log(Math.Max(2.0, corrLen))));
-        topK = Math.Min(topK, corrLen);
-
-        // Spectrum R[b] = A @ vec(q[b] k[b]^T), the same operator as the per-sample matmul spectrum.
-        var m = Engine.BatchMatMul(q, Engine.TensorPermute(k, new[] { 0, 2, 1 }));              // [B, lq, lk]
-        var spectrum = Engine.TensorMatMulTransposed(
-            Engine.Reshape(m, new[] { b, lq * lk }), DiagonalMeanOperator(lq, lk, corrLen, d)); // [B, corrLen]
-
-        // Per-sample top-k delays (host read; non-differentiable selection, as in the per-sample path).
-        var host = spectrum.GetCpuData();
-        var gather = new Tensor<T>(new[] { b, corrLen, topK });   // one-hot: gathered[b, i] = R[b, lag_{b,i}]
-        var shift = new Tensor<T>(new[] { b, topK, lq * lk });    // one-hot rows: out[t] += w_i * v[(t+lag_i) mod lk]
-        var vals = new double[corrLen];
-        for (int s = 0; s < b; s++)
-        {
-            for (int lag = 0; lag < corrLen; lag++) vals[lag] = _numOps.ToDouble(host[s * corrLen + lag]);
-            var lags = Enumerable.Range(0, corrLen).OrderByDescending(i => vals[i]).Take(topK).ToArray();
-            for (int i = 0; i < lags.Length; i++)
-            {
-                gather[s, lags[i], i] = _numOps.One;
-                for (int t = 0; t < lq; t++)
-                    shift[s, i, t * lk + (t + lags[i]) % lk] = _numOps.One;
-            }
-        }
-
-        var gathered = Engine.BatchMatMul(Engine.Reshape(spectrum, new[] { b, 1, corrLen }), gather); // [B, 1, K]
-        var weights = Engine.Softmax(gathered, -1);
-        var operatorRows = Engine.Reshape(Engine.BatchMatMul(weights, shift), new[] { b, lq, lk });  // [B, lq, lk]
-        return Engine.BatchMatMul(operatorRows, v);                                                  // [B, lq, d]
-    }
-
-    private (Tensor<T> seasonal, Tensor<T> trend) EncoderLayerBatched(Tensor<T> seasonal, Tensor<T> trend, int layerIdx)
-    {
-        var layer = _encoderLayers[layerIdx];
-        int seqLen = seasonal.Shape[1];
-        var attn = AutoCorrelationBatched(
-            MatMulRows(seasonal, layer.GetQueryProjection()),
-            MatMulRows(seasonal, layer.GetKeyProjection()),
-            MatMulRows(seasonal, layer.GetValueProjection()));
-        var normalized = LayerNormRows(Engine.TensorAdd(seasonal, MatMulRows(attn, layer.GetOutputProjection())),
-            layer.GetLayerNorm1Gamma(), layer.GetLayerNorm1Beta());
-        var ffHidden = Engine.ReLU(LinearRows(normalized, layer.GetFF1Weight(), layer.GetFF1Bias()));
-        var ffOutput = LinearRows(ffHidden, layer.GetFF2Weight(), layer.GetFF2Bias());
-        var newSeasonal = LayerNormRows(Engine.TensorAdd(normalized, ffOutput), layer.GetLayerNorm2Gamma(), layer.GetLayerNorm2Beta());
-        var newTrend = MovingAverageBatched(newSeasonal, _movingAvgKernel, seqLen);
-        return (Engine.TensorSubtract(newSeasonal, newTrend), Engine.TensorAdd(trend, newTrend));
-    }
-
-    private (Tensor<T> seasonal, Tensor<T> trend) DecoderLayerBatched(
-        Tensor<T> decSeasonal, Tensor<T> decTrend, Tensor<T> encSeasonal, int layerIdx)
-    {
-        var layer = _decoderLayers[layerIdx];
-        int seqLen = decSeasonal.Shape[1];
-        var selfAttn = AutoCorrelationBatched(
-            MatMulRows(decSeasonal, layer.GetSelfQueryProjection()),
-            MatMulRows(decSeasonal, layer.GetSelfKeyProjection()),
-            MatMulRows(decSeasonal, layer.GetSelfValueProjection()));
-        var norm1 = LayerNormRows(Engine.TensorAdd(decSeasonal, MatMulRows(selfAttn, layer.GetSelfOutputProjection())),
-            layer.GetLayerNorm1Gamma(), layer.GetLayerNorm1Beta());
-        var crossAttn = AutoCorrelationBatched(
-            MatMulRows(norm1, layer.GetCrossQueryProjection()),
-            MatMulRows(encSeasonal, layer.GetCrossKeyProjection()),
-            MatMulRows(encSeasonal, layer.GetCrossValueProjection()));
-        var norm2 = LayerNormRows(Engine.TensorAdd(norm1, MatMulRows(crossAttn, layer.GetCrossOutputProjection())),
-            layer.GetLayerNorm2Gamma(), layer.GetLayerNorm2Beta());
-        var ffHidden = Engine.ReLU(LinearRows(norm2, layer.GetFF1Weight(), layer.GetFF1Bias()));
-        var ffOutput = LinearRows(ffHidden, layer.GetFF2Weight(), layer.GetFF2Bias());
-        var newSeasonal = LayerNormRows(Engine.TensorAdd(norm2, ffOutput), layer.GetLayerNorm3Gamma(), layer.GetLayerNorm3Beta());
-        var newTrend = MovingAverageBatched(newSeasonal, _movingAvgKernel, seqLen);
-        return (Engine.TensorSubtract(newSeasonal, newTrend), Engine.TensorAdd(decTrend, newTrend));
-    }
-
     /// <summary>
-    /// <see cref="ForwardCore"/> for B already z-normalized windows: windows [B, S] -> normalized forecasts [B, H].
+    /// Batched core forward on ALREADY z-normalized windows: <c>[B, L]</c> -> normalized forecast <c>[B, H]</c>.
     /// </summary>
-    internal Tensor<T> ForwardBatched(Tensor<T> windows)
+    /// <remarks>
+    /// The same model as the per-sample forward, one rank wider, with nothing read back to the host: each window's
+    /// delays are chosen on the device (a rank mask over its own correlation spectrum) and its rolled-value
+    /// aggregation is a one-hot-weighted sum of constant shift operators, so one compiled plan replays it for every
+    /// batch with each window still picking its own delays.
+    /// </remarks>
+    internal Tensor<T> ForwardBatched(Tensor<T> input)
     {
-        int b = windows.Shape[0], seqLen = windows.Shape[1];
-        int embDim = _options.EmbeddingDim, horizon = _options.ForecastHorizon;
+        int batch = input.Shape[0];
+        int seqLen = input.Shape[1];
+        int embDim = _options.EmbeddingDim;
+        int horizon = _options.ForecastHorizon;
 
+        // Embedding: x @ inputProjᵀ plus the positional encoding of each step, [B, L, D].
+        var flatIn = Engine.Reshape(input, new[] { batch * seqLen, 1 });
         var embedded = Engine.Reshape(
-            Engine.TensorMatMul(Engine.Reshape(windows, new[] { b * seqLen, 1 }), Engine.Reshape(_inputProjection, new[] { 1, embDim })),
-            new[] { b, seqLen, embDim });
-        embedded = Engine.TensorAdd(embedded,
-            Engine.Reshape(Engine.TensorNarrow(_positionalEncoding, 0, 0, seqLen), new[] { 1, seqLen, embDim }));
+            Engine.TensorMatMul(flatIn, Engine.Reshape(_inputProjection, new[] { 1, embDim })),
+            new[] { batch, seqLen, embDim });
+        embedded = Engine.TensorAdd(embedded, PositionalEncodingSlice(seqLen));
 
+        // Series decomposition, then the encoder.
         var trend = MovingAverageBatched(embedded, _movingAvgKernel, seqLen);
         var seasonal = Engine.TensorSubtract(embedded, trend);
         for (int i = 0; i < _encoderLayers.Count; i++)
             (seasonal, trend) = EncoderLayerBatched(seasonal, trend, i);
 
-        // Decoder init: learned seasonal placeholder; trend = learned init + each window's embedding mean.
-        var zeros = new Tensor<T>(new[] { b, horizon, embDim });
-        Tensor<T> decSeasonal = Engine.TensorAdd(zeros, Engine.Reshape(_decoderSeasonalInit, new[] { 1, horizon, embDim }));
-        var embMean = Engine.TensorMultiplyScalar(Engine.ReduceSum(embedded, new[] { 1 }, keepDims: true),
-            _numOps.FromDouble(1.0 / seqLen));                                                       // [B, 1, E]
-        Tensor<T> decTrend = Engine.TensorAdd(Engine.Reshape(_decoderTrendInit, new[] { 1, horizon, embDim }), embMean);
-        for (int i = 0; i < _decoderLayers.Count; i++)
-            (decSeasonal, decTrend) = DecoderLayerBatched(decSeasonal, decTrend, seasonal, i);
-
-        var output = Engine.TensorAdd(
-            Engine.TensorMatMulTransposed(Engine.Reshape(decSeasonal, new[] { b * horizon, embDim }), _seasonalProjection),
-            Engine.TensorMatMulTransposed(Engine.Reshape(decTrend, new[] { b * horizon, embDim }), _trendProjection));
-        return Engine.TensorAdd(Engine.Reshape(output, new[] { b, horizon }), Engine.Reshape(_outputBias, new[] { 1, horizon }));
-    }
-
-    // Core Engine forward on an ALREADY z-normalized lookback window, returning the normalized
-    // [forecastHorizon, 1] forecast. Built entirely from Engine.Tensor* ops so a GradientTape
-    // differentiates it automatically and every op is GPU-dispatchable.
-    internal Tensor<T> ForwardCore(Vector<T> input)
-    {
-        int seqLen = Math.Min(input.Length, _options.LookbackWindow);
-        int embDim = _options.EmbeddingDim;
-        int forecastHorizon = _options.ForecastHorizon;
-
-        // Input + positional encoding as constant data tensors (no grad needed).
-        var inData = new Vector<T>(seqLen);
-        for (int t = 0; t < seqLen; t++) inData[t] = input[t];
-        var inputTensor = new Tensor<T>(new[] { seqLen, 1 }, inData);
-
-        var posData = new Vector<T>(seqLen * embDim);
-        var peHost = _positionalEncodingHost ??= _positionalEncoding.GetCpuData();
-        for (int i = 0; i < seqLen * embDim; i++) posData[i] = peHost[i];
-        var posTensor = new Tensor<T>(new[] { seqLen, embDim }, posData);
-
-        // Embedding: input @ inputProj(1×embDim) + positional encoding.
-        var embedded = Engine.TensorAdd(
-            Engine.TensorMatMul(inputTensor, Engine.Reshape(_inputProjection, new[] { 1, embDim })),
-            posTensor);
-
-        // Series decomposition.
-        var trend = MovingAverageEngine(embedded, _movingAvgKernel, seqLen, embDim);
-        var seasonal = Engine.TensorSubtract(embedded, trend);
-
-        // Encoder.
-        for (int i = 0; i < _encoderLayers.Count; i++)
-            (seasonal, trend) = EncoderLayerEngine(seasonal, trend, i);
-
-        // Decoder init (Autoformer §3.2). The seasonal placeholder is the learned
-        // init; the trend-cyclical init is DATA-DEPENDENT — the mean of the encoder
-        // input broadcast over the decoder length — plus a small learned refinement.
-        // This is what lets the forecast track each window's level: without the data
-        // mean the decoder trend is a constant and every window decodes to the same
-        // value (flat forecast, R² ≈ 0).
-        Tensor<T> decSeasonal = _decoderSeasonalInit;
+        // Decoder init (Autoformer §3.2): the learned seasonal placeholder, and a trend init that is the mean of
+        // each window's embedded input plus a learned refinement, broadcast over the horizon.
         var embMean = Engine.TensorMultiplyScalar(
-            Engine.ReduceSum(embedded, new[] { 0 }, keepDims: true),
-            _numOps.FromDouble(1.0 / seqLen));
-        Tensor<T> decTrend = Engine.TensorAdd(_decoderTrendInit, embMean);
+            Engine.ReduceSum(embedded, new[] { 1 }, keepDims: true), _numOps.FromDouble(1.0 / seqLen)); // [B, 1, D]
+        var decTrend = Engine.TensorAdd(Engine.Reshape(_decoderTrendInit, new[] { 1, horizon, embDim }), embMean);
+        var decSeasonal = Engine.TensorAdd(
+            Engine.Reshape(_decoderSeasonalInit, new[] { 1, horizon, embDim }), new Tensor<T>(new[] { batch, 1, 1 }));
         for (int i = 0; i < _decoderLayers.Count; i++)
-            (decSeasonal, decTrend) = DecoderLayerEngine(decSeasonal, decTrend, seasonal, trend, i);
+            (decSeasonal, decTrend) = DecoderLayerBatched(decSeasonal, decTrend, seasonal, trend, i);
 
-        // Output projection: seasonal·projᵀ + trend·projᵀ + bias.
+        // Output projection: seasonal·projᵀ + trend·projᵀ + bias, [B, H].
         var output = Engine.TensorAdd(
-            Engine.TensorMatMul(decSeasonal, Engine.TensorTranspose(_seasonalProjection)),
-            Engine.TensorMatMul(decTrend, Engine.TensorTranspose(_trendProjection)));
-        return Engine.TensorAdd(output, Engine.Reshape(_outputBias, new[] { forecastHorizon, 1 }));
+            Engine.TensorMatMul(Engine.Reshape(decSeasonal, new[] { batch * horizon, embDim }),
+                Engine.TensorTranspose(_seasonalProjection)),
+            Engine.TensorMatMul(Engine.Reshape(decTrend, new[] { batch * horizon, embDim }),
+                Engine.TensorTranspose(_trendProjection)));
+        return Engine.TensorAdd(
+            Engine.Reshape(output, new[] { batch, horizon }), Engine.Reshape(_outputBias, new[] { 1, horizon }));
     }
 
-    // Paper-faithful series-decomposition moving average (replication-pad +
-    // stride-1 windowed mean) built from IEngine ops so the tape differentiates
-    // the trend. Vectorized — O(kernelSize) tensor ops, no per-element indexing.
-    private Tensor<T> MovingAverageEngine(Tensor<T> x, int kernelSize, int seqLen, int embDim)
+    /// <summary>The first <paramref name="seqLen"/> rows of the positional encoding as a constant <c>[1, L, D]</c>.</summary>
+    private Tensor<T> PositionalEncodingSlice(int seqLen)
     {
-        int leftPad = kernelSize / 2;
-        int rightPad = kernelSize - 1 - leftPad;
-        Tensor<T> padded;
-        if (leftPad + rightPad == 0)
+        int embDim = _options.EmbeddingDim;
+        var peHost = _positionalEncodingHost ??= _positionalEncoding.GetCpuData();
+        var posData = new Vector<T>(seqLen * embDim);
+        for (int i = 0; i < seqLen * embDim; i++) posData[i] = peHost[i];
+        return new Tensor<T>(new[] { 1, seqLen, embDim }, posData);
+    }
+
+    /// <summary>Applies <paramref name="weight"/> to the last axis of a <c>[B, S, D]</c> tensor.</summary>
+    private Tensor<T> ProjectBatched(Tensor<T> x, Tensor<T> weight)
+    {
+        int batch = x.Shape[0], seq = x.Shape[1];
+        var flat = Engine.TensorMatMul(Engine.Reshape(x, new[] { batch * seq, x.Shape[2] }), weight);
+        return Engine.Reshape(flat, new[] { batch, seq, flat.Shape[1] });
+    }
+
+    /// <summary>LayerNorm over the feature axis of a <c>[B, S, D]</c> tensor.</summary>
+    private Tensor<T> LayerNormBatched(Tensor<T> x, Tensor<T> gamma, Tensor<T> beta)
+    {
+        int batch = x.Shape[0], seq = x.Shape[1], dim = x.Shape[2];
+        var normed = Engine.LayerNorm(Engine.Reshape(x, new[] { batch * seq, dim }), gamma, beta, 1e-6, out _, out _);
+        return Engine.Reshape(normed, new[] { batch, seq, dim });
+    }
+
+    /// <summary>The position-wise feed-forward block of a layer on <c>[B, S, D]</c>.</summary>
+    private Tensor<T> FeedForwardBatched(Tensor<T> x, Tensor<T> ff1Weight, Tensor<T> ff1Bias, Tensor<T> ff2Weight, Tensor<T> ff2Bias)
+    {
+        int batch = x.Shape[0], seq = x.Shape[1], dim = x.Shape[2];
+        var flat = Engine.Reshape(x, new[] { batch * seq, dim });
+        var hidden = Engine.ReLU(AddBias(Engine.TensorMatMul(flat, Engine.TensorTranspose(ff1Weight)), ff1Bias));
+        var output = AddBias(Engine.TensorMatMul(hidden, Engine.TensorTranspose(ff2Weight)), ff2Bias);
+        return Engine.Reshape(output, new[] { batch, seq, dim });
+    }
+
+    // Constant shift operators keyed by (corrLen, lq, lk): row `lag` holds S_lag with S_lag[t, s] = 1 when
+    // s == (t + lag) mod lk, flattened to [corrLen, lq*lk].
+    [Scratch]
+    private readonly ConcurrentDictionary<(int CorrLen, int Lq, int Lk), Tensor<T>> _shiftOperatorCache = new();
+
+    private Tensor<T> ShiftOperators(int corrLen, int lq, int lk)
+    {
+        return _shiftOperatorCache.GetOrAdd((corrLen, lq, lk), _ =>
         {
-            padded = x;
-        }
-        else
-        {
-            var front = Engine.TensorNarrow(x, 0, 0, 1);
-            var back = Engine.TensorNarrow(x, 0, seqLen - 1, 1);
-            var parts = new Tensor<T>[leftPad + 1 + rightPad];
-            int idx = 0;
-            for (int i = 0; i < leftPad; i++) parts[idx++] = front;
-            parts[idx++] = x;
-            for (int i = 0; i < rightPad; i++) parts[idx++] = back;
-            padded = Engine.Concat(parts, 0);
-        }
-        Tensor<T> acc = Engine.TensorNarrow(padded, 0, 0, seqLen);
-        for (int j = 1; j < kernelSize; j++)
-            acc = Engine.TensorAdd(acc, Engine.TensorNarrow(padded, 0, j, seqLen));
-        return Engine.TensorMultiplyScalar(acc, _numOps.FromDouble(1.0 / kernelSize));
+            var data = new Vector<T>(corrLen * lq * lk);
+            for (int lag = 0; lag < corrLen; lag++)
+                for (int t = 0; t < lq; t++)
+                    data[lag * (lq * lk) + t * lk + (t + lag) % lk] = _numOps.One;
+            return new Tensor<T>(new[] { corrLen, lq * lk }, data);
+        });
     }
 
     /// <summary>
-    /// Batched series-decomposition moving average over [B, S, D]. Identical arithmetic to the per-sample
-    /// <see cref="MovingAverageEngine"/>, lifted one rank: narrows move from dim 0 to dim 1.
+    /// Auto-correlation attention (Wu et al. 2021, §3.1) for <c>[B, lq, D]</c> queries and <c>[B, lk, D]</c>
+    /// keys/values, every window choosing its own top-k delays on the device.
+    /// </summary>
+    /// <remarks>
+    /// out[b, t] = Σ_i softmax(R_b)_i · v[b, (t + lag_{b,i}) mod lk]. The selection is non-differentiable, as in
+    /// the paper; the gradient flows through the softmax over the selected correlation values (into q and k) and
+    /// through the aggregated values. Writing the aggregation as a[b, lag] · S_lag, with a the softmax weights at
+    /// the selected lags and zero elsewhere, keeps it a constant-shape graph of batched matmuls.
+    /// </remarks>
+    private Tensor<T> AutoCorrelationBatched(Tensor<T> q, Tensor<T> k, Tensor<T> v)
+    {
+        int batch = q.Shape[0], lq = q.Shape[1], d = q.Shape[2];
+        int lk = k.Shape[1];
+        int corrLen = Math.Min(lq, lk);
+        if (corrLen <= 0) return v;
+
+        int topK = Math.Max(1, (int)Math.Round(_options.AutoCorrelationFactor * Math.Log(Math.Max(2.0, corrLen))));
+        topK = Math.Min(topK, corrLen);
+
+        var corr = CorrelationSpectrumBatched(q, k, corrLen, d);                                   // [B, corrLen]
+
+        // Each window's top-k delays and their softmax weights, scattered to their lags: a[b, lag].
+        var lagWeights = TopKLagWeights(corr, topK);                                               // [B, corrLen]
+
+        // W_b = Σ_lag a[b, lag] · S_lag, then out_b = W_b · v_b.
+        var mix = Engine.TensorMatMul(
+            lagWeights, ShiftOperators(corrLen, lq, lk));                                          // [B, lq*lk]
+        return Engine.TensorBatchMatMul(Engine.Reshape(mix, new[] { batch, lq, lk }), v);          // [B, lq, D]
+    }
+
+    /// <summary>
+    /// Softmax weights over each row's top-<paramref name="topK"/> correlation values, placed at their lags with
+    /// zero elsewhere: <c>[B, C]</c> in, <c>[B, C]</c> out.
+    /// </summary>
+    /// <remarks>
+    /// Lag i is selected when fewer than k lags beat it: a strictly larger value, or an equal value at a lower lag
+    /// (the order a stable descending sort gives). Built from same-type comparisons rather than an index-returning
+    /// top-k, so a compiled plan can capture it and each replay re-selects from the new batch. The mask carries no
+    /// gradient; the selected values do, through the softmax, as in the paper.
+    /// </remarks>
+    internal Tensor<T> TopKLagWeights(Tensor<T> corr, int topK)
+    {
+        int batch = corr.Shape[0], lags = corr.Shape[1];
+        var expand = new Tensor<T>(new[] { 1, lags, lags });
+        var own = Engine.TensorAdd(Engine.Reshape(corr, new[] { batch, lags, 1 }), expand);       // [b, i, j] = c_i
+        var other = Engine.TensorAdd(Engine.Reshape(corr, new[] { batch, 1, lags }), expand);     // [b, i, j] = c_j
+        var beats = Engine.TensorAdd(
+            Engine.TensorGreaterThan(other, own),
+            Engine.TensorMultiply(Engine.TensorEquals(other, own), EarlierLagMask(lags)));
+        var rank = Engine.ReduceSum(beats, new[] { 2 }, keepDims: false);                         // [B, C]
+        var selected = Engine.TensorLessThan(rank, _numOps.FromDouble(topK));                     // [B, C] 0/1
+
+        var shifted = Engine.TensorSubtract(corr, Engine.ReduceMax(corr, new[] { 1 }, keepDims: true));
+        var exp = Engine.TensorMultiply(Engine.TensorExp(shifted), selected);
+        return Engine.TensorDivide(exp, Engine.ReduceSum(exp, new[] { 1 }, keepDims: true));
+    }
+
+    // [1, C, C] with 1 where j < i: an equal value at an earlier lag ranks ahead.
+    [Scratch]
+    private readonly ConcurrentDictionary<int, Tensor<T>> _earlierLagMaskCache = new();
+
+    private Tensor<T> EarlierLagMask(int lags)
+    {
+        return _earlierLagMaskCache.GetOrAdd(lags, _ =>
+        {
+            var data = new Vector<T>(lags * lags);
+            for (int i = 0; i < lags; i++)
+                for (int j = 0; j < i; j++)
+                    data[i * lags + j] = _numOps.One;
+            return new Tensor<T>(new[] { 1, lags, lags }, data);
+        });
+    }
+    private (Tensor<T> seasonal, Tensor<T> trend) EncoderLayerBatched(Tensor<T> seasonal, Tensor<T> trend, int layerIdx)
+    {
+        var layer = _encoderLayers[layerIdx];
+        int seqLen = seasonal.Shape[1];
+
+        var attn = AutoCorrelationBatched(
+            ProjectBatched(seasonal, layer.GetQueryProjection()),
+            ProjectBatched(seasonal, layer.GetKeyProjection()),
+            ProjectBatched(seasonal, layer.GetValueProjection()));
+        var normalized = LayerNormBatched(
+            Engine.TensorAdd(seasonal, ProjectBatched(attn, layer.GetOutputProjection())),
+            layer.GetLayerNorm1Gamma(), layer.GetLayerNorm1Beta());
+        var ffOutput = FeedForwardBatched(normalized,
+            layer.GetFF1Weight(), layer.GetFF1Bias(), layer.GetFF2Weight(), layer.GetFF2Bias());
+        var newSeasonal = LayerNormBatched(Engine.TensorAdd(normalized, ffOutput),
+            layer.GetLayerNorm2Gamma(), layer.GetLayerNorm2Beta());
+
+        var newTrend = MovingAverageBatched(newSeasonal, _movingAvgKernel, seqLen);
+        return (Engine.TensorSubtract(newSeasonal, newTrend), Engine.TensorAdd(trend, newTrend));
+    }
+
+    private (Tensor<T> seasonal, Tensor<T> trend) DecoderLayerBatched(
+        Tensor<T> decSeasonal, Tensor<T> decTrend, Tensor<T> encSeasonal, Tensor<T> encTrend, int layerIdx)
+    {
+        var layer = _decoderLayers[layerIdx];
+        int seqLen = decSeasonal.Shape[1];
+
+        var selfAttn = AutoCorrelationBatched(
+            ProjectBatched(decSeasonal, layer.GetSelfQueryProjection()),
+            ProjectBatched(decSeasonal, layer.GetSelfKeyProjection()),
+            ProjectBatched(decSeasonal, layer.GetSelfValueProjection()));
+        var norm1 = LayerNormBatched(
+            Engine.TensorAdd(decSeasonal, ProjectBatched(selfAttn, layer.GetSelfOutputProjection())),
+            layer.GetLayerNorm1Gamma(), layer.GetLayerNorm1Beta());
+
+        var crossAttn = AutoCorrelationBatched(
+            ProjectBatched(norm1, layer.GetCrossQueryProjection()),
+            ProjectBatched(encSeasonal, layer.GetCrossKeyProjection()),
+            ProjectBatched(encSeasonal, layer.GetCrossValueProjection()));
+        var norm2 = LayerNormBatched(
+            Engine.TensorAdd(norm1, ProjectBatched(crossAttn, layer.GetCrossOutputProjection())),
+            layer.GetLayerNorm2Gamma(), layer.GetLayerNorm2Beta());
+
+        var ffOutput = FeedForwardBatched(norm2,
+            layer.GetFF1Weight(), layer.GetFF1Bias(), layer.GetFF2Weight(), layer.GetFF2Bias());
+        var newSeasonal = LayerNormBatched(Engine.TensorAdd(norm2, ffOutput),
+            layer.GetLayerNorm3Gamma(), layer.GetLayerNorm3Beta());
+
+        var newTrend = MovingAverageBatched(newSeasonal, _movingAvgKernel, seqLen);
+        return (Engine.TensorSubtract(newSeasonal, newTrend), Engine.TensorAdd(decTrend, newTrend));
+    }
+
+    /// <summary>
+    /// The paper's series-decomposition moving average (replication pad, stride-1 windowed mean) over the time
+    /// axis of [B, S, D], built from engine ops so the tape differentiates the trend.
     /// </summary>
     /// <remarks>
     /// The replication padding is taken per sample from that sample's OWN first and last step (narrow on
@@ -749,193 +747,23 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
     }
 
     /// <summary>
-    /// Correlation spectrum via a single matmul instead of a per-lag loop.
-    /// R[lag] = mean over (t &lt; corrLen-lag, dim) of q[t,:]·k[t+lag,:] is, by definition, the mean of the
-    /// lag-th diagonal of M = Q.K^T. Summing a diagonal is LINEAR in M, so the whole spectrum is one constant
-    /// operator applied to vec(M): R = A @ vec(Q.K^T).
+    /// Correlation spectrum for <c>[B, lq, D]</c> queries and <c>[B, lk, D]</c> keys: R[b, lag] = mean over
+    /// (t &lt; corrLen-lag, dim) of q[b,t,:]·k[b,t+lag,:]. Returns <c>[B, corrLen]</c>.
     /// </summary>
     /// <remarks>
-    /// This is the op-count fix. The per-lag loop issued corrLen x ~5 dispatches (~120 at the default
-    /// lookback of 24) at EACH of four call sites per forward; this issues ~5 total, independent of corrLen.
-    ///
-    /// NOT bit-identical to the loop: the products are summed in a different ORDER (matmul reduction vs
-    /// per-lag ReduceSum), so results agree to floating-point tolerance rather than exactly. The mathematics
-    /// is identical — same quantity, same gradients (A is a constant, so the tape differentiates through
-    /// vec(M) unchanged) — only the association order differs. Equivalence is asserted at 1e-9 in
-    /// AutoformerBatchedEquivalenceTests; a mismatch beyond that means the formula, not the rounding, broke.
-    /// </remarks>
-    internal Tensor<T> CorrelationSpectrumMatmul(Tensor<T> q, Tensor<T> k, int corrLen, int d)
-    {
-        int lq = q.Shape[0];
-        int lk = k.Shape[0];
-
-        var m = Engine.TensorMatMul(q, Engine.TensorTranspose(k));      // [lq, lk]
-        var flat = Engine.Reshape(m, new[] { lq * lk, 1 });             // [lq*lk, 1]
-        var spectrum = Engine.TensorMatMul(DiagonalMeanOperator(lq, lk, corrLen, d), flat); // [corrLen, 1]
-        return Engine.Reshape(spectrum, new[] { corrLen });
-    }
-
-    /// <summary>
-    /// Batched correlation spectrum: R[b, lag] = mean over (t &lt; corrLen-lag, dim) of q[b,t,:]·k[b,t+lag,:],
-    /// for q/k shaped [B, S, D]. Returns [B, corrLen].
-    /// </summary>
-    /// <remarks>
-    /// This is the op-count hot spot. The per-sample path issues corrLen x ~5 ops PER SAMPLE, so a batch of
-    /// B costs B*corrLen*5 dispatches; four call sites per forward (encoder self x N, decoder self, decoder
-    /// cross) multiply that again. Computing the spectrum for the whole batch at once collapses the B factor:
-    /// the SAME ops run on tensors one rank wider, so each sample's arithmetic and its summation ORDER are
-    /// unchanged and results stay bit-identical to the per-sample path — only the dispatch count drops.
-    /// The top-k SELECTION is deliberately NOT batched: it is data-dependent per sample (each window picks
-    /// delays from its own spectrum), which is Autoformer's defining mechanism.
+    /// R[b, lag] is the mean of the lag-th diagonal of M_b = Q_b·K_bᵀ. Summing a diagonal is linear in M, so the
+    /// whole spectrum is one batched matmul and one constant operator: R = vec(M) · Aᵀ. A per-lag loop issued
+    /// corrLen x ~5 dispatches at each of the four call sites per forward. The products are summed in a different
+    /// order than that loop, so the two agree to rounding, not bit for bit.
     /// </remarks>
     internal Tensor<T> CorrelationSpectrumBatched(Tensor<T> q, Tensor<T> k, int corrLen, int d)
     {
-        var parts = new Tensor<T>[corrLen];
-        for (int lag = 0; lag < corrLen; lag++)
-        {
-            int valid = corrLen - lag;
-            // dim 1 is time for [B, S, D]; reduce over time+feature leaving the batch axis.
-            var qSlice = Engine.TensorNarrow(q, 1, 0, valid);
-            var kSlice = Engine.TensorNarrow(k, 1, lag, valid);
-            var summed = Engine.ReduceSum(
-                Engine.TensorMultiply(qSlice, kSlice), new[] { 1, 2 }, keepDims: true); // [B, 1, 1]
-            parts[lag] = Engine.TensorMultiplyScalar(
-                Engine.Reshape(summed, new[] { summed.Shape[0], 1 }),
-                _numOps.FromDouble(1.0 / (valid * d)));
-        }
-
-        return Engine.Concat(parts, 1); // [B, corrLen]
+        int batch = q.Shape[0], lq = q.Shape[1], lk = k.Shape[1];
+        var scores = Engine.TensorBatchMatMul(q, Engine.TensorPermute(k, new[] { 0, 2, 1 })); // [B, lq, lk]
+        return Engine.TensorMatMul(
+            Engine.Reshape(scores, new[] { batch, lq * lk }),
+            Engine.TensorTranspose(DiagonalMeanOperator(lq, lk, corrLen, d)));                // [B, corrLen]
     }
-
-    private Tensor<T> AutoCorrelationEngine(Tensor<T> q, Tensor<T> k, Tensor<T> v)
-    {
-        int lq = q.Shape[0];
-        int d = q.Shape[1];
-        int lk = k.Shape[0];
-        int corrLen = Math.Min(lq, lk);
-        if (corrLen <= 0) return v;
-
-        int topK = Math.Max(1, (int)Math.Round(_options.AutoCorrelationFactor * Math.Log(Math.Max(2.0, corrLen))));
-        topK = Math.Min(topK, corrLen);
-
-        // R[lag] = mean_{t < corrLen-lag, dim} q[t]·k[t+lag], lag in [0, corrLen). Tape-tracked.
-        // Computed as ONE matmul (see CorrelationSpectrumMatmul): the spectrum is the diagonal means of
-        // Q.K^T, and diagonal summation is linear in that product. The previous formulation issued
-        // corrLen x ~5 dispatches here — ~120 at the default lookback of 24, at each of four call sites per
-        // forward — which is what made Autoformer training dispatch-bound.
-        var corr = CorrelationSpectrumMatmul(q, k, corrLen, d);
-
-        // Top-k delays by correlation value (host read of the forward values; the index choice is
-        // non-differentiable, like the paper's topk over the autocorrelation spectrum). Download the whole
-        // [corrLen] vector in ONE device->host copy: indexing corr[lag] per element on a GPU-resident tensor
-        // forces a separate transfer + full pipeline sync each time (corrLen syncs per call, ×4 calls per
-        // forward, ×samples, ×epochs) — the dominant cost that left the GPU ~7% busy while the model timed out.
-        var corrHost = corr.GetCpuData();
-        var corrVals = new double[corrLen];
-        for (int lag = 0; lag < corrLen; lag++) corrVals[lag] = _numOps.ToDouble(corrHost[lag]);
-        var topLags = Enumerable.Range(0, corrLen)
-            .OrderByDescending(i => corrVals[i])
-            .Take(topK)
-            .ToArray();
-
-        // Softmax over the gathered top-k correlation values → aggregation weights (tape-tracked).
-        var gatheredParts = new Tensor<T>[topLags.Length];
-        for (int i = 0; i < topLags.Length; i++)
-            gatheredParts[i] = Engine.TensorNarrow(corr, 0, topLags[i], 1);
-        var weights = Engine.Softmax(Engine.Concat(gatheredParts, 0)); // [topK]
-
-        // Aggregate: out[t,d] = Σ_i weights[i] · v[(t + lag_i) mod lk, d], for t in [0, lq).
-        var w0 = Engine.Reshape(Engine.TensorNarrow(weights, 0, 0, 1), new[] { 1, 1 });
-        var agg = Engine.TensorMultiply(RollAndFit(v, topLags[0], lk, lq), w0);
-        for (int i = 1; i < topLags.Length; i++)
-        {
-            var rolled = RollAndFit(v, topLags[i], lk, lq);
-            var wi = Engine.Reshape(Engine.TensorNarrow(weights, 0, i, 1), new[] { 1, 1 });
-            agg = Engine.TensorAdd(agg, Engine.TensorMultiply(rolled, wi));
-        }
-        return agg;
-    }
-
-    // Circular roll of a [lk, d] sequence by `lag` so result[t] = v[(t + lag) mod lk], then fit to
-    // length outLen (truncate, or tile-then-truncate when outLen > lk). Built from Narrow/Concat —
-    // no per-element indexing — so it stays on the gradient tape.
-    private Tensor<T> RollAndFit(Tensor<T> v, int lag, int lk, int outLen)
-    {
-        lag %= lk;
-        Tensor<T> rolled = lag == 0
-            ? v
-            : Engine.Concat(new[] { Engine.TensorNarrow(v, 0, lag, lk - lag), Engine.TensorNarrow(v, 0, 0, lag) }, 0);
-        if (outLen == lk) return rolled;
-        if (outLen < lk) return Engine.TensorNarrow(rolled, 0, 0, outLen);
-        int reps = (outLen + lk - 1) / lk;
-        var parts = new Tensor<T>[reps];
-        for (int r = 0; r < reps; r++) parts[r] = rolled;
-        return Engine.TensorNarrow(Engine.Concat(parts, 0), 0, 0, outLen);
-    }
-
-    private (Tensor<T> seasonal, Tensor<T> trend) EncoderLayerEngine(Tensor<T> seasonal, Tensor<T> trend, int layerIdx)
-    {
-        var layer = _encoderLayers[layerIdx];
-        int seqLen = seasonal.Shape[0];
-        int embDim = seasonal.Shape[1];
-
-        var q = Engine.TensorMatMul(seasonal, layer.GetQueryProjection());
-        var k = Engine.TensorMatMul(seasonal, layer.GetKeyProjection());
-        var v = Engine.TensorMatMul(seasonal, layer.GetValueProjection());
-        var attn = AutoCorrelationEngine(q, k, v);
-        var projected = Engine.TensorMatMul(attn, layer.GetOutputProjection());
-        var residual = Engine.TensorAdd(seasonal, projected);
-        var normalized = Engine.LayerNorm(residual, layer.GetLayerNorm1Gamma(), layer.GetLayerNorm1Beta(),
-            1e-6, out _, out _);
-
-        var ffHidden = Engine.ReLU(AddBias(
-            Engine.TensorMatMul(normalized, Engine.TensorTranspose(layer.GetFF1Weight())), layer.GetFF1Bias()));
-        var ffOutput = AddBias(
-            Engine.TensorMatMul(ffHidden, Engine.TensorTranspose(layer.GetFF2Weight())), layer.GetFF2Bias());
-        var ffResidual = Engine.TensorAdd(normalized, ffOutput);
-        var newSeasonal = Engine.LayerNorm(ffResidual, layer.GetLayerNorm2Gamma(), layer.GetLayerNorm2Beta(),
-            1e-6, out _, out _);
-
-        var newTrend = MovingAverageEngine(newSeasonal, _movingAvgKernel, seqLen, embDim);
-        newSeasonal = Engine.TensorSubtract(newSeasonal, newTrend);
-        return (newSeasonal, Engine.TensorAdd(trend, newTrend));
-    }
-
-    private (Tensor<T> seasonal, Tensor<T> trend) DecoderLayerEngine(
-        Tensor<T> decSeasonal, Tensor<T> decTrend, Tensor<T> encSeasonal, Tensor<T> encTrend, int layerIdx)
-    {
-        var layer = _decoderLayers[layerIdx];
-        int seqLen = decSeasonal.Shape[0];
-        int embDim = decSeasonal.Shape[1];
-
-        var sq = Engine.TensorMatMul(decSeasonal, layer.GetSelfQueryProjection());
-        var sk = Engine.TensorMatMul(decSeasonal, layer.GetSelfKeyProjection());
-        var sv = Engine.TensorMatMul(decSeasonal, layer.GetSelfValueProjection());
-        var selfAttn = AutoCorrelationEngine(sq, sk, sv);
-        var selfProjected = Engine.TensorMatMul(selfAttn, layer.GetSelfOutputProjection());
-        var norm1 = Engine.LayerNorm(Engine.TensorAdd(decSeasonal, selfProjected),
-            layer.GetLayerNorm1Gamma(), layer.GetLayerNorm1Beta(), 1e-6, out _, out _);
-
-        var cq = Engine.TensorMatMul(norm1, layer.GetCrossQueryProjection());
-        var ck = Engine.TensorMatMul(encSeasonal, layer.GetCrossKeyProjection());
-        var cv = Engine.TensorMatMul(encSeasonal, layer.GetCrossValueProjection());
-        var crossAttn = AutoCorrelationEngine(cq, ck, cv);
-        var crossProjected = Engine.TensorMatMul(crossAttn, layer.GetCrossOutputProjection());
-        var norm2 = Engine.LayerNorm(Engine.TensorAdd(norm1, crossProjected),
-            layer.GetLayerNorm2Gamma(), layer.GetLayerNorm2Beta(), 1e-6, out _, out _);
-
-        var ffHidden = Engine.ReLU(AddBias(
-            Engine.TensorMatMul(norm2, Engine.TensorTranspose(layer.GetFF1Weight())), layer.GetFF1Bias()));
-        var ffOutput = AddBias(
-            Engine.TensorMatMul(ffHidden, Engine.TensorTranspose(layer.GetFF2Weight())), layer.GetFF2Bias());
-        var newSeasonal = Engine.LayerNorm(Engine.TensorAdd(norm2, ffOutput),
-            layer.GetLayerNorm3Gamma(), layer.GetLayerNorm3Beta(), 1e-6, out _, out _);
-
-        var newTrend = MovingAverageEngine(newSeasonal, _movingAvgKernel, seqLen, embDim);
-        newSeasonal = Engine.TensorSubtract(newSeasonal, newTrend);
-        return (newSeasonal, Engine.TensorAdd(decTrend, newTrend));
-    }
-
     // All trainable parameter tensors (model + encoder/decoder layers), in a
     // stable order, for the GradientTape sources and the optimizer step.
     internal List<Tensor<T>> CollectTrainableParameters()
@@ -1146,11 +974,11 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
 
 /// <summary>
 /// Autoformer encoder layer. Its trainable tensors are consumed by the model-level
-/// tape forward (<c>AutoformerModel.EncoderLayerEngine</c>); the layer holds parameters
+/// tape forward (<c>AutoformerModel.EncoderLayerBatched</c>); the layer holds parameters
 /// and their (de)serialization only — it does not run its own forward pass.
 /// </summary>
 // TWO inputs and TWO outputs - the (seasonal, trend) pair Autoformer's series decomposition carries
-// through every layer. See AutoformerModel.EncoderLayerEngine, whose signature is literally
+// through every layer. See AutoformerModel.EncoderLayerBatched, whose signature is literally
 // (Tensor seasonal, Tensor trend) -> (Tensor seasonal, Tensor trend). Both streams are [B, T, emb] and
 // stay that way: the auto-correlation block and the FFN each end in a residual add, and decomposition
 // splits a stream into two streams of the SAME width rather than widening one.
@@ -1164,7 +992,7 @@ internal partial class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBa
     /// <inheritdoc />
     /// <remarks>
     /// Declines: this layer has two inputs and two outputs, and its own <c>ForwardTraced</c> throws
-    /// because the real forward is <c>AutoformerModel.EncoderLayerEngine</c>.
+    /// because the real forward is <c>AutoformerModel.EncoderLayerBatched</c>.
     /// <see cref="OutputsFor"/> is the contract.
     /// </remarks>
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
@@ -1339,10 +1167,10 @@ internal partial class AutoformerEncoderLayer<T> : NeuralNetworks.Layers.LayerBa
 
 /// <summary>
 /// Autoformer decoder layer. Its trainable tensors are consumed by the model-level
-/// tape forward (<c>AutoformerModel.DecoderLayerEngine</c>); the layer holds parameters
+/// tape forward (<c>AutoformerModel.DecoderLayerBatched</c>); the layer holds parameters
 /// and their (de)serialization only — it does not run its own forward pass.
 /// </summary>
-// The decoder half of the same pair. DecoderLayerEngine takes FOUR tensors - the decoder's own
+// The decoder half of the same pair. DecoderLayerBatched takes FOUR tensors - the decoder's own
 // (seasonal, trend) plus the encoder's - and returns TWO, both shaped like the decoder seasonal stream
 // on port 0. Cross-correlation reads the encoder streams but is sized by the decoder queries.
 [TensorLayout(TensorAxis.Batch, TensorAxis.Time, TensorAxis.Features,
@@ -1355,7 +1183,7 @@ internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBa
     /// <inheritdoc />
     /// <remarks>
     /// Declines: four inputs, two outputs, and <c>ForwardTraced</c> throws - the real forward is
-    /// <c>AutoformerModel.DecoderLayerEngine</c>. <see cref="OutputsFor"/> is the contract.
+    /// <c>AutoformerModel.DecoderLayerBatched</c>. <see cref="OutputsFor"/> is the contract.
     /// </remarks>
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
 
@@ -1367,7 +1195,7 @@ internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBa
     /// </para>
     /// <para>
     /// NOTE, not fixed here: the constructor declares THREE input shapes
-    /// (<c>base(new int[][] { [emb], [emb], [emb] }, ...)</c>) while <c>DecoderLayerEngine</c> consumes
+    /// (<c>base(new int[][] { [emb], [emb], [emb] }, ...)</c>) while <c>DecoderLayerBatched</c> consumes
     /// FOUR tensors. This contract sizes from port 0 and so is unaffected either way, but the declared
     /// port count and the real one disagree.
     /// </para>

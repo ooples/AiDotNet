@@ -375,9 +375,10 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
          transposed kernel on Linux (a recycled flipped-kernel buffer hit the im2col conv's identity-keyed transpose
          cache), so DiffCut, DiffSeg, SegNeXt and RAFT trained on wrong input gradients in CI only.
 
-Bumped 0.136.0 to 0.137.1 for AiDotNet.Tensors #1275: TensorPool kept arena-backed tensors, so after a
-         TensorArena.Reset one buffer sat behind two live tensors and TensorNarrow's backward was overwritten from the
-         second step on. Every model training under its base-class arena drifted (Chronos by up to 6e-4 in 4 steps). -->
+         Bumped 0.136.0 to 0.137.1 for AiDotNet.Tensors #1275: a backward that returned an arena-backed tensor to
+         TensorPool had it re-rented on the next step while the arena had reissued the same buffer, so NarrowBackward
+         gradients were overwritten from step 2 under the base-class training arena. TFT's quantile loss narrows its
+         forecast per quantile: its eager step diverged from the fused plan by 2e-2 after 14 steps. -->
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.137.1" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.137.1" />
     <PackageVersion Include="AiDotNet.Tensors" Version="0.137.1" />
