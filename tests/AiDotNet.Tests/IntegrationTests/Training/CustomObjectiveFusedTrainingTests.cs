@@ -28,7 +28,7 @@ public class CustomObjectiveFusedTrainingTests
     // by a few 1e-8 of the parameter scale per step; a step on baked data moves weights by far more.
     private const double RelativeTolerance = 1e-5;
 
-    public static TheoryData<string> Scenarios => new() { "VideoMAE", "DeepONet", "FNO", "MQCNN", "CodeSwitchingASR", "CCDM", "TSDiff", "TimeDiff", "TFC", "NeRF" };
+    public static TheoryData<string> Scenarios => new() { "VideoMAE", "DeepONet", "FNO", "MQCNN", "CodeSwitchingASR", "CCDM", "TSDiff", "TimeDiff", "TFC", "NeRF", "BasicVSRPlusPlus" };
 
     private sealed record RunResult(Vector<double> Parameters, int FusedSteps, int EagerSteps);
 
@@ -47,6 +47,7 @@ public class CustomObjectiveFusedTrainingTests
         "TimeDiff" => Warm(BuildTimeDiff(), new Tensor<double>([1, 16, 1])),
         "TFC" => Warm(BuildTfc(), new Tensor<double>([1, 16, 1])),
         "NeRF" => WarmNerf(BuildNerf()),
+        "BasicVSRPlusPlus" => Warm(BuildBasicVsr(), new Tensor<double>([2, 3, 16, 16])),
         _ => throw new ArgumentOutOfRangeException(nameof(scenario)),
     };
 
@@ -80,6 +81,8 @@ public class CustomObjectiveFusedTrainingTests
             case "TimeDiff": TrainOnChangingBatches(model, [1, 16, 1], [1, 4]); break;
             case "TFC": TrainOnChangingBatches(model, [1, 16, 1], [1, 4]); break;
             case "NeRF": TrainNerf((AiDotNet.NeuralRadianceFields.Models.NeRF<double>)model); break;
+            // A two-frame clip, so flow estimation and warping run between the frames.
+            case "BasicVSRPlusPlus": TrainOnChangingBatches(model, [2, 3, 16, 16], [2, 3, 32, 32]); break;
         }
     }
 
@@ -250,6 +253,15 @@ public class CustomObjectiveFusedTrainingTests
         for (int step = 0; step < 3; step++)
             model.TrainOnImageBatch(loader, raysPerBatch: 4, optimizerOptions: null);
     }
+    // A rate large enough that three steps move the weights well past the tolerance, so a step on another clip's
+    // data would show.
+    private static AiDotNet.Video.Enhancement.BasicVSRPlusPlus<double> BuildBasicVsr() => new(
+        new NeuralNetworkArchitecture<double>(inputType: InputType.ThreeDimensional, taskType: NeuralNetworkTaskType.Regression,
+            inputHeight: 16, inputWidth: 16, inputDepth: 3, outputSize: 2),
+        options: new AiDotNet.Video.Options.BasicVSRPlusPlusOptions
+        {
+            ScaleFactor = 2, NumFeatures = 8, NumResidualBlocks = 1, NumPropagations = 1, LearningRate = 0.1,
+        });
     private static AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASROptions AsrOptions() => new()
     {
         EncoderDim = 16, NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 8, DecoderDim = 16,
