@@ -60,25 +60,10 @@ public class TapeTrainingLoopRatchetTests
 
     /// <summary>
     /// Hand-written loops that predate the ratchet. Remove an entry when its file moves onto the shared step; never add one.
+    /// Empty since #2295 migrated the last fifteen (the metric meta-learners onto MetaLearnerBase.ApplyOuterUpdate, the
+    /// rest onto TapeTrainingStepper); it stays as the place a structural exception would have to be argued.
     /// </summary>
-    private static readonly HashSet<string> KnownLoops = new(StringComparer.Ordinal)
-    {
-        "Diffusion/NoisePredictors/NoisePredictorBase.cs",
-        "MetaLearning/Algorithms/ATAMLAlgorithm.cs",
-        "MetaLearning/Algorithms/LEOAlgorithm.cs",
-        "MetaLearning/Algorithms/MCLAlgorithm.cs",
-        "MetaLearning/Algorithms/MatchingNetworksAlgorithm.cs",
-        "MetaLearning/Algorithms/MetaOptNetAlgorithm.cs",
-        "MetaLearning/Algorithms/ProtoNetsAlgorithm.cs",
-        "MetaLearning/Algorithms/RelationNetworkAlgorithm.cs",
-        "NeuralNetworks/GraphGenerationModel.cs",
-        "NeuralNetworks/SyntheticData/AutoDiffTabGenerator.cs",
-        "NeuralNetworks/SyntheticData/MisGANGenerator.cs",
-        "NeuralNetworks/SyntheticData/TabSynGenerator.cs",
-        "NeuralNetworks/SyntheticData/TimeGANGenerator.cs",
-        "ReinforcementLearning/Agents/MuZeroAgent.cs",
-        "ReinforcementLearning/Agents/QMIXAgent.cs",
-    };
+    private static readonly HashSet<string> KnownLoops = new(StringComparer.Ordinal);
 
     [Fact]
     public void NoNewHandWrittenTapeTrainingLoop()

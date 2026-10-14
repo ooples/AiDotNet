@@ -1711,13 +1711,20 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
     #region IModel<Tensor<T>, Tensor<T>, ModelMetadata<T>> Implementation
 
     /// <inheritdoc />
+    /// <remarks>
+    /// A noise predictor is timestep-conditional, and <c>(input, expectedOutput)</c> carries no timestep, so there is
+    /// no objective to train on here. Predictors train through their diffusion model's <c>Train</c>, which samples the
+    /// timesteps and noise and steps the predictor's parameters through the shared training step. This method used to
+    /// compute gradients through <see cref="ComputeGradients"/>, which no predictor implements, and then apply a fixed
+    /// 1e-4 SGD step that could therefore never run.
+    /// </remarks>
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         ThrowIfDisposed();
-        // Compute gradients and apply them
-        var gradients = ComputeGradients(input, expectedOutput, LossFunction);
-        var learningRate = NumOps.FromDouble(1e-4);
-        ApplyGradients(gradients, learningRate);
+        throw new NotSupportedException(
+            $"{GetType().Name} is a timestep-conditional noise predictor and cannot train on an (input, target) pair " +
+            "alone. Train the diffusion model that owns it (DiffusionModelBase.Train samples the timestep and noise " +
+            "and steps the predictor through the shared training step).");
     }
 
     /// <inheritdoc />

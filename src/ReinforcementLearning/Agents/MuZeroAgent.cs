@@ -7,6 +7,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Optimizers;
 using AiDotNet.ReinforcementLearning.ReplayBuffers;
 using System;
 
@@ -83,13 +84,26 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     private UniformReplayBuffer<T, Vector<T>, Vector<T>> _replayBuffer;
     private int _updateCount;
 
-    // #1756: Adam optimizer moment state for the K-step unrolled joint training. The representation,
-    // dynamics and prediction networks are unrolled on ONE gradient tape and share a single step
-    // counter, but each network's flat Adam moments (m, v over its GetParameters() layout) are kept
-    // separately keyed by the network instance. Transient optimizer state, not serialized — the same
-    // role as PyTorch's optimizer.state.
-    private readonly System.Collections.Generic.Dictionary<object, (double[] M, double[] V)> _netAdam = new();
-    private int _adamStep;
+    // #1756: the Adam optimizer for the K-step unrolled joint training. The representation, dynamics and prediction
+    // networks are unrolled on ONE gradient tape and stepped together; Adam keeps its moments per parameter tensor.
+    // Transient optimizer state, not serialized -- the same role as PyTorch's optimizer.state.
+    private AdamOptimizer<T, Tensor<T>, Tensor<T>>? _jointOptimizer;
+
+    // Plain Adam (beta1 0.9, beta2 0.999, eps 1e-8) at the agent's RESOLVED learning rate (the base-class value with its
+    // non-zero fallback, NOT the nullable Options.LearningRate, which defaults to null and would freeze the weights).
+    private AdamOptimizer<T, Tensor<T>, Tensor<T>> JointOptimizer()
+        => _jointOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            null,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = Convert.ToDouble(LearningRate),
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                Epsilon = 1e-8,
+                UseAdaptiveLearningRate = false,
+                UseAdaptiveMomentum = false,
+                UseAdaptiveBetas = false,
+            });
 
     /// <summary>
     /// Initializes a new instance with default settings. All hyperparameters
@@ -507,86 +521,93 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         try
         {
 
-        using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>();
-
-        // Collect every tape-tracked (prediction − target) residual across the batch of unrolled
-        // sequences; the joint loss is the mean squared residual (equivalent to summing the per-head
-        // value/reward/policy MSEs, and unroll-length-normalized).
-        var residuals = new System.Collections.Generic.List<Tensor<T>>();
-
+        // Sample every unroll window and its DETACHED n-step value targets before the objective runs: the objective
+        // then only replays the forward, so an optimizer that re-evaluates it sees the same data and targets.
+        var windows = new System.Collections.Generic.List<(System.Collections.Generic.List<Experience<T, Vector<T>, Vector<T>>> Seq, T[] ValueTargets)>();
         for (int b = 0; b < batchSize; b++)
         {
             // Trajectory window of up to K+1 consecutive transitions (truncated at an episode boundary).
             var seq = _replayBuffer.SampleSequence(unroll + 1);
             if (seq.Count < 1) continue;
-            // Train one unroll step per transition in the window (capped at K). On a FULL K+1 window this
-            // is K steps and seq[K] serves only as the final bootstrap state (unchanged). On a window
-            // TRUNCATED at an episode boundary (or a 1-transition buffer) this also trains the last /
-            // terminal transition's heads — its value target bootstraps off seq[last].NextState via
-            // NStepValueTarget, so no transition near an episode end is silently dropped from the loss.
+            // Train one unroll step per transition in the window (capped at K). On a FULL K+1 window this is K steps
+            // and seq[K] serves only as the final bootstrap state. On a window TRUNCATED at an episode boundary (or a
+            // 1-transition buffer) this also trains the last / terminal transition's heads -- its value target
+            // bootstraps off seq[last].NextState via NStepValueTarget, so no transition near an episode end is
+            // silently dropped from the loss.
             int steps = Math.Min(unroll, seq.Count);
 
-            // Cache bootstrap V(s) per unique bootstrap index within THIS sequence: NStepValueTarget is
-            // called once per unrolled step k and each call runs a detached representation+prediction pass
-            // for its bootstrap state. Different k's often resolve to the same bootstrap index (e.g. every
-            // step past the last non-terminal transition bootstraps off the same terminal NextState), so
-            // memoizing avoids repeating that inference batchSize×unrollSteps times.
+            // Bootstrap V(s) memoized per unique bootstrap index within THIS sequence: different k's often resolve to
+            // the same index (every step past the last non-terminal transition bootstraps off the same NextState).
             var bootValueCache = new System.Collections.Generic.Dictionary<int, T>();
-
-            // h_0 = f_representation(o_0). Outputs stay rank-1 (FromVector -> [n], Dense preserves rank),
-            // so no Reshape is used in the unroll — Engine.Reshape deliberately does NOT attach an
-            // autodiff GradFn (it's sidestepped for view caching), which would sever the tape.
-            var h = repNet.ForwardForTraining(Tensor<T>.FromVector(seq[0].State));
-
+            var targets = new T[steps];
             for (int k = 0; k < steps; k++)
-            {
-                var exp = seq[k];
-
-                // Prediction head at h_k -> [policy (actionDim) | value (1)].
-                var pred = predNet.ForwardForTraining(h);
-                var policyPred = Engine.TensorSlice(pred, new[] { 0 }, new[] { actionDim });
-                var valuePred = Engine.TensorSlice(pred, new[] { actionDim }, new[] { 1 });
-                residuals.Add(Engine.TensorSubtract(valuePred, ScalarTensor(NStepValueTarget(seq, k, nStep, gamma, bootValueCache))));
-                residuals.Add(Engine.TensorSubtract(policyPred, ActionTensor(exp.Action, actionDim)));
-
-                // Dynamics: (h_{k+1}, r_k) = g(h_k, a_k).
-                var dynIn = Engine.TensorConcatenate(new[] { h, ActionTensor(exp.Action, actionDim) }, 0);
-                var dynOut = dynNet.ForwardForTraining(dynIn);
-                var hNext = Engine.TensorSlice(dynOut, new[] { 0 }, new[] { latent });
-                var rewardPred = Engine.TensorSlice(dynOut, new[] { latent }, new[] { 1 });
-                residuals.Add(Engine.TensorSubtract(rewardPred, ScalarTensor(exp.Reward)));
-
-                h = hNext;
-            }
+                targets[k] = NStepValueTarget(seq, k, nStep, gamma, bootValueCache);
+            windows.Add((seq, targets));
         }
 
-        if (residuals.Count == 0)
+        if (windows.Count == 0)
         {
             return NumOps.Zero;
         }
 
-        var allResiduals = residuals.Count == 1
-            ? residuals[0]
-            : Engine.TensorConcatenate(residuals.ToArray(), 0);
-        var loss = Engine.TensorMultiplyScalar(
-            Engine.ReduceSum(Engine.TensorMultiply(allResiduals, allResiduals), null),
-            NumOps.FromDouble(1.0 / allResiduals.Length));
+        // The joint loss is the mean squared (prediction - target) residual over every unrolled step of every window
+        // (equivalent to summing the per-head value/reward/policy MSEs, and unroll-length-normalized).
+        Tensor<T> UnrollLoss()
+        {
+            var residuals = new System.Collections.Generic.List<Tensor<T>>();
+            foreach (var (seq, targets) in windows)
+            {
+                // h_0 = f_representation(o_0). Outputs stay rank-1 (FromVector -> [n], Dense preserves rank), so no
+                // Reshape is used in the unroll -- Engine.Reshape deliberately does NOT attach an autodiff GradFn
+                // (it's sidestepped for view caching), which would sever the tape.
+                var h = repNet.ForwardForTraining(Tensor<T>.FromVector(seq[0].State));
+                for (int k = 0; k < targets.Length; k++)
+                {
+                    var exp = seq[k];
 
-        // Compute grads for ALL tracked leaves (sources: null) — the pattern NeuralNetworkBase's own
-        // tape training uses; passing explicit sources can miss the exact leaf instances recorded.
-        var grads = tape.ComputeGradients(loss, sources: null);
-        // Apply the joint gradient through each network's canonical GetParameters/UpdateParameters
-        // round-trip. The tape's grads are keyed by the tensors the forward used; those are NOT
-        // necessarily the same instances GetParameters exposes, so an in-place write to them would not
-        // be reflected. Mapping the grads into GetParameters' layer-ordered flat layout and writing
-        // back via UpdateParameters is the only path guaranteed to persist.
-        _adamStep++;
-        ApplyNetworkAdam(repNet, grads);
-        ApplyNetworkAdam(dynNet, grads);
-        ApplyNetworkAdam(predNet, grads);
+                    // Prediction head at h_k -> [policy (actionDim) | value (1)].
+                    var pred = predNet.ForwardForTraining(h);
+                    var policyPred = Engine.TensorSlice(pred, new[] { 0 }, new[] { actionDim });
+                    var valuePred = Engine.TensorSlice(pred, new[] { actionDim }, new[] { 1 });
+                    residuals.Add(Engine.TensorSubtract(valuePred, ScalarTensor(targets[k])));
+                    residuals.Add(Engine.TensorSubtract(policyPred, ActionTensor(exp.Action, actionDim)));
+
+                    // Dynamics: (h_{k+1}, r_k) = g(h_k, a_k).
+                    var dynIn = Engine.TensorConcatenate(new[] { h, ActionTensor(exp.Action, actionDim) }, 0);
+                    var dynOut = dynNet.ForwardForTraining(dynIn);
+                    var hNext = Engine.TensorSlice(dynOut, new[] { 0 }, new[] { latent });
+                    var rewardPred = Engine.TensorSlice(dynOut, new[] { latent }, new[] { 1 });
+                    residuals.Add(Engine.TensorSubtract(rewardPred, ScalarTensor(exp.Reward)));
+
+                    h = hNext;
+                }
+            }
+
+            var allResiduals = residuals.Count == 1
+                ? residuals[0]
+                : Engine.TensorConcatenate(residuals.ToArray(), 0);
+            return Engine.TensorMultiplyScalar(
+                Engine.ReduceSum(Engine.TensorMultiply(allResiduals, allResiduals), null),
+                NumOps.FromDouble(1.0 / allResiduals.Length));
+        }
+
+        // One Adam step over all three networks' parameters on the shared eager tape step. Adam's moments are kept
+        // per parameter tensor, so this is the per-network Adam it replaces with one shared step counter.
+        var parameters = Training.TapeTrainingStep<T>.CollectParameters(repNet.Layers)
+            .Concat(Training.TapeTrainingStep<T>.CollectParameters(dynNet.Layers))
+            .Concat(Training.TapeTrainingStep<T>.CollectParameters(predNet.Layers))
+            .Distinct(TensorReferenceComparer<Tensor<T>>.Instance)
+            .ToList();
+        T loss = Training.TapeTrainingStepper<T>.EagerObjectiveStep(parameters, UnrollLoss, JointOptimizer());
+
+        // The update wrote the parameter tensors in place; flush each network's weight caches so the next detached
+        // Predict (the n-step bootstrap) reads the new weights.
+        repNet.NotifyParametersUpdatedInPlace();
+        dynNet.NotifyParametersUpdatedInPlace();
+        predNet.NotifyParametersUpdatedInPlace();
 
         _updateCount++;
-        return loss[0];
+        return loss;
 
         }
         finally
@@ -639,67 +660,6 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             bootValueCache[bootIndex] = bootValue;
         }
         return NumOps.Add(ret, NumOps.Multiply(disc, bootValue));
-    }
-
-    /// <summary>
-    /// Applies one Adam step (β1=0.9, β2=0.999, ε=1e-8, lr = the agent's resolved <see cref="LearningRate"/>
-    /// — the base-class value with its non-zero fallback, NOT the nullable <c>Options.LearningRate</c>) to a single network,
-    /// mapping the joint tape gradients into the network's canonical <c>GetParameters()</c> flat layout
-    /// (layer order, the same order <see cref="TapeTrainingStep{T}.CollectParameters"/> walks) and
-    /// writing back via <c>UpdateParameters</c> — the only path guaranteed to persist and be read back
-    /// by <c>GetParameters</c>. Per-network Adam moment state persists in <see cref="_netAdam"/>.
-    /// </summary>
-    private void ApplyNetworkAdam(NeuralNetworkBase<T> net, System.Collections.Generic.Dictionary<Tensor<T>, Tensor<T>> grads)
-    {
-        var current = net.GetParameters();
-        int total = current.Length;
-        if (total == 0) return;
-
-        // Build the flat gradient aligned to GetParameters' layout by concatenating each collected
-        // parameter tensor's gradient in layer order (advancing the offset for every tensor, so a
-        // parameter with no gradient leaves a zero block and is simply not updated).
-        var flatGrad = new double[total];
-        int offset = 0;
-        foreach (var t in Training.TapeTrainingStep<T>.CollectParameters(net.Layers))
-        {
-            if (grads.TryGetValue(t, out var g) && g is not null)
-            {
-                var gs = g.AsSpan();
-                // Bound by the gradient length too: g is not guaranteed to match t.Length (a partial
-                // gradient would otherwise read past gs and throw IndexOutOfRange). Copy the overlapping
-                // prefix; any remaining slots in this tensor's block stay zero (unaffected by the update).
-                int limit = Math.Min(Math.Min(t.Length, gs.Length), total - offset);
-                for (int i = 0; i < limit; i++) flatGrad[offset + i] = Convert.ToDouble(gs[i]);
-            }
-            offset += t.Length;
-        }
-
-        if (!_netAdam.TryGetValue(net, out var mom) || mom.M.Length != total)
-        {
-            mom = (new double[total], new double[total]);
-            _netAdam[net] = mom;
-        }
-        var (m, v) = mom;
-
-        const double beta1 = 0.9, beta2 = 0.999, eps = 1e-8;
-        double bc1 = 1.0 - Math.Pow(beta1, _adamStep);
-        double bc2 = 1.0 - Math.Pow(beta2, _adamStep);
-        // Use the agent's RESOLVED learning rate (base class, with the non-zero fallback), NOT
-        // _options.LearningRate — the latter is a nullable T that defaults to null/zero, which would
-        // make every Adam step zero and leave the parameters frozen.
-        double lr = Convert.ToDouble(LearningRate);
-        var updated = new Vector<T>(total);
-        for (int i = 0; i < total; i++)
-        {
-            double g = flatGrad[i];
-            double mi = beta1 * m[i] + (1.0 - beta1) * g;
-            double vi = beta2 * v[i] + (1.0 - beta2) * g * g;
-            m[i] = mi;
-            v[i] = vi;
-            double step = lr * (mi / bc1) / (Math.Sqrt(vi / bc2) + eps);
-            updated[i] = NumOps.Subtract(current[i], NumOps.FromDouble(step));
-        }
-        net.UpdateParameters(updated);
     }
 
     private Vector<T> ConcatenateVectors(Vector<T> a, Vector<T> b)

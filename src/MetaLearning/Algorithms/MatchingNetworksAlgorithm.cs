@@ -183,11 +183,14 @@ public partial class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearner
             }
         }
 
-        double beta = _matchingOptions.OuterLearningRate;
-        ParamModel.SetParameters(ApplyGradients(body, bodyGradient, beta));
-        if (_kernelWeights.Length > 0) _kernelWeights = ApplyGradients(_kernelWeights, kernelGradient, beta);
-        if (_supportContextWeights.Length > 0) _supportContextWeights = ApplyGradients(_supportContextWeights, supportGradient, beta);
-        if (_queryContextWeights.Length > 0) _queryContextWeights = ApplyGradients(_queryContextWeights, queryGradient, beta);
+        // Clipped above, before the L2 term is added, so the shared step does not clip again.
+        ApplyOuterUpdate(new[]
+        {
+            new OuterUpdateGroup(body, bodyGradient, ParamModel.SetParameters),
+            new OuterUpdateGroup(_kernelWeights, kernelGradient, updated => _kernelWeights = updated),
+            new OuterUpdateGroup(_supportContextWeights, supportGradient, updated => _supportContextWeights = updated),
+            new OuterUpdateGroup(_queryContextWeights, queryGradient, updated => _queryContextWeights = updated),
+        }, clipThreshold: null, _matchingOptions.OuterLearningRate);
 
         return NumOps.Divide(totalLoss, batchSize);
     }

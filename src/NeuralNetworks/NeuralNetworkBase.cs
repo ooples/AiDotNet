@@ -13981,6 +13981,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     protected void InvalidateWeightCachesAfterSuccessfulWeightUpdate()
         => InvalidateWeightCachesAfterSuccessfulWeightUpdate(updatedOnDevice: false);
 
+    /// <summary>
+    /// Flushes this model's weight caches after a caller outside it updated its parameter tensors in place: an agent
+    /// that trains several networks through one shared optimizer step (MuZero's representation, dynamics and
+    /// prediction networks). Without it the next eval-mode forward could serve the pre-update weights.
+    /// </summary>
+    internal void NotifyParametersUpdatedInPlace() => InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+
     /// <summary>The optimizer's configured regularization, or null when it has none.</summary>
     private static IRegularization<T, Tensor<T>, Tensor<T>>? OptimizerRegularizationOf(
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)

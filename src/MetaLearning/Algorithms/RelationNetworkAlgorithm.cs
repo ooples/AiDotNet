@@ -149,22 +149,14 @@ public partial class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerB
         AddDecay(bodyGradient, body, _relationOptions.FeatureEncoderL2Reg);
         AddDecay(relationGradient, _relationWeights, _relationOptions.RelationModuleL2Reg);
 
-        if (_relationOptions.GradientClipThreshold.HasValue && _relationOptions.GradientClipThreshold.Value > 0)
+        ApplyOuterUpdate(new[]
         {
-            double threshold = _relationOptions.GradientClipThreshold.Value;
-            bodyGradient = ClipGradients(bodyGradient, threshold);
-            if (relationGradient.Length > 0) relationGradient = ClipGradients(relationGradient, threshold);
-            if (transformGradient.Length > 0) transformGradient = ClipGradients(transformGradient, threshold);
-            if (poolingGradient.Length > 0) poolingGradient = ClipGradients(poolingGradient, threshold);
-            if (shotGradient.Length > 0) shotGradient = ClipGradients(shotGradient, threshold);
-        }
-
-        double beta = _relationOptions.OuterLearningRate;
-        ParamModel.SetParameters(ApplyGradients(body, bodyGradient, beta));
-        if (_relationWeights.Length > 0) _relationWeights = ApplyGradients(_relationWeights, relationGradient, beta);
-        if (_featureTransform.Length > 0) _featureTransform = ApplyGradients(_featureTransform, transformGradient, beta);
-        if (_poolingWeights.Length > 0) _poolingWeights = ApplyGradients(_poolingWeights, poolingGradient, beta);
-        if (_shotWeights.Length > 0) _shotWeights = ApplyGradients(_shotWeights, shotGradient, beta);
+            new OuterUpdateGroup(body, bodyGradient, ParamModel.SetParameters),
+            new OuterUpdateGroup(_relationWeights, relationGradient, updated => _relationWeights = updated),
+            new OuterUpdateGroup(_featureTransform, transformGradient, updated => _featureTransform = updated),
+            new OuterUpdateGroup(_poolingWeights, poolingGradient, updated => _poolingWeights = updated),
+            new OuterUpdateGroup(_shotWeights, shotGradient, updated => _shotWeights = updated),
+        }, _relationOptions.GradientClipThreshold, _relationOptions.OuterLearningRate);
 
         return NumOps.Divide(totalLoss, batchSize);
     }

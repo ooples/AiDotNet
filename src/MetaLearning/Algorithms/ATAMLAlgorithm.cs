@@ -161,19 +161,11 @@ public partial class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         sharedGradient = Scale(sharedGradient ?? new Vector<T>(shared.Length), batchSize);
         taskGradient = Scale(taskGradient ?? new Vector<T>(_taskParameters.Length), batchSize);
 
-        if (_algoOptions.GradientClipThreshold.HasValue && _algoOptions.GradientClipThreshold.Value > 0)
+        ApplyOuterUpdate(new[]
         {
-            double threshold = _algoOptions.GradientClipThreshold.Value;
-            sharedGradient = ClipGradients(sharedGradient, threshold);
-            if (taskGradient.Length > 0) taskGradient = ClipGradients(taskGradient, threshold);
-        }
-
-        double beta = _algoOptions.OuterLearningRate;
-        ParamModel.SetParameters(ApplyGradients(shared, sharedGradient, beta));
-        if (_taskParameters.Length > 0)
-        {
-            _taskParameters = ApplyGradients(_taskParameters, taskGradient, beta);
-        }
+            new OuterUpdateGroup(shared, sharedGradient, ParamModel.SetParameters),
+            new OuterUpdateGroup(_taskParameters, taskGradient, updated => _taskParameters = updated),
+        }, _algoOptions.GradientClipThreshold, _algoOptions.OuterLearningRate);
 
         return NumOps.Divide(totalLoss, batchSize);
     }

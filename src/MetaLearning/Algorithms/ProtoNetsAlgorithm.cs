@@ -176,20 +176,13 @@ public partial class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
         mahalanobisGradient = Scale(mahalanobisGradient ?? new Vector<T>(_mahalanobisLogScale.Length), batchSize);
         classGradient = Scale(classGradient ?? new Vector<T>(_classLogScale.Length), batchSize);
 
-        if (_protoNetsOptions.GradientClipThreshold.HasValue && _protoNetsOptions.GradientClipThreshold.Value > 0)
+        ApplyOuterUpdate(new[]
         {
-            double threshold = _protoNetsOptions.GradientClipThreshold.Value;
-            bodyGradient = ClipGradients(bodyGradient, threshold);
-            if (attentionGradient.Length > 0) attentionGradient = ClipGradients(attentionGradient, threshold);
-            if (mahalanobisGradient.Length > 0) mahalanobisGradient = ClipGradients(mahalanobisGradient, threshold);
-            if (classGradient.Length > 0) classGradient = ClipGradients(classGradient, threshold);
-        }
-
-        double beta = _protoNetsOptions.OuterLearningRate;
-        ParamModel.SetParameters(ApplyGradients(body, bodyGradient, beta));
-        if (_attentionQuery.Length > 0) _attentionQuery = ApplyGradients(_attentionQuery, attentionGradient, beta);
-        if (_mahalanobisLogScale.Length > 0) _mahalanobisLogScale = ApplyGradients(_mahalanobisLogScale, mahalanobisGradient, beta);
-        if (_classLogScale.Length > 0) _classLogScale = ApplyGradients(_classLogScale, classGradient, beta);
+            new OuterUpdateGroup(body, bodyGradient, ParamModel.SetParameters),
+            new OuterUpdateGroup(_attentionQuery, attentionGradient, updated => _attentionQuery = updated),
+            new OuterUpdateGroup(_mahalanobisLogScale, mahalanobisGradient, updated => _mahalanobisLogScale = updated),
+            new OuterUpdateGroup(_classLogScale, classGradient, updated => _classLogScale = updated),
+        }, _protoNetsOptions.GradientClipThreshold, _protoNetsOptions.OuterLearningRate);
 
         return NumOps.Divide(totalLoss, batchSize);
     }

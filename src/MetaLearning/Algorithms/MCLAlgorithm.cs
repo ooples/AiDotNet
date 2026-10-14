@@ -130,19 +130,11 @@ public partial class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         bodyGradient = Scale(bodyGradient ?? new Vector<T>(body.Length), batchSize);
         projectionGradient = Scale(projectionGradient ?? new Vector<T>(_projectionWeights.Length), batchSize);
 
-        if (_mclOptions.GradientClipThreshold.HasValue && _mclOptions.GradientClipThreshold.Value > 0)
+        ApplyOuterUpdate(new[]
         {
-            double threshold = _mclOptions.GradientClipThreshold.Value;
-            bodyGradient = ClipGradients(bodyGradient, threshold);
-            if (projectionGradient.Length > 0) projectionGradient = ClipGradients(projectionGradient, threshold);
-        }
-
-        double beta = _mclOptions.OuterLearningRate;
-        ParamModel.SetParameters(ApplyGradients(body, bodyGradient, beta));
-        if (_projectionWeights.Length > 0)
-        {
-            _projectionWeights = ApplyGradients(_projectionWeights, projectionGradient, beta);
-        }
+            new OuterUpdateGroup(body, bodyGradient, ParamModel.SetParameters),
+            new OuterUpdateGroup(_projectionWeights, projectionGradient, updated => _projectionWeights = updated),
+        }, _mclOptions.GradientClipThreshold, _mclOptions.OuterLearningRate);
 
         return NumOps.Divide(totalLoss, batchSize);
     }

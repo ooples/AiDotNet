@@ -165,17 +165,11 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
             }
         }
 
-        if (_metaOptNetOptions.GradientClipThreshold.HasValue && _metaOptNetOptions.GradientClipThreshold.Value > 0)
-        {
-            bodyGradient = ClipGradients(bodyGradient, _metaOptNetOptions.GradientClipThreshold.Value);
-        }
-
-        double beta = _metaOptNetOptions.OuterLearningRate;
-        ParamModel.SetParameters(ApplyGradients(body, bodyGradient, beta));
+        // The learned temperature is stepped unclipped, as it always was; only the encoder's gradient is clipped.
+        var groups = new List<OuterUpdateGroup> { new(body, bodyGradient, ParamModel.SetParameters) };
         if (_metaOptNetOptions.UseLearnedTemperature)
-        {
-            _logitScale = ApplyGradients(_logitScale, scaleGradient, beta);
-        }
+            groups.Add(new OuterUpdateGroup(_logitScale, scaleGradient, updated => _logitScale = updated, clip: false));
+        ApplyOuterUpdate(groups, _metaOptNetOptions.GradientClipThreshold, _metaOptNetOptions.OuterLearningRate);
 
         return NumOps.Divide(totalLoss, batchSize);
     }

@@ -214,19 +214,17 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         for (int i = 0; i < 6; i++)
         {
             gradients[i] = Scale(sums[i] ?? new Vector<T>(lengths[i]), batchSize);
-            if (_leoOptions.GradientClipThreshold.HasValue && _leoOptions.GradientClipThreshold.Value > 0 && gradients[i].Length > 0)
-            {
-                gradients[i] = ClipGradients(gradients[i], _leoOptions.GradientClipThreshold.Value);
-            }
         }
 
-        double beta = _leoOptions.OuterLearningRate;
-        ParamModel.SetParameters(ApplyGradients(body, gradients[0], beta));
-        _encoderWeights = ApplyGradients(_encoderWeights, gradients[1], beta);
-        if (_relationWeights.Length > 0) _relationWeights = ApplyGradients(_relationWeights, gradients[2], beta);
-        _decoderWeights = ApplyGradients(_decoderWeights, gradients[3], beta);
-        _latentRates = ApplyGradients(_latentRates, gradients[4], beta);
-        _fineTuningRates = ApplyGradients(_fineTuningRates, gradients[5], beta);
+        ApplyOuterUpdate(new[]
+        {
+            new OuterUpdateGroup(body, gradients[0], ParamModel.SetParameters),
+            new OuterUpdateGroup(_encoderWeights, gradients[1], updated => _encoderWeights = updated),
+            new OuterUpdateGroup(_relationWeights, gradients[2], updated => _relationWeights = updated),
+            new OuterUpdateGroup(_decoderWeights, gradients[3], updated => _decoderWeights = updated),
+            new OuterUpdateGroup(_latentRates, gradients[4], updated => _latentRates = updated),
+            new OuterUpdateGroup(_fineTuningRates, gradients[5], updated => _fineTuningRates = updated),
+        }, _leoOptions.GradientClipThreshold, _leoOptions.OuterLearningRate);
 
         return NumOps.Divide(total, batchSize);
     }

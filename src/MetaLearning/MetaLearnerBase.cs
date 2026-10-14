@@ -821,6 +821,68 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         var scaledGradients = Engine.Multiply(gradients, lr);
         return Engine.Subtract(parameters, scaledGradients);
     }
+    /// <summary>
+    /// One parameter group of an outer-loop meta-update: its current values, its batch-mean gradient, where the
+    /// updated values are written, and whether the gradient-clip threshold applies to it.
+    /// </summary>
+    protected readonly struct OuterUpdateGroup
+    {
+        /// <summary>Creates a group.</summary>
+        /// <param name="parameters">The group's current values.</param>
+        /// <param name="gradient">The batch-mean gradient of the meta-objective with respect to the group.</param>
+        /// <param name="commit">Receives the updated values.</param>
+        /// <param name="clip">Whether the outer-loop clip threshold applies to this group's gradient.</param>
+        public OuterUpdateGroup(Vector<T> parameters, Vector<T> gradient, Action<Vector<T>> commit, bool clip = true)
+        {
+            Guard.NotNull(parameters, nameof(parameters));
+            Guard.NotNull(gradient, nameof(gradient));
+            Guard.NotNull(commit, nameof(commit));
+            Parameters = parameters;
+            Gradient = gradient;
+            Commit = commit;
+            Clip = clip;
+        }
+
+        /// <summary>The group's current values.</summary>
+        public Vector<T> Parameters { get; }
+
+        /// <summary>The batch-mean gradient for the group.</summary>
+        public Vector<T> Gradient { get; }
+
+        /// <summary>Receives the updated values.</summary>
+        public Action<Vector<T>> Commit { get; }
+
+        /// <summary>Whether the clip threshold applies to this group.</summary>
+        public bool Clip { get; }
+    }
+
+    /// <summary>
+    /// The outer-loop update every metric meta-learner shares: each non-empty group's gradient is clipped by
+    /// <paramref name="clipThreshold"/> (when it is positive and the group opts in), then stepped by
+    /// <see cref="ApplyGradients"/> at <paramref name="learningRate"/>.
+    /// </summary>
+    /// <remarks>
+    /// The metric meta-learners (ProtoNets, Matching Networks, Relation Network, MetaOptNet, LEO, MCL, ATAML) each
+    /// carried their own copy of this clip-then-step block, one line per learned parameter group. Groups are clipped
+    /// independently, exactly as those copies did, so the update is unchanged; it now lives in one place.
+    /// </remarks>
+    /// <param name="groups">The parameter groups to step.</param>
+    /// <param name="clipThreshold">The per-group gradient-norm limit; null or non-positive disables clipping.</param>
+    /// <param name="learningRate">The outer learning rate.</param>
+    protected void ApplyOuterUpdate(IReadOnlyList<OuterUpdateGroup> groups, double? clipThreshold, double learningRate)
+    {
+        Guard.NotNull(groups, nameof(groups));
+        bool clipping = clipThreshold.HasValue && clipThreshold.Value > 0;
+        foreach (var group in groups)
+        {
+            if (group.Parameters.Length == 0)
+                continue;
+            var gradient = clipping && group.Clip && group.Gradient.Length > 0
+                ? ClipGradients(group.Gradient, clipThreshold)
+                : group.Gradient;
+            group.Commit(ApplyGradients(group.Parameters, gradient, learningRate));
+        }
+    }
 
     /// <summary>
     /// Applies gradients with per-layer learning rates using <see cref="ILayeredModel{T}"/> metadata.

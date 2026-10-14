@@ -324,16 +324,6 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
     private Tensor<T> ReduceToScalar(Tensor<T> t)
         => Engine.ReduceSum(t, Enumerable.Range(0, t.Shape.Length).ToArray(), keepDims: false);
 
-    private void TapeStepOver(GradientTape<T> tape, Tensor<T> loss, IReadOnlyList<ILayer<T>> layers)
-    {
-        var trainable = Training.TapeTrainingStep<T>.CollectParameters(layers);
-        if (trainable.Count == 0) return;
-        var grads = tape.ComputeGradients(loss, trainable);
-        T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
-        LastLoss = lossValue;
-        var ctx = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(trainable, grads, lossValue);
-        _optimizer.Step(ctx);
-    }
 
     private IReadOnlyList<ILayer<T>> BuildDenoiserLayerList()
     {
@@ -809,11 +799,13 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
                 }
             }
 
-            using var tape = new GradientTape<T>();
-            var pred = DenoiserForward(BuildDenoiserInput(xt, t));
-            var target = VectorToTensor(noise);
-            var loss = ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(pred, target)));
-            TapeStepOver(tape, loss, denoiserLayers);
+            // The shared eager step on the same objective when the fused multi-slot step did not apply.
+            var eagerInput = BuildDenoiserInput(xt, t);
+            var eagerTarget = VectorToTensor(noise);
+            LastLoss = Training.TapeTrainingStepper<T>.EagerObjectiveStep(
+                () => Training.TapeTrainingStep<T>.CollectParameters(denoiserLayers),
+                () => ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(DenoiserForward(eagerInput), eagerTarget))),
+                _optimizer);
         }
     }
 
