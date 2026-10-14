@@ -617,10 +617,16 @@ public partial class DiTNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <inheritdoc />
+    public override bool SupportsBatchedTimeEmbedding => true;
+
+    /// <inheritdoc />
     public override Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
     {
         EnsureLayersInitialized();
         _lastInput = noisySample;
+        // The documented input is GetTimestepEmbedding's raw sinusoidal embedding, as PredictNoise builds it;
+        // project it through the time MLP exactly as PredictNoise does.
+        timeEmbedding = ProjectTimeEmbedding(timeEmbedding);
 
         // See PredictNoise: foundation-scale eval uses the eager fp16-resident forward, bypassing the
         // disk-streaming scope and compiled replay.

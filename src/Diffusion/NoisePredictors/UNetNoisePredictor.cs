@@ -734,6 +734,9 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
     }
 
     /// <inheritdoc />
+    public override bool SupportsBatchedTimeEmbedding => true;
+
+    /// <inheritdoc />
     public override Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
     {
         EnsureLayersInitialized();
