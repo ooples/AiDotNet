@@ -373,12 +373,16 @@ Bumped 0.134.4 to 0.135.0 for AiDotNet.Tensors #1095: TapeStepContext.ValidateBu
 
 Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv input gradient was served a stale
          transposed kernel on Linux (a recycled flipped-kernel buffer hit the im2col conv's identity-keyed transpose
-         cache), so DiffCut, DiffSeg, SegNeXt and RAFT trained on wrong input gradients in CI only. -->
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.136.0" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.136.0" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.136.0" />
-    <PackageVersion Include="AiDotNet.Evolution" Version="0.2.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.136.0" />
+         cache), so DiffCut, DiffSeg, SegNeXt and RAFT trained on wrong input gradients in CI only.
+
+Bumped 0.136.0 to 0.137.1 for AiDotNet.Tensors #1275: TensorPool kept arena-backed tensors, so after a
+         TensorArena.Reset one buffer sat behind two live tensors and TensorNarrow's backward was overwritten from the
+         second step on. Every model training under its base-class arena drifted (Chronos by up to 6e-4 in 4 steps). -->
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.137.1" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.137.1" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.137.1" />
+    <PackageVersion Include="AiDotNet.Evolution" Version="0.3.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.137.1" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />
