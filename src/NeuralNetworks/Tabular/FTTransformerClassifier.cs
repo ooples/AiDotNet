@@ -309,11 +309,8 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
             var logits = Forward(numericalFeatures, categoricalIndices);
             var lossTensor = SoftmaxCrossEntropyLoss(logits, OneHot(targets, logits.Shape[0]));
             var grads = tape.ComputeGradients(lossTensor, trainable.ToArray());
-            foreach (var t in trainable)
-            {
-                if (t is null || !grads.TryGetValue(t, out var g) || g is null) continue;
-                Engine.TensorSubtractInPlace(t, Engine.TensorMultiplyScalar(g, learningRate));
-            }
+            foreach (var t in trainable.Where(t => t is not null && grads.ContainsKey(t)))
+                Engine.TensorSubtractInPlace(t, Engine.TensorMultiplyScalar(grads[t], learningRate));
             lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
         }
 
@@ -343,7 +340,8 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
     // Plain SGD at a rate, without the clipping the optimizer options enable by default (this step never clipped).
     private AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>> SgdAt(double rate)
     {
-        if (_sgd is null || _sgdRate != rate)
+        // An exact match is the point: the cached optimizer is reused only for the very rate it was built with.
+        if (_sgd is null || !_sgdRate.Equals(rate))
         {
             _sgd = new AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(null,
                 new StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>>
