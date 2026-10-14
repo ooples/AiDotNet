@@ -28,7 +28,7 @@ public class CustomObjectiveFusedTrainingTests
     // by a few 1e-8 of the parameter scale per step; a step on baked data moves weights by far more.
     private const double RelativeTolerance = 1e-5;
 
-    public static TheoryData<string> Scenarios => new() { "VideoMAE", "DeepONet", "FNO", "MQCNN", "CodeSwitchingASR", "CCDM" };
+    public static TheoryData<string> Scenarios => new() { "VideoMAE", "DeepONet", "FNO", "MQCNN", "CodeSwitchingASR", "CCDM", "TSDiff" };
 
     private sealed record RunResult(Vector<double> Parameters, int FusedSteps, int EagerSteps);
 
@@ -43,6 +43,7 @@ public class CustomObjectiveFusedTrainingTests
         "MQCNN" => Warm(BuildMqcnn(), new Tensor<double>([1, 8, 1])),
         "CodeSwitchingASR" => Warm(BuildAsr(), new Tensor<double>([4, 8])),
         "CCDM" => Warm(BuildCcdm(), new Tensor<double>([1, 8, 1])),
+        "TSDiff" => Warm(BuildTsDiff(), new Tensor<double>([1, 16, 1])),
         _ => throw new ArgumentOutOfRangeException(nameof(scenario)),
     };
 
@@ -72,6 +73,7 @@ public class CustomObjectiveFusedTrainingTests
             case "CodeSwitchingASR": TrainOnChangingBatches(model, [4, 8], [4, AsrOptions().VocabSize]); break;
             // Every step draws its own diffusion steps, noise and contrastive negatives.
             case "CCDM": TrainOnChangingBatches(model, [1, 8, 1], [1, 4]); break;
+            case "TSDiff": TrainOnChangingBatches(model, [1, 16, 1], [1, 4]); break;
         }
     }
 
@@ -169,6 +171,16 @@ public class CustomObjectiveFusedTrainingTests
             ContextLength = 8, ForecastHorizon = 4, HiddenDimension = 8, NumLayers = 1, NumHeads = 2, EmbeddingLayers = 2,
             DiffusionSteps = 10, NumSamples = 2, TrainingBatchSize = 2, DropoutRate = 0.0, AttentionDropoutRate = 0.0,
             ContrastiveWeight = 0.5, NumNegatives = 2, Seed = 11,
+        });
+
+    // Half the rows drop their conditioning, so both classifier-free branches train every step.
+    private static AiDotNet.Finance.Forecasting.Foundation.TSDiff<double> BuildTsDiff() => new(
+        new NeuralNetworkArchitecture<double>(inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 16, outputSize: 4),
+        new AiDotNet.Models.Options.TSDiffOptions<double>
+        {
+            SequenceLength = 16, ForecastHorizon = 4, HiddenDimension = 8, NumResidualBlocks = 1, NumDiffusionSteps = 10,
+            NumSamples = 2, TrainingBatchSize = 4, UnconditionalProbability = 0.5, DropoutRate = 0.0, Seed = 13,
         });
 
     private static AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASROptions AsrOptions() => new()
