@@ -355,8 +355,9 @@ public partial class DiffusionResBlock<T> : LayerBase<T>, IShapeContract
         // of allocation drops per Predict, cutting Gen0/Gen1 GC frequency.
         // Tape-active mode keeps the allocating variants because the tape
         // backward needs the pre-add tensor to recover gradients.
-        bool useInPlace = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
-                          || AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        bool useInPlace = (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
+                           || AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed)
+                          && !AiDotNet.Autodiff.GradientRecording.IsTrainingTrace;
 
         // Within-resblock GPU profiling (AIDOTNET_PROFILE_SYNC=1 → real GPU time per sub-op). Feeds the same
         // sink the UNet uses; entries prefixed "rb." so the aggregator splits conv vs groupnorm vs add.
