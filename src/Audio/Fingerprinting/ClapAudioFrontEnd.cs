@@ -208,8 +208,8 @@ internal sealed class ClapAudioFrontEnd<T>
             for (int x = xmin; x < xmax; x++)
             {
                 double weight = total > 0 ? weights[x - xmin] / total : 0.0;
-                // Triangle weights are never negative, so this skips exactly the zero-weight taps.
-                if (!(weight > 0.0)) continue;
+                // Triangle weights are finite and never negative, so this skips exactly the zero-weight taps.
+                if (weight <= 0.0) continue;
                 int offset = x * mels;
                 for (int m = 0; m < mels; m++) accumulator[m] += weight * NumOps.ToDouble(source[offset + m]);
             }
