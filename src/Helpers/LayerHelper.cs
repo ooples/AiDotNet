@@ -29589,67 +29589,6 @@ public static partial class LayerHelper<T>
     }
 
     #endregion
-    #region VisionMamba Layers
-
-    /// <summary>
-    /// Creates MambaBlock layers for the Vision Mamba classifier model.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateVisionMambaClassifierLayers(
-        int numPatches, int mambaInputDim, int numLayers, int stateDimension)
-    {
-        for (int i = 0; i < numLayers; i++)
-        {
-            yield return new MambaBlock<T>(numPatches, mambaInputDim, stateDimension);
-        }
-    }
-
-    /// <summary>
-    /// Creates encoder layers for the VisionMamba model.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateVisionMambaEncoderLayers(
-        int inputChannels, int inputHeight, int inputWidth,
-        int[] channelDims, int[] depths, double dropRate)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        int h = inputHeight, w = inputWidth, inC = inputChannels;
-
-        for (int stage = 0; stage < channelDims.Length; stage++)
-        {
-            int outC = channelDims[stage];
-            int stride = stage == 0 ? 4 : 2;
-            int kernel = stage == 0 ? 7 : 3;
-            int pad = stage == 0 ? 3 : 1;
-
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
-            h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
-
-            for (int d = 1; d < depths[stage]; d++)
-            {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
-            }
-
-            inC = outC;
-        }
-    }
-
-    /// <summary>
-    /// Creates decoder layers for the VisionMamba model.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateVisionMambaDecoderLayers(
-        int encoderOutputChannels, int decoderDim, int numClasses,
-        int featureHeight, int featureWidth)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-
-        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
-    }
-
-    #endregion
     #region VMamba Layers
 
     /// <summary>
@@ -32891,48 +32830,6 @@ public static partial class LayerHelper<T>
         yield return new DenseLayer<T>(3, activationFunction: new IdentityActivation<T>());
     }
 
-    #region SAM Layers
-
-    /// <summary>
-    /// Creates the ViT encoder layers for SAM (Segment Anything Model).
-    /// Paper: Kirillov et al., "Segment Anything" ICCV 2023.
-    /// Architecture: ViT backbone with 16x16 patch embedding followed by transformer blocks.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateSAMEncoderLayers(
-        int inputChannels, int inputHeight, int inputWidth,
-        int[] channelDims, int[] depths, double dropRate)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-
-        // Patch embedding: 16x16 non-overlapping patches
-        yield return new ConvolutionalLayer<T>(channelDims[0], 16, 16, 0, relu);
-
-        // ViT transformer blocks
-        int patchH = inputHeight / 16;
-        int patchW = inputWidth / 16;
-        for (int i = 0; i < depths[0]; i++)
-        {
-            yield return new BatchNormalizationLayer<T>();
-            yield return new ConvolutionalLayer<T>(channelDims[0], 1, 1, 0, relu);
-        }
-    }
-
-    /// <summary>
-    /// Creates the lightweight mask decoder layers for SAM.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateSAMDecoderLayers(
-        int encoderOutputChannels, int decoderDim, int numClasses,
-        int featureHeight = 16, int featureWidth = 16)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-
-        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
-    }
-
-    #endregion
 
     #region Mamba2 Forecasting Layers
 
