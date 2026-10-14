@@ -11465,8 +11465,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             }
         }
 
-        var collect = parameterProvider ?? CollectModelTrainableTensors;
-        var parameters = collect();
+        var parameters = parameterProvider is not null ? parameterProvider() : CollectModelTrainableTensors();
 
         // The network's layers ride along so the compiled step's own lazy-init forward runs them in inference mode
         // (with none, that forward ran in training mode and a BatchNorm updated its running statistics an extra

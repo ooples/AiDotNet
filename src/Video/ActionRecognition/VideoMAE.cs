@@ -106,7 +106,7 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
 
     // Draws the pretraining tube masks. Seeded from Options.Seed when one is set, so pretraining is reproducible;
     // it ignored the seed and drew every mask from a secure generator.
-    private Random _random = RandomHelper.CreateSecureRandom();
+    private readonly Random _random = RandomHelper.CreateSecureRandom();
     private bool _disposed;
 
     /// <summary>

@@ -1,4 +1,4 @@
-﻿using AiDotNet.Interfaces;
+using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
@@ -715,14 +715,10 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
             t.GetMethod(nameof(PredictTrainingNoise), flags, null,
                 new[] { typeof(Tensor<T>), typeof(int[]), typeof(bool), typeof(Tensor<T>), typeof(Tensor<T>) }, null),
         };
-        foreach (var hook in hooks)
-        {
-            var declaring = hook?.DeclaringType;
-            if (declaring is null) return false;
-            var open = declaring.IsGenericType ? declaring.GetGenericTypeDefinition() : declaring;
-            if (open != typeof(LatentDiffusionModelBase<>) && open != typeof(DiffusionModelBase<>)) return false;
-        }
-        return true;
+        return hooks
+            .Select(hook => hook?.DeclaringType)
+            .Select(declaring => declaring is not null && declaring.IsGenericType ? declaring.GetGenericTypeDefinition() : declaring)
+            .All(open => open == typeof(LatentDiffusionModelBase<>) || open == typeof(DiffusionModelBase<>));
     });
 
     // Shapes a noisy latent for the predictor: [B, C, H, W], with zero channels appended when the predictor
