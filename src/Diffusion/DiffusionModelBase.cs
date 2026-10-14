@@ -1,4 +1,4 @@
-﻿using System.Linq;
+﻿﻿using System.Linq;
 using AiDotNet.Autodiff;
 using AiDotNet.Deployment.Optimization.Quantization;
 using AiDotNet.Deployment.Optimization.Quantization.Training;
@@ -1090,27 +1090,15 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
         if (batchSize == 1)
             return PredictNoise(noisyBatch, timesteps[0]);
 
-        int perElement = noisyBatch.Length / batchSize;
-        // batch > 1: keep each per-element slice at the SAME rank as noisyBatch by preserving a
-        // leading batch dim of 1 ([B, C, H, W] -> [1, C, H, W]), NOT dropping it to [C, H, W].
-        var elemShape = new int[noisyBatch.Rank];
-        elemShape[0] = 1;
-        for (int i = 1; i < noisyBatch.Rank; i++) elemShape[i] = noisyBatch.Shape[i];
-        var result = new Tensor<T>(noisyBatch._shape);
-        var nbSpan = noisyBatch.AsSpan();
-        var resSpan = result.AsWritableSpan();
+        // batch > 1: each element is narrowed out at the SAME rank as noisyBatch ([B, C, H, W] -> [1, C, H, W]),
+        // predicted at its own timestep, and the predictions concatenated back, all through engine ops. The loop
+        // this replaced copied elements in and out through host spans into fresh tensors, which cut the tape: the
+        // loss of a batched Train no longer depended on any weight, so every gradient was empty and Adam never
+        // moved a parameter (measured on StableDiffusion15: 0 of 93 tensors with gradient moved per step).
+        var predictions = new Tensor<T>[batchSize];
         for (int b = 0; b < batchSize; b++)
-        {
-            var elem = new Tensor<T>(elemShape);
-            var elemSpan = elem.AsWritableSpan();
-            for (int j = 0; j < perElement; j++)
-                elemSpan[j] = nbSpan[b * perElement + j];
-            var pred = PredictNoise(elem, timesteps[b]);
-            var predSpan = pred.AsSpan();
-            for (int j = 0; j < perElement; j++)
-                resSpan[b * perElement + j] = predSpan[j];
-        }
-        return result;
+            predictions[b] = PredictNoise(Engine.TensorNarrow(noisyBatch, 0, b, 1), timesteps[b]);
+        return Engine.TensorConcatenate(predictions, 0);
     }
 
     /// <summary>
