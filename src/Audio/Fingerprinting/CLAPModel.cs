@@ -333,30 +333,45 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     }
 
     /// <summary>
-    /// Runs an exported audio encoder. The features go to the graph's first input that is not the mask; a graph that
-    /// also declares an input whose name contains <c>longer</c> (LAION-CLAP's fusion mask, <c>[batch]</c>, 1 where a
-    /// sample's local views are fused) receives the mask there, so a fusion export behaves like the native tower.
+    /// Runs an exported audio encoder. The features go to the graph's feature input; a graph that also declares an
+    /// input whose name contains <c>longer</c> (LAION-CLAP's fusion mask, <c>[batch]</c>, 1 where a sample's local
+    /// views are fused) receives the mask there, so a fusion export behaves like the native tower.
     /// </summary>
     /// <remarks>
-    /// The ONNX input contract: input one is <c>[batch, views, frames, mels]</c> (one view, or the four fusion views);
-    /// an optional input named with <c>longer</c> is the mask. A graph without the mask input receives only the
-    /// features, as before; for a fusion graph that means every sample is treated as short.
+    /// The ONNX contract: one feature input <c>[batch, views, frames, mels]</c> (one view, or the four fusion views)
+    /// and at most one more input, the mask, named with <c>longer</c>. The embedding is the graph's only output, or
+    /// else the one output whose name contains <c>embed</c>. Any other layout is ambiguous and is rejected by name
+    /// rather than fed or read by position.
     /// </remarks>
     private static Tensor<T> RunOnnxAudioEncoder(OnnxModel<T> encoder, Tensor<T> features, Tensor<T> longer)
     {
         var inputs = encoder.Metadata.Inputs;
-        var maskInput = inputs.FirstOrDefault(
-            input => input.Name.IndexOf("longer", System.StringComparison.OrdinalIgnoreCase) >= 0);
-        if (maskInput is null)
-            return encoder.Run(features);
-
-        var featureInput = inputs.First(input => !ReferenceEquals(input, maskInput));
-        var outputs = encoder.Run(new System.Collections.Generic.Dictionary<string, Tensor<T>>
+        var maskInputs = inputs
+            .Where(input => input.Name.IndexOf("longer", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            .ToList();
+        var featureInputs = inputs.Where(input => !maskInputs.Contains(input)).ToList();
+        if (featureInputs.Count != 1 || maskInputs.Count > 1)
         {
-            [featureInput.Name] = features,
-            [maskInput.Name] = longer,
-        });
-        return outputs.Values.First();
+            throw new InvalidOperationException(
+                "The CLAP audio ONNX graph must declare one feature input and at most one 'longer' mask input; it "
+                + $"declares {string.Join(", ", inputs.Select(input => input.Name))}.");
+        }
+
+        var feeds = new System.Collections.Generic.Dictionary<string, Tensor<T>> { [featureInputs[0].Name] = features };
+        if (maskInputs.Count == 1)
+            feeds[maskInputs[0].Name] = longer;
+
+        var outputs = encoder.Run(feeds);
+        if (outputs.Count == 1)
+            return outputs.Values.First();
+        var embeddings = outputs
+            .Where(output => output.Key.IndexOf("embed", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            .ToList();
+        if (embeddings.Count == 1)
+            return embeddings[0].Value;
+        throw new InvalidOperationException(
+            "The CLAP audio ONNX graph returns several outputs and not exactly one named with 'embed'; it returns "
+            + $"{string.Join(", ", outputs.Keys)}.");
     }
 
     /// <summary>

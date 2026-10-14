@@ -184,9 +184,12 @@ internal sealed class ClapAudioFrontEnd<T>
         double support = scale >= 1.0 ? scale : 1.0;
         double invScale = scale >= 1.0 ? 1.0 / scale : 1.0;
         var result = new Tensor<T>(new[] { outputs, mels });
+        // One flat copy of the rows: the inner loop reads each row's mels contiguously, which a per-element tensor
+        // indexer would make several times slower, and the copy is the size of the input it reads.
         var source = rows.ToArray();
         var accumulator = new double[mels];
-        var weights = new double[inputs];
+        // Sized to the widest filter window (support reaches about scale + 1 rows on each side), not to the input.
+        var weights = new double[(int)Math.Ceiling(2 * support) + 2];
         for (int i = 0; i < outputs; i++)
         {
             double center = scale * (i + 0.5);
@@ -196,15 +199,17 @@ internal sealed class ClapAudioFrontEnd<T>
             for (int x = xmin; x < xmax; x++)
             {
                 double arg = Math.Abs((x - center + 0.5) * invScale);
-                weights[x] = arg < 1.0 ? 1.0 - arg : 0.0;
-                total += weights[x];
+                double weight = arg < 1.0 ? 1.0 - arg : 0.0;
+                weights[x - xmin] = weight;
+                total += weight;
             }
 
             Array.Clear(accumulator, 0, mels);
             for (int x = xmin; x < xmax; x++)
             {
-                double weight = total > 0 ? weights[x] / total : 0.0;
-                if (weight == 0.0) continue;
+                double weight = total > 0 ? weights[x - xmin] / total : 0.0;
+                // Triangle weights are never negative, so this skips exactly the zero-weight taps.
+                if (!(weight > 0.0)) continue;
                 int offset = x * mels;
                 for (int m = 0; m < mels; m++) accumulator[m] += weight * NumOps.ToDouble(source[offset + m]);
             }
