@@ -298,6 +298,12 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// The objective is the supervised forecast loss plus the time-frequency contrastive term, recorded together so the
+    /// shared projection head receives both contributions. It steps on the shared fused session with the model's
+    /// optimizer (the paper's Adam by default). Both paths used to apply a hard-coded SGD step at 0.001 and never
+    /// read the configured optimizer.
+    /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> target)
     {
         if (!_useNativeMode)
@@ -305,120 +311,44 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
 
         var loss = LossFunction;
 
-        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
-
-        // GPU-RESIDENT fast path — compiled fused SGD on the combined supervised +
-        // contrastive objective. Safe now that ApplyInstanceNormalization and
-        // ComputeFrequencyRepresentation both use traceable Engine ops (ReduceMean /
-        // ReduceVariance / TensorSqrt / broadcast for RevIN, TensorMatMul + magnitude
-        // for the DFT) — both re-execute on every replay from
-        // the current-step persistent slot data instead of freezing at trace time.
-        var trainableLayers = Layers.OfType<ITrainableLayer<T>>().ToList();
-        if (trainableLayers.Count > 0)
+        // The contrastive term reads the step's input, so it is computed inside the forward (which receives the
+        // input the plan rebinds on every replay) and handed to the loss, which the step always runs right after.
+        Tensor<T>? capturedContrastive = null;
+        Tensor<T> ForwardCombined(Tensor<T> inp)
         {
-            // Closure-captured contrastive loss: ComputeContrastiveLossTape runs
-            // INSIDE the forward closure so it consumes the CURRENT-step persistent
-            // input (`inp`), not the outer `input` which would freeze at compile
-            // time. Fwd/Loss ordering is guaranteed by the fused-step contract.
-            Tensor<T>? capturedContrastive = null;
-            Tensor<T> ForwardCombined(Tensor<T> inp)
-            {
-                capturedContrastive = ComputeContrastiveLossTape(inp);
-                return ForwardForTraining(inp);
-            }
-            Tensor<T> ComputeLossCombined(Tensor<T> pred, Tensor<T> tgt)
-            {
-                var alignedT = tgt;
-                if (pred.Rank > tgt.Rank && pred.Shape[0] == 1 && pred.Length == tgt.Length)
-                    pred = Engine.Reshape(pred, tgt._shape);
-                else if (tgt.Rank > pred.Rank && tgt.Shape[0] == 1 && tgt.Length == pred.Length)
-                    alignedT = Engine.Reshape(tgt, pred._shape);
-                var supervised = loss.ComputeTapeLoss(pred, alignedT);
-                var contrastive = capturedContrastive
-                    ?? throw new InvalidOperationException(
-                        "TFC fused step: contrastive loss was not captured by ForwardCombined. " +
-                        "This indicates the fused-step framework called the loss closure before " +
-                        "the forward closure, which violates its documented Fwd-then-Loss ordering.");
-                if (!supervised._shape.SequenceEqual(contrastive._shape)
-                    && supervised.Length == contrastive.Length)
-                    contrastive = Engine.Reshape(contrastive, supervised._shape);
-                return Engine.TensorAdd(supervised, contrastive);
-            }
-            if (AiDotNet.Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
-                    trainableLayers, input, target,
-                    forward: ForwardCombined, computeLoss: ComputeLossCombined,
-                    optimizerType: AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD,
-                    learningRate: 0.001f, beta1: 0.9f, beta2: 0.999f, epsilon: 1e-8f, weightDecay: 0f,
-                    out T fusedLoss, owner: this,
-                    onGradients: gradients => PublishParameterGradients(gradients)))
-            {
-                LastLoss = fusedLoss;
-                return;
-            }
+            capturedContrastive = ComputeContrastiveLossTape(inp);
+            return ForwardForTraining(inp);
+        }
+        Tensor<T> ComputeLossCombined(Tensor<T> pred, Tensor<T> tgt)
+        {
+            var alignedT = tgt;
+            if (pred.Rank > tgt.Rank && pred.Shape[0] == 1 && pred.Length == tgt.Length)
+                pred = Engine.Reshape(pred, tgt._shape);
+            else if (tgt.Rank > pred.Rank && tgt.Shape[0] == 1 && tgt.Length == pred.Length)
+                alignedT = Engine.Reshape(tgt, pred._shape);
+            var supervised = loss.ComputeTapeLoss(pred, alignedT);
+            var contrastive = capturedContrastive
+                ?? throw new InvalidOperationException(
+                    "TFC training step: the loss ran before the forward computed the contrastive term.");
+
+            // Shape-align on rank drift (a rank-0 supervised loss against a [1] contrastive one); both are scalars.
+            if (!supervised._shape.SequenceEqual(contrastive._shape) && supervised.Length == contrastive.Length)
+                contrastive = Engine.Reshape(contrastive, supervised._shape);
+            return Engine.TensorAdd(supervised, contrastive);
         }
 
-        // Custom tape step: TFC's loss is supervised forecast + weighted
-        // contrastive alignment between the time-domain and frequency-
-        // domain encoder outputs. Both terms must be recorded under the
-        // same GradientTape so the optimizer update reflects the full
-        // objective.
-        using var tape = new GradientTape<T>();
-
-        // Supervised branch (reuse the forecast head's output).
-        var forecast = ForwardForTraining(input);
-        var alignedTarget = target;
-        if (forecast.Rank > target.Rank && forecast.Shape[0] == 1 && forecast.Length == target.Length)
-            forecast = Engine.Reshape(forecast, target._shape);
-        else if (target.Rank > forecast.Rank && target.Shape[0] == 1 && target.Length == forecast.Length)
-            alignedTarget = Engine.Reshape(target, forecast._shape);
-        var supervisedLoss = loss.ComputeTapeLoss(forecast, alignedTarget);
-
-        // Contrastive branch — separate forward through time+freq encoders
-        // (tape-aware; see ComputeContrastiveLossTape below). Weight it
-        // with _contrastiveTemperature-based scaling applied inside the
-        // helper, so this stays a simple additive combination.
-        var contrastiveLoss = ComputeContrastiveLossTape(input);
-
-        // Total = supervised + contrastive. Using TensorAdd keeps both
-        // losses on the same tape so tape.ComputeGradients(total, ...)
-        // accumulates gradients from both terms into each shared
-        // parameter (the projection head is shared, so its gradient is
-        // the sum of contributions from both branches).
-        // Shape-align on rank drift (e.g. supervisedLoss rank-0 [] vs
-        // contrastiveLoss rank-1 [1]) so the engine's strict-shape add
-        // accepts the pair. Both are scalar-valued so reshape is safe.
-        if (!supervisedLoss._shape.SequenceEqual(contrastiveLoss._shape)
-            && supervisedLoss.Length == contrastiveLoss.Length)
+        // Every training entry point on the base puts the layers in training mode for the step; without it the
+        // encoders' dropout stays in inference mode.
+        SetTrainingMode(true);
+        try
         {
-            contrastiveLoss = Engine.Reshape(contrastiveLoss, supervisedLoss._shape);
+            TrainCustomTapeStep(input, target, ForwardCombined, ComputeLossCombined, _optimizer,
+                () => Training.TapeTrainingStep<T>.CollectParameters(Layers));
+            StepSchedulerIfSupported(_optimizer);
         }
-        var totalLoss = Engine.TensorAdd(supervisedLoss, contrastiveLoss);
-
-        var allGrads = ComputeAndPublishParameterGradients(tape, totalLoss, sources: null);
-        var grads = new Dictionary<Tensor<T>, Tensor<T>>(
-            Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-        foreach (var param in trainableParams)
+        finally
         {
-            if (allGrads.TryGetValue(param, out var grad))
-                grads[param] = grad;
-        }
-
-        T lossValue = totalLoss.Length > 0 ? totalLoss[0] : NumOps.Zero;
-        LastLoss = lossValue;
-
-        // Apply gradients via the registered optimizer. Mirrors the
-        // simple SGD-style update path used in TapeTrainingStep so that
-        // non-Adam optimizers still get the learning-rate-scaled
-        // gradient descent semantics when a full IGradientBasedOptimizer
-        // isn't wired up for Finance models yet.
-        T lr = NumOps.FromDouble(0.001);
-        foreach (var param in trainableParams)
-        {
-            if (grads.TryGetValue(param, out var grad))
-            {
-                var update = Engine.TensorMultiplyScalar(grad, lr);
-                Engine.TensorSubtractInPlace(param, update);
-            }
+            SetTrainingMode(false);
         }
     }
 

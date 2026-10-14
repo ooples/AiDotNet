@@ -28,7 +28,7 @@ public class CustomObjectiveFusedTrainingTests
     // by a few 1e-8 of the parameter scale per step; a step on baked data moves weights by far more.
     private const double RelativeTolerance = 1e-5;
 
-    public static TheoryData<string> Scenarios => new() { "VideoMAE", "DeepONet", "FNO", "MQCNN", "CodeSwitchingASR", "CCDM", "TSDiff", "TimeDiff" };
+    public static TheoryData<string> Scenarios => new() { "VideoMAE", "DeepONet", "FNO", "MQCNN", "CodeSwitchingASR", "CCDM", "TSDiff", "TimeDiff", "TFC" };
 
     private sealed record RunResult(Vector<double> Parameters, int FusedSteps, int EagerSteps);
 
@@ -45,6 +45,7 @@ public class CustomObjectiveFusedTrainingTests
         "CCDM" => Warm(BuildCcdm(), new Tensor<double>([1, 8, 1])),
         "TSDiff" => Warm(BuildTsDiff(), new Tensor<double>([1, 16, 1])),
         "TimeDiff" => Warm(BuildTimeDiff(), new Tensor<double>([1, 16, 1])),
+        "TFC" => Warm(BuildTfc(), new Tensor<double>([1, 16, 1])),
         _ => throw new ArgumentOutOfRangeException(nameof(scenario)),
     };
 
@@ -76,6 +77,7 @@ public class CustomObjectiveFusedTrainingTests
             case "CCDM": TrainOnChangingBatches(model, [1, 8, 1], [1, 4]); break;
             case "TSDiff": TrainOnChangingBatches(model, [1, 16, 1], [1, 4]); break;
             case "TimeDiff": TrainOnChangingBatches(model, [1, 16, 1], [1, 4]); break;
+            case "TFC": TrainOnChangingBatches(model, [1, 16, 1], [1, 4]); break;
         }
     }
 
@@ -193,6 +195,16 @@ public class CustomObjectiveFusedTrainingTests
         {
             ContextLength = 16, ForecastHorizon = 4, HiddenDimension = 8, NumLayers = 1, NumHeads = 2, DiffusionSteps = 10,
             TrainingBatchSize = 4, DropoutRate = 0.0, Seed = 17,
+        });
+
+    // The contrastive term reads the step's input from inside the forward.
+    private static AiDotNet.Finance.Forecasting.Foundation.TFC<double> BuildTfc() => new(
+        new NeuralNetworkArchitecture<double>(inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 16, outputSize: 4),
+        new AiDotNet.Models.Options.TFCOptions<double>
+        {
+            ContextLength = 16, ForecastHorizon = 4, HiddenDimension = 8, ProjectionDimension = 4, NumTimeLayers = 1,
+            NumFreqLayers = 1, DropoutRate = 0.0,
         });
 
     private static AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASROptions AsrOptions() => new()
