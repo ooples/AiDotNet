@@ -106,6 +106,8 @@ public class DiceLoss<T> : LossFunctionBase<T>
         var numerator1 = Engine.Reshape(numerator, new[] { 1 });
         var denominator1 = Engine.Reshape(denominator, new[] { 1 });
         var dice = Engine.TensorDivide(numerator1, denominator1);
-        return Engine.ScalarMinusTensor(NumOps.One, dice);
+        // The result is reshaped back to rank-0 [], the ComputeTapeLoss contract CompositeLoss enforces (a focal + dice
+        // composite otherwise threw "term 1 produced shape [1] but the running total has shape []").
+        return Engine.Reshape(Engine.ScalarMinusTensor(NumOps.One, dice), Array.Empty<int>());
     }
 }

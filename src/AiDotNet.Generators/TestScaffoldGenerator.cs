@@ -7046,10 +7046,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                      model.FullyQualifiedName.IndexOf(
                          "AiDotNet.ComputerVision.Segmentation.Foundation.", System.StringComparison.Ordinal) >= 0)
             {
-                // SAM keeps ViT-H and the paper AdamW settings as production defaults.
-                // Exercise the published ViT-B variant in generated CPU CI, with a lower
-                // user-configured fine-tuning rate for random-data invariants. The public
-                // model-size selector and optimizer options preserve full customization.
+                // Exercise the published ViT-B variant in generated CPU CI; training uses the paper's AdamW recipe,
+                // scaled by the optimizer factory to the configured batch.
                 //
                 // The spatial size MUST be 112, matching what GetPatchVisionSpatialSize returns for
                 // s_patchVisionFamilies (which lists SAM). These two pins disagreed: the model was
@@ -7064,7 +7062,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 112, inputWidth: 112, inputDepth: 3, outputSize: 1), " +
                     "options: new AiDotNet.ComputerVision.Segmentation.Foundation.SAMOptions " +
-                    "{ NumClasses = 1, ModelSize = AiDotNet.Enums.SAMModelSize.ViTBase, DropRate = 0.0, LearningRate = 1e-5 })";
+                    "{ NumClasses = 1, ModelSize = AiDotNet.Enums.SAMModelSize.ViTBase, DropRate = 0.0 })";
             }
             else if (model.ClassName == "SegGPT" && model.TypeParameterCount == 1)
             {
