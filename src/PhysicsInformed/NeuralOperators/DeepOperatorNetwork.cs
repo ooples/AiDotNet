@@ -590,8 +590,6 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 {
                     T totalLoss = NumOps.Zero;
 
-                    // Collect all trainable parameters from both sub-networks
-                    var allParams = Training.TapeTrainingStep<T>.CollectParameters(Layers);
 
                     for (int i = 0; i < numSamples; i++)
                     {
@@ -616,39 +614,32 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                             targets[q, 0] = targetValues[i, q];
                         }
 
-                        // Single tape over the FULL DON forward: branch + trunk + combine
-                        using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>();
+                        // One step over the FULL DON forward (branch + trunk + combine), so gradients reach both
+                        // sub-networks: the fused compiled plan when it applies, the eager tape otherwise. The
+                        // branch and trunk inputs travel packed in the step's input, so a plan replays each
+                        // sample's own sensors and query points.
+                        var branchShape = branchInput._shape;
+                        var trunkShape = trunkInput._shape;
+                        Tensor<T> Forward(Tensor<T> packed)
+                        {
+                            var branchOutput = _branchNet.ForwardForTraining(
+                                Training.StepInputPacking<T>.Slice(packed, 0, branchShape));
+                            var trunkOutput = _trunkNet.ForwardForTraining(
+                                Training.StepInputPacking<T>.Slice(packed, branchInput.Length, trunkShape));
+                            var branchOutput2D = branchOutput.Rank == 2
+                                ? branchOutput
+                                : Engine.Reshape(branchOutput, new[] { 1, _latentDimension });
+                            var trunkOutput2D = trunkOutput.Rank == 2
+                                ? trunkOutput
+                                : Engine.Reshape(trunkOutput, new[] { numQueries, _latentDimension });
+                            return Engine.TensorMatMul(trunkOutput2D, Engine.TensorTranspose(branchOutput2D));
+                        }
 
-                        var branchOutput = _branchNet.ForwardForTraining(branchInput);
-                        var trunkOutput = _trunkNet.ForwardForTraining(trunkInput);
-
-                        var branchOutput2D = branchOutput.Rank == 2
-                            ? branchOutput
-                            : Engine.Reshape(branchOutput, new[] { 1, _latentDimension });
-                        var trunkOutput2D = trunkOutput.Rank == 2
-                            ? trunkOutput
-                            : Engine.Reshape(trunkOutput, new[] { numQueries, _latentDimension });
-                        var branchOutputT = Engine.TensorTranspose(branchOutput2D);
-                        var predictions = Engine.TensorMatMul(trunkOutput2D, branchOutputT);
-
-                        // Compute loss under the same tape
-                        var lossTensor = lossFunction
-                            .ComputeTapeLoss(predictions, targets);
-                        T lossVal = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+                        T lossVal = TrainCustomTapeStep(
+                            Training.StepInputPacking<T>.Pack(branchInput, trunkInput), targets,
+                            Forward, lossFunction.ComputeTapeLoss, _optimizer,
+                            () => Training.TapeTrainingStep<T>.CollectParameters(Layers));
                         totalLoss = NumOps.Add(totalLoss, lossVal);
-
-                        // Backprop through the COMBINED graph — gradients flow to both branch and trunk
-                        var grads = tape.ComputeGradients(lossTensor, allParams);
-
-                        // Update all parameters using optimizer
-                        var opt = _optimizer;
-                        var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
-                            allParams, grads, lossVal,
-                            branchInput, targets,
-                            (inp, _) => ForwardForTraining(inp),
-                            (pred, tgt) => lossFunction.ComputeTapeLoss(pred, tgt),
-                            null);
-                        opt.Step(context);
                     }
 
                     T avgLoss = numSamples > 0

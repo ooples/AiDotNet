@@ -636,6 +636,9 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// both of those in place every op in the forward pass records on the
         /// tape, so backward just falls out of <c>tape.ComputeGradients</c>.
         /// </remarks>
+        // Built on the first step and kept, so its state (none for plain SGD, but a schedule's position) persists.
+        private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainingOptimizer;
+
         private void TapeTrainStep(Tensor<T> input, Tensor<T> expectedOutput)
         {
             ValidateInputShape(input);
@@ -648,123 +651,31 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 throw new InvalidOperationException("FNO requires DenseLayer lift and projection layers.");
             }
 
-            int[] spatialShape = input._shape.Skip(2).ToArray();
-
-            // GPU-RESIDENT fast path — compiled fused-Adam step on the whole
-            // lift → fourier stack → project pipeline. FNO's forward is a
-            // straight tape-tracked chain, so the compiled plan captures it
-            // cleanly. Falls through to the SGD-in-place path below on any
-            // failure. Uses SGD to match this method's baseline behavior.
-            if (CanTrainOnGpu)
+            // Lift -> Fourier stack -> project with an MSE objective, as one step on the shared fused session: the
+            // compiled plan when it applies (CPU or GPU), the eager tape otherwise. Plain SGD at 0.001, the update
+            // this step has always applied. _fourierLayers are registered in Layers, so collecting Layers alone
+            // trains each Fourier parameter once; collecting both would apply its update twice per step.
+            Tensor<T> Forward(Tensor<T> inp)
             {
-                // _fourierLayers are already registered into Layers (see the
-                // InitializeArchitecture Layers.Add(fourierLayer) call at construction),
-                // so iterating Layers alone collects them exactly once — a second
-                // pass over _fourierLayers would double-register each Fourier
-                // parameter and let the fused optimizer's moment buffers apply
-                // the update twice per step.
-                var allTrainable = new List<ITrainableLayer<T>>();
-                foreach (var l in Layers) if (l is ITrainableLayer<T> t) allTrainable.Add(t);
-                if (allTrainable.Count > 0)
-                {
-                    Tensor<T> Forward(Tensor<T> inp)
-                    {
-                        var sSh = inp._shape.Skip(2).ToArray();
-                        var lf = FlattenPointwiseInput(inp, sSh);
-                        var lo = liftLayer.Forward(lf);
-                        var lifted = UnflattenPointwiseOutput(lo, inp.Shape[0], sSh);
-                        Tensor<T> y = lifted;
-                        foreach (var fl in _fourierLayers) y = fl.Forward(y);
-                        var pf = FlattenPointwiseInput(y, sSh);
-                        var po = projectLayer.Forward(pf);
-                        return UnflattenPointwiseOutput(po, inp.Shape[0], sSh);
-                    }
-                    Tensor<T> ComputeLoss(Tensor<T> pred, Tensor<T> tgt)
-                    {
-                        var d = Engine.TensorSubtract(pred, tgt);
-                        var s = Engine.TensorMultiply(d, d);
-                        var ss = Engine.ReduceSum(s, null);
-                        return Engine.TensorMultiplyScalar(ss, NumOps.Divide(NumOps.One, NumOps.FromDouble(pred.Length)));
-                    }
-                    if (AiDotNet.Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
-                            allTrainable, input, expectedOutput,
-                            forward: Forward, computeLoss: ComputeLoss,
-                            optimizerType: AiDotNet.Tensors.Engines.Compilation.OptimizerType.SGD,
-                            learningRate: 0.001f, beta1: 0.9f, beta2: 0.999f, epsilon: 1e-8f, weightDecay: 0f,
-                            out T fusedLoss, owner: this))
-                    {
-                        LastLoss = fusedLoss;
-                        return;
-                    }
-                }
+                var spatial = inp._shape.Skip(2).ToArray();
+                var lifted = UnflattenPointwiseOutput(liftLayer.Forward(FlattenPointwiseInput(inp, spatial)), inp.Shape[0], spatial);
+                Tensor<T> y = lifted;
+                foreach (var fl in _fourierLayers) y = fl.Forward(y);
+                return UnflattenPointwiseOutput(projectLayer.Forward(FlattenPointwiseInput(y, spatial)), inp.Shape[0], spatial);
             }
 
-            // Collect every trainable parameter tensor. _fourierLayers are already
-            // registered into Layers (Layers.Add(fourierLayer) at construction), so
-            // iterating Layers alone covers them — a second pass over _fourierLayers
-            // would apply the SGD update twice per step to each Fourier parameter.
-            var paramList = new List<Tensor<T>>();
-            foreach (var layer in Layers)
+            Tensor<T> MeanSquaredError(Tensor<T> pred, Tensor<T> tgt)
             {
-                if (layer is ITrainableLayer<T> trainable)
-                {
-                    var layerParams = trainable.GetTrainableParameters();
-                    if (layerParams is not null)
-                    {
-                        foreach (var p in layerParams)
-                        {
-                            if (p is not null && p.Length > 0) paramList.Add(p);
-                        }
-                    }
-                }
-            }
-            var paramTensors = paramList.ToArray();
-
-            using var tape = new GradientTape<T>();
-
-            // Forward: lift → fourier stack → project. Every op is tape-tracked.
-            var liftFlat = FlattenPointwiseInput(input, spatialShape);
-            var liftOut = liftLayer.Forward(liftFlat);
-            var lifted = UnflattenPointwiseOutput(liftOut, input.Shape[0], spatialShape);
-
-            Tensor<T> x = lifted;
-            foreach (var fl in _fourierLayers)
-            {
-                x = fl.Forward(x);
+                var diff = Engine.TensorSubtract(pred, tgt);
+                return Engine.TensorMultiplyScalar(
+                    Engine.ReduceSum(Engine.TensorMultiply(diff, diff), null),
+                    NumOps.Divide(NumOps.One, NumOps.FromDouble(pred.Length)));
             }
 
-            var projFlat = FlattenPointwiseInput(x, spatialShape);
-            var projOut = projectLayer.Forward(projFlat);
-            var output = UnflattenPointwiseOutput(projOut, input.Shape[0], spatialShape);
-
-            // Mean squared error: mean((output - target)^2)
-            var diff = Engine.TensorSubtract(output, expectedOutput);
-            var sq = Engine.TensorMultiply(diff, diff);
-            var lossSum = Engine.ReduceSum(sq, null);
-            var invN = NumOps.Divide(NumOps.One, NumOps.FromDouble(output.Length));
-            var lossTensor = Engine.TensorMultiplyScalar(lossSum, invN);
-
-            LastLoss = lossTensor.Data.Span[0];
-
-            // Backward via the tape.
-            var grads = tape.ComputeGradients(lossTensor, paramTensors);
-
-            // SGD update in place so existing tensor references (and any
-            // engine persistent buffers registered through SetParameters) stay
-            // consistent.
-            T lr = NumOps.FromDouble(0.001);
-            foreach (var param in paramTensors)
-            {
-                if (!grads.TryGetValue(param, out var grad) || grad is null) continue;
-                var paramSpan = param.Data.Span;
-                var gradSpan = grad.Data.Span;
-                int n = Math.Min(paramSpan.Length, gradSpan.Length);
-                for (int i = 0; i < n; i++)
-                {
-                    paramSpan[i] = NumOps.Subtract(paramSpan[i], NumOps.Multiply(gradSpan[i], lr));
-                }
-            }
-        }
+            _trainingOptimizer ??= new StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(
+                this, new StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 0.001 });
+            TrainCustomTapeStep(input, expectedOutput, Forward, MeanSquaredError, _trainingOptimizer,
+                () => Training.TapeTrainingStep<T>.CollectParameters(Layers));        }
 
         /// <summary>
         /// Gets metadata about the FNO model.
@@ -899,10 +810,9 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         private readonly int[] _modeSizes;
         private readonly IActivationFunction<T> _activation;
 
-        // Split-complex spectral weights stored as two real tensors so they can
-        // participate directly in the gradient tape alongside the rest of the
-        // Engine.FFT / Engine.FFT2D pipeline. Registered as trainable parameters
-        // below in the constructor.
+        // Split-complex spectral weights stored as two real tensors so they participate directly in the gradient
+        // tape alongside the DFT-matmul spectral transform. Registered as trainable parameters below in the
+        // constructor.
         [TrainableParameter(Role = PersistentTensorRole.Weights)]
         private Tensor<T> _spectralWeightsReal;
 
@@ -976,15 +886,9 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 throw new ArgumentException($"Expected channel width {_width}, got {input.Shape[1]}.");
             }
 
-            // Tape-tracked spectral conv using Engine.FFT* for every rank.
-            //   - 2-D: single fused Engine.FFT2D call (fast path).
-            //   - Other ranks: separable 1-D Engine.FFT loop. Will collapse into
-            //     a single Engine.FFTND call once native N-D FFT ships — see
-            //     https://github.com/ooples/AiDotNet.Tensors/issues/135.
-            // Backward flows through the FFT / FFT2D grad nodes automatically.
-            var spectral = _spatialDimensions.Length == 2
-                ? ApplySpectralConvolution2DTape(input)
-                : ApplySpectralConvolutionNDTape(input);
+            // Spectral convolution through dense DFT matmuls (see ApplySeparableFft), the same for every spatial
+            // rank, so the spectral weights are on the gradient tape and in a compiled plan.
+            var spectral = ApplySpectralConvolutionNDTape(input);
             var local = ApplyPointwiseMixing(input);
             var combined = Engine.TensorAdd(spectral, local);
 
@@ -1039,110 +943,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
 
         /// <summary>
-        /// Tape-tracked spectral convolution for the 2D case using Engine.FFT2D.
-        /// Replaces the hand-rolled ForwardFFT / mode-index loop in
-        /// <see cref="ApplySpectralConvolution"/> when the input has exactly 2
-        /// spatial dimensions, which is the common FNO use case (Navier-Stokes,
-        /// Darcy flow, 2D weather). Every op records on the gradient tape so
-        /// backward propagates through Engine.FFT2D's grad node automatically —
-        /// no manual Backward needed for this path.
-        /// </summary>
-        private Tensor<T> ApplySpectralConvolution2DTape(Tensor<T> input)
-        {
-            int batchSize = input.Shape[0];
-            int height = input.Shape[2];
-            int width = input.Shape[3];
-            int modesH = _modeSizes[0];
-            int modesW = _modeSizes[1];
-
-            // Real input → zero imaginary companion for FFT2D's split-complex API.
-            var inputImag = new Tensor<T>(input._shape);
-            inputImag.Fill(_numOps.Zero);
-
-            // Forward FFT over the last two spatial axes.
-            Engine.FFT2D(input, inputImag, out var specRe, out var specIm);
-
-            // Output spectrum starts as zeros — scatter sums the active corners.
-            var outSpecRe = new Tensor<T>(specRe._shape);
-            var outSpecIm = new Tensor<T>(specIm._shape);
-            outSpecRe.Fill(_numOps.Zero);
-            outSpecIm.Fill(_numOps.Zero);
-
-            // FNO keeps the low-frequency corner [0..modes-1] AND the high-frequency
-            // (negative-frequency via DFT symmetry) corner [H-modes..H-1] on each
-            // spatial axis. In 2D that is 4 corners. Each corner reuses the same
-            // compact weights via the MapModeIndex folding in the legacy code;
-            // we match that behavior exactly.
-            for (int cornerH = 0; cornerH < 2; cornerH++)
-            {
-                int hStart = cornerH == 0 ? 0 : height - modesH;
-                if (hStart < 0 || hStart + modesH > height) continue;
-
-                for (int cornerW = 0; cornerW < 2; cornerW++)
-                {
-                    int wStart = cornerW == 0 ? 0 : width - modesW;
-                    if (wStart < 0 || wStart + modesW > width) continue;
-
-                    var sliceStart = new[] { 0, 0, hStart, wStart };
-                    var sliceSize = new[] { batchSize, _width, modesH, modesW };
-
-                    var inBlockRe = Engine.TensorSlice(specRe, sliceStart, sliceSize);
-                    var inBlockIm = Engine.TensorSlice(specIm, sliceStart, sliceSize);
-
-                    // Per-location complex matmul:
-                    //   (aR + aI*i)(wR + wI*i) = (aR*wR - aI*wI) + (aR*wI + aI*wR)*i
-                    // each real matmul is PerLocationMatMul which reduces over the
-                    // input-channel axis.
-                    var arWr = PerLocationMatMul(inBlockRe, _spectralWeightsReal, batchSize, _width, _width, modesH, modesW);
-                    var aiWi = PerLocationMatMul(inBlockIm, _spectralWeightsImag, batchSize, _width, _width, modesH, modesW);
-                    var arWi = PerLocationMatMul(inBlockRe, _spectralWeightsImag, batchSize, _width, _width, modesH, modesW);
-                    var aiWr = PerLocationMatMul(inBlockIm, _spectralWeightsReal, batchSize, _width, _width, modesH, modesW);
-
-                    var outBlockRe = Engine.TensorSubtract(arWr, aiWi);
-                    var outBlockIm = Engine.TensorAdd(arWi, aiWr);
-
-                    outSpecRe = Engine.TensorSetSlice(outSpecRe, outBlockRe, sliceStart);
-                    outSpecIm = Engine.TensorSetSlice(outSpecIm, outBlockIm, sliceStart);
-                }
-            }
-
-            // Inverse FFT back to spatial. Imaginary part should be numerically
-            // near zero for a real-roundtrip signal; we return the real part.
-            Engine.IFFT2D(outSpecRe, outSpecIm, out var spatialRe, out _);
-            return spatialRe;
-        }
-
-        /// <summary>
-        /// Per-frequency batched matmul used by the 2D spectral conv. For each
-        /// spatial location (h, w) the compact weight tensor <c>[C_out, C_in]</c>
-        /// is applied to the <c>[B, C_in]</c> input slice producing <c>[B, C_out]</c>,
-        /// reducing over the input-channel axis. Implemented as a single
-        /// <c>TensorBatchMatMul</c> with <c>(mh * mw)</c> batch dims after
-        /// permuting the location axes to the front.
-        /// </summary>
-        private Tensor<T> PerLocationMatMul(
-            Tensor<T> input, Tensor<T> weights,
-            int batchSize, int inChannels, int outChannels,
-            int modesH, int modesW)
-        {
-            // input   [B, C_in, mh, mw]  → permute to [mh, mw, B, C_in]  → reshape [mh*mw, B, C_in]
-            var inputPermuted = Engine.TensorPermute(input, new[] { 2, 3, 0, 1 });
-            var inputBatched = Engine.Reshape(inputPermuted, new[] { modesH * modesW, batchSize, inChannels });
-
-            // weights [C_out, C_in, mh, mw] → permute to [mh, mw, C_in, C_out] → reshape [mh*mw, C_in, C_out]
-            var weightsPermuted = Engine.TensorPermute(weights, new[] { 2, 3, 1, 0 });
-            var weightsBatched = Engine.Reshape(weightsPermuted, new[] { modesH * modesW, inChannels, outChannels });
-
-            // Batched matmul: [mh*mw, B, C_in] @ [mh*mw, C_in, C_out] → [mh*mw, B, C_out]
-            var resultBatched = Engine.TensorBatchMatMul(inputBatched, weightsBatched);
-
-            // [mh*mw, B, C_out] → [mh, mw, B, C_out] → permute to [B, C_out, mh, mw]
-            var resultUnbatched = Engine.Reshape(resultBatched, new[] { modesH, modesW, batchSize, outChannels });
-            return Engine.TensorPermute(resultUnbatched, new[] { 2, 3, 0, 1 });
-        }
-
-        /// <summary>
-        /// N-D generalization of <see cref="PerLocationMatMul"/>. Applies compact
+        /// Applies compact
         /// per-frequency weights <c>[C_out, C_in, m_1, ..., m_N]</c> to an input
         /// block <c>[B, C_in, m_1, ..., m_N]</c> producing <c>[B, C_out, m_1, ..., m_N]</c>
         /// by treating the <c>N</c> spatial location axes as a flattened batch for
@@ -1196,16 +997,25 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         }
 
         /// <summary>
-        /// Applies an N-D forward or inverse FFT as a sequence of 1-D
-        /// <c>Engine.FFT</c> / <c>Engine.IFFT</c> calls, one per spatial axis.
-        /// Each call transforms the last axis, so we permute the target axis
-        /// into the last position before each call and permute back afterward.
-        /// All ops record on the gradient tape. This is the interim separable
-        /// implementation — once native <c>FFTND</c> / <c>IFFTND</c> ship
-        /// (<see href="https://github.com/ooples/AiDotNet.Tensors/issues/135">
-        /// AiDotNet.Tensors#135</see>) this method becomes a single engine call.
+        /// The N-D forward or inverse discrete Fourier transform over the spatial axes, as one dense DFT matmul per
+        /// axis. The inverse carries the 1/N factor, as <c>Engine.IFFT</c> does.
         /// </summary>
-        private (Tensor<T> real, Tensor<T> imag) ApplySeparableFft(
+        /// <remarks>
+        /// <para>
+        /// The split-complex <c>Engine.FFT</c> / <c>Engine.IFFT</c> / <c>Engine.FFT2D</c> primitives record nothing
+        /// on the gradient tape (their out-parameter outputs cannot carry a node), so a spectral convolution built
+        /// on them gave its spectral weights no gradient at all: FNO trained only its lift, pointwise and
+        /// projection weights. A DFT along an axis is a matmul with a fixed basis, so writing it as one is
+        /// differentiable everywhere, replays in a compiled plan, and is exact at every length. (<c>Engine.FFT</c>
+        /// zero-pads a length that is not a power of two to the next one, a different transform.)
+        /// </para>
+        /// <para>
+        /// Along an axis of length N, with C[n, k] = cos(2 pi n k / N) and S[n, k] = sin(2 pi n k / N):
+        /// forward (re + i im)(C - iS) = (re C + im S) + i(im C - re S);
+        /// inverse (re + i im)(C + iS) / N = (re C - im S) / N + i(im C + re S) / N.
+        /// </para>
+        /// </remarks>
+        internal (Tensor<T> real, Tensor<T> imag) ApplySeparableFft(
             Tensor<T> inputReal, Tensor<T> inputImag, bool inverse)
         {
             int rank = inputReal.Rank;
@@ -1214,8 +1024,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
             for (int axis = 2; axis < rank; axis++)
             {
-                // Build the permutation that moves `axis` to the last position
-                // while preserving the relative order of the other axes.
+                // Move xis to the last position, keeping the other axes in order.
                 int[] perm = new int[rank];
                 int[] invPerm = new int[rank];
                 int idx = 0;
@@ -1234,33 +1043,66 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
                 var rePerm = Engine.TensorPermute(re, perm);
                 var imPerm = Engine.TensorPermute(im, perm);
+                int n = rePerm.Shape[rank - 1];
+                int rows = rePerm.Length / n;
+                var permShape = rePerm._shape;
+                var reFlat = Engine.Reshape(rePerm, new[] { rows, n });
+                var imFlat = Engine.Reshape(imPerm, new[] { rows, n });
+                var (cos, sin) = DftBasis(n);
 
-                Tensor<T> newRe;
-                Tensor<T> newIm;
+                var reC = Engine.TensorMatMul(reFlat, cos);
+                var imC = Engine.TensorMatMul(imFlat, cos);
+                var reS = Engine.TensorMatMul(reFlat, sin);
+                var imS = Engine.TensorMatMul(imFlat, sin);
+                Tensor<T> newRe, newIm;
                 if (inverse)
                 {
-                    Engine.IFFT(rePerm, imPerm, out newRe, out newIm);
+                    var invN = _numOps.FromDouble(1.0 / n);
+                    newRe = Engine.TensorMultiplyScalar(Engine.TensorSubtract(reC, imS), invN);
+                    newIm = Engine.TensorMultiplyScalar(Engine.TensorAdd(imC, reS), invN);
                 }
                 else
                 {
-                    Engine.FFT(rePerm, imPerm, out newRe, out newIm);
+                    newRe = Engine.TensorAdd(reC, imS);
+                    newIm = Engine.TensorSubtract(imC, reS);
                 }
 
-                re = Engine.TensorPermute(newRe, invPerm);
-                im = Engine.TensorPermute(newIm, invPerm);
+                re = Engine.TensorPermute(Engine.Reshape(newRe, permShape), invPerm);
+                im = Engine.TensorPermute(Engine.Reshape(newIm, permShape), invPerm);
             }
 
             return (re, im);
         }
 
+        // The cosine and sine DFT bases for a length, [N, N], built once per length.
+        [Scratch]
+        private readonly Dictionary<int, (Tensor<T> Cos, Tensor<T> Sin)> _dftBases = new();
+
+        private (Tensor<T> Cos, Tensor<T> Sin) DftBasis(int n)
+        {
+            if (_dftBases.TryGetValue(n, out var cached))
+                return cached;
+            var cos = new Tensor<T>(new[] { n, n });
+            var sin = new Tensor<T>(new[] { n, n });
+            for (int r = 0; r < n; r++)
+            {
+                for (int k = 0; k < n; k++)
+                {
+                    // Reduce n*k mod N first so the angle stays small and exact for long axes.
+                    double angle = 2.0 * Math.PI * ((long)r * k % n) / n;
+                    cos[r, k] = _numOps.FromDouble(Math.Cos(angle));
+                    sin[r, k] = _numOps.FromDouble(Math.Sin(angle));
+                }
+            }
+            var basis = (cos, sin);
+            _dftBases[n] = basis;
+            return basis;
+        }
+
         /// <summary>
-        /// Tape-tracked spectral convolution for arbitrary spatial rank. Uses
-        /// separable 1-D <c>Engine.FFT</c> / <c>Engine.IFFT</c> over each spatial
-        /// axis, then iterates the <c>2^N</c> mode corners, slicing out the
-        /// compact block, running the four-real-op complex matmul, and scattering
-        /// the result back into a zero-filled output spectrum. The 2-D case goes
-        /// through <see cref="ApplySpectralConvolution2DTape"/> instead, which
-        /// uses native <c>Engine.FFT2D</c> as a faster fused call.
+        /// Tape-tracked spectral convolution for any spatial rank: the separable DFT of <see cref="ApplySeparableFft"/>
+        /// over each spatial axis, then the <c>2^N</c> mode corners, each sliced out, multiplied by the compact
+        /// complex weights (four real matmuls) and scattered back into a zero-filled output spectrum.
         /// </summary>
         private Tensor<T> ApplySpectralConvolutionNDTape(Tensor<T> input)
         {
@@ -1274,7 +1116,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 modeShape[d] = Math.Min(_modeSizes[d], spatialShape[d]);
             }
 
-            // Real input → zero imaginary companion for the FFT's split-complex API.
+            // Real input: a zero imaginary companion for the split-complex transform.
             var inputImag = new Tensor<T>(input._shape);
             inputImag.Fill(_numOps.Zero);
 
