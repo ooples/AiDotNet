@@ -11396,6 +11396,103 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         StepSchedulerIfSupported(resolvedOptimizer);
     }
 
+    /// <summary>Custom-objective training steps this network has run on the fused compiled plan.</summary>
+    internal int CustomFusedStepCount { get; private set; }
+
+    /// <summary>Custom-objective training steps this network has run on the eager tape.</summary>
+    internal int CustomEagerStepCount { get; private set; }
+
+    // The custom-objective forwards that have already resolved their lazily shaped layers.
+    private readonly HashSet<System.Reflection.MethodInfo> _warmedCustomForwards = new();
+
+    /// <summary>
+    /// One training step with the caller's own forward and objective: the fused compiled plan when it applies (CPU or
+    /// GPU), the eager tape with the optimizer otherwise.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For a model whose objective is not <see cref="TrainWithTape(Tensor{T}, Tensor{T}, IGradientBasedOptimizer{T, Tensor{T}, Tensor{T}}?)"/>'s
+    /// prediction-versus-target loss: masked reconstruction, a physics residual, a multi-input forward. Everything
+    /// that changes per step must reach <paramref name="forward"/> and <paramref name="loss"/> through
+    /// <paramref name="input"/> and <paramref name="target"/>: a compiled plan bakes any other host value the
+    /// closures read at trace time and replays it for every later step.
+    /// </para>
+    /// <para>
+    /// It runs on this network's shared fused session, so the plan, its optimizer moments and the committed-failure
+    /// policy are the ones <see cref="TrainWithTape(Tensor{T}, Tensor{T}, IGradientBasedOptimizer{T, Tensor{T}, Tensor{T}}?)"/> uses.
+    /// </para>
+    /// </remarks>
+    /// <param name="parameterProvider">The tensors to train, when not the network's own trainable set; read again after
+    /// the first forward resolves lazily shaped layers.</param>
+    /// <returns>The step's loss.</returns>
+    protected T TrainCustomTapeStep(
+        Tensor<T> input,
+        Tensor<T> target,
+        Func<Tensor<T>, Tensor<T>> forward,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> loss,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        Func<IReadOnlyList<Tensor<T>>>? parameterProvider = null)
+    {
+        Guard.NotNull(input);
+        Guard.NotNull(target);
+        Guard.NotNull(forward);
+        Guard.NotNull(loss);
+        using var reentrancyGuard = AcquireTrainSentinel();
+
+        var configuredOptimizer = _baseTrainOptimizerExplicitlyConfigured && _baseTrainOptimizer is not null
+            ? _baseTrainOptimizer
+            : optimizer ?? _baseTrainOptimizer;
+        var resolvedOptimizer = configuredOptimizer ?? GetOrCreateBaseOptimizer();
+
+        // Lazily shaped layers own no parameters until their first forward, and a plan holds only the tensors that
+        // exist when it is built. A custom objective can reach layers the network's own forward never does (a
+        // pretraining decoder), so each distinct objective runs one forward outside the tape before its first step;
+        // otherwise those layers are created during the trace and never trained.
+        if (_warmedCustomForwards.Add(forward.Method))
+        {
+            using (new NoGradScope<T>())
+                forward(input);
+        }
+
+        var collect = parameterProvider ?? CollectModelTrainableTensors;
+        var parameters = collect();
+
+        var request = new Training.FusedTrainingStepRequest<T>
+        {
+            Layers = Array.Empty<ITrainableLayer<T>>(),
+            Input = input,
+            Target = target,
+            Forward = forward,
+            ComputeLoss = loss,
+            Optimizer = resolvedOptimizer,
+            ExtraParameters = parameters,
+            ModelGradientClip = MaxGradNormValue,
+            OnGradients = ScatterFusedGradients,
+        };
+
+        T lossValue = NumOps.Zero;
+        var outcome = parameters.Count == 0
+            ? Training.FusedStepOutcome.Declined
+            : FusedSession.TryStep(request, out lossValue);
+        if (outcome == Training.FusedStepOutcome.Stepped)
+        {
+            CustomFusedStepCount++;
+            InvalidateWeightCachesAfterSuccessfulWeightUpdate(updatedOnDevice: true);
+        }
+        else
+        {
+            // A committed plan's optimizer moments cannot move to the eager optimizer; the session's shared policy
+            // drops the plan after a device fault and throws for anything else.
+            if (outcome == Training.FusedStepOutcome.CommittedFailure)
+                FusedSession.DropAfterCommittedFailure();
+            CustomEagerStepCount++;
+            lossValue = Training.TapeTrainingStepper<T>.EagerStep(request);
+            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+        }
+
+        LastLoss = lossValue;
+        return lossValue;
+    }
     protected void TrainWithTape(Tensor<T> input, Tensor<T> expected,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
     {
