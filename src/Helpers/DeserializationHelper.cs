@@ -1195,7 +1195,8 @@ public static class DeserializationHelper
         {
             // TransformerDecoderLayer(int numHeads, int feedForwardDim,
             //                          int sequenceLength = 512,
-            //                          IActivationFunction<T>? ffnActivation = null)
+            //                          IActivationFunction<T>? ffnActivation = null,
+            //                          bool causal = false)
             // _embeddingSize is resolved lazily from input.Shape[^1] on first Forward
             // (or eagerly via ResolveFromShape after this method returns).
             int embeddingSize = inputShape[^1];
@@ -1225,13 +1226,17 @@ public static class DeserializationHelper
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             object? activation = TryCreateActivationInstance(additionalParams, "FfnActivationType", activationFuncType);
 
-            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), activationFuncType });
+            // The [LayerState] key is the parameter name. A model saved before the flag existed has no entry and
+            // was built bidirectional, which is the constructor default.
+            bool causal = TryGetBool(additionalParams, "causal") ?? false;
+
+            var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), activationFuncType, typeof(bool) });
             if (ctor is null)
             {
                 throw new MissingLayerCtorException(
-                    "Cannot find TransformerDecoderLayer constructor with (int numHeads, int feedForwardDim, int sequenceLength, IActivationFunction<T>?).");
+                    "Cannot find TransformerDecoderLayer constructor with (int numHeads, int feedForwardDim, int sequenceLength, IActivationFunction<T>?, bool causal).");
             }
-            instance = ctor.Invoke(new object?[] { numHeads, feedForwardDim, sequenceLength, activation });
+            instance = ctor.Invoke(new object?[] { numHeads, feedForwardDim, sequenceLength, activation, causal });
         }
         else if (genericDef == typeof(SelfAttentionLayer<>))
         {
