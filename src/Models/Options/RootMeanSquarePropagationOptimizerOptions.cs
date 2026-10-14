@@ -142,4 +142,25 @@ public class RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput> : Gra
     /// uncentered RMSProp behavior for existing callers.
     /// </remarks>
     public bool Centered { get; set; }
+
+    /// <summary>
+    /// Gets or sets the momentum of the uncentered update: <c>v ← μ·v + η·g/√(s + ε)</c>, <c>θ ← θ − v</c>. Default 0
+    /// (no momentum). The centered update keeps using the optimizer's <c>InitialMomentum</c>, as it always has.
+    /// </summary>
+    /// <remarks>TensorFlow's RMSProp and PyTorch's <c>momentum</c> argument both apply momentum this way; papers
+    /// trained with it (EfficientNet, MnasNet, MobileNetV3) state "RMSProp with momentum 0.9".</remarks>
+    public double Momentum { get; set; }
+
+    /// <summary>
+    /// Gets or sets the starting value of the mean-square accumulator. Default 0 (PyTorch, Keras). TensorFlow 1's
+    /// <c>tf.train.RMSPropOptimizer</c>, which the official EfficientNet code trains with, starts it at 1, so the first
+    /// steps are not divided by a near-zero root.
+    /// </summary>
+    public double InitialAccumulatorValue { get; set; }
+
+    /// <summary>
+    /// Gets or sets whether ε is added inside the square root, <c>g/√(s + ε)</c> (TensorFlow), rather than outside it,
+    /// <c>g/(√s + ε)</c> (PyTorch, the default).
+    /// </summary>
+    public bool EpsilonInsideRoot { get; set; }
 }

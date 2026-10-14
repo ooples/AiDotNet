@@ -219,6 +219,9 @@ internal static class PaperOptimizerFactory
                 case RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput> rmsProp:
                     if (!double.IsNaN(recipe.Rho)) rmsProp.Decay = recipe.Rho;
                     if (!double.IsNaN(recipe.Epsilon)) rmsProp.Epsilon = recipe.Epsilon;
+                    // "RMSProp with momentum μ" is momentum on the uncentered update; InitialMomentum alone was
+                    // read only by the centered one, so every declared RMSProp momentum was dropped.
+                    if (!double.IsNaN(recipe.Momentum)) rmsProp.Momentum = recipe.Momentum;
                     break;
                 case AdagradOptimizerOptions<T, TInput, TOutput> adagrad:
                     if (!double.IsNaN(recipe.Epsilon)) adagrad.Epsilon = recipe.Epsilon;

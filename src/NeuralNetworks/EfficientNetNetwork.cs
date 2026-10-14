@@ -147,6 +147,14 @@ public partial class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
             ?? throw new InvalidOperationException("EfficientNet declares its paper recipe.");
+        // The official code trains with TensorFlow 1's tf.train.RMSPropOptimizer, whose mean-square accumulator starts
+        // at 1 and whose epsilon sits inside the root. Starting it at 0 divides the first steps by a near-zero root and
+        // moves every weight by about 3·lr, which the paper's rate does not survive.
+        if (optimizer is null && _optimizer.GetOptions() is RootMeanSquarePropagationOptimizerOptions<T, Tensor<T>, Tensor<T>> rmsProp)
+        {
+            rmsProp.InitialAccumulatorValue = 1.0;
+            rmsProp.EpsilonInsideRoot = true;
+        }
 
         InitializeLayers();
     }

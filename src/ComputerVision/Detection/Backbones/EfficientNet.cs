@@ -35,6 +35,7 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+[TaskVariantOf(typeof(AiDotNet.NeuralNetworks.EfficientNetNetwork<>), "detection backbone")]
 public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 {
     private readonly EfficientNetVariant _variant;
@@ -62,6 +63,9 @@ public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<
         _trunkConfiguration = new EfficientNetTrunkConfiguration(width, depth, options.InChannels, IncludeHead: false);
         OutputChannels = _trunkConfiguration.PyramidChannels;
         InitializeLayers();
+        // A backbone starts in inference mode: its parent detector switches it to training when it trains, and the
+        // base default (training) would otherwise normalize every detection with the batch's own statistics.
+        SetTrainingMode(false);
     }
 
     private static Tensor<T> Batched(Tensor<T> input)
