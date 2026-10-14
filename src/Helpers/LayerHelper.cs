@@ -2015,9 +2015,8 @@ public static partial class LayerHelper<T>
             yield return new DenseLayer<T>(hidden2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
             yield return new DenseLayer<T>(encoderOutputSize, new IdentityActivation<T>() as IActivationFunction<T>);
 
-            // Mean and LogVariance layers
-            yield return new MeanLayer<T>(0);
-            yield return new LogVarianceLayer<T>(0);
+            // The last encoder layer outputs the posterior mean (first latentSize features) and log variance (the rest);
+            // the VAE splits it and samples z = mean + exp(logvar / 2) * eps before the decoder.
 
             // Decoder layers (mirror of encoder)
             yield return new DenseLayer<T>(hidden2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
@@ -2053,9 +2052,8 @@ public static partial class LayerHelper<T>
             int encoderOutputSize = latentSize * 2;
             yield return new DenseLayer<T>(encoderOutputSize, new IdentityActivation<T>() as IActivationFunction<T>);
 
-            // Mean and LogVariance layers
-            yield return new MeanLayer<T>(0);
-            yield return new LogVarianceLayer<T>(0);
+            // The last encoder layer outputs the posterior mean (first latentSize features) and log variance (the rest);
+            // the VAE splits it and samples z = mean + exp(logvar / 2) * eps before the decoder.
 
             // Decoder layers
             yield return new DenseLayer<T>(pooledSize / 2, new LeakyReLUActivation<T>() as IActivationFunction<T>);
