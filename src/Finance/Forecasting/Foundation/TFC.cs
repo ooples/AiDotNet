@@ -344,7 +344,6 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
         {
             TrainCustomTapeStep(input, target, ForwardCombined, ComputeLossCombined, _optimizer,
                 () => Training.TapeTrainingStep<T>.CollectParameters(Layers));
-            StepSchedulerIfSupported(_optimizer);
         }
         finally
         {

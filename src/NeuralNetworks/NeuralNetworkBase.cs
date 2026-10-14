@@ -11506,6 +11506,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             InvalidateWeightCachesAfterSuccessfulWeightUpdate();
         }
 
+        // The per-batch scheduler advance every other training entry point makes, on the optimizer that stepped.
+        StepSchedulerIfSupported(resolvedOptimizer);
         LastLoss = lossValue;
         return lossValue;
     }
