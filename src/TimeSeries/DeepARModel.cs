@@ -257,11 +257,12 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         }
 
         // Adam optimizer (Salinas et al. 2020 use Adam).
-        var adamOptions = new AdamOptimizerOptions<T, Matrix<T>, Vector<T>>
+        // Tensor-typed so the shared fused step can map it onto its compiled Adam kernel.
+        var adamOptions = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
         {
             InitialLearningRate = _options.LearningRate
         };
-        var optimizer = new AdamOptimizer<T, Matrix<T>, Vector<T>>(null, adamOptions);
+        var optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(null, adamOptions);
 
         // Collect every registered weight/bias tensor from the LSTM stack and the head.
         var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(AllLayers(), -1);
@@ -279,104 +280,62 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         List<Vector<T>>? bestSnapshot = null;
         _epochLosses.Clear();
 
+        // Keep only anchors with a complete lookback AND a one-step-ahead target for every timestep in the
+        // window: window inputs y[idx-L .. idx-1], targets y[idx-L+1 .. idx], so idx in [L, N-1]. Filtered once,
+        // before shuffling, so every full batch has the same shape; each distinct shape is its own compiled plan.
+        var validIndices = new List<int>(Math.Max(0, numSamples - lookback));
+        for (int idx = lookback; idx < numSamples; idx++)
+            validIndices.Add(idx);
+        int inputDim = 1 + cov;
+
         for (int epoch = 0; epoch < maxEpochs; epoch++)
         {
             if (timeBounded && TrainingCancellationToken.IsCancellationRequested)
                 break;
             TrainingCancellationToken.ThrowIfCancellationRequested();
 
-            var indices = Enumerable.Range(0, numSamples).OrderBy(_ => _random.Next()).ToList();
+            var indices = validIndices.OrderBy(_ => _random.Next()).ToList();
 
             double epochLossSum = 0.0;
             int epochSampleCount = 0;
 
-            for (int batchStart = 0; batchStart < numSamples; batchStart += _options.BatchSize)
+            for (int batchStart = 0; batchStart < indices.Count; batchStart += _options.BatchSize)
             {
                 if (timeBounded && TrainingCancellationToken.IsCancellationRequested)
                     break;
                 TrainingCancellationToken.ThrowIfCancellationRequested();
 
-                int batchEnd = Math.Min(batchStart + _options.BatchSize, numSamples);
-                int batchCount = batchEnd - batchStart;
+                int b = Math.Min(_options.BatchSize, indices.Count - batchStart);
 
-                // Keep only anchors with a complete lookback AND a one-step-ahead target for
-                // every timestep in the window: window inputs y[idx-L .. idx-1], targets
-                // y[idx-L+1 .. idx]. That requires idx ∈ [L, N-1].
-                var validIndices = new List<int>(batchCount);
-                for (int bi = 0; bi < batchCount; bi++)
-                {
-                    int idx = indices[batchStart + bi];
-                    if (idx < lookback || idx >= yNorm.Length)
-                        continue;
-                    validIndices.Add(idx);
-                }
-
-                if (validIndices.Count == 0)
-                    continue;
-
-                int b = validIndices.Count;
-
-                // Per-timestep observation [1, B] (drives the residual-mean skip) and LSTM input
-                // [1+cov, B] (series value + standardized covariates), plus the [B, L] target window.
-                int inputDim = 1 + cov;
-                var obsSteps = new Tensor<T>[lookback];
-                var lstmInputSteps = new Tensor<T>[lookback];
-                for (int t = 0; t < lookback; t++)
-                {
-                    var obs = new Tensor<T>(new[] { 1, b });
-                    var xt = new Tensor<T>(new[] { inputDim, b });
-                    for (int bi = 0; bi < b; bi++)
-                    {
-                        int idx = validIndices[bi];
-                        int seriesIdx = idx - lookback + t;
-                        T yv = yNorm[seriesIdx];
-                        obs[0, bi] = yv;
-                        xt[0, bi] = yv;
-                        for (int c = 0; c < cov; c++)
-                            xt[1 + c, bi] = NumOps.Divide(NumOps.Subtract(x[seriesIdx, c], _covMean[c]), _covStd[c]);
-                    }
-
-                    obsSteps[t] = obs;
-                    lstmInputSteps[t] = xt;
-                }
-
+                // Input [L, 1+cov, B]: per timestep, the series value (row 0, which is also the observation the
+                // residual-mean skip adds to) and the standardized covariates. Target [B, L].
+                var inputData = new T[lookback * inputDim * b];
                 var targetData = new T[b * lookback];
                 for (int bi = 0; bi < b; bi++)
                 {
-                    int idx = validIndices[bi];
+                    int idx = indices[batchStart + bi];
                     for (int t = 0; t < lookback; t++)
-                        targetData[bi * lookback + t] = yNorm[idx - lookback + t + 1];
+                    {
+                        int seriesIdx = idx - lookback + t;
+                        int rowBase = t * inputDim * b;
+                        inputData[rowBase + bi] = yNorm[seriesIdx];
+                        for (int c = 0; c < cov; c++)
+                            inputData[rowBase + (1 + c) * b + bi] =
+                                NumOps.Divide(NumOps.Subtract(x[seriesIdx, c], _covMean[c]), _covStd[c]);
+                        targetData[bi * lookback + t] = yNorm[seriesIdx + 1];
+                    }
                 }
+                var batchInput = new Tensor<T>(new[] { lookback, inputDim, b }, new Vector<T>(inputData));
                 var batchTarget = new Tensor<T>(new[] { b, lookback }, new Vector<T>(targetData));
 
-                using var tape = new GradientTape<T>();
+                // The unrolled LSTM, the distribution head's likelihood, the backward and the Adam update: one fused
+                // compiled plan when it applies (CPU or GPU), the eager tape otherwise (TrainTapeBatch).
+                T batchLoss = TrainTapeBatch(
+                    Array.Empty<ITrainableLayer<T>>(), batchInput, batchTarget,
+                    ForwardPackedHidden, ComputePackedLoss, optimizer, extraParameters: trainableParams);
 
-                // Unroll the LSTM to per-step top hidden states, then let the selected distribution head
-                // build its own likelihood loss (the head owns the residual-mean skip + distribution math).
-                var hiddenSteps = ForwardHidden(lstmInputSteps, b);
-                var batchLoss = _head.ComputeBatchLoss(hiddenSteps, obsSteps, batchTarget);
-
-                var allGrads = tape.ComputeGradients(batchLoss, sources: null);
-                var grads = new Dictionary<Tensor<T>, Tensor<T>>(
-                    Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-                foreach (var param in trainableParams)
-                {
-                    if (allGrads.TryGetValue(param, out var grad))
-                        grads[param] = grad;
-                }
-
-                if (batchLoss.Length > 0)
-                {
-                    double bl = Convert.ToDouble(batchLoss[0]);
-                    epochLossSum += bl * b;
-                    epochSampleCount += b;
-                }
-
-                var context = new TapeStepContext<T>(
-                    trainableParams, grads,
-                    batchLoss.Length > 0 ? batchLoss[0] : NumOps.Zero);
-
-                optimizer.Step(context);
+                epochLossSum += NumOps.ToDouble(batchLoss) * b;
+                epochSampleCount += b;
             }
 
             if (epochSampleCount > 0)
@@ -442,6 +401,49 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
         }
 
         return hiddenSteps;
+    }
+
+    /// <summary>
+    /// Training forward over a packed batch: <paramref name="input"/> is <c>[L, 1+cov, B]</c>. Returns
+    /// <c>[L, H+1, B]</c>, each timestep's top-layer hidden state stacked over its observation row, so the loss can
+    /// hand the distribution head both without the forward reading the batch on the host. Every slice is an engine
+    /// op, which a compiled plan replays against each new batch.
+    /// </summary>
+    private Tensor<T> ForwardPackedHidden(Tensor<T> input)
+    {
+        int steps = input.Shape[0];
+        int inputDim = input.Shape[1];
+        int batch = input.Shape[2];
+
+        var inputSteps = new Tensor<T>[steps];
+        for (int t = 0; t < steps; t++)
+            inputSteps[t] = Engine.Reshape(Engine.TensorNarrow(input, 0, t, 1), new[] { inputDim, batch });
+
+        var hiddenSteps = ForwardHidden(inputSteps, batch);
+        var packed = new Tensor<T>[steps];
+        for (int t = 0; t < steps; t++)
+            packed[t] = Engine.TensorConcatenate(new[] { hiddenSteps[t], Engine.TensorNarrow(inputSteps[t], 0, 0, 1) }, 0);
+        return Engine.TensorStack(packed, 0);
+    }
+
+    /// <summary>Unpacks <see cref="ForwardPackedHidden"/>'s output and returns the head's likelihood loss.</summary>
+    private Tensor<T> ComputePackedLoss(Tensor<T> packed, Tensor<T> target)
+    {
+        int steps = packed.Shape[0];
+        int rows = packed.Shape[1];
+        int batch = packed.Shape[2];
+        int hidden = rows - 1;
+
+        var hiddenSteps = new Tensor<T>[steps];
+        var obsSteps = new Tensor<T>[steps];
+        for (int t = 0; t < steps; t++)
+        {
+            var step = Engine.Reshape(Engine.TensorNarrow(packed, 0, t, 1), new[] { rows, batch });
+            hiddenSteps[t] = Engine.TensorNarrow(step, 0, 0, hidden);
+            obsSteps[t] = Engine.TensorNarrow(step, 0, hidden, 1);
+        }
+
+        return _head.ComputeBatchLoss(hiddenSteps, obsSteps, target);
     }
 
     private List<Vector<T>> SnapshotParameters()

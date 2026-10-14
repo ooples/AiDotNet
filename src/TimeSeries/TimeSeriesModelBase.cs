@@ -300,6 +300,12 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     /// <summary>Whether the most recent training step ran on the fused compiled plan.</summary>
     internal bool LastTrainingStepFused => _tapeStepper?.LastStepFused ?? false;
 
+    /// <summary>Training steps this model has run on the fused compiled plan.</summary>
+    internal int FusedTrainingStepCount => _tapeStepper?.FusedStepCount ?? 0;
+
+    /// <summary>Training steps this model has run on the eager tape.</summary>
+    internal int EagerTrainingStepCount => _tapeStepper?.EagerStepCount ?? 0;
+
     /// <summary>
     /// Gets or sets the trained model parameters.
     /// </summary>
