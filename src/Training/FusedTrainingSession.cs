@@ -113,6 +113,8 @@ internal sealed class FusedTrainingSession<T>
     private readonly Action? _onReset;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _lastOptimizer;
     private bool _persistenceVerified;
+    // The plan whose update the numeric probe last saw land; a later plan is verified numerically again.
+    private object? _verifiedPlan;
     private int _stepsSincePersistenceCheck;
     private bool _replayAgreementVerified;
     private bool _zeroGradientCrossChecked;
@@ -154,6 +156,7 @@ internal sealed class FusedTrainingSession<T>
         IsDisabled = stickyDisable;
         IsCommitted = false;
         _persistenceVerified = false;
+        _verifiedPlan = null;
         _stepsSincePersistenceCheck = 0;
         _replayAgreementVerified = false;
         _zeroGradientCrossChecked = false;
@@ -165,6 +168,7 @@ internal sealed class FusedTrainingSession<T>
         IsDisabled = disabled;
         IsCommitted = false;
         _persistenceVerified = false;
+        _verifiedPlan = null;
         _stepsSincePersistenceCheck = 0;
         _replayAgreementVerified = false;
         _zeroGradientCrossChecked = false;
@@ -258,12 +262,20 @@ internal sealed class FusedTrainingSession<T>
 
         bool verifyPersistence = (!_persistenceVerified && !IsCommitted)
             || ++_stepsSincePersistenceCheck >= PersistenceRecheckInterval;
-        var probe = verifyPersistence ? SampleParameters(request) : null;
+        // Once a replay has been seen to update the live tensors, every later replay runs the same plan, so a
+        // periodic re-check only has to confirm the plan still trains the model's live tensors -- a host-side
+        // comparison (ConfiguredPlanTrainsLiveParameters). The numeric probe below costs a slice, a copy and a
+        // reduction per parameter plus a synchronous readback that drains the device (6-14 ms every 16 steps on
+        // the parity Transformer, a fifth of its CUDA step time); it runs only when that comparison cannot answer.
+        bool structuralRecheck = verifyPersistence && _persistenceVerified && _verifiedPlan is not null
+            && ReferenceEquals(_verifiedPlan, CompiledTapeTrainingStep<T>.ConfiguredPlanIdentity);
+        var probe = verifyPersistence && !structuralRecheck ? SampleParameters(request) : null;
         bool gradientsObserved = false;
         bool gradientNonZero = false;
         void OnGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> gradients)
         {
-            if (verifyPersistence)
+            // Only the numeric check reads whether the gradients were nonzero (a reduction per gradient on the device).
+            if (verifyPersistence && !structuralRecheck)
             {
                 gradientsObserved = true;
                 gradientNonZero = AnyGradientNonZero(gradients);
@@ -355,7 +367,30 @@ internal sealed class FusedTrainingSession<T>
             _replayAgreementVerified = true;
         }
 
-        if (verifyPersistence)
+        if (structuralRecheck)
+        {
+            bool? stillAttached = CompiledTapeTrainingStep<T>.ConfiguredPlanTrainsLiveParameters(
+                (IEnumerable<Tensor<T>>?)request.Selection ?? EnumerateLiveParameters(request));
+            if (stillAttached == true)
+            {
+                _stepsSincePersistenceCheck = 0;
+            }
+            else if (stillAttached == false)
+            {
+                string reason = "the fused compiled plan no longer trains the model's live parameter tensors, so "
+                    + "training continues on the eager tape (ooples/AiDotNet#1822)";
+                Warn(reason);
+                Reset(stickyDisable: true);
+                return Decline(reason);
+            }
+            else
+            {
+                // The plan cannot report its parameters: verify numerically on the next step.
+                _persistenceVerified = false;
+                _stepsSincePersistenceCheck = PersistenceRecheckInterval;
+            }
+        }
+        else if (verifyPersistence)
         {
             bool persisted = probe is not null && AnySampleChanged(probe);
             bool? attached = CompiledTapeTrainingStep<T>.ConfiguredPlanTrainsLiveParameters(
@@ -408,6 +443,7 @@ internal sealed class FusedTrainingSession<T>
             {
                 _persistenceVerified = true;
                 _stepsSincePersistenceCheck = 0;
+                _verifiedPlan = CompiledTapeTrainingStep<T>.ConfiguredPlanIdentity;
             }
         }
 

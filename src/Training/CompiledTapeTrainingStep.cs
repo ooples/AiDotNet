@@ -416,6 +416,10 @@ public static class CompiledTapeTrainingStep<T>
     /// come loose from the model (ooples/AiDotNet#1822). Null when that cannot be read: no configured plan ran the
     /// last step (a mixed-precision plan, or none), or the plan does not report its parameters.
     /// </summary>
+    /// <summary>The compiled plan the last fused step configured (null if none), compared by reference: a session that
+    /// verified one plan's updates numerically trusts its later replays, but not a plan compiled since.</summary>
+    internal static object? ConfiguredPlanIdentity => _configuredPlan;
+
     internal static bool? ConfiguredPlanTrainsLiveParameters(IEnumerable<Tensor<T>> liveParameters)
     {
         if (CurrentState.planOptimizerStep < 0) return null;
