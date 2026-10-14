@@ -1,4 +1,5 @@
-﻿﻿using System.Linq;
+﻿using AiDotNet.Tensors.Engines.Optimization;
+using System.Linq;
 using AiDotNet.Autodiff;
 using AiDotNet.Deployment.Optimization.Quantization;
 using AiDotNet.Deployment.Optimization.Quantization.Training;
@@ -44,9 +45,15 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     AiDotNet.Interfaces.ISelfSupervisedModel, AiDotNet.Models.Parameters.IParameterManifestProvider,
     AiDotNet.Models.Parameters.IParameterSurfaceLifecycle
 {
-    // Held across Train calls. The fused plan owns the optimizer state, so a step object built per call
-    // re-traced and recompiled every call and restarted the optimizer at t = 1 (Adam ~ lr*sign(g)).
-    private AiDotNet.Training.MultiSlotFusedStep<T>? _fusedMultiSlotStep;
+    // Held across Train calls: the fused plan owns the optimizer state, so a session built per call would
+    // restart the moments every step.
+    private AiDotNet.Training.FusedTrainingSession<T>? _fusedSession;
+
+    /// <summary>Training steps this model has run on the fused compiled plan.</summary>
+    internal int FusedTrainingStepCount { get; private set; }
+
+    /// <summary>Training steps this model has run on the eager tape.</summary>
+    internal int EagerTrainingStepCount { get; private set; }
 
     // --- declared state (ModelStateRegistry) ---
     // Identical in every model base because these bases are siblings over the same interfaces rather
@@ -184,21 +191,92 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     public virtual ModelOptions GetOptions() => _options;
 
     /// <summary>
-    /// Opt-in flag: does this subclass's <see cref="PredictNoise"/> /
-    /// <see cref="PredictNoiseBatched"/> path use ONLY traceable engine ops (no
-    /// host-side <c>.Data.Span</c> loops, no per-step class-field mutation)?
-    /// When <c>true</c>, <see cref="Train"/> attempts a
-    /// <see cref="AiDotNet.Training.MultiSlotFusedStep{T}"/> fused-plan step
-    /// with (noisySample, noise) as persistent slots — the compiled plan replays
-    /// the forward per training call so <c>PredictNoise</c> must be free of
-    /// per-call side effects that would freeze at trace time.
-    /// <para>
-    /// Base default is <c>false</c> so existing subclasses (which may still use
-    /// <c>.Data.Span</c> internally) run through the eager tape as before. Override
-    /// after auditing your forward path. See ooples/AiDotNet#1846.
-    /// </para>
+    /// Whether this model can predict training noise from a <c>[B]</c> tensor of timesteps through
+    /// <see cref="PredictTrainingNoise(Tensor{T}, Tensor{T}, Tensor{T}, Tensor{T})"/>. When it can, training runs
+    /// on the shared fused compiled plan, which re-binds each batch's timesteps on every replay; an int timestep
+    /// would be baked into the plan at trace time.
     /// </summary>
-    protected virtual bool SupportsFusedDenoising => false;
+    protected virtual bool CanPredictFromTimestepTensor => false;
+
+    /// <summary>
+    /// Predicts scheduler noise for a noisy training batch whose per-element timesteps arrive as a <c>[B]</c>
+    /// tensor. Must equal <see cref="PredictTrainingNoise(Tensor{T}, int[], bool, Tensor{T}, Tensor{T})"/> for
+    /// the same timesteps.
+    /// </summary>
+    protected virtual Tensor<T> PredictTrainingNoise(
+        Tensor<T> noisySample, Tensor<T> timesteps, Tensor<T> input, Tensor<T> expectedOutput) =>
+        throw new NotSupportedException($"{GetType().Name} cannot predict noise from a timestep tensor.");
+
+    /// <summary>
+    /// The optimizer a fused step trains with, built before the first step. A model with lazy layers resolves
+    /// them first with one forward outside the tape, since an empty parameter set cannot be planned.
+    /// </summary>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? PrepareFusedDenoising(
+        Tensor<T> noisySample, int[] timesteps, bool isBatched, Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (_trainingOptimizer is null && CollectTrainableParameters().Length == 0)
+        {
+            using var noGrad = new NoGradScope<T>();
+            PredictTrainingNoise(noisySample, timesteps, isBatched, input, expectedOutput);
+        }
+
+        return CollectTrainableParameters().Length == 0 ? null : GetOrCreateTrainingOptimizer();
+    }
+    /// <summary>
+    /// One fused denoising step. The input packs each element's flattened noisy sample with its timestep,
+    /// <c>[B, N + 1]</c>, and the forward splits them with engine ops, so every replay trains on that batch's
+    /// own samples and timesteps.
+    /// </summary>
+    private bool TryFusedDenoisingStep(
+        Tensor<T> noisySample, Vector<T> noise, int[] timesteps, int batch,
+        Tensor<T> input, Tensor<T> expectedOutput,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
+    {
+        var parameters = CollectTrainableParameters();
+        if (parameters.Length == 0)
+            return false;
+
+        int perElement = noisySample.Length / batch;
+        var packedData = new T[batch * (perElement + 1)];
+        var sampleSpan = noisySample.AsSpan();
+        for (int b = 0; b < batch; b++)
+        {
+            sampleSpan.Slice(b * perElement, perElement).CopyTo(packedData.AsSpan(b * (perElement + 1), perElement));
+            packedData[b * (perElement + 1) + perElement] = NumOps.FromDouble(timesteps[b]);
+        }
+
+        var sampleShape = noisySample._shape;
+        Tensor<T> Forward(Tensor<T> packed)
+        {
+            var sample = Engine.Reshape(Engine.TensorNarrow(packed, 1, 0, perElement), sampleShape);
+            var stepTimesteps = Engine.Reshape(Engine.TensorNarrow(packed, 1, perElement, 1), new[] { batch });
+            return PredictTrainingNoise(sample, stepTimesteps, input, expectedOutput);
+        }
+
+        // L_simple = mean ||eps - eps_theta||^2, as on the eager path.
+        Tensor<T> Loss(Tensor<T> predicted, Tensor<T> target)
+        {
+            var diff = Engine.TensorSubtract(predicted, target);
+            var sq = Engine.TensorMultiply(diff, diff);
+            return Engine.ReduceMean(sq, Enumerable.Range(0, sq.Shape.Length).ToArray(), keepDims: false);
+        }
+
+        var session = _fusedSession ??= new AiDotNet.Training.FusedTrainingSession<T>(this);
+        var outcome = session.TryStep(new AiDotNet.Training.FusedTrainingStepRequest<T>
+        {
+            Layers = Array.Empty<ITrainableLayer<T>>(),
+            Input = new Tensor<T>(new[] { batch, perElement + 1 }, new Vector<T>(packedData)),
+            Target = new Tensor<T>(sampleShape, noise),
+            Forward = Forward,
+            ComputeLoss = Loss,
+            Optimizer = optimizer,
+            ExtraParameters = parameters,
+        }, out _);
+
+        if (outcome == AiDotNet.Training.FusedStepOutcome.CommittedFailure)
+            session.DropAfterCommittedFailure();
+        return outcome == AiDotNet.Training.FusedStepOutcome.Stepped;
+    }
 
     private static void RestoreShadow(Tensor<T> param, Vector<T> shadow)
     {
@@ -1444,74 +1522,26 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
             noisySampleTensor = new Tensor<T>(trainingSample._shape, noisySample);
         }
 
-        // Preferred fused path: MultiSlotFusedStep with (noisySample, noise,
-        // timestepsPerElement) as persistent slots. Only engages when the
-        // concrete subclass has certified its PredictNoise/PredictNoiseBatched
-        // path as fully traceable by opting in via SupportsFusedDenoising —
-        // eager PredictNoise implementations that use host-side .Data.Span
-        // loops would freeze at trace time. See ooples/AiDotNet#1846.
-        // Only try the fused path when an optimizer has already been resolved
-        // (avoids double-construction with a slightly-different config).
-        var trainingOptimizerForFused = _trainingOptimizer;
-        if (SupportsFusedDenoising
-            && trainingOptimizerForFused is not null
-            && NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
-                trainingOptimizerForFused,
-                out var mfsCfg))
+        // Fused path: forward, loss, backward and the optimizer update as one compiled plan, on the shared
+        // session every base class trains through, with the timesteps as a plan input. It must own the
+        // optimizer from the first step: an eager first step would leave its Adam moments in the eager
+        // optimizer, and the plan would restart them from zero (a full learning-rate step off per step). QAT
+        // stays eager: its straight-through estimator restores full-precision weights between backward and update.
+        if (!IsQuantizationAwareTrainingEnabled
+            && CanPredictFromTimestepTensor
+            && TensorCodecOptions.Current.EnableCompilation
+            && PrepareFusedDenoising(noisySampleTensor, timesteps, isBatched, input, expectedOutput) is { } fusedOptimizer
+            && TryFusedDenoisingStep(noisySampleTensor, noiseVector, timesteps, batchSize, input, expectedOutput, fusedOptimizer))
         {
-            var trainableForFused = CollectTrainableParameters();
-            var noiseSlotT = new Tensor<T>(noisySampleTensor._shape, noiseVector);
-            var slots = new Tensor<T>[]
-            {
-                noisySampleTensor,
-                noiseSlotT,
-            };
-            var multiSlotStep = _fusedMultiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>();
-            var timestepsSnapshot = timesteps;
-            var isBatchedSnapshot = isBatched;
-            Tensor<T> ForwardFromSlots(IReadOnlyList<Tensor<T>> s)
-            {
-                return PredictTrainingNoise(
-                    s[0], timestepsSnapshot, isBatchedSnapshot, input, expectedOutput);
-            }
-            Tensor<T> ComputeLossFromSlots(Tensor<T> pred, IReadOnlyList<Tensor<T>> s)
-            {
-                var diff = Engine.TensorSubtract(pred, s[1]);
-                var sq = Engine.TensorMultiply(diff, diff);
-                var axes = Enumerable.Range(0, sq.Shape.Length).ToArray();
-                return Engine.ReduceMean(sq, axes, keepDims: false);
-            }
-            if (trainableForFused.Length > 0
-                && multiSlotStep.TryStep(
-                    parameterProvider: () => CollectTrainableParameters(),
-                    zeroGradAction: null,
-                    freshSlotData: slots,
-                    forward: ForwardFromSlots,
-                    computeLoss: ComputeLossFromSlots,
-                    optimizerType: mfsCfg.Type,
-                    learningRate: mfsCfg.LearningRate,
-                    beta1: mfsCfg.Beta1,
-                    beta2: mfsCfg.Beta2,
-                    epsilon: mfsCfg.Epsilon,
-                    weightDecay: mfsCfg.WeightDecay,
-                    lrSchedule: mfsCfg.Schedule,
-                    extras: mfsCfg.Extras,
-                    out T _))
-            {
-                // The fused optimizer owns its internal gradient buffers and deliberately
-                // does not expose them. Say so explicitly instead of leaving a stale or
-                // empty public snapshot behind.
-                if (RetainTrainingGradientSurface)
-                    _trainingGradientSurfaceUnavailable = true;
-                if (qatShadows is not null && qatParams is not null)
-                {
-                    for (int i = 0; i < qatParams.Length; i++)
-                        RestoreShadow(qatParams[i], qatShadows[i]);
-                }
-                return;
-            }
+            // The fused optimizer owns its gradient buffers and does not expose them; say so rather than leave
+            // a stale or empty public snapshot behind.
+            if (RetainTrainingGradientSurface)
+                _trainingGradientSurfaceUnavailable = true;
+            FusedTrainingStepCount++;
+            return;
         }
 
+        EagerTrainingStepCount++;
         using var tape = new GradientTape<T>();
 
         // Forward pass — triggers lazy layer initialization, then we walk for
@@ -2643,8 +2673,8 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     {
         if (_disposed || !disposing) return;
         _disposed = true;
-        _fusedMultiSlotStep?.Dispose();
-        _fusedMultiSlotStep = null;
+        _fusedSession?.Reset(stickyDisable: false);
+        _fusedSession = null;
 
         // Always dispose the scheduler we own — schedulers may hold buffers
         // (precomputed alpha/beta arrays, native handles for accelerated
