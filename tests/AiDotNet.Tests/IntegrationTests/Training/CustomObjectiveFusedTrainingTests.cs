@@ -28,7 +28,7 @@ public class CustomObjectiveFusedTrainingTests
     // by a few 1e-8 of the parameter scale per step; a step on baked data moves weights by far more.
     private const double RelativeTolerance = 1e-5;
 
-    public static TheoryData<string> Scenarios => new() { "VideoMAE", "DeepONet", "FNO" };
+    public static TheoryData<string> Scenarios => new() { "VideoMAE", "DeepONet", "FNO", "MQCNN", "CodeSwitchingASR" };
 
     private sealed record RunResult(Vector<double> Parameters, int FusedSteps, int EagerSteps);
 
@@ -40,6 +40,8 @@ public class CustomObjectiveFusedTrainingTests
         "VideoMAE" => WarmVideoMae(BuildVideoMae()),
         "DeepONet" => BuildDeepOnet(),
         "FNO" => Warm(BuildFno(), new Tensor<double>([1, 2, 4])),
+        "MQCNN" => Warm(BuildMqcnn(), new Tensor<double>([1, 8, 1])),
+        "CodeSwitchingASR" => Warm(BuildAsr(), new Tensor<double>([4, 8])),
         _ => throw new ArgumentOutOfRangeException(nameof(scenario)),
     };
 
@@ -65,6 +67,8 @@ public class CustomObjectiveFusedTrainingTests
             case "VideoMAE": TrainVideoMae((VideoMAE<double>)model); break;
             case "DeepONet": TrainDeepOnet((DeepOperatorNetwork<double>)model); break;
             case "FNO": TrainFno((FourierNeuralOperator<double>)model); break;
+            case "MQCNN": TrainOnChangingBatches(model, [1, 8, 1], [1, 2 * MqcnnQuantiles]); break;
+            case "CodeSwitchingASR": TrainOnChangingBatches(model, [4, 8], [4, AsrOptions().VocabSize]); break;
         }
     }
 
@@ -139,6 +143,41 @@ public class CustomObjectiveFusedTrainingTests
             }
         }
         model.Train(functions, locations, targets, epochs: 2, learningRate: 0.01, verbose: false);
+    }
+
+    private const int MqcnnQuantiles = 3;
+
+    private static AiDotNet.Finance.Forecasting.Neural.MQCNN<double> BuildMqcnn() => new(
+        new NeuralNetworkArchitecture<double>(inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 1, outputSize: 2 * MqcnnQuantiles),
+        new AiDotNet.Models.Options.MQCNNOptions<double>
+        {
+            LookbackWindow = 8, ForecastHorizon = 2, EncoderChannels = 4, DecoderChannels = 4,
+            NumEncoderLayers = 1, NumDecoderLayers = 1, DropoutRate = 0.0,
+        });
+
+    private static AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASROptions AsrOptions() => new()
+    {
+        EncoderDim = 16, NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 8, DecoderDim = 16,
+        NumDecoderLayers = 1, MandarinCharVocabSize = 6, EnglishBpeVocabSize = 5, MaxTextLength = 16, DropoutRate = 0.0,
+    };
+
+    private static AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASR<double> BuildAsr() => new(
+        new NeuralNetworkArchitecture<double>(inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification, inputSize: 64, outputSize: 32),
+        AsrOptions());
+
+    // Three Train calls, each on its own input and target.
+    private static void TrainOnChangingBatches(NeuralNetworkBase<double> model, int[] inputShape, int[] targetShape)
+    {
+        for (int step = 0; step < 3; step++)
+        {
+            var input = new Tensor<double>(inputShape);
+            var target = new Tensor<double>(targetShape);
+            for (int i = 0; i < input.Length; i++) input[i] = Math.Sin(0.37 * i + step);
+            for (int i = 0; i < target.Length; i++) target[i] = 0.5 + 0.4 * Math.Cos(0.23 * i - step);
+            model.Train(input, target);
+        }
     }
 
     private static FourierNeuralOperator<double> BuildFno() =>
