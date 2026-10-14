@@ -123,6 +123,12 @@ internal sealed class TapeTrainingStepper<T>
     /// <summary>Whether the most recent <see cref="Step"/> ran on the fused compiled plan.</summary>
     public bool LastStepFused { get; private set; }
 
+    /// <summary>Steps this stepper ran on the fused compiled plan.</summary>
+    public int FusedStepCount { get; private set; }
+
+    /// <summary>Steps this stepper ran on the eager tape.</summary>
+    public int EagerStepCount { get; private set; }
+
     /// <summary>Trains one batch and returns its loss.</summary>
     public T Step(FusedTrainingStepRequest<T> request)
     {
@@ -130,10 +136,12 @@ internal sealed class TapeTrainingStepper<T>
         if (TryFusedStep(request, out T fusedLoss))
         {
             LastStepFused = true;
+            FusedStepCount++;
             return fusedLoss;
         }
 
         LastStepFused = false;
+        EagerStepCount++;
         return EagerStep(request);
     }
 
