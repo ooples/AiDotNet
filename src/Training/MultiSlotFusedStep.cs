@@ -43,6 +43,12 @@ public sealed class MultiSlotFusedStep<T> : IDisposable
 
     private static IEngine Engine => AiDotNetEngine.Current;
 
+    /// <summary>Steps that ran on the fused compiled plan.</summary>
+    internal int FusedStepCount { get; private set; }
+
+    /// <summary>Steps the plan declined, which the caller then ran eagerly.</summary>
+    internal int DeclinedStepCount { get; private set; }
+
     /// <summary>
     /// Trains one step on the fused compiled plan. Returns false when the plan does not apply; the caller then runs
     /// its eager step.
@@ -125,7 +131,14 @@ public sealed class MultiSlotFusedStep<T> : IDisposable
 
         if (outcome == FusedStepOutcome.CommittedFailure)
             _session.DropAfterCommittedFailure();
-        return outcome == FusedStepOutcome.Stepped;
+        if (outcome == FusedStepOutcome.Stepped)
+        {
+            FusedStepCount++;
+            return true;
+        }
+
+        DeclinedStepCount++;
+        return false;
     }
 
     /// <summary>Forgets the compiled plan and its optimizer state.</summary>
