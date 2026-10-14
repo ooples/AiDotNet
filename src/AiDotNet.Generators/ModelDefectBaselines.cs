@@ -6,22 +6,16 @@ namespace AiDotNet.Generators;
 /// </summary>
 internal static class ModelDefectBaselines
 {
-    /// <summary>ADNDEF001: models implemented twice (same simple name, same primary paper), 60 types.</summary>
+    /// <summary>ADNDEF001: models implemented twice (same name ignoring a Model/Network/Net/TTS suffix, same primary paper) without a verified [TaskVariantOf] or [DistinctImplementationOf].</summary>
     internal static readonly System.Collections.Generic.HashSet<string> DuplicatePapers =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
-            "AiDotNet.Clustering.Neural.SelfOrganizingMap<T>",
-            "AiDotNet.ComputerVision.Segmentation.Foundation.SAM<T>",
+            "AiDotNet.Audio.Classification.AST<T>",
+            "AiDotNet.Audio.Fingerprinting.ASTModel<T>",
             "AiDotNet.ComputerVision.Segmentation.OpenVocabulary.GroundedSAM2<T>",
             "AiDotNet.ComputerVision.Segmentation.Referring.GLaMM<T>",
-            "AiDotNet.Diffusion.TextToImage.LuminaT2XModel<T>",
-            "AiDotNet.Diffusion.Video.LuminaT2XModel<T>",
-            "AiDotNet.Finance.Forecasting.Neural.WaveNet<T>",
-            "AiDotNet.NeuralNetworks.SelfOrganizingMap<T>",
             "AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>",
             "AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T>",
-            "AiDotNet.TextToSpeech.Vocoders.WaveNet<T>",
-            "AiDotNet.VisionLanguage.Encoders.SAM<T>",
             "AiDotNet.VisionLanguage.Grounding.GLaMM<T>",
             "AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>",
         };
@@ -372,7 +366,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.VisionLanguage.Encoders.RADIOv25<T>",
             "AiDotNet.VisionLanguage.Encoders.RegionCLIP<T>",
             "AiDotNet.VisionLanguage.Encoders.RemoteCLIP<T>",
-            "AiDotNet.VisionLanguage.Encoders.SAM<T>",
             "AiDotNet.VisionLanguage.Encoders.SigLIPSO<T>",
             "AiDotNet.VisionLanguage.Encoders.ViT<T>",
             "AiDotNet.VisionLanguage.Foundational.METER<T>",

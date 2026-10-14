@@ -261,6 +261,7 @@ namespace AiDotNet.AutoML
     [ModelComplexity(ModelComplexity.VeryHigh)]
     [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Denoising Diffusion Probabilistic Models", "https://arxiv.org/abs/2006.11239")]
+    [TaskVariantOf(typeof(AiDotNet.AutoML.DiffusionAutoMLModel<>), "architecture search over the diffusion model")]
     public class DiffusionAutoML<T> : AutoMLModelBase<T, Tensor<T>, Tensor<T>>
     {
         private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();

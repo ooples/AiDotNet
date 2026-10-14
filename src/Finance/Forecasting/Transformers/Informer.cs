@@ -78,6 +78,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
                 Schedule = LearningRateSchedulerType.Exponential, DecayRate = 0.5,
                 ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
                 Source = "Zhou et al. 2021 (Experimental Details / Setup): Adam, 'learning rate starts from 1e-4, decaying two times smaller every epoch', batch size 32. Verified against the paper.")]
+[TaskVariantOf(typeof(AiDotNet.TimeSeries.InformerModel<>), "financial forecasting")]
 public partial class Informer<T> : ForecastingModelBase<T>
 {
     private readonly bool _useNativeMode;

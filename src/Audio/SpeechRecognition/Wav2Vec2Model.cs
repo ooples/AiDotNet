@@ -69,6 +69,7 @@ namespace AiDotNet.Audio.SpeechRecognition;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("wav2vec 2.0: A Framework for Self-Supervised Learning of Speech Representations", "https://arxiv.org/abs/2006.11477", Year = 2020, Authors = "Alexei Baevski, Henry Zhou, Abdelrahman Mohamed, Michael Auli")]
+[TaskVariantOf(typeof(AiDotNet.Audio.Foundations.Wav2Vec2<>), "speech recognition with a CTC head")]
 public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 {
     private readonly Wav2Vec2ModelOptions _options;

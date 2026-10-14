@@ -72,6 +72,7 @@ namespace AiDotNet.Audio.Classification;
     + "tower runs, so Layers[0] never sees the raw samples.")]
 [StackInputLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     BatchOptional = true)]
+[TaskVariantOf(typeof(AiDotNet.Audio.Fingerprinting.CLAPModel<>), "zero-shot and fine-tuned audio classification")]
 public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 {
     #region Fields

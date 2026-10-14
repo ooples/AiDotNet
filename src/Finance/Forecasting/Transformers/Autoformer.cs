@@ -78,6 +78,7 @@ namespace AiDotNet.Finance.Forecasting.Transformers;
                 Schedule = LearningRateSchedulerType.Exponential, DecayRate = 0.5,
                 ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
                 Source = "Wu et al. 2021, Implementation details: Adam with an initial learning rate of 1e-4 and batch size 32; the official code (lradj 'type1') halves the rate after every epoch.")]
+[TaskVariantOf(typeof(AiDotNet.TimeSeries.AutoformerModel<>), "financial forecasting")]
 public partial class Autoformer<T> : ForecastingModelBase<T>
 {
     private readonly bool _useNativeMode;

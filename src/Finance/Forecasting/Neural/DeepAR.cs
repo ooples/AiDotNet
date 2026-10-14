@@ -74,6 +74,7 @@ namespace AiDotNet.Finance.Forecasting.Neural;
 [ResearchPaper("DeepAR: Probabilistic Forecasting with Autoregressive Recurrent Networks", "https://arxiv.org/abs/1704.04110", Year = 2020, Authors = "David Salinas, Valentin Flunkert, Jan Gasthaus, Tim Januschowski")]
 [PaperOptimizer(OptimizerKind.Adam, Provenance = RecipeProvenance.PerDataset,
                 Source = "Salinas et al. 2020, Sec. 4: Adam with early stopping. The paper tunes the learning rate manually per dataset, so there is no single value to declare and the provenance says so rather than the omission being silent.")]
+[TaskVariantOf(typeof(AiDotNet.TimeSeries.DeepARModel<>), "financial forecasting")]
 public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProvider<T>
 {
     private readonly DeepAROptions<T> _options;
