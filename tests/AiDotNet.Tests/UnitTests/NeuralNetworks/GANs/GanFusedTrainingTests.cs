@@ -332,4 +332,41 @@ public class GanFusedTrainingTests
         var eager = RunSteps(acgan.Generator, acgan.Discriminator, Steps(acgan), compile: false);
         var fused = RunSteps(twin.Generator, twin.Discriminator, Steps(twin), compile: true);
         AssertFusedMatchesEager("ACGAN", 2, eager, fused, before);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task InfoGanSteps_RunFused_AndTrainGeneratorQAndDiscriminatorAtOneIterate()
+    {
+        // The generator and Q share one loss and step from the same iteration's weights; the discriminator trains
+        // on each iteration's own samples.
+        await Task.Yield();
+        InfoGAN<double> Make()
+        {
+            var gan = new InfoGAN<double>(
+                DenseNet(NeuralNetworkTaskType.Regression, 6, 16, 4, new TanhActivation<double>()),
+                DenseNet(NeuralNetworkTaskType.BinaryClassification, 4, 16, 1, new IdentityActivation<double>()),
+                DenseNet(NeuralNetworkTaskType.Regression, 4, 16, 2, new IdentityActivation<double>()),
+                latentCodeSize: 2,
+                inputType: InputType.OneDimensional);
+            gan.Generator.Predict(Data(6, 0));
+            gan.Discriminator.Predict(Data(4, 0));
+            gan.QNetwork.Predict(Data(4, 0));
+            return gan;
+        }
+        var infogan = Make();
+        var twin = Make();
+        twin.Generator.SetParameters(infogan.Generator.GetParameters());
+        twin.Discriminator.SetParameters(infogan.Discriminator.GetParameters());
+        twin.QNetwork.SetParameters(infogan.QNetwork.GetParameters());
+        var before = infogan.Generator.GetParameters();
+
+        Action<int> Steps(InfoGAN<double> gan) => s => gan.TrainStep(Data(4, 100 + s), Data(4, s), Data(2, 50 + s));
+        int discriminatorFused = twin.Discriminator.CustomFusedStepCount;
+        var eager = RunSteps(infogan.Generator, infogan.QNetwork, Steps(infogan), compile: false);
+        var fused = RunSteps(twin.Generator, twin.QNetwork, Steps(twin), compile: true);
+        AssertFusedMatchesEager("InfoGAN", 2, eager, fused, before);
+
+        Assert.Equal(4, twin.Discriminator.CustomFusedStepCount - discriminatorFused);
+        double discriminator = Worst(infogan.Discriminator.GetParameters().ToArray(), twin.Discriminator.GetParameters().ToArray());
+        Assert.True(discriminator <= Tolerance, $"InfoGAN: fused discriminator diverged from eager by {discriminator:G6}.");
     }}
