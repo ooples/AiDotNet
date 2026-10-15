@@ -1,4 +1,4 @@
-﻿using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Engines.Autodiff;
 using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
@@ -406,12 +406,13 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         // Train generator to fool discriminator (adversarial objective)
         Generator.SetTrainingMode(true);
         var trainableGen = (NeuralNetworkBase<T>)Generator;
-        return trainableGen.TrainWithCustomLoss(generatorInput, genOutput =>
+        return trainableGen.TrainWithCustomLossFused(generatorInput, (stepInput, genOutput) =>
         {
-            // Concatenate generator output with conditions for discriminator
-            var conditions = Engine.TensorSlice(generatorInput,
+            // Concatenate generator output with conditions for discriminator. The conditions come from the step's own
+            // input, which a compiled plan rebinds on every replay.
+            var conditions = Engine.TensorSlice(stepInput,
                 new[] { 0, Generator.Architecture.InputSize - _numConditionClasses },
-                new[] { generatorInput.Shape[0], _numConditionClasses });
+                new[] { stepInput.Shape[0], _numConditionClasses });
             var withConditions = ConcatenateImageAndCondition(genOutput, conditions);
 
             // On the tape, with the discriminator frozen. Discriminator.Predict opened a NoGradScope and

@@ -415,7 +415,7 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
         // Train generator: minimize -mean(Critic(fake)) (Wasserstein objective)
         Tensor<T> newNoise = GenerateRandomNoiseTensor(noise.Shape[0], Generator.Architecture.InputSize);
         var trainableGen = (NeuralNetworkBase<T>)Generator;
-        T generatorLoss = trainableGen.TrainWithCustomLoss(newNoise, genOutput =>
+        T generatorLoss = trainableGen.TrainWithCustomLossFused(newNoise, (_, genOutput) =>
         {
             // On the tape, with the critic frozen. Critic.Predict opened a NoGradScope, which detached
             // the critic's forward and left the generator with exactly zero gradient.

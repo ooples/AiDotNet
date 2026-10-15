@@ -5030,6 +5030,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     private protected void ScatterFusedGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
     {
+        // A step that ran on the fused session (or its eager twin) never reaches ComputeAndPublishParameterGradients,
+        // so the reachability probe is told here. A tensor the step's loss does not reach gets an all-zero
+        // gradient from the plan, which the probe counts as unreached.
+        TapeReachabilityProbe<T>.Current?.Record(this, grads);
         PublishParameterGradients(grads);
     }
 
@@ -11425,7 +11429,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <param name="parameterProvider">The tensors to train, when not the network's own trainable set; read again after
     /// the first forward resolves lazily shaped layers.</param>
     /// <returns>The step's loss.</returns>
-    protected T TrainCustomTapeStep(
+    protected internal T TrainCustomTapeStep(
         Tensor<T> input,
         Tensor<T> target,
         Func<Tensor<T>, Tensor<T>> forward,
@@ -13218,6 +13222,39 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </param>
     /// <param name="optimizer">Optional optimizer override. Uses default Adam if null.</param>
     /// <returns>The scalar loss value for monitoring.</returns>
+    /// <summary>
+    /// One training step on this network's output under a caller-defined loss, on the shared fused session.
+    /// </summary>
+    /// <remarks>
+    /// The loss receives the step's input as well as the network's output, and must read per-step data only through
+    /// them: a compiled plan rebinds the input on every replay and bakes any other host value the loss captures.
+    /// Other networks' live weights (a frozen discriminator) are read as they stand at each step. For a loss that
+    /// captures per-step tensors (advantages, actions), use
+    /// <see cref="TrainWithCustomLoss(Tensor{T}, Func{Tensor{T}, Tensor{T}}, IGradientBasedOptimizer{T, Tensor{T}, Tensor{T}}?)"/>.
+    /// </remarks>
+    internal T TrainWithCustomLossFused(
+        Tensor<T> input,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (computeLoss is null) throw new ArgumentNullException(nameof(computeLoss));
+
+        SetTrainingMode(true);
+        try
+        {
+            // The forward returns the loss itself, so the objective sees the rebound input; the target is unused.
+            return TrainCustomTapeStep(input, input,
+                stepInput => computeLoss(stepInput, ForwardForTraining(stepInput)),
+                (loss, _) => loss,
+                optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
     public T TrainWithCustomLoss(
         Tensor<T> input,
         Func<Tensor<T>, Tensor<T>> computeLoss,
@@ -13432,6 +13469,43 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return lossValue;
     }
 
+    /// <summary>
+    /// A training-mode forward that records nothing and leaves every layer's registered state (BatchNorm running
+    /// statistics and the like) as it found it; the output is a detached copy.
+    /// </summary>
+    /// <remarks>
+    /// For a step that needs a network's training-mode output as data before the step that trains it runs the same
+    /// forward again: an adversarial iteration's generated samples for the discriminator, ahead of the generator's
+    /// own step. The values are the ones that step's forward computes (same weights, same batch statistics), and the
+    /// running statistics still advance once per iteration, in the step.
+    /// </remarks>
+    internal Tensor<T> ForwardForTrainingDetached(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+
+        var saved = new List<(Tensor<T> Buffer, T[] Values)>();
+        foreach (var layer in Layers) SnapshotBuffers(layer, saved);
+        try
+        {
+            using (new NoGradScope<T>())
+                return ForwardForTraining(input).Clone();
+        }
+        finally
+        {
+            foreach (var (buffer, values) in saved)
+                values.AsSpan().CopyTo(buffer.AsWritableSpan());
+        }
+    }
+
+    private static void SnapshotBuffers(ILayer<T> layer, List<(Tensor<T> Buffer, T[] Values)> saved)
+    {
+        if (layer is LayerBase<T> concrete)
+        {
+            foreach (var (_, buffer) in concrete.GetRegisteredBuffers())
+                saved.Add((buffer, buffer.ToArray()));
+        }
+        foreach (var sub in layer.GetSubLayers()) SnapshotBuffers(sub, saved);
+    }
     /// <summary>
     /// Runs this network's forward on the caller's active gradient tape with the network frozen:
     /// in evaluation mode, and stepped by nobody unless the caller hands its parameters to

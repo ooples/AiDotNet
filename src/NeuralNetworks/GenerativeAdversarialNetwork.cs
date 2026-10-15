@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
@@ -561,62 +561,16 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
     /// </remarks>
     public (T discriminatorLoss, T generatorLoss) TrainStep(Tensor<T> realImages, Tensor<T> noise)
     {
-        // Ensure we're in training mode
-        Generator.SetTrainingMode(true);
-        Discriminator.SetTrainingMode(true);
-
-        // ----- Train the discriminator -----
-
-        // Generate fake images
-        Tensor<T> fakeImages = GenerateImages(noise);
-
-        // Store batches for feature matching if enabled
-        if (UseFeatureMatching)
-        {
-            _lastRealBatch = realImages.Clone();
-            _lastFakeBatch = fakeImages.Clone();
-        }
-
-        // Get batch size from real images tensor
-        int batchSize = realImages.Shape[0];
-
-        // Create label tensors (1 for real, 0 for fake)
-        Tensor<T> realLabels = CreateLabelTensor(batchSize, NumOps.One);
-        Tensor<T> fakeLabels = CreateLabelTensor(batchSize, NumOps.Zero);
-
-        // Train discriminator with tape-based autodiff
-        Discriminator.Train(realImages, realLabels);
-        Discriminator.Train(fakeImages, fakeLabels);
-
-        // Compute discriminator loss for monitoring
-        var realPred = Discriminator.Predict(realImages);
-        var fakePred = Discriminator.Predict(fakeImages);
-        T realLoss = LossFunction.CalculateLoss(realPred.ToVector(), realLabels.ToVector());
-        T fakeLoss = LossFunction.CalculateLoss(fakePred.ToVector(), fakeLabels.ToVector());
-        T discriminatorLoss = NumOps.Divide(NumOps.Add(realLoss, fakeLoss), NumOps.FromDouble(2.0));
-        _lastDiscriminatorLoss = discriminatorLoss;
-
-        // ----- Train the generator with tape -----
-        Tensor<T> newFakeImages = GenerateImages(noise);
-        Tensor<T> allRealLabels = CreateLabelTensor(batchSize, NumOps.One);
-
-        // Generator wants discriminator to classify fakes as real
-        Generator.Train(noise, allRealLabels);
-
-        // Compute generator loss for monitoring
-        var genPred = Discriminator.Predict(newFakeImages);
-        T generatorLoss = LossFunction.CalculateLoss(genPred.ToVector(), allRealLabels.ToVector());
-        _lastGeneratorLoss = generatorLoss;
-
-        // Track generator loss
-        _generatorLosses.Add(generatorLoss);
-        if (_generatorLosses.Count > 100)
-        {
-            _generatorLosses.RemoveAt(0);
-        }
-
-        return (discriminatorLoss, generatorLoss);
+        // One adversarial iteration, exactly the one Train runs: the discriminator on real and generated samples, then
+        // the generator through the frozen discriminator. This used to train the generator with
+        // Generator.Train(noise, realLabels), regressing its images onto the [batch, 1] "real" labels instead of
+        // learning from the discriminator.
+        Train(noise, realImages);
+        return (_lastDiscriminatorLoss, _lastGeneratorLoss);
     }
+
+    // The generator step's loss reads only the discriminator's score; a fused step still takes a target.
+    private static readonly Tensor<T> GeneratorStepTarget = new Tensor<T>(new[] { 1 });
 
     /// <summary>
     /// Creates a tensor filled with a specified value, typically used for labels.
@@ -972,38 +926,13 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
 
         // ------------ Train Discriminator ------------
 
-        // Issue #1390 perf fix: run the generator forward ONCE per Train()
-        // call instead of twice. Previously the disc step received a
-        // Generator.Predict(input) output (eval mode, NoGradScope) and the
-        // gen step ran ForwardForTraining(input) inside TrainWithCustomLoss
-        // — two full generator forwards per iteration (~19 ms wasted on the
-        // DCGAN MoreData fixture per the issue's substep profile).
-        //
-        // New flow:
-        //   1. Open the generator's gradient tape here.
-        //   2. Run ForwardForTraining ONCE on the tape -> fakeTapeTracked.
-        //   3. Take a value-copy detached snapshot for the disc step.
-        //   4. Disc step opens its own nested tape (independent of gen tape
-        //      because ThreadStatic _current save/restore in GradientTape).
-        //   5. Gen step reuses fakeTapeTracked (still attached to the open
-        //      gen tape) and calls BackwardAndStepOnPrecomputedLoss to drive
-        //      the optimizer without a second ForwardForTraining call.
-        //
-        // Behavior note: the disc now trains on train-mode generator output
-        // (uses batch BN stats, would apply Dropout if any) rather than the
-        // eval-mode Predict output. This matches the PyTorch DCGAN tutorial
-        // convention (`fake = G(z); fake_detached = fake.detach()`). DCGAN
-        // architecture has no Dropout; the BN distribution shift is the
-        // standard adversarial behavior, not a regression.
-        using var genTape = new GradientTape<T>();
-        var fakeTapeTracked = ((NeuralNetworkBase<T>)Generator).ForwardForTraining(input);
-
-        // Detached value-copy for the discriminator step. A fresh Tensor<T>
-        // with no GradNode chain — ops touching it record no parent link to
-        // the gen tape, so the disc step can't leak gradients into the
-        // generator's parameters.
-        var fakeImages = new Tensor<T>(fakeTapeTracked.Shape.ToArray());
-        fakeTapeTracked.AsSpan().CopyTo(fakeImages.AsWritableSpan());
+        // The discriminator's generated samples come from a training-mode generator forward that records nothing and
+        // leaves the generator's running statistics untouched: the same values the generator step's own forward
+        // computes below (same weights, same batch statistics), with the statistics still advancing once per
+        // iteration, in that step. That step runs on the generator's fused session, so it needs a forward of its own;
+        // sharing one taped forward between the two steps (#1390) kept the generator step eager.
+        var trainableGen = (NeuralNetworkBase<T>)Generator;
+        var fakeImages = trainableGen.ForwardForTrainingDetached(input);
 
         // Cache real / fake batches only when an auxiliary loss path needs
         // them. Previously this clone ran unconditionally for UseFeatureMatching;
@@ -1098,7 +1027,6 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
         // formulated directly on discriminator logits and doesn't need a
         // pre-built "all real" label tensor — that's implicit in the
         // -log σ(disc(fake)) form.
-        var trainableGen = (NeuralNetworkBase<T>)Generator;
         // The discriminator must be in EVAL mode for the generator step (its
         // BatchNorm running stats / Dropout masks are frozen relative to the
         // generator update — Goodfellow 2014 §3 "fix the discriminator to its
@@ -1119,40 +1047,19 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
         T generatorLoss;
         try
         {
-            // Issue #1390: reuse the tape-tracked generator output from the
-            // step start (line ~929) instead of re-running ForwardForTraining
-            // inside TrainWithCustomLoss. The gen tape opened earlier
-            // (genTape) is still active; the disc-layer Forward calls below
-            // continue to record on it, then BackwardAndStepOnPrecomputedLoss
-            // drives gradient compute + optimizer step on the shared tape.
-            //
-            // Walk the discriminator layer-by-layer in eval mode (but WITHOUT
-            // NoGradScope) so each Forward call records on genTape. This
-            // keeps disc weights fixed (only gen params are passed to
-            // ComputeGradients inside BackwardAndStepOnPrecomputedLoss) while
-            // letting the adversarial signal propagate through every BN /
-            // Conv / activation back to fakeTapeTracked → Generator's weights.
-            // The shared frozen forward (NeuralNetworkBase.ForwardFrozenOnTape) instead of a walk over
-            // Discriminator.Layers written out here: every GAN now scores through one path, which also
-            // honours a discriminator that overrides ForwardForTraining.
-            var discScore = Discriminator.ForwardFrozenOnTape(fakeTapeTracked);
-
-            // Generator loss: non-saturating BCE-with-logits per Goodfellow
-            // 2014 §3, matching the BCE-with-logits criterion that this base
-            // class wires into the Discriminator (GetDefaultLossFunction(
-            // BinaryClassification) = BCE-with-logits).
-            //
-            // -log σ(discScore) is the per-sample non-saturating generator
-            // term. Implemented via the numerically-stable LogSigmoid identity
-            // -log σ(x) = softplus(-x), where softplus is the tape-tracked
-            // Engine.Softplus op. ReduceMean over all axes gives the scalar
-            // loss the tape requires.
-            var allAxes = Enumerable.Range(0, discScore.Shape.Length).ToArray();
-            var negLogSigmoid = Engine.Softplus(Engine.TensorNegate(discScore));
-            var lossTensor = Engine.ReduceMean(negLogSigmoid, allAxes, keepDims: false);
-
-            generatorLoss = trainableGen.BackwardAndStepOnPrecomputedLoss(genTape, lossTensor);
-        }
+            // One step on the generator's fused session: the generator forward, the frozen discriminator's score and
+            // the non-saturating loss, -log σ(D(G(z))) = softplus(-D(G(z))) (Goodfellow 2014 §3, on the logits of
+            // the BCE-with-logits discriminator), compiled with the backward and the update. The discriminator is
+            // read, never stepped: only the generator's parameters are trained. The target is unused.
+            var discriminator = Discriminator;
+            generatorLoss = trainableGen.TrainCustomTapeStep(
+                input,
+                GeneratorStepTarget,
+                z => discriminator.ForwardFrozenOnTape(trainableGen.ForwardForTraining(z)),
+                (discScore, _) => Engine.ReduceMean(
+                    Engine.Softplus(Engine.TensorNegate(discScore)),
+                    Enumerable.Range(0, discScore.Shape.Length).ToArray(),
+                    keepDims: false));        }
         finally
         {
             Discriminator.SetTrainingMode(prevDiscriminatorTrainingMode);
