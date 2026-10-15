@@ -241,6 +241,16 @@ public partial class NodeClassificationModel<T> : GraphModelLayoutBase<T>, AiDot
     /// All graph convolutional layers in the model will use this adjacency matrix.
     /// </para>
     /// </remarks>
+    // Points every graph layer at an adjacency without changing the model's own: a training step's packed copy, then
+    // the model's again.
+    private void SetLayerAdjacency(Tensor<T> adjacency)
+    {
+        foreach (var layer in Layers)
+        {
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
+                graphLayer.SetAdjacencyMatrix(adjacency);
+        }
+    }
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
         _cachedAdjacencyMatrix = adjacencyMatrix;
@@ -327,7 +337,38 @@ public partial class NodeClassificationModel<T> : GraphModelLayoutBase<T>, AiDot
         }
 
         EnsureDefaultAdjacencyForInput(input);
-        TrainWithTape(input, expectedOutput, _optimizer);
+        if (_lossFunction is LossFunctionBase<T> tapeLoss && _cachedAdjacencyMatrix is not null)
+        {
+            // The adjacency is part of the step's data: the graph layers read it in the forward, and a compiled plan
+            // bakes anything its forward reads other than its input. Packed with the node features, it reaches the
+            // layers from the step's own input, so a plan traced on one graph trains a new graph on its own
+            // structure. The layers get the model's adjacency back after.
+            var adjacency = _cachedAdjacencyMatrix;
+            int[] featureShape = input._shape;
+            int[] adjacencyShape = adjacency._shape;
+            int featureLength = input.Length;
+            try
+            {
+                TrainCustomTapeStep(
+                    Training.StepInputPacking<T>.Pack(input, adjacency),
+                    expectedOutput,
+                    packed =>
+                    {
+                        SetLayerAdjacency(Training.StepInputPacking<T>.Slice(packed, featureLength, adjacencyShape));
+                        return Forward(Training.StepInputPacking<T>.Slice(packed, 0, featureShape));
+                    },
+                    tapeLoss.ComputeTapeLoss,
+                    _optimizer);
+            }
+            finally
+            {
+                SetLayerAdjacency(adjacency);
+            }
+        }
+        else
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
 
         SetTrainingMode(false);
     }

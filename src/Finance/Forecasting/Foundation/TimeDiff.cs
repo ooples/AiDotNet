@@ -400,7 +400,6 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
                 (predicted, target) => _lossFunction.ComputeTapeLoss(predicted, target),
                 _optimizer,
                 () => Training.TapeTrainingStep<T>.CollectParameters(Layers));
-            StepSchedulerIfSupported(_optimizer);
         }
         finally
         {

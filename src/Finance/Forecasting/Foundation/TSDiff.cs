@@ -328,7 +328,6 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingObje
                 (predicted, epsilon) => _lossFunction.ComputeTapeLoss(predicted, epsilon),
                 _optimizer,
                 () => Training.TapeTrainingStep<T>.CollectParameters(Layers));
-            StepSchedulerIfSupported(_optimizer);
         }
         finally
         {

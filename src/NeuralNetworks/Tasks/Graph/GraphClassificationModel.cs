@@ -273,6 +273,16 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
     /// Sets the adjacency matrix for all graph layers in the model.
     /// </summary>
     /// <param name="adjacencyMatrix">The graph adjacency matrix.</param>
+    // Points every graph layer at an adjacency without changing the model's own: a training step's packed copy, then
+    // the model's again.
+    private void SetLayerAdjacency(Tensor<T> adjacency)
+    {
+        foreach (var layer in Layers)
+        {
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
+                graphLayer.SetAdjacencyMatrix(adjacency);
+        }
+    }
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
         _cachedAdjacencyMatrix = adjacencyMatrix;
@@ -711,23 +721,33 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
                 + $"implements ComputeTapeLoss); the configured loss '{_lossFunction.GetType().Name}' is "
                 + "not tape-differentiable. Supply a LossFunctionBase<T>-derived loss such as CrossEntropyWithLogitsLoss.");
 
-        // Fused compiled step (FusedTrainingStep): forward + backward + optimizer update as one plan,
-        // GPU-resident on a GPU engine and a fused CPU kernel otherwise. Falls through to the eager
-        // tape+optimizer path when it does not apply (unsupported optimizer, non-compilable graph).
-        // Applied per Train() call because GraphClassificationModel.Train is a single-batch entry.
-        var trainableLayers = Layers
-            .Where(l => l is ITrainableLayer<T>).Cast<ITrainableLayer<T>>()
-            .ToList();
-        // The shared training step: the fused plan when it applies, otherwise the shared eager tape step with the
-        // same optimizer and gradient publication. Every registered tensor (nested modules included) is trained.
-        LastLoss = AiDotNet.Training.FusedTrainingStep<T>.Step(
-            this, trainableLayers, input, expectedOutput,
-            forward: Forward,
-            computeLoss: tapeLoss.ComputeTapeLoss,
-            optimizer: _optimizer,
-            extraTensors: Training.TapeTrainingStep<T>.CollectParameters(Layers, LayerStructureVersion),
-            onGradients: ScatterFusedGradients);
-    }
+        // The adjacency is part of the step's data: the graph layers read it in the forward, and a compiled plan
+        // bakes anything its forward reads other than its input. Packed with the node features, it reaches the
+        // layers from the step's own input, so a plan traced on one graph trains the next graph on its own
+        // structure (graph classification sets one per graph). The layers get the model's adjacency back after.
+        var adjacency = _cachedAdjacencyMatrix ?? throw new InvalidOperationException(
+            "Adjacency matrix must be set before training. Call SetAdjacencyMatrix() first.");
+        int[] featureShape = input._shape;
+        int[] adjacencyShape = adjacency._shape;
+        int featureLength = input.Length;
+        try
+        {
+            TrainCustomTapeStep(
+                Training.StepInputPacking<T>.Pack(input, adjacency),
+                expectedOutput,
+                packed =>
+                {
+                    SetLayerAdjacency(Training.StepInputPacking<T>.Slice(packed, featureLength, adjacencyShape));
+                    return Forward(Training.StepInputPacking<T>.Slice(packed, 0, featureShape));
+                },
+                tapeLoss.ComputeTapeLoss,
+                _optimizer,
+                () => Training.TapeTrainingStep<T>.CollectParameters(Layers, LayerStructureVersion));
+        }
+        finally
+        {
+            SetLayerAdjacency(adjacency);
+        }    }
 
 
     /// <summary>

@@ -401,7 +401,6 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
                 (predicted, packedTarget) => TrainingBatchLoss(predicted, packedTarget, layout),
                 _optimizer,
                 () => Training.TapeTrainingStep<T>.CollectParameters(Layers));
-            StepSchedulerIfSupported(_optimizer);
         }
         finally
         {
