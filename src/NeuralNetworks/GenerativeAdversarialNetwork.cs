@@ -1,4 +1,4 @@
-﻿using AiDotNet.Attributes;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Options;
@@ -561,61 +561,12 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
     /// </remarks>
     public (T discriminatorLoss, T generatorLoss) TrainStep(Tensor<T> realImages, Tensor<T> noise)
     {
-        // Ensure we're in training mode
-        Generator.SetTrainingMode(true);
-        Discriminator.SetTrainingMode(true);
-
-        // ----- Train the discriminator -----
-
-        // Generate fake images
-        Tensor<T> fakeImages = GenerateImages(noise);
-
-        // Store batches for feature matching if enabled
-        if (UseFeatureMatching)
-        {
-            _lastRealBatch = realImages.Clone();
-            _lastFakeBatch = fakeImages.Clone();
-        }
-
-        // Get batch size from real images tensor
-        int batchSize = realImages.Shape[0];
-
-        // Create label tensors (1 for real, 0 for fake)
-        Tensor<T> realLabels = CreateLabelTensor(batchSize, NumOps.One);
-        Tensor<T> fakeLabels = CreateLabelTensor(batchSize, NumOps.Zero);
-
-        // Train discriminator with tape-based autodiff
-        Discriminator.Train(realImages, realLabels);
-        Discriminator.Train(fakeImages, fakeLabels);
-
-        // Compute discriminator loss for monitoring
-        var realPred = Discriminator.Predict(realImages);
-        var fakePred = Discriminator.Predict(fakeImages);
-        T realLoss = LossFunction.CalculateLoss(realPred.ToVector(), realLabels.ToVector());
-        T fakeLoss = LossFunction.CalculateLoss(fakePred.ToVector(), fakeLabels.ToVector());
-        T discriminatorLoss = NumOps.Divide(NumOps.Add(realLoss, fakeLoss), NumOps.FromDouble(2.0));
-        _lastDiscriminatorLoss = discriminatorLoss;
-
-        // ----- Train the generator with tape -----
-        Tensor<T> newFakeImages = GenerateImages(noise);
-        Tensor<T> allRealLabels = CreateLabelTensor(batchSize, NumOps.One);
-
-        // Generator wants discriminator to classify fakes as real
-        Generator.Train(noise, allRealLabels);
-
-        // Compute generator loss for monitoring
-        var genPred = Discriminator.Predict(newFakeImages);
-        T generatorLoss = LossFunction.CalculateLoss(genPred.ToVector(), allRealLabels.ToVector());
-        _lastGeneratorLoss = generatorLoss;
-
-        // Track generator loss
-        _generatorLosses.Add(generatorLoss);
-        if (_generatorLosses.Count > 100)
-        {
-            _generatorLosses.RemoveAt(0);
-        }
-
-        return (discriminatorLoss, generatorLoss);
+        // One adversarial iteration, exactly the one Train runs: the discriminator on real and generated samples, then
+        // the generator through the frozen discriminator. This used to train the generator with
+        // Generator.Train(noise, realLabels), regressing its images onto the [batch, 1] "real" labels instead of
+        // learning from the discriminator.
+        Train(noise, realImages);
+        return (_lastDiscriminatorLoss, _lastGeneratorLoss);
     }
 
     /// <summary>
