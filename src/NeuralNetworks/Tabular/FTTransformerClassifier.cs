@@ -305,13 +305,12 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
         }
         else
         {
-            using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>();
-            var logits = Forward(numericalFeatures, categoricalIndices);
-            var lossTensor = SoftmaxCrossEntropyLoss(logits, OneHot(targets, logits.Shape[0]));
-            var grads = tape.ComputeGradients(lossTensor, trainable.ToArray());
-            foreach (var t in trainable.Where(t => t is not null && grads.ContainsKey(t)))
-                Engine.TensorSubtractInPlace(t, Engine.TensorMultiplyScalar(grads[t], learningRate));
-            lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
+            // The same plain SGD on the shared eager tape step.
+            var onehot = OneHot(targets, numericalFeatures.Shape[0]);
+            lossValue = AiDotNet.Training.TapeTrainingStepper<T>.EagerSgdObjectiveStep(
+                () => trainable,
+                () => SoftmaxCrossEntropyLoss(Forward(numericalFeatures, categoricalIndices), onehot),
+                learningRate);
         }
 
         ResetState();

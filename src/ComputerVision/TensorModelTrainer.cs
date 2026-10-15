@@ -113,6 +113,9 @@ internal static class TensorModelTrainer<T>
             ComputeLoss = loss,
             Optimizer = optimizer,
             ExtraParameters = parameters,
+            // A vision forward can read host-side state a trace would bake in; the first replay is checked against
+            // the eager forward and a disagreeing update is undone.
+            VerifyReplayAgreement = true,
         }, out lossValue);
 
         if (outcome == AiDotNet.Training.FusedStepOutcome.CommittedFailure)
@@ -136,14 +139,11 @@ internal static class TensorModelTrainer<T>
         Func<TPrediction, TTarget, Tensor<T>> loss,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-
         // Resolve lazy layer shapes BEFORE reading the registry. The convolutions behind the Conv2D
         // adapter infer their input depth on first Forward and own no parameters until then, so the
         // registry would report none and the step would silently do nothing. No tape is active here,
         // so this records nothing.
         EnsureWarm(model, forward, input);
-
 
         var parameters = LiveTrainableTensors(model);
         if (parameters.Length == 0)
@@ -152,58 +152,32 @@ internal static class TensorModelTrainer<T>
                 $"No live trainable tensors were discovered for model '{model.GetType().FullName}'.");
         }
 
-        var engine = AiDotNetEngine.Current;
-        using (var tape = new GradientTape<T>())
+        // The shared eager step: the update runs inside the tape's scope (the gradients live in the step's arena), with
+        // plain SGD at the given rate or the caller's optimizer, whose state is keyed by these live tensors.
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>> checkShapes = gradients => RequireMatchingShapes(model, gradients);
+        Tensor<T> Objective() => loss(forward(input), target);
+        return optimizer is null
+            ? AiDotNet.Training.TapeTrainingStepper<T>.EagerSgdObjectiveStep(() => parameters, Objective, learningRate, checkShapes)
+            : AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(parameters, Objective, optimizer, checkShapes);
+    }
+
+    // A gradient whose shape differs from its tensor means the forward used a reshaped copy or an
+    // out-of-engine view instead of the registered tensor, so the tape recorded the wrong one.
+    private static void RequireMatchingShapes(
+        ModelBase<T, Tensor<T>, Tensor<T>> model, IReadOnlyDictionary<Tensor<T>, Tensor<T>> gradients)
+    {
+        foreach (var pair in gradients)
         {
-            var predicted = forward(input);
-            var objective = loss(predicted, target);
-            var gradients = tape.ComputeGradients(objective, parameters);
-
-            // The update runs INSIDE the tape's scope. Disposing the outermost tape rewinds the
-            // active TensorArena (the per-step recycling of AiDotNet #1804), and the gradients and
-            // the loss live in that arena: consumed after the dispose, their storage is already
-            // being reissued to the update's own temporaries. Every model trained inside an arena
-            // then applied a mix of its gradients and unrelated scratch - and threw only when a
-            // reissued buffer happened to have a different shape (a [256, 1024] weight receiving
-            // [1024, 256]). The no-grad scope keeps the update itself off the tape.
-            using (new NoGradScope<T>())
+            if (!SameShape(pair.Key, pair.Value))
             {
-                var reached = new List<Tensor<T>>(parameters.Length);
-                foreach (var parameter in parameters)
-                {
-                    if (gradients.TryGetValue(parameter, out var gradient))
-                    {
-                        if (!SameShape(parameter, gradient))
-                        {
-                            throw new InvalidOperationException(
-                                $"{model.GetType().Name}: the gradient for a trainable tensor of shape "
-                                + $"[{string.Join(", ", parameter._shape)}] has shape [{string.Join(", ", gradient._shape)}]. "
-                                + "The forward pass must use this tensor exactly as registered - a reshaped copy or "
-                                + "a view created outside the engine records the wrong tensor on the tape.");
-                        }
-
-                        reached.Add(parameter);
-                    }
-                }
-
-                T value = objective.Length > 0 ? objective[0] : numOps.Zero;
-                if (optimizer is null)
-                {
-                    foreach (var parameter in reached)
-                        engine.TensorSubtractInPlace(parameter, engine.TensorMultiplyScalar(gradients[parameter], learningRate));
-                }
-                else
-                {
-                    // The optimizer keys its state (momentum, moments) by tensor reference, and these are the
-                    // live tensors the forward reads, so the state follows the weights from step to step.
-                    optimizer.Step(new TapeStepContext<T>(reached, gradients, value));
-                }
-
-                return value;
+                throw new InvalidOperationException(
+                    $"{model.GetType().Name}: the gradient for a trainable tensor of shape "
+                    + $"[{string.Join(", ", pair.Key._shape)}] has shape [{string.Join(", ", pair.Value._shape)}]. "
+                    + "The forward pass must use this tensor exactly as registered - a reshaped copy or "
+                    + "a view created outside the engine records the wrong tensor on the tape.");
             }
         }
     }
-
     // Runs one forward the first time a model trains, so lazily shaped layers own their parameters before the
     // registry is read.
     private static void EnsureWarm<TPrediction>(

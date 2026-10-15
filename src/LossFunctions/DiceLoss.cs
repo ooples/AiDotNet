@@ -101,11 +101,13 @@ public class DiceLoss<T> : LossFunctionBase<T>
         // "Tensor shapes must match. Got [1] and []" from CpuEngine.TensorDivide, aborting
         // ComputeGradients. That made DiceLoss unusable for TRAINING whenever it was applied on its
         // own -- the failure surfaces as an exception mid-Train, which callers see as "no parameters
-        // changed", not as a loss bug. Reshaping is an Engine op so the tape is preserved, and the
-        // returned rank-1 loss matches what the other loss functions here already produce.
+        // changed", not as a loss bug. Reshaping is an Engine op so the tape is preserved.
         var numerator1 = Engine.Reshape(numerator, new[] { 1 });
         var denominator1 = Engine.Reshape(denominator, new[] { 1 });
         var dice = Engine.TensorDivide(numerator1, denominator1);
-        return Engine.ScalarMinusTensor(NumOps.One, dice);
+
+        // The ComputeTapeLoss contract is a rank-0 loss, which every other loss here returns (a full ReduceMean or
+        // ReduceSum with keepDims: false). A [1] Dice term made CompositeLoss reject focal + Dice, SAM's default.
+        return Engine.Reshape(Engine.ScalarMinusTensor(NumOps.One, dice), Array.Empty<int>());
     }
 }

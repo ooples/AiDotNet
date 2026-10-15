@@ -436,7 +436,7 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
 
     // Forward on ONE already z-normalized lookback window: the batched forward with a batch of one, returned as
     // the normalized [forecastHorizon, 1] forecast. Training and inference run the same graph.
-    private Tensor<T> ForwardCore(Vector<T> input)
+    internal Tensor<T> ForwardCore(Vector<T> input)
     {
         int seqLen = Math.Min(input.Length, _options.LookbackWindow);
         var inData = new Vector<T>(seqLen);
@@ -766,7 +766,7 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
     }
     // All trainable parameter tensors (model + encoder/decoder layers), in a
     // stable order, for the GradientTape sources and the optimizer step.
-    private List<Tensor<T>> CollectTrainableParameters()
+    internal List<Tensor<T>> CollectTrainableParameters()
     {
         var p = new List<Tensor<T>>
         {
@@ -796,6 +796,9 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
     /// <summary>
     /// Predicts one-step-ahead values for each row of the input.
     /// </summary>
+    // Rows per batched prediction forward (bounds activation memory; see Predict).
+    private const int PredictChunkRows = 256;
+
     public override Vector<T> Predict(Matrix<T> input)
     {
         if (TryPredictFromTimeIndexCalibration(input, _trainingSeries, out var calibratedPredictions))
@@ -815,22 +818,50 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
         // the forecast to a constant. This is a genuine one-step-ahead forecast
         // from real history, NOT a shortcut that returns the memorized target value.
         bool inSample = _trainingSeries.Length == n && n > 0;
+
+        // Each row's window: the in-sample lookback of the observed series, or (out-of-sample / no history yet)
+        // the row itself. ForwardEngine consumes the first min(length, lookback) values of a window.
+        var windows = new Vector<T>[n];
         for (int i = 0; i < n; i++)
         {
-            if (inSample)
+            int w = inSample ? Math.Min(lookback, i) : 0;
+            if (w > 0)
             {
-                int w = Math.Min(lookback, i);
-                if (w > 0)
-                {
-                    var window = new Vector<T>(w);
-                    for (int t = 0; t < w; t++) window[t] = _trainingSeries[i - w + t];
-                    var fc = ForwardEngine(window);
-                    predictions[i] = fc.Length > 0 ? fc[0] : _numOps.Zero;
-                    continue;
-                }
+                var window = new Vector<T>(w);
+                for (int t = 0; t < w; t++) window[t] = _trainingSeries[i - w + t];
+                windows[i] = window;
             }
-            // Out-of-sample (or no history yet): forecast from the row itself.
-            predictions[i] = PredictSingle(input.GetRow(i));
+            else
+            {
+                windows[i] = input.GetRow(i);
+            }
+        }
+
+        // One batched forward per window length instead of one per row: AiModelBuilder predicts the whole dataset
+        // after fitting, which made per-row inference a large share of a production fit. Same per-row values
+        // (AutoformerBatchedForwardTests: ForwardBatched == ForwardCore row by row).
+        foreach (var group in Enumerable.Range(0, n)
+                     .Where(i => windows[i].Length > 0)
+                     .GroupBy(i => Math.Min(windows[i].Length, lookback)))
+        {
+            int len = group.Key;
+            var all = group.ToArray();
+            // Bounded chunks: activations scale with rows x length x embedding (x4 in the FFN), and a whole
+            // in-sample dataset in one forward exhausted memory at the default embedding width.
+            for (int c0 = 0; c0 < all.Length; c0 += PredictChunkRows)
+            {
+                var rows = all.Skip(c0).Take(PredictChunkRows).ToArray();
+                // A nested arena per chunk: its scratch is recycled when the chunk ends without touching any arena
+                // the caller has open (whose tensors may still be live).
+                using var chunkArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
+                var data = new Vector<T>(rows.Length * len);
+                for (int r = 0; r < rows.Length; r++)
+                    for (int t = 0; t < len; t++)
+                        data[r * len + t] = _numOps.Divide(_numOps.Subtract(windows[rows[r]][t], _normMean), _normStd);
+                var outNorm = ForwardBatched(new Tensor<T>(new[] { rows.Length, len }, data));      // [rows, horizon]
+                for (int r = 0; r < rows.Length; r++)
+                    predictions[rows[r]] = _numOps.Add(_numOps.Multiply(outNorm[r, 0], _normStd), _normMean);
+            }
         }
 
         return predictions;
@@ -1208,6 +1239,7 @@ internal partial class AutoformerDecoderLayer<T> : NeuralNetworks.Layers.LayerBa
     private Tensor<T> _crossOutputProj;
 
     // Feed-forward parameters
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ff1Weight;
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _ff1Bias;

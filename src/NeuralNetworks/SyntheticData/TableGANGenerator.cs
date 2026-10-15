@@ -454,173 +454,18 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
         var fakeBatch = GeneratorForwardBatched(noiseBatch);
         fakeBatch = ApplyOutputActivationsBatched(fakeBatch);
 
-        // Preferred fused path: WganGpFusedStep (see ooples/AiDotNet#1845).
-        var discParams = TapeTrainingStep<T>.CollectParameters(_discLayers.Cast<ILayer<T>>());
-        if (discParams.Count > 0
-            && NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
-                _discriminatorOptimizer,
-                out var wganCfg))
-        {
-            var wganStep = _wganFusedStep ??= new AiDotNet.Training.WganGpFusedStep<T>();
-            Tensor<T> DiscFwd(Tensor<T> inp) => DiscriminatorForwardBatched(inp, isTraining: true);
-            Tensor<T> EpsilonSampler(int bs) =>
-                Engine.TensorRandomUniformRange<T>(new[] { bs, 1 }, NumOps.Zero, NumOps.One);
-            if (wganStep.TryStep(
-                    discParameters: discParams,
-                    realBatch: realBatch,
-                    fakeBatch: fakeBatch,
-                    discForward: DiscFwd,
-                    epsilonSampler: EpsilonSampler,
-                    gradientPenaltyWeight: _options.GradientPenaltyWeight,
-                    optimizerType: wganCfg.Type,
-                    learningRate: wganCfg.LearningRate,
-                    beta1: wganCfg.Beta1,
-                    beta2: wganCfg.Beta2,
-                    epsilon: wganCfg.Epsilon,
-                    weightDecay: wganCfg.WeightDecay,
-                    lrSchedule: wganCfg.Schedule,
-                    extras: wganCfg.Extras,
-                    out T _))
-            {
-                return;
-            }
-        }
-
-        // Secondary fused path: FusedTrainingStep with the loss composed via
-        // this class's ComputeGradientPenalty (createGraph=true GP fix, #1844).
-        var trainableDiscLayers = _discLayers.OfType<ITrainableLayer<T>>().ToList();
-        if (trainableDiscLayers.Count > 0)
-        {
-            int realN = realBatch.Shape[0];
-            int fakeN = fakeBatch.Shape[0];
-            var stacked = Engine.TensorConcatenate([realBatch, fakeBatch], axis: 0);
-            var target = new Tensor<T>(new[] { 1 });
-            Tensor<T> Fwd(Tensor<T> both) => DiscriminatorForwardBatched(both, isTraining: true);
-            Tensor<T> Loss(Tensor<T> allScores, Tensor<T> _)
-            {
-                var rShape = allScores._shape.ToArray(); rShape[0] = realN;
-                var fShape = allScores._shape.ToArray(); fShape[0] = fakeN;
-                var rStart = new int[allScores.Rank];
-                var fStart = new int[allScores.Rank]; fStart[0] = realN;
-                var rScores = Engine.TensorSlice(allScores, rStart, rShape);
-                var fScores = Engine.TensorSlice(allScores, fStart, fShape);
-                var axes = Enumerable.Range(0, rScores.Shape.Length).ToArray();
-                var wasserstein = Engine.TensorSubtract(
-                    Engine.ReduceMean(fScores, axes, keepDims: false),
-                    Engine.ReduceMean(rScores, axes, keepDims: false));
-                var gp = ComputeGradientPenalty(realBatch, fakeBatch);
-                return Engine.TensorAdd(wasserstein,
-                    Engine.TensorMultiplyScalar(gp, NumOps.FromDouble(_options.GradientPenaltyWeight)));
-            }
-            if (AiDotNet.Training.FusedTrainingStep<T>.TryStep(
-                    trainableDiscLayers, stacked, target,
-                    forward: Fwd, computeLoss: Loss,
-                    optimizer: _discriminatorOptimizer,
-                    out T _, owner: this))
-            {
-                return;
-            }
-        }
-
-        using var tape = new GradientTape<T>();
-        // discParams already collected above for the WganGpFusedStep attempt.
-
-        var realScores = DiscriminatorForwardBatched(realBatch, isTraining: true);
-        var fakeScores = DiscriminatorForwardBatched(fakeBatch, isTraining: true);
-
-        var allAxes = Enumerable.Range(0, realScores.Shape.Length).ToArray();
-        var avgReal = Engine.ReduceMean(realScores, allAxes, keepDims: false);
-        var avgFake = Engine.ReduceMean(fakeScores, allAxes, keepDims: false);
-        // Critic minimizes E[D(fake)] − E[D(real)] + λ·GP (Gulrajani 2017
-        // WGAN-GP — the gradient penalty is the 1-Lipschitz constraint that
-        // makes the dual Wasserstein form recover the Earth-Mover distance).
-        // Without GP, plain WGAN diverges without weight clipping.
-        var wasserstein = Engine.TensorSubtract(avgFake, avgReal);
-        var gradientPenalty = ComputeGradientPenalty(realBatch, fakeBatch);
-        var lossTensor = Engine.TensorAdd(
-            wasserstein,
-            Engine.TensorMultiplyScalar(gradientPenalty, NumOps.FromDouble(_options.GradientPenaltyWeight)));
-
-        var grads = tape.ComputeGradients(lossTensor, discParams);
-        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-
-        // Replay must reproduce the FULL objective (Wasserstein term + λ·GP).
-        // Replaying only the Wasserstein term would drift the critic away
-        // from the 1-Lipschitz constraint on optimizer.Step replays.
-        var capturedFake = fakeBatch;
-        var capturedReal = realBatch;
-        double capturedGpWeight = _options.GradientPenaltyWeight;
-        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(inp, true);
-        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _)
-        {
-            var recomputedAvgReal = Engine.ReduceMean(pred, allAxes, keepDims: false);
-            var recomputedFakeScores = DiscriminatorForwardBatched(capturedFake, true);
-            var recomputedAvgFake = Engine.ReduceMean(recomputedFakeScores, allAxes, keepDims: false);
-            var recomputedWasserstein = Engine.TensorSubtract(recomputedAvgFake, recomputedAvgReal);
-            var recomputedGp = ComputeGradientPenalty(capturedReal, capturedFake);
-            return Engine.TensorAdd(
-                recomputedWasserstein,
-                Engine.TensorMultiplyScalar(recomputedGp, NumOps.FromDouble(capturedGpWeight)));
-        }
-
-        var context = new TapeStepContext<T>(
-            discParams, grads, lossValue,
-            realBatch, realBatch, ComputeForward, RecomputeLoss,
-            parameterBuffer: null);
-        _discriminatorOptimizer.Step(context);
-    }
-
-    /// <summary>
-    /// WGAN-GP gradient penalty (Gulrajani et al. 2017 §4): sample
-    /// interpolates between real and fake, get critic gradients w.r.t.
-    /// interpolates via a nested <see cref="GradientTape{T}"/>, then penalize
-    /// the squared deviation of the per-sample L2 norm from 1. Returns a
-    /// scalar that the caller weights by <see cref="TableGANOptions{T}.GradientPenaltyWeight"/>
-    /// and adds to the Wasserstein critic loss. Mirrors the
-    /// <c>CausalGANGenerator.ComputeGradientPenalty</c> implementation.
-    /// </summary>
-    private Tensor<T> ComputeGradientPenalty(Tensor<T> realBatch, Tensor<T> fakeBatch)
-    {
-        int batchSize = Math.Max(1, realBatch.Shape[0]);
-        int elementsPerSample = Math.Max(1, realBatch.Length / batchSize);
-
-        var epsilon = Engine.TensorRandomUniformRange<T>([batchSize, 1], NumOps.Zero, NumOps.One);
-        var epsilonBroadcast = Engine.TensorTile(epsilon, [1, elementsPerSample]).Reshape([realBatch.Length]);
-        var ones = new Tensor<T>([realBatch.Length]);
-        Engine.TensorFill(ones, NumOps.One);
-        var oneMinusEpsilon = Engine.TensorSubtract(ones, epsilonBroadcast);
-
-        var realFlat = realBatch.Reshape([realBatch.Length]);
-        var fakeFlat = fakeBatch.Reshape([fakeBatch.Length]);
-        var interpolatedFlat = Engine.TensorAdd(
-            Engine.TensorMultiply(epsilonBroadcast, realFlat),
-            Engine.TensorMultiply(oneMinusEpsilon, fakeFlat));
-        var interpolated = interpolatedFlat.Reshape(realBatch._shape);
-
-        Tensor<T> inputGradients;
-        using (var gradientTape = new GradientTape<T>())
-        {
-            var scores = DiscriminatorForwardBatched(interpolated, true);
-            var scoreAxes = Enumerable.Range(0, scores.Shape.Length).ToArray();
-            var summedScores = Engine.ReduceSum(scores, scoreAxes, keepDims: false);
-            // AiDotNet #1844: createGraph=true records inner backward on outer tape
-            // so gradient penalty actually flows to disc weights (WGAN-GP correctness).
-            var gradients = gradientTape.ComputeGradients(summedScores, [interpolated], createGraph: true);
-            inputGradients = gradients.TryGetValue(interpolated, out var gradient)
-                ? gradient
-                : new Tensor<T>(interpolated._shape);
-        }
-
-        var gradientsReshaped = inputGradients.Reshape([batchSize, elementsPerSample]);
-        var gradientSquared = Engine.TensorMultiply(gradientsReshaped, gradientsReshaped);
-        var gradientNormSquared = Engine.ReduceSum(gradientSquared, [1], keepDims: false);
-        var gradientNorm = Engine.TensorSqrt(Engine.TensorAddScalar(gradientNormSquared, NumOps.FromDouble(1e-12)));
-        var targetNorm = new Tensor<T>(gradientNorm._shape);
-        Engine.TensorFill(targetNorm, NumOps.One);
-        var deviation = Engine.TensorSubtract(gradientNorm, targetNorm);
-        var penalty = Engine.TensorMultiply(deviation, deviation);
-        var penaltyAxes = Enumerable.Range(0, penalty.Shape.Length).ToArray();
-        return Engine.ReduceMean(penalty, penaltyAxes, keepDims: false);
+        // The shared WGAN-GP critic step: the GPU-resident primitive, the fused compiled plan or the shared eager
+        // tape step, with one replay-safe gradient penalty (Gulrajani et al. 2017; #1844 / #1845).
+        AiDotNet.Training.WassersteinCriticStep<T>.Step(
+            this,
+            _discLayers,
+            realBatch,
+            fakeBatch,
+            input => DiscriminatorForwardBatched(input, isTraining: true),
+            _options.GradientPenaltyWeight,
+            _discriminatorOptimizer,
+            _random,
+            ref _wganFusedStep);
     }
 
     /// <summary>
@@ -650,34 +495,16 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
         {
             Tensor<T> Fwd(Tensor<T> nb) => ApplyOutputActivationsBatched(GeneratorForwardBatched(nb));
             Tensor<T> Loss(Tensor<T> fakeActivated, Tensor<T> real) => ComputeGeneratorLoss(fakeActivated, real);
-            if (AiDotNet.Training.FusedTrainingStep<T>.TryStep(
-                    trainableGenLayers, noiseBatch, realBatch,
-                    forward: Fwd, computeLoss: Loss,
-                    optimizer: _generatorOptimizer,
-                    out T _, owner: this))
-            {
-                return;
-            }
+            // One step through the shared training step: the fused plan when it applies, otherwise the shared
+            // eager tape step on the same objective. The critic scores the samples in evaluation mode and is not
+            // in the generator's parameter group, so only the generator moves.
+            AiDotNet.Training.FusedTrainingStep<T>.Step(
+                this, trainableGenLayers, noiseBatch, realBatch,
+                forward: Fwd,
+                computeLoss: Loss,
+                optimizer: _generatorOptimizer,
+                extraTensors: genParams);
         }
-
-        using var tape = new GradientTape<T>();
-
-        var fakeBatch = GeneratorForwardBatched(noiseBatch);
-        var fakeActivated = ApplyOutputActivationsBatched(fakeBatch);
-        var lossTensor = ComputeGeneratorLoss(fakeActivated, realBatch);
-        var grads = tape.ComputeGradients(lossTensor, genParams);
-        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-
-        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) =>
-            ApplyOutputActivationsBatched(GeneratorForwardBatched(inp));
-        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _) =>
-            ComputeGeneratorLoss(pred, realBatch);
-
-        var context = new TapeStepContext<T>(
-            genParams, grads, lossValue,
-            noiseBatch, noiseBatch, ComputeForward, RecomputeLoss,
-            parameterBuffer: null);
-        _generatorOptimizer.Step(context);
     }
 
     private Tensor<T> ComputeGeneratorLoss(Tensor<T> fakeActivated, Tensor<T> realBatch)

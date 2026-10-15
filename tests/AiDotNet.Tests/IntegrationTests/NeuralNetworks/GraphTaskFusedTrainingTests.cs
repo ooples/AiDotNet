@@ -45,7 +45,8 @@ public class GraphTaskFusedTrainingTests
             "NodeClassification" => new NodeClassificationModel<double>(
                 new NeuralNetworkArchitecture<double>(inputType: InputType.OneDimensional,
                     taskType: NeuralNetworkTaskType.MultiClassClassification, complexity: NetworkComplexity.Simple,
-                    inputSize: Features, outputSize: 2)),
+                    inputSize: Features, outputSize: 2),
+                options: new NodeClassificationOptions { HiddenDim = 4, NumLayers = 2, DropoutRate = 0.0 }),
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
 

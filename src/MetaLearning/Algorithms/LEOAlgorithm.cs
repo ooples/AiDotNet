@@ -481,7 +481,15 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         // The tape is deliberately not disposed: inside a TensorArena, disposing it returns tensors the enclosing
         // computation still holds - the next step then reads a recycled buffer and fails on its shape. Left to the
         // collector, the step's graph stays valid for the outer backward that differentiates through it.
-        var inner = new GradientTape<T>(new GradientTapeOptions { Persistent = true });
+        //
+        // NOT disposing it must still not leave it CURRENT. Constructing a tape makes it this thread's recording tape
+        // until it is disposed, so an undisposed inner tape stayed current after this method returned: every later
+        // operation on the thread - the next episode, or another test reusing the thread-pool thread - recorded onto it
+        // and walked its stale graph into recycled arena tensors ("cannot reshape 6 elements to [6, 3]" in unrelated
+        // BOIL and ProtoNets tests, intermittently, once AiDotNet.Tensors 0.137.1 made the tape-owned arena the
+        // default). The scope restores the enclosing tape on return; the inner tape opens no arena of its own.
+        using var restoreEnclosingTape = GradientTape<T>.RecordOn(GradientTape<T>.Current);
+        var inner = new GradientTape<T>(new GradientTapeOptions { Persistent = true, SuppressArenaScope = true });
         var loss = innerLoss();
         var gradients = inner.ComputeGradients(loss, new[] { source }, createGraph: !_leoOptions.UseFirstOrder);
         var gradient = gradients.TryGetValue(source, out var g) ? g : new Tensor<T>(source._shape);

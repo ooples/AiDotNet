@@ -467,10 +467,12 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// Generator forward pass with residual connections, BatchNorm, and manual ReLU.
     /// When using custom layers, performs a simple sequential forward pass instead.
     /// </summary>
-    private Tensor<T> GeneratorForward(Vector<T> input)
-    {
-        var inputTensor = VectorToTensor(input);
+    private Tensor<T> GeneratorForward(Vector<T> input) => GeneratorForward(VectorToTensor(input));
 
+    // The tensor form reads its input only through engine ops, so a compiled training plan replays it on each step's
+    // refreshed noise instead of baking the traced draw into the graph.
+    private Tensor<T> GeneratorForward(Tensor<T> inputTensor)
+    {
         if (_usingCustomLayers)
         {
             return CustomLayersForward(inputTensor);
@@ -577,12 +579,13 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             {
                 var real = VectorToTensor(GetRow(partition, row));
                 var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
-                using var tape = new GradientTape<T>();
-                var realScore = TeacherForward(teacherIdx, real);
-                var fakeData = GeneratorForward(noise);
-                var fakeScore = TeacherForward(teacherIdx, fakeData);
-                var loss = Engine.TensorAdd(BceLoss(realScore, 1.0), BceLoss(fakeScore, 0.0));
-                TapeStepOver(tape, loss, BuildTeacherLayerList(teacherIdx), _teacherOptimizers[teacherIdx % _teacherOptimizers.Length]);
+                StepOver(() =>
+                {
+                    var realScore = TeacherForward(teacherIdx, real);
+                    var fakeData = GeneratorForward(noise);
+                    var fakeScore = TeacherForward(teacherIdx, fakeData);
+                    return Engine.TensorAdd(BceLoss(realScore, 1.0), BceLoss(fakeScore, 0.0));
+                }, BuildTeacherLayerList(teacherIdx), _teacherOptimizers[teacherIdx % _teacherOptimizers.Length]);
             }
         }
     }
@@ -599,11 +602,12 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             var realSample = GetRow(transformedData, _random.Next(transformedData.Rows));
             double realLabel = QueryTeachers(realSample);
 
-            using var tape = new GradientTape<T>();
-            var fakeScore = StudentForward(VectorToTensor(fakeVector), isTraining: true);
-            var realScore = StudentForward(VectorToTensor(realSample), isTraining: true);
-            var loss = Engine.TensorAdd(BceLoss(fakeScore, fakeLabel), BceLoss(realScore, realLabel));
-            TapeStepOver(tape, loss, BuildStudentLayerList(), _studentOptimizer);
+            StepOver(() =>
+            {
+                var fakeScore = StudentForward(VectorToTensor(fakeVector), isTraining: true);
+                var realScore = StudentForward(VectorToTensor(realSample), isTraining: true);
+                return Engine.TensorAdd(BceLoss(fakeScore, fakeLabel), BceLoss(realScore, realLabel));
+            }, BuildStudentLayerList(), _studentOptimizer);
         }
     }
 
@@ -618,52 +622,31 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         // stays frozen — only the generator's layers get moment updates.
         var generatorLayers = BuildGeneratorLayerList();
         var trainableGenLayers = generatorLayers.OfType<ITrainableLayer<T>>().ToList();
-        if (trainableGenLayers.Count > 0 && AiDotNet.Training.FusedTrainingStep<T>.IsAvailable)
-        {
-            // The target tensor is unused (BceLoss takes a fixed scalar target=1.0)
-            // but TryStepWithFusedOptimizer requires one; pass a 1-element scalar
-            // that the loss closure ignores.
-            var targetPlaceholder = new Tensor<T>(new[] { 1 });
-            targetPlaceholder[0] = NumOps.One;
+        var generatorParameters = Training.TapeTrainingStep<T>.CollectParameters(generatorLayers);
+        if (generatorParameters.Count == 0) return;
+        // The target tensor is unused (BceLoss takes a fixed scalar target=1.0)
+        // but TryStepWithFusedOptimizer requires one; pass a 1-element scalar
+        // that the loss closure ignores.
+        var targetPlaceholder = new Tensor<T>(new[] { 1 });
+        targetPlaceholder[0] = NumOps.One;
 
-            Tensor<T> ForwardG(Tensor<T> noiseInput)
-            {
-                var noiseVec = noiseInput.ToVector();
-                var fake = GeneratorForward(noiseVec);
-                return StudentForward(fake, isTraining: true);
-            }
-            Tensor<T> ComputeGenLoss(Tensor<T> studentScore, Tensor<T> _) => BceLoss(studentScore, 1.0);
+        // The forward reads the noise only through engine ops (the tensor overload), so the fused plan replays
+        // each step's refreshed noise. The previous fused path read it back with ToVector, which a trace freezes.
+        Tensor<T> ForwardG(Tensor<T> noiseInput) => StudentForward(GeneratorForward(noiseInput), isTraining: true);
+        Tensor<T> ComputeGenLoss(Tensor<T> studentScore, Tensor<T> _) => BceLoss(studentScore, 1.0);
 
-            bool fusedEngaged = false;
-            for (int i = 0; i < batchSize; i++)
-            {
-                var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
-                var noiseTensor = new Tensor<T>(new[] { noise.Length }, noise);
-                bool ran = AiDotNet.Training.FusedTrainingStep<T>.TryStep(
-                    trainableGenLayers, noiseTensor, targetPlaceholder,
-                    forward: ForwardG, computeLoss: ComputeGenLoss,
-                    optimizer: _generatorOptimizer,
-                    out T _, owner: this);
-                if (!ran)
-                {
-                    // First-step compile failure → abandon and fall back to eager for the rest of the batch.
-                    if (!fusedEngaged) break;
-                    // Compiled earlier but this step couldn't — skip.
-                    continue;
-                }
-                fusedEngaged = true;
-            }
-            if (fusedEngaged) return;
-        }
-
+        // One step per noise sample through the shared training step (the fused plan when it applies, otherwise
+        // the shared eager tape step). The student is not in the generator's parameter group, so it stays frozen.
         for (int i = 0; i < batchSize; i++)
         {
             var noise = CreateStandardNormalVector(_options.EmbeddingDimension);
-            using var tape = new GradientTape<T>();
-            var fakeData = GeneratorForward(noise);
-            var studentScore = StudentForward(fakeData, isTraining: true);
-            var loss = BceLoss(studentScore, 1.0);
-            TapeStepOver(tape, loss, BuildGeneratorLayerList(), _generatorOptimizer);
+            var noiseTensor = new Tensor<T>(new[] { noise.Length }, noise);
+            LastLoss = AiDotNet.Training.FusedTrainingStep<T>.Step(
+                this, trainableGenLayers, noiseTensor, targetPlaceholder,
+                forward: ForwardG,
+                computeLoss: ComputeGenLoss,
+                optimizer: _generatorOptimizer,
+                extraTensors: generatorParameters);
         }
     }
 
@@ -714,16 +697,13 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
     #region Tape Step Helpers
 
-    private void TapeStepOver(GradientTape<T> tape, Tensor<T> loss, IReadOnlyList<ILayer<T>> layers,
+    // One update of the tensors of `layers` on the shared eager tape step.
+    private void StepOver(Func<Tensor<T>> objective, IReadOnlyList<ILayer<T>> layers,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
     {
         var trainable = Training.TapeTrainingStep<T>.CollectParameters(layers);
         if (trainable.Count == 0) return;
-        var grads = tape.ComputeGradients(loss, trainable);
-        T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
-        LastLoss = lossValue;
-        var ctx = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(trainable, grads, lossValue);
-        optimizer.Step(ctx);
+        LastLoss = Training.TapeTrainingStepper<T>.EagerObjectiveStep(trainable, objective, optimizer);
     }
 
     private Tensor<T> ReduceToScalar(Tensor<T> t)
@@ -979,12 +959,13 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         SetTrainingMode(true);
         try
         {
-            using var tape = new GradientTape<T>();
-            var output = GeneratorForward(TensorToVector(input, input.Length));
-            var flatOut = output.Rank == 1 ? output : Engine.Reshape(output, new[] { output.Length });
-            var target = expectedOutput.Rank == 1 ? expectedOutput : Engine.Reshape(expectedOutput, new[] { expectedOutput.Length });
-            var loss = ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(flatOut, target)));
-            TapeStepOver(tape, loss, BuildGeneratorLayerList(), _generatorOptimizer);
+            StepOver(() =>
+            {
+                var output = GeneratorForward(TensorToVector(input, input.Length));
+                var flatOut = output.Rank == 1 ? output : Engine.Reshape(output, new[] { output.Length });
+                var target = expectedOutput.Rank == 1 ? expectedOutput : Engine.Reshape(expectedOutput, new[] { expectedOutput.Length });
+                return ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(flatOut, target)));
+            }, BuildGeneratorLayerList(), _generatorOptimizer);
         }
         finally
         {

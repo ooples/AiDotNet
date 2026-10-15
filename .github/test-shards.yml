@@ -1528,6 +1528,8 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.ArchitectureSharingGuardTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.AudioVisualCorrespondenceExecutionTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.BertEmbeddingLayerTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.VariationalAutoencoderPosteriorTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.GANs.GanFusedTrainingTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Blip2OnnxContractTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.BlipOnnxContractTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.CompiledModelHostTests.|
