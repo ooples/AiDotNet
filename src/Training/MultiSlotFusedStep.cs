@@ -33,6 +33,7 @@ public sealed class MultiSlotFusedStep<T> : IDisposable
 {
     private readonly FusedTrainingSession<T> _session;
     private bool _disposed;
+    private bool _warmed;
 
     /// <summary>Creates a step for <paramref name="owner"/>, the model whose plan and optimizer state it holds.</summary>
     public MultiSlotFusedStep(object owner)
@@ -78,15 +79,20 @@ public sealed class MultiSlotFusedStep<T> : IDisposable
         if (freshSlotData is null || freshSlotData.Count == 0)
             return false;
 
-        var parameters = parameterProvider();
-        if (parameters is null || parameters.Count == 0)
+        // Lazily shaped layers create their weights on their first forward. Reading the parameter set before that
+        // forward found only part of it (not necessarily none), so the first plan compiled against the partial set,
+        // the second step saw the full set and rebuilt the plan, and the first step's optimizer moments were lost
+        // (TabDDPM's plan counted 199 steps for 200 rows). One no-grad forward before the first step resolves them.
+        if (!_warmed)
         {
             using (new NoGradScope<T>())
                 forward(freshSlotData);
-            parameters = parameterProvider();
-            if (parameters is null || parameters.Count == 0)
-                return false;
+            _warmed = true;
         }
+
+        var parameters = parameterProvider();
+        if (parameters is null || parameters.Count == 0)
+            return false;
 
         var shapes = new int[freshSlotData.Count][];
         var offsets = new int[freshSlotData.Count];
