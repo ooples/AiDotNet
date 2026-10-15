@@ -404,61 +404,85 @@ public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
         DiscriminatorA.SetTrainingMode(true);
         DiscriminatorB.SetTrainingMode(true);
 
-        // Both generators' forwards are recorded once on the generator tape (#1390) and shared by
-        // every term; the discriminators train on detached copies of the translations.
-        using var generatorTape = new GradientTape<T>();
-        var fakeB = GeneratorAtoB.ForwardForTraining(realA);
-        var fakeA = GeneratorBtoA.ForwardForTraining(realB);
-        var fakeBDetached = new Tensor<T>(fakeB.Shape.ToArray());
-        fakeB.AsSpan().CopyTo(fakeBDetached.AsWritableSpan());
-        var fakeADetached = new Tensor<T>(fakeA.Shape.ToArray());
-        fakeA.AsSpan().CopyTo(fakeADetached.AsWritableSpan());
+        // The translations the discriminators score, and the cycle error this iteration reports, come from
+        // training-mode forwards that record nothing and leave the generators' running statistics to their step.
+        var fakeBDetached = GeneratorAtoB.ForwardForTrainingDetached(realA);
+        var fakeADetached = GeneratorBtoA.ForwardForTrainingDetached(realB);
+        int[] shapeA = realA._shape;
+        int[] shapeB = realB._shape;
+        int lengthA = realA.Length;
+        int lengthB = realB.Length;
 
         // ----- Discriminators: least squares, halved (Zhu et al. 2017, section 4) -----
-        // Both on one tape: the two losses share no parameters, so each network's gradient is its own
-        // term's, and StepOnTape steps each with its own optimizer. They used to be "updated" from
-        // gradients no backward had produced.
-        T discriminatorLoss;
-        using (var discriminatorTape = new GradientTape<T>())
+        // The two halves share no parameters, so each discriminator's step on its own half is exactly its share of
+        // the joint objective; each runs on its fused session with its own optimizer.
+        T discriminatorLossA = DiscriminatorA.TrainObjectiveFused(
+            Training.StepInputPacking<T>.Pack(realA, fakeADetached),
+            packed => Engine.TensorMultiplyScalar(Engine.TensorAdd(
+                LeastSquaresLoss(DiscriminatorA.ForwardForTraining(Training.StepInputPacking<T>.Slice(packed, 0, shapeA)), target: 1.0),
+                LeastSquaresLoss(DiscriminatorA.ForwardForTraining(Training.StepInputPacking<T>.Slice(packed, lengthA, fakeADetached._shape)), target: 0.0)),
+                NumOps.FromDouble(0.5)),
+            _discriminatorAOptimizer);
+        T discriminatorLossB = DiscriminatorB.TrainObjectiveFused(
+            Training.StepInputPacking<T>.Pack(realB, fakeBDetached),
+            packed => Engine.TensorMultiplyScalar(Engine.TensorAdd(
+                LeastSquaresLoss(DiscriminatorB.ForwardForTraining(Training.StepInputPacking<T>.Slice(packed, 0, shapeB)), target: 1.0),
+                LeastSquaresLoss(DiscriminatorB.ForwardForTraining(Training.StepInputPacking<T>.Slice(packed, lengthB, fakeBDetached._shape)), target: 0.0)),
+                NumOps.FromDouble(0.5)),
+            _discriminatorBOptimizer);
+        T discriminatorLoss = NumOps.Add(discriminatorLossA, discriminatorLossB);
+
+        // ----- Generators: adversarial + lambda * cycle + 0.5 * lambda * identity (eq. 3) -----
+        // One loss trains both generators, since the cycle term runs through each of them. The reference
+        // implementation steps them with ONE optimizer over both parameter sets; when the two configured
+        // optimizers are the same algorithm with the same settings (the paper default) that is what runs, on one
+        // fused plan. Otherwise each generator keeps its own optimizer on the eager tape.
+        Tensor<T> GeneratorObjective(Tensor<T> a, Tensor<T> b)
         {
-            var halfA = Engine.TensorAdd(
-                LeastSquaresLoss(DiscriminatorA.ForwardForTraining(realA), target: 1.0),
-                LeastSquaresLoss(DiscriminatorA.ForwardForTraining(fakeADetached), target: 0.0));
-            var halfB = Engine.TensorAdd(
-                LeastSquaresLoss(DiscriminatorB.ForwardForTraining(realB), target: 1.0),
-                LeastSquaresLoss(DiscriminatorB.ForwardForTraining(fakeBDetached), target: 0.0));
-            var discriminatorObjective = Engine.TensorMultiplyScalar(Engine.TensorAdd(halfA, halfB), NumOps.FromDouble(0.5));
-            discriminatorLoss = StepOnTape(discriminatorTape, discriminatorObjective, new[]
+            var fakeB = GeneratorAtoB.ForwardForTraining(a);
+            var fakeA = GeneratorBtoA.ForwardForTraining(b);
+            var adversarial = Engine.TensorAdd(
+                LeastSquaresLoss(DiscriminatorB.ForwardFrozenOnTape(fakeB), target: 1.0),
+                LeastSquaresLoss(DiscriminatorA.ForwardFrozenOnTape(fakeA), target: 1.0));
+            var cycle = Engine.TensorAdd(
+                MeanAbsoluteError(GeneratorBtoA.ForwardForTraining(fakeB), a),
+                MeanAbsoluteError(GeneratorAtoB.ForwardForTraining(fakeA), b));
+            var identity = Engine.TensorAdd(
+                MeanAbsoluteError(GeneratorBtoA.ForwardForTraining(a), a),
+                MeanAbsoluteError(GeneratorAtoB.ForwardForTraining(b), b));
+            return Engine.TensorAdd(
+                adversarial,
+                Engine.TensorAdd(
+                    Engine.TensorMultiplyScalar(cycle, _cycleConsistencyLambda),
+                    Engine.TensorMultiplyScalar(identity, _identityLambda)));
+        }
+
+        T generatorLoss;
+        if (GeneratorsShareOneOptimizerConfig())
+        {
+            generatorLoss = GeneratorAtoB.TrainObjectiveFused(
+                Training.StepInputPacking<T>.Pack(realA, realB),
+                packed => GeneratorObjective(
+                    Training.StepInputPacking<T>.Slice(packed, 0, shapeA),
+                    Training.StepInputPacking<T>.Slice(packed, lengthA, shapeB)),
+                _generatorAtoBOptimizer,
+                () => GeneratorAtoB.CollectModelTrainableTensors().Concat(GeneratorBtoA.CollectModelTrainableTensors()).ToList());
+        }
+        else
+        {
+            using var generatorTape = new GradientTape<T>();
+            generatorLoss = StepOnTape(generatorTape, GeneratorObjective(realA, realB), new[]
             {
-                (DiscriminatorA, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)_discriminatorAOptimizer),
-                (DiscriminatorB, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)_discriminatorBOptimizer),
+                (GeneratorAtoB, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)_generatorAtoBOptimizer),
+                (GeneratorBtoA, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)_generatorBtoAOptimizer),
             });
         }
 
-        // ----- Generators: adversarial + lambda * cycle + 0.5 * lambda * identity (eq. 3) -----
-        // One loss trains both generators, since the cycle term runs through each of them. They used
-        // to be trained by Train(realA, realB): a paired regression, which unpaired data cannot supply.
-        var adversarial = Engine.TensorAdd(
-            LeastSquaresLoss(DiscriminatorB.ForwardFrozenOnTape(fakeB), target: 1.0),
-            LeastSquaresLoss(DiscriminatorA.ForwardFrozenOnTape(fakeA), target: 1.0));
+        // The cycle error at this iteration's weights, from the translations taken before the generators moved.
         var cycleTensor = Engine.TensorAdd(
-            MeanAbsoluteError(GeneratorBtoA.ForwardForTraining(fakeB), realA),
-            MeanAbsoluteError(GeneratorAtoB.ForwardForTraining(fakeA), realB));
-        var identityTensor = Engine.TensorAdd(
-            MeanAbsoluteError(GeneratorBtoA.ForwardForTraining(realA), realA),
-            MeanAbsoluteError(GeneratorAtoB.ForwardForTraining(realB), realB));
-        var generatorObjective = Engine.TensorAdd(
-            adversarial,
-            Engine.TensorAdd(
-                Engine.TensorMultiplyScalar(cycleTensor, _cycleConsistencyLambda),
-                Engine.TensorMultiplyScalar(identityTensor, _identityLambda)));
-        T generatorLoss = StepOnTape(generatorTape, generatorObjective, new[]
-        {
-            (GeneratorAtoB, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)_generatorAtoBOptimizer),
-            (GeneratorBtoA, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)_generatorBtoAOptimizer),
-        });
+            MeanAbsoluteError(GeneratorBtoA.ForwardForTrainingDetached(fakeBDetached), realA),
+            MeanAbsoluteError(GeneratorAtoB.ForwardForTrainingDetached(fakeADetached), realB));
         T cycleLoss = cycleTensor.Length > 0 ? cycleTensor[0] : NumOps.Zero;
-
         return (discriminatorLoss, generatorLoss, cycleLoss);
     }
 
@@ -502,6 +526,15 @@ public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
         return result;
     }
 
+    /// <summary>
+    /// True when both generators' optimizers are the same fused algorithm with the same settings, so one optimizer over
+    /// both parameter sets (the reference implementation's) is what the configuration describes.
+    /// </summary>
+    private bool GeneratorsShareOneOptimizerConfig()
+        => _generatorAtoBOptimizer.GetType() == _generatorBtoAOptimizer.GetType()
+            && Training.FusedTrainingSession<T>.TryMapToFusedOptimizerConfig(_generatorAtoBOptimizer, out var configAtoB)
+            && Training.FusedTrainingSession<T>.TryMapToFusedOptimizerConfig(_generatorBtoAOptimizer, out var configBtoA)
+            && configAtoB.Equals(configBtoA);
     /// <summary>
     /// The mean squared distance of discriminator scores from a real (1) or fake (0) target, recorded on
     /// the active tape: the least-squares GAN loss CycleGAN uses in place of the log-likelihood.

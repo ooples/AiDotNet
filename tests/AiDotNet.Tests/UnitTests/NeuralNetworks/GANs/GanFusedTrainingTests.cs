@@ -375,4 +375,48 @@ public class GanFusedTrainingTests
         var eager = RunSteps(pix2pix.Generator, pix2pix.Discriminator, Steps(pix2pix), compile: false);
         var fused = RunSteps(twin.Generator, twin.Discriminator, Steps(twin), compile: true);
         AssertFusedMatchesEager("Pix2Pix", 2, eager, fused, before);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task CycleGanSteps_RunFused_WithBothGeneratorsOnOnePlan()
+    {
+        // Both generators train on one plan per iteration (the reference's single optimizer over both), each
+        // discriminator on its own; all four must land where the eager iterations put them.
+        await Task.Yield();
+        CycleGAN<double> Make()
+        {
+            var gan = new CycleGAN<double>(
+                DenseNet(NeuralNetworkTaskType.Generative, 4, 16, 4, new TanhActivation<double>()),
+                DenseNet(NeuralNetworkTaskType.Generative, 4, 16, 4, new TanhActivation<double>()),
+                DenseNet(NeuralNetworkTaskType.Regression, 4, 16, 1, new IdentityActivation<double>()),
+                DenseNet(NeuralNetworkTaskType.Regression, 4, 16, 1, new IdentityActivation<double>()),
+                InputType.OneDimensional);
+            foreach (var network in new[] { gan.GeneratorAtoB, gan.GeneratorBtoA, gan.DiscriminatorA, gan.DiscriminatorB })
+                network.Predict(Data(4, 0));
+            return gan;
+        }
+        var cyclegan = Make();
+        var twin = Make();
+        twin.GeneratorAtoB.SetParameters(cyclegan.GeneratorAtoB.GetParameters());
+        twin.GeneratorBtoA.SetParameters(cyclegan.GeneratorBtoA.GetParameters());
+        twin.DiscriminatorA.SetParameters(cyclegan.DiscriminatorA.GetParameters());
+        twin.DiscriminatorB.SetParameters(cyclegan.DiscriminatorB.GetParameters());
+        var before = cyclegan.GeneratorAtoB.GetParameters();
+
+        Action<int> Steps(CycleGAN<double> gan) => s => gan.TrainStep(Data(4, s), Data(4, 100 + s));
+        int discriminatorsFused = twin.DiscriminatorA.CustomFusedStepCount + twin.DiscriminatorB.CustomFusedStepCount;
+        var eager = RunSteps(cyclegan.GeneratorAtoB, cyclegan.GeneratorBtoA, Steps(cyclegan), compile: false);
+        var fused = RunSteps(twin.GeneratorAtoB, twin.GeneratorBtoA, Steps(twin), compile: true);
+        AssertFusedMatchesEager("CycleGAN", 1, eager, fused, before);
+
+        Assert.Equal(8, twin.DiscriminatorA.CustomFusedStepCount + twin.DiscriminatorB.CustomFusedStepCount - discriminatorsFused);
+        foreach (var (eagerNet, fusedNet, name) in new[]
+        {
+            (cyclegan.DiscriminatorA, twin.DiscriminatorA, "discriminator A"),
+            (cyclegan.DiscriminatorB, twin.DiscriminatorB, "discriminator B"),
+        })
+        {
+            double worst = Worst(eagerNet.GetParameters().ToArray(), fusedNet.GetParameters().ToArray());
+            Assert.True(worst <= Tolerance, $"CycleGAN {name}: fused diverged from eager by {worst:G6}.");
+        }
     }}

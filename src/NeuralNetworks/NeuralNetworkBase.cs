@@ -5160,7 +5160,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>Collects every trainable tensor owned by this model in canonical order.</summary>
-    protected IReadOnlyList<Tensor<T>> CollectModelTrainableTensors()
+    protected internal IReadOnlyList<Tensor<T>> CollectModelTrainableTensors()
     {
         var allParameters = new List<Tensor<T>>();
         var seen = new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
@@ -13265,14 +13265,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// runs (a frozen discriminator) are read as they stand at each step; only this network's parameters are trained.
     /// The caller sets the training modes.
     /// </remarks>
+    /// <param name="parameterProvider">The tensors to train when not this network's own: a step that trains several
+    /// networks under one optimizer passes all of theirs.</param>
     internal T TrainObjectiveFused(
         Tensor<T> data,
         Func<Tensor<T>, Tensor<T>> objective,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        Func<IReadOnlyList<Tensor<T>>>? parameterProvider = null)
     {
         if (data is null) throw new ArgumentNullException(nameof(data));
         if (objective is null) throw new ArgumentNullException(nameof(objective));
-        return TrainCustomTapeStep(data, data, objective, (loss, _) => loss, optimizer);
+        return TrainCustomTapeStep(data, data, objective, (loss, _) => loss, optimizer, parameterProvider);
     }
 
     public T TrainWithCustomLoss(
