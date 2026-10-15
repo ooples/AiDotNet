@@ -71,7 +71,6 @@ public class TapeTrainingLoopRatchetTests
         "MetaLearning/Algorithms/MetaOptNetAlgorithm.cs",
         "MetaLearning/Algorithms/ProtoNetsAlgorithm.cs",
         "MetaLearning/Algorithms/RelationNetworkAlgorithm.cs",
-        "ReinforcementLearning/Agents/QMIXAgent.cs",
     };
 
     [Fact]
