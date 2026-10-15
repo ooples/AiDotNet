@@ -347,4 +347,32 @@ public class GanFusedTrainingTests
         Assert.Equal(4, twin.Discriminator.CustomFusedStepCount - discriminatorFused);
         double discriminator = Worst(infogan.Discriminator.GetParameters().ToArray(), twin.Discriminator.GetParameters().ToArray());
         Assert.True(discriminator <= Tolerance, $"InfoGAN: fused discriminator diverged from eager by {discriminator:G6}.");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Pix2PixSteps_RunFused_AndReadEachStepsImagePairs()
+    {
+        // The discriminator scores each step's source paired with its target and with the generated image; the
+        // generator's L1 term reads the step's own target.
+        await Task.Yield();
+        Pix2Pix<double> Make()
+        {
+            var gan = new Pix2Pix<double>(
+                DenseNet(NeuralNetworkTaskType.Generative, 16, 16, 4, new TanhActivation<double>()),
+                DenseNet(NeuralNetworkTaskType.Regression, 20, 16, 1, new IdentityActivation<double>()),
+                InputType.OneDimensional);
+            gan.Generator.Predict(Data(16, 0));
+            gan.Discriminator.Predict(Data(20, 0));
+            return gan;
+        }
+        var pix2pix = Make();
+        var twin = Make();
+        twin.Generator.SetParameters(pix2pix.Generator.GetParameters());
+        twin.Discriminator.SetParameters(pix2pix.Discriminator.GetParameters());
+        var before = pix2pix.Generator.GetParameters();
+
+        Action<int> Steps(Pix2Pix<double> gan) => s => gan.TrainStep(Data(16, s), Data(4, 100 + s));
+        var eager = RunSteps(pix2pix.Generator, pix2pix.Discriminator, Steps(pix2pix), compile: false);
+        var fused = RunSteps(twin.Generator, twin.Discriminator, Steps(twin), compile: true);
+        AssertFusedMatchesEager("Pix2Pix", 2, eager, fused, before);
     }}

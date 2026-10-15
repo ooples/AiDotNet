@@ -291,45 +291,58 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
         Generator.SetTrainingMode(true);
         Discriminator.SetTrainingMode(true);
 
-        // ONE generator forward, recorded on the generator's tape: the pattern the base GAN uses (#1390).
-        // The discriminator trains on a detached copy, so its step cannot reach the generator. The
-        // generator step then scores the tracked original through the frozen discriminator.
-        using var generatorTape = new GradientTape<T>();
-        var fakeTracked = Generator.ForwardForTraining(inputImages);
-        var fakeImages = new Tensor<T>(fakeTracked.Shape.ToArray());
-        fakeTracked.AsSpan().CopyTo(fakeImages.AsWritableSpan());
+        // Both steps run on their network's fused session, with every per-step tensor in the step's data. The
+        // generated images come from a training-mode generator forward that leaves the generator's running statistics
+        // to the generator's own step, whose forward computes the same values.
+        var fakeImages = Generator.ForwardForTrainingDetached(inputImages);
+        int[] inputShape = inputImages._shape;
+        int[] targetShape = targetImages._shape;
+        int[] fakeShape = fakeImages._shape;
+        int inputLength = inputImages.Length;
+        int targetLength = targetImages.Length;
 
         // ----- Discriminator: maximise L_cGAN(G, D) (Isola et al. 2017, eq. 1) -----
         // "We divide the objective by 2 while optimizing D, which slows down the rate at which D learns
         // relative to G" (section 3.3). The loss is averaged over every output, which is the PatchGAN
         // average over patches when the discriminator emits a map.
-        T discriminatorLoss;
-        using (var discriminatorTape = new GradientTape<T>())
-        {
-            var realScores = Discriminator.ForwardForTraining(ConcatenateImages(inputImages, targetImages));
-            var fakeScores = Discriminator.ForwardForTraining(ConcatenateImages(inputImages, fakeImages));
-            var discriminatorObjective = Engine.TensorMultiplyScalar(
-                Engine.TensorAdd(
-                    Discriminator.BinaryCrossEntropyOnTape(realScores, targetIsReal: true),
-                    Discriminator.BinaryCrossEntropyOnTape(fakeScores, targetIsReal: false)),
-                NumOps.FromDouble(0.5));
-            discriminatorLoss = StepOnTape(discriminatorTape, discriminatorObjective, Discriminator,
-                _discriminatorOptimizer);
-        }
+        T discriminatorLoss = Discriminator.TrainObjectiveFused(
+            Training.StepInputPacking<T>.Pack(inputImages, targetImages, fakeImages),
+            packed =>
+            {
+                var source = Training.StepInputPacking<T>.Slice(packed, 0, inputShape);
+                var target = Training.StepInputPacking<T>.Slice(packed, inputLength, targetShape);
+                var fake = Training.StepInputPacking<T>.Slice(packed, inputLength + targetLength, fakeShape);
+                var realScores = Discriminator.ForwardForTraining(ConcatenateImages(source, target));
+                var fakeScores = Discriminator.ForwardForTraining(ConcatenateImages(source, fake));
+                return Engine.TensorMultiplyScalar(
+                    Engine.TensorAdd(
+                        Discriminator.BinaryCrossEntropyOnTape(realScores, targetIsReal: true),
+                        Discriminator.BinaryCrossEntropyOnTape(fakeScores, targetIsReal: false)),
+                    NumOps.FromDouble(0.5));
+            },
+            _discriminatorOptimizer);
 
         // ----- Generator: L_cGAN + lambda * L_L1 (eq. 4) -----
         // The adversarial term is the one the paper trains: maximise log D(x, G(x)) rather than minimise
         // log(1 - D(x, G(x))). The L1 term is the mean absolute error to the target.
-        var generatorScores = Discriminator.ForwardFrozenOnTape(ConcatenateImages(inputImages, fakeTracked));
-        var adversarialLoss = Discriminator.BinaryCrossEntropyOnTape(generatorScores, targetIsReal: true);
-        var l1Tensor = Engine.ReduceMean(
-            Engine.TensorAbs(Engine.TensorSubtract(fakeTracked, targetImages)),
-            Enumerable.Range(0, fakeTracked.Shape.Length).ToArray(),
-            keepDims: false);
-        var generatorObjective = Engine.TensorAdd(adversarialLoss, Engine.TensorMultiplyScalar(l1Tensor, NumOps.FromDouble(_l1Lambda)));
-        T generatorLoss = StepOnTape(generatorTape, generatorObjective, Generator, _generatorOptimizer);
-        T l1Loss = l1Tensor.Length > 0 ? l1Tensor[0] : NumOps.Zero;
+        T generatorLoss = Generator.TrainObjectiveFused(
+            Training.StepInputPacking<T>.Pack(inputImages, targetImages),
+            packed =>
+            {
+                var source = Training.StepInputPacking<T>.Slice(packed, 0, inputShape);
+                var target = Training.StepInputPacking<T>.Slice(packed, inputLength, targetShape);
+                var generated = Generator.ForwardForTraining(source);
+                var adversarialLoss = Discriminator.BinaryCrossEntropyOnTape(
+                    Discriminator.ForwardFrozenOnTape(ConcatenateImages(source, generated)), targetIsReal: true);
+                return Engine.TensorAdd(
+                    adversarialLoss,
+                    Engine.TensorMultiplyScalar(MeanAbsoluteError(generated, target), NumOps.FromDouble(_l1Lambda)));
+            },
+            _generatorOptimizer);
 
+        // The L1 term at this step, from the generated images the step's forward reproduced.
+        var l1Tensor = MeanAbsoluteError(fakeImages, targetImages);
+        T l1Loss = l1Tensor.Length > 0 ? l1Tensor[0] : NumOps.Zero;
         return (discriminatorLoss, generatorLoss, l1Loss);
     }
 
@@ -344,6 +357,12 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
         return Generator.Predict(inputImages);
     }
 
+    /// <summary>The mean absolute error between two images, recorded for the step.</summary>
+    private Tensor<T> MeanAbsoluteError(Tensor<T> images, Tensor<T> targets)
+        => Engine.ReduceMean(
+            Engine.TensorAbs(Engine.TensorSubtract(images, targets)),
+            Enumerable.Range(0, images.Shape.Length).ToArray(),
+            keepDims: false);
     /// <summary>
     /// Pairs each input image with the image being judged, along the channel axis for spatial tensors
     /// and the feature axis otherwise: the conditional discriminator's input (Isola et al. 2017).
