@@ -13774,8 +13774,18 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 network.PublishParameterGradients(gradients);
                 network.LastLoss = lossValue;
 
+                // Each optimizer sees only its own network's gradients. An optimizer's global-norm clip measures and
+                // scales every gradient in its context, so handing every member the whole dictionary clipped each
+                // network by the joint norm, rescaled the other members' gradients in place, and clipped the next
+                // member again on those already-scaled values. PyTorch's per-optimizer clip_grad_norm_ is per network.
+                var ownGradients = new Dictionary<Tensor<T>, Tensor<T>>(
+                    AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                foreach (var parameter in memberParameters[i])
+                {
+                    if (gradients.TryGetValue(parameter, out var gradient)) ownGradients[parameter] = gradient;
+                }
                 var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
-                    memberParameters[i], gradients, lossValue);
+                    memberParameters[i], ownGradients, lossValue);
                 network.MarkTrainMutationStarted();
                 optimizer.Step(context);
                 network.InvalidateWeightCachesAfterSuccessfulWeightUpdate();
