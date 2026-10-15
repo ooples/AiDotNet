@@ -756,15 +756,9 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
         // ooples/AiDotNet#1846.
         AiDotNet.Training.MultiSlotFusedStep<T>? multiSlotStep = null;
         var denoiserLayers = BuildDenoiserLayerList();
-        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(denoiserLayers).ToArray();
-        AiDotNet.Optimizers.Fused.FusedOptimizerConfig mfsCfg = default;
-        bool fusedEligible = false;
-        if (trainableParams.Length > 0)
-        {
-            fusedEligible = NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
-                _optimizer,
-                out mfsCfg);
-        }
+        // The fused step resolves lazily created weights itself, so it is tried from the first row: an eager first
+        // row would leave its optimizer moments behind when the plan takes over.
+        bool fusedEligible = NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(_optimizer, out _);
 
         for (int row = startRow; row < endRow; row++)
         {
@@ -782,7 +776,7 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
             // as persistent slots. The denoiser layer set replays per row with fresh slots.
             if (fusedEligible)
             {
-                multiSlotStep = _fusedMultiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>();
+                multiSlotStep = _fusedMultiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>(this);
                 var denoiserInput = BuildDenoiserInput(xt, t);
                 var targetNoiseT = VectorToTensor(noise);
                 var slots = new[] { denoiserInput, targetNoiseT };
@@ -795,14 +789,7 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
                         freshSlotData: slots,
                         forward: ForwardFromSlots,
                         computeLoss: ComputeLossFromSlots,
-                        optimizerType: mfsCfg.Type,
-                        learningRate: mfsCfg.LearningRate,
-                        beta1: mfsCfg.Beta1,
-                        beta2: mfsCfg.Beta2,
-                        epsilon: mfsCfg.Epsilon,
-                        weightDecay: mfsCfg.WeightDecay,
-                        lrSchedule: mfsCfg.Schedule,
-                        extras: mfsCfg.Extras,
+                        optimizer: _optimizer,
                         out T _))
                 {
                     continue;

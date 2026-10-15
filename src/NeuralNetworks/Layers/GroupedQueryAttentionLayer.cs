@@ -508,7 +508,8 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
         Tensor<T> context;
         if (!cacheBwd
             && _alibiLayer == null
-            && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null)
+            && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
+            && !AiDotNet.Autodiff.GradientRecording.IsTrainingTrace)
         {
             // â”€â”€ Inference fast path â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             // Fused interleaved RoPE + GQA-aware scaled-dot-product attention, both
@@ -649,7 +650,8 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
         // to the Engine SDPA path below, which applies an additive causal mask so the cap and mask compose.
         if (_useCausalMask
             && _attnLogitSoftcap <= 0.0
-            && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null)
+            && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
+            && !AiDotNet.Autodiff.GradientRecording.IsTrainingTrace)
         {
             var flashConfig = new FlashAttentionConfig { ReturnAttentionWeights = true, UseCausalMask = true };
             var (flashOutput, flashWeights) = FlashAttention<T>.Forward(

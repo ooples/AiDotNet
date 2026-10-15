@@ -104,6 +104,8 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
     private InferenceSession? _onnxSession;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
+    // Draws the pretraining tube masks. Seeded from Options.Seed when one is set, so pretraining is reproducible;
+    // it ignored the seed and drew every mask from a secure generator.
     private readonly Random _random = RandomHelper.CreateSecureRandom();
     private bool _disposed;
 
@@ -208,6 +210,8 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
         _options = options ?? new VideoMAEOptions();
         _options.Validate();
         Options = _options;
+        if (_options.Seed.HasValue)
+            _random = RandomHelper.CreateSeededRandom(_options.Seed.Value);
 
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 224;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 224;
@@ -394,13 +398,33 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
         SetTrainingMode(true);
         try
         {
-            // The forward and the loss are recorded on this tape; BackwardAndStepOnPrecomputedLoss runs
-            // backward over it and applies the optimizer step, the same entry point the library's other
-            // custom-objective models (NeRF, TVAE, TabDDPM, the GANs) train through.
-            using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>();
-            var reconstruction = DecodeForReconstruction(EncodeVisiblePatches(clip, mask));
-            var loss = ReconstructionObjective(reconstruction, clip, mask);
-            return BackwardAndStepOnPrecomputedLoss(tape, loss, _optimizer);
+            // One step on the shared fused session: the compiled plan when it applies, the eager tape otherwise.
+            // Everything that changes per step travels in the step's input and target, never in a closure, so a
+            // plan replays this step's clip and mask: the input packs the clip with its visible-patch map, the
+            // target packs the reconstruction target with the masked-patch map (both built here from the data).
+            int numTubelets = clip.Shape[1] / _tubeletSize;
+            int patchesH = mask.GetLength(1);
+            int patchesW = mask.GetLength(2);
+            var visible = BuildPatchMask(mask, numTubelets, 1, keepMasked: false);
+            var maskedOnly = BuildPatchMask(mask, numTubelets, 1, keepMasked: true);
+            var target = BuildReconstructionTarget(clip, patchesH, patchesW);
+            var clipShape = clip._shape;
+            var mapShape = visible._shape;
+            var targetShape = target._shape;
+            int patchDim = targetShape[1];
+
+            Tensor<T> Forward(Tensor<T> packed)
+            {
+                var stepClip = Training.StepInputPacking<T>.Slice(packed, 0, clipShape);
+                var stepVisible = Training.StepInputPacking<T>.Slice(packed, clip.Length, mapShape);
+                return DecodeForReconstruction(EncodeVisiblePatches(stepClip, stepVisible));
+            }
+
+            Tensor<T> Loss(Tensor<T> reconstruction, Tensor<T> packed)
+                => MaskedReconstructionLoss(
+                    reconstruction, Training.StepInputPacking<T>.Slice(packed, 0, targetShape), Training.StepInputPacking<T>.Slice(packed, target.Length, mapShape), patchDim);
+
+            return TrainCustomTapeStep(Training.StepInputPacking<T>.Pack(clip, visible), Training.StepInputPacking<T>.Pack(target, maskedOnly), Forward, Loss, _optimizer);
         }
         finally
         {
@@ -644,31 +668,16 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
                 nameof(video));
         }
 
-        // Combine frames into tubelet pairs
+        // Group frames into tubelets: [B, T, C, H, W] -> [B * numTubelets, tubeletSize * C, H, W], row b * numTubelets + t,
+        // channel ts * C + c holding frame t * tubeletSize + ts. That is exactly a reshape of the whole tubelets in
+        // memory order, so it is one engine op. It used to be an element-by-element host copy, which a compiled training
+        // plan bakes into its trace and replays: every pretraining step after the first trained on the first clip.
         int numTubelets = numFrames / _tubeletSize;
-        var tubeletInput = new Tensor<T>([batchSize * numTubelets, channels * _tubeletSize, height, width]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int t = 0; t < numTubelets; t++)
-            {
-                for (int ts = 0; ts < _tubeletSize; ts++)
-                {
-                    int frameIdx = t * _tubeletSize + ts;
-                    for (int c = 0; c < channels; c++)
-                    {
-                        for (int h = 0; h < height; h++)
-                        {
-                            for (int w = 0; w < width; w++)
-                            {
-                                tubeletInput[b * numTubelets + t, ts * channels + c, h, w] = video[b, frameIdx, c, h, w];
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
+        var wholeTubelets = numTubelets * _tubeletSize == numFrames
+            ? video
+            : Engine.TensorNarrow(video, 1, 0, numTubelets * _tubeletSize);
+        var tubeletInput = Engine.Reshape(
+            wholeTubelets, new[] { batchSize * numTubelets, channels * _tubeletSize, height, width });
         // Apply patch embedding layer
         if (Layers.Count > 0)
         {
@@ -823,8 +832,18 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
                 nameof(mask));
         }
 
-        var visible = BuildPatchMask(mask, numTubelets, patchEmbedded.Shape[1], keepMasked: false);
+        return EncodeMaskedEmbedding(BuildPatchMask(mask, numTubelets, 1, keepMasked: false), patchEmbedded);
+    }
 
+    /// <summary>
+    /// The pretraining encoder with the visibility map as a tensor: <paramref name="visible"/> is
+    /// [B * numTubelets, 1, patchesH, patchesW], 1 at visible patches, broadcast over the feature channels.
+    /// </summary>
+    internal Tensor<T> EncodeVisiblePatches(Tensor<T> video, Tensor<T> visible)
+        => EncodeMaskedEmbedding(visible, PatchEmbed(video));
+
+    private Tensor<T> EncodeMaskedEmbedding(Tensor<T> visible, Tensor<T> patchEmbedded)
+    {
         // Apply encoder blocks. Each Layers[i] is a shape-preserving
         // Conv(numFeatures, 3, 1, 1) whose built-in ReLU records on the autodiff
         // tape, so a straight sequential dispatch keeps the gradient path intact.
@@ -1036,6 +1055,24 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
 
         // With nothing masked the objective is an honest zero (and so is every gradient).
         return Engine.TensorMultiplyScalar(total, NumOps.FromDouble(1.0 / Math.Max(1L, count)));
+    }
+
+    /// <summary>
+    /// The masked reconstruction objective with the mask as a tensor: <paramref name="maskedOnly"/> is
+    /// [B * numTubelets, 1, patchesH, patchesW], 1 at masked patches. Equals
+    /// <see cref="ReconstructionObjective"/> for the same mask; the masked-element count is read from the map,
+    /// so a compiled plan computes it from each step's own mask.
+    /// </summary>
+    private Tensor<T> MaskedReconstructionLoss(Tensor<T> reconstructed, Tensor<T> target, Tensor<T> maskedOnly, int patchDim)
+    {
+        var diff = Engine.TensorSubtract(reconstructed, target);
+        var squaredMasked = Engine.TensorMultiply(Engine.TensorMultiply(diff, diff), maskedOnly);
+        var total = Engine.ReduceSum(squaredMasked, Enumerable.Range(0, squaredMasked.Rank).ToArray(), keepDims: false);
+        var count = Engine.TensorMultiplyScalar(
+            Engine.ReduceSum(maskedOnly, Enumerable.Range(0, maskedOnly.Rank).ToArray(), keepDims: false),
+            NumOps.FromDouble(patchDim));
+        // With nothing masked the objective is an honest zero (and so is every gradient).
+        return Engine.TensorDivide(total, Engine.TensorMax(count, NumOps.One));
     }
 
     /// <summary>

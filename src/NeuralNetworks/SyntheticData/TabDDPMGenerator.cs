@@ -692,8 +692,7 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         // is compiled once (on the first row) and replayed per subsequent row
         // by refreshing slot data. See ooples/AiDotNet#1846.
         AiDotNet.Training.MultiSlotFusedStep<T>? multiSlotStep = null;
-        bool fusedMapped = NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(_optimizer, out var mfsCfg);
-        bool hasTrainableParameters = false;
+        bool fusedMapped = NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(_optimizer, out _);
         for (int row = startRow; row < endRow; row++)
         {
             int t = _gaussianDiffusion.SampleTimestep();
@@ -729,16 +728,14 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             // _timestepProjection stays INSIDE the compiled forward closure
             // (which _plan.Step() replays per row) so its weights participate
             // in the backward pass. See ooples/AiDotNet#1846.
-            // The optimizer mapping is per batch; the has-parameters gate latches once true (a lazily built model
-            // reports none until its first forward). TryStep still reads the parameter set every step: that is how
-            // it notices a changed set and re-reads lazily created weights after its first trace.
-            if (fusedMapped
-                && (hasTrainableParameters || (hasTrainableParameters = CollectModelTrainableTensors().Count > 0)))
+            // The fused step resolves lazily created weights itself, so it is tried from the first row: an eager first
+            // row would leave its optimizer moments behind when the plan takes over.
+            if (fusedMapped)
             {
                 var slots = BuildTabDDPMSlots(numNoisy, actualNoise, catNoisy, catClean, t);
                 if (slots is not null)
                 {
-                    multiSlotStep = _fusedMultiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>();
+                    multiSlotStep = _fusedMultiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>(this);
                     Tensor<T> ForwardFromSlots(IReadOnlyList<Tensor<T>> s)
                     {
                         // s[0] numNoisy, s[1] actualNoise, s[2] catNoisy,
@@ -783,14 +780,7 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
                             freshSlotData: slots,
                             forward: ForwardFromSlots,
                             computeLoss: ComputeLossFromSlots,
-                            optimizerType: mfsCfg.Type,
-                            learningRate: mfsCfg.LearningRate,
-                            beta1: mfsCfg.Beta1,
-                            beta2: mfsCfg.Beta2,
-                            epsilon: mfsCfg.Epsilon,
-                            weightDecay: mfsCfg.WeightDecay,
-                            lrSchedule: mfsCfg.Schedule,
-                            extras: mfsCfg.Extras,
+                            optimizer: _optimizer,
                             out T _))
                     {
                         continue;

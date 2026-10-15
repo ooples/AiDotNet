@@ -715,8 +715,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         // weight matmuls) instead of three. The fused weight column layout is [qW | kW | vW], so
         // output columns [0,E)/[E,2E)/[2E,3E) reproduce the three separate GEMMs bit-identically.
         // The custom backward never runs without a tape, so the unfused weights are not needed here.
-        bool qkvTapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
-            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        bool qkvTapeActive = AiDotNet.Autodiff.GradientRecording.IsRecording<T>();
         if (ForwardScratchGate.FusedQkv && !qkvTapeActive)
         {
             int threeE = 3 * _embeddingDimension;
@@ -779,8 +778,7 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         // per-layer buffer instead of allocating the scores/weights/output tensors. The
         // attention-weight matrix is only needed by this layer's custom backward, which
         // never runs without a tape — so discarding it here is safe. Bit-identical math.
-        bool sdpaTapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
-            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+        bool sdpaTapeActive = AiDotNet.Autodiff.GradientRecording.IsRecording<T>();
         if (ForwardScratchGate.Sdpa && !sdpaTapeActive)
         {
             int sq = Q.Shape[2];

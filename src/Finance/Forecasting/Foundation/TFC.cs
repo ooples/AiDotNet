@@ -298,6 +298,12 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// The objective is the supervised forecast loss plus the time-frequency contrastive term, recorded together so the
+    /// shared projection head receives both contributions. It steps on the shared fused session with the model's
+    /// optimizer (the paper's Adam by default). Both paths used to apply a hard-coded SGD step at 0.001 and never
+    /// read the configured optimizer.
+    /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> target)
     {
         if (!_useNativeMode)
@@ -305,15 +311,8 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
 
         var loss = LossFunction;
 
-        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
-        var trainableLayers = Layers.OfType<ITrainableLayer<T>>().ToList();
-
-        // TF-C's objective is the supervised forecast loss plus the contrastive alignment between the time-domain
-        // and frequency-domain encoder outputs, both recorded in one objective so the update reflects the full loss
-        // (the projection head is shared, so its gradient sums both branches). The contrastive term is computed
-        // INSIDE the forward closure from the CURRENT step's input, so a compiled replay recomputes it from the
-        // refreshed input instead of freezing the traced batch; ApplyInstanceNormalization and
-        // ComputeFrequencyRepresentation are traceable engine ops. Fwd-then-Loss ordering is the step's contract.
+        // The contrastive term reads the step's input, so it is computed inside the forward (which receives the
+        // input the plan rebinds on every replay) and handed to the loss, which the step always runs right after.
         Tensor<T>? capturedContrastive = null;
         Tensor<T> ForwardCombined(Tensor<T> inp)
         {
@@ -330,26 +329,27 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
             var supervised = loss.ComputeTapeLoss(pred, alignedT);
             var contrastive = capturedContrastive
                 ?? throw new InvalidOperationException(
-                    "TFC training step: contrastive loss was not captured by ForwardCombined. " +
-                    "This indicates the loss closure ran before the forward closure, which violates the " +
-                    "training step's Fwd-then-Loss ordering.");
-            // Shape-align on rank drift (rank-0 [] vs rank-1 [1]); both are scalar-valued so reshape is safe.
-            if (!supervised._shape.SequenceEqual(contrastive._shape)
-                && supervised.Length == contrastive.Length)
+                    "TFC training step: the loss ran before the forward computed the contrastive term.");
+
+            // Shape-align on rank drift (a rank-0 supervised loss against a [1] contrastive one); both are scalars.
+            if (!supervised._shape.SequenceEqual(contrastive._shape) && supervised.Length == contrastive.Length)
                 contrastive = Engine.Reshape(contrastive, supervised._shape);
             return Engine.TensorAdd(supervised, contrastive);
         }
 
-        // One step through the shared training step with the model's configured optimizer (the paper optimizer by
-        // default): the fused compiled plan when it applies, otherwise the shared eager tape step. Previously both
-        // paths hard-coded plain SGD at 0.001 and ignored the optimizer the model was constructed with.
-        LastLoss = AiDotNet.Training.FusedTrainingStep<T>.Step(
-            this, trainableLayers, input, target,
-            forward: ForwardCombined,
-            computeLoss: ComputeLossCombined,
-            optimizer: _optimizer,
-            extraTensors: trainableParams,
-            onGradients: gradients => PublishParameterGradients(gradients));
+        // Every training entry point on the base puts the layers in training mode for the step; without it the
+        // encoders' dropout stays in inference mode.
+        SetTrainingMode(true);
+        try
+        {
+            TrainCustomTapeStep(input, target, ForwardCombined, ComputeLossCombined, _optimizer,
+                () => Training.TapeTrainingStep<T>.CollectParameters(Layers));
+            StepSchedulerIfSupported(_optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
     /// <summary>

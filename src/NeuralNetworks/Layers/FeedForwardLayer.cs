@@ -704,8 +704,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
             // and consumed before the next call to this same layer. ND input keeps the
             // original allocating path (FusedLinearInto's fast path is rank-2 only; routing ND
             // through it would allocate AND copy).
-            bool ffTapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
-                && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+            bool ffTapeActive = AiDotNet.Autodiff.GradientRecording.IsRecording<T>();
             if (ForwardScratchGate.FusedLinear && !ffTapeActive && input.Rank == 2)
             {
                 int batchDim = input.Shape[0];

@@ -39,13 +39,14 @@ internal static class TensorModelTrainer<T>
     }
 
     /// <summary>
-    /// Runs one training step on raw tensors: the forward, the loss (mean squared error unless the model supplies its
-    /// own), then an update of every live trainable tensor.
+    /// Runs one tape-based training step: forward under a gradient tape, the loss (mean squared
+    /// error unless the model supplies its own), then a stochastic-gradient update of every live
+    /// trainable tensor.
     /// </summary>
     /// <param name="model">The model being trained.</param>
     /// <param name="input">The training input.</param>
     /// <param name="target">The desired output, shaped like the model prediction.</param>
-    /// <param name="learningRate">Step size for the plain-SGD update used when <paramref name="optimizer"/> is null.</param>
+    /// <param name="learningRate">Step size for the parameter update.</param>
     /// <param name="forward">
     /// The model's differentiable forward pass. It must be built from engine operations so the tape
     /// records it - a forward that drops to scalar loops severs the chain and the parameters upstream
@@ -58,12 +59,6 @@ internal static class TensorModelTrainer<T>
     /// </param>
     /// <param name="optimizer">The update rule. Null means plain SGD at <paramref name="learningRate"/>.</param>
     /// <returns>The loss value for this step, measured before the update.</returns>
-    /// <remarks>
-    /// With an optimizer the step goes through the model's <see cref="AiDotNet.Training.TapeTrainingStepper{T}"/>: the
-    /// fused compiled plan (forward, backward and update in one replay, on any engine) when it applies, the shared
-    /// eager tape step otherwise. These models' forwards were written for the eager tape, so the plan's first replay
-    /// on new data is checked against the eager forward and the model stays eager when they disagree.
-    /// </remarks>
     public static T Step(
         ModelBase<T, Tensor<T>, Tensor<T>> model,
         Tensor<T> input,
@@ -74,37 +69,64 @@ internal static class TensorModelTrainer<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
     {
         var objective = loss ?? MeanSquaredError;
-        var parameters = WarmedTrainableTensors(model, input, forward);
-        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>> checkShapes = gradients => RequireMatchingShapes(model, gradients);
-        if (optimizer is null)
-        {
-            return AiDotNet.Training.TapeTrainingStepper<T>.EagerSgdObjectiveStep(
-                () => parameters, () => objective(forward(input), target), learningRate, checkShapes);
-        }
+        return optimizer is not null && TryFusedStep(model, input, target, forward, objective, optimizer, out T fusedLoss)
+            ? fusedLoss
+            : StepWithTargets(model, input, target, learningRate, forward, objective, optimizer);
+    }
 
-        return AiDotNet.Training.TapeTrainingStepper<T>.ForOwner(model).Step(new AiDotNet.Training.FusedTrainingStepRequest<T>
+    /// <summary>Steps this process has run on the fused compiled plan, for tests that must see the plan engage.</summary>
+    internal static int FusedStepCount;
+
+    // One fused session per model: the compiled plan owns the optimizer moments across steps.
+    private static readonly ConditionalWeakTable<object, AiDotNet.Training.FusedTrainingSession<T>> Sessions = new();
+
+    /// <summary>
+    /// Forward, loss, backward and the optimizer update as one compiled plan, on the shared session every base
+    /// class trains through, when it applies. Only a tensor target can be a plan input; a typed target is read by
+    /// the loss closure on the host, so <see cref="StepWithTargets{TPrediction, TTarget}"/> stays eager.
+    /// </summary>
+    private static bool TryFusedStep(
+        ModelBase<T, Tensor<T>, Tensor<T>> model,
+        Tensor<T> input,
+        Tensor<T> target,
+        Func<Tensor<T>, Tensor<T>> forward,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> loss,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
+        out T lossValue)
+    {
+        lossValue = MathHelper.GetNumericOperations<T>().Zero;
+        if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
+            return false;
+
+        EnsureWarm(model, forward, input);
+        var parameters = LiveTrainableTensors(model);
+        if (parameters.Length == 0)
+            return false;
+
+        var session = Sessions.GetValue(model, static m => new AiDotNet.Training.FusedTrainingSession<T>(m));
+        var outcome = session.TryStep(new AiDotNet.Training.FusedTrainingStepRequest<T>
         {
             Layers = Array.Empty<ITrainableLayer<T>>(),
-            Selection = parameters,
-            ExtraParameters = parameters,
             Input = input,
             Target = target,
             Forward = forward,
-            ComputeLoss = objective,
+            ComputeLoss = loss,
             Optimizer = optimizer,
-            OnGradients = checkShapes,
-            VerifyReplayAgreement = true,
-        });
+            ExtraParameters = parameters,
+        }, out lossValue);
+
+        if (outcome == AiDotNet.Training.FusedStepOutcome.CommittedFailure)
+            session.DropAfterCommittedFailure();
+        if (outcome != AiDotNet.Training.FusedStepOutcome.Stepped)
+            return false;
+        System.Threading.Interlocked.Increment(ref FusedStepCount);
+        return true;
     }
 
     /// <summary>
     /// Runs the same single update for structured heads and typed task targets, without flattening
     /// away their meaning. Forward outputs and the loss are consumed inside the tape/arena lifetime.
     /// </summary>
-    /// <remarks>
-    /// A typed task loss assigns targets to predictions on the host (anchor matching, bipartite matching), so this
-    /// step is a graph break: it always runs on the shared eager tape step.
-    /// </remarks>
     public static T StepWithTargets<TPrediction, TTarget>(
         ModelBase<T, Tensor<T>, Tensor<T>> model,
         Tensor<T> input,
@@ -114,36 +136,11 @@ internal static class TensorModelTrainer<T>
         Func<TPrediction, TTarget, Tensor<T>> loss,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
     {
-        var parameters = WarmedTrainableTensors(model, input, forward);
-        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>> checkShapes = gradients => RequireMatchingShapes(model, gradients);
-        Tensor<T> Objective() => loss(forward(input), target);
-        return optimizer is null
-            ? AiDotNet.Training.TapeTrainingStepper<T>.EagerSgdObjectiveStep(() => parameters, Objective, learningRate, checkShapes)
-            : AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(parameters, Objective, optimizer, checkShapes);
-    }
-
-    // Resolves lazy layer shapes BEFORE reading the registry, then returns the live trainable tensors. The
-    // convolutions behind the Conv2D adapter infer their input depth on first Forward and own no parameters until
-    // then, so the registry would report none and the step would silently do nothing. No tape is active here, so
-    // this records nothing.
-    private static Tensor<T>[] WarmedTrainableTensors<TPrediction>(
-        ModelBase<T, Tensor<T>, Tensor<T>> model, Tensor<T> input, Func<Tensor<T>, TPrediction> forward)
-    {
-        var warmup = Warmed.GetValue(model, static _ => new WarmupState());
-        if (!System.Threading.Volatile.Read(ref warmup.Complete))
-        {
-            // GetValue may invoke competing factories; its returned state is the one shared by
-            // every caller. Serialize initialization, not the whole training step. A failed forward
-            // leaves Complete false so a later call retries instead of caching the exception.
-            lock (warmup)
-            {
-                if (!warmup.Complete)
-                {
-                    forward(input);
-                    System.Threading.Volatile.Write(ref warmup.Complete, true);
-                }
-            }
-        }
+        // Resolve lazy layer shapes BEFORE reading the registry. The convolutions behind the Conv2D
+        // adapter infer their input depth on first Forward and own no parameters until then, so the
+        // registry would report none and the step would silently do nothing. No tape is active here,
+        // so this records nothing.
+        EnsureWarm(model, forward, input);
 
         var parameters = LiveTrainableTensors(model);
         if (parameters.Length == 0)
@@ -152,23 +149,50 @@ internal static class TensorModelTrainer<T>
                 $"No live trainable tensors were discovered for model '{model.GetType().FullName}'.");
         }
 
-        return parameters;
+        // The shared eager step: the update runs inside the tape's scope (the gradients live in the step's arena), with
+        // plain SGD at the given rate or the caller's optimizer, whose state is keyed by these live tensors.
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>> checkShapes = gradients => RequireMatchingShapes(model, gradients);
+        Tensor<T> Objective() => loss(forward(input), target);
+        return optimizer is null
+            ? AiDotNet.Training.TapeTrainingStepper<T>.EagerSgdObjectiveStep(() => parameters, Objective, learningRate, checkShapes)
+            : AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(parameters, Objective, optimizer, checkShapes);
     }
 
+    // A gradient whose shape differs from its tensor means the forward used a reshaped copy or an
+    // out-of-engine view instead of the registered tensor, so the tape recorded the wrong one.
     private static void RequireMatchingShapes(
         ModelBase<T, Tensor<T>, Tensor<T>> model, IReadOnlyDictionary<Tensor<T>, Tensor<T>> gradients)
     {
         foreach (var pair in gradients)
         {
-            var parameter = pair.Key;
-            var gradient = pair.Value;
-            if (!SameShape(parameter, gradient))
+            if (!SameShape(pair.Key, pair.Value))
             {
                 throw new InvalidOperationException(
                     $"{model.GetType().Name}: the gradient for a trainable tensor of shape "
-                    + $"[{string.Join(", ", parameter._shape)}] has shape [{string.Join(", ", gradient._shape)}]. "
+                    + $"[{string.Join(", ", pair.Key._shape)}] has shape [{string.Join(", ", pair.Value._shape)}]. "
                     + "The forward pass must use this tensor exactly as registered - a reshaped copy or "
                     + "a view created outside the engine records the wrong tensor on the tape.");
+            }
+        }
+    }
+    // Runs one forward the first time a model trains, so lazily shaped layers own their parameters before the
+    // registry is read.
+    private static void EnsureWarm<TPrediction>(
+        ModelBase<T, Tensor<T>, Tensor<T>> model, Func<Tensor<T>, TPrediction> forward, Tensor<T> input)
+    {
+        var warmup = Warmed.GetValue(model, static _ => new WarmupState());
+        if (System.Threading.Volatile.Read(ref warmup.Complete))
+            return;
+
+        // GetValue may invoke competing factories; its returned state is the one shared by every caller. Serialize
+        // initialization, not the whole training step. A failed forward leaves Complete false so a later call
+        // retries instead of caching the exception.
+        lock (warmup)
+        {
+            if (!warmup.Complete)
+            {
+                forward(input);
+                System.Threading.Volatile.Write(ref warmup.Complete, true);
             }
         }
     }

@@ -420,11 +420,52 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
                 return;
             }
 
-            if (TapeTrainingStep<T>.CollectParameters(Layers).Count == 0) return;
+            if (_optimizer is null) return;
 
-            // The joint objective on the network's shared eager step: gradients published through the base, the
-            // configured optimizer (AdamW by default) driving the update.
-            TrainWithCustomObjective(input, expected, JointObjective, _optimizer);
+            // One step on the shared fused session: the compiled plan when it applies, the eager tape otherwise.
+            // The forward returns every head, flattened and concatenated, so the joint objective reads them from the
+            // step's output. The LID target is derived from the reference on the host (an argmax), so it travels in
+            // the step's target rather than being recomputed inside the loss, where a plan would bake it.
+            bool withLid = _options.LidWeight > 0.0 && _lidHead is not null;
+            var lidTarget = withLid ? LanguageIdentificationTarget(LidFrames(input), expected) : null;
+            var target = lidTarget is null ? expected : StepInputPacking<T>.Pack(expected, lidTarget);
+            var expectedShape = expected._shape;
+            int[] ctcShape = Array.Empty<int>(), attShape = Array.Empty<int>(), lidShape = Array.Empty<int>();
+
+            Tensor<T> Forward(Tensor<T> features)
+            {
+                var encoded = EncodeForward(features);
+                var ctc = CtcForward(encoded);
+                var att = AttentionForward(encoded);
+                ctcShape = ctc._shape;
+                attShape = att._shape;
+                var heads = new List<Tensor<T>> { Engine.Reshape(ctc, [1, ctc.Length]), Engine.Reshape(att, [1, att.Length]) };
+                if (withLid)
+                {
+                    var lid = LidForward(encoded);
+                    lidShape = lid._shape;
+                    heads.Add(Engine.Reshape(lid, [1, lid.Length]));
+                }
+                return Engine.TensorConcatenate(heads.ToArray(), 1);
+            }
+
+            Tensor<T> Loss(Tensor<T> packedHeads, Tensor<T> packedTarget)
+            {
+                int ctcLength = ctcShape.Aggregate(1, (x, y) => x * y);
+                int attLength = attShape.Aggregate(1, (x, y) => x * y);
+                var reference = lidTarget is null ? packedTarget : StepInputPacking<T>.Slice(packedTarget, 0, expectedShape);
+                var joint = JointHeadsObjective(
+                    StepInputPacking<T>.Slice(packedHeads, 0, ctcShape),
+                    StepInputPacking<T>.Slice(packedHeads, ctcLength, attShape),
+                    reference);
+                if (lidTarget is null) return joint;
+
+                var lidLogits = StepInputPacking<T>.Slice(packedHeads, ctcLength + attLength, lidShape);
+                var lidLoss = MeanSquaredTo(lidLogits, StepInputPacking<T>.Slice(packedTarget, expected.Length, lidTarget._shape));
+                return Engine.TensorAdd(joint, Engine.TensorMultiplyScalar(lidLoss, NumOps.FromDouble(_options.LidWeight)));
+            }
+
+            TrainCustomTapeStep(input, target, Forward, Loss, _optimizer, () => TapeTrainingStep<T>.CollectParameters(Layers));
         }
         finally
         {
@@ -435,33 +476,32 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
     /// <summary>
     /// The joint multitask objective, on one tape over the shared encoder.
     /// </summary>
-    private Tensor<T> JointObjective(Tensor<T> input, Tensor<T> expected)
+    private Tensor<T> JointHeadsObjective(Tensor<T> ctcLogits, Tensor<T> attLogits, Tensor<T> expected)
     {
-        var encoded = EncodeForward(input);
-
-        var ctcLogits = CtcForward(encoded);
-        var attLogits = AttentionForward(encoded);
-
         var ctcLoss = MeanSquaredTo(ctcLogits, expected);
         var attLoss = MeanSquaredTo(attLogits, expected);
 
         double ctcWeight = _options.CtcWeight;
-        var joint = Engine.TensorAdd(
+        return Engine.TensorAdd(
             Engine.TensorMultiplyScalar(attLoss, NumOps.FromDouble(1.0 - ctcWeight)),
             Engine.TensorMultiplyScalar(ctcLoss, NumOps.FromDouble(ctcWeight)));
-
-        // The third task. Its target is derived from the reference tokens' own language, which is
-        // well-defined only because the inventories are concatenated rather than unified.
-        if (_options.LidWeight > 0.0 && _lidHead is not null)
-        {
-            var lidLoss = LanguageIdentificationLoss(LidForward(encoded), expected);
-            joint = Engine.TensorAdd(joint,
-                Engine.TensorMultiplyScalar(lidLoss, NumOps.FromDouble(_options.LidWeight)));
-        }
-
-        return joint;
     }
 
+    // The LID head's frame count for an input shape, read once from a forward outside the tape.
+    private readonly Dictionary<string, int> _lidFramesByShape = new();
+
+    private int LidFrames(Tensor<T> input)
+    {
+        string key = string.Join(",", input._shape);
+        if (_lidFramesByShape.TryGetValue(key, out int frames)) return frames;
+        using (new NoGradScope<T>())
+        {
+            var lid = LidForward(EncodeForward(input));
+            frames = lid.Rank >= 2 ? lid.Shape[0] : 1;
+        }
+        _lidFramesByShape[key] = frames;
+        return frames;
+    }
     /// <summary>
     /// Mean squared error between a branch's logits and the reference, over the overlapping extent.
     /// </summary>
@@ -483,10 +523,9 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
     /// property the paper's separate-inventory choice buys, and it is why an LID task is available
     /// at all without extra annotation.
     /// </remarks>
-    private Tensor<T> LanguageIdentificationLoss(Tensor<T> lidLogits, Tensor<T> expected)
+    private Tensor<T> LanguageIdentificationTarget(int frames, Tensor<T> expected)
     {
         int classes = SupportedLanguages.Count;
-        int frames = lidLogits.Rank >= 2 ? lidLogits.Shape[0] : 1;
         int vocab = expected.Rank >= 2 ? expected.Shape[^1] : expected.Length;
 
         var targetData = new T[frames * classes];
@@ -510,11 +549,7 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
             targetData[f * classes + language] = NumOps.One;
         }
 
-        var lidTarget = new Tensor<T>(targetData, [frames, classes]);
-        var aligned = AlignTargetTo(lidLogits, lidTarget);
-        var diff = Engine.TensorSubtract(lidLogits, aligned);
-        var axes = Enumerable.Range(0, diff.Rank).ToArray();
-        return Engine.ReduceMean(Engine.TensorMultiply(diff, diff), axes, keepDims: false);
+        return new Tensor<T>(targetData, [frames, classes]);
     }
 
     /// <summary>
@@ -524,10 +559,15 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
     {
         if (expected.Rank == logits.Rank && expected._shape.SequenceEqual(logits._shape)) return expected;
 
-        var aligned = new Tensor<T>(logits._shape);
-        int n = Math.Min(aligned.Length, expected.Length);
-        for (int i = 0; i < n; i++) aligned[i] = expected[i];
-        return aligned;
+        // Engine ops only: a compiled plan replays this against each step's reference. The element-wise copy it
+        // replaced read the reference on the host, which a plan bakes in at trace time.
+        var flat = Engine.Reshape(expected, [expected.Length]);
+        int n = Math.Min(logits.Length, expected.Length);
+        var kept = n == expected.Length ? flat : Engine.TensorNarrow(flat, 0, 0, n);
+        var fitted = n == logits.Length
+            ? kept
+            : Engine.TensorConcatenate(new[] { kept, new Tensor<T>([logits.Length - n]) }, 0);
+        return Engine.Reshape(fitted, logits._shape);
     }
 
     #endregion

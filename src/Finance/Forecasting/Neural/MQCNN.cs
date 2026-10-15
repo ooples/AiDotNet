@@ -537,32 +537,17 @@ public partial class MQCNN<T> : ForecastingModelBase<T>
         // Keep the tape-based flow but compute pinball loss directly so
         // each quantile sees its asymmetric gradient.
 
-        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
-
-        // GPU-RESIDENT fast path — fused ADAM on the multi-quantile pinball
-        // objective. Falls through to the eager Adam step below.
+        // One step on the shared fused session: the compiled plan when it applies (CPU or GPU), the eager tape
+        // otherwise, both with the model's own optimizer. The fused attempt used to hard-code an Adam
+        // configuration of its own, so the two paths could train with different optimizers.
         //
-        // Adam (not plain SGD): the pinball gradient is bounded by q / (1 - q)
-        // (≤ 0.9) and then averaged over BOTH the horizon and the quantile
-        // grid, so the raw gradient magnitude reaching the weights is tiny.
-        // Fixed-rate SGD at lr=1e-3 therefore barely moves the parameters and
-        // the loss stays effectively flat (the memorization invariant caught
-        // exactly this: 0.2244 → 0.2240 over 20 steps). Adam's per-parameter
-        // second-moment normalization makes the effective step ≈ lr regardless
-        // of the small gradient scale, so the model actually fits. The model
-        // already constructs an AdamOptimizer as _optimizer; use its
-        // hyper-parameters here so the fused and eager paths agree.
-        var trainableLayers = Layers.OfType<ITrainableLayer<T>>().ToList();
-        // One step through the shared training step with the model's configured optimizer (Adam at
-        // _options.LearningRate by default): the fused compiled plan when it applies, otherwise the shared eager tape
-        // step. Both paths now use the SAME optimizer, so a caller-supplied optimizer is honoured on the fused path too.
-        LastLoss = AiDotNet.Training.FusedTrainingStep<T>.Step(
-            this, trainableLayers, input, target,
-            forward: ForwardForTraining,
-            computeLoss: ComputeMultiQuantilePinballLossTape,
-            optimizer: _optimizer,
-            extraTensors: trainableParams,
-            onGradients: gradients => PublishParameterGradients(gradients));
+        // Adam (not plain SGD): the pinball gradient is bounded by q / (1 - q) (<= 0.9) and then averaged over BOTH
+        // the horizon and the quantile grid, so the raw gradient reaching the weights is tiny. Fixed-rate SGD at
+        // lr=1e-3 barely moves the parameters (the memorization invariant caught exactly this: 0.2244 -> 0.2240
+        // over 20 steps); Adam's second-moment normalization makes the effective step about lr whatever the
+        // gradient scale.
+        TrainCustomTapeStep(input, target, ForwardForTraining, ComputeMultiQuantilePinballLossTape, _optimizer,
+            () => Training.TapeTrainingStep<T>.CollectParameters(Layers));
     }
 
     /// <summary>

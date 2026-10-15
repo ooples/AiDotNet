@@ -408,8 +408,7 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         // train step (CompiledModelHost.Predict + LazyNode.Realize) — on top of the eager op
         // record the backward needs anyway. Eager records the identical ops on the tape, so the
         // gradients are unchanged; inference (no tape / NoGradScope) still gets the fast replay.
-        if (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
-            && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed)
+        if (AiDotNet.Autodiff.GradientRecording.IsRecording<T>())
             return eagerFallback();
 
         // Compiled inference replay is opt-in (see s_autoCompiledInferenceEnabled): the verify pass
@@ -1706,6 +1705,46 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         return embedding;
     }
 
+    /// <summary>
+    /// The sinusoidal timestep embedding of a <c>[B]</c> tensor of timesteps, <c>[B, TimeEmbeddingDim]</c>, built
+    /// from engine ops.
+    /// </summary>
+    /// <remarks>
+    /// Row b equals <see cref="GetTimestepEmbedding"/> of timestep b. Because the timesteps arrive as a tensor
+    /// rather than an int, a compiled training plan can take them as an input and replay with each batch's own
+    /// timesteps; the int overload bakes the traced timestep into the plan.
+    /// </remarks>
+    public virtual Tensor<T> GetTimestepEmbedding(Tensor<T> timesteps)
+    {
+        ThrowIfDisposed();
+        int batch = timesteps.Length;
+        int halfDim = TimeEmbeddingDim / 2;
+        var angles = Engine.TensorMultiply(
+            Engine.Reshape(timesteps, new[] { batch, 1 }), TimestepFrequencies(halfDim));      // [B, half]
+        return Engine.TensorConcatenate(new[] { Engine.TensorSin(angles), Engine.TensorCos(angles) }, 1);
+    }
+
+    [Scratch]
+    private Tensor<T>? _timestepFrequencies;
+
+    // exp(-i * ln(10000) / (half - 1)) for i < half, as [1, half]; the frequencies of GetTimestepEmbedding(int).
+    private Tensor<T> TimestepFrequencies(int halfDim)
+    {
+        if (_timestepFrequencies is { } cached && cached.Length == halfDim)
+            return cached;
+        var logScale = Math.Log(10000.0) / (halfDim - 1);
+        var data = new Vector<T>(halfDim);
+        for (int i = 0; i < halfDim; i++)
+            data[i] = NumOps.FromDouble(Math.Exp(-i * logScale));
+        return _timestepFrequencies = new Tensor<T>(new[] { 1, halfDim }, data);
+    }
+
+    /// <summary>
+    /// Whether <see cref="PredictNoiseWithEmbedding"/> accepts a <c>[B, TimeEmbeddingDim]</c> embedding, one row
+    /// per batch element, and returns what <see cref="PredictNoise(Tensor{T}, int, Tensor{T})"/> returns for each
+    /// element at its own timestep. The fused diffusion training step needs it.
+    /// </summary>
+    public virtual bool SupportsBatchedTimeEmbedding => false;
     #endregion
 
     #region IModel<Tensor<T>, Tensor<T>, ModelMetadata<T>> Implementation

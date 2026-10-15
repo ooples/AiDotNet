@@ -44,6 +44,15 @@ public sealed partial class FeedforwardPolicyAgent<T> : IPortfolioAgent<T>
     private readonly IReadOnlyList<Tensor<T>> _trainable;
     private readonly AdamOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
+    // One episode's update on the shared fused session: the compiled plan when it applies, the eager tape otherwise.
+    private readonly Training.TapeTrainingStepper<T> _stepper;
+
+    /// <summary>Episode updates run on the fused compiled plan.</summary>
+    internal int FusedTrainingStepCount => _stepper.FusedStepCount;
+
+    /// <summary>Episode updates run on the eager tape.</summary>
+    internal int EagerTrainingStepCount => _stepper.EagerStepCount;
+
     private readonly List<T[]> _states = new();
     private readonly List<T[]> _actions = new();
     private readonly List<double> _rewards = new();
@@ -71,6 +80,7 @@ public sealed partial class FeedforwardPolicyAgent<T> : IPortfolioAgent<T>
 
         _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             null, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = learningRate });
+        _stepper = new Training.TapeTrainingStepper<T>(this);
     }
 
     private static Tensor<T> CreateRandom(int[] shape, double stddev, int seed)
@@ -84,7 +94,9 @@ public sealed partial class FeedforwardPolicyAgent<T> : IPortfolioAgent<T>
 
     private static double ToD(T v) => Convert.ToDouble(v);
 
-    /// <summary>Mean action tensor [actionDim,1] for one state tensor [stateDim,1]: tanh(meanW·tanh(W1·x+b1)+meanB).</summary>
+    /// <summary>
+    /// Mean actions [actionDim, n] for states [stateDim, n], one column per state: tanh(meanW·tanh(W1·x+b1)+meanB).
+    /// </summary>
     private Tensor<T> MeanOf(Tensor<T> x)
     {
         var h = Engine.Tanh(Engine.TensorAdd(Engine.TensorMatMul(_w1, x), _b1));
@@ -135,51 +147,19 @@ public sealed partial class FeedforwardPolicyAgent<T> : IPortfolioAgent<T>
             return NumOps.Zero;
         }
 
-        int n = _states.Count;
-        var returns = new double[n];
-        double g = 0;
-        for (int t = n - 1; t >= 0; t--)
+        // The policy is memoryless, so the whole episode is one batched forward: states [stateDim, n] in, means
+        // [actionDim, n] out, scored against the actions and their loss weights.
+        var weights = PolicyGradientRollout<T>.LossWeights(_rewards, _gamma, _sigma);
+        T reported = _stepper.Step(new Training.FusedTrainingStepRequest<T>
         {
-            g = _rewards[t] + _gamma * g;
-            returns[t] = g;
-        }
-        double mean = 0;
-        for (int t = 0; t < n; t++) mean += returns[t];
-        mean /= n;
-        double var = 0;
-        for (int t = 0; t < n; t++) var += (returns[t] - mean) * (returns[t] - mean);
-        double std = Math.Sqrt(var / Math.Max(1, n)) + 1e-8;
-        var advantage = new double[n];
-        for (int t = 0; t < n; t++) advantage[t] = (returns[t] - mean) / std;
-
-        double invSigma2 = 1.0 / (_sigma * _sigma);
-        // Policy-gradient surrogate: sum over the rollout of adv_t * 0.5 * ||a_t - mu(s_t)||^2 / sigma^2, on the shared
-        // eager tape step.
-        Tensor<T> PolicyLoss()
-        {
-            Tensor<T>? loss = null;
-            for (int t = 0; t < n; t++)
-            {
-                var xt = new Tensor<T>(new[] { _stateDim, 1 });
-                for (int i = 0; i < _stateDim; i++) xt[i, 0] = _states[t][i];
-                var meanT = MeanOf(xt); // memoryless: each step independent
-
-                var actionT = new Tensor<T>(new[] { _actionDim, 1 });
-                for (int a = 0; a < _actionDim; a++) actionT[a, 0] = _actions[t][a];
-
-                var diff = Engine.TensorSubtract(actionT, meanT);
-                var sq = Engine.ReduceSum(Engine.TensorMultiply(diff, diff), new[] { 0, 1 }, keepDims: false);
-                var term = Engine.TensorMultiplyScalar(sq, NumOps.FromDouble(0.5 * invSigma2 * advantage[t]));
-                loss = loss is null ? term : Engine.TensorAdd(loss, term);
-            }
-            return loss ?? new Tensor<T>(new[] { 1 });
-        }
-
-        T reported = NumOps.Zero;
-        if (n > 0)
-        {
-            reported = AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(_trainable, PolicyLoss, _optimizer);
-        }
+            Layers = Array.Empty<ITrainableLayer<T>>(),
+            Input = PolicyGradientRollout<T>.States(_states, _stateDim),
+            Target = PolicyGradientRollout<T>.Target(_actions, weights, _actionDim),
+            Forward = MeanOf,
+            ComputeLoss = (means, target) => PolicyGradientRollout<T>.Loss(means, target, _actionDim),
+            Optimizer = _optimizer,
+            ExtraParameters = _trainable,
+        });
 
         _states.Clear();
         _actions.Clear();

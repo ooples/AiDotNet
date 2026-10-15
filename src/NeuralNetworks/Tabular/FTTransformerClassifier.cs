@@ -285,31 +285,81 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
         // gradient for every leaf tensor we collected. (Previously TrainStep had
         // only a "// Backward pass" comment, so UpdateParameters threw "Backward
         // pass must be called before updating parameters" — training never ran.)
-        // Plain SGD (p -= learningRate * grad) on the shared eager tape step.
-        T lossValue = AiDotNet.Training.TapeTrainingStepper<T>.EagerSgdObjectiveStep(
-            () => trainable,
-            () => SoftmaxCrossEntropyLoss(Forward(numericalFeatures, categoricalIndices), targets),
-            learningRate);
+        // Plain SGD at the caller's rate, the update this step has always applied, as one step on the shared fused
+        // session: the compiled plan when it applies, the eager tape otherwise. Categorical features are looked up
+        // by integer index on the host, which a plan would bake in, so a batch carrying them stays eager.
+        T lossValue;
+        if (categoricalIndices is null)
+        {
+            var stepper = _tapeStepper ??= new AiDotNet.Training.TapeTrainingStepper<T>(this);
+            lossValue = stepper.Step(new AiDotNet.Training.FusedTrainingStepRequest<T>
+            {
+                Layers = Array.Empty<AiDotNet.Interfaces.ITrainableLayer<T>>(),
+                Input = numericalFeatures,
+                Target = OneHot(targets, numericalFeatures.Shape[0]),
+                Forward = features => Forward(features, null),
+                ComputeLoss = SoftmaxCrossEntropyLoss,
+                Optimizer = SgdAt(NumOps.ToDouble(learningRate)),
+                ExtraParameters = trainable,
+            });
+        }
+        else
+        {
+            // The same plain SGD on the shared eager tape step.
+            var onehot = OneHot(targets, numericalFeatures.Shape[0]);
+            lossValue = AiDotNet.Training.TapeTrainingStepper<T>.EagerSgdObjectiveStep(
+                () => trainable,
+                () => SoftmaxCrossEntropyLoss(Forward(numericalFeatures, categoricalIndices), onehot),
+                learningRate);
+        }
+
         ResetState();
         return lossValue;
     }
 
-    /// <summary>
-    /// Tape-tracked softmax cross-entropy on logits [B, C] against integer targets.
-    /// CE = −mean_b Σ_c onehot[b,c]·log(softmax(logits)[b,c]). Built from Engine
-    /// tensor ops (recorded by the active <c>GradientTape</c>) with a CONSTANT
-    /// one-hot target (no gradient), so reverse-mode AD differentiates it cleanly.
-    /// </summary>
-    private Tensor<T> SoftmaxCrossEntropyLoss(Tensor<T> logits, int[] targets)
+    // The class targets as a one-hot [batch, classes] tensor: data the step carries, not a closure.
+    private Tensor<T> OneHot(int[] targets, int batch)
     {
-        int batch = logits.Shape[0];
-        int numClasses = logits.Shape[1];
-
-        var onehot = new Tensor<T>([batch, numClasses]);
+        var onehot = new Tensor<T>([batch, _numClasses]);
         for (int b = 0; b < batch; b++)
-            onehot[b * numClasses + targets[b]] = NumOps.One;
+            onehot[b * _numClasses + targets[b]] = NumOps.One;
+        return onehot;
+    }
 
-        // Numerically-stable log-softmax (avoids the log(0) risk of softmax→log).
+    private AiDotNet.Training.TapeTrainingStepper<T>? _tapeStepper;
+
+    /// <summary>Training steps run on the fused compiled plan.</summary>
+    internal int FusedTrainingStepCount => _tapeStepper?.FusedStepCount ?? 0;
+
+    /// <summary>Training steps run on the eager tape.</summary>
+    internal int EagerTrainingStepCount => _tapeStepper?.EagerStepCount ?? 0;
+    private AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>? _sgd;
+    private double _sgdRate = double.NaN;
+
+    // Plain SGD at a rate, without the clipping the optimizer options enable by default (this step never clipped).
+    private AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>> SgdAt(double rate)
+    {
+        // An exact match is the point: the cached optimizer is reused only for the very rate it was built with.
+        if (_sgd is null || !_sgdRate.Equals(rate))
+        {
+            _sgd = new AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(null,
+                new StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = rate,
+                    EnableGradientClipping = false,
+                });
+            _sgdRate = rate;
+        }
+        return _sgd;
+    }
+
+    /// <summary>
+    /// Tape-tracked softmax cross-entropy on logits [B, C] against a one-hot target [B, C].
+    /// CE = −mean_b Σ_c onehot[b,c]·log(softmax(logits)[b,c]). Built from Engine tensor ops, with the one-hot
+    /// target a step input (no gradient), so reverse-mode AD and a compiled plan both differentiate it cleanly.
+    /// </summary>
+    private Tensor<T> SoftmaxCrossEntropyLoss(Tensor<T> logits, Tensor<T> onehot)
+    {
         var logProbs = Engine.TensorLogSoftmax(logits, axis: -1);
         var weighted = Engine.TensorMultiply(logProbs, onehot);
         var perRow = Engine.ReduceSum(weighted, new[] { 1 }, keepDims: false);
