@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -419,4 +420,107 @@ public class GanFusedTrainingTests
             double worst = Worst(eagerNet.GetParameters().ToArray(), fusedNet.GetParameters().ToArray());
             Assert.True(worst <= Tolerance, $"CycleGAN {name}: fused diverged from eager by {worst:G6}.");
         }
+    }
+
+    private static StyleGAN<double> MakeStyleGan(bool mixing, double r1Gamma)
+    {
+        var gan = new StyleGAN<double>(
+            DenseNet(NeuralNetworkTaskType.Regression, 16, 16, 8, new IdentityActivation<double>()),
+            DenseNet(NeuralNetworkTaskType.Generative, 8, 16, 4, new TanhActivation<double>()),
+            DenseNet(NeuralNetworkTaskType.Regression, 4, 16, 1, new IdentityActivation<double>()),
+            latentSize: 16,
+            intermediateLatentSize: 8,
+            inputType: InputType.OneDimensional,
+            options: new AiDotNet.NeuralNetworks.Options.StyleGANOptions
+            {
+                EnableStyleMixing = mixing, StyleMixingProbability = 1.0, R1Gamma = r1Gamma,
+            });
+        gan.MappingNetwork.Predict(Data(16, 0));
+        gan.SynthesisNetwork.Predict(Data(8, 0));
+        gan.Discriminator.Predict(Data(4, 0));
+        return gan;
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task StyleGanSteps_RunFused_AndTakeTheEagerIteration()
+    {
+        // Mapping and synthesis train on one loss at their own rates, both at this iteration's weights; the
+        // discriminator without R1 (see StyleGanR1Steps_KeepTheDiscriminatorEager). Style mixing draws from unseeded
+        // generators, so this comparison runs without it.
+        await Task.Yield();
+        var stylegan = MakeStyleGan(mixing: false, r1Gamma: 0.0);
+        var twin = MakeStyleGan(mixing: false, r1Gamma: 0.0);
+        twin.MappingNetwork.SetParameters(stylegan.MappingNetwork.GetParameters());
+        twin.SynthesisNetwork.SetParameters(stylegan.SynthesisNetwork.GetParameters());
+        twin.Discriminator.SetParameters(stylegan.Discriminator.GetParameters());
+        var before = stylegan.SynthesisNetwork.GetParameters();
+
+        Action<int> Steps(StyleGAN<double> gan) => s => gan.TrainStep(Data(4, 100 + s), Data(16, s));
+        int discriminatorFused = twin.Discriminator.CustomFusedStepCount;
+        var eager = RunSteps(stylegan.SynthesisNetwork, stylegan.MappingNetwork, Steps(stylegan), compile: false);
+        var fused = RunSteps(twin.SynthesisNetwork, twin.MappingNetwork, Steps(twin), compile: true);
+        AssertFusedMatchesEager("StyleGAN", 2, eager, fused, before);
+
+        Assert.Equal(4, twin.Discriminator.CustomFusedStepCount - discriminatorFused);
+        double discriminator = Worst(stylegan.Discriminator.GetParameters().ToArray(), twin.Discriminator.GetParameters().ToArray());
+        Assert.True(discriminator <= Tolerance, $"StyleGAN discriminator: fused diverged from eager by {discriminator:G6}.");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task StyleGanStepsWithMixing_RunFused()
+    {
+        // Every step mixes styles, so the mixing latents and mask travel in the mapping step's data each step.
+        await Task.Yield();
+        var stylegan = MakeStyleGan(mixing: true, r1Gamma: 0.0);
+        var networks = new[] { stylegan.MappingNetwork, stylegan.SynthesisNetwork, stylegan.Discriminator };
+        var fused0 = networks.Select(n => n.CustomFusedStepCount).ToArray();
+        var eager0 = networks.Select(n => n.CustomEagerStepCount).ToArray();
+        var original = TensorCodecOptions.Current;
+        try
+        {
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
+            CompiledTapeTrainingStep<double>.Invalidate();
+            for (int s = 1; s <= 3; s++) stylegan.TrainStep(Data(4, 100 + s), Data(16, s));
+        }
+        finally
+        {
+            TensorCodecOptions.SetCurrent(original);
+            CompiledTapeTrainingStep<double>.Invalidate();
+        }
+        for (int i = 0; i < networks.Length; i++)
+        {
+            Assert.Equal(3, networks[i].CustomFusedStepCount - fused0[i]);
+            Assert.Equal(0, networks[i].CustomEagerStepCount - eager0[i]);
+        }
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task StyleGanR1Steps_KeepTheDiscriminatorEager()
+    {
+        // R1 differentiates the discriminator's input on an inner tape with createGraph. A compiled training trace
+        // records no tape, so that step declines the plan and runs on the eager tape (sticky after the first try);
+        // the generator's steps, which have no inner tape, stay fused.
+        await Task.Yield();
+        var stylegan = MakeStyleGan(mixing: false, r1Gamma: 10.0);
+        var networks = new[] { stylegan.MappingNetwork, stylegan.SynthesisNetwork, stylegan.Discriminator };
+        var fused0 = networks.Select(n => n.CustomFusedStepCount).ToArray();
+        var eager0 = networks.Select(n => n.CustomEagerStepCount).ToArray();
+        var discriminatorBefore = stylegan.Discriminator.GetParameters();
+        var original = TensorCodecOptions.Current;
+        try
+        {
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
+            CompiledTapeTrainingStep<double>.Invalidate();
+            for (int s = 1; s <= 3; s++) stylegan.TrainStep(Data(4, 100 + s), Data(16, s));
+        }
+        finally
+        {
+            TensorCodecOptions.SetCurrent(original);
+            CompiledTapeTrainingStep<double>.Invalidate();
+        }
+        Assert.Equal(3, stylegan.MappingNetwork.CustomFusedStepCount - fused0[0]);
+        Assert.Equal(3, stylegan.SynthesisNetwork.CustomFusedStepCount - fused0[1]);
+        Assert.Equal(3, stylegan.Discriminator.CustomEagerStepCount - eager0[2]);
+        Assert.True(Worst(stylegan.Discriminator.GetParameters().ToArray(), discriminatorBefore.ToArray()) > 0,
+            "the eager R1 discriminator steps did not move the discriminator.");
     }}
