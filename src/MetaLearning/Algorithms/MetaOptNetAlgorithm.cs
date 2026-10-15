@@ -265,13 +265,14 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
         var (fixedSupport, fixedQuery) = Embed(task, episode);
         T loss;
         var scaleGradient = new Vector<T>(1);
-        using (var tape = new GradientTape<T>(new GradientTapeOptions { Persistent = true }))
-        {
-            var objective = QueryLoss(fixedSupport, fixedQuery, episode, scaleTensor);
-            loss = objective[0];
-            var gradients = tape.ComputeGradients(objective, new[] { scaleTensor });
-            if (gradients.TryGetValue(scaleTensor, out var g)) scaleGradient[0] = g[0];
-        }
+        loss = AiDotNet.Training.TapeGradients<T>.Of(
+            () => QueryLoss(fixedSupport, fixedQuery, episode, scaleTensor),
+            new[] { scaleTensor },
+            gradients =>
+            {
+                if (gradients.TryGetValue(scaleTensor, out var g)) scaleGradient[0] = g[0];
+            },
+            persistent: true);
 
         return (loss, bodyGradient, scaleGradient);
     }

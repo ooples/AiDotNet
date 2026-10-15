@@ -207,12 +207,12 @@ public partial class AWGIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         var leaves = _network.CreateLeaves(_weights);
         T loss;
         Vector<T> weightGradient;
-        using (var tape = new GradientTape<T>(new GradientTapeOptions { Persistent = true }))
-        {
-            var objective = Objective(leaves, support, query, episode, averager, supportTarget, Training(seed));
-            loss = objective[0];
-            weightGradient = leaves.FlattenGradients(tape.ComputeGradients(objective, leaves.All), _weights.Length);
-        }
+        weightGradient = new Vector<T>(_weights.Length);
+        loss = AiDotNet.Training.TapeGradients<T>.Of(
+            () => Objective(leaves, support, query, episode, averager, supportTarget, Training(seed)),
+            leaves.All,
+            gradients => weightGradient = leaves.FlattenGradients(gradients, _weights.Length),
+            persistent: true);
 
         return (loss, bodyGradient, weightGradient);
     }
@@ -419,9 +419,13 @@ public partial class AWGIMAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         int rows = episode.SupportSelector.Shape[0];
         var noise = seed.HasValue ? Training(seed.Value) : AwgimNetwork<T>.Noise.None;
         var leaves = _network.CreateLeaves(_weights);
-        using var tape = new GradientTape<T>(new GradientTapeOptions { Persistent = true });
-        var objective = Objective(leaves, support, query, episode, ClassAverager(episode, rows), SupportTarget(episode, rows), noise);
-        return leaves.FlattenGradients(tape.ComputeGradients(objective, leaves.All), _weights.Length);
+        var weightGradient = new Vector<T>(_weights.Length);
+        AiDotNet.Training.TapeGradients<T>.Of(
+            () => Objective(leaves, support, query, episode, ClassAverager(episode, rows), SupportTarget(episode, rows), noise),
+            leaves.All,
+            gradients => weightGradient = leaves.FlattenGradients(gradients, _weights.Length),
+            persistent: true);
+        return weightGradient;
     }
 
     #endregion
