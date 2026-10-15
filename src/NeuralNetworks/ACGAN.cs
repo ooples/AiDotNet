@@ -1,4 +1,4 @@
-﻿using System.IO;
+using System.IO;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -305,47 +305,62 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
         Generator.SetTrainingMode(true);
         Discriminator.SetTrainingMode(true);
 
+        // Both steps run on their network's fused session. Every per-step tensor travels in the step's data, which
+        // a compiled plan rebinds on every replay: the discriminator's real and generated samples and their labels,
+        // and the generator's noise with its requested classes. The generated samples come from a training-mode
+        // forward that leaves the generator's running statistics to the generator's own step.
         var generatorInput = ConcatenateTensors(noise, fakeLabels);
-        using var generatorTape = new GradientTape<T>();
-        var fakeTracked = Generator.ForwardForTraining(generatorInput);
-        var fakeImages = new Tensor<T>(fakeTracked.Shape.ToArray());
-        fakeTracked.AsSpan().CopyTo(fakeImages.AsWritableSpan());
-
+        var fakeImages = Generator.ForwardForTrainingDetached(generatorInput);
         bool emitsProbabilities = Discriminator.FinalLayerEmitsProbabilities();
 
         // ----- Discriminator: maximise L_S + L_C (Odena et al. 2017, eqs. 2 and 3) -----
-        T discriminatorLoss;
-        using (var discriminatorTape = new GradientTape<T>())
+        int[] realShape = realImages._shape;
+        int[] fakeShape = fakeImages._shape;
+        int[] labelShape = fakeLabels._shape;
+        int realLength = realImages.Length;
+        int fakeLength = fakeImages.Length;
+        int labelLength = fakeLabels.Length;
+        bool withRealLabels = realLabels is not null;
+        var discriminatorData = realLabels is not null
+            ? Training.StepInputPacking<T>.Pack(realImages, fakeImages, fakeLabels, realLabels)
+            : Training.StepInputPacking<T>.Pack(realImages, fakeImages, fakeLabels);
+        T discriminatorLoss = Discriminator.TrainObjectiveFused(discriminatorData, packed =>
         {
-            var realOutput = Discriminator.ForwardForTraining(realImages);
-            var fakeOutput = Discriminator.ForwardForTraining(fakeImages);
-            var discriminatorObjective = Engine.TensorAdd(
+            var real = Training.StepInputPacking<T>.Slice(packed, 0, realShape);
+            var fake = Training.StepInputPacking<T>.Slice(packed, realLength, fakeShape);
+            var fakeClasses = Training.StepInputPacking<T>.Slice(packed, realLength + fakeLength, labelShape);
+            var realOutput = Discriminator.ForwardForTraining(real);
+            var fakeOutput = Discriminator.ForwardForTraining(fake);
+            var objective = Engine.TensorAdd(
                 SourceNegativeLogLikelihood(realOutput, isReal: true),
                 Engine.TensorAdd(
                     SourceNegativeLogLikelihood(fakeOutput, isReal: false),
-                    ClassNegativeLogLikelihood(fakeOutput, fakeLabels, emitsProbabilities)));
-            if (realLabels is not null)
+                    ClassNegativeLogLikelihood(fakeOutput, fakeClasses, emitsProbabilities)));
+            if (withRealLabels)
             {
-                discriminatorObjective = Engine.TensorAdd(
-                    discriminatorObjective,
-                    ClassNegativeLogLikelihood(realOutput, realLabels, emitsProbabilities));
+                var realClasses = Training.StepInputPacking<T>.Slice(
+                    packed, realLength + fakeLength + labelLength, labelShape);
+                objective = Engine.TensorAdd(objective, ClassNegativeLogLikelihood(realOutput, realClasses, emitsProbabilities));
             }
-            discriminatorLoss = StepOnTape(discriminatorTape, discriminatorObjective, Discriminator,
-                _discriminatorOptimizer);
-        }
+            return objective;
+        }, _discriminatorOptimizer);
 
         // ----- Generator: maximise L_C - L_S -----
         // The source term is taken in its non-saturating form (Goodfellow et al. 2014, section 3): the
         // generator minimises -log P(S = real | X_fake) instead of log P(S = fake | X_fake). Both have the
         // same fixed point, but the non-saturating one does not vanish while the discriminator still
         // rejects every sample. The class term is the paper's: a generated image must be classified as
-        // the class it was asked for.
-        var generatorOutput = Discriminator.ForwardFrozenOnTape(fakeTracked);
-        var generatorObjective = Engine.TensorAdd(
-            SourceNegativeLogLikelihood(generatorOutput, isReal: true),
-            ClassNegativeLogLikelihood(generatorOutput, fakeLabels, emitsProbabilities));
-        T generatorLoss = StepOnTape(generatorTape, generatorObjective, Generator, _generatorOptimizer);
-
+        // the class it was asked for. The requested classes are the tail of the generator's own input.
+        int batchSize = noise.Shape[0];
+        int noiseWidth = noise.Shape[1];
+        T generatorLoss = Generator.TrainObjectiveFused(generatorInput, stepInput =>
+        {
+            var requestedClasses = Engine.TensorSlice(stepInput, new[] { 0, noiseWidth }, new[] { batchSize, _numClasses });
+            var generatorOutput = Discriminator.ForwardFrozenOnTape(Generator.ForwardForTraining(stepInput));
+            return Engine.TensorAdd(
+                SourceNegativeLogLikelihood(generatorOutput, isReal: true),
+                ClassNegativeLogLikelihood(generatorOutput, requestedClasses, emitsProbabilities));
+        }, _generatorOptimizer);
         return (discriminatorLoss, generatorLoss);
     }
 

@@ -13255,6 +13255,26 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
     }
 
+    /// <summary>
+    /// One step that trains this network on an objective computed from a step's packed data, on its fused session.
+    /// </summary>
+    /// <remarks>
+    /// For an adversarial or multi-term step whose objective reads several per-step tensors (real and generated
+    /// samples, labels): pack them into <paramref name="data"/> with <c>StepInputPacking</c> and slice them back inside
+    /// <paramref name="objective"/>, which a compiled plan rebinds on every replay. Other networks the objective
+    /// runs (a frozen discriminator) are read as they stand at each step; only this network's parameters are trained.
+    /// The caller sets the training modes.
+    /// </remarks>
+    internal T TrainObjectiveFused(
+        Tensor<T> data,
+        Func<Tensor<T>, Tensor<T>> objective,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    {
+        if (data is null) throw new ArgumentNullException(nameof(data));
+        if (objective is null) throw new ArgumentNullException(nameof(objective));
+        return TrainCustomTapeStep(data, data, objective, (loss, _) => loss, optimizer);
+    }
+
     public T TrainWithCustomLoss(
         Tensor<T> input,
         Func<Tensor<T>, Tensor<T>> computeLoss,

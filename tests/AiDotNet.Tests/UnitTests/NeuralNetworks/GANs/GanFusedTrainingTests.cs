@@ -255,4 +255,81 @@ public class GanFusedTrainingTests
         double moved = 0.0;
         for (int i = 0; i < after.Length; i++) moved = Math.Max(moved, Math.Abs(after[i] - before[i]));
         Assert.True(moved > 0, "the fused generator steps did not move the generator.");
+    }
+
+    private static NeuralNetworkArchitecture<double> DenseNet(NeuralNetworkTaskType task, int input, int hidden, int output,
+        IActivationFunction<double> head) => new(
+        inputType: InputType.OneDimensional, taskType: task, inputSize: input, outputSize: output,
+        layers: new List<ILayer<double>>
+        {
+            new DenseLayer<double>(hidden, (IActivationFunction<double>)new LeakyReLUActivation<double>()),
+            new DenseLayer<double>(output, head),
+        });
+
+    // Runs four adversarial steps under one compilation setting and reports both networks and the fused/eager
+    // step counts the steps added to each.
+    private static (Vector<double> First, Vector<double> Second, int Fused, int Eager) RunSteps(
+        NeuralNetworkBase<double> first, NeuralNetworkBase<double> second, Action<int> step, bool compile)
+    {
+        var original = TensorCodecOptions.Current;
+        int fused0 = first.CustomFusedStepCount + second.CustomFusedStepCount;
+        int eager0 = first.CustomEagerStepCount + second.CustomEagerStepCount;
+        try
+        {
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = compile });
+            CompiledTapeTrainingStep<double>.Invalidate();
+            for (int s = 1; s <= 4; s++) step(s);
+        }
+        finally
+        {
+            TensorCodecOptions.SetCurrent(original);
+            CompiledTapeTrainingStep<double>.Invalidate();
+        }
+        return (first.GetParameters(), second.GetParameters(),
+            first.CustomFusedStepCount + second.CustomFusedStepCount - fused0,
+            first.CustomEagerStepCount + second.CustomEagerStepCount - eager0);
+    }
+
+    private static void AssertFusedMatchesEager(string name, int stepsPerIteration,
+        (Vector<double> First, Vector<double> Second, int Fused, int Eager) eager,
+        (Vector<double> First, Vector<double> Second, int Fused, int Eager) fused, Vector<double> firstBefore)
+    {
+        Assert.Equal(0, eager.Fused);
+        Assert.Equal(4 * stepsPerIteration, eager.Eager);
+        Assert.Equal(0, fused.Eager);
+        Assert.Equal(4 * stepsPerIteration, fused.Fused);
+        double moved = Worst(eager.First.ToArray(), firstBefore.ToArray());
+        Assert.True(moved > 10 * Tolerance, $"{name}: training barely moved the first network ({moved:G6}).");
+        double first = Worst(eager.First.ToArray(), fused.First.ToArray());
+        double second = Worst(eager.Second.ToArray(), fused.Second.ToArray());
+        Assert.True(first <= Tolerance, $"{name}: fused first network diverged from eager by {first:G6}.");
+        Assert.True(second <= Tolerance, $"{name}: fused second network diverged from eager by {second:G6}.");
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task AcganSteps_RunFused_AndReadEachStepsSamplesAndClasses()
+    {
+        await Task.Yield();
+        ACGAN<double> Make()
+        {
+            var gan = new ACGAN<double>(
+                DenseNet(NeuralNetworkTaskType.Generative, 16, 16, 4, new TanhActivation<double>()),
+                DenseNet(NeuralNetworkTaskType.Regression, 4, 16, 4, new IdentityActivation<double>()),
+                numClasses: 3,
+                inputType: InputType.OneDimensional);
+            gan.Generator.Predict(Data(16, 0));
+            gan.Discriminator.Predict(Data(4, 0));
+            return gan;
+        }
+        var acgan = Make();
+        var twin = Make();
+        twin.Generator.SetParameters(acgan.Generator.GetParameters());
+        twin.Discriminator.SetParameters(acgan.Discriminator.GetParameters());
+        var before = acgan.Generator.GetParameters();
+
+        Action<int> Steps(ACGAN<double> gan) => s =>
+            gan.TrainStep(Data(4, 100 + s), OneHot(3, s), Data(13, s), OneHot(3, s + 1));
+        var eager = RunSteps(acgan.Generator, acgan.Discriminator, Steps(acgan), compile: false);
+        var fused = RunSteps(twin.Generator, twin.Discriminator, Steps(twin), compile: true);
+        AssertFusedMatchesEager("ACGAN", 2, eager, fused, before);
     }}
