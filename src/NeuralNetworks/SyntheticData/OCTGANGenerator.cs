@@ -606,6 +606,9 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
             Engine.TensorMultiplyScalar(fakeRow, NumOps.Subtract(NumOps.One, eps)));
 
         Tensor<T> inputGradients;
+        // Outside the step arena: the input gradients this inner tape builds outlive it, and an arena may reissue a
+        // step's tensors at a tape boundary (AiDotNet.Tensors 0.135.0+), corrupting the penalty's backward.
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         using (var innerTape = new GradientTape<T>())
         {
             var score = SvddDistSq(DiscriminatorForward(interpolated, isTraining: false));

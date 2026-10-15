@@ -444,6 +444,11 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// </remarks>
     private Tensor<T> R1Penalty(Tensor<T> realImages)
     {
+        // Outside the step arena: the input gradients the inner tape builds outlive that tape, and an arena may
+        // reissue a step's tensors at a tape boundary (AiDotNet.Tensors 0.135.0+). Under a training arena the next
+        // step's backward read reissued buffers and threw (index out of range; "Multiples length (1) must match
+        // tensor dimensions (3)").
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         int batchSize = realImages.Shape[0];
         var realInput = new Tensor<T>(realImages.Shape.ToArray());
         realImages.AsSpan().CopyTo(realInput.AsWritableSpan());
