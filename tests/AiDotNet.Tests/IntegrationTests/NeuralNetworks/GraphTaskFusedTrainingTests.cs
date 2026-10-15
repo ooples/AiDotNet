@@ -24,7 +24,7 @@ public class GraphTaskFusedTrainingTests
     private const int Nodes = 5;
     private const int Features = 3;
 
-    public static TheoryData<string> Models => new() { "GraphClassification", "LinkPrediction", "NodeClassification" };
+    public static TheoryData<string> Models => new() { "GraphClassification", "LinkPrediction", "NodeClassification", "GraphGeneration" };
 
     private sealed record RunResult(Vector<double> Parameters, int FusedSteps, int EagerSteps);
 
@@ -47,6 +47,11 @@ public class GraphTaskFusedTrainingTests
                     taskType: NeuralNetworkTaskType.MultiClassClassification, complexity: NetworkComplexity.Simple,
                     inputSize: Features, outputSize: 2),
                 options: new NodeClassificationOptions { HiddenDim = 4, NumLayers = 2, DropoutRate = 0.0 }),
+            // A variational graph autoencoder: it reconstructs the adjacency, with reparameterization noise per step.
+            "GraphGeneration" => new GraphGenerationModel<double>(options: new AiDotNet.NeuralNetworks.Options.GraphGenerationModelOptions
+            {
+                InputFeatures = Features, HiddenDim = 4, LatentDim = 3, NumEncoderLayers = 2, MaxNodes = Nodes,
+            }),
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
 
@@ -91,6 +96,8 @@ public class GraphTaskFusedTrainingTests
 
     private static Tensor<double> Target(NeuralNetworkBase<double> model, int step)
     {
+        // The generation model's target is the graph it reconstructs.
+        if (model is GraphGenerationModel<double>) return Adjacency(step);
         var shape = model.Predict(Features_(step))._shape;
         var target = new Tensor<double>(shape);
         target[step % target.Length] = 1.0;
