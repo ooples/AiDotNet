@@ -75,7 +75,6 @@ public class TapeTrainingLoopRatchetTests
         "NeuralNetworks/SyntheticData/AutoDiffTabGenerator.cs",
         "NeuralNetworks/SyntheticData/MisGANGenerator.cs",
         "NeuralNetworks/SyntheticData/TabSynGenerator.cs",
-        "NeuralNetworks/SyntheticData/TimeGANGenerator.cs",
         "ReinforcementLearning/Agents/MuZeroAgent.cs",
         "ReinforcementLearning/Agents/QMIXAgent.cs",
     };
