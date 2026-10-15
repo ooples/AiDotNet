@@ -259,6 +259,16 @@ public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
     /// Sets the adjacency matrix for all graph layers in the model.
     /// </summary>
     /// <param name="adjacencyMatrix">The graph adjacency matrix.</param>
+    // Points every graph layer at an adjacency without changing the model's own: a training step's packed copy, then
+    // the model's again.
+    private void SetLayerAdjacency(Tensor<T> adjacency)
+    {
+        foreach (var layer in Layers)
+        {
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
+                graphLayer.SetAdjacencyMatrix(adjacency);
+        }
+    }
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
         _cachedAdjacencyMatrix = adjacencyMatrix;
@@ -710,41 +720,33 @@ public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
                 + $"implements ComputeTapeLoss); the configured loss '{_lossFunction.GetType().Name}' is "
                 + "not tape-differentiable. Supply a LossFunctionBase<T>-derived loss such as BinaryCrossEntropyLoss.");
 
-        // Fused compiled step (FusedTrainingStep), as GraphClassificationModel: one plan on any engine,
-        // GPU-resident on a GPU; falls back to the eager tape+optimizer.
-        var trainableLayers = Layers
-            .Where(l => l is ITrainableLayer<T>).Cast<ITrainableLayer<T>>()
-            .ToList();
-        if (AiDotNet.Training.FusedTrainingStep<T>.TryStep(
-                trainableLayers, input, expectedOutput,
-                forward: Forward,
-                computeLoss: tapeLoss.ComputeTapeLoss,
-                optimizer: _optimizer,
-                out T fusedLoss,
-                onGradients: ScatterFusedGradients,
-                owner: this))
+        // The adjacency is part of the step's data: the graph layers read it in the forward, and a compiled plan
+        // bakes anything its forward reads other than its input. Packed with the node features, it reaches the
+        // layers from the step's own input, so a plan traced on one graph trains the next graph on its own
+        // structure (graph classification sets one per graph). The layers get the model's adjacency back after.
+        var adjacency = _cachedAdjacencyMatrix ?? throw new InvalidOperationException(
+            "Adjacency matrix must be set before training. Call SetAdjacencyMatrix() first.");
+        int[] featureShape = input._shape;
+        int[] adjacencyShape = adjacency._shape;
+        int featureLength = input.Length;
+        try
         {
-            LastLoss = fusedLoss;
-            return;
+            TrainCustomTapeStep(
+                Training.StepInputPacking<T>.Pack(input, adjacency),
+                expectedOutput,
+                packed =>
+                {
+                    SetLayerAdjacency(Training.StepInputPacking<T>.Slice(packed, featureLength, adjacencyShape));
+                    return Forward(Training.StepInputPacking<T>.Slice(packed, 0, featureShape));
+                },
+                tapeLoss.ComputeTapeLoss,
+                _optimizer,
+                () => Training.TapeTrainingStep<T>.CollectParameters(Layers, LayerStructureVersion));
         }
-
-        using (var tape = new GradientTape<T>())
+        finally
         {
-            var predictions = Forward(input);
-            var lossTensor = tapeLoss.ComputeTapeLoss(predictions, expectedOutput);
-            // Always record the loss that was computed, even when there are no trainable parameters to
-            // step — LastLoss must reflect the most recent Train call for consistent telemetry.
-            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-            var trainableParameters = Training.TapeTrainingStep<T>.CollectParameters(Layers, LayerStructureVersion);
-            if (trainableParameters.Count > 0)
-            {
-                var gradients = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParameters);
-                var context = new TapeStepContext<T>(trainableParameters, gradients, lossValue);
-                _optimizer.Step(context);
-            }
-            LastLoss = lossValue;
-        }
-    }
+            SetLayerAdjacency(adjacency);
+        }    }
 
     /// <summary>
     /// Gets metadata about this model for serialization and identification.
