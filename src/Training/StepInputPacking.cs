@@ -25,7 +25,8 @@ internal static class StepInputPacking<T>
         int offset = 0;
         foreach (var part in parts)
         {
-            part.AsSpan().CopyTo(data.AsSpan(offset, part.Length));
+            // A view (a slice, a shifted window) is materialized first: only a contiguous tensor has one span.
+            part.Contiguous().AsSpan().CopyTo(data.AsSpan(offset, part.Length));
             offset += part.Length;
         }
         return new Tensor<T>(new[] { 1, total }, new Vector<T>(data));
