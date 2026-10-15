@@ -433,8 +433,9 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
         var std = Engine.TensorExp(clampedHalfLogVar);
 
         // Sample epsilon (detached): no tape needed for the noise term.
-        _lastLatent = Engine.TensorAdd(mean, Engine.TensorMultiply(std, DrawEpsilon(mean._shape)));
-        return _lastLatent;
+        var latent = Engine.TensorAdd(mean, Engine.TensorMultiply(std, DrawEpsilon(mean._shape)));
+        _lastLatent = latent;
+        return latent;
     }
 
     /// <summary>Standard normal noise of <paramref name="shape"/> from the model's seeded generator.</summary>
