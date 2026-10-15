@@ -392,16 +392,21 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
             // mean f(fake) - mean f(real). It used to be trained by Critic.Train(real, 1) and
             // Critic.Train(fake, 0) with the critic network's configured loss -- a regression towards
             // 0/1 labels, which is not the Wasserstein estimate at all.
-            T criticLoss;
-            using (var criticTape = new GradientTape<T>())
-            {
-                var realScores = Critic.ForwardForTraining(realImages);
-                var fakeScores = Critic.ForwardForTraining(fakeImages);
-                var criticObjective = Engine.TensorSubtract(
-                    Engine.ReduceMean(fakeScores, Enumerable.Range(0, fakeScores.Shape.Length).ToArray(), keepDims: false),
-                    Engine.ReduceMean(realScores, Enumerable.Range(0, realScores.Shape.Length).ToArray(), keepDims: false));
-                criticLoss = StepOnTape(criticTape, criticObjective, Critic, _criticOptimizer);
-            }
+            // On the critic's fused session, with the real and generated samples packed into the step's data.
+            int[] realShape = realImages._shape;
+            int[] fakeShape = fakeImages._shape;
+            int realLength = realImages.Length;
+            T criticLoss = Critic.TrainObjectiveFused(
+                Training.StepInputPacking<T>.Pack(realImages, fakeImages),
+                packed =>
+                {
+                    var realScores = Critic.ForwardForTraining(Training.StepInputPacking<T>.Slice(packed, 0, realShape));
+                    var fakeScores = Critic.ForwardForTraining(Training.StepInputPacking<T>.Slice(packed, realLength, fakeShape));
+                    return Engine.TensorSubtract(
+                        Engine.ReduceMean(fakeScores, Enumerable.Range(0, fakeScores.Shape.Length).ToArray(), keepDims: false),
+                        Engine.ReduceMean(realScores, Enumerable.Range(0, realScores.Shape.Length).ToArray(), keepDims: false));
+                },
+                _criticOptimizer);
 
             totalCriticLoss = NumOps.Add(totalCriticLoss, criticLoss);
 

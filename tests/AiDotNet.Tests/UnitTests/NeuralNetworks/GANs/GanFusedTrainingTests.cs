@@ -161,57 +161,30 @@ public class GanFusedTrainingTests
         InputType.OneDimensional);
 
     [Fact(Timeout = 120000)]
-    public async Task ConditionalGanGeneratorSteps_RunFused_AndReadEachStepsConditions()
+    public async Task ConditionalGanSteps_RunFused_AndReadEachStepsSamplesAndConditions()
     {
-        // The generator's loss slices the class conditions out of the step's input; a plan that read them from the
-        // first step's host tensor would train every later step against the first step's classes.
+        // Both steps read the class conditions from their step's data: the discriminator its packed samples and
+        // conditions, the generator the tail of its own input. A plan that read them from the first step's host tensors
+        // would train every later step against the first step's classes.
         await Task.Yield();
-        using var cgan = BuildConditional();
-        using var twin = BuildConditional();
-        // Plain forwards resolve the lazy layers without giving either copy optimizer moments of its own.
-        foreach (var g in new[] { cgan, twin })
+        ConditionalGAN<double> Make()
         {
-            Net(g.Generator).Predict(Data(9, 0));
-            Net(g.Discriminator).Predict(Data(7, 0));
+            var gan = BuildConditional();
+            gan.Generator.Predict(Data(9, 0));
+            gan.Discriminator.Predict(Data(7, 0));
+            return gan;
         }
-        Net(twin.Generator).SetParameters(Net(cgan.Generator).GetParameters());
-        Net(twin.Discriminator).SetParameters(Net(cgan.Discriminator).GetParameters());
-        var before = Net(cgan.Generator).GetParameters();
+        using var cgan = Make();
+        using var twin = Make();
+        twin.Generator.SetParameters(cgan.Generator.GetParameters());
+        twin.Discriminator.SetParameters(cgan.Discriminator.GetParameters());
+        var before = cgan.Generator.GetParameters();
 
-        Vector<double> RunConditional(ConditionalGAN<double> gan, bool compile, out int fused, out int eager)
-        {
-            var original = TensorCodecOptions.Current;
-            var generator = Net(gan.Generator);
-            int fused0 = generator.CustomFusedStepCount, eager0 = generator.CustomEagerStepCount;
-            try
-            {
-                TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = compile });
-                CompiledTapeTrainingStep<double>.Invalidate();
-                for (int step = 1; step <= 4; step++) gan.TrainStep(Data(4, 100 + step), OneHot(3, step), Data(6, step));
-            }
-            finally
-            {
-                TensorCodecOptions.SetCurrent(original);
-                CompiledTapeTrainingStep<double>.Invalidate();
-            }
-            fused = generator.CustomFusedStepCount - fused0;
-            eager = generator.CustomEagerStepCount - eager0;
-            return generator.GetParameters();
-        }
-
-        var eagerParameters = RunConditional(cgan, compile: false, out int eagerFused, out int eagerEager);
-        var fusedParameters = RunConditional(twin, compile: true, out int fusedFused, out int fusedEager);
-
-        Assert.Equal(0, eagerFused);
-        Assert.Equal(4, eagerEager);
-        Assert.Equal(0, fusedEager);
-        Assert.Equal(4, fusedFused);
-        double moved = Worst(eagerParameters.ToArray(), before.ToArray());
-        Assert.True(moved > 10 * Tolerance, $"training barely moved the generator ({moved:G6}).");
-        double worst = Worst(eagerParameters.ToArray(), fusedParameters.ToArray());
-        Assert.True(worst <= Tolerance, $"fused conditional generator diverged from eager by {worst:G6}.");
+        Action<int> Steps(ConditionalGAN<double> gan) => s => gan.TrainStep(Data(4, 100 + s), OneHot(3, s), Data(6, s));
+        var eager = RunSteps(cgan.Generator, cgan.Discriminator, Steps(cgan), compile: false);
+        var fused = RunSteps(twin.Generator, twin.Discriminator, Steps(twin), compile: true);
+        AssertFusedMatchesEager("ConditionalGAN", 2, eager, fused, before);
     }
-
     private static Tensor<float> FloatData(int width, int step)
     {
         var tensor = new Tensor<float>([Batch, width]);
@@ -236,6 +209,9 @@ public class GanFusedTrainingTests
         var generator = (NeuralNetworkBase<float>)wgan.Generator;
         var before = generator.GetParameters();
         int fused0 = generator.CustomFusedStepCount, eager0 = generator.CustomEagerStepCount;
+        // The paper's five critic iterations per generator step (Arjovsky et al. 2017, Algorithm 1).
+        var critic = (NeuralNetworkBase<float>)wgan.Critic;
+        int criticFused0 = critic.CustomFusedStepCount, criticEager0 = critic.CustomEagerStepCount;
         var original = TensorCodecOptions.Current;
         try
         {
@@ -250,6 +226,8 @@ public class GanFusedTrainingTests
         }
 
         Assert.Equal(3, generator.CustomFusedStepCount - fused0);
+        Assert.Equal(3 * 5, critic.CustomFusedStepCount - criticFused0);
+        Assert.Equal(0, critic.CustomEagerStepCount - criticEager0);
         Assert.Equal(0, generator.CustomEagerStepCount - eager0);
         var after = generator.GetParameters();
         double moved = 0.0;
