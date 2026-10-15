@@ -49,7 +49,7 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
     /// </summary>
     public override IEnumerable<Tensor<T>> GetParameterChunks()
     {
-#if NETFRAMEWORK
+#if AIDN_LEGACY_TFM
         // GetParameterChunks is part of IParameterizable's chunked-API
         // contract, which IParameterizable.cs gates behind
         // `#if !NETFRAMEWORK` because default interface methods need
@@ -109,7 +109,7 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
         // layers (this override bypasses the base flat SetParameters path), so a sibling clone isn't
         // corrupted. Per-element null tensors are rejected by each sub-model's own SetParameterChunks.
         EnsureOwnWeights();
-#if NETFRAMEWORK
+#if AIDN_LEGACY_TFM
         // Chunked API is unavailable through the interface on net471 (see GetParameterChunks above);
         // fall back to the base flat buffer-and-SetParameters path.
         base.SetParameterChunks(chunks);
@@ -147,7 +147,7 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
 #endif
     }
 
-#if !NETFRAMEWORK
+#if !AIDN_LEGACY_TFM
     private static void PullInto(
         IParameterizable<T, Tensor<T>, Tensor<T>>? sub,
         IEnumerator<Tensor<T>> source,

@@ -79,7 +79,7 @@ internal static class ModelPayloadEncryption
             throw new ArgumentException("License key cannot be null or empty.", nameof(licenseKey));
         }
 
-#if NET471
+#if AIDN_LEGACY_TFM
         throw new PlatformNotSupportedException(
             "AIMF payload encryption requires .NET Core 3.0 or later.");
 #else
@@ -152,7 +152,7 @@ internal static class ModelPayloadEncryption
             throw new ArgumentNullException(nameof(tag));
         }
 
-#if NET471
+#if AIDN_LEGACY_TFM
         throw new PlatformNotSupportedException(
             "AIMF payload encryption requires .NET Core 3.0 or later.");
 #else
@@ -218,7 +218,7 @@ internal static class ModelPayloadEncryption
             throw new ArgumentException("License key cannot be null or empty.", nameof(licenseKey));
         }
 
-#if NET471
+#if AIDN_LEGACY_TFM
         throw new PlatformNotSupportedException(
             "AIMF payload encryption requires .NET Core 3.0 or later.");
 #else
@@ -287,7 +287,7 @@ internal static class ModelPayloadEncryption
             throw new ArgumentNullException(nameof(tag));
         }
 
-#if NET471
+#if AIDN_LEGACY_TFM
         throw new PlatformNotSupportedException(
             "AIMF payload encryption requires .NET Core 3.0 or later.");
 #else
@@ -320,7 +320,7 @@ internal static class ModelPayloadEncryption
 #endif
     }
 
-#if !NET471
+#if !AIDN_LEGACY_TFM
     /// <summary>
     /// Derives a 256-bit AES key from a license key string and salt using PBKDF2-SHA256.
     /// </summary>

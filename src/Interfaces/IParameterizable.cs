@@ -38,7 +38,7 @@ public interface IParameterizable<T, TInput, TOutput> : IParameterSource<T>
     /// <item>PyTorch-compatibility shims (state_dict-style export)</item>
     /// </list>
     /// </remarks>
-#if !NETFRAMEWORK
+#if !AIDN_LEGACY_TFM
     // Chunked-API contract is .NET-Standard-2.1+ / .NET 10 only. Default
     // interface methods need runtime dispatch support that .NET Framework
     // 4.7.1 doesn't provide, so we omit this from the IParameterizable
@@ -106,7 +106,7 @@ public interface IParameterizable<T, TInput, TOutput> : IParameterSource<T>
     /// property to decide whether to call <see cref="SetParameters"/> during random initialization.
     /// The default implementation returns <c>true</c> when <see cref="ParameterCount"/> is greater than zero.
     /// </remarks>
-#if NETFRAMEWORK
+#if AIDN_LEGACY_TFM
     bool SupportsParameterInitialization { get; }
 #else
     bool SupportsParameterInitialization => ParameterCount > 0;
@@ -128,7 +128,7 @@ public interface IParameterizable<T, TInput, TOutput> : IParameterSource<T>
     /// that have structural constraints on their parameters (e.g., monotonically increasing
     /// thresholds in ordinal regression, non-negative weights in NMF, etc.).
     /// </remarks>
-#if NETFRAMEWORK
+#if AIDN_LEGACY_TFM
     Vector<T> SanitizeParameters(Vector<T> parameters);
 #else
     Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;

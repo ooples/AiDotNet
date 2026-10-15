@@ -34,7 +34,7 @@ internal static class OnlineLicenseServices
     private static readonly object FileLock = new();
     private static string? _cacheDirOverrideForTests;
 
-#if !NET471
+#if !AIDN_LEGACY_TFM
     private static readonly System.Net.Http.HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(10) };
 #endif
 
@@ -79,7 +79,7 @@ internal static class OnlineLicenseServices
 
         try
         {
-#if NET471
+#if AIDN_LEGACY_TFM
             var thread = new System.Threading.Thread(() => RefreshCore(validateUrl, licenseKey, machineIdHash))
             {
                 IsBackground = true,
@@ -318,7 +318,7 @@ internal static class OnlineLicenseServices
     private static string ShortHash(string value)
     {
         byte[] bytes = Encoding.UTF8.GetBytes("license-cache:" + value);
-#if NET471
+#if AIDN_LEGACY_TFM
         using var sha = System.Security.Cryptography.SHA256.Create();
         byte[] hash = sha.ComputeHash(bytes);
 #else
@@ -335,7 +335,7 @@ internal static class OnlineLicenseServices
 
     private static string? HttpGet(string url)
     {
-#if NET471
+#if AIDN_LEGACY_TFM
         using var client = new System.Net.WebClient();
         return client.DownloadString(url);
 #else
@@ -346,7 +346,7 @@ internal static class OnlineLicenseServices
 
     private static string? HttpPost(string url, string json)
     {
-#if NET471
+#if AIDN_LEGACY_TFM
         using var client = new System.Net.WebClient();
         client.Headers[System.Net.HttpRequestHeader.ContentType] = "application/json";
         try
