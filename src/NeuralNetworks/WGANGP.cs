@@ -437,7 +437,7 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
         // Train generator: minimize -mean(Critic(fake)) (Wasserstein objective with GP)
         Tensor<T> newNoise = GenerateRandomNoiseTensor(noise.Shape[0], Generator.Architecture.InputSize);
         var trainableGen = (NeuralNetworkBase<T>)Generator;
-        T generatorLoss = trainableGen.TrainWithCustomLoss(ShapeAsGeneratorInput(newNoise), genOutput =>
+        T generatorLoss = trainableGen.TrainWithCustomLossFused(ShapeAsGeneratorInput(newNoise), (_, genOutput) =>
         {
             // Keep the critic forward on the generator's active tape. Predict() is an
             // inference API and deliberately suppresses gradient recording; using it here
