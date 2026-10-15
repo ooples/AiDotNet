@@ -63,7 +63,6 @@ public class TapeTrainingLoopRatchetTests
     /// </summary>
     private static readonly HashSet<string> KnownLoops = new(StringComparer.Ordinal)
     {
-        "Diffusion/NoisePredictors/NoisePredictorBase.cs",
     };
 
     [Fact]
