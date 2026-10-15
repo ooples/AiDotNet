@@ -931,7 +931,7 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
         // computes below (same weights, same batch statistics), with the statistics still advancing once per
         // iteration, in that step. That step runs on the generator's fused session, so it needs a forward of its own;
         // sharing one taped forward between the two steps (#1390) kept the generator step eager.
-        var trainableGen = (NeuralNetworkBase<T>)Generator;
+        var trainableGen = Generator;
         var fakeImages = trainableGen.ForwardForTrainingDetached(input);
 
         // Cache real / fake batches only when an auxiliary loss path needs
@@ -984,7 +984,7 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
         // discriminator's parameters before the generator step below.
         if (_useGradientPenalty && _lastRealBatch is not null && _lastFakeBatch is not null)
         {
-            var trainableDisc = (NeuralNetworkBase<T>)Discriminator;
+            var trainableDisc = Discriminator;
             try
             {
                 // Build the GP loss inline INSIDE the TrainWithCustomLoss

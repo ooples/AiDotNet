@@ -527,8 +527,9 @@ internal sealed class FusedTrainingSession<T>
             var squares = engine.Reshape(engine.ReduceSum(engine.TensorMultiply(gradient, gradient), null), new[] { 1 });
             total = total is null ? squares : engine.TensorAdd(total, squares);
         }
-        // NaN counts as non-zero: the gradient reached the parameters (as non-finite values the plan's guard handles).
-        return total is not null && NumOps.ToDouble(total[0]) != 0.0;
+        // An exact zero test: any nonzero sum means a gradient reached the parameters. NaN counts as non-zero (NaN never
+        // Equals 0), since the gradient did reach them, as non-finite values the plan's guard handles.
+        return total is not null && !NumOps.ToDouble(total[0]).Equals(0.0);
     }
 
     private static (Tensor<T> Live, Tensor<T> Saved)[] SnapshotTrainedTensors(FusedTrainingStepRequest<T> request)
