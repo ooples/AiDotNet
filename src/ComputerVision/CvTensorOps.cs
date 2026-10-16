@@ -330,6 +330,46 @@ internal static class CvTensorOps<T>
     }
 
     /// <summary>
+    /// <see cref="ConcatenateOutputs"/> for a raw regression step, with the outputs listed in
+    /// <paramref name="dataOutputs"/> taken out of the loss. Those outputs are data the step cannot change,
+    /// such as the boxes a two-stage detector's head received, so their positions carry the target's own
+    /// values: their squared error is zero and they no longer dominate the loss. When
+    /// <paramref name="target"/> is null or shaped differently, those positions are zero.
+    /// </summary>
+    public static Tensor<T> ConcatenateTrainableOutputs(IReadOnlyList<Tensor<T>> outputs, IReadOnlyCollection<int> dataOutputs,
+        Tensor<T>? target)
+    {
+        var prediction = ConcatenateOutputs(outputs);
+        if (dataOutputs.Count == 0)
+        {
+            return prediction;
+        }
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        var keep = new Tensor<T>[outputs.Count];
+        for (int i = 0; i < outputs.Count; i++)
+        {
+            keep[i] = new Tensor<T>(outputs[i].Shape.ToArray());
+            if (!dataOutputs.Contains(i)) keep[i].Fill(ops.One);
+        }
+
+        var keepMask = ConcatenateOutputs(keep);
+        var kept = Engine.TensorMultiply(prediction, keepMask);
+        if (target is null || !target.Shape.ToArray().SequenceEqual(prediction.Shape.ToArray()))
+        {
+            return kept;
+        }
+
+        var dataMask = new Tensor<T>(keepMask.Shape.ToArray());
+        for (int i = 0; i < dataMask.Length; i++)
+        {
+            dataMask[i] = ops.Subtract(ops.One, keepMask[i]);
+        }
+
+        return Engine.TensorAdd(kept, Engine.TensorMultiply(target, dataMask));
+    }
+
+    /// <summary>
     /// Builds a Swin relative-position bias <c>[1, H, L, L]</c> from a learnable table
     /// <c>[R, H]</c> and an index map <c>index[i, j]</c> into its rows. The lookup is a gather, so the
     /// table receives gradients.

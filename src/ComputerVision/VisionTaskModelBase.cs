@@ -138,6 +138,13 @@ public abstract class VisionTaskModelBase<T> : ModelBase<T, Tensor<T>, Tensor<T>
     protected virtual Tensor<T> TrainingForward(Tensor<T> input) => Predict(input);
 
     /// <summary>
+    /// The target of the raw-output <see cref="Train"/> step in progress, or null outside one. A
+    /// <see cref="TrainingForward"/> that emits data outputs reads it to take them out of the loss.
+    /// </summary>
+    [AiDotNet.Attributes.Scratch]
+    protected Tensor<T>? RawStepTarget { get; private set; }
+
+    /// <summary>
     /// The zero input, <c>[1, channels, height, width]</c>, whose forward pass resolves this model's
     /// shape-deferred layers exactly as its first real input would.
     /// </summary>
@@ -161,6 +168,7 @@ public abstract class VisionTaskModelBase<T> : ModelBase<T, Tensor<T>, Tensor<T>
         if (expectedOutput is null) throw new ArgumentNullException(nameof(expectedOutput));
         bool wasTraining = IsTrainingMode;
         SetTrainingMode(true);
+        RawStepTarget = expectedOutput;
         try
         {
             RecordTrainingLoss(TensorModelTrainer<T>.Step(
@@ -168,6 +176,7 @@ public abstract class VisionTaskModelBase<T> : ModelBase<T, Tensor<T>, Tensor<T>
         }
         finally
         {
+            RawStepTarget = null;
             SetTrainingMode(wasTraining);
         }
     }
