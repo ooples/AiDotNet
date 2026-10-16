@@ -16,6 +16,27 @@ namespace AiDotNet.Tokenization.Algorithms
     {
         private readonly string _continuingSubwordPrefix;
         private readonly int _maxInputCharsPerWord;
+        private readonly bool _lowercase;
+
+        private const string BertBaseUncasedResource = "AiDotNet.Tokenization.bert-base-uncased-vocab.txt.gz";
+
+        /// <summary>
+        /// BERT-base's uncased WordPiece tokenizer (Devlin et al. 2019): the released 30,522-token vocabulary
+        /// (google-research/bert, Apache-2.0), shipped with the library, with lowercasing and accent stripping.
+        /// </summary>
+        public static WordPieceTokenizer BertBaseUncased()
+        {
+            var assembly = typeof(WordPieceTokenizer).Assembly;
+            using var stream = assembly.GetManifestResourceStream(BertBaseUncasedResource)
+                ?? throw new System.IO.InvalidDataException($"The embedded resource {BertBaseUncasedResource} is missing.");
+            using var gzip = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);
+            using var reader = new System.IO.StreamReader(gzip, Encoding.UTF8);
+            var ids = new Dictionary<string, int>(StringComparer.Ordinal);
+            string? line;
+            while ((line = reader.ReadLine()) is not null)
+                if (!ids.ContainsKey(line)) ids[line] = ids.Count;
+            return new WordPieceTokenizer(new Vocabulary.Vocabulary(ids, "[UNK]"), SpecialTokens.Bert());
+        }
 
         /// <summary>
         /// Creates a new WordPiece tokenizer.
@@ -29,7 +50,8 @@ namespace AiDotNet.Tokenization.Algorithms
             IVocabulary vocabulary,
             SpecialTokens? specialTokens = null,
             string continuingSubwordPrefix = "##",
-            int maxInputCharsPerWord = 100)
+            int maxInputCharsPerWord = 100,
+            bool lowercase = true)
             : base(vocabulary, specialTokens ?? SpecialTokens.Bert())
         {
             if (maxInputCharsPerWord < 1)
@@ -37,7 +59,81 @@ namespace AiDotNet.Tokenization.Algorithms
 
             _continuingSubwordPrefix = continuingSubwordPrefix;
             _maxInputCharsPerWord = maxInputCharsPerWord;
+            _lowercase = lowercase;
         }
+
+        /// <summary>
+        /// BERT's basic tokenization (the reference BasicTokenizer): control characters removed and whitespace
+        /// normalized, each CJK character made its own word, words split on whitespace, lowercased with accents
+        /// stripped (uncased models), and every punctuation character split off as its own word.
+        /// </summary>
+        internal static List<string> BasicTokenize(string text, bool lowercase)
+        {
+            var cleaned = new StringBuilder(text.Length);
+            foreach (char c in text)
+            {
+                if (c == 0 || c == 0xFFFD || IsControl(c)) continue;
+                if (IsWhitespace(c)) cleaned.Append(' ');
+                else if (IsCjk(c)) cleaned.Append(' ').Append(c).Append(' ');
+                else cleaned.Append(c);
+            }
+            var words = new List<string>();
+            foreach (var token in cleaned.ToString().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                string word = token;
+                if (lowercase)
+                {
+                    var decomposed = word.ToLowerInvariant().Normalize(NormalizationForm.FormD);
+                    word = new string(decomposed.Where(ch => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch)
+                        != System.Globalization.UnicodeCategory.NonSpacingMark).ToArray());
+                }
+                var current = new StringBuilder();
+                foreach (char ch in word)
+                {
+                    if (IsPunctuation(ch))
+                    {
+                        if (current.Length > 0) { words.Add(current.ToString()); current.Clear(); }
+                        words.Add(ch.ToString());
+                    }
+                    else current.Append(ch);
+                }
+                if (current.Length > 0) words.Add(current.ToString());
+            }
+            return words;
+        }
+
+        private static bool IsWhitespace(char c)
+            => c == ' ' || c == '\t' || c == '\n' || c == '\r'
+               || System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c) == System.Globalization.UnicodeCategory.SpaceSeparator;
+
+        private static bool IsControl(char c)
+        {
+            if (c == '\t' || c == '\n' || c == '\r') return false;
+            var category = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c);
+            return category == System.Globalization.UnicodeCategory.Control || category == System.Globalization.UnicodeCategory.Format;
+        }
+
+        // ASCII non-letters/digits count as punctuation even where Unicode disagrees (^, $, `), as in the reference.
+        private static bool IsPunctuation(char c)
+        {
+            if ((c >= 33 && c <= 47) || (c >= 58 && c <= 64) || (c >= 91 && c <= 96) || (c >= 123 && c <= 126)) return true;
+            switch (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c))
+            {
+                case System.Globalization.UnicodeCategory.ConnectorPunctuation:
+                case System.Globalization.UnicodeCategory.DashPunctuation:
+                case System.Globalization.UnicodeCategory.OpenPunctuation:
+                case System.Globalization.UnicodeCategory.ClosePunctuation:
+                case System.Globalization.UnicodeCategory.InitialQuotePunctuation:
+                case System.Globalization.UnicodeCategory.FinalQuotePunctuation:
+                case System.Globalization.UnicodeCategory.OtherPunctuation:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        private static bool IsCjk(char c)
+            => (c >= 0x4E00 && c <= 0x9FFF) || (c >= 0x3400 && c <= 0x4DBF) || (c >= 0xF900 && c <= 0xFAFF);
 
         /// <summary>
         /// Trains a WordPiece tokenizer from a corpus.
@@ -75,17 +171,10 @@ namespace AiDotNet.Tokenization.Algorithms
             var wordFreqs = new Dictionary<string, int>();
             foreach (var text in corpus)
             {
-                var words = text.ToLowerInvariant()
-                    .Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
-
-                foreach (var word in words)
+                // The same pre-tokenization as encoding: punctuation is its own word, and so its own token.
+                foreach (var word in BasicTokenize(text, lowercase: true))
                 {
-                    // Remove punctuation for basic training
-                    var cleanWord = new string(word.Where(c => char.IsLetterOrDigit(c)).ToArray());
-                    if (!string.IsNullOrEmpty(cleanWord))
-                    {
-                        wordFreqs[cleanWord] = wordFreqs.GetValueOrDefault(cleanWord, 0) + 1;
-                    }
+                    wordFreqs[word] = wordFreqs.GetValueOrDefault(word, 0) + 1;
                 }
             }
 
@@ -146,17 +235,8 @@ namespace AiDotNet.Tokenization.Algorithms
                 return new List<string>();
 
             var outputTokens = new List<string>();
-
-            // Basic whitespace tokenization
-            var words = text.Split(new[] { ' ', '\t', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
-            var lowercaseWords = words.Select(w => w.ToLowerInvariant());
-
-            foreach (var word in lowercaseWords)
-            {
-                var wordTokens = TokenizeWord(word);
-                outputTokens.AddRange(wordTokens);
-            }
-
+            foreach (var word in BasicTokenize(text, _lowercase))
+                outputTokens.AddRange(TokenizeWord(word));
             return outputTokens;
         }
 
@@ -165,19 +245,15 @@ namespace AiDotNet.Tokenization.Algorithms
         /// </summary>
         private List<string> TokenizeWord(string word)
         {
-            // Strip punctuation to match training behavior
-            var cleanWord = new string(word.Where(c => char.IsLetterOrDigit(c)).ToArray());
-            if (string.IsNullOrEmpty(cleanWord))
+            if (string.IsNullOrEmpty(word))
             {
                 return new List<string>();
             }
 
-            if (cleanWord.Length > _maxInputCharsPerWord)
+            if (word.Length > _maxInputCharsPerWord)
             {
                 return new List<string> { SpecialTokens.UnkToken };
             }
-
-            word = cleanWord;
 
             var tokens = new List<string>();
             int start = 0;

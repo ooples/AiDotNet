@@ -1783,3 +1783,19 @@ shard:
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
     filter: 'Category!=GPU&Category!=Stress&Category!=Sweep&FullyQualifiedName~AiDotNet.Tests.TextToSpeech.'
+  # =====================================================================
+  # REFERENCE PARITY TESTS - vision and vision-language networks checked against their official code
+  # (AiDotNet.Tests.ComputerVision.*, AiDotNet.Tests.VisionLanguage.*), and the PR #2294 additions
+  # outside those namespaces.
+  # =====================================================================
+  # Namespace clauses, so a new reference test class is covered the moment it is added.
+  - name: Reference Parity Tests
+    project: tests/AiDotNet.Tests/AiDotNetTests.csproj
+    framework: net10.0
+    filter: >-
+      Category!=GPU&Category!=Stress&Category!=Sweep&(
+      FullyQualifiedName~AiDotNet.Tests.ComputerVision.|
+      FullyQualifiedName~AiDotNet.Tests.VisionLanguage.|
+      FullyQualifiedName~AiDotNet.Tests.ContinualLearning.ContinualLearningPenaltyTrainingTests.|
+      FullyQualifiedName~AiDotNet.Tests.Generators.ModelDefectDuplicateTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.SelfOrganizingMapReferenceTests.)
