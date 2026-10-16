@@ -244,10 +244,6 @@ public partial class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         }
     };
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) =>
-        throw new NotSupportedException(
-            $"{GetType().Name}: detection backbones train as part of a parent detector.");
-
 
 
 

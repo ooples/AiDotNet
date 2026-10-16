@@ -352,43 +352,14 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
         return Accelerate(input, () => Forward(input));
     }
 
-    /// <summary>
-    /// Trains the VGG network using the provided input and expected output.
-    /// </summary>
-    /// <param name="input">The input tensor for training.</param>
-    /// <param name="expectedOutput">The expected output tensor (one-hot encoded class labels).</param>
-    /// <remarks>
-    /// <para>
-    /// This method performs one training iteration: forward pass, loss calculation,
-    /// backward pass, and parameter update.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This is how the network learns. You show it an image and tell
-    /// it what class the image belongs to. The network makes a guess, compares it to the
-    /// correct answer, and adjusts its weights to do better next time.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc/>
+    /// <remarks>A single <c>[C, H, W]</c> image is batched for training; its target is batched with it when it is a label vector.</remarks>
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
     {
-        SetTrainingMode(true);
-        try
-        {
-            // Match Forward's behavior: accept 3D [C,H,W] single example and
-            // expand to 4D [1,C,H,W] so the layer stack (conv / pool / flatten /
-            // dense) receives the batched shape it expects. Without the
-            // expansion the FlattenLayer in the classifier head treats the
-            // channel dimension as a batch and produces an output with the
-            // wrong leading dim — fails the loss-shape check on every training
-            // call with a single 3D input.
-            var (processedInput, processedTarget) = EnsureBatchForCnnTraining(input, expectedOutput);
-            TrainWithTape(processedInput, processedTarget, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        if (target is null) return (input.Rank == 3 ? PromoteToBatchedTensor(input) : input, null);
+        var (batchedInput, batchedTarget) = EnsureBatchForCnnTraining(input, target);
+        return (batchedInput, batchedTarget);
     }
-
     /// <summary>
     /// Applies parameter updates using the optimizer.
     /// </summary>

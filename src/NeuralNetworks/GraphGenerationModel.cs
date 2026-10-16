@@ -619,7 +619,7 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
         {
             for (int epoch = 0; epoch < epochs; epoch++)
             {
-                TrainSingleStep(nodeFeatures, adjacencyMatrix);
+                Train(nodeFeatures, adjacencyMatrix);
             }
         }
         finally
@@ -906,49 +906,23 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
     }
 
     /// <summary>
-    /// Trains the model on a single batch using tape-based backprop through
-    /// the VGAE objective (Kipf &amp; Welling 2016 §3): L = L_recon + L_KL with
-    /// L_recon = BCE(sigmoid(Z Z^T), A) and
-    /// L_KL = -0.5 Σ (1 + log σ² - μ² - exp(log σ²)).
-    /// </summary>
-    /// <remarks>
-    /// Previous implementation had a hand-rolled <c>ComputeReconstructionGradient</c>
-    /// that returned the dL/dÂ element-wise but NEVER wired it back into the
-    /// encoder / variational weight gradients — <c>GetParameterGradients</c>
-    /// read <c>_meanWeightsGradient</c> / <c>_logVarWeightsGradient</c> which
-    /// stayed at their default <c>null</c>, so Adam got an all-zero gradient
-    /// vector and no parameter ever moved (the
-    /// Training_ShouldChangeParameters failure). We now record the forward
-    /// pass under a <see cref="GradientTape{T}"/>, compute a tape-tracked
-    /// ELBO using <c>Engine</c> ops end-to-end (engine BCE, engine KL), and
-    /// let <c>tape.ComputeGradients</c> populate the real gradient dict
-    /// for every trainable tensor referenced by the forward graph.
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-        => TrainSingleStep(input, expectedOutput);
-
-    /// <summary>
     /// The single-step body behind <see cref="Train(Tensor{T}, Tensor{T})"/>, named so the
     /// multi-epoch <see cref="Train(Tensor{T}, Tensor{T}, int, double)"/> overload can run one step
     /// without the call binding back to itself. See that overload for why a bare two-argument
     /// <c>Train</c> call is not usable from inside this class.
     /// </summary>
-    private void TrainSingleStep(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The VGAE objective (Kipf and Welling 2016): the ELBO of the decoded adjacency given the node features, with the
+    /// features, the target adjacency and the reparameterization noise as the step's data, so a compiled plan replays
+    /// each graph with its own noise. The graph layers get the target graph back after the step.
+    /// </remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Ensure 2D input [numNodes, features]
         if (input.Rank == 1)
             input = input.Reshape([1, input.Shape[0]]);
 
         int numNodes = input.Shape[0];
-
-        // The reconstruction target is the caller-supplied adjacency matrix.
-        // Previously this method ignored expectedOutput and silently smuggled
-        // the target through _autoAdjacencyMatrix, so direct callers ended up
-        // optimizing against an all-ones fallback. Validate the shape up front
-        // so misuse (e.g., passing per-sample labels) fails with a clear
-        // message instead of producing nonsense gradients.
-        if (expectedOutput is null)
-            throw new ArgumentNullException(nameof(expectedOutput));
         if (expectedOutput.Rank != 2
             || expectedOutput.Shape[0] != numNodes
             || expectedOutput.Shape[1] != numNodes)
@@ -958,52 +932,33 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
                 $"got shape [{string.Join(", ", expectedOutput.Shape)}].",
                 nameof(expectedOutput));
         }
+
         var adjacencyMatrix = expectedOutput;
-
-        foreach (var layer in Layers)
-            layer.SetTrainingMode(true);
-
-        // One step on the shared fused session with the configured optimizer, so its moments and scheduler state carry
-        // across steps. The node features, the adjacency (the graph layers read it in the forward and the
-        // reconstruction targets it) and this step's reparameterization noise travel in the step's input, which a
-        // compiled plan rebinds on every replay. The noise is drawn here, from the model's seeded generator, in the
-        // order the taped forward drew it.
         int latentDim = _meanWeights.Shape[1];
         var epsilon = DrawEpsilon(new[] { numNodes, latentDim });
-        int[] featureShape = input._shape;
-        int[] adjacencyShape = adjacencyMatrix._shape;
-        int[] epsilonShape = epsilon._shape;
-        int featureLength = input.Length;
-        int adjacencyLength = adjacencyMatrix.Length;
-        try
+        return new[]
         {
-            TrainCustomTapeStep(
-                Training.StepInputPacking<T>.Pack(input, adjacencyMatrix, epsilon),
-                adjacencyMatrix,
-                packed =>
+            new Training.TrainingObjective<T>(
+                new[] { input, adjacencyMatrix, epsilon },
+                data =>
                 {
-                    var features = Training.StepInputPacking<T>.Slice(packed, 0, featureShape);
-                    var adjacency = Training.StepInputPacking<T>.Slice(packed, featureLength, adjacencyShape);
-                    var noise = Training.StepInputPacking<T>.Slice(packed, featureLength + adjacencyLength, epsilonShape);
-                    var (mean, logVar) = Encode(features, adjacency);
-                    var reconstructed = Decode(ReparameterizeWith(mean, logVar, noise));
-                    return ElboLoss(reconstructed, adjacency, mean, logVar);
-                },
-                (loss, _) => loss,
-                _optimizer);
-        }
-        finally
-        {
-            // The layers and the cache read the step's packed copy during the step; give them the graph back.
-            _cachedAdjacencyMatrix = adjacencyMatrix;
-            foreach (var layer in Layers)
+                    var (mean, logVar) = Encode(data[0], data[1]);
+                    var reconstructed = Decode(ReparameterizeWith(mean, logVar, data[2]));
+                    return ElboLoss(reconstructed, data[1], mean, logVar);
+                })
             {
-                if (layer is IGraphConvolutionLayer<T> graphLayer)
-                    graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
-            }
-        }
+                AfterStep = () =>
+                {
+                    _cachedAdjacencyMatrix = adjacencyMatrix;
+                    foreach (var layer in Layers)
+                    {
+                        if (layer is IGraphConvolutionLayer<T> graphLayer)
+                            graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
+                    }
+                },
+            },
+        };
     }
-
     /// <summary>
     /// The tape-tracked ELBO: the configured reconstruction loss (BinaryCrossEntropy by default, paper-faithful for
     /// VGAE) plus KLWeight times the per-element KL divergence to N(0, I) (Kipf and Welling 2016, section 3.2):

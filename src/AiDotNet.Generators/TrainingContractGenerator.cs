@@ -14,7 +14,9 @@ namespace AiDotNet.Generators;
 /// <item><c>TrainingOptimizer =&gt; _optimizer</c> when the model declares a gradient-based <c>_optimizer</c> field
 /// (the optimizer its constructor built, usually the paper recipe);</item>
 /// <item><c>TrainingUnavailableReason</c> from a <c>bool _useNativeMode</c> field (an ONNX-backed instance cannot
-/// train);</item>
+/// train), or for an <c>IDetectionBackbone</c>, which trains only inside its parent detector;</item>
+/// <item><c>OnTrainingStepStarting</c> calling the model's <c>EnsureNativeInitialized()</c>, so its native layers
+/// exist before a training step reads them;</item>
 /// <item><c>PrepareInputForTraining =&gt; PreprocessImage(input)</c> when the model's own <c>PredictCore</c>
 /// preprocesses its image, so training sees the input inference sees. A model whose prediction skips it keeps the
 /// raw input.</item>
@@ -75,10 +77,12 @@ public class TrainingContractGenerator : IIncrementalGenerator
 
         bool emitOptimizer = !Declares(type, "TrainingOptimizer")
             && DeclaresGradientOptimizerField(type, numeric, ctx.SemanticModel.Compilation);
-        bool emitReason = !Declares(type, "TrainingUnavailableReason") && DeclaresNativeModeField(type);
+        bool backbone = !Declares(type, "TrainingUnavailableReason") && FirstImplementsDetectionBackbone(type);
+        bool emitReason = !Declares(type, "TrainingUnavailableReason") && (backbone || DeclaresNativeModeField(type));
         bool emitPreprocess = !Declares(type, "PrepareInputForTraining") && PredictCorePreprocessesImage(type, ct);
         bool emitDisposedGuard = !Declares(type, "ThrowIfCannotTrain") && DeclaresThrowIfDisposed(type);
-        if (!emitOptimizer && !emitReason && !emitPreprocess && !emitDisposedGuard) return null;
+        bool emitNativeInit = !Declares(type, "OnTrainingStepStarting") && DeclaresParameterlessVoid(type, "EnsureNativeInitialized");
+        if (!emitOptimizer && !emitReason && !emitPreprocess && !emitDisposedGuard && !emitNativeInit) return null;
 
         string t = numeric.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         string tensor = $"global::AiDotNet.Tensors.LinearAlgebra.Tensor<{t}>";
@@ -115,10 +119,20 @@ public class TrainingContractGenerator : IIncrementalGenerator
 
         if (emitReason)
         {
-            sb.AppendLine($"{indent}    /// <summary>An instance running an ONNX session instead of native layers cannot train.</summary>");
-            sb.AppendLine($"{indent}    {Generated}");
-            sb.AppendLine($"{indent}    protected override string? TrainingUnavailableReason =>");
-            sb.AppendLine($"{indent}        _useNativeMode ? base.TrainingUnavailableReason : OnnxTrainingUnavailableReason;");
+            if (backbone)
+            {
+                sb.AppendLine($"{indent}    /// <summary>A detection backbone trains as part of its parent detector, which runs the joint step.</summary>");
+                sb.AppendLine($"{indent}    {Generated}");
+                sb.AppendLine($"{indent}    protected override string? TrainingUnavailableReason =>");
+                sb.AppendLine($"{indent}        $\"{{GetType().Name}}: detection backbones train as part of a parent detector (FasterRCNN, YOLO, DETR, ...), which runs the joint forward and backward pass.\";");
+            }
+            else
+            {
+                sb.AppendLine($"{indent}    /// <summary>An instance running an ONNX session instead of native layers cannot train.</summary>");
+                sb.AppendLine($"{indent}    {Generated}");
+                sb.AppendLine($"{indent}    protected override string? TrainingUnavailableReason =>");
+                sb.AppendLine($"{indent}        _useNativeMode ? base.TrainingUnavailableReason : OnnxTrainingUnavailableReason;");
+            }
         }
 
         if (emitDisposedGuard)
@@ -129,6 +143,17 @@ public class TrainingContractGenerator : IIncrementalGenerator
             sb.AppendLine($"{indent}    {{");
             sb.AppendLine($"{indent}        ThrowIfDisposed();");
             sb.AppendLine($"{indent}        base.ThrowIfCannotTrain();");
+            sb.AppendLine($"{indent}    }}");
+        }
+
+        if (emitNativeInit)
+        {
+            sb.AppendLine($"{indent}    /// <summary>The native layers are built before the first training step reads them.</summary>");
+            sb.AppendLine($"{indent}    {Generated}");
+            sb.AppendLine($"{indent}    protected override void OnTrainingStepStarting({tensor} input, {tensor} target)");
+            sb.AppendLine($"{indent}    {{");
+            sb.AppendLine($"{indent}        base.OnTrainingStepStarting(input, target);");
+            sb.AppendLine($"{indent}        EnsureNativeInitialized();");
             sb.AppendLine($"{indent}    }}");
         }
 
@@ -223,8 +248,18 @@ public class TrainingContractGenerator : IIncrementalGenerator
         return false;
     }
 
-    private static bool DeclaresThrowIfDisposed(INamedTypeSymbol type)
-        => type.GetMembers("ThrowIfDisposed").OfType<IMethodSymbol>()
+    /// <summary>Whether this type, and not a base class, is the first in its chain to implement IDetectionBackbone.</summary>
+    private static bool FirstImplementsDetectionBackbone(INamedTypeSymbol type)
+    {
+        static bool Implements(INamedTypeSymbol? t) => t is not null && t.AllInterfaces.Any(i =>
+            i.OriginalDefinition.ToDisplayString() == "AiDotNet.Interfaces.IDetectionBackbone<T>");
+        return Implements(type) && !Implements(type.BaseType);
+    }
+
+    private static bool DeclaresThrowIfDisposed(INamedTypeSymbol type) => DeclaresParameterlessVoid(type, "ThrowIfDisposed");
+
+    private static bool DeclaresParameterlessVoid(INamedTypeSymbol type, string name)
+        => type.GetMembers(name).OfType<IMethodSymbol>()
             .Any(m => !m.IsStatic && m.Parameters.Length == 0 && m.ReturnsVoid);
 
     private static bool DeclaresNativeModeField(INamedTypeSymbol type)

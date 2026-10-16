@@ -614,6 +614,24 @@ public abstract partial class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>, 
     /// Labels are [batch, tokens, vocab] or [tokens, vocab] unbatched, so the token axis is the
     /// one before the vocabulary axis.
     /// </remarks>
+    /// <inheritdoc/>
+    /// <remarks>
+    /// A model with a CIF alignment layer fires one token per target token during training (Dong and Xu 2020): each
+    /// step tells the layer how many tokens the target has.
+    /// </remarks>
+    protected override void OnTrainingStepStarting(Tensor<T> input, Tensor<T> target)
+    {
+        base.OnTrainingStepStarting(input, target);
+        SetCifTargetTokenCount(target);
+    }
+
+    /// <inheritdoc/>
+    protected override void OnTrainingStepEnded(bool succeeded)
+    {
+        SetCifTargetTokenCount(null);
+        base.OnTrainingStepEnded(succeeded);
+    }
+
     private void SetCifTargetTokenCount(Tensor<T>? expected)
     {
         int? tokenCount = null;

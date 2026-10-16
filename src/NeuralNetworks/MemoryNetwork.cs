@@ -621,21 +621,6 @@ public partial class MemoryNetwork<T> : SequenceModelLayoutBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
 #pragma warning restore CS0169
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        foreach (var layer in Layers)
-            layer.SetTrainingMode(true);
-try
-{
-    TrainWithTape(input, expectedOutput, _optimizer);
-}
-finally
-{
-    SetTrainingMode(false);
-}
-    }
-
     /// <summary>
     /// Calculates mean squared error between predictions and expected outputs.
     /// </summary>

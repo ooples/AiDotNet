@@ -365,25 +365,26 @@ public partial class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
         return Accelerate(input, () => Forward(input));
     }
 
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc/>
+    /// <remarks>A single <c>[C, H, W]</c> image is batched for training; its target is batched with it when it is a label vector.</remarks>
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
     {
-        // Mirror Forward's shape contract — expand 3D inputs (and their
-        // targets) to 4D so ForwardForTraining's raw layer iteration
-        // receives the 4D tensor BatchNormalizationLayer needs. See
-        // ResNet/VGG Train() for the same pattern.
-        SetTrainingMode(true);
+        if (target is null) return (input.Rank == 3 ? PromoteToBatchedTensor(input) : input, null);
+        var (batchedInput, batchedTarget) = EnsureBatchForCnnTraining(input, target);
+        return (batchedInput, batchedTarget);
+    }
+    /// <inheritdoc/>
+    /// <remarks>The batch-normalization statistics stay frozen during training: those layers run in inference mode.</remarks>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        if (!isTraining) return;
         foreach (var layer in Layers)
         {
             if (layer is BatchNormalizationLayer<T>)
                 layer.SetTrainingMode(false);
         }
-
-        var (processedInput, processedTarget) = EnsureBatchForCnnTraining(input, expectedOutput);
-        TrainWithTape(processedInput, processedTarget, _optimizer);
-        SetTrainingMode(false);
     }
-
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc />

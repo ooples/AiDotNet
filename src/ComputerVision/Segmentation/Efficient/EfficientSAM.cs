@@ -158,38 +158,6 @@ public partial class EfficientSAM<T> : Common.PromptableSegmentationBase<T>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
         => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
-    /// <summary>
-    /// Performs one training step.
-    /// </summary>
-    /// <param name="input">The input tensor.</param>
-    /// <param name="expectedOutput">Ground-truth segmentation tensor.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Trains the model. Only available in native mode.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown when called on an ONNX-mode model.</exception>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
-        if (input.Shape.Length == 3) input = AddBatchDimension(input);
-        if (expectedOutput.Shape.Length == 3) expectedOutput = AddBatchDimension(expectedOutput);
-        if (input.Shape.Length != 4) throw new ArgumentException($"Tape-based training requires rank 3 (CHW) or rank 4 (NCHW), got rank {input.Shape.Length}.", nameof(input));
-        if (expectedOutput.Shape.Length != 4) throw new ArgumentException($"Tape-based training target requires rank 3 (CHW) or rank 4 (NCHW), got rank {expectedOutput.Shape.Length}.", nameof(expectedOutput));
-        if (input.Shape[0] != expectedOutput.Shape[0])
-            throw new ArgumentException(
-                $"Input batch size ({input.Shape[0]}) must match target batch size ({expectedOutput.Shape[0]}).",
-                nameof(expectedOutput));
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, Optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
     #endregion
 
     #region Private Methods

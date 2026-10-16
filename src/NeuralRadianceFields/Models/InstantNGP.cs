@@ -1434,20 +1434,14 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
     private int _imageTrainingIteration;
     private NeuralRadianceFields.Data.SceneBounds? _autoBounds;
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc/>
+    /// <remarks>Every <c>OccupancyUpdateInterval</c> steps, the occupancy grid is refreshed from the field (Müller et al. 2022).</remarks>
+    protected override void OnTrainingStepEnded(bool succeeded)
     {
-        SetTrainingMode(true);
-        // The hash tables train on the tape with the rest of the model (the encoding routes the feature gradient to
-        // every level's table); only the occupancy grid is updated here.
-        TrainWithTape(input, expectedOutput);
-
+        if (!succeeded) return;
         _trainingStep++;
         if (_trainingStep % _occupancyUpdateInterval == 0)
-        {
             UpdateOccupancyGrid();
-        }
-
-        SetTrainingMode(false);
     }
 
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.

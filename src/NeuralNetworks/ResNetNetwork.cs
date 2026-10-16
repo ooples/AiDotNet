@@ -493,38 +493,14 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         return Accelerate(input, () => Forward(input));
     }
 
-    /// <summary>
-    /// Trains the ResNet network using the provided input and expected output.
-    /// </summary>
-    /// <param name="input">The input tensor for training.</param>
-    /// <param name="expectedOutput">The expected output tensor (one-hot encoded class labels).</param>
-    /// <remarks>
-    /// Accepts both 3D <c>[C, H, W]</c> (single unbatched example) and 4D
-    /// <c>[B, C, H, W]</c> inputs — matches <see cref="Forward"/>'s contract.
-    /// When a 3D input arrives, a leading batch dimension is added so every
-    /// downstream layer sees the conv-standard 4D tensor. The corresponding
-    /// target is also expanded to <c>[1, numClasses]</c> so the loss sees
-    /// matching batch dims on both operands. Previously
-    /// <see cref="NeuralNetworkBase{T}.ForwardForTraining"/> fed the raw 3D
-    /// tensor straight to the layer stack, which caused the FlattenLayer to
-    /// treat the 512-channel dimension as a batch and produce a
-    /// <c>[512, 10]</c> prediction — failing the loss shape check in
-    /// <c>EnsureTargetMatchesPredicted</c>.
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc/>
+    /// <remarks>A single <c>[C, H, W]</c> image is batched for training; its target is batched with it when it is a label vector.</remarks>
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
     {
-        SetTrainingMode(true);
-        try
-        {
-            var (processedInput, processedTarget) = EnsureBatchForCnnTraining(input, expectedOutput);
-            TrainWithTape(processedInput, processedTarget, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        if (target is null) return (input.Rank == 3 ? PromoteToBatchedTensor(input) : input, null);
+        var (batchedInput, batchedTarget) = EnsureBatchForCnnTraining(input, target);
+        return (batchedInput, batchedTarget);
     }
-
     /// <summary>
     /// Applies parameter updates using the optimizer.
     /// </summary>

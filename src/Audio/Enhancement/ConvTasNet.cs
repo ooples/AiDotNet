@@ -500,29 +500,8 @@ public partial class ConvTasNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T
 
     #region Training
 
-    /// <summary>
-    /// One training step on the base tape: the whole network (encoder, every TCN block, the mask head and the
-    /// decoder) is differentiated against the loss, negative SI-SNR with permutation-invariant training by default.
-    /// </summary>
-    /// <param name="input">The mixture, [batch, samples] or [samples].</param>
-    /// <param name="expected">The reference sources, [batch, sources, samples].</param>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-        {
-            throw new InvalidOperationException("Cannot train in ONNX inference mode.");
-        }
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, Optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
+    /// <inheritdoc/>
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => Optimizer;
 
     #endregion
 

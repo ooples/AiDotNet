@@ -769,53 +769,8 @@ public partial class BiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         }
     }
 
-    /// <summary>
-    /// Performs one training step: forward pass, loss computation, backward pass, and parameter update.
-    /// </summary>
-    /// <param name="input">Token embeddings with shape [sequenceLength, embeddingDim].</param>
-    /// <param name="expected">Ground truth label indices with shape [sequenceLength]. Each value is
-    /// an integer index into <see cref="SequenceLabelingNERBase{T}.LabelNames"/>.</param>
-    /// <remarks>
-    /// <para>
-    /// A single training step consists of:
-    /// <list type="number">
-    /// <item><b>Preprocessing:</b> Pad/truncate input to MaxSequenceLength</item>
-    /// <item><b>Forward pass:</b> Compute emission scores through BiLSTM and projection layers,
-    /// then CRF decoding produces the predicted label sequence</item>
-    /// <item><b>Loss computation:</b> Cross-entropy loss between predicted and expected labels
-    /// (with CRF, this becomes the negative log-likelihood of the correct sequence)</item>
-    /// <item><b>Backward pass:</b> Compute gradients for all parameters by propagating the
-    /// loss gradient backward through CRF, projection, dropout, and BiLSTM layers</item>
-    /// <item><b>Parameter update:</b> AdamW optimizer adjusts all weights using the computed
-    /// gradients with adaptive learning rates and weight decay</item>
-    /// </list>
-    ///
-    /// Training mode is enabled during the forward/backward pass to activate dropout layers
-    /// (which are disabled during inference) and is restored to inference mode afterwards,
-    /// even if an error occurs.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method teaches the model from one example. You show it a sentence
-    /// with the correct labels, and it adjusts its internal weights to be more accurate. Call this
-    /// method many times with different examples (training loop) to train the model.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="NotSupportedException">Thrown when called in ONNX mode.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when optimizer is not initialized.</exception>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
-        if (_optimizer is null) throw new InvalidOperationException("Optimizer is not initialized. Cannot train without an optimizer.");
-        // Delegate to the shared CRF-aware training step (lives on
-        // SequenceLabelingNERBase) so this synchronous path and the
-        // async INERModel<T>.TrainAsync path agree on the loss
-        // objective + preprocessing contract. The shared helper pads
-        // input + labels to MaxSequenceLength, manages training-mode
-        // around the step, and routes through CRF NLL when UseCRF is
-        // true (falling back to tape-based cross-entropy otherwise).
-        RunCrfAwareTrainStep(input, expected, _options.UseCRF, _optimizer);
-    }
-
+    /// <inheritdoc/>
+    protected override bool? CrfTraining => _options.UseCRF;
     /// <inheritdoc />
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
     {

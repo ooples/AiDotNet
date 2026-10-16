@@ -568,19 +568,9 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         return activations;
     }
 
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _autoencoderOptimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
+    /// <inheritdoc/>
+    /// <remarks>Supervised training pre-trains the autoencoder with its own optimizer (Choi et al. 2017).</remarks>
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _autoencoderOptimizer;
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
