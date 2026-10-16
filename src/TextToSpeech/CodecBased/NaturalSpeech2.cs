@@ -226,25 +226,6 @@ public partial class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
         return c;
     }
 
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            // Honor the optimizer selected by the native constructor. The two-argument
-            // overload creates a generic fallback and silently ignores _optimizer.
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <summary>
     /// Refuses parameter work on a disposed model, on every entry point rather than one.
     /// </summary>

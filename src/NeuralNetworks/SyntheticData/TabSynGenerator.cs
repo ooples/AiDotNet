@@ -359,37 +359,6 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     }
 
     /// <summary>
-    /// Trains the TabSyn network using the provided input and expected output.
-    /// </summary>
-    /// <param name="input">The input data tensor.</param>
-    /// <param name="expectedOutput">The expected reconstruction tensor.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This runs a single training step for the VAE.
-    /// The full two-phase training (VAE then diffusion) happens in Fit().
-    /// This method is provided for compatibility with the NeuralNetworkBase pattern.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // Single-step encoder training for NeuralNetworkBase compatibility (the
-        // full two-phase VAE + latent-diffusion training runs in Fit). The encoder
-        // is the Layers chain, so TrainWithTape backpropagates through it; the
-        // previous body called _optimizer.UpdateParameters(Layers) without a
-        // backward and threw "Backward pass must be called before updating
-        // parameters".
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <summary>
     /// Runs one optimizer step over the parameters of the given <paramref name="layers"/>
     /// using gradients from <paramref name="tape"/> for the precomputed scalar
     /// <paramref name="loss"/>. Lets the two training phases (VAE, latent diffusion)

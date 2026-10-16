@@ -383,21 +383,6 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         return c;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(PreprocessImage(input), expected);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     private IEnumerable<LayerBase<T>?> EnumerateMedClipExtraLayers()
     {
         foreach (var layer in EnumerateTextEncoderTrainableLayers()) yield return layer;

@@ -244,25 +244,6 @@ public partial class ProDiff<T> : TtsModelBase<T>, IAcousticModel<T>
         return c;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            // Honor the optimizer selected by the public constructor. The
-            // two-argument overload creates a generic fallback and silently
-            // ignores ProDiff's configured Adam + rsqrt schedule.
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <summary>
     /// Refuses parameter work on a disposed model, on every entry point rather than one.
     /// </summary>

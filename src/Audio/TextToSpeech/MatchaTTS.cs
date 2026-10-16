@@ -210,20 +210,6 @@ public partial class MatchaTTS<T> : AlignedTextToMelModelBase<T>, ITextToSpeech<
         var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <summary>
     /// Trains paired token/mel sequences with explicit lengths and optional monotonic duration
     /// targets. The inherited frame-level Train overload remains available and unchanged.

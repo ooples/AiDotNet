@@ -415,15 +415,6 @@ public partial class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAct
         return hidden;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
-    }
-
     // UpdateParameters restated a fold the base now derives from generated component registration.
     // Removed under AIDN082.
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>

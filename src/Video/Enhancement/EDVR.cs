@@ -252,20 +252,6 @@ public partial class EDVR<T> : VideoSuperResolutionBase<T>
 
     protected override Tensor<T> PredictCore(Tensor<T> input) => Forward(input);
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     #endregion
 
     #region Layer Initialization

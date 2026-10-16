@@ -465,20 +465,6 @@ public partial class TimesNet<T> : ForecastingModelBase<T>
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the TimesNet model, Train performs a training step. This updates the TimesNet architecture so it learns from data.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        base.Train(input, target);
-    }
-
     /// <summary>
     /// Training-mode forward: calls <see cref="Forward"/> directly so
     /// <c>_dropoutLayers</c> between the Inception blocks fire during

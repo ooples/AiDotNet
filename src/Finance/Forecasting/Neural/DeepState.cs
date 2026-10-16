@@ -508,26 +508,6 @@ public partial class DeepState<T> : ForecastingModelBase<T>
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Training minimizes the difference between predictions and actuals.
-    /// For state space models, this also implicitly trains the SSM to capture data dynamics.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass. Delegate to FinancialModelBase.Train → TrainWithTape.
-        // The ForwardNativeForTraining override below keeps dropout and
-        // other train-only layer behavior active; see its remarks.
-        base.Train(input, target);
-    }
-
     /// <summary>
     /// Training-mode forward: calls <see cref="Forward"/> directly so
     /// the tape forward stays in training mode. The default path goes

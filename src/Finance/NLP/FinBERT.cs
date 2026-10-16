@@ -397,37 +397,6 @@ public partial class FinBERT<T> : FinancialNLPModelBase<T>
     }
 
     /// <summary>
-    /// Trains the FinBERT model on a batch of input-target pairs.
-    /// </summary>
-    /// <param name="input">Input tensor with token IDs.</param>
-    /// <param name="target">Target tensor with sentiment labels (one-hot or class indices).</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Training updates all layers:
-    /// - Token and position embeddings
-    /// - Multi-head attention weights
-    /// - Feed-forward network weights
-    /// - Classification head
-    ///
-    /// Fine-tuning on domain-specific data typically improves performance.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
-        base.Train(input, target);
-    }
-
-    /// <summary>
     /// Tape-aware training forward. FinBERT is an NLP model, not a forecaster,
     /// so the base <see cref="FinancialModelBase{T}.ForwardForTraining"/> (which
     /// routes through <c>Forecast → ForecastNative</c>) throws "ForecastNative

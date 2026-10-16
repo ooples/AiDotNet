@@ -1009,25 +1009,6 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         };
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // try/finally: SetTrainingMode(false) used to run only on the success path, so any throw from
-        // TrainWithTape -- a shape mismatch, a non-finite gradient, an OOM -- escaped with the model
-        // still in training mode. Dropout then stayed stochastic and BatchNorm kept updating its
-        // running statistics on every later Predict, making inference silently non-deterministic long
-        // after the error that caused it was handled.
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     // The layer streams this model holds outside Layers are discovered by ModelParameterGenerator and surfaced automatically; the hand-written hook that used to sit here was an override wearing a different name.
 
     // UpdateParameters restated a fold the base now derives from generated component registration.

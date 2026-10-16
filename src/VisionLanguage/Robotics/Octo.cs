@@ -365,18 +365,6 @@ public partial class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction
         return c;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        // Drive training with Octo's CONFIGURED optimizer (AdamW at OctoOptions.LearningRate, default the
-        // paper-aligned 1e-4). The 2-arg TrainWithTape used a built-in default rate (~1e-3) that overshot
-        // and diverged on the smaller configs (MoreData_ShouldNotDegrade: 200-iter loss > 50-iter loss).
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
-    }
-
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being

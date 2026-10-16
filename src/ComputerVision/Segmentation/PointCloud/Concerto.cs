@@ -197,31 +197,6 @@ public partial class Concerto<T> : Common.SemanticSegmentationBase<T>
     protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
     /// <summary>
-    /// Performs one training step.
-    /// </summary>
-    /// <param name="input">The input tensor.</param>
-    /// <param name="expectedOutput">Ground-truth segmentation tensor.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Trains the model. Only available in native mode.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown when called on an ONNX-mode model.</exception>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, Optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <summary>
     /// Runs Concerto's self-supervised pretraining: cross-modal distillation from paired camera
     /// views plus intra-modal self-distillation against a momentum teacher.
     /// </summary>
