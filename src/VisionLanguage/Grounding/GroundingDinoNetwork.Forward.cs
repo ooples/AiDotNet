@@ -4,8 +4,8 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <param name="Logits">Per decoder layer, the query-to-token similarities <c>[B, Q, MaxTextLength]</c>; masked tokens and
 /// tokens past the prompt hold <see cref="GroundingDinoNetwork{T}.Masked"/>.</param>
 /// <param name="Boxes">Per decoder layer, the boxes <c>[B, Q, 4]</c> as (cx, cy, w, h) normalized to the image.</param>
-/// <param name="EncoderLogits">The selected queries' similarities before decoding (two-stage auxiliary output).</param>
-/// <param name="EncoderBoxes">The selected proposals' boxes <c>[B, Q, 4]</c> (two-stage auxiliary output).</param>
+/// <param name="EncoderLogits">The selected encoder tokens' scores against the encoded text <c>[B, Q, MaxTextLength]</c> (the encoder's auxiliary output).</param>
+/// <param name="EncoderBoxes">The selected tokens' boxes <c>[B, Q, 4]</c>, on the tape (the encoder's auxiliary output; the decoder starts from them detached).</param>
 /// <param name="TokenMask">The prompt tokens the logits score (after truncation to MaxTextLength).</param>
 internal sealed record GroundingDinoOutput<T>(Tensor<T>[] Logits, Tensor<T>[] Boxes, Tensor<T> EncoderLogits, Tensor<T> EncoderBoxes, bool[,] TokenMask);
 

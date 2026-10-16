@@ -135,7 +135,16 @@ internal sealed partial class GroundingDinoNetwork<T>
                     reference[i, q, k] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-NumOps.ToDouble(coordinateLogits[i, selected[i, q], k]))));
         var target = _engine.TensorBroadcastTo(_engine.Reshape(_engine.TensorSlice(_engine.Reshape(Value(QueryEmbedding), new[] { c.Queries, c.Dim }),
             new[] { 0, 0 }, new[] { queries, c.Dim }), new[] { 1, queries, c.Dim }), new[] { b, queries, c.Dim });
-        var encoderLogits = Contrast(target, text, mask);
+        // The encoder's outputs for its auxiliary loss, as the official code takes them (hs_enc and refpoint_embed_undetach):
+        // the selected tokens' scores against the encoded text, and their boxes, on the tape.
+        var rows = new int[b * queries];
+        for (int i = 0; i < b; i++)
+            for (int q = 0; q < queries; q++) rows[i * queries + q] = i * tokens + selected[i, q];
+        int width = encoderClass.Shape[2];
+        var encoderLogits = _engine.Reshape(AiDotNet.ComputerVision.CvTensorOps<T>.Select(
+            _engine.Reshape(encoderClass, new[] { b * tokens, width }), rows, 0), new[] { b, queries, width });
+        var encoderBoxes = _engine.Sigmoid(_engine.Reshape(AiDotNet.ComputerVision.CvTensorOps<T>.Select(
+            _engine.Reshape(coordinateLogits, new[] { b * tokens, 4 }), rows, 0), new[] { b, queries, 4 }));
         var initialReference = reference;
         Record("init_reference", reference);
 
@@ -180,7 +189,7 @@ internal sealed partial class GroundingDinoNetwork<T>
         }
         if (Trace is not null)
             Record("intermediate", _engine.TensorStack(intermediate.ToArray(), 1));
-        return new GroundingDinoOutput<T>(logits, boxes, encoderLogits, initialReference, mask);
+        return new GroundingDinoOutput<T>(logits, boxes, encoderLogits, encoderBoxes, mask);
     }
 
     /// <summary>When set, the forward records its intermediate tensors here by name (for reference comparisons).</summary>
