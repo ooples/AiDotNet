@@ -3852,7 +3852,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         string memberName)
     {
         var rebound = RebindLayerGraphAlias(graph, previousLayers, replacementLayers, memberName);
-        if (!ReferenceEquals((object?)graph, (object?)rebound))
+        if ((object?)graph != rebound)   // reference comparison; LayerGraph<T> is a class
         {
             throw new InvalidOperationException(
                 $"Readonly layer graph member '{memberName}' aliases the canonical Layers graph and cannot " +
