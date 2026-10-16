@@ -339,8 +339,8 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>, IShapeContract
         metadata["FfnDim"] = _ffnDim.ToString(ci);
         metadata["Gated"] = _gated.ToString();
         var ffnActivationType = _ffnActivation.GetType();
-        metadata["FfnActivationType"] = ffnActivationType.AssemblyQualifiedName
-            ?? ffnActivationType.FullName ?? string.Empty;
+        string? qualifiedName = ffnActivationType.AssemblyQualifiedName;
+        metadata["FfnActivationType"] = qualifiedName ?? ffnActivationType.FullName ?? string.Empty;
 
         // Persist the injected (polymorphic T5 / MHA / GQA) attention sublayer as a self-contained sub-blob
         // under an "Attn." prefix: its concrete type, its own metadata, and its shapes. The block's ctor

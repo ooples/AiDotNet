@@ -353,8 +353,8 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
         // same FFN (BERT GELU vs Vaswani ReLU); without this a cloned block always
         // fell back to the constructor default and diverged from the original.
         var ffnActivationType = _ffnActivation.GetType();
-        metadata["FfnActivationType"] = ffnActivationType.AssemblyQualifiedName
-            ?? ffnActivationType.FullName ?? string.Empty;
+        string? qualifiedName = ffnActivationType.AssemblyQualifiedName;
+        metadata["FfnActivationType"] = qualifiedName ?? ffnActivationType.FullName ?? string.Empty;
         return metadata;
     }
 }

@@ -199,8 +199,8 @@ public sealed partial class TimeSformerBlockLayer<T> : LayerBase<T>, IShapeContr
         metadata["FfnDim"] = _ffnDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["NumFrames"] = _configuredFrames.ToString(System.Globalization.CultureInfo.InvariantCulture);
         var ffnActivationType = _ffnActivation.GetType();
-        metadata["FfnActivationType"] = ffnActivationType.AssemblyQualifiedName
-            ?? ffnActivationType.FullName ?? string.Empty;
+        string? qualifiedName = ffnActivationType.AssemblyQualifiedName;
+        metadata["FfnActivationType"] = qualifiedName ?? ffnActivationType.FullName ?? string.Empty;
         return metadata;
     }
 
