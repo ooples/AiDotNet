@@ -195,4 +195,39 @@ public class ClapArchitectureTests
 
     private static Tensor<double> Captions() =>
         new(new[] { 2, 6 }, new Vector<double>(new double[] { 0, 5, 9, 2, 1, 1, 0, 33, 41, 17, 2, 1 }));
+
+    [Fact(Timeout = 120000)]
+    public async Task AttentionalFeatureFusion_DistinctMaps_GradientsReachEveryParameter()
+    {
+        await Task.Yield();
+        var layer = new AttentionalFeatureFusionLayer<double>(8, 4);
+        layer.SetTrainingMode(false);
+        var rng = new Random(2313);
+        Tensor<double> Map()
+        {
+            var t = new Tensor<double>(new[] { 2, 8, 4, 4 });
+            var span = t.AsWritableSpan();
+            for (int i = 0; i < span.Length; i++) span[i] = rng.NextDouble() * 2 - 1;
+            return t;
+        }
+        var x = Map();
+        var y = Map();
+
+        using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<double>();
+        var fused = layer.Forward(x, y);
+        var parameters = AiDotNet.Training.TapeTrainingStep<double>.CollectParameters(new[] { layer }, structureVersion: -1);
+        Assert.NotEmpty(parameters);
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var projection = Map();
+        var loss = engine.ReduceSum(engine.TensorMultiply(fused, projection), new[] { 0, 1, 2, 3 }, keepDims: false);
+        var gradients = tape.ComputeGradients(loss, parameters);
+
+        // Both attention branches (local and global context) and their batch norms train.
+        foreach (var parameter in parameters)
+        {
+            Assert.True(gradients.TryGetValue(parameter, out var gradient) && gradient is not null,
+                $"a {string.Join("x", parameter.Shape.ToArray())} parameter received no gradient");
+            Assert.Contains(gradient!.ToArray(), g => Math.Abs(g) > 1e-12);
+        }
+    }
 }
