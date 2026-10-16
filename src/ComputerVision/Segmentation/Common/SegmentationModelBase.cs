@@ -198,6 +198,9 @@ public abstract partial class SegmentationModelBase<T> : NeuralNetworkBase<T>, I
     protected IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? Optimizer
         => _useNativeMode ? _optimizer ??= CreateDefaultOptimizer() : null;
 
+    /// <inheritdoc/>
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => Optimizer;
+
     /// <summary>
     /// Creates the optimizer used when the constructor was given none. Override to change the default.
     /// </summary>
@@ -418,29 +421,6 @@ public abstract partial class SegmentationModelBase<T> : NeuralNetworkBase<T>, I
         }
 
         return Forward(input);
-    }
-
-    /// <summary>
-    /// Performs one training step: forward pass, loss, backward pass, and parameter update.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">Thrown when called on an ONNX-mode model.</exception>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-        {
-            throw new InvalidOperationException(
-                "Training is not supported in ONNX mode. Use the native mode constructor for training.");
-        }
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
     }
 
     #endregion

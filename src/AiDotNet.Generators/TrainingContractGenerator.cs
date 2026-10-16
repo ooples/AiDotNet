@@ -14,7 +14,10 @@ namespace AiDotNet.Generators;
 /// <item><c>TrainingOptimizer =&gt; _optimizer</c> when the model declares a gradient-based <c>_optimizer</c> field
 /// (the optimizer its constructor built, usually the paper recipe);</item>
 /// <item><c>TrainingUnavailableReason</c> from a <c>bool _useNativeMode</c> field (an ONNX-backed instance cannot
-/// train).</item>
+/// train);</item>
+/// <item><c>PrepareInputForTraining =&gt; PreprocessImage(input)</c> when the model's own <c>PredictCore</c>
+/// preprocesses its image, so training sees the input inference sees. A model whose prediction skips it keeps the
+/// raw input.</item>
 /// </list>
 /// A model that declares either member itself keeps its own.
 /// </summary>
@@ -73,7 +76,9 @@ public class TrainingContractGenerator : IIncrementalGenerator
         bool emitOptimizer = !Declares(type, "TrainingOptimizer")
             && DeclaresGradientOptimizerField(type, numeric, ctx.SemanticModel.Compilation);
         bool emitReason = !Declares(type, "TrainingUnavailableReason") && DeclaresNativeModeField(type);
-        if (!emitOptimizer && !emitReason) return null;
+        bool emitPreprocess = !Declares(type, "PrepareInputForTraining") && PredictCorePreprocessesImage(type, ct);
+        bool emitDisposedGuard = !Declares(type, "ThrowIfCannotTrain") && DeclaresThrowIfDisposed(type);
+        if (!emitOptimizer && !emitReason && !emitPreprocess && !emitDisposedGuard) return null;
 
         string t = numeric.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         string tensor = $"global::AiDotNet.Tensors.LinearAlgebra.Tensor<{t}>";
@@ -113,6 +118,24 @@ public class TrainingContractGenerator : IIncrementalGenerator
             sb.AppendLine($"{indent}    {Generated}");
             sb.AppendLine($"{indent}    protected override string? TrainingUnavailableReason =>");
             sb.AppendLine($"{indent}        _useNativeMode ? base.TrainingUnavailableReason : OnnxTrainingUnavailableReason;");
+        }
+
+        if (emitDisposedGuard)
+        {
+            sb.AppendLine($"{indent}    /// <summary>A disposed instance cannot train.</summary>");
+            sb.AppendLine($"{indent}    {Generated}");
+            sb.AppendLine($"{indent}    protected override void ThrowIfCannotTrain()");
+            sb.AppendLine($"{indent}    {{");
+            sb.AppendLine($"{indent}        ThrowIfDisposed();");
+            sb.AppendLine($"{indent}        base.ThrowIfCannotTrain();");
+            sb.AppendLine($"{indent}    }}");
+        }
+
+        if (emitPreprocess)
+        {
+            sb.AppendLine($"{indent}    /// <summary>Training sees the image <c>PredictCore</c> sees: the same preprocessing.</summary>");
+            sb.AppendLine($"{indent}    {Generated}");
+            sb.AppendLine($"{indent}    protected override {tensor} PrepareInputForTraining({tensor} input) => PreprocessImage(input);");
         }
 
         sb.AppendLine($"{indent}}}");
@@ -168,6 +191,43 @@ public class TrainingContractGenerator : IIncrementalGenerator
         return SymbolEqualityComparer.Default.Equals(field.Type, expected)
             || field.Type.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i, expected));
     }
+
+    /// <summary>Whether the type's own PredictCore calls PreprocessImage on its way to the layers.</summary>
+    private static bool PredictCorePreprocessesImage(INamedTypeSymbol type, System.Threading.CancellationToken ct)
+    {
+        if (type.GetMembers("PreprocessImage").Length == 0 && !InheritsMember(type, "PreprocessImage")) return false;
+        foreach (var predict in type.GetMembers("PredictCore").OfType<IMethodSymbol>())
+        {
+            foreach (var reference in predict.DeclaringSyntaxReferences)
+            {
+                if (reference.GetSyntax(ct) is not MethodDeclarationSyntax method) continue;
+                SyntaxNode? body = (SyntaxNode?)method.Body ?? method.ExpressionBody;
+                if (body is null) continue;
+                if (body.DescendantNodes().OfType<InvocationExpressionSyntax>().Any(call => call.Expression switch
+                    {
+                        IdentifierNameSyntax id => id.Identifier.ValueText == "PreprocessImage",
+                        MemberAccessExpressionSyntax access => access.Name.Identifier.ValueText == "PreprocessImage",
+                        _ => false,
+                    }))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool InheritsMember(INamedTypeSymbol type, string name)
+    {
+        for (var current = type.BaseType; current is not null; current = current.BaseType)
+            if (current.GetMembers(name).Length > 0) return true;
+        return false;
+    }
+
+    private static bool DeclaresThrowIfDisposed(INamedTypeSymbol type)
+        => type.GetMembers("ThrowIfDisposed").OfType<IMethodSymbol>()
+            .Any(m => !m.IsStatic && m.Parameters.Length == 0 && m.ReturnsVoid);
 
     private static bool DeclaresNativeModeField(INamedTypeSymbol type)
         => type.GetMembers("_useNativeMode").OfType<IFieldSymbol>()

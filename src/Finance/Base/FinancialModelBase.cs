@@ -767,7 +767,10 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
     /// keeps the training-mode toggle and the loss history in one place.
     /// </remarks>
     protected virtual void RunTrainingStep(Tensor<T> input, Tensor<T> expectedOutput)
-        => TrainWithTape(input, expectedOutput, TrainingOptimizer);
+    {
+        if (!TryTrainDeclaredObjectives(input, expectedOutput))
+            TrainWithTape(input, expectedOutput, TrainingOptimizer);
+    }
 
     /// <summary>
     /// Core training implementation for derived classes.

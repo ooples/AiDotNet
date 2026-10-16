@@ -10495,18 +10495,111 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         $"{GetType().Name} is running an ONNX inference session and cannot be trained. Construct it with the native " +
         "(layer-based) constructor to train.";
 
-    private void ThrowIfCannotTrain()
+    /// <summary>
+    /// Throws when this instance cannot take a training step: <see cref="TrainingUnavailableReason"/> is set, or (in the
+    /// override the source generator emits for a model with its own <c>ThrowIfDisposed</c>) it was disposed.
+    /// </summary>
+    protected virtual void ThrowIfCannotTrain()
     {
         if (TrainingUnavailableReason is { } reason)
             throw new NotSupportedException(reason);
     }
 
+    /// <summary>
+    /// The optimizer steps one training call takes, when this model's objective is not the prediction-versus-target
+    /// loss: a diffusion model's noise-prediction loss, a graph model's step over its adjacency, a GAN's critic and
+    /// generator steps. Null (the default) trains the prediction against the target.
+    /// </summary>
+    /// <param name="input">The training input.</param>
+    /// <param name="target">The training target.</param>
+    /// <returns>The steps to take, in order, or null for the standard step.</returns>
+    /// <remarks>
+    /// The base class runs each objective on the shared fused session, in training mode, and records the last loss.
+    /// A model declares what its step computes; it does not write the training loop. See
+    /// <see cref="Training.TrainingObjective{T}"/>.
+    /// </remarks>
+    protected virtual IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> target)
+        => null;
+
+    /// <summary>
+    /// Runs the objectives <see cref="DefineTrainingObjectives"/> declares, in training mode; returns false when the model
+    /// declares none. A family base that overrides <see cref="Train(Tensor{T}, Tensor{T})"/> calls this first, so its
+    /// models' declared objectives run.
+    /// </summary>
+    protected bool TryTrainDeclaredObjectives(Tensor<T> input, Tensor<T> target)
+    {
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(true);
+        try
+        {
+            var objectives = DefineTrainingObjectives(input, target);
+            if (objectives is null) return false;
+            foreach (var objective in objectives)
+            {
+                Guard.NotNull(objective);
+                try
+                {
+                    TrainDeclaredObjective(objective);
+                }
+                finally
+                {
+                    objective.AfterStep?.Invoke();
+                }
+            }
+
+            return true;
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
+    }
+
+    /// <summary>
+    /// Takes one optimizer step on <paramref name="objective"/> through the shared fused session and returns its loss:
+    /// for a model's training entry points other than <see cref="Train(Tensor{T}, Tensor{T})"/> (image-space NeRF
+    /// training, masked-autoencoder pretraining). The caller sets the training mode.
+    /// </summary>
+    protected T TrainDeclaredObjective(Training.TrainingObjective<T> objective)
+    {
+        Guard.NotNull(objective);
+        var data = objective.Data;
+        var shapes = new int[data.Count][];
+        var offsets = new int[data.Count];
+        int offset = 0;
+        for (int i = 0; i < data.Count; i++)
+        {
+            Guard.NotNull(data[i]);
+            shapes[i] = data[i]._shape;
+            offsets[i] = offset;
+            offset += data[i].Length;
+        }
+
+        var packed = Training.StepInputPacking<T>.Pack(data as Tensor<T>[] ?? data.ToArray());
+        return TrainCustomTapeStep(
+            packed,
+            packed,
+            step =>
+            {
+                var views = new Tensor<T>[shapes.Length];
+                for (int i = 0; i < views.Length; i++)
+                    views[i] = Training.StepInputPacking<T>.Slice(step, offsets[i], shapes[i]);
+                return objective.Loss(views);
+            },
+            static (loss, _) => loss,
+            objective.Optimizer,
+            objective.Parameters);
+    }
+
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        Guard.NotNull(input);
+        Guard.NotNull(expectedOutput);
         ThrowIfCannotTrain();
         // Once training has begun, the loss is locked (see SetLossFunction) so the loss reported in metrics
         // matches the loss actually optimized.
         _hasBeenTrained = true;
+        if (TryTrainDeclaredObjectives(input, expectedOutput)) return;
         RunTrainStep(input, expectedOutput, optimizerOverride: null);
     }
 
@@ -10573,7 +10666,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // same input-shape contract: pass either single-sample
         // <c>[C,H,W]</c> / <c>[seq,F]</c> / <c>[F]</c> or batched
         // <c>[B,C,H,W]</c> / <c>[B,seq,F]</c> / <c>[B,F]</c> — both work.
-        (input, expectedOutput) = NormalizeBatchDim(input, expectedOutput);
+        // A model with its own PredictCore owns its public-input convention (its own batching, time-major audio,
+        // token sequences), and prediction leaves its input alone (PrepareInputForTraining); training follows the
+        // same rule. Promoting it guessed from the architecture's rank and turned a batched [B, T, F] into rank 4.
+        if (!PredictCoreOwnsPublicInputPreparation())
+            (input, expectedOutput) = NormalizeBatchDim(input, expectedOutput);
 
         // Data-dependent LSUV init (Mishkin & Matas 2015): on the FIRST training step, rescale
         // each trainable layer's weights so its output has ~unit variance across this batch. This
