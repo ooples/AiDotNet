@@ -410,6 +410,20 @@ public abstract partial class SegmentationModelBase<T> : NeuralNetworkBase<T>, I
         return Predict(image);
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Training batches a single <c>[C, H, W]</c> image the way <see cref="Forward"/> batches one for prediction, and
+    /// its <c>[classes, H, W]</c> target with it. The target is batched only together with a single image: a rank-3
+    /// target beside a batched image is already <c>[N, H, W]</c>.
+    /// </remarks>
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
+    {
+        var (preparedInput, preparedTarget) = base.PrepareTrainingPair(input, target, draw);
+        if (preparedInput.Rank != 3) return (preparedInput, preparedTarget);
+        return (AddBatchDimension(preparedInput),
+            preparedTarget is not null && preparedTarget.Rank == 3 ? AddBatchDimension(preparedTarget) : preparedTarget);
+    }
+
     /// <summary>
     /// Runs a forward pass, dispatching to ONNX or native mode.
     /// </summary>

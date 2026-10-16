@@ -102,7 +102,7 @@ public class TrainOverrideAnalyzer : DiagnosticAnalyzer
 }
 
 /// <summary>
-/// The concrete networks that overrode <c>Train</c> when <see cref="TrainOverrideAnalyzer"/> was added (2026-10-16), 169 types.
+/// The concrete networks that overrode <c>Train</c> when <see cref="TrainOverrideAnalyzer"/> was added (2026-10-16).
 /// May only shrink.
 /// </summary>
 internal static class TrainOverrideBaseline
@@ -138,28 +138,14 @@ internal static class TrainOverrideBaseline
         "AiDotNet.ComputerVision.Detection.ObjectDetection.YOLO.YOLOv9Backbone<T>",
         "AiDotNet.ComputerVision.Segmentation.Diffusion.DiffCutSegmentation<T>",
         "AiDotNet.ComputerVision.Segmentation.Efficient.EfficientSAM<T>",
-        "AiDotNet.ComputerVision.Segmentation.Efficient.FastSAM<T>",
-        "AiDotNet.ComputerVision.Segmentation.Efficient.SlimSAM<T>",
-        "AiDotNet.ComputerVision.Segmentation.Foundation.EoMT<T>",
         "AiDotNet.ComputerVision.Segmentation.Foundation.Mask2Former<T>",
         "AiDotNet.ComputerVision.Segmentation.Foundation.OneFormer<T>",
-        "AiDotNet.ComputerVision.Segmentation.Foundation.SAM<T>",
-        "AiDotNet.ComputerVision.Segmentation.Foundation.SAM21<T>",
-        "AiDotNet.ComputerVision.Segmentation.Foundation.SAMHQ<T>",
-        "AiDotNet.ComputerVision.Segmentation.Foundation.UNINEXT<T>",
         "AiDotNet.ComputerVision.Segmentation.Foundation.XDecoder<T>",
-        "AiDotNet.ComputerVision.Segmentation.Interactive.SEEM<T>",
         "AiDotNet.ComputerVision.Segmentation.Mamba.VisionMamba<T>",
-        "AiDotNet.ComputerVision.Segmentation.Mamba.VMamba<T>",
         "AiDotNet.ComputerVision.Segmentation.Medical.MedSAM<T>",
-        "AiDotNet.ComputerVision.Segmentation.Medical.NnUNet<T>",
         "AiDotNet.ComputerVision.Segmentation.Medical.SwinUNETR<T>",
         "AiDotNet.ComputerVision.Segmentation.Medical.TransUNet<T>",
         "AiDotNet.ComputerVision.Segmentation.Medical.UMamba<T>",
-        "AiDotNet.ComputerVision.Segmentation.OpenVocabulary.CATSeg<T>",
-        "AiDotNet.ComputerVision.Segmentation.OpenVocabulary.MaskAdapter<T>",
-        "AiDotNet.ComputerVision.Segmentation.OpenVocabulary.OpenVocabSAM<T>",
-        "AiDotNet.ComputerVision.Segmentation.Panoptic.KMaXDeepLab<T>",
         "AiDotNet.Document.GraphBased.PICK<T>",
         "AiDotNet.Document.LayoutAware.LayoutLM<T>",
         "AiDotNet.Document.LayoutAware.LayoutLMv2<T>",
