@@ -19,6 +19,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [0.234.1](https://github.com/ooples/AiDotNet/compare/v0.234.0...v0.234.1) (2026-10-16)
+
+
+### Bug Fixes
+
+* CLAP as LAION-CLAP's network ([#2313](https://github.com/ooples/AiDotNet/issues/2313)), BLIP grounded in the image ([#2297](https://github.com/ooples/AiDotNet/issues/2297)), and net462/netstandard2.0 targets ([#2326](https://github.com/ooples/AiDotNet/issues/2326)) ([#2323](https://github.com/ooples/AiDotNet/issues/2323)) ([8964274](https://github.com/ooples/AiDotNet/commit/8964274287313adcb6e82b1dba72b7f3603cf953))
+* copy a nested options object instead of aliasing it, and test which inference components engage ([#1993](https://github.com/ooples/AiDotNet/issues/1993), [#1632](https://github.com/ooples/AiDotNet/issues/1632)) ([#2317](https://github.com/ooples/AiDotNet/issues/2317)) ([d87617f](https://github.com/ooples/AiDotNet/commit/d87617f05f7890dc6c9a34b5a5e5d9ebe6cc6341))
+* fused attention training, namesake model coverage, cancellation reporting, clap fidelity and factory architecture ([#2312](https://github.com/ooples/AiDotNet/issues/2312), [#2138](https://github.com/ooples/AiDotNet/issues/2138), [#2131](https://github.com/ooples/AiDotNet/issues/2131), [#2313](https://github.com/ooples/AiDotNet/issues/2313), [#2147](https://github.com/ooples/AiDotNet/issues/2147)) ([#2316](https://github.com/ooples/AiDotNet/issues/2316)) ([1b8c757](https://github.com/ooples/AiDotNet/commit/1b8c757cfb5b3734402df8414d5887c10f78523c))
+
+
+### Documentation
+
+* **website:** replace unsourced speed claims with measured results ([#2309](https://github.com/ooples/AiDotNet/issues/2309)) ([b627f5c](https://github.com/ooples/AiDotNet/commit/b627f5c1f568b21a9acabbf8d67b3522e9f0ea08))
+
 ## [0.234.0](https://github.com/ooples/AiDotNet/compare/v0.233.0...v0.234.0) (2026-10-10)
 
 
