@@ -482,7 +482,7 @@ public partial class HTMNetwork<T> : VectorModelLayoutBase<T>
     /// temporal patterns and relationships in your data over time.
     /// </para>
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // HTM networks don't use supervised learning with expected outputs
         // They learn by observing sequences of inputs
@@ -556,6 +556,8 @@ public partial class HTMNetwork<T> : VectorModelLayoutBase<T>
             foreach (var layer in Layers)
                 layer.SetTrainingMode(false);
         }
+
+        return true;
     }
 
     /// <summary>

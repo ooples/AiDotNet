@@ -721,11 +721,13 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
         return Generate(input);
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         TrainStep(
             WithBatchAxis(expectedOutput, Discriminator.Architecture.InputType),
             WithBatchAxis(input, MappingNetwork.Architecture.InputType));
+
+        return true;
     }
 
     public override ModelMetadata<T> GetModelMetadata()

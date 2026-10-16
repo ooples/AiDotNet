@@ -950,7 +950,7 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     }
 
     /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // Full PATE-GAN training (teachers + student + generator) runs in Fit. This
         // single-step entry point trains the generator (the Layers chain that Predict
@@ -971,6 +971,8 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         {
             SetTrainingMode(false);
         }
+
+        return true;
     }
 
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.

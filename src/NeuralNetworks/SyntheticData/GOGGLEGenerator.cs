@@ -756,7 +756,7 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     /// that computed a loss scalar and discarded it without ever updating
     /// any parameter.
     /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         EnsureSizedForInput(input);
         SetTrainingMode(true);
@@ -789,7 +789,7 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
                         extraTensors: extras))
                 {
                     ProjectAdjacencyConstraints();
-                    return;
+                    return true;
                 }
             }
 
@@ -805,6 +805,8 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         {
             SetTrainingMode(false);
         }
+
+        return true;
     }
 
     /// <summary>

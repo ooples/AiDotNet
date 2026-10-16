@@ -996,9 +996,11 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
     }
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         TrainStep(expectedOutput, input);
+
+        return true;
     }
 
     /// <inheritdoc/>

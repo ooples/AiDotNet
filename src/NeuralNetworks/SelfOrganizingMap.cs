@@ -324,7 +324,7 @@ public partial class SelfOrganizingMap<T> : VectorModelLayoutBase<T>
     }
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         var flatInput = input.Rank == 1 ? input : input.Reshape(new[] { input.Length });
         if (flatInput.Length != _inputDimension)
@@ -346,6 +346,8 @@ public partial class SelfOrganizingMap<T> : VectorModelLayoutBase<T>
         LastLoss = NumOps.Sqrt(distances[bmu]);
 
         _currentEpoch++;
+
+        return true;
     }
 
     private T CalculateLearningRate(T initialLearningRate, int currentEpoch, int totalEpochs)
