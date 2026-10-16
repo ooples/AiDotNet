@@ -161,6 +161,9 @@ internal static class WassersteinCriticStep<T>
         var interpolated = engine.Reshape(interpolatedRows, real._shape);
 
         Tensor<T> inputGradient;
+        // Outside the step arena: the input gradients this inner tape builds outlive it, and an arena may reissue a
+        // step's tensors at a tape boundary (AiDotNet.Tensors 0.135.0+), corrupting the penalty's backward.
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         using (var gradientTape = new GradientTape<T>())
         {
             var scores = criticForward(interpolated);

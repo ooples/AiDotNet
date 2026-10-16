@@ -570,45 +570,14 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }
 
-    /// <summary>
-    /// Trains the RelationalGCN model on a batch of input-target pairs.
-    /// </summary>
-    /// <param name="input">Input tensor with node features.</param>
-    /// <param name="target">Target tensor with future values.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Training optimizes:
-    /// 1. Basis matrices (shared across relations)
-    /// 2. Relation coefficients (how to combine bases per relation)
-    /// 3. Self-loop weights (preserving node identity)
-    /// 4. Output projection (final prediction)
-    ///
-    /// The basis decomposition enables efficient parameter sharing.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
+    /// <inheritdoc/>
+    /// <remarks>After a step, the basis decomposition is refreshed.</remarks>
+    protected override void OnTrainingStepEnded(bool succeeded)
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        base.Train(input, target);
-
-        // Basis decomposition state (_basisMatrices + _relationCoefficients)
-        // is not surfaced to the shared tape/optimizer — those fields are
-        // double[,][] / double[,], not Tensor<T>, so they aren't in Layers
-        // and TrainWithTape never computes their gradients. Keep the
-        // model-specific update path alive by invoking the
-        // gradient-scaled random-perturbation update with the most recent
-        // loss as the gradient magnitude. This preserves the original
-        // pre-refactor training semantics for the basis-decomposition
-        // branch; a proper R-GCN tape-aware basis gradient is tracked in
-        // the follow-up to surface these as Tensor<T> parameters.
-        if (_useBasisDecomposition)
-        {
-            var lossVec = new Vector<T>(new[] { LastLoss is not null ? LastLoss : NumOps.FromDouble(1e-3) });
-            UpdateBasisDecompositionFromGradient(lossVec);
-        }
+        if (!succeeded || !_useBasisDecomposition) return;
+        var lossVec = new Vector<T>(new[] { LastLoss is not null ? LastLoss : NumOps.FromDouble(1e-3) });
+        UpdateBasisDecompositionFromGradient(lossVec);
     }
-
     /// <summary>
     /// Updates basis decomposition parameters based on loss gradient.
     /// </summary>

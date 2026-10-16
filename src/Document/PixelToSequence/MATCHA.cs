@@ -733,18 +733,6 @@ public partial class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
         return base.GetNamedLayerActivations(input);
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-
-        EnsureNativeInitialized();
-        SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput, _optimizer);
-        SetTrainingMode(false);
-    }
-
     // UpdateParameters is NOT overridden. It used to throw NotSupportedException; the base
     // implementation is virtual now and distributes a flat vector over the same enumeration
     // GetParameters folds, which this model already exposes correctly. The throw existed

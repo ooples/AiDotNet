@@ -63,21 +63,6 @@ public class TapeTrainingLoopRatchetTests
     /// </summary>
     private static readonly HashSet<string> KnownLoops = new(StringComparer.Ordinal)
     {
-        "Diffusion/NoisePredictors/NoisePredictorBase.cs",
-        "MetaLearning/Algorithms/ATAMLAlgorithm.cs",
-        "MetaLearning/Algorithms/LEOAlgorithm.cs",
-        "MetaLearning/Algorithms/MCLAlgorithm.cs",
-        "MetaLearning/Algorithms/MatchingNetworksAlgorithm.cs",
-        "MetaLearning/Algorithms/MetaOptNetAlgorithm.cs",
-        "MetaLearning/Algorithms/ProtoNetsAlgorithm.cs",
-        "MetaLearning/Algorithms/RelationNetworkAlgorithm.cs",
-        "NeuralNetworks/GraphGenerationModel.cs",
-        "NeuralNetworks/SyntheticData/AutoDiffTabGenerator.cs",
-        "NeuralNetworks/SyntheticData/MisGANGenerator.cs",
-        "NeuralNetworks/SyntheticData/TabSynGenerator.cs",
-        "NeuralNetworks/SyntheticData/TimeGANGenerator.cs",
-        "ReinforcementLearning/Agents/MuZeroAgent.cs",
-        "ReinforcementLearning/Agents/QMIXAgent.cs",
     };
 
     [Fact]

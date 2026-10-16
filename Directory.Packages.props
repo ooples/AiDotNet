@@ -384,7 +384,12 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
          Bumped 0.137.1 to 0.138.0 for AiDotNet.Tensors #1278 and #1287: TensorGatherClassValues' backward is
          differentiable under createGraph (LEO's meta-gradient through a class-index cross-entropy), and the graph
          backward seeds a rank-0 loss with its own shape instead of [1] (DBNet: "Tensor shapes must match. Got [] and
-         [1]"). -->
+         [1]").
+
+         Bumped 0.138.0 to 0.138.1 for AiDotNet.Tensors #1301: the arena's tensor ring reissued a tensor after a reset
+         with its previous owner's GradFn, so a later graph backward walked into an earlier step's node whose tensors
+         had been reissued under other shapes (StyleGAN after its R1 penalty: "Multiples length (1) must match tensor
+         dimensions (3)"). -->
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.139.0" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.139.0" />
     <PackageVersion Include="AiDotNet.Tensors" Version="0.139.0" />

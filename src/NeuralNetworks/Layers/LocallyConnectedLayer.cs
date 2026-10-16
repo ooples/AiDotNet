@@ -557,7 +557,7 @@ public partial class LocallyConnectedLayer<T> : LayerBase<T>, IShapeContract
         // _weights tensor in place — replacing the field reference would
         // discard the AllocateLazyWeight registration that EnsureInitialized
         // set up (engine persistent-tensor list + streaming-pool tracking).
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_kernelSize * _kernelSize * _inputChannels + _outputChannels)));
+        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / ((double)_kernelSize * _kernelSize * _inputChannels + _outputChannels)));
         T half = NumOps.FromDouble(0.5);
 
         int totalElements = _weights.Length;

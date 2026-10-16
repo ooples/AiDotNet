@@ -113,6 +113,9 @@ internal static class TensorModelTrainer<T>
             ComputeLoss = loss,
             Optimizer = optimizer,
             ExtraParameters = parameters,
+            // A vision forward can read host-side state a trace would bake in; the first replay is checked against
+            // the eager forward and a disagreeing update is undone.
+            VerifyReplayAgreement = true,
         }, out lossValue);
 
         if (outcome == AiDotNet.Training.FusedStepOutcome.CommittedFailure)
@@ -251,7 +254,7 @@ internal static class TensorModelTrainer<T>
     {
         public static readonly TensorReferenceComparer Instance = new();
 
-        public bool Equals(Tensor<T>? x, Tensor<T>? y) => ReferenceEquals(x, y);
+        public bool Equals(Tensor<T>? x, Tensor<T>? y) => (object?)x == y;   // reference comparison
 
         public int GetHashCode(Tensor<T> obj) => RuntimeHelpers.GetHashCode(obj);
     }

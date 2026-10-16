@@ -851,7 +851,7 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
         // Streaming-aware: route through AllocateLazyWeight so the pool
         // pre-evicts before the He-init fill.
         var weights = AllocateLazyWeight([outC, inC, kH, kW]);
-        double fan_in = inC * kH * kW;
+        double fan_in = (double)inC * kH * kW;
         double std = Math.Sqrt(2.0 / fan_in); // He initialization
 
         var random = RandomHelper.CreateSeededRandom(42);

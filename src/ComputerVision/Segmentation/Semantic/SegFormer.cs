@@ -255,53 +255,6 @@ public partial class SegFormer<T> : Common.SemanticSegmentationBase<T>
         return Forward(input);
     }
 
-    /// <summary>
-    /// Performs one training step: forward pass, loss computation, backward pass, and parameter update.
-    /// </summary>
-    /// <param name="input">The input image tensor [B, C, H, W] or [C, H, W] containing the training image(s).</param>
-    /// <param name="expectedOutput">The ground-truth segmentation map tensor with the same spatial dimensions
-    /// as the model output. Each value represents the correct class label for that pixel position.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Training teaches the model to produce better segmentation maps by comparing
-    /// its predictions to the correct answers (ground truth). Each call to Train():
-    /// 1. Runs the input image through the model (forward pass)
-    /// 2. Compares the prediction to the expected output to compute the error (loss)
-    /// 3. Calculates how each weight contributed to the error (backward pass / backpropagation)
-    /// 4. Updates the weights using the optimizer (e.g., Adam) to reduce future errors
-    ///
-    /// You typically call this method many times in a loop over your training dataset (epochs).
-    /// Training is only available in native mode — ONNX models are inference-only and will throw
-    /// an <see cref="InvalidOperationException"/> if you attempt to train them.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown when called on an ONNX-mode model,
-    /// which does not support training.</exception>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-        {
-            throw new InvalidOperationException(
-                "Training is not supported in ONNX mode. Use the native mode constructor for training.");
-        }
-
-        SetTrainingMode(true);
-        try
-        {
-            // Optimizer, NOT the raw _optimizer field. Before this model derived from the segmentation
-        // base it eagerly assigned `optimizer ?? new AdamWOptimizer<...>(this)`, so the field was
-        // never null in native mode. It now passes `optimizer` straight to the base, which stores it
-        // as given - so the field IS null whenever the caller supplied none, and training would run
-        // with no optimizer at all. The base's Optimizer property resolves the default lazily, which
-        // reproduces the old behaviour exactly.
-        TrainWithTape(input, expectedOutput, Optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     #endregion
 
     #region Private Methods

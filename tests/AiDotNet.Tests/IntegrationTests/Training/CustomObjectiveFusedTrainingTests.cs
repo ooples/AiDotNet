@@ -28,7 +28,7 @@ public class CustomObjectiveFusedTrainingTests
     // by a few 1e-8 of the parameter scale per step; a step on baked data moves weights by far more.
     private const double RelativeTolerance = 1e-5;
 
-    public static TheoryData<string> Scenarios => new() { "VideoMAE", "DeepONet", "FNO", "MQCNN", "CodeSwitchingASR", "CCDM", "TSDiff", "TimeDiff", "TFC" };
+    public static TheoryData<string> Scenarios => new() { "VideoMAE", "DeepONet", "FNO", "MQCNN", "CodeSwitchingASR", "CCDM", "TSDiff", "TimeDiff", "TFC", "NeRF", "InstantNGP", "BasicVSRPlusPlus" };
 
     private sealed record RunResult(Vector<double> Parameters, int FusedSteps, int EagerSteps);
 
@@ -46,6 +46,9 @@ public class CustomObjectiveFusedTrainingTests
         "TSDiff" => Warm(BuildTsDiff(), new Tensor<double>([1, 16, 1])),
         "TimeDiff" => Warm(BuildTimeDiff(), new Tensor<double>([1, 16, 1])),
         "TFC" => Warm(BuildTfc(), new Tensor<double>([1, 16, 1])),
+        "NeRF" => WarmNerf(BuildNerf()),
+        "InstantNGP" => WarmInstantNgp(BuildInstantNgp()),
+        "BasicVSRPlusPlus" => Warm(BuildBasicVsr(), new Tensor<double>([2, 3, 16, 16])),
         _ => throw new ArgumentOutOfRangeException(nameof(scenario)),
     };
 
@@ -78,6 +81,10 @@ public class CustomObjectiveFusedTrainingTests
             case "TSDiff": TrainOnChangingBatches(model, [1, 16, 1], [1, 4]); break;
             case "TimeDiff": TrainOnChangingBatches(model, [1, 16, 1], [1, 4]); break;
             case "TFC": TrainOnChangingBatches(model, [1, 16, 1], [1, 4]); break;
+            case "NeRF": TrainNerf((AiDotNet.NeuralRadianceFields.Models.NeRF<double>)model); break;
+            case "InstantNGP": TrainInstantNgp((AiDotNet.NeuralRadianceFields.Models.InstantNGP<double>)model); break;
+            // A two-frame clip, so flow estimation and warping run between the frames.
+            case "BasicVSRPlusPlus": TrainOnChangingBatches(model, [2, 3, 16, 16], [2, 3, 32, 32]); break;
         }
     }
 
@@ -207,6 +214,85 @@ public class CustomObjectiveFusedTrainingTests
             NumFreqLayers = 1, DropoutRate = 0.0,
         });
 
+    // Hierarchical sampling is on, so every batch also runs the coarse pass that places the fine samples. Seed gives
+    // the two arms the same stratified jitter and importance draws.
+    private static AiDotNet.NeuralRadianceFields.Models.NeRF<double> BuildNerf() => new(
+        options: new AiDotNet.Models.Options.NeRFOptions
+        {
+            PositionEncodingLevels = 2, DirectionEncodingLevels = 2, HiddenDim = 8, NumLayers = 1, ColorHiddenDim = 4,
+            ColorNumLayers = 1, UseHierarchicalSampling = true, HierarchicalSamples = 2, RenderSamples = 3,
+            RenderNearBound = 1.0, RenderFarBound = 3.0, LearningRate = 1e-3, Seed = 7,
+        });
+
+    private static AiDotNet.NeuralRadianceFields.Models.NeRF<double> WarmNerf(AiDotNet.NeuralRadianceFields.Models.NeRF<double> model)
+    {
+        var origins = new Tensor<double>([1, 3]);
+        var directions = new Tensor<double>([1, 3]);
+        directions[2] = 1.0;
+        model.RenderRays(origins, directions, 3, 1.0, 3.0);
+        return model;
+    }
+
+    private static AiDotNet.NeuralRadianceFields.Data.ImageView<double>[] NerfViews()
+    {
+        var views = new AiDotNet.NeuralRadianceFields.Data.ImageView<double>[2];
+        for (int v = 0; v < views.Length; v++)
+        {
+            var photo = new Tensor<double>([4, 4, 3]);
+            for (int i = 0; i < photo.Length; i++) photo[i] = 0.5 + 0.4 * Math.Sin(0.7 * i + v);
+            var rotation = new Matrix<double>(3, 3);
+            rotation[0, 0] = 1.0; rotation[1, 1] = 1.0; rotation[2, 2] = 1.0;
+            views[v] = new AiDotNet.NeuralRadianceFields.Data.ImageView<double>(
+                photo, new Vector<double>(new[] { 0.0, 0.0, -1.0 * v }), rotation, focalLength: 0.0);
+        }
+        return views;
+    }
+
+    // Three batches, each its own rays, targets and sample draws.
+    // Instant-NGP's hash tables train with its MLPs: the plan replays the hash encoding on each batch's samples.
+    private static AiDotNet.NeuralRadianceFields.Models.InstantNGP<double> BuildInstantNgp() => new(
+        new AiDotNet.Models.Options.InstantNGPOptions<double>
+        {
+            HashTableSize = 64, NumLevels = 2, FeaturesPerLevel = 2, FinestResolution = 8, CoarsestResolution = 2,
+            MlpHiddenDim = 8, MlpNumLayers = 1, FeatureDim = 4, ColorHiddenDim = 4, ColorNumLayers = 1,
+            OccupancyGridResolution = 4, RenderSamples = 3, RenderNearBound = 1.0, RenderFarBound = 3.0,
+            SceneMin = new Vector<double>(new[] { -4.0, -4.0, -4.0 }),
+            SceneMax = new Vector<double>(new[] { 4.0, 4.0, 4.0 }),
+            Seed = 7,
+        });
+
+    private static AiDotNet.NeuralRadianceFields.Models.InstantNGP<double> WarmInstantNgp(
+        AiDotNet.NeuralRadianceFields.Models.InstantNGP<double> model)
+    {
+        var origins = new Tensor<double>([1, 3]);
+        var directions = new Tensor<double>([1, 3]);
+        directions[2] = 1.0;
+        model.RenderRays(origins, directions, 3, 1.0, 3.0);
+        return model;
+    }
+
+    private static void TrainInstantNgp(AiDotNet.NeuralRadianceFields.Models.InstantNGP<double> model)
+    {
+        var loader = AiDotNet.NeuralRadianceFields.Data.ImageTrainingDataLoaders.FromViews(NerfViews(), seed: 42);
+        for (int step = 0; step < 3; step++)
+            model.TrainOnImageBatch(loader, raysPerBatch: 4, optimizerOptions: null);
+    }
+
+    private static void TrainNerf(AiDotNet.NeuralRadianceFields.Models.NeRF<double> model)
+    {
+        var loader = AiDotNet.NeuralRadianceFields.Data.ImageTrainingDataLoaders.FromViews(NerfViews(), seed: 42);
+        for (int step = 0; step < 3; step++)
+            model.TrainOnImageBatch(loader, raysPerBatch: 4, optimizerOptions: null);
+    }
+    // A rate large enough that three steps move the weights well past the tolerance, so a step on another clip's
+    // data would show.
+    private static AiDotNet.Video.Enhancement.BasicVSRPlusPlus<double> BuildBasicVsr() => new(
+        new NeuralNetworkArchitecture<double>(inputType: InputType.ThreeDimensional, taskType: NeuralNetworkTaskType.Regression,
+            inputHeight: 16, inputWidth: 16, inputDepth: 3, outputSize: 2),
+        options: new AiDotNet.Video.Options.BasicVSRPlusPlusOptions
+        {
+            ScaleFactor = 2, NumFeatures = 8, NumResidualBlocks = 1, NumPropagations = 1, LearningRate = 0.1,
+        });
     private static AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASROptions AsrOptions() => new()
     {
         EncoderDim = 16, NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 8, DecoderDim = 16,

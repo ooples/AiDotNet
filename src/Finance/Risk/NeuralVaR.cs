@@ -70,7 +70,7 @@ public partial class NeuralVaR<T> : RiskModelBase<T>
     /// <summary>
     /// Routes the optimizer selected for NeuralVaR through the shared tape-training path.
     /// </summary>
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -86,8 +86,9 @@ public partial class NeuralVaR<T> : RiskModelBase<T>
         // A VaR forecast is a conditional quantile, not a conditional mean.
         // Barrera et al. learn VaR with neural-network quantile regression;
         // MSE would instead estimate E[Y|X] and is therefore the wrong objective.
+        var configuredLoss = options?.LossFunction;
         return lossFunction
-            ?? options?.LossFunction
+            ?? configuredLoss
             ?? new QuantileLoss<T>(options?.ConfidenceLevel ?? 0.95);
     }
 

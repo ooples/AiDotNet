@@ -212,23 +212,6 @@ public partial class EfficientConformer<T> : AudioNeuralNetworkBase<T>, ISpeechR
                 "A native EfficientConformer optimizer is not available in ONNX mode.");
 
     /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <inheritdoc />
     protected override bool SupportsParameterMutation => _useNativeMode;
 
     /// <inheritdoc />

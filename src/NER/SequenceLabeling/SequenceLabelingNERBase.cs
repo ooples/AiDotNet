@@ -497,6 +497,33 @@ public abstract partial class SequenceLabelingNERBase<T> : NERNeuralNetworkBase<
     /// <see cref="PreprocessLabels"/> + the subclass's <c>PreprocessTokens</c>
     /// override.
     /// </remarks>
+    /// <summary>
+    /// Whether this model trains through its CRF layer: true for the CRF negative log-likelihood, false for the
+    /// token-level loss over preprocessed tokens and labels, null (the default) for a model that does not use this
+    /// family's token/label training step.
+    /// </summary>
+    protected virtual bool? CrfTraining => null;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// A model that declares <see cref="CrfTraining"/> takes this family's token/label step: tokens and labels are
+    /// preprocessed and aligned, and with <see cref="CrfTraining"/> true and a CRF layer in the stack the objective is the
+    /// CRF negative log-likelihood (log-partition minus gold score), which trains the upstream layers and the CRF's
+    /// transition, start and end scores together (Lafferty et al. 2001). Other models take the base step.
+    /// </remarks>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (CrfTraining is not bool useCrf)
+        {
+            base.Train(input, expectedOutput);
+            return;
+        }
+
+        Guard.NotNull(input);
+        Guard.NotNull(expectedOutput);
+        ThrowIfCannotTrain();
+        RunCrfAwareTrainStep(input, expectedOutput, useCrf, TrainingOptimizer ?? GetOrCreateBaseOptimizer());
+    }
     protected double RunCrfAwareTrainStep(
         Tensor<T> input,
         Tensor<T> expected,

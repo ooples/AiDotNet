@@ -530,36 +530,6 @@ public partial class SiameseNetwork<T> : DeclaredModelLayoutBase<T>, IAuxiliaryL
     }
 
     /// <summary>
-    /// Trains the Siamese network on pairs of inputs with their expected similarity.
-    /// </summary>
-    /// <param name="input">The input tensor containing pairs of items. Expected shape: [batchSize, 2, ...dimensions]</param>
-    /// <param name="expectedOutput">The expected similarity scores. Shape: [batchSize, 1]</param>
-    /// <remarks>
-    /// <para>
-    /// This method trains the Siamese network by processing pairs through the shared subnetwork,
-    /// calculating the similarity between their embeddings, and updating the network parameters
-    /// based on the difference between predicted and expected similarity scores.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method teaches the network to recognize when two inputs are similar.
-    /// You provide pairs of inputs along with how similar they should be (0 to 1). The network learns
-    /// to produce embeddings that are close together for similar inputs and far apart for different inputs.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <summary>
     /// Defines the Siamese forward graph for tape-based training. Input is a
     /// pair tensor [B, 2, ...features]; we slice into the two halves along
     /// axis 1, run each through the shared subnetwork's training-time forward

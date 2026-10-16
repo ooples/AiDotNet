@@ -245,7 +245,7 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
         T scale1 = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_edgeFeaturesCount + _edgeNetworkHiddenDim)));
         InitializeTensor(_edgeNetworkWeights1, scale1);
 
-        T scale2 = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_edgeNetworkHiddenDim + _inputFeatures * _outputFeatures)));
+        T scale2 = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_edgeNetworkHiddenDim + (double)_inputFeatures * _outputFeatures)));
         InitializeTensor(_edgeNetworkWeights2, scale2);
 
         // Initialize self-loop weights

@@ -319,13 +319,13 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
         InitializeTensor(_selfWeights, scale);
 
         // Initialize combination weights
-        T scaleComb = NumOps.Sqrt(NumOps.FromDouble(2.0 / (3 * _outputFeatures + _outputFeatures)));
+        T scaleComb = NumOps.Sqrt(NumOps.FromDouble(2.0 / (3.0 * _outputFeatures + _outputFeatures)));
         InitializeTensor(_combinationWeights, scaleComb);
 
         // Initialize gating weights if used
         if (_gateWeights != null)
         {
-            T scaleGate = NumOps.Sqrt(NumOps.FromDouble(2.0 / (3 * _outputFeatures + 3)));
+            T scaleGate = NumOps.Sqrt(NumOps.FromDouble(2.0 / (3.0 * _outputFeatures + 3)));
             InitializeTensor(_gateWeights, scaleGate);
         }
 

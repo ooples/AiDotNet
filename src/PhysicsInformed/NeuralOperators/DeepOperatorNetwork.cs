@@ -807,26 +807,12 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             return Vector<T>.Concatenate(_branchNet.GetGradients(), _trunkNet.GetGradients());
         }
 
-        /// <summary>
-        /// Performs a basic supervised training step using MSE loss.
-        /// </summary>
-        /// <param name="input">Training input tensor.</param>
-        /// <param name="expectedOutput">Expected output tensor.</param>
+        /// <inheritdoc/>
         /// <remarks>
-        /// Uses standard backpropagation through both branch and trunk networks.
+        /// The input is <c>[batch, sensors + query]</c>; a <c>[batch]</c> target is read as <c>[batch, 1]</c>.
         /// </remarks>
-        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+        protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
         {
-            if (input == null)
-            {
-                throw new ArgumentNullException(nameof(input));
-            }
-
-            if (expectedOutput == null)
-            {
-                throw new ArgumentNullException(nameof(expectedOutput));
-            }
-
             if (input.Rank != 2)
             {
                 throw new ArgumentException("DeepONet expects a 2D input tensor.", nameof(input));
@@ -844,27 +830,19 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
                 throw new ArgumentException($"Expected input width {expectedWidth} (sensors + query), got {input.Shape[1]}.", nameof(input));
             }
 
+            if (target is null) return (input, null);
             int batchSize = input.Shape[0];
-            Tensor<T> expectedOutputTensor = expectedOutput;
-            if (expectedOutput.Rank == 1)
+            if (target.Rank == 1)
             {
-                expectedOutputTensor = expectedOutput.Reshape(batchSize, 1);
-            }
-            else if (expectedOutput.Rank != 2 || expectedOutput.Shape[0] != batchSize || expectedOutput.Shape[1] != 1)
-            {
-                throw new ArgumentException("Expected output shape [batch, 1].", nameof(expectedOutput));
+                return (input, target.Reshape(batchSize, 1));
             }
 
-            SetTrainingMode(true);
-            try
+            if (target.Rank != 2 || target.Shape[0] != batchSize || target.Shape[1] != 1)
             {
-                // The [batch, 1] form validated above - this used to pass the original instead.
-                TrainWithTape(input, expectedOutputTensor, _optimizer);
+                throw new ArgumentException("Expected output shape [batch, 1].", nameof(target));
             }
-            finally
-            {
-                SetTrainingMode(false);
-            }
+
+            return (input, target);
         }
 
         /// <inheritdoc/>

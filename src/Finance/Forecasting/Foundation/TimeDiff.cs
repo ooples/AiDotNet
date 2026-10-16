@@ -334,78 +334,74 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
     /// per step while making a seeded model's training reproducible. It replaced a fresh secure
     /// generator per call, which ignored the configured seed.
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The denoising objective with the paper's future mixup and autoregressive initialization. The draws and the
+    /// denoiser's input rows are built here and travel as the step's data, so a compiled plan replays each step's
+    /// own draws. The base class trains in training mode, so the denoiser's dropout is live.
+    /// </remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
+        if (expectedOutput.Length <= 0) return Array.Empty<Training.TrainingObjective<T>>();
 
-        if (expectedOutput.Length <= 0) return;
+        var conditioned = ApplyInstanceNormalization(input);
+        if (conditioned.Rank == 1)
+            conditioned = Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
 
-        // Every training entry point on the base puts the layers in training mode for the
-        // duration of the step; without it the denoiser's DropoutLayers stay in inference mode
-        // and the configured DropoutRate is silently inert.
-        SetTrainingMode(true);
-        try
+        int outputLen = _forecastHorizon;
+        var rand = TrainingRandom;
+        int rows = Math.Max(1, _trainingBatchSize);
+
+        var autoregressiveInit = BuildAutoregressiveInit(conditioned, outputLen);
+        var timesteps = new int[rows];
+        var clean = new Tensor<T>(new[] { rows, outputLen });
+        var noised = new Tensor<T>(new[] { rows, outputLen });
+        var mixed = new Tensor<T>(new[] { rows, outputLen });
+        for (int r = 0; r < rows; r++)
         {
-            var conditioned = ApplyInstanceNormalization(input);
-            if (conditioned.Rank == 1)
-                conditioned = Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
-
-            int outputLen = _forecastHorizon;
-            var rand = TrainingRandom;
-            int rows = Math.Max(1, _trainingBatchSize);
-
-            var autoregressiveInit = BuildAutoregressiveInit(conditioned, outputLen);
-            var timesteps = new int[rows];
-            var clean = new Tensor<T>(new[] { rows, outputLen });
-            var noised = new Tensor<T>(new[] { rows, outputLen });
-            var mixed = new Tensor<T>(new[] { rows, outputLen });
-            for (int r = 0; r < rows; r++)
+            int k = rand.Next(_diffusionSteps);
+            timesteps[r] = k;
+            T sqrtAlphaBar = _sqrtAlphasCumprod[k];
+            T sqrtOneMinus = _sqrtOneMinusAlphasCumprod[k];
+            for (int i = 0; i < outputLen; i++)
             {
-                int k = rand.Next(_diffusionSteps);
-                timesteps[r] = k;
-                T sqrtAlphaBar = _sqrtAlphasCumprod[k];
-                T sqrtOneMinus = _sqrtOneMinusAlphasCumprod[k];
-                for (int i = 0; i < outputLen; i++)
+                T epsilon = SampleStandardNormal(rand);
+                T y = i < expectedOutput.Length ? expectedOutput[i] : NumOps.Zero;
+                T past = MappedPastValue(conditioned, outputLen, i);
+                int flat = r * outputLen + i;
+
+                clean.Data.Span[flat] = y;
+                noised.Data.Span[flat] = NumOps.Add(
+                    NumOps.Multiply(sqrtAlphaBar, y),
+                    NumOps.Multiply(sqrtOneMinus, epsilon));
+
+                if (_useFutureMixup)
                 {
-                    T epsilon = SampleStandardNormal(rand);
-                    T y = i < expectedOutput.Length ? expectedOutput[i] : NumOps.Zero;
-                    T past = MappedPastValue(conditioned, outputLen, i);
-                    int flat = r * outputLen + i;
-
-                    clean.Data.Span[flat] = y;
-                    noised.Data.Span[flat] = NumOps.Add(
-                        NumOps.Multiply(sqrtAlphaBar, y),
-                        NumOps.Multiply(sqrtOneMinus, epsilon));
-
-                    if (_useFutureMixup)
-                    {
-                        // Equation 14: each element of m_k is drawn from Uniform[0, 1).
-                        double m = rand.NextDouble();
-                        mixed.Data.Span[flat] = NumOps.Add(
-                            NumOps.Multiply(NumOps.FromDouble(m), past),
-                            NumOps.Multiply(NumOps.FromDouble(1.0 - m), y));
-                    }
-                    else
-                    {
-                        mixed.Data.Span[flat] = past;
-                    }
+                    // Equation 14: each element of m_k is drawn from Uniform[0, 1).
+                    double m = rand.NextDouble();
+                    mixed.Data.Span[flat] = NumOps.Add(
+                        NumOps.Multiply(NumOps.FromDouble(m), past),
+                        NumOps.Multiply(NumOps.FromDouble(1.0 - m), y));
+                }
+                else
+                {
+                    mixed.Data.Span[flat] = past;
                 }
             }
+        }
 
-            // The denoiser's input rows carry no parameter dependency, so they are built here and handed to the shared
-            // fused session as the step's input: a compiled plan replays each step's own draws.
-            var packedRows = BuildDenoiserInput(noised, mixed, autoregressiveInit, timesteps, rows, outputLen);
-            TrainCustomTapeStep(packedRows, clean, DenoiseRows,
-                (predicted, target) => _lossFunction.ComputeTapeLoss(predicted, target),
-                _optimizer,
-                () => Training.TapeTrainingStep<T>.CollectParameters(Layers));
-            StepSchedulerIfSupported(_optimizer);
-        }
-        finally
+        // The denoiser's input rows carry no parameter dependency, so they are built here and handed to the shared
+        // fused session as the step's input: a compiled plan replays each step's own draws.
+        var packedRows = BuildDenoiserInput(noised, mixed, autoregressiveInit, timesteps, rows, outputLen);
+        return new[]
         {
-            SetTrainingMode(false);
-        }
+            new Training.TrainingObjective<T>(
+                new[] { packedRows, clean },
+                data => _lossFunction.ComputeTapeLoss(DenoiseRows(data[0]), data[1]))
+            {
+                Parameters = () => Training.TapeTrainingStep<T>.CollectParameters(Layers),
+            },
+        };
     }
 
     /// <summary>

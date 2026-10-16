@@ -194,24 +194,6 @@ public partial class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
         }
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        if (_optimizer is null)
-            throw new InvalidOperationException("Optimizer is required for training.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <summary>
     /// Refuses parameter work on a disposed model, on every entry point rather than one.
     /// </summary>

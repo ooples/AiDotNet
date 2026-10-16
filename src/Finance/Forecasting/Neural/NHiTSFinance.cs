@@ -454,25 +454,12 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
     }
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the NHiTSFinance model, Train performs a training step. This updates the NHiTSFinance architecture so it learns from data.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        // Same rank-1 -> rank-2 promotion as Predict so the tape pooling path
-        // sees the [B, T] shape it requires (Challu et al. 2022 §3.2).
-        var processedInput = input.Rank == 1 ? PromoteToBatchedTensor(input) : input;
-        var processedTarget = target.Rank == 1 ? PromoteToBatchedTensor(target) : target;
-        base.Train(processedInput, processedTarget);
-    }
-
+    /// <remarks>A single series and its horizon are batched.</remarks>
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
+        => (input.Rank == 1 ? PromoteToBatchedTensor(input) : input,
+            target is not null && target.Rank == 1 ? PromoteToBatchedTensor(target) : target);
     /// <inheritdoc />
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
     /// <summary>
     /// Training-mode forward: replays the N-HiTS pipeline (pool →

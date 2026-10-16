@@ -1649,32 +1649,6 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
     public override bool SupportsTraining => _useNativeMode;
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> target)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Training is only supported in native mode.");
-        }
-
-        // BLIP uses multiple training objectives:
-        // 1. Image-Text Contrastive (ITC) - like CLIP
-        // 2. Image-Text Matching (ITM) - binary classification
-        // 3. Language Modeling (LM) - caption generation
-
-        // For now, implement ITC like CLIP
-        // Full implementation would include all three objectives
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, target, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         // GPU-resident optimization: use TryForwardGpuOptimized for speedup

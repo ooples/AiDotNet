@@ -517,38 +517,17 @@ public partial class MQCNN<T> : ForecastingModelBase<T>
     }
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Training MQCNN uses quantile loss (pinball loss),
-    /// which penalizes predictions differently based on whether they're above or
-    /// below the actual value, and based on which quantile is being predicted.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        // MQCNN-specific training: the constructors default to MSE for
-        // compatibility with FinancialModelBase, but MQCNN's real loss
-        // is multi-quantile pinball — running the default base.Train
-        // would supervise ALL quantile outputs against the same target
-        // with symmetric squared error, collapsing the quantile spread.
-        // Keep the tape-based flow but compute pinball loss directly so
-        // each quantile sees its asymmetric gradient.
-
-        // One step on the shared fused session: the compiled plan when it applies (CPU or GPU), the eager tape
-        // otherwise, both with the model's own optimizer. The fused attempt used to hard-code an Adam
-        // configuration of its own, so the two paths could train with different optimizers.
-        //
-        // Adam (not plain SGD): the pinball gradient is bounded by q / (1 - q) (<= 0.9) and then averaged over BOTH
-        // the horizon and the quantile grid, so the raw gradient reaching the weights is tiny. Fixed-rate SGD at
-        // lr=1e-3 barely moves the parameters (the memorization invariant caught exactly this: 0.2244 -> 0.2240
-        // over 20 steps); Adam's second-moment normalization makes the effective step about lr whatever the
-        // gradient scale.
-        TrainCustomTapeStep(input, target, ForwardForTraining, ComputeMultiQuantilePinballLossTape, _optimizer,
-            () => Training.TapeTrainingStep<T>.CollectParameters(Layers));
-    }
+    /// <remarks>The multi-quantile pinball loss of the forecast against the target (Wen et al. 2017).</remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> target)
+        => new[]
+        {
+            new Training.TrainingObjective<T>(
+                new[] { input, target },
+                data => ComputeMultiQuantilePinballLossTape(ForwardForTraining(data[0]), data[1]))
+            {
+                Parameters = () => Training.TapeTrainingStep<T>.CollectParameters(Layers),
+            },
+        };
 
     /// <summary>
     /// Tape-aware multi-quantile pinball loss. The model's flat output

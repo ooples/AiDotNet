@@ -432,53 +432,69 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
         Discriminator.SetTrainingMode(true);
         QNetwork.SetTrainingMode(true);
 
-        // ONE generator forward, recorded on the generator's tape (#1390); D trains on a detached copy.
+        // Every step runs on its network's fused session, with the step's tensors in its packed data. The generated
+        // samples come from a training-mode generator forward that leaves the generator's running statistics to the
+        // generator's own step.
         var generatorInput = ConcatenateTensors(noise, latentCodes);
-        using var generatorTape = new GradientTape<T>();
-        var fakeTracked = Generator.ForwardForTraining(generatorInput);
-        var fakeImages = new Tensor<T>(fakeTracked.Shape.ToArray());
-        fakeTracked.AsSpan().CopyTo(fakeImages.AsWritableSpan());
+        var fakeImages = Generator.ForwardForTrainingDetached(generatorInput);
+        int[] realShape = realImages._shape;
+        int[] fakeShape = fakeImages._shape;
+        int[] codeShape = latentCodes._shape;
+        int realLength = realImages.Length;
+        int fakeLength = fakeImages.Length;
 
         // ----- Discriminator: maximise V(D, G) -----
-        // Its two updates used to step on GetParameterGradients() after no backward pass at all.
-        T discriminatorLoss;
-        using (var discriminatorTape = new GradientTape<T>())
-        {
-            var realScores = Discriminator.ForwardForTraining(realImages);
-            var fakeScores = Discriminator.ForwardForTraining(fakeImages);
-            var discriminatorObjective = Engine.TensorAdd(
-                Discriminator.BinaryCrossEntropyOnTape(realScores, targetIsReal: true),
-                Discriminator.BinaryCrossEntropyOnTape(fakeScores, targetIsReal: false));
-            discriminatorLoss = StepOnTape(discriminatorTape, discriminatorObjective, Discriminator,
-                _discriminatorOptimizer);
-        }
+        T discriminatorLoss = Discriminator.TrainObjectiveFused(
+            Training.StepInputPacking<T>.Pack(realImages, fakeImages),
+            packed =>
+            {
+                var realScores = Discriminator.ForwardForTraining(Training.StepInputPacking<T>.Slice(packed, 0, realShape));
+                var fakeScores = Discriminator.ForwardForTraining(Training.StepInputPacking<T>.Slice(packed, realLength, fakeShape));
+                return Engine.TensorAdd(
+                    Discriminator.BinaryCrossEntropyOnTape(realScores, targetIsReal: true),
+                    Discriminator.BinaryCrossEntropyOnTape(fakeScores, targetIsReal: false));
+            },
+            _discriminatorOptimizer);
 
         // ----- Generator and Q: minimise V(D, G) - lambda * L_I(G, Q) (Chen et al. 2016, eq. 6) -----
-        // One loss, two networks: the generator AND the Q network are stepped, each by its own
-        // optimizer. The old closure trained the generator alone, so Q -- whose loss was in it -- never
-        // moved. The adversarial term is the non-saturating -log D(G(z, c)). For the continuous codes
-        // this model draws, Q(c|x) is a unit-variance factored Gaussian, whose negative log-likelihood is
-        // the squared error up to a constant -- the form the paper uses for continuous codes.
-        var generatorScores = Discriminator.ForwardFrozenOnTape(fakeTracked);
-        var adversarialLoss = Discriminator.BinaryCrossEntropyOnTape(generatorScores, targetIsReal: true);
-        var predictedCodes = QNetwork.ForwardForTraining(fakeTracked);
-        var codeError = Engine.TensorSubtract(predictedCodes, latentCodes);
-        var mutualInfoTensor = Engine.ReduceMean(
-            Engine.TensorMultiply(codeError, codeError),
-            Enumerable.Range(0, codeError.Shape.Length).ToArray(),
-            keepDims: false);
-        var generatorObjective = Engine.TensorAdd(
-            adversarialLoss, Engine.TensorMultiplyScalar(mutualInfoTensor, _mutualInfoCoefficient));
-        T generatorLoss = StepOnTape(generatorTape, generatorObjective, new[]
+        // One loss, two networks, each stepped by its own optimizer, both differentiated at this iteration's
+        // weights. The generator step runs first and reads the current Q. Q's gradient of the same loss treats the
+        // generated samples as data (the adversarial term does not depend on Q), so its step trains on the samples
+        // this iteration's generator produced, before the generator moved. The adversarial term is the
+        // non-saturating -log D(G(z, c)). For the continuous codes this model draws, Q(c|x) is a unit-variance
+        // factored Gaussian, whose negative log-likelihood is the squared error up to a constant -- the form the
+        // paper uses for continuous codes.
+        int batch = noise.Shape[0];
+        int noiseWidth = noise.Shape[1];
+        T generatorLoss = Generator.TrainObjectiveFused(generatorInput, stepInput =>
         {
-            ((NeuralNetworkBase<T>)Generator, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)_generatorOptimizer),
-            ((NeuralNetworkBase<T>)QNetwork, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)_qNetworkOptimizer),
-        });
-        T mutualInfoLoss = mutualInfoTensor.Length > 0 ? mutualInfoTensor[0] : NumOps.Zero;
+            var codes = Engine.TensorSlice(stepInput, new[] { 0, noiseWidth }, new[] { batch, _latentCodeSize });
+            var generated = Generator.ForwardForTraining(stepInput);
+            var adversarialLoss = Discriminator.BinaryCrossEntropyOnTape(
+                Discriminator.ForwardFrozenOnTape(generated), targetIsReal: true);
+            return Engine.TensorAdd(
+                adversarialLoss,
+                Engine.TensorMultiplyScalar(CodeSquaredError(QNetwork.ForwardForTraining(generated), codes), _mutualInfoCoefficient));
+        }, _generatorOptimizer);
 
+        T mutualInfoLoss = QNetwork.TrainObjectiveFused(
+            Training.StepInputPacking<T>.Pack(fakeImages, latentCodes),
+            packed => CodeSquaredError(
+                QNetwork.ForwardForTraining(Training.StepInputPacking<T>.Slice(packed, 0, fakeShape)),
+                Training.StepInputPacking<T>.Slice(packed, fakeLength, codeShape)),
+            _qNetworkOptimizer);
         return (discriminatorLoss, generatorLoss, mutualInfoLoss);
     }
 
+    /// <summary>The mean squared error between predicted and true latent codes, recorded for the step.</summary>
+    private Tensor<T> CodeSquaredError(Tensor<T> predictedCodes, Tensor<T> codes)
+    {
+        var codeError = Engine.TensorSubtract(predictedCodes, codes);
+        return Engine.ReduceMean(
+            Engine.TensorMultiply(codeError, codeError),
+            Enumerable.Range(0, codeError.Shape.Length).ToArray(),
+            keepDims: false);
+    }
     /// <summary>
     /// Calculates mutual information loss (MSE between predicted and true codes).
     /// </summary>

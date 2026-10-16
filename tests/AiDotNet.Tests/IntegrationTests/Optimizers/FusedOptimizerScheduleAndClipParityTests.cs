@@ -27,11 +27,20 @@ public class FusedOptimizerScheduleAndClipParityTests
 {
     /// <summary>
     /// How far a fused run may drift from eager, as a multiple of the drift of the same optimizer with the
-    /// feature under test turned off. The fused kernel takes the learning rate, betas and epsilon as float
-    /// (FusedOptimizerConfig), so even plain Adam differs from eager in double by that rounding (measured
-    /// 3.1e-8 over 9 steps here). The defects these tests guard differ by 1e-3 or throw.
+    /// feature under test turned off. The defects these tests guard differ by 1e-3 or throw.
     /// </summary>
     private const double ControlFloorMultiple = 4.0;
+
+    /// <summary>
+    /// The least drift the bound allows. Double training stays in double on the fused step, so the control can
+    /// drift by a single ulp or not at all, and a schedule or clip that moves the rate between steps changes the
+    /// rounding by a few more (2.4e-15 over 9 scheduled steps on CI's Linux runners, against a 2.2e-16 control).
+    /// That is far below the 1e-6 the clip test's positive control requires.
+    /// </summary>
+    private const double RoundOffFloor = 1e-12;
+
+    private static double AllowedDrift(double controlDrift) =>
+        ControlFloorMultiple * Math.Max(controlDrift, RoundOffFloor);
 
     private static NeuralNetworkArchitecture<double> MakeArch() =>
         new NeuralNetworkArchitecture<double>(
@@ -146,7 +155,7 @@ public class FusedOptimizerScheduleAndClipParityTests
         Assert.Equal(0, eager.FusedSteps);
         Assert.True(MaxAbsDifference(eager.Parameters, init) > 1e-4, "Training did not move the parameters.");
         double divergence = MaxAbsDifference(fused.Parameters, eager.Parameters);
-        Assert.True(divergence <= ControlFloorMultiple * floor,
+        Assert.True(divergence <= AllowedDrift(floor),
             $"Fused training with a per-epoch scheduler diverged from eager by {divergence:E3}; " +
             $"unscheduled Adam drifts {floor:E3}.");
     }
@@ -178,7 +187,7 @@ public class FusedOptimizerScheduleAndClipParityTests
         Assert.True(MaxAbsDifference(eager.Parameters, eagerUnclipped.Parameters) > 1e-6,
             "MaxGradientNorm did not bind; the clip comparison would be vacuous.");
         double divergence = MaxAbsDifference(fused.Parameters, eager.Parameters);
-        Assert.True(divergence <= ControlFloorMultiple * floor,
+        Assert.True(divergence <= AllowedDrift(floor),
             $"Fused training ignored the optimizer's gradient clip: diverged from eager by {divergence:E3}; " +
             $"unclipped Adam drifts {floor:E3}.");
     }

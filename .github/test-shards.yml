@@ -1514,6 +1514,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.Profiling.GpuProfilingTests.|
       FullyQualifiedName~AiDotNet.Tests.Storage.SqliteSqlSyntaxValidatorTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.CheckpointGradientEquivalenceTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.NoisePredictorTapeGradientTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.LowPrecisionResidentTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.DiTWeightStreamingTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.Models.InstantStyleMechanismTests.|
@@ -1524,10 +1525,13 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.ArchitectureLayerAgreementTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.OptionsSeedReassignmentTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.CallerBuiltLayerSeedingTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.StepOnTapeClippingTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.LayerGradientPublishReuseTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.ArchitectureSharingGuardTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.AudioVisualCorrespondenceExecutionTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.BertEmbeddingLayerTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.VariationalAutoencoderPosteriorTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.GANs.GanFusedTrainingTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Blip2OnnxContractTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.BlipOnnxContractTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.CompiledModelHostTests.|

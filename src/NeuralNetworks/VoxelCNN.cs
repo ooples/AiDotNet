@@ -298,45 +298,6 @@ public partial class VoxelCNN<T> : VolumetricModelLayoutBase<T>
     /// </summary>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
 
-    /// <summary>
-    /// Trains the network on a single batch of input-output pairs.
-    /// </summary>
-    /// <param name="input">The input voxel grid tensor.</param>
-    /// <param name="expectedOutput">The expected output (ground truth labels).</param>
-    /// <remarks>
-    /// <para>
-    /// Training involves:
-    /// 1. Forward pass to compute predictions
-    /// 2. Loss calculation between predictions and expected output
-    /// 3. Backward pass to compute gradients
-    /// 4. Gradient clipping to prevent exploding gradients
-    /// 5. Parameter update using the optimizer
-    /// </para>
-    /// </remarks>
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            // TrainWithTape handles forward + backward + parameter update
-            // via the GradientTape + optimizer.Step path. The trailing
-            // _optimizer.UpdateParameters(Layers) call this method had
-            // before tried to ALSO run the legacy
-            // ConvolutionalLayer3D.UpdateParameters path, which expects
-            // each layer's _gradients field to be populated by a previous
-            // .Backward() call — but tape-based training never calls
-            // layer.Backward, so the legacy path threw "Backward pass
-            // must be called before updating parameters" on every
-            // VoxelCNN training-path invariant test (#1224 Cluster C).
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>

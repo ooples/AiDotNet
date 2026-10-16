@@ -76,7 +76,7 @@ public partial class NeuralGARCH<T> : FinancialModelBase<T>, IVolatilityModel<T>
     /// step ran on a freshly allocated default Adam instead. Measured before the override: a
     /// configured rate of 1e-5, 1e-4, 1e-3, 0.05 and 1.0 all produced the same 1e-3 update.
     /// </remarks>
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
     private readonly NeuralGARCHOptions<T> _options;
 
     /// <inheritdoc/>

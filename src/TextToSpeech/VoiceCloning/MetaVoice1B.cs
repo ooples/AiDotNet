@@ -158,7 +158,7 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
             double posPhase = (s + 1.0) / (seq + 1.0);
             for (int c = 0; c < condDim; c++)
             {
-                double freq = 1.0 / Math.Pow(10000.0, (2.0 * (c / 2)) / condDim);
+                double freq = 1.0 / Math.Pow(10000.0, (double)(c - c % 2) / condDim);   // 2*(c/2): the sin/cos pair index
                 double tokEmb = Math.Sin(token * (c + 1)) * 0.5;
                 double posEmb = ((c & 1) == 0 ? Math.Sin(posPhase / freq) : Math.Cos(posPhase / freq)) * 0.5;
                 double spkEmb = speakerEmbedding is not null
@@ -227,15 +227,6 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
     }
 
     /// <inheritdoc />

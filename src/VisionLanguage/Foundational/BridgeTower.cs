@@ -261,27 +261,6 @@ public partial class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguag
         return c;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        // Pass _optimizer (the AdamW the constructor created with the
-        // model's paper-faithful hyperparameters) into TrainWithTape so
-        // the train path actually uses it. Without this the call
-        // dropped through to GetOrCreateBaseOptimizer's default Adam at
-        // lr=1e-3, ignoring whatever the caller configured via the
-        // optimizer ctor parameter.
-        try
-        {
-            TrainWithTape(PreprocessImage(input), expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     // This forwarded to a helper the base now calls from its own
     // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 

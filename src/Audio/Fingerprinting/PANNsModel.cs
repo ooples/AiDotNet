@@ -563,16 +563,6 @@ public partial class PANNsModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprin
         };
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot train in ONNX inference mode.");
-        SetTrainingMode(true);
-        try { TrainWithTape(input, expected, _optimizer); }
-        finally { SetTrainingMode(false); }
-    }
-
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being

@@ -1,4 +1,4 @@
-using AiDotNet.ActivationFunctions;
+﻿using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
@@ -107,7 +107,7 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     // One dedicated optimizer per sub-network (Li et al. 2019 MisGAN trains four:
     // data discriminator, mask discriminator, data generator, mask generator).
     // See CTGANGenerator for why one shared AdamOptimizer corrupts moments across
-    // networks of different parameter counts. TapeStepOver takes the optimizer so
+    // networks of different parameter counts. StepOver takes the optimizer so
     // each network keeps its own moment state.
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _dataGenOptimizer;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _maskGenOptimizer;
@@ -190,6 +190,9 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new MisGANOptions<T>()).MaxGradNorm)
     {
         _options = options;
+        // Through the base's Options: that is what seeds the layer-initialization scope from Options.Seed, so the four
+        // sub-networks InitializeLayers builds get reproducible weights.
+        base.Options = _options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>
             new(this, new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -381,6 +384,7 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         BuildDataDiscriminator();
         BuildMaskGenerator();
         BuildMaskDiscriminator();
+        MaterializeSubNetworks();
 
         // Training loop
         int batchSize = Math.Min(_options.BatchSize, data.Rows);
@@ -479,7 +483,9 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
 
         // Default layers: residual connections with BN + ReLU
         var h = input;
-        var originalInput = CloneTensor(input);
+        // The input itself, not an element-by-element host copy: engine ops never write their inputs, and the copy
+        // was a constant to a compiled training plan, so every replay concatenated the first step's noise.
+        var originalInput = input;
 
         for (int i = 0; i < Layers.Count - 1; i++)
         {
@@ -501,7 +507,9 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     private Tensor<T> MaskGeneratorForward(Tensor<T> input)
     {
         var current = input;
-        var originalInput = CloneTensor(input);
+        // The input itself, not an element-by-element host copy: engine ops never write their inputs, and the copy
+        // was a constant to a compiled training plan, so every replay concatenated the first step's noise.
+        var originalInput = input;
 
         for (int i = 0; i < _maskGenLayers.Count - 1; i++)
         {
@@ -571,20 +579,28 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         // couples G_m to the data GAN instead of using a fixed Bernoulli mask for
         // both sides. Weight clipping runs after EVERY critic step (WGAN).
         var criticLayers = BuildDataDiscLayerList();
+        int width = _dataWidth;
+        int embed = _options.EmbeddingDimension;
         for (int i = batchStart; i < batchEnd; i++)
         {
             var realRow = GetRow(transformedData, i);
-            var realMask = VectorToTensor(CreateRandomMask(_dataWidth, _options.MissingRate));
-            var dataNoise = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
-            var maskNoise = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
-
-            using var tape = new GradientTape<T>();
-            var realScore = DataDiscriminatorForward(ElementwiseMultiplyTensor(VectorToTensor(realRow), realMask), isTraining: true);
-            var fakeRow = DataGeneratorForward(dataNoise);
-            var fakeMask = MaskGeneratorForward(maskNoise);
-            var fakeScore = DataDiscriminatorForward(ElementwiseMultiplyTensor(fakeRow, fakeMask), isTraining: true);
-            var loss = Engine.TensorSubtract(ReduceToScalar(fakeScore), ReduceToScalar(realScore));
-            TapeStepOver(tape, loss, criticLayers, _dataDiscOptimizer);
+            var realMask = CreateRandomMask(_dataWidth, _options.MissingRate);
+            var dataNoise = VectorToTensor(CreateStandardNormalVector(embed));
+            var maskNoise = VectorToTensor(CreateStandardNormalVector(embed));
+            // The critic trains on the generated sample as data: the generators run unrecorded (training mode, so their
+            // BatchNorm statistics advance as they did when this forward was taped), and only the critic is in the step.
+            Tensor<T> fakeMasked;
+            using (new NoGradScope<T>())
+                fakeMasked = ElementwiseMultiplyTensor(DataGeneratorForward(dataNoise), MaskGeneratorForward(maskNoise));
+            var packed = Training.StepInputPacking<T>.Pack(VectorToTensor(realRow), VectorToTensor(realMask), fakeMasked);
+            StepOver(criticLayers, packed, step =>
+            {
+                var realScore = DataDiscriminatorForward(ElementwiseMultiplyTensor(
+                    Engine.TensorNarrow(step, 1, 0, width), Engine.TensorNarrow(step, 1, width, width)), isTraining: true);
+                var fakeScore = DataDiscriminatorForward(
+                    Engine.Reshape(Engine.TensorNarrow(step, 1, 2 * width, fakeMasked.Length), new[] { fakeMasked.Length }), isTraining: true);
+                return Engine.TensorSubtract(ReduceToScalar(fakeScore), ReduceToScalar(realScore));
+            }, _dataDiscOptimizer);
             ClipWeights(criticLayers);
         }
     }
@@ -592,17 +608,25 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     private void TrainMaskDiscriminatorStep(Matrix<T> transformedData, int batchStart, int batchEnd)
     {
         var criticLayers = BuildMaskDiscLayerList();
+        int width = _dataWidth;
+        int embed = _options.EmbeddingDimension;
         for (int i = batchStart; i < batchEnd; i++)
         {
-            var realMask = VectorToTensor(CreateRandomMask(_dataWidth, _options.MissingRate));
-            var noise = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
-
-            using var tape = new GradientTape<T>();
-            var realScore = MaskDiscriminatorForward(realMask, isTraining: true);
-            var fakeMask = MaskGeneratorForward(noise);
-            var fakeScore = MaskDiscriminatorForward(fakeMask, isTraining: true);
-            var loss = Engine.TensorSubtract(ReduceToScalar(fakeScore), ReduceToScalar(realScore));
-            TapeStepOver(tape, loss, criticLayers, _maskDiscOptimizer);
+            var realMask = CreateRandomMask(_dataWidth, _options.MissingRate);
+            var noise = VectorToTensor(CreateStandardNormalVector(embed));
+            // The generated mask is data to the critic, as in the masked-data critic's step.
+            Tensor<T> fakeMask;
+            using (new NoGradScope<T>())
+                fakeMask = MaskGeneratorForward(noise);
+            var packed = Training.StepInputPacking<T>.Pack(VectorToTensor(realMask), fakeMask);
+            StepOver(criticLayers, packed, step =>
+            {
+                var realScore = MaskDiscriminatorForward(
+                    Engine.Reshape(Engine.TensorNarrow(step, 1, 0, width), new[] { width }), isTraining: true);
+                var fakeScore = MaskDiscriminatorForward(
+                    Engine.Reshape(Engine.TensorNarrow(step, 1, width, fakeMask.Length), new[] { fakeMask.Length }), isTraining: true);
+                return Engine.TensorSubtract(ReduceToScalar(fakeScore), ReduceToScalar(realScore));
+            }, _maskDiscOptimizer);
             ClipWeights(criticLayers);
         }
     }
@@ -610,92 +634,33 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     private void TrainDataGeneratorStep(int batchStart, int batchEnd)
     {
         // G_x is optimized against D_x using a mask drawn from G_m, so the data and
-        // mask generators are trained jointly against the masked-data critic.
-        // GPU-RESIDENT: pack (dataNoise, maskNoise) into a single input; splitting
-        // inside the closure keeps both noise sources refreshed per replay.
+        // mask generators are trained jointly against the masked-data critic. Both
+        // noise draws travel in the step's data, so a compiled plan replays each
+        // step's own.
         var dataGenLayers = BuildDataGenLayerList();
-        var trainableDataGen = dataGenLayers.OfType<ITrainableLayer<T>>().ToList();
-        if (trainableDataGen.Count > 0 && AiDotNet.Training.FusedTrainingStep<T>.IsAvailable)
-        {
-            int embed = _options.EmbeddingDimension;
-            var target = new Tensor<T>(new[] { 1 });
-            Tensor<T> Fwd(Tensor<T> packed)
-            {
-                var dn = Engine.TensorSlice(packed, [0], [embed]);
-                var mn = Engine.TensorSlice(packed, [embed], [embed]);
-                var fakeRow = DataGeneratorForward(dn);
-                var fakeMask = MaskGeneratorForward(mn);
-                return DataDiscriminatorForward(ElementwiseMultiplyTensor(fakeRow, fakeMask), isTraining: true);
-            }
-            Tensor<T> Loss(Tensor<T> score, Tensor<T> _) => Engine.TensorNegate(ReduceToScalar(score));
-            bool fusedEngaged = false;
-            for (int i = batchStart; i < batchEnd; i++)
-            {
-                var dn = CreateStandardNormalVector(embed);
-                var mn = CreateStandardNormalVector(embed);
-                var packed = new Vector<T>(2 * embed);
-                for (int k = 0; k < embed; k++) packed[k] = dn[k];
-                for (int k = 0; k < embed; k++) packed[embed + k] = mn[k];
-                var packedTensor = new Tensor<T>(new[] { 2 * embed }, packed);
-                bool ran = AiDotNet.Training.FusedTrainingStep<T>.TryStep(
-                    trainableDataGen, packedTensor, target,
-                    forward: Fwd, computeLoss: Loss,
-                    optimizer: _dataGenOptimizer,
-                    out T _, owner: this);
-                if (!ran) { if (!fusedEngaged) break; continue; }
-                fusedEngaged = true;
-            }
-            if (fusedEngaged) return;
-        }
-
+        int embed = _options.EmbeddingDimension;
         for (int i = batchStart; i < batchEnd; i++)
         {
-            var dataNoise = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
-            var maskNoise = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
-
-            using var tape = new GradientTape<T>();
-            var fakeRow = DataGeneratorForward(dataNoise);
-            var fakeMask = MaskGeneratorForward(maskNoise);
-            var fakeScore = DataDiscriminatorForward(ElementwiseMultiplyTensor(fakeRow, fakeMask), isTraining: true);
-            var loss = Engine.TensorNegate(ReduceToScalar(fakeScore));
-            TapeStepOver(tape, loss, BuildDataGenLayerList(), _dataGenOptimizer);
+            var packed = Pack(CreateStandardNormalVector(embed), CreateStandardNormalVector(embed));
+            StepOver(dataGenLayers, packed, step =>
+            {
+                var fakeRow = DataGeneratorForward(Engine.TensorSlice(step, [0], [embed]));
+                var fakeMask = MaskGeneratorForward(Engine.TensorSlice(step, [embed], [embed]));
+                return Engine.TensorNegate(ReduceToScalar(
+                    DataDiscriminatorForward(ElementwiseMultiplyTensor(fakeRow, fakeMask), isTraining: true)));
+            }, _dataGenOptimizer);
         }
     }
 
     private void TrainMaskGeneratorStep(int batchStart, int batchEnd)
     {
-        // GPU-RESIDENT: per-sample loop; fused plan replays with fresh noise.
         var maskGenLayers = BuildMaskGenLayerList();
-        var trainableMaskGen = maskGenLayers.OfType<ITrainableLayer<T>>().ToList();
-        if (trainableMaskGen.Count > 0 && AiDotNet.Training.FusedTrainingStep<T>.IsAvailable)
-        {
-            var target = new Tensor<T>(new[] { 1 });
-            Tensor<T> Fwd(Tensor<T> noise) => MaskDiscriminatorForward(MaskGeneratorForward(noise), isTraining: true);
-            Tensor<T> Loss(Tensor<T> score, Tensor<T> _) => Engine.TensorNegate(ReduceToScalar(score));
-            bool fusedEngaged = false;
-            for (int i = batchStart; i < batchEnd; i++)
-            {
-                var noiseTensor = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
-                bool ran = AiDotNet.Training.FusedTrainingStep<T>.TryStep(
-                    trainableMaskGen, noiseTensor, target,
-                    forward: Fwd, computeLoss: Loss,
-                    optimizer: _maskGenOptimizer,
-                    out T _, owner: this);
-                if (!ran) { if (!fusedEngaged) break; continue; }
-                fusedEngaged = true;
-            }
-            if (fusedEngaged) return;
-        }
-
         for (int i = batchStart; i < batchEnd; i++)
         {
-            var noise = VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension));
-
-            using var tape = new GradientTape<T>();
-            var fakeMask = MaskGeneratorForward(noise);
-            var fakeScore = MaskDiscriminatorForward(fakeMask, isTraining: true);
-            var loss = Engine.TensorNegate(ReduceToScalar(fakeScore));
-            TapeStepOver(tape, loss, BuildMaskGenLayerList(), _maskGenOptimizer);
+            StepOver(maskGenLayers, VectorToTensor(CreateStandardNormalVector(_options.EmbeddingDimension)),
+                noise => Engine.TensorNegate(ReduceToScalar(
+                    MaskDiscriminatorForward(MaskGeneratorForward(noise), isTraining: true))),
+                _maskGenOptimizer);
         }
     }
 
@@ -703,39 +668,92 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
 
     #region Tape Step Helpers
 
-    /// <summary>Runs one optimizer step over the given sub-network's parameters from a tape-tracked loss.</summary>
-    private void TapeStepOver(GradientTape<T> tape, Tensor<T> loss, IReadOnlyList<ILayer<T>> layers,
+    /// <summary>
+    /// Runs each sub-network once, in inference mode and recording nothing, so lazily shaped layers create their weights
+    /// before any step collects them.
+    /// </summary>
+    /// <remarks>
+    /// A FullyConnectedLayer creates (or replaces) its weight tensors on its first forward. A step collects the tensors it
+    /// trains before running its objective, so on freshly built layers the first step trained tensors the layers then
+    /// discarded: the fused plan and the eager step then trained different sets from the first step on.
+    /// </remarks>
+    private void MaterializeSubNetworks()
+    {
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            using (new NoGradScope<T>())
+            {
+                var noise = new Tensor<T>(new[] { _options.EmbeddingDimension });
+                var fake = DataGeneratorForward(noise);
+                var mask = MaskGeneratorForward(noise);
+                DataDiscriminatorForward(ElementwiseMultiplyTensor(fake, mask), isTraining: false);
+                MaskDiscriminatorForward(mask, isTraining: false);
+            }
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
+    }
+
+    /// <summary>
+    /// One step over a sub-network's parameters on the shared training step: the fused plan when it applies, the
+    /// shared eager tape step otherwise. Every per-step value the objective reads travels in <paramref name="data"/>,
+    /// which a compiled plan rebinds on every replay; the other sub-networks the objective runs are read as they stand.
+    /// </summary>
+    private void StepOver(IReadOnlyList<ILayer<T>> layers, Tensor<T> data, Func<Tensor<T>, Tensor<T>> objective,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
     {
         var trainable = Training.TapeTrainingStep<T>.CollectParameters(layers);
         if (trainable.Count == 0) return;
-        var grads = tape.ComputeGradients(loss, trainable);
-        T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
-        LastLoss = lossValue;
-        var ctx = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(trainable, grads, lossValue);
-        optimizer.Step(ctx);
+        LastLoss = AiDotNet.Training.FusedTrainingStep<T>.Step(
+            this, layers.OfType<ITrainableLayer<T>>().ToList(), data, data,
+            forward: objective,
+            computeLoss: (loss, _) => loss,
+            optimizer: optimizer,
+            extraTensors: trainable);
+    }
+
+    /// <summary>The vectors laid end to end as one step's data.</summary>
+    private static Tensor<T> Pack(params Vector<T>[] parts)
+    {
+        int total = 0;
+        foreach (var part in parts) total += part.Length;
+        var packed = new Vector<T>(total);
+        int offset = 0;
+        foreach (var part in parts)
+        {
+            for (int k = 0; k < part.Length; k++) packed[offset + k] = part[k];
+            offset += part.Length;
+        }
+        return new Tensor<T>(new[] { total }, packed);
     }
 
     private Tensor<T> ReduceToScalar(Tensor<T> t)
         => Engine.ReduceSum(t, Enumerable.Range(0, t.Shape.Length).ToArray(), keepDims: false);
 
     /// <summary>WGAN weight clipping: clamp each critic parameter to [-c, c] for Lipschitz continuity.</summary>
+    /// <remarks>
+    /// In place, in each live parameter tensor. Writing the clamped values back through UpdateParameters replaced the
+    /// layers' weight tensors, which orphaned the optimizer's per-tensor state and left a compiled plan training the
+    /// replaced tensors.
+    /// </remarks>
     private void ClipWeights(IReadOnlyList<ILayer<T>> layers)
     {
         T lo = NumOps.FromDouble(-WGanClip);
         T hi = NumOps.FromDouble(WGanClip);
-        foreach (var layer in layers)
+        foreach (var parameter in Training.TapeTrainingStep<T>.CollectParameters(layers))
         {
-            var ps = layer.GetParameters();
-            if (ps.Length == 0) continue;
-            bool changed = false;
-            for (int i = 0; i < ps.Length; i++)
+            for (int i = 0; i < parameter.Length; i++)
             {
-                if (NumOps.GreaterThan(ps[i], hi)) { ps[i] = hi; changed = true; }
-                else if (NumOps.LessThan(ps[i], lo)) { ps[i] = lo; changed = true; }
+                T value = parameter.GetFlat(i);
+                if (NumOps.GreaterThan(value, hi)) parameter.SetFlat(i, hi);
+                else if (NumOps.LessThan(value, lo)) parameter.SetFlat(i, lo);
             }
-            if (changed) layer.UpdateParameters(ps);
         }
+        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
     }
 
     private IReadOnlyList<ILayer<T>> BuildDataGenLayerList()
@@ -787,18 +805,21 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         SetTrainingMode(true);
         try
         {
-            using var tape = new GradientTape<T>();
-            var output = DataGeneratorForward(input);
-            var flatOut = output.Rank == 1 ? output : Engine.Reshape(output, new[] { output.Length });
-            var target = expectedOutput.Rank == 1 ? expectedOutput : Engine.Reshape(expectedOutput, new[] { expectedOutput.Length });
-            // Honor the ctor-supplied / task-default loss function (tape-connected)
-            // rather than hardcoding squared error; fall back to MSE only if the
-            // configured loss does not expose a tape implementation.
-            Tensor<T> loss = LossFunction is LossFunctions.LossFunctionBase<T> tapeLoss
-                ? tapeLoss.ComputeTapeLoss(flatOut, target)
-                : ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(flatOut, target)));
-            TapeStepOver(tape, loss, BuildDataGenLayerList(), _dataGenOptimizer);
-        }
+            // Honor the ctor-supplied / task-default loss function (tape-connected) rather than hardcoding squared
+            // error; fall back to the squared error only if the configured loss does not expose a tape implementation.
+            var packed = Training.StepInputPacking<T>.Pack(input, expectedOutput);
+            int[] inputShape = input._shape;
+            int inputLength = input.Length;
+            int targetLength = expectedOutput.Length;
+            StepOver(BuildDataGenLayerList(), packed, step =>
+            {
+                var output = DataGeneratorForward(Training.StepInputPacking<T>.Slice(step, 0, inputShape));
+                var flatOut = output.Rank == 1 ? output : Engine.Reshape(output, new[] { output.Length });
+                var target = Training.StepInputPacking<T>.Slice(step, inputLength, new[] { targetLength });
+                return LossFunction is LossFunctions.LossFunctionBase<T> tapeLoss
+                    ? tapeLoss.ComputeTapeLoss(flatOut, target)
+                    : ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(flatOut, target)));
+            }, _dataGenOptimizer);        }
         finally
         {
             SetTrainingMode(false);

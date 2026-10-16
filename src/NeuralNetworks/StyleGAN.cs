@@ -368,49 +368,60 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
 
         int batchSize = realImages.Shape[0];
 
-        // ONE generator forward -- mapping, optional style mixing, synthesis -- recorded on the
-        // generator's tape and shared by both steps (#1390). The previous step computed every loss as a
-        // detached scalar and then ran three hand-written Adam updates on GetParameterGradients():
-        // gradients no backward had produced, because the Backward calls were commented out when manual
-        // backprop was removed. No network trained (#2155).
-        using var generatorTape = new GradientTape<T>();
-        var styles = MapToStyles(latentCodes);
-        if (_enableStyleMixing && RandomHelper.ThreadSafeRandom.NextDouble() < _styleMixingProbability)
-        {
-            styles = MixStyles(styles, MapToStyles(GenerateRandomLatentCodes(batchSize)));
-        }
-
-        var fakeTracked = SynthesisNetwork.ForwardForTraining(ReshapeForCNN(styles, SynthesisNetwork.Architecture));
-        var fakeImages = new Tensor<T>(fakeTracked.Shape.ToArray());
-        fakeTracked.AsSpan().CopyTo(fakeImages.AsWritableSpan());
+        // Every step runs on its network's fused session with the step's tensors in its data. Style mixing is data
+        // too: this step's second latent codes and its coarse/fine mask (all ones when the step does not mix, so the
+        // second mapping contributes nothing). The styles and images the discriminator sees come from training-mode
+        // forwards that record nothing and leave the generator's running statistics to its own steps.
+        bool mixing = _enableStyleMixing && RandomHelper.ThreadSafeRandom.NextDouble() < _styleMixingProbability;
+        var mixLatents = mixing ? GenerateRandomLatentCodes(batchSize) : latentCodes;
+        var styles = MapToStylesDetached(latentCodes);
+        var mask = StyleMixingMask(batchSize, styles.Shape[1], mixing);
+        styles = BlendStyles(styles, MapToStylesDetached(mixLatents), mask);
+        var synthesisInput = ReshapeForCNN(styles, SynthesisNetwork.Architecture);
+        var fakeImages = SynthesisNetwork.ForwardForTrainingDetached(synthesisInput);
+        int[] realShape = realImages._shape;
+        int[] fakeShape = fakeImages._shape;
+        int[] latentShape = latentCodes._shape;
+        int[] maskShape = mask._shape;
+        int realLength = realImages.Length;
+        int latentLength = latentCodes.Length;
 
         // ----- Discriminator: non-saturating logistic loss plus R1 (Karras et al. 2019) -----
-        T discriminatorLoss;
-        using (var discriminatorTape = new GradientTape<T>())
-        {
-            var realScores = Discriminator.ForwardForTraining(realImages);
-            var fakeScores = Discriminator.ForwardForTraining(fakeImages);
-            var discriminatorObjective = Engine.TensorAdd(
-                Discriminator.BinaryCrossEntropyOnTape(realScores, targetIsReal: true),
-                Discriminator.BinaryCrossEntropyOnTape(fakeScores, targetIsReal: false));
-            if (_options.R1Gamma > 0)
+        T discriminatorLoss = Discriminator.TrainObjectiveFused(
+            Training.StepInputPacking<T>.Pack(realImages, fakeImages),
+            packed =>
             {
-                discriminatorObjective = Engine.TensorAdd(discriminatorObjective, R1Penalty(realImages));
-            }
-
-            discriminatorLoss = StepOnTape(discriminatorTape, discriminatorObjective, Discriminator,
-                _discriminatorOptimizer);
-        }
+                var real = Training.StepInputPacking<T>.Slice(packed, 0, realShape);
+                var objective = Engine.TensorAdd(
+                    Discriminator.BinaryCrossEntropyOnTape(Discriminator.ForwardForTraining(real), targetIsReal: true),
+                    Discriminator.BinaryCrossEntropyOnTape(
+                        Discriminator.ForwardForTraining(Training.StepInputPacking<T>.Slice(packed, realLength, fakeShape)),
+                        targetIsReal: false));
+                return _options.R1Gamma > 0 ? Engine.TensorAdd(objective, R1Penalty(real)) : objective;
+            },
+            _discriminatorOptimizer);
 
         // ----- Generator: the synthesis and mapping networks, trained by one loss at their own rates -----
-        var generatorScores = Discriminator.ForwardFrozenOnTape(fakeTracked);
-        var generatorObjective = Discriminator.BinaryCrossEntropyOnTape(generatorScores, targetIsReal: true);
-        T generatorLoss = StepOnTape(generatorTape, generatorObjective, new[]
-        {
-            ((NeuralNetworkBase<T>)SynthesisNetwork, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)_synthesisOptimizer),
-            ((NeuralNetworkBase<T>)MappingNetwork, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)_mappingOptimizer),
-        });
-
+        // Both differentiate the loss at this iteration's weights, each with its own optimizer. The mapping step runs
+        // first, through the synthesis network as it stands. The synthesis network's gradient treats the styles as
+        // data, so its step trains on the styles this iteration's mapping produced, before the mapping moved.
+        MappingNetwork.TrainObjectiveFused(
+            Training.StepInputPacking<T>.Pack(latentCodes, mixLatents, mask),
+            packed =>
+            {
+                var mixed = BlendStyles(
+                    MapToStyles(Training.StepInputPacking<T>.Slice(packed, 0, latentShape)),
+                    MapToStyles(Training.StepInputPacking<T>.Slice(packed, latentLength, latentShape)),
+                    Training.StepInputPacking<T>.Slice(packed, 2 * latentLength, maskShape));
+                var generated = SynthesisNetwork.ForwardForTraining(ReshapeForCNN(mixed, SynthesisNetwork.Architecture));
+                return Discriminator.BinaryCrossEntropyOnTape(Discriminator.ForwardFrozenOnTape(generated), targetIsReal: true);
+            },
+            _mappingOptimizer);
+        T generatorLoss = SynthesisNetwork.TrainObjectiveFused(
+            synthesisInput,
+            stepStyles => Discriminator.BinaryCrossEntropyOnTape(
+                Discriminator.ForwardFrozenOnTape(SynthesisNetwork.ForwardForTraining(stepStyles)), targetIsReal: true),
+            _synthesisOptimizer);
         return (discriminatorLoss, generatorLoss);
     }
 
@@ -421,6 +432,14 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// Goes through the same <see cref="ReshapeForCNN"/> that <see cref="Generate"/> uses, so training
     /// and inference run one forward path.
     /// </remarks>
+    /// <summary>The styles for <paramref name="latentCodes"/>, from a forward that records nothing and leaves the mapping network's state.</summary>
+    private Tensor<T> MapToStylesDetached(Tensor<T> latentCodes)
+    {
+        var styles = MappingNetwork.ForwardForTrainingDetached(ReshapeForCNN(latentCodes, MappingNetwork.Architecture));
+        return styles.Shape.Length > 2
+            ? Engine.Reshape(styles, new[] { styles.Shape[0], styles.Length / styles.Shape[0] })
+            : styles;
+    }
     private Tensor<T> MapToStyles(Tensor<T> latentCodes)
     {
         var styles = MappingNetwork.ForwardForTraining(ReshapeForCNN(latentCodes, MappingNetwork.Architecture));
@@ -444,6 +463,16 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// </remarks>
     private Tensor<T> R1Penalty(Tensor<T> realImages)
     {
+        // Nothing is recorded during a step's shape warm-up (an unrecorded forward whose value is discarded), so the
+        // inner tape would have no operations to differentiate. The penalty only matters to a recorded objective.
+        if (!AiDotNet.Autodiff.GradientRecording.IsRecording<T>())
+            return new Tensor<T>(new[] { 1 });
+
+        // Outside the step arena: the input gradients the inner tape builds outlive that tape, and an arena may
+        // reissue a step's tensors at a tape boundary (AiDotNet.Tensors 0.135.0+). Under a training arena the next
+        // step's backward read reissued buffers and threw (index out of range; "Multiples length (1) must match
+        // tensor dimensions (3)").
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         int batchSize = realImages.Shape[0];
         var realInput = new Tensor<T>(realImages.Shape.ToArray());
         realImages.AsSpan().CopyTo(realInput.AsWritableSpan());
@@ -493,49 +522,43 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// </remarks>
     private Tensor<T> MixStyles(Tensor<T> styles1, Tensor<T> styles2)
     {
-        // Validate inputs
         if (styles1.Shape[0] != styles2.Shape[0])
         {
             throw new ArgumentException(
                 $"Batch size mismatch: styles1 has {styles1.Shape[0]} samples, styles2 has {styles2.Shape[0]} samples.");
         }
-
-        var random = RandomHelper.ThreadSafeRandom;
-        int styleSize = styles1.Shape[1];
-
-        // Handle edge cases where style size is too small for meaningful mixing
-        // Need at least 3 elements to mix (1 for coarse, 1 for mixing point, 1 for fine)
-        if (styleSize < 3)
-        {
-            // If too small to mix, just return styles1
-            return styles1;
-        }
-
-        // Mix in middle layers: pick a layer between 1 and styleSize/2
-        // random.Next(minInclusive, maxExclusive) requires maxExclusive > minInclusive
-        int maxMixingLayer = Math.Max(2, styleSize / 2);
-        int mixingLayer = random.Next(1, maxMixingLayer);
-
-        // Blend with masks rather than copying elements: training passes tape-tracked styles through
-        // here, and an element copy into a fresh tensor severed the gradient back to the mapping network.
-        var coarseMask = new Tensor<T>(styles1.Shape.ToArray());
-        var fineMask = new Tensor<T>(styles1.Shape.ToArray());
-        for (int b = 0; b < styles1.Shape[0]; b++)
-        {
-            for (int i = 0; i < styleSize; i++)
-            {
-                bool coarse = i < mixingLayer;
-                coarseMask[b, i] = coarse ? NumOps.One : NumOps.Zero;
-                fineMask[b, i] = coarse ? NumOps.Zero : NumOps.One;
-            }
-        }
-
-        var mixedStyles = Engine.TensorAdd(
-            Engine.TensorMultiply(styles1, coarseMask),
-            Engine.TensorMultiply(styles2, fineMask));
-        return mixedStyles;
+        return BlendStyles(styles1, styles2, StyleMixingMask(styles1.Shape[0], styles1.Shape[1], mix: true));
     }
 
+    /// <summary>
+    /// The coarse-style mask of one mixing draw, [batch, styleSize]: ones on the layers before a crossover drawn from
+    /// [1, styleSize / 2), zeros after. All ones when the step does not mix, or the styles are too short to split
+    /// (at least 3 entries: one coarse, the crossover, one fine).
+    /// </summary>
+    private Tensor<T> StyleMixingMask(int batchSize, int styleSize, bool mix)
+    {
+        int crossover = styleSize;
+        if (mix && styleSize >= 3)
+            crossover = RandomHelper.ThreadSafeRandom.Next(1, Math.Max(2, styleSize / 2));
+
+        var mask = new Tensor<T>(new[] { batchSize, styleSize });
+        for (int row = 0; row < batchSize; row++)
+            for (int i = 0; i < crossover; i++)
+                mask[row, i] = NumOps.One;
+        return mask;
+    }
+
+    /// <summary>
+    /// styles1 on the coarse layers and styles2 on the fine ones, blended with the mask rather than copied: training
+    /// passes tape-tracked styles through here, and an element copy severed the gradient back to the mapping network.
+    /// </summary>
+    private Tensor<T> BlendStyles(Tensor<T> styles1, Tensor<T> styles2, Tensor<T> coarseMask)
+    {
+        var ones = new Tensor<T>(coarseMask._shape);
+        Engine.TensorFill(ones, NumOps.One);
+        var fineMask = Engine.TensorSubtract(ones, coarseMask);
+        return Engine.TensorAdd(Engine.TensorMultiply(styles1, coarseMask), Engine.TensorMultiply(styles2, fineMask));
+    }
     /// <summary>
     /// Generates images from latent codes.
     /// </summary>

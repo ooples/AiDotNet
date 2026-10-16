@@ -574,6 +574,9 @@ internal sealed class FusedTrainingSession<T>
         return AnyGradientNonZero(tape.ComputeGradients(loss, parameters));
     }
 
+    // A host-resident gradient is scanned in place, and its first nonzero element answers. Squaring every gradient on
+    // the engine allocated a gradient-sized temporary per parameter on each probed step: about 30 MB on a
+    // 7.2M-parameter N-BEATS, the training loop's largest allocation. A small gradient also squared to zero in float.
     private static bool AnyGradientNonZero(IReadOnlyDictionary<Tensor<T>, Tensor<T>> gradients)
     {
         var engine = AiDotNetEngine.Current;
@@ -582,11 +585,30 @@ internal sealed class FusedTrainingSession<T>
         foreach (var gradient in gradients.Values)
         {
             if (gradient is null || gradient.Length == 0) continue;
+            if (gradient is not SparseTensor<T> && !gradient.HasPendingGpuData && gradient.TryGetGpuBuffer() is null)
+            {
+                if (HostAnyNonZero(gradient)) return true;
+                continue;
+            }
             var squares = engine.Reshape(engine.ReduceSum(engine.TensorMultiply(gradient, gradient), null), new[] { 1 });
             total = total is null ? squares : engine.TensorAdd(total, squares);
         }
-        // NaN counts as non-zero: the gradient reached the parameters (as non-finite values the plan's guard handles).
-        return total is not null && NumOps.ToDouble(total[0]) != 0.0;
+        // An exact zero test: any nonzero sum means a gradient reached the parameters. NaN counts as non-zero (NaN never
+        // Equals 0), since the gradient did reach them, as non-finite values the plan's guard handles.
+        return total is not null && !NumOps.ToDouble(total[0]).Equals(0.0);
+    }
+
+    // Exact, like the engine reduction: -0 is zero, and NaN is non-zero (the gradient reached the parameters).
+    private static bool HostAnyNonZero(Tensor<T> gradient)
+    {
+        var values = (gradient.IsContiguous ? gradient : gradient.Contiguous()).AsSpan();
+        var comparer = EqualityComparer<T>.Default;
+        T zero = NumOps.Zero;
+        for (int i = 0; i < values.Length; i++)
+        {
+            if (!comparer.Equals(values[i], zero)) return true;
+        }
+        return false;
     }
 
     private static (Tensor<T> Live, Tensor<T> Saved)[] SnapshotTrainedTensors(FusedTrainingStepRequest<T> request)

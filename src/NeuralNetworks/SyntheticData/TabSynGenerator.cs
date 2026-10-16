@@ -359,52 +359,17 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     }
 
     /// <summary>
-    /// Trains the TabSyn network using the provided input and expected output.
-    /// </summary>
-    /// <param name="input">The input data tensor.</param>
-    /// <param name="expectedOutput">The expected reconstruction tensor.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This runs a single training step for the VAE.
-    /// The full two-phase training (VAE then diffusion) happens in Fit().
-    /// This method is provided for compatibility with the NeuralNetworkBase pattern.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // Single-step encoder training for NeuralNetworkBase compatibility (the
-        // full two-phase VAE + latent-diffusion training runs in Fit). The encoder
-        // is the Layers chain, so TrainWithTape backpropagates through it; the
-        // previous body called _optimizer.UpdateParameters(Layers) without a
-        // backward and threw "Backward pass must be called before updating
-        // parameters".
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <summary>
     /// Runs one optimizer step over the parameters of the given <paramref name="layers"/>
     /// using gradients from <paramref name="tape"/> for the precomputed scalar
     /// <paramref name="loss"/>. Lets the two training phases (VAE, latent diffusion)
     /// each update only their own sub-network from a tape-tracked loss.
     /// </summary>
-    private void TapeStepOver(GradientTape<T> tape, Tensor<T> loss, IEnumerable<ILayer<T>> layers)
+    private void EagerStepOver(Func<Tensor<T>> objective, IEnumerable<ILayer<T>> layers)
     {
         var layerList = layers.Where(l => l is not null).ToList();
-        var trainable = Training.TapeTrainingStep<T>.CollectParameters(layerList);
-        if (trainable.Count == 0) return;
-        var grads = tape.ComputeGradients(loss, trainable);
-        T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
-        LastLoss = lossValue;
-        var ctx = new TapeStepContext<T>(trainable, grads, lossValue);
-        _optimizer.Step(ctx);
+        if (Training.TapeTrainingStep<T>.CollectParameters(layerList).Count == 0) return;
+        LastLoss = Training.TapeTrainingStepper<T>.EagerObjectiveStep(
+            () => Training.TapeTrainingStep<T>.CollectParameters(layerList), objective, _optimizer);
     }
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
@@ -855,15 +820,12 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         for (int row = startRow; row < endRow; row++)
         {
             var inputTensor = VectorToTensor(GetRow(transformedData, row));
-
-            using var tape = new GradientTape<T>();
-            var encoderOutput = EncoderForwardOnTape(inputTensor);
-            var (mean, logVar) = SplitEncoderOutput(encoderOutput);
-            var z = Reparameterize(mean, logVar);
-            var rawOutput = DecoderForward(z);
-            var loss = ComputeElboLossTape(rawOutput, inputTensor, mean, logVar);
-
-            TapeStepOver(tape, loss, vaeLayers);
+            EagerStepOver(() =>
+            {
+                var (mean, logVar) = SplitEncoderOutput(EncoderForwardOnTape(inputTensor));
+                var rawOutput = DecoderForward(Reparameterize(mean, logVar));
+                return ComputeElboLossTape(rawOutput, inputTensor, mean, logVar);
+            }, vaeLayers);
         }
     }
 
@@ -1025,12 +987,11 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
                 }
             }
 
-            using var tape = new GradientTape<T>();
-            var predictedNoise = DiffusionMLPForwardOnTape(noisy, timeEmbed);
             // ε-prediction MSE (Ho et al. 2020) on the VAE latent codes (Zhang et al. 2024 TabSyn).
-            var diff2 = Engine.TensorSubtract(predictedNoise, VectorToTensor(actualNoise));
-            var loss = ReduceToScalar(Engine.TensorSquare(diff2));
-            TapeStepOver(tape, loss, _diffMLPLayers);
+            var noiseTarget = VectorToTensor(actualNoise);
+            EagerStepOver(
+                () => ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(DiffusionMLPForwardOnTape(noisy, timeEmbed), noiseTarget))),
+                _diffMLPLayers);
         }
     }
 

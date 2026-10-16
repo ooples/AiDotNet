@@ -560,29 +560,6 @@ public partial class LayoutGraph<T> : DocumentNeuralNetworkBase<T>, ILayoutDetec
         return output;
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-
-        SetTrainingMode(true);
-        try
-        {
-            // TrainWithTape performs the complete forward + backward + optimizer step over the tape. The
-            // previous code then ALSO ran a manual UpdateParameters(CollectGradients()) gradient-descent step
-            // on top of it — a double update that reads gradients TrainWithTape already consumed and pushes
-            // the weights past the tape's step. One tape step is the correct, complete update.
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            // Restore inference mode even if TrainWithTape throws, so a failed step doesn't leave
-            // BatchNorm/Dropout stuck in training mode for subsequent inference.
-            SetTrainingMode(false);
-        }
-    }
-
     // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
 

@@ -183,6 +183,10 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new TimeGANOptions<T>()).MaxGradNorm)
     {
         _options = options;
+        // Through the base's Options: that is what seeds the layer-initialization scope from Options.Seed, so the
+        // recurrent stacks InitializeLayers builds get reproducible weights. Without it two fits with one seed started
+        // from different weights.
+        Options = _options;
         ValidateOptions();
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>
@@ -717,8 +721,6 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         var realEmbeddings = EmbedderForwardBatched(xBatch, isTraining: false);
         var (ht, htNext) = BuildAdjacentLatentBatch(realEmbeddings);
 
-        using var tape = new GradientTape<T>();
-
         var genSupLayers = new List<ILayer<T>>();
         genSupLayers.AddRange(Layers);
         if (_generatorOutput is not null) genSupLayers.Add(_generatorOutput);
@@ -726,76 +728,48 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         if (_supervisorOutput is not null) genSupLayers.Add(_supervisorOutput);
         var paramsList = TapeTrainingStep<T>.CollectParameters(genSupLayers);
 
-        // Adversarial term: minimize -log σ(D(s(g(z))))
+        // The step's noise and real latent pairs travel in its packed input, which a compiled plan rebinds on every
+        // replay; the forward returns the joint objective itself. Adversarial term: minimize -log σ(D(s(g(z)))), with
+        // the discriminator read in inference mode and not trained.
         int advBatch = Math.Max(1, supervisedBatch);
         var noise = GenerateNoiseBatchTensor(advBatch, sequenceLength, hiddenDim);
-        var fakeEmb = GeneratorForwardBatched(noise, isTraining: true);
-        var fakeSup = SupervisorForwardBatched(fakeEmb, isTraining: true);
-        var fakeScores = DiscriminatorForwardBatched(fakeSup, isTraining: false);
-        var advAxes = Enumerable.Range(0, fakeScores.Shape.Length).ToArray();
-        var advLoss = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(fakeScores), advAxes, keepDims: false));
+        bool supervised = supervisedBatch > 0;
+        int[] noiseShape = noise._shape;
+        int[] latentShape = ht._shape;
+        int noiseLength = noise.Length;
+        int latentLength = ht.Length;
+        double supervisedWeight = _options.SupervisedWeight;
 
-        Tensor<T> lossTensor;
-        if (supervisedBatch > 0)
+        Tensor<T> JointObjective(Tensor<T> packed)
         {
-            // Supervised term: L_S = E[||h_{t+1} − s(h_t)||_2^2] on real
-            // sequence pairs. Embedder is frozen by Phase 1 and runs
-            // outside the tape; the supervisor remains tape-tracked so its
-            // gradient flows.
-            var htPred = SupervisorForwardBatched(ht, isTraining: true);
-            var diff = Engine.TensorSubtract(htPred, htNext);
+            var stepNoise = StepInputPacking<T>.Slice(packed, 0, noiseShape);
+            var fakeScores = DiscriminatorForwardBatched(
+                SupervisorForwardBatched(GeneratorForwardBatched(stepNoise, isTraining: true), isTraining: true), isTraining: false);
+            var advAxes = Enumerable.Range(0, fakeScores.Shape.Length).ToArray();
+            var advLoss = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(fakeScores), advAxes, keepDims: false));
+            if (!supervised)
+            {
+                // No paired data (sequence too short for next-step pairing): adversarial-only for this batch.
+                return advLoss;
+            }
+
+            // Supervised term: L_S = E[||h_{t+1} - s(h_t)||_2^2] on real sequence pairs; the embedder is frozen by
+            // Phase 1, so the pairs are data. Yoon 2019 weights L_U and L_S equally in the joint phase.
+            var htPred = SupervisorForwardBatched(StepInputPacking<T>.Slice(packed, noiseLength, latentShape), isTraining: true);
+            var diff = Engine.TensorSubtract(htPred, StepInputPacking<T>.Slice(packed, noiseLength + latentLength, latentShape));
             var sq = Engine.TensorMultiply(diff, diff);
-            var supAxes = Enumerable.Range(0, sq.Shape.Length).ToArray();
-            var supLoss = Engine.ReduceMean(sq, supAxes, keepDims: false);
-
-            // Yoon 2019 uses equal weighting between L_U and L_S in the
-            // joint phase; expose γ via options later if needed.
-            var weightedSup = Engine.TensorMultiplyScalar(supLoss, NumOps.FromDouble(_options.SupervisedWeight));
-            lossTensor = Engine.TensorAdd(advLoss, weightedSup);
-        }
-        else
-        {
-            // No paired data available (sequence too short for next-step
-            // pairing) — fall back to adversarial-only for this batch.
-            lossTensor = advLoss;
+            var supLoss = Engine.ReduceMean(sq, Enumerable.Range(0, sq.Shape.Length).ToArray(), keepDims: false);
+            return Engine.TensorAdd(advLoss, Engine.TensorMultiplyScalar(supLoss, NumOps.FromDouble(supervisedWeight)));
         }
 
-        var grads = tape.ComputeGradients(lossTensor, paramsList);
-        T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-
-        // Replay-correct closure for the joint phase: lossTensor combined
-        // adversarial (advLoss) AND, when supervisedBatch > 0, the weighted
-        // supervised next-step term. RecomputeLoss must reproduce the full
-        // sum so optimizer.Step replays stay tied to the objective that
-        // produced `grads` — replaying only the adversarial part silently
-        // drops the temporal-supervision phase-3 contribution.
-        int capturedSupervisedBatch = supervisedBatch;
-        var capturedHt = ht;
-        var capturedHtNext = htNext;
-        var capturedAdvAxes = advAxes;
-        double capturedSupWeight = _options.SupervisedWeight;
-        Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => DiscriminatorForwardBatched(
-            SupervisorForwardBatched(GeneratorForwardBatched(inp, true), true), false);
-        Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _)
-        {
-            var adv = Engine.TensorNegate(Engine.ReduceMean(LogSigmoid(pred), capturedAdvAxes, keepDims: false));
-            if (capturedSupervisedBatch <= 0) return adv;
-            var htPred = SupervisorForwardBatched(capturedHt, isTraining: true);
-            var diff = Engine.TensorSubtract(htPred, capturedHtNext);
-            var sq = Engine.TensorMultiply(diff, diff);
-            var supAxes = Enumerable.Range(0, sq.Shape.Length).ToArray();
-            var supLoss = Engine.ReduceMean(sq, supAxes, keepDims: false);
-            var weightedSup = Engine.TensorMultiplyScalar(supLoss, NumOps.FromDouble(capturedSupWeight));
-            return Engine.TensorAdd(adv, weightedSup);
-        }
-
-        var context = new TapeStepContext<T>(
-            paramsList, grads, lossValue,
-            noise, noise, ComputeForward, RecomputeLoss,
-            parameterBuffer: null);
-        _generatorOptimizer.Step(context);
+        var packedInput = supervised ? StepInputPacking<T>.Pack(noise, ht, htNext) : StepInputPacking<T>.Pack(noise);
+        FusedTrainingStep<T>.Step(
+            this, genSupLayers.OfType<ITrainableLayer<T>>().ToList(), packedInput, packedInput,
+            forward: JointObjective,
+            computeLoss: (loss, _) => loss,
+            optimizer: _generatorOptimizer,
+            extraTensors: paramsList);
     }
-
     /// <summary>
     /// Builds a batch of complete sequences as <c>[batch, time, features]</c>.
     /// Keeping the time axis is required for every recurrent TimeGAN component.

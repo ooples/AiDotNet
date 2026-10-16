@@ -1186,8 +1186,10 @@ public static class CompiledTapeTrainingStep<T>
             // every plan.Step() (including the implicit one inside the
             // compile lambda) reads from these refs, so writing to them
             // here makes the new data visible.
-            input.AsSpan().CopyTo(_persistentInput!.AsWritableSpan());
-            target.AsSpan().CopyTo(_persistentTarget!.AsWritableSpan());
+            // A view (a slice, a shifted window) is materialized first: only a contiguous tensor has one span, and a
+            // view input used to throw here, sending every step of a model that passes slices to the eager tape.
+            input.Contiguous().AsSpan().CopyTo(_persistentInput!.AsWritableSpan());
+            target.Contiguous().AsSpan().CopyTo(_persistentTarget!.AsWritableSpan());
 
             // Force layer initialization before collecting parameters — DenseLayer
             // replaces _weights with a new tensor on first Forward.

@@ -2302,31 +2302,24 @@ public abstract partial class NoisePredictorBase<T> : INoisePredictor<T>, IModel
         Func<Tensor<T>, Tensor<T>, Tensor<T>>? lossBuilder = null,
         Func<Tensor<T>, Tensor<T>>? forwardBuilder = null)
     {
-        using var tape = new GradientTape<T>();
+        var result = new Dictionary<Tensor<T>, Tensor<T>>();
+        AiDotNet.Training.TapeGradients<T>.Of(
+            () =>
+            {
+                var predicted = forwardBuilder is not null ? forwardBuilder(input) : Forward(input);
+                if (lossBuilder is not null)
+                    return lossBuilder(predicted, target);
 
-        // Forward pass (recorded by the engine).
-        var predicted = forwardBuilder is not null
-            ? forwardBuilder(input)
-            : Forward(input);
-
-        Tensor<T> loss;
-        if (lossBuilder is not null)
-        {
-            loss = lossBuilder(predicted, target);
-        }
-        else
-        {
-            // Default: MSE = mean((predicted - target)^2). Tape-recorded so AD works.
-            var diff = Engine.TensorSubtract(predicted, target);
-            var squared = Engine.TensorMultiply(diff, diff);
-            var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
-            loss = Engine.ReduceMean(squared, allAxes, keepDims: false);
-        }
-
-        // Reverse-mode AD: compute gradients for all trainable parameters
-        return tape.ComputeGradients(loss, trainableParams);
+                // Default: MSE loss using engine ops so the tape records the backward graph.
+                var diff = Engine.TensorSubtract(predicted, target);
+                var squared = Engine.TensorMultiply(diff, diff);
+                var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
+                return Engine.ReduceMean(squared, allAxes, keepDims: false);
+            },
+            trainableParams,
+            gradients => result = gradients);
+        return result;
     }
-
     /// <summary>
     /// Extracts accumulated parameter gradients from all layers after backpropagation.
     /// </summary>

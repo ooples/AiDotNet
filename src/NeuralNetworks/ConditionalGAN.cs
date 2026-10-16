@@ -368,16 +368,27 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
             Tensor<T> generatorInput = ConcatenateTensors(noise, conditions);
             Tensor<T> fakeImages = PredictBatched(Generator, generatorInput);
 
-            T discriminatorLoss;
-            using (var discriminatorTape = new GradientTape<T>())
-            {
-                var realScores = Discriminator.ForwardForTraining(ConcatenateImageAndCondition(realImages, conditions));
-                var fakeScores = Discriminator.ForwardForTraining(ConcatenateImageAndCondition(fakeImages, conditions));
-                var discriminatorObjective = Engine.TensorAdd(
-                    Discriminator.BinaryCrossEntropyOnTape(realScores, targetIsReal: true),
-                    Discriminator.BinaryCrossEntropyOnTape(fakeScores, targetIsReal: false));
-                discriminatorLoss = StepOnTape(discriminatorTape, discriminatorObjective, Discriminator, DiscriminatorOptimizer);
-            }
+            // On the discriminator's fused session, with the real and generated samples and their conditions packed
+            // into the step's data, which a compiled plan rebinds on every replay.
+            int[] realShape = realImages._shape;
+            int[] fakeShape = fakeImages._shape;
+            int[] conditionShape = conditions._shape;
+            int realLength = realImages.Length;
+            int fakeLength = fakeImages.Length;
+            T discriminatorLoss = Discriminator.TrainObjectiveFused(
+                Training.StepInputPacking<T>.Pack(realImages, fakeImages, conditions),
+                packed =>
+                {
+                    var stepConditions = Training.StepInputPacking<T>.Slice(packed, realLength + fakeLength, conditionShape);
+                    var realScores = Discriminator.ForwardForTraining(ConcatenateImageAndCondition(
+                        Training.StepInputPacking<T>.Slice(packed, 0, realShape), stepConditions));
+                    var fakeScores = Discriminator.ForwardForTraining(ConcatenateImageAndCondition(
+                        Training.StepInputPacking<T>.Slice(packed, realLength, fakeShape), stepConditions));
+                    return Engine.TensorAdd(
+                        Discriminator.BinaryCrossEntropyOnTape(realScores, targetIsReal: true),
+                        Discriminator.BinaryCrossEntropyOnTape(fakeScores, targetIsReal: false));
+                },
+                DiscriminatorOptimizer);
 
             // ----- Train Generator -----
             T generatorLoss = TrainGeneratorOnBatch(generatorInput);
@@ -406,12 +417,13 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         // Train generator to fool discriminator (adversarial objective)
         Generator.SetTrainingMode(true);
         var trainableGen = (NeuralNetworkBase<T>)Generator;
-        return trainableGen.TrainWithCustomLoss(generatorInput, genOutput =>
+        return trainableGen.TrainWithCustomLossFused(generatorInput, (stepInput, genOutput) =>
         {
-            // Concatenate generator output with conditions for discriminator
-            var conditions = Engine.TensorSlice(generatorInput,
+            // Concatenate generator output with conditions for discriminator. The conditions come from the step's own
+            // input, which a compiled plan rebinds on every replay.
+            var conditions = Engine.TensorSlice(stepInput,
                 new[] { 0, Generator.Architecture.InputSize - _numConditionClasses },
-                new[] { generatorInput.Shape[0], _numConditionClasses });
+                new[] { stepInput.Shape[0], _numConditionClasses });
             var withConditions = ConcatenateImageAndCondition(genOutput, conditions);
 
             // On the tape, with the discriminator frozen. Discriminator.Predict opened a NoGradScope and

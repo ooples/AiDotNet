@@ -304,11 +304,13 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
     /// optimizer (the paper's Adam by default). Both paths used to apply a hard-coded SGD step at 0.001 and never
     /// read the configured optimizer.
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The supervised loss plus the time-frequency contrastive term (Zhang et al. 2022), both from one forward of the
+    /// step's input.
+    /// </remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> target)
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
         var loss = LossFunction;
 
         // The contrastive term reads the step's input, so it is computed inside the forward (which receives the
@@ -339,17 +341,15 @@ public partial class TFC<T> : TimeSeriesFoundationModelBase<T>
 
         // Every training entry point on the base puts the layers in training mode for the step; without it the
         // encoders' dropout stays in inference mode.
-        SetTrainingMode(true);
-        try
+        return new[]
         {
-            TrainCustomTapeStep(input, target, ForwardCombined, ComputeLossCombined, _optimizer,
-                () => Training.TapeTrainingStep<T>.CollectParameters(Layers));
-            StepSchedulerIfSupported(_optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+            new Training.TrainingObjective<T>(
+                new[] { input, target },
+                data => ComputeLossCombined(ForwardCombined(data[0]), data[1]))
+            {
+                Parameters = () => Training.TapeTrainingStep<T>.CollectParameters(Layers),
+            },
+        };
     }
 
     /// <summary>

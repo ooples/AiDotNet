@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 
@@ -20,25 +21,27 @@ internal static class PolicyGradientRollout<T>
     /// <summary>The per-step loss weights adv_t · 0.5 / σ², from the discounted returns whitened over the episode.</summary>
     public static double[] LossWeights(IReadOnlyList<double> rewards, double gamma, double sigma)
     {
-        int n = rewards.Count;
-        var returns = new double[n];
+        var returns = DiscountedReturns(rewards, gamma);
+        int n = returns.Length;
+        double mean = returns.Average();
+        double var = returns.Sum(r => (r - mean) * (r - mean));
+        double std = Math.Sqrt(var / Math.Max(1, n)) + 1e-8;
+
+        double halfInvSigma2 = 0.5 / (sigma * sigma);
+        return returns.Select(r => halfInvSigma2 * (r - mean) / std).ToArray();
+    }
+
+    /// <summary>G_t = r_t + γ·G_{t+1}, accumulated from the end of the episode.</summary>
+    private static double[] DiscountedReturns(IReadOnlyList<double> rewards, double gamma)
+    {
+        var returns = new double[rewards.Count];
         double g = 0;
-        for (int t = n - 1; t >= 0; t--)
+        for (int t = rewards.Count - 1; t >= 0; t--)
         {
             g = rewards[t] + gamma * g;
             returns[t] = g;
         }
-        double mean = 0;
-        for (int t = 0; t < n; t++) mean += returns[t];
-        mean /= n;
-        double var = 0;
-        for (int t = 0; t < n; t++) var += (returns[t] - mean) * (returns[t] - mean);
-        double std = Math.Sqrt(var / Math.Max(1, n)) + 1e-8;
-
-        double halfInvSigma2 = 0.5 / (sigma * sigma);
-        var weights = new double[n];
-        for (int t = 0; t < n; t++) weights[t] = halfInvSigma2 * (returns[t] - mean) / std;
-        return weights;
+        return returns;
     }
 
     /// <summary>The states as <c>[stateDim, n]</c>, one column per step.</summary>

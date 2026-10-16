@@ -408,23 +408,14 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
             var visible = BuildPatchMask(mask, numTubelets, 1, keepMasked: false);
             var maskedOnly = BuildPatchMask(mask, numTubelets, 1, keepMasked: true);
             var target = BuildReconstructionTarget(clip, patchesH, patchesW);
-            var clipShape = clip._shape;
-            var mapShape = visible._shape;
-            var targetShape = target._shape;
-            int patchDim = targetShape[1];
+            int patchDim = target.Shape[1];
 
-            Tensor<T> Forward(Tensor<T> packed)
-            {
-                var stepClip = Training.StepInputPacking<T>.Slice(packed, 0, clipShape);
-                var stepVisible = Training.StepInputPacking<T>.Slice(packed, clip.Length, mapShape);
-                return DecodeForReconstruction(EncodeVisiblePatches(stepClip, stepVisible));
-            }
-
-            Tensor<T> Loss(Tensor<T> reconstruction, Tensor<T> packed)
-                => MaskedReconstructionLoss(
-                    reconstruction, Training.StepInputPacking<T>.Slice(packed, 0, targetShape), Training.StepInputPacking<T>.Slice(packed, target.Length, mapShape), patchDim);
-
-            return TrainCustomTapeStep(Training.StepInputPacking<T>.Pack(clip, visible), Training.StepInputPacking<T>.Pack(target, maskedOnly), Forward, Loss, _optimizer);
+            // The clip, its visibility map, the reconstruction target and the masked-patch map are the step's data, so
+            // a compiled plan replays each clip with its own mask.
+            return TrainDeclaredObjective(new Training.TrainingObjective<T>(
+                new[] { clip, visible, target, maskedOnly },
+                data => MaskedReconstructionLoss(
+                    DecodeForReconstruction(EncodeVisiblePatches(data[0], data[1])), data[2], data[3], patchDim)));
         }
         finally
         {
@@ -538,25 +529,6 @@ public partial class VideoMAE<T> : NeuralNetworkBase<T>
         var probe = new Tensor<T>([1, _tubeletSize, _channels, _height, _width]);
         var features = EncodeVideo(probe);
         ClassificationForward(features);
-    }
-
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-        {
-            throw new InvalidOperationException("Training is not supported in ONNX mode. Use native mode constructor for training.");
-        }
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
     }
 
     #endregion

@@ -437,7 +437,7 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
         // Train generator: minimize -mean(Critic(fake)) (Wasserstein objective with GP)
         Tensor<T> newNoise = GenerateRandomNoiseTensor(noise.Shape[0], Generator.Architecture.InputSize);
         var trainableGen = (NeuralNetworkBase<T>)Generator;
-        T generatorLoss = trainableGen.TrainWithCustomLoss(ShapeAsGeneratorInput(newNoise), genOutput =>
+        T generatorLoss = trainableGen.TrainWithCustomLossFused(ShapeAsGeneratorInput(newNoise), (_, genOutput) =>
         {
             // Keep the critic forward on the generator's active tape. Predict() is an
             // inference API and deliberately suppresses gradient recording; using it here
@@ -590,6 +590,9 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
             // input-gradient norm back into the critic weights, just as PyTorch's autograd.grad
             // and the paper's official TensorFlow implementation do.
             Tensor<T> inputGradients;
+            // Outside the step arena: the input gradients this inner tape builds outlive it, and an arena may reissue a
+            // step's tensors at a tape boundary (AiDotNet.Tensors 0.135.0+), corrupting the penalty's backward.
+            using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
             using (var innerTape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>())
             {
                 var interpolatedScores = Critic.ForwardForTraining(interpolated);

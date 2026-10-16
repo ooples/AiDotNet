@@ -442,27 +442,6 @@ public partial class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILan
     }
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!SupportsTraining)
-            throw new InvalidOperationException("Cannot train in ONNX mode.");
-
-        SetTrainingMode(true);
-        try
-        {
-            // TrainWithTape performs the complete forward, loss, backward, and
-            // configured-optimizer step.  The previous implementation calculated
-            // a loss derivative and discarded it, then asked the optimizer to
-            // update layers that had never received gradients.
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <inheritdoc/>
     /// <remarks>
     /// Runs the SAME MFCC front end prediction runs. Without it the training forward fed the raw
     /// waveform straight into a stack whose first layer expects cepstral frames, so the objective

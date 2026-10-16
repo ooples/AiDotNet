@@ -227,7 +227,7 @@ public partial class EnCodec<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
     {
         int nq = numQuantizers ?? _options.NumQuantizers;
         double bitsPerToken = Math.Log(_options.CodebookSize) / Math.Log(2.0);
-        return nq * TokenFrameRate * bitsPerToken;
+        return (double)nq * TokenFrameRate * bitsPerToken;
     }
 
     #endregion
@@ -248,20 +248,6 @@ public partial class EnCodec<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
         var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
     }
 
     /// <inheritdoc />

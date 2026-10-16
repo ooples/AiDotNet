@@ -143,26 +143,6 @@ public partial class CIFEncoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
         }
     }
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-        {
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        }
-
-        SetTrainingMode(true);
-        try
-        {
-            // CIF supervision is applied for the duration of the step by the shared helper.
-            TrainWithCifSupervision(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being

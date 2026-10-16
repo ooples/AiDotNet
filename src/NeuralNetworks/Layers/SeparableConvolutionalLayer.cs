@@ -591,7 +591,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
     private void InitializeParameters()
     {
         // Use He initialization for kernels
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_kernelSize * _kernelSize * _inputDepth)));
+        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / ((double)_kernelSize * _kernelSize * _inputDepth)));
         InitializeTensor(_depthwiseKernels, scale);
         InitializeTensor(_pointwiseKernels, scale);
 

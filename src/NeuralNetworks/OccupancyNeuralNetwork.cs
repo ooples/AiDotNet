@@ -452,54 +452,6 @@ public partial class OccupancyNeuralNetwork<T> : VectorModelLayoutBase<T>
                 InitialLearningRate = _options.BaseOptimizerInitialLearningRate
             });
 
-    /// <summary>
-    /// Trains the neural network on sensor data and occupancy labels.
-    /// </summary>
-    /// <param name="input">The input tensor containing sensor data.</param>
-    /// <param name="expectedOutput">The expected output tensor containing occupancy information.</param>
-    /// <remarks>
-    /// <para>
-    /// This method trains the occupancy neural network by comparing its predictions with expected
-    /// occupancy values. It handles both temporal and non-temporal training data formats.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method teaches the network to accurately detect occupancy 
-    /// by showing it examples of sensor readings and the correct occupancy levels.
-    /// 
-    /// The training process follows these steps:
-    /// 1. The network processes the sensor readings
-    /// 2. Its prediction is compared to the actual occupancy value
-    /// 3. The difference (error) is used to adjust the network's internal settings
-    /// 4. This process repeats with many examples until the network becomes accurate
-    /// 
-    /// The network automatically handles different data formats depending on whether it's
-    /// configured to analyze patterns over time (temporal) or just current readings.
-    /// Over time, the network becomes better at recognizing the subtle patterns in
-    /// sensor data that indicate human presence.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // Tape-based forward+backward+parameter-update path used by every
-        // supervised NeuralNetworkBase consumer. The previous body was an
-        // empty if/else stub that left training as a no-op — Train was being
-        // called but nothing was learning, so LossStrictlyDecreasesOnMemorization
-        // / Training_ShouldChangeParameters / OptimizerStep invariants all
-        // failed with "loss didn't decrease" / "parameters unchanged".
-        // Both temporal and non-temporal occupancy data flow through the same
-        // Layers chain (CreateDefaultOccupancyLayers / CreateDefaultOccupancyTemporalLayers),
-        // so a single TrainWithTape delegation covers both branches.
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
 
 
     /// <summary>

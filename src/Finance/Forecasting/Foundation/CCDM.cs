@@ -372,41 +372,37 @@ public partial class CCDM<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
     /// step fresh.
     /// </para>
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// One denoising batch over every window: antithetic draws per window, packed with their layout so a compiled plan
+    /// replays each step's own draws.
+    /// </remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-        if (expectedOutput.Length <= 0) return;
+        if (expectedOutput.Length <= 0) return Array.Empty<Training.TrainingObjective<T>>();
 
-        // Every training entry point on the base puts the layers in training mode for the duration
-        // of the step; without it the dropout layers stay in inference mode.
-        SetTrainingMode(true);
-        try
+        var windows = SplitWindows(input);
+        var targets = SplitTargets(expectedOutput, windows.Count);
+        var rand = _trainingRandom;
+
+        var draws = new List<DenoisingDraw>(windows.Count);
+        for (int w = 0; w < windows.Count; w++)
+            draws.Add(DrawDenoisingBatch(windows[w], targets[w], rand, antithetic: true));
+
+        // Everything this step draws (steps, noise, contrastive negatives) travels in the packed input and target,
+        // so the shared fused session's compiled plan replays this step's draws instead of the first step's. The
+        // layout depends only on the input shape and the options, so it is the same on every replay.
+        var batch = BuildTrainingBatch(draws, RandomHelper.CreateSeededRandom(rand.Next()));
+        var layout = batch.Layout;
+        return new[]
         {
-            var windows = SplitWindows(input);
-            var targets = SplitTargets(expectedOutput, windows.Count);
-            var rand = _trainingRandom;
-
-            var draws = new List<DenoisingDraw>(windows.Count);
-            for (int w = 0; w < windows.Count; w++)
-                draws.Add(DrawDenoisingBatch(windows[w], targets[w], rand, antithetic: true));
-
-            // Everything this step draws (steps, noise, contrastive negatives) travels in the packed input and target,
-            // so the shared fused session's compiled plan replays this step's draws instead of the first step's. The
-            // layout depends only on the input shape and the options, so it is the same on every replay.
-            var batch = BuildTrainingBatch(draws, RandomHelper.CreateSeededRandom(rand.Next()));
-            var layout = batch.Layout;
-            TrainCustomTapeStep(batch.Input, batch.Target,
-                packed => ForwardTrainingBatch(packed, layout),
-                (predicted, packedTarget) => TrainingBatchLoss(predicted, packedTarget, layout),
-                _optimizer,
-                () => Training.TapeTrainingStep<T>.CollectParameters(Layers));
-            StepSchedulerIfSupported(_optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+            new Training.TrainingObjective<T>(
+                new[] { batch.Input, batch.Target },
+                data => TrainingBatchLoss(ForwardTrainingBatch(data[0], layout), data[1], layout))
+            {
+                Parameters = () => Training.TapeTrainingStep<T>.CollectParameters(Layers),
+            },
+        };
     }
 
     /// <summary>

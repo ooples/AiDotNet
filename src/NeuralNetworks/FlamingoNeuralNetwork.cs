@@ -351,7 +351,7 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         {
             for (int j = 0; j < embeddings.Shape[1]; j++)
             {
-                double angle = i / Math.Pow(10000, 2.0 * (j / 2) / embeddings.Shape[1]);
+                double angle = i / Math.Pow(10000, (double)(j - j % 2) / embeddings.Shape[1]);   // 2*(j/2): the sin/cos pair index
                 double value = j % 2 == 0 ? Math.Sin(angle) : Math.Cos(angle);
                 embeddings[i, j] = NumOps.FromDouble(value);
             }
@@ -1007,25 +1007,6 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
             ["vision_features"] = visionFeatures.Clone(),
             ["perceiver_features"] = perceiverFeatures.Clone(),
         };
-    }
-
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // try/finally: SetTrainingMode(false) used to run only on the success path, so any throw from
-        // TrainWithTape -- a shape mismatch, a non-finite gradient, an OOM -- escaped with the model
-        // still in training mode. Dropout then stayed stochastic and BatchNorm kept updating its
-        // running statistics on every later Predict, making inference silently non-deterministic long
-        // after the error that caused it was handled.
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
     }
 
     // The layer streams this model holds outside Layers are discovered by ModelParameterGenerator and surfaced automatically; the hand-written hook that used to sit here was an override wearing a different name.
