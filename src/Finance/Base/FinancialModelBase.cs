@@ -132,6 +132,10 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
     public virtual bool UseNativeMode => _baseUseNativeMode;
 
     /// <inheritdoc/>
+    protected override string? TrainingUnavailableReason =>
+        UseNativeMode ? base.TrainingUnavailableReason : OnnxTrainingUnavailableReason;
+
+    /// <inheritdoc/>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Training only works in native mode. ONNX mode is
@@ -733,7 +737,7 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
         SetTrainingMode(true);
         try
         {
-            RunTrainingStep(input, expectedOutput);
+            RunWithTrainingStepHooks(input, expectedOutput, () => RunTrainingStep(input, expectedOutput));
         }
         finally
         {

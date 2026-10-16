@@ -582,37 +582,15 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }
 
-    /// <summary>
-    /// Trains the model.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the GraphWaveNet model, Train performs a training step. This updates the GraphWaveNet architecture so it learns from data.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
+    /// <inheritdoc/>
+    /// <remarks>After a step, the adaptive graph is refreshed from the node embeddings.</remarks>
+    protected override void OnTrainingStepEnded(bool succeeded)
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        base.Train(input, target);
-
-        // Adaptive graph state (_nodeEmbedding1 / _nodeEmbedding2) lives
-        // outside Layers and so doesn't get gradients from the shared
-        // tape path. Keep it on a training trajectory: feed the most
-        // recent loss magnitude into UpdateNodeEmbeddingsFromGradient
-        // (which is itself a loss-scaled random-perturbation update in
-        // this simplified R-GCN port) and then refresh the adaptive
-        // adjacency matrix so downstream inference uses the updated
-        // embeddings.
-        if (_useAdaptiveGraph)
-        {
-            var lossVec = new Vector<T>(new[] { LastLoss is not null ? LastLoss : NumOps.FromDouble(1e-3) });
-            UpdateNodeEmbeddingsFromGradient(lossVec);
-            UpdateAdaptiveAdjacency();
-        }
+        if (!succeeded || !_useAdaptiveGraph) return;
+        var lossVec = new Vector<T>(new[] { LastLoss is not null ? LastLoss : NumOps.FromDouble(1e-3) });
+        UpdateNodeEmbeddingsFromGradient(lossVec);
+        UpdateAdaptiveAdjacency();
     }
-
     /// <summary>
     /// Training-mode forward: calls <see cref="Forward"/> directly so
     /// dropout and the adaptive-graph conv stay in training mode under

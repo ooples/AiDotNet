@@ -573,40 +573,15 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }
 
-    /// <summary>
-    /// Trains the MTGNN model on a batch of input-target pairs.
-    /// </summary>
-    /// <param name="input">Input tensor with historical data for all nodes.</param>
-    /// <param name="target">Target tensor with future values for all nodes.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Training jointly optimizes:
-    /// 1. Node embeddings (for graph structure discovery)
-    /// 2. Mix-hop propagation weights (for spatial aggregation)
-    /// 3. Temporal convolution weights (for time pattern learning)
-    ///
-    /// The graph structure evolves during training as embeddings are updated.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
+    /// <inheritdoc/>
+    /// <remarks>After a step, the learned graph is refreshed from the node embeddings.</remarks>
+    protected override void OnTrainingStepEnded(bool succeeded)
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        base.Train(input, target);
-
-        // Node embeddings + the learned adjacency live outside Layers
-        // (double[,] fields, not Tensor<T>), so the tape-based base
-        // trainer can't compute their gradients. Preserve the pre-
-        // refactor training trajectory for that state: step the
-        // gradient-scaled random-perturbation update on the embeddings
-        // using the most recent loss as the gradient magnitude, then
-        // rebuild the adaptive adjacency so downstream inference uses
-        // the updated values.
+        if (!succeeded) return;
         var lossVec = new Vector<T>(new[] { LastLoss is not null ? LastLoss : NumOps.FromDouble(1e-3) });
         UpdateNodeEmbeddingsFromGradient(lossVec);
         UpdateAdaptiveAdjacency();
     }
-
     /// <summary>
     /// Training-mode forward: mirrors <see cref="Forward"/> but swaps
     /// <see cref="ApplyMixHopPropagation"/> for

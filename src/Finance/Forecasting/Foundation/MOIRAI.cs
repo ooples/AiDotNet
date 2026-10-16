@@ -747,31 +747,9 @@ public partial class MOIRAI<T> : TimeSeriesFoundationModelBase<T>
     }
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the MOIRAI model, Train performs a training step. This updates the MOIRAI architecture so it learns from data.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow. For v1 (encoder) MOIRAI
-        // we need to preserve the masked-encoder training objective
-        // that the class description promises, so mask the input first
-        // and hand the masked tensor to base.Train. The decoder-only
-        // path is causal-autoregressive and doesn't use masking, so it
-        // gets the raw input.
-        var trainingInput = _useDecoderOnly ? input : ApplyRandomMasking(input);
-        base.Train(trainingInput, target);
-    }
-
+    /// <remarks>The masked-encoder variant trains on a randomly masked context; the decoder-only one on the raw context.</remarks>
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
+        => (_useDecoderOnly ? input : ApplyRandomMasking(input), target);
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     /// <remarks>

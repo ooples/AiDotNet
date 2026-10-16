@@ -10591,6 +10591,43 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             objective.Parameters);
     }
 
+    /// <summary>
+    /// Runs before each <see cref="Train(Tensor{T}, Tensor{T})"/> step, after the guards: state the step reads, such as
+    /// a teacher-forcing target or posterior returns the forward consumes.
+    /// </summary>
+    /// <param name="input">The training input.</param>
+    /// <param name="target">The training target.</param>
+    protected virtual void OnTrainingStepStarting(Tensor<T> input, Tensor<T> target)
+    {
+    }
+
+    /// <summary>
+    /// Runs after each <see cref="Train(Tensor{T}, Tensor{T})"/> step, whether it succeeded or not: clears what
+    /// <see cref="OnTrainingStepStarting"/> set, and applies updates that follow a successful step (for example an
+    /// adaptive graph refreshed from the new weights).
+    /// </summary>
+    /// <param name="succeeded">Whether the step completed.</param>
+    protected virtual void OnTrainingStepEnded(bool succeeded)
+    {
+    }
+
+    /// <summary>Runs <paramref name="step"/> between <see cref="OnTrainingStepStarting"/> and <see cref="OnTrainingStepEnded"/>.</summary>
+    protected void RunWithTrainingStepHooks(Tensor<T> input, Tensor<T> target, Action step)
+    {
+        Guard.NotNull(step);
+        OnTrainingStepStarting(input, target);
+        bool succeeded = false;
+        try
+        {
+            step();
+            succeeded = true;
+        }
+        finally
+        {
+            OnTrainingStepEnded(succeeded);
+        }
+    }
+
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         Guard.NotNull(input);
@@ -10599,8 +10636,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Once training has begun, the loss is locked (see SetLossFunction) so the loss reported in metrics
         // matches the loss actually optimized.
         _hasBeenTrained = true;
-        if (TryTrainDeclaredObjectives(input, expectedOutput)) return;
-        RunTrainStep(input, expectedOutput, optimizerOverride: null);
+        RunWithTrainingStepHooks(input, expectedOutput, () =>
+        {
+            if (!TryTrainDeclaredObjectives(input, expectedOutput))
+                RunTrainStep(input, expectedOutput, optimizerOverride: null);
+        });
     }
 
     /// <summary>
