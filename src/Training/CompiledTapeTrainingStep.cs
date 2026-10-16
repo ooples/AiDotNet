@@ -416,6 +416,10 @@ public static class CompiledTapeTrainingStep<T>
     /// come loose from the model (ooples/AiDotNet#1822). Null when that cannot be read: no configured plan ran the
     /// last step (a mixed-precision plan, or none), or the plan does not report its parameters.
     /// </summary>
+    /// <summary>The compiled plan the last fused step configured (null if none), compared by reference: a session that
+    /// verified one plan's updates numerically trusts its later replays, but not a plan compiled since.</summary>
+    internal static object? ConfiguredPlanIdentity => _configuredPlan;
+
     internal static bool? ConfiguredPlanTrainsLiveParameters(IEnumerable<Tensor<T>> liveParameters)
     {
         if (CurrentState.planOptimizerStep < 0) return null;
@@ -999,7 +1003,11 @@ public static class CompiledTapeTrainingStep<T>
         object? owner = null,
         // L2 regularization strength applied to each parameter gradient BEFORE clipping (the optimizer's configured
         // L2Regularization; 0 = none). Declines when the linked Tensors plan cannot apply it.
-        double l2Regularization = 0.0)
+        double l2Regularization = 0.0,
+        // When set, a compiled step hands back its loss TENSOR here instead of reading the scalar (lossValue is then
+        // zero). Reading the scalar waits for the device to finish the step; a caller that may never look at the
+        // loss lets the host prepare the next step while the device runs this one.
+        System.Runtime.CompilerServices.StrongBox<Tensor<T>?>? deferredLoss = null)
     {
         if (layers is null) throw new ArgumentNullException(nameof(layers));
         // A model whose whole training surface is raw extra tensors passes no layers; its first extra tensor then
@@ -1019,7 +1027,7 @@ public static class CompiledTapeTrainingStep<T>
         try
         {
             _currentState = state;
-            return TryStepWithFusedOptimizerCore(layers: layers, input: input, target: target, forward: forward, computeLoss: computeLoss, optimizerType: optimizerType, learningRate: learningRate, beta1: beta1, beta2: beta2, epsilon: epsilon, weightDecay: weightDecay, lossValue: out lossValue, maxGradNorm: maxGradNorm, lrSchedule: lrSchedule, eagerOptimizer: eagerOptimizer, useBf16Moments: useBf16Moments, extraTensors: extraTensors, fusedExtras: fusedExtras, onGradients: onGradients, trainableSelection: trainableSelection, l2Regularization: l2Regularization);
+            return TryStepWithFusedOptimizerCore(layers: layers, input: input, target: target, forward: forward, computeLoss: computeLoss, optimizerType: optimizerType, learningRate: learningRate, beta1: beta1, beta2: beta2, epsilon: epsilon, weightDecay: weightDecay, lossValue: out lossValue, maxGradNorm: maxGradNorm, lrSchedule: lrSchedule, eagerOptimizer: eagerOptimizer, useBf16Moments: useBf16Moments, extraTensors: extraTensors, fusedExtras: fusedExtras, onGradients: onGradients, trainableSelection: trainableSelection, l2Regularization: l2Regularization, deferredLoss: deferredLoss);
         }
         finally
         {
@@ -1056,9 +1064,11 @@ public static class CompiledTapeTrainingStep<T>
         // (see NeuralNetworkBase.SelectTrainableParametersForTraining). Null = optimize
         // everything, which is what all but the partial-freeze models want.
         IReadOnlyCollection<Tensor<T>>? trainableSelection = null,
-        double l2Regularization = 0.0)
+        double l2Regularization = 0.0,
+        System.Runtime.CompilerServices.StrongBox<Tensor<T>?>? deferredLoss = null)
     {
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
+        if (deferredLoss is not null) deferredLoss.Value = null;
         // AiDotNet#1395: clear the previous-call's exception buffer so the
         // caller's GetLastFallbackException reflects only the outcome of THIS
         // call. (Cleared on entry, not on success, so a successful step doesn't
@@ -1577,7 +1587,10 @@ public static class CompiledTapeTrainingStep<T>
             // only because its fused optimizers leave backward as a separate phase.
             PublishFusedGradients(onGradients, parameters, plan);
 
-            lossValue = lossOutput.Length > 0 ? lossOutput[0] : MathHelper.GetNumericOperations<T>().Zero;
+            if (deferredLoss is not null)
+                deferredLoss.Value = lossOutput;
+            else
+                lossValue = lossOutput.Length > 0 ? lossOutput[0] : MathHelper.GetNumericOperations<T>().Zero;
             // Signal successful fused engagement so tests/diagnostics can
             // assert the compiled path actually ran — distinguishing it from
             // a silent fallback to the eager path.

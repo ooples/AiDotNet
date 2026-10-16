@@ -346,6 +346,46 @@ public class SharedTrainingStepTests
         return (first, second);
     }
 
+    /// <summary>
+    /// Once a fused plan is verified, the session re-checks every FusedTrainingSession.PersistenceRecheckInterval
+    /// steps that it still trains the layer's live tensors. A layer whose weight tensor is REPLACED after that (not
+    /// overwritten in place) must not keep training a plan bound to the old tensor: within a re-check interval the
+    /// new tensor has to start moving.
+    /// </summary>
+    [Fact]
+    public void ReplacedWeightTensorIsTrainedAfterTheNextRecheck()
+    {
+        var layer = new SwappableDenseLayer(Outputs);
+        layer.Forward(new Tensor<float>(new[] { Batch, Features }));
+        var stepper = new TapeTrainingStepper<float>(new object());
+        var optimizer = Adam();
+        var data = new Random(31);
+        int interval = FusedTrainingSession<float>.PersistenceRecheckInterval;
+
+        for (int step = 0; step < interval + 4; step++)
+            stepper.Step(PlainRequest(layer, RandomTensor(data, Batch, Features), RandomTensor(data, Batch, Outputs), optimizer));
+        Assert.True(stepper.LastStepFused, $"the fused path did not engage ({stepper.Session.LastMissReason}).");
+
+        var replacement = new Tensor<float>(layer.CurrentWeights.ToArray(), layer.CurrentWeights.Shape.ToArray());
+        layer.ReplaceWeights(replacement);
+        var atReplacement = replacement.ToArray();
+
+        for (int step = 0; step < 2 * interval + 2; step++)
+            stepper.Step(PlainRequest(layer, RandomTensor(data, Batch, Features), RandomTensor(data, Batch, Outputs), optimizer));
+
+        Assert.Same(replacement, layer.CurrentWeights);
+        Assert.NotEqual(atReplacement, replacement.ToArray());
+    }
+
+    // Exposes DenseLayer's protected weight replacement: SetWeights binds a NEW tensor object, which is how a layer's
+    // live parameters can stop being the tensors a compiled plan trains.
+    private sealed class SwappableDenseLayer : DenseLayer<float>
+    {
+        public SwappableDenseLayer(int outputSize) : base(outputSize) { }
+        public Tensor<float> CurrentWeights => GetWeights();
+        public void ReplaceWeights(Tensor<float> weights) => SetWeights(weights);
+    }
+
     private static FusedTrainingStepRequest<float> PlainRequest(
         DenseLayer<float> layer, Tensor<float> input, Tensor<float> target,
         IGradientBasedOptimizer<float, Tensor<float>, Tensor<float>> optimizer)
