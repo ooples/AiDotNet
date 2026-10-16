@@ -101,10 +101,6 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
     
     #region Native Mode Fields
     private DenseLayer<T>? _inputProjection;
-    private List<DenseLayer<T>>? _filterLayers;
-    private List<DenseLayer<T>>? _gateLayers;
-    private List<DenseLayer<T>>? _diffusionLayers;
-    private List<DenseLayer<T>>? _skipLayers;
     private List<LayerNormalizationLayer<T>>? _layerNorms;
     private List<DropoutLayer<T>>? _dropoutLayers;
     private DenseLayer<T>? _endLayer1;
@@ -530,21 +526,7 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
         if (allDense.Count >= 4)
         {
             _inputProjection = allDense[0];
-            _filterLayers = new List<DenseLayer<T>>();
-            _gateLayers = new List<DenseLayer<T>>();
-            _diffusionLayers = new List<DenseLayer<T>>();
-            _skipLayers = new List<DenseLayer<T>>();
-
-            int idx = 1;
-            int totalLayers = _numBlocks * _layersPerBlock;
-            for (int i = 0; i < totalLayers && idx + 3 < allDense.Count - 2; i++)
-            {
-                _filterLayers.Add(allDense[idx++]);
-                _gateLayers.Add(allDense[idx++]);
-                _diffusionLayers.Add(allDense[idx++]);
-                _skipLayers.Add(allDense[idx++]);
-            }
-
+            // The per-block filter/gate/diffusion/skip layers run through Layers; no separate list reads them.
             _endLayer1 = allDense[allDense.Count - 2];
             _outputLayer = allDense[allDense.Count - 1];
         }

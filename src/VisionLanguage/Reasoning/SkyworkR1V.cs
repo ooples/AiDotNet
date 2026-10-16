@@ -283,7 +283,7 @@ public partial class SkyworkR1V<T> : VisionLanguageModelBase<T>, IReasoningVLM<T
                     // Step-dependent attention: early steps = broad, late steps = focused
                     double stepFocus = Math.Exp(-step * 0.3) * 0.5 + 0.5;
                     double attnScore =
-                        visVal * Math.Sin((d + 1) * (t + 1) * 0.004 + step * 0.5) * 0.3;
+                        visVal * Math.Sin((d + 1.0) * (t + 1) * 0.004 + step * 0.5) * 0.3;
                     double w = Math.Exp(attnScore) * enrichWeight * stepFocus;
                     visAttn += w * visVal;
                     attnSum += w;

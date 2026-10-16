@@ -233,7 +233,7 @@ public partial class QVQ72B<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
                 {
                     double visVal = NumOps.ToDouble(visualFeatures[v % visDim]);
                     // Step-dependent attention: each step focuses on different aspects
-                    double stepBias = Math.Sin((step + 1) * (v + 1) * 0.01) * 0.3;
+                    double stepBias = Math.Sin((step + 1.0) * (v + 1) * 0.01) * 0.3;
                     // Question-conditioned attention
                     double qBias =
                         NumOps.ToDouble(questionTokens[v % qLen]) / _options.VocabSize * 0.2;

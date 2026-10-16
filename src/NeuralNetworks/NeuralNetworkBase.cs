@@ -2731,7 +2731,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // resolved, allocation-free slots. KnownParameterCount retains those exact widths while
             // unknown slots contribute zero. MaterializedParameterCount can still be larger when a
             // deferred slot already owns live storage, so capacity planning takes the greater truth.
-            long declared = layout.DeclaredParameterCount ?? layout.KnownParameterCount;
+            long? declaredCount = layout.DeclaredParameterCount;
+            long declared = declaredCount ?? layout.KnownParameterCount;
             return Math.Max(layout.MaterializedParameterCount, declared);
         }
     }
@@ -3851,7 +3852,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         string memberName)
     {
         var rebound = RebindLayerGraphAlias(graph, previousLayers, replacementLayers, memberName);
-        if (!ReferenceEquals(graph, rebound))
+        if (!ReferenceEquals((object?)graph, (object?)rebound))
         {
             throw new InvalidOperationException(
                 $"Readonly layer graph member '{memberName}' aliases the canonical Layers graph and cannot " +
@@ -5300,7 +5301,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         foreach (var layer in GetExtraTrainableLayers())
         {
             if (layer is null || !layer.SupportsTraining || layer.ParameterCount <= 0) continue;
-            allGradients.Add(layer.ScatteredParameterGradients ?? (_hasPublishedParameterGradients
+            var scattered = layer.ScatteredParameterGradients;
+            allGradients.Add(scattered ?? (_hasPublishedParameterGradients
                 ? new Vector<T>(ParameterCountHelper.ToFlatVectorSize(layer.ParameterCount))
                 : layer.GetParameterGradients()));
         }
@@ -15827,7 +15829,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         var definitionType = runtimeType.IsGenericType
             ? runtimeType.GetGenericTypeDefinition()
             : runtimeType;
-        return definitionType.FullName ?? definitionType.Name;
+        string? fullName = definitionType.FullName;
+        return fullName ?? definitionType.Name;
     }
 
     private sealed class SerializedAdditionalLayer

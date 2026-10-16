@@ -230,7 +230,7 @@ public partial class Janus<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<
             for (int h = 0; h < Math.Min(hiddenDim, 64); h++)
             {
                 double hv = NumOps.ToDouble(textHidden[h % hiddenDim]);
-                val += hv * Math.Cos((g + 1) * (h + 1) * 0.008);
+                val += hv * Math.Cos((g + 1.0) * (h + 1) * 0.008);
             }
             genAdaptorOut[g] = val / Math.Sqrt(64);
         }

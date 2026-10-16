@@ -181,7 +181,13 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     /// Gets the dimension r of the random prior z, which equals the embedding dimension unless
     /// <see cref="MedGANOptions{T}.NoiseDimension"/> overrides it.
     /// </summary>
-    public int NoiseDimension => _options.NoiseDimension ?? _options.EmbeddingDimension;
+    public int NoiseDimension => NoiseDimensionOrEmbedding(_options);
+
+    private static int NoiseDimensionOrEmbedding(MedGANOptions<T> options)
+    {
+        int? noise = options.NoiseDimension;
+        return noise ?? options.EmbeddingDimension;
+    }
 
     /// <summary>
     /// Gets the width the discriminator actually consumes: twice the record width when minibatch
@@ -435,7 +441,8 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         if (batchSize <= 0) { IsFitted = true; return; }
 
         // --- Stage 1: pre-train the autoencoder on the real records ---
-        int pretrainEpochs = _options.AutoencoderPretrainEpochs
+        int? configuredPretrainEpochs = _options.AutoencoderPretrainEpochs;
+        int pretrainEpochs = configuredPretrainEpochs
             ?? Math.Max(1, (int)Math.Round(epochCount * _options.AutoencoderPretrainFraction));
         pretrainEpochs = Math.Min(pretrainEpochs, epochCount);
 

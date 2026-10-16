@@ -439,7 +439,7 @@ public partial class VideoGigaGANGeneratorLayer<T> : LayerBase<T>, IShapeContrac
                     new[] { batch, channels, height, width });
                 var weighted = Engine.TensorMultiplyScalar(
                     shifted,
-                    NumOps.FromDouble(kernel[y] * kernel[x] / 16.0));
+                    NumOps.FromDouble((double)kernel[y] * kernel[x] / 16.0));
                 blurred = blurred is null ? weighted : Engine.TensorAdd(blurred, weighted);
             }
         }

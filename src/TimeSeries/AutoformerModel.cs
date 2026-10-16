@@ -737,7 +737,7 @@ public partial class AutoformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossF
             for (int lag = 0; lag < corrLen; lag++)
             {
                 int valid = corrLen - lag;
-                T w = _numOps.FromDouble(1.0 / (valid * d));
+                T w = _numOps.FromDouble(1.0 / ((double)valid * d));
                 for (int t = 0; t < valid; t++)
                     data[lag * (lq * lk) + t * lk + (t + lag)] = w;
             }

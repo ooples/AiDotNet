@@ -248,7 +248,7 @@ public partial class SkyworkR1V2<T> : VisionLanguageModelBase<T>, IReasoningVLM<
                             NumOps.ToDouble(questionTokens[(t + g * 3) % qLen])
                             / _options.VocabSize;
                         // Trajectory-specific + step-specific attention
-                        double trajBias = Math.Sin((g + 1) * (step + 1) * (t + 1) * 0.005) * 0.25;
+                        double trajBias = Math.Sin((g + 1.0) * (step + 1) * (t + 1) * 0.005) * 0.25;
                         double w = Math.Exp((visVal + qVal * 0.3 + trajBias) * 0.3);
                         visAttn += w * visVal;
                         attnSum += w;

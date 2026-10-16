@@ -685,7 +685,7 @@ public partial class SubpixelConvolutionalLayer<T> : LayerBase<T>, IShapeContrac
         // AllocateLazyWeight-registered instance that the streaming pool /
         // weight registry are tracking, breaking the LRU bookkeeping for
         // very large models. In-place mutation preserves the registration.
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_inputDepth * _kernelSize * _kernelSize + _outputDepth * _upscaleFactor * _upscaleFactor)));
+        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / ((double)_inputDepth * _kernelSize * _kernelSize + (double)_outputDepth * _upscaleFactor * _upscaleFactor)));
 
         // Generate scaled random values via the engine (vectorized) and
         // copy into the EXISTING _kernels tensor's storage so we preserve

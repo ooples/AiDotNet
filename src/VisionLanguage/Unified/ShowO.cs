@@ -284,11 +284,11 @@ public partial class ShowO<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<
                 for (int h = 0; h < Math.Min(8, hiddenDim); h++)
                     textCond +=
                         NumOps.ToDouble(textHidden[h % hiddenDim])
-                        * Math.Sin((t + 1) * (h + 1) * 0.02);
+                        * Math.Sin((t + 1.0) * (h + 1) * 0.02);
                 textCond /= 8.0;
 
                 // Combined prediction
-                double logit = contextVal * 0.6 + textCond * 0.4 + Math.Sin(t * step * 0.01) * 0.1;
+                double logit = contextVal * 0.6 + textCond * 0.4 + Math.Sin((double)t * step * 0.01) * 0.1;
                 int tokenId = (int)(((Math.Tanh(logit) + 1.0) / 2.0) * (numVisTokens - 1));
                 tokenId = Math.Max(0, Math.Min(numVisTokens - 1, tokenId));
                 predictedIds[t] = tokenId;

@@ -442,7 +442,7 @@ public partial class GraphTransformerLayer<T> : LayerBase<T>, IGraphConvolutionL
         InitializeTensor(_valueWeights, scaleQKV);
 
         // Initialize output weights
-        T scaleOut = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_numHeads * _headDim + _outputFeatures)));
+        T scaleOut = NumOps.Sqrt(NumOps.FromDouble(2.0 / ((double)_numHeads * _headDim + _outputFeatures)));
         InitializeTensor(_outputWeights, scaleOut);
 
         // Initialize FFN weights

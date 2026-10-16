@@ -86,8 +86,9 @@ public partial class NeuralVaR<T> : RiskModelBase<T>
         // A VaR forecast is a conditional quantile, not a conditional mean.
         // Barrera et al. learn VaR with neural-network quantile regression;
         // MSE would instead estimate E[Y|X] and is therefore the wrong objective.
+        var configuredLoss = options?.LossFunction;
         return lossFunction
-            ?? options?.LossFunction
+            ?? configuredLoss
             ?? new QuantileLoss<T>(options?.ConfidenceLevel ?? 0.95);
     }
 

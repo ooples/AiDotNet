@@ -104,9 +104,6 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
     #region Native Mode Fields
     private DenseLayer<T>? _inputProjection;
     private DenseLayer<T>? _nodeEmbeddingLayer;
-    private List<DenseLayer<T>>? _mixHopLayers;
-    private List<DenseLayer<T>>? _temporalLayers;
-    private List<DenseLayer<T>>? _gateLayers;
     private List<LayerNormalizationLayer<T>>? _layerNorms;
     private List<DropoutLayer<T>>? _dropoutLayers;
     private DenseLayer<T>? _outputLayer;
@@ -509,26 +506,7 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
             _inputProjection = allDense[0];
             _nodeEmbeddingLayer = allDense[1];
 
-            // Mix-hop layers, temporal layers, and gate layers are interleaved
-            _mixHopLayers = new List<DenseLayer<T>>();
-            _temporalLayers = new List<DenseLayer<T>>();
-            _gateLayers = new List<DenseLayer<T>>();
-
-            int idx = 2;
-            for (int layer = 0; layer < _numLayers; layer++)
-            {
-                // Mix-hop layers
-                for (int hop = 0; hop < _mixHopDepth && idx < allDense.Count - 2; hop++)
-                {
-                    _mixHopLayers.Add(allDense[idx++]);
-                }
-
-                // Temporal and gate layers
-                if (idx < allDense.Count - 2)
-                    _temporalLayers.Add(allDense[idx++]);
-                if (idx < allDense.Count - 2)
-                    _gateLayers.Add(allDense[idx++]);
-            }
+            // The interleaved mix-hop, temporal and gate layers run through Layers; no separate list reads them.
 
             _outputLayer = allDense[allDense.Count - 1];
         }

@@ -115,7 +115,7 @@ internal static class ImageTrainingHelpers
             meanG += numOps.ToDouble(hallucination[y, x, 1]);
             meanB += numOps.ToDouble(hallucination[y, x, 2]);
         }
-        double count = H * W;
+        double count = (double)H * W;
         meanR /= count; meanG /= count; meanB /= count;
 
         // Weighted blend: target = (1 - c) * photo_sample + c * prior_mean_color.

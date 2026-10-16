@@ -221,7 +221,7 @@ public partial class SEEDX<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<
             double val = 0;
             for (int h = 0; h < Math.Min(hiddenDim, 64); h++)
                 val +=
-                    NumOps.ToDouble(textHidden[h % hiddenDim]) * Math.Cos((s + 1) * (h + 1) * 0.01);
+                    NumOps.ToDouble(textHidden[h % hiddenDim]) * Math.Cos((s + 1.0) * (h + 1) * 0.01);
             semanticCond[s] = val / 64.0;
         }
 
@@ -234,7 +234,7 @@ public partial class SEEDX<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel<
             for (int h = 0; h < Math.Min(hiddenDim, 32); h++)
                 val +=
                     NumOps.ToDouble(textHidden[h % hiddenDim])
-                    * Math.Sin((d + 1) * (h + 1) * 0.015);
+                    * Math.Sin((d + 1.0) * (h + 1) * 0.015);
             detailCond[d] = val / 32.0;
         }
 

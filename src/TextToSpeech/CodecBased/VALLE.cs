@@ -178,7 +178,7 @@ public partial class VALLE<T> : TtsModelBase<T>, ICodecTts<T>
             int frame = Math.Min(i * _options.CodecFrameRate / SampleRate, codecFrames - 1);
             double sample = 0;
             for (int q = 0; q < numCodebooks; q++)
-                sample += allCodebooks[q, frame] * Math.Sin(i * (q + 1) * 0.005) / numCodebooks;
+                sample += allCodebooks[q, frame] * Math.Sin((double)i * (q + 1) * 0.005) / numCodebooks;
             waveform[i] = NumOps.FromDouble(Math.Tanh(sample));
         }
         return waveform;

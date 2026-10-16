@@ -279,7 +279,7 @@ public partial class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel
                 for (int h = 0; h < Math.Min(8, hiddenDim); h++)
                     textCond +=
                         NumOps.ToDouble(textHidden[h % hiddenDim])
-                        * Math.Sin((t + 1) * (h + 1) * 0.015);
+                        * Math.Sin((t + 1.0) * (h + 1) * 0.015);
                 textCond /= 8.0;
 
                 double logit = contextVal * 0.5 + textCond * 0.5;
