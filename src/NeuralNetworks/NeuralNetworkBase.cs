@@ -10752,7 +10752,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 hasExtraTensors = enumerator.MoveNext();
             }
 
-            if (trainableParams.Count > 0 || hasExtraTensors)
+            // Lazy layers hold zero-length placeholders until their first forward, so before the first step a
+            // network made only of them collects no materialized tensors. That is not a network without trainable
+            // layers: TrainWithTape runs a forward first to materialize them (AnyLayerHasUnmaterializedParameters),
+            // while the legacy path below would ask an untrained DenseLayer to UpdateParameters and throw
+            // "Backward pass must be called before updating parameters".
+            if (trainableParams.Count > 0 || hasExtraTensors
+                || AnyLayerNeedsShapeResolution() || AnyLayerHasUnmaterializedParameters())
             {
                 // Tape-based training: delegates forward/backward/update to TrainWithTape
                 // which uses the configured optimizer via Step(TapeStepContext)
