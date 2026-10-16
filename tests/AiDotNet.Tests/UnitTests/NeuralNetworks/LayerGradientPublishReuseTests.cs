@@ -64,6 +64,43 @@ public sealed class LayerGradientPublishReuseTests
                 $"gradient {i}: {actual[i]} vs {expected[i]}; a reused buffer kept step-1 values");
     }
 
+    [Fact]
+    public void CompiledPlanHostGradients_AreReadWhenTheSurfaceIsRead_AndAReadVectorStaysFixed()
+    {
+        // A compiled plan's gradient buffers outlive its step (it republishes them on the next one), so the layer keeps
+        // them by reference and fills its flat vector only when something reads it -- copying them every step cost a
+        // CPU MLP ~15% of its training time for a vector nothing read. A vector already read is a snapshot.
+        var model = Build();
+        var dense = (LayerBase<float>)model.Layers[0];
+        var parameters = dense.GetTrainableParameters();
+        Assert.NotEmpty(parameters);
+        var gradients = new System.Collections.Generic.Dictionary<Tensor<float>, Tensor<float>>();
+        foreach (var p in parameters) gradients[p] = Filled(p, 1f);
+
+        Assert.True(dense.ScatterParameterGradients(gradients, sourcesOutliveStep: true) > 0);
+
+        // The plan's next backward writes the same buffers; a read now must see what they hold.
+        foreach (var g in gradients.Values) Fill(g, 7f);
+        var read = dense.GetParameterGradients();
+        Assert.True(read.Length > 0);
+        Assert.All(read.ToArray(), v => Assert.Equal(7f, v));
+
+        foreach (var g in gradients.Values) Fill(g, 9f);
+        Assert.All(read.ToArray(), v => Assert.Equal(7f, v));
+    }
+
+    private static Tensor<float> Filled(Tensor<float> like, float value)
+    {
+        var t = new Tensor<float>(like.Shape.ToArray());
+        Fill(t, value);
+        return t;
+    }
+
+    private static void Fill(Tensor<float> t, float value)
+    {
+        for (int i = 0; i < t.Length; i++) t[i] = value;
+    }
+
     private static FeedForwardNeuralNetwork<float> Build()
     {
         var layers = new System.Collections.Generic.List<ILayer<float>>
