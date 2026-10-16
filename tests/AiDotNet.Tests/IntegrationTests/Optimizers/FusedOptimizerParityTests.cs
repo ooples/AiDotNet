@@ -134,6 +134,135 @@ public class FusedOptimizerParityTests
         return (maxAbs, fusedSteps, trainDelta);
     }
 
+    /// <summary>Optimizers whose update depends on the sign of each gradient element, not its magnitude.</summary>
+    private static readonly HashSet<string> SignBasedOptimizers = new(StringComparer.Ordinal) { "Rprop" };
+
+    // A gradient element this close to zero (relative to the step's largest) has a sign set by float summation order.
+    private const int NumericallyZeroUlps = 4;
+
+    // The comparison must cover at least this many steps before a numerically-zero gradient ends it.
+    private const int MinimumIdenticalSteps = 10;
+
+    /// <summary>
+    /// Sign-based optimizers: fused and eager training must be bit-identical on every step before the first step in
+    /// which some gradient element is numerically zero (non-zero but within <see cref="NumericallyZeroUlps"/> ulps of
+    /// that step's largest gradient). That window must be at least <see cref="MinimumIdenticalSteps"/> steps and must
+    /// exercise both halves of the rule: a step size that grew (same sign twice) and a sign reversal (the skipped step).
+    /// </summary>
+    /// <remarks>
+    /// Rprop moves each weight by sign(g)·Δ, so a max-abs bound after a fixed number of steps measures float noise, not
+    /// the mapping. The compiled plan sums in a different order from the eager tape. A gradient near zero can then
+    /// take opposite signs on the two paths, and Rprop skips the step on one side and takes it on the other. Measured
+    /// (#2327): bit-identical for 27 steps; at step 28 one weight's gradient was -1.98e-11, 1.4 ulps of the largest
+    /// gradient; by step 40 the cascade reached 478 weights and 2e-4. Stopping at the first numerically-zero gradient
+    /// keeps the check exact. A wrong mapping (a swapped eta, a missing sign-reversal reset, a lost step size) changes
+    /// the very first steps, so it still fails.
+    /// </remarks>
+    private void AssertIdenticalUntilAGradientIsNumericallyZero(string name)
+    {
+        var (fused, fusedSteps) = Trajectory(() => FusedKernelParityTests.Create(name), compile: true);
+        var (eager, eagerFusedSteps) = Trajectory(() => FusedKernelParityTests.Create(name), compile: false);
+        Assert.True(fusedSteps > 0, $"{name} maps onto a fused kernel but training never engaged it (fusedSteps == 0).");
+        Assert.Equal(0, eagerFusedSteps);
+
+        var (x, y) = MakeData();
+        int compared = 0;
+        for (int t = 1; t <= Steps; t++)
+        {
+            // Both runs start step t from the same weights, so the eager gradient there is the one both paths saw.
+            if (HasNumericallyZeroGradient(name, eager[t - 1], x, y)) break;
+            for (int i = 0; i < fused[t].Length; i++)
+            {
+                Assert.True(fused[t][i] == eager[t][i],
+                    $"{name}: fused and eager training differ at step {t}, weight {i} ({fused[t][i]:R} vs {eager[t][i]:R}), " +
+                    "before any gradient was numerically zero: the fused step does not compute the eager update.");
+            }
+            compared = t;
+        }
+
+        // Which branches of the rule the identical window exercised, read off the eager weight updates: a step size
+        // that grew (a larger move in the same direction) and a reversal (iRprop- takes no step after one).
+        int grew = 0, reversed = 0;
+        for (int t = 2; t <= compared; t++)
+            for (int i = 0; i < eager[t].Length; i++)
+            {
+                float previous = eager[t - 1][i] - eager[t - 2][i], update = eager[t][i] - eager[t - 1][i];
+                if (previous != 0 && update == 0) reversed++;
+                else if (previous != 0 && Math.Sign(update) == Math.Sign(previous) && Math.Abs(update) > Math.Abs(previous)) grew++;
+            }
+
+        _output.WriteLine($"{name}: fusedSteps={fusedSteps}, bit-identical for {compared} of {Steps} steps " +
+            $"({grew} step-size increases, {reversed} sign reversals)");
+        Assert.True(grew > 0 && reversed > 0,
+            $"{name}: the {compared} identical steps exercised {grew} step-size increases and {reversed} sign reversals; " +
+            "both branches must run for the comparison to cover the rule.");
+        Assert.True(compared >= MinimumIdenticalSteps,
+            $"{name}: a numerically-zero gradient appeared at step {compared + 1}, before {MinimumIdenticalSteps} steps were " +
+            "compared; the comparison would be too short to mean anything.");
+        double moved = 0;
+        for (int i = 0; i < eager[compared].Length; i++) moved = Math.Max(moved, Math.Abs(eager[compared][i] - eager[0][i]));
+        Assert.True(moved > 1e-6, $"{name}: training barely moved the parameters ({moved:E3}); the comparison would be vacuous.");
+    }
+
+    // Parameters before training (index 0) and after each step, training with compilation on or off.
+    private (List<float[]> Snapshots, long FusedSteps) Trajectory(
+        Func<IGradientBasedOptimizer<float, Tensor<float>, Tensor<float>>> optFactory, bool compile)
+    {
+        NeuralNetworkArchitecture<float>.DefaultRandomSeedOverride = 1234;
+        var net = new FeedForwardNeuralNetwork<float>(MakeArch(), optFactory(), new MeanSquaredErrorLoss<float>());
+        net.SetTrainingMode(true);
+        var (x, y) = MakeData();
+        var snapshots = new List<float[]> { net.GetParameters().ToArray() };
+        var saved = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
+        try
+        {
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(
+                new AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions { EnableCompilation = compile });
+            CompiledTapeTrainingStep<float>.Invalidate();
+            CompiledTapeTrainingStep<float>.ResetFusedStepCount();
+            for (int i = 0; i < Steps; i++)
+            {
+                net.Train(x, y);
+                snapshots.Add(net.GetParameters().ToArray());
+            }
+            return (snapshots, CompiledTapeTrainingStep<float>.GetFusedStepCount());
+        }
+        finally
+        {
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(saved);
+            CompiledTapeTrainingStep<float>.Invalidate();
+        }
+    }
+
+    // Whether the eager gradient at these weights has an element that is non-zero but within NumericallyZeroUlps ulps
+    // of the largest. Exact zeros (a dead ReLU unit, an unused weight) are structural and the same on both paths.
+    private static bool HasNumericallyZeroGradient(string name, float[] weights, Tensor<float> x, Tensor<float> y)
+    {
+        NeuralNetworkArchitecture<float>.DefaultRandomSeedOverride = 1234;
+        var net = new FeedForwardNeuralNetwork<float>(MakeArch(), FusedKernelParityTests.Create(name), new MeanSquaredErrorLoss<float>());
+        net.UpdateParameters(new Vector<float>(weights));
+        var saved = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
+        float[] g;
+        try
+        {
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(
+                new AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions { EnableCompilation = false });
+            g = net.ComputeGradients(x, y).ToArray();
+        }
+        finally
+        {
+            AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(saved);
+        }
+
+        float largest = 0;
+        foreach (var v in g) largest = Math.Max(largest, Math.Abs(v));
+        if (largest == 0) return false;
+        float threshold = NumericallyZeroUlps * (MathF.BitIncrement(largest) - largest);
+        foreach (var v in g)
+            if (v != 0 && Math.Abs(v) <= threshold) return true;
+        return false;
+    }
+
     private static AdamOptimizer<float, Tensor<float>, Tensor<float>> Adam() =>
         new(null, new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-2 });
 
@@ -147,6 +276,12 @@ public class FusedOptimizerParityTests
     [MemberData(nameof(FusedKernelParityTests.Cases), MemberType = typeof(FusedKernelParityTests))]
     public void Training_EngagesTheFusedPath_AndMatchesTheEagerStep(string name)
     {
+        if (SignBasedOptimizers.Contains(name))
+        {
+            AssertIdenticalUntilAGradientIsNumericallyZero(name);
+            return;
+        }
+
         var (adamDiff, _, _) = Divergence(Adam);
         var fusedTrace = new List<(float[] Parameters, float[] Gradients)>();
         var eagerTrace = new List<(float[] Parameters, float[] Gradients)>();

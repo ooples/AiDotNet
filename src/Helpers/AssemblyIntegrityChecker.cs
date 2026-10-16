@@ -119,7 +119,7 @@ internal static class AssemblyIntegrityChecker
                 return false;
             }
 
-#if NET471
+#if AIDN_LEGACY_TFM
             // Constant-time comparison for net471
             bool match = true;
             for (int i = 0; i < 32; i++)

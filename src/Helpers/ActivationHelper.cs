@@ -14,6 +14,19 @@ namespace AiDotNet.Helpers;
 public static class ActivationHelper
 {
     /// <summary>
+    /// The exact GELU, <c>x · Φ(x) = ½ x erfc(−x / √2)</c>, as PyTorch's <c>F.gelu</c> computes it by default.
+    /// </summary>
+    /// <remarks><see cref="IEngine.GELU{T}"/> is the tanh approximation, which differs by up to about 1e-3; models
+    /// matched to a PyTorch reference use this form.</remarks>
+    internal static Tensor<T> ExactGelu<T>(Tensor<T> x, IEngine engine)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        return engine.TensorMultiplyScalar(
+            engine.TensorMultiply(x, engine.TensorErfc(engine.TensorMultiplyScalar(x, ops.FromDouble(-1 / Math.Sqrt(2))))),
+            ops.FromDouble(0.5));
+    }
+
+    /// <summary>
     /// Applies a vector activation function to a tensor using Engine methods when possible.
     /// </summary>
     /// <typeparam name="T">The numeric type (float, double, etc.).</typeparam>

@@ -243,7 +243,7 @@ jobs:
           [ -f "$main" ] || { echo "Error: core package $main not found"; exit 1; }
 
           files=$(unzip -Z1 "$main")
-          for tfm in net471 net8.0 net10.0; do
+          for tfm in net462 net471 netstandard2.0 net8.0 net10.0; do
             echo "$files" | grep -qE "^lib/${tfm}/.+[.]dll$" || { echo "Error: Missing ${tfm} lib in $main"; exit 1; }
             echo "Found ${tfm} in $(basename "$main")"
           done

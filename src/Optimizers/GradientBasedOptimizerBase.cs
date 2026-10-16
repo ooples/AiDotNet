@@ -2257,7 +2257,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </summary>
     private static IEnumerable<Tensor<T>> ResolveParameterChunks(IParameterizable<T, TInput, TOutput> parameterizable)
     {
-#if !NETFRAMEWORK
+#if !AIDN_LEGACY_TFM
         return parameterizable.GetParameterChunks();
 #else
         if (parameterizable is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn)
@@ -2268,7 +2268,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 #endif
     }
 
-#if NETFRAMEWORK
+#if AIDN_LEGACY_TFM
     private static IEnumerable<Tensor<T>> ParameterChunksFlatFallback(IParameterizable<T, TInput, TOutput> parameterizable)
     {
         var flat = parameterizable.GetParameters();

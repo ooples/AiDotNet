@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-#if NETFRAMEWORK
+#if AIDN_LEGACY_TFM
 using System.Runtime.Serialization;
 #endif
 using AiDotNet.Interfaces;
@@ -296,7 +296,7 @@ internal static class ModelTypeRegistry
         // is designed to fully reconstruct the model from serialized bytes.
         try
         {
-#if NETFRAMEWORK
+#if AIDN_LEGACY_TFM
             var uninitializedObj = FormatterServices.GetUninitializedObject(closedType);
 #else
             var uninitializedObj = RuntimeHelpers.GetUninitializedObject(closedType);

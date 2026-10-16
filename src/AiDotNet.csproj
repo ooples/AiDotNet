@@ -8,9 +8,15 @@
 	    types at the consumer. net8.0 was previously blocked on AiDotNet.Tensors
 	    not shipping a net8.0 build; that dependency now does (AiDotNet.Tensors
 	    PR #680), so net8.0 is enabled here against that release.
-	    Extending to net462 / netstandard2.0 is tracked in AiDotNet.Tensors #679.
+	    net462 and netstandard2.0 (#2326) mirror AiDotNet.Tensors #679, whose package
+	    ships both since 0.137.1: .NET Framework 4.6.2 apps and netstandard libraries
+	    (Unity/Mono, .NET 5-7) can reference AiDotNet too.
 	  -->
-	  <TargetFrameworks>net10.0;net8.0;net471</TargetFrameworks>
+	  <TargetFrameworks>net10.0;net8.0;net471;net462;netstandard2.0</TargetFrameworks>
+	  <!-- The pre-.NET-Core targets share one API surface for this library's purposes (no default interface methods,
+	       no OS-platform attributes, older crypto/HTTP APIs): code guards on AIDN_LEGACY_TFM rather than NET471 or
+	       NETFRAMEWORK, so net462 and netstandard2.0 take the same branch as net471. -->
+	  <DefineConstants Condition="'$(TargetFramework)' == 'net471' or '$(TargetFramework)' == 'net462' or '$(TargetFramework)' == 'netstandard2.0'">$(DefineConstants);AIDN_LEGACY_TFM</DefineConstants>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
@@ -103,7 +109,7 @@
 	  <!-- The dynamic binder is part of the modern shared framework. Keeping this package on
 	       net8/net10 makes current SDKs report NU1510 (and this project treats warnings as errors),
 	       while net471 still needs the compatibility package. -->
-	  <PackageReference Include="Microsoft.CSharp" Condition="'$(TargetFramework)' == 'net471'" />
+	  <PackageReference Include="Microsoft.CSharp" Condition="'$(TargetFramework)' == 'net471' or '$(TargetFramework)' == 'net462' or '$(TargetFramework)' == 'netstandard2.0'" />
 	  <PackageReference Include="Microsoft.Extensions.AI.Abstractions" />
 	  <!-- Microsoft.Data.Sqlite extracted to the opt-in AiDotNet.Storage.Sqlite
 	       metapackage in audit-2026-05 phase 2c (finding #14). Core code used it
@@ -161,7 +167,7 @@
 	</ItemGroup> -->
 
 	<!-- System.Net.Http only for .NET Framework (built-in for .NET Core/.NET 5+) -->
-	<ItemGroup Condition="'$(TargetFramework)' == 'net471'">
+	<ItemGroup Condition="'$(TargetFramework)' == 'net471' or '$(TargetFramework)' == 'net462'">
 	  <Reference Include="System.Net.Http" />
 	</ItemGroup>
 

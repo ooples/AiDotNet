@@ -38,7 +38,7 @@ internal static class MachineFingerprint
 
     private static string? GetPlatformMachineId()
     {
-#if NET471
+#if AIDN_LEGACY_TFM
         // .NET Framework — use fallback (registry APIs differ; keep it simple)
         return null;
 #else
@@ -61,7 +61,7 @@ internal static class MachineFingerprint
 #endif
     }
 
-#if !NET471
+#if !AIDN_LEGACY_TFM
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
     private static string? ReadWindowsMachineGuid()
     {
@@ -162,7 +162,7 @@ internal static class MachineFingerprint
     {
         byte[] bytes = Encoding.UTF8.GetBytes(input);
 
-#if NET471
+#if AIDN_LEGACY_TFM
         using var sha = SHA256.Create();
         byte[] hash = sha.ComputeHash(bytes);
 #else

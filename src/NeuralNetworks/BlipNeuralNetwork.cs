@@ -151,19 +151,26 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
     private readonly List<ILayer<T>> _visionEncoderLayers = [];
 
     /// <summary>
-    /// Text encoder layers (native mode).
+    /// The text encoder's BERT blocks (native mode): bidirectional self-attention, a cross-attention sublayer and a
+    /// feed-forward network.
     /// </summary>
-    private readonly List<ILayer<T>> _textEncoderLayers = [];
+    /// <remarks>
+    /// These blocks are both of BLIP's text encoders (Li et al. 2022, §3.1). Run without the cross-attention they are
+    /// the unimodal text encoder used for image-text contrastive learning; run with it, attending to the image patches,
+    /// they are the image-grounded text encoder used for image-text matching. The two share every weight.
+    /// </remarks>
+    private readonly List<TransformerDecoderLayer<T>> _textEncoderBlocks = [];
 
     /// <summary>
-    /// Text decoder layers for caption generation (native mode).
+    /// Projects the text encoder's [CLS] state into the shared ITC embedding space.
     /// </summary>
-    private readonly List<ILayer<T>> _textDecoderLayers = [];
+    private ILayer<T>? _textProjection;
 
     /// <summary>
-    /// Cross-attention layers for ITM (native mode).
+    /// The image-grounded text decoder's blocks (native mode): causal self-attention and cross-attention to the image
+    /// in every block, used for captioning and VQA.
     /// </summary>
-    private readonly List<ILayer<T>> _crossAttentionLayers = [];
+    private readonly List<TransformerDecoderLayer<T>> _textDecoderLayers = [];
 
     /// <summary>
     /// Image-Text Matching (ITM) classification head.
@@ -512,6 +519,25 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
                 _numLayers, _numDecoderLayers, _numHeads, _mlpDim, _vocabularySize));
         }
 
+        // A custom Architecture.Layers must have exactly the layout CreateBlipLayers produces; a short list would
+        // otherwise fail below with an index error that names no expected count.
+        //
+        // BREAKING CHANGE (#2297): the layout changed when the matching and decoding paths were made to read the
+        // image. The six separate image-text-matching blocks are gone (the text encoder's own blocks serve both the
+        // unimodal and the image-grounded encoder, as in the paper), and every text block must be a
+        // TransformerDecoderLayer<T>: bidirectional (IsCausal false) in the text encoder, causal in the decoder. A
+        // custom list built for the previous layout no longer matches and is rejected here, by count, with the
+        // expected layout named; rebuild it from LayerHelper<T>.CreateBlipLayers.
+        int expectedLayerCount = (1 + _numLayers + 1) + (1 + _numLayers + 1) + _numDecoderLayers + 2;
+        if (Layers.Count != expectedLayerCount)
+        {
+            throw new InvalidOperationException(
+                $"BLIP expects {expectedLayerCount} layers for {_numLayers} encoder and {_numDecoderLayers} decoder " +
+                $"blocks (image encoder, text encoder, text decoder, ITM head, LM head); got {Layers.Count}. " +
+                "Since #2297 there are no separate image-text-matching blocks; build a custom list from " +
+                "LayerHelper<T>.CreateBlipLayers.");
+        }
+
         // Distribute layers to internal fields
         int idx = 0;
 
@@ -523,23 +549,18 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
             _visionEncoderLayers.Add(Layers[idx++]);
         _visionEncoderLayers.Add(Layers[idx++]); // vision projection
 
-        // Text encoder: EmbeddingLayer + numLayers × TransformerEncoder + projection
+        // Text encoder: EmbeddingLayer + numLayers × BERT block + projection. The same blocks serve the unimodal
+        // and the image-grounded encoder (Li et al. 2022, §3.1), so there is no separate set of ITM blocks.
         _textTokenEmbedding = Layers[idx++];
-        _textEncoderLayers.Clear();
-        _textEncoderLayers.Add(_textTokenEmbedding);
+        _textEncoderBlocks.Clear();
         for (int i = 0; i < _numLayers; i++)
-            _textEncoderLayers.Add(Layers[idx++]);
-        _textEncoderLayers.Add(Layers[idx++]); // text projection
+            _textEncoderBlocks.Add(RequireImageGroundedBlock(Layers[idx++], "text encoder", i, expectCausal: false));
+        _textProjection = Layers[idx++];
 
-        // Text decoder layers
+        // Image-grounded text decoder
         _textDecoderLayers.Clear();
         for (int i = 0; i < _numDecoderLayers; i++)
-            _textDecoderLayers.Add(Layers[idx++]);
-
-        // Cross-attention layers (6)
-        _crossAttentionLayers.Clear();
-        for (int i = 0; i < 6; i++)
-            _crossAttentionLayers.Add(Layers[idx++]);
+            _textDecoderLayers.Add(RequireImageGroundedBlock(Layers[idx++], "text decoder", i, expectCausal: true));
 
         // ITM head + LM head
         _itmHead = Layers[idx++];
@@ -555,6 +576,37 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
 
         // Initialize with small random values
         InitializeParameters();
+    }
+
+    /// <summary>
+    /// Checks that a layer in a text position is a block that can cross-attend to the image, with the self-attention
+    /// direction BLIP gives that position: bidirectional in the text encoder, causal in the decoder (Li et al. 2022,
+    /// §3.1).
+    /// </summary>
+    /// <param name="layer">The layer at this position of <c>Layers</c>.</param>
+    /// <param name="role">The stack the layer belongs to, for the error message.</param>
+    /// <param name="index">The layer's index within that stack, for the error message.</param>
+    /// <param name="expectCausal">Whether the stack's self-attention must be causal.</param>
+    /// <returns>The layer as a <see cref="TransformerDecoderLayer{T}"/>.</returns>
+    /// <exception cref="InvalidOperationException">The layer is not a cross-attending block, or its self-attention
+    /// runs in the wrong direction.</exception>
+    private static TransformerDecoderLayer<T> RequireImageGroundedBlock(ILayer<T> layer, string role, int index, bool expectCausal)
+    {
+        if (layer is not TransformerDecoderLayer<T> block)
+        {
+            throw new InvalidOperationException(
+                $"BLIP's {role} block {index} must be a {nameof(TransformerDecoderLayer<T>)}, whose cross-attention " +
+                $"sublayer attends to the image; got {layer.GetType().Name}.");
+        }
+
+        if (block.IsCausal != expectCausal)
+        {
+            throw new InvalidOperationException(
+                $"BLIP's {role} block {index} must have {(expectCausal ? "causal" : "bidirectional")} self-attention " +
+                $"(Li et al. 2022, §3.1); this one is {(block.IsCausal ? "causal" : "bidirectional")}.");
+        }
+
+        return block;
     }
 
     /// <summary>
@@ -910,10 +962,12 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
             hidden = Engine.TensorAdd<T>(hidden, posExpanded);
         }
 
-        // Process through transformer layers
-        foreach (var layer in _textEncoderLayers.Skip(1)) // Skip embedding layer
+        // The unimodal text encoder: the BERT blocks without their cross-attention (Li et al. 2022, §3.1), then the
+        // ITC projection.
+        hidden = RunTextEncoder(hidden, imageFeatures: null);
+        if (_textProjection is not null)
         {
-            hidden = layer.Forward(hidden);
+            hidden = _textProjection.Forward(hidden);
         }
 
         // Extract CLS token embedding (first position)
@@ -1069,20 +1123,12 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
     /// </summary>
     private T ComputeImageTextMatchNative(Tensor<T> image, string text)
     {
-        // Get image and text features
+        // The image-grounded text encoder (Li et al. 2022, §3.1): the text encoder's blocks, each cross-attending to
+        // the image patches between its bidirectional self-attention and its feed-forward network.
         var imageFeatures = GetImageFeaturesNative(image);
-        var textFeatures = GetTextFeaturesNative(text);
+        var fused = GetTextFeaturesNative(text, imageFeatures);
 
-        // Apply cross-attention
-        Tensor<T> fused = textFeatures;
-        foreach (var layer in _crossAttentionLayers)
-        {
-            // Simple implementation: just use text features
-            // Full implementation would use cross-attention between image and text
-            fused = layer.Forward(fused);
-        }
-
-        // Apply ITM head
+        // The ITM head is a 2-way classifier on the image-grounded [CLS] state.
         if (_itmHead is not null)
         {
             var logits = _itmHead.Forward(fused);
@@ -1100,7 +1146,8 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
             return NumOps.Divide(exp1, sum); // Return probability of match
         }
 
-        return NumOps.FromDouble(0.5);
+        throw new InvalidOperationException(
+            "BLIP's native image-text matching needs its ITM head, which this model's layers do not include.");
     }
 
     /// <summary>
@@ -1150,7 +1197,7 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
     /// <summary>
     /// Gets image features without final projection (for cross-attention).
     /// </summary>
-    private Tensor<T> GetImageFeaturesNative(Tensor<T> image)
+    internal Tensor<T> GetImageFeaturesNative(Tensor<T> image)
     {
         Tensor<T> batchedImage = image.Shape.Length == 3
             ? Engine.TensorExpandDims(image, 0)
@@ -1194,9 +1241,12 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
     }
 
     /// <summary>
-    /// Gets text features without final projection.
+    /// Gets the text encoder's hidden states, without the final projection.
     /// </summary>
-    private Tensor<T> GetTextFeaturesNative(string text)
+    /// <param name="text">The text to encode.</param>
+    /// <param name="imageFeatures">The image patch states <c>[batch, patches, hidden]</c> to cross-attend to (the
+    /// image-grounded encoder), or null for the unimodal encoder.</param>
+    internal Tensor<T> GetTextFeaturesNative(string text, Tensor<T>? imageFeatures)
     {
         var options = new EncodingOptions
         {
@@ -1231,24 +1281,39 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
             hidden = Engine.TensorAdd<T>(hidden, posExpanded);
         }
 
-        // Process through transformer layers (except final projection)
-        // Skip first layer (embedding) and last layer (projection), handling edge cases
-        int textLayerCount = _textEncoderLayers.Count;
-        if (textLayerCount > 2)
+        return RunTextEncoder(hidden, imageFeatures);
+    }
+
+    /// <summary>
+    /// Runs the text encoder's BERT blocks over embedded text.
+    /// </summary>
+    /// <param name="hidden">The token plus position embeddings, <c>[batch, sequence, hidden]</c>.</param>
+    /// <param name="imageFeatures">The image patch states to cross-attend to, or null to skip the cross-attention.</param>
+    /// <returns>The encoder's hidden states, before the ITC projection.</returns>
+    /// <remarks>
+    /// With <paramref name="imageFeatures"/> null this is BLIP's unimodal text encoder; with the image it is the
+    /// image-grounded text encoder, which inserts cross-attention to the image into every block between the
+    /// self-attention and the feed-forward network (Li et al. 2022, §3.1). Both use the same weights.
+    /// </remarks>
+    private Tensor<T> RunTextEncoder(Tensor<T> hidden, Tensor<T>? imageFeatures)
+    {
+        foreach (var block in _textEncoderBlocks)
         {
-            foreach (var layer in _textEncoderLayers.Skip(1).Take(textLayerCount - 2))
-            {
-                hidden = layer.Forward(hidden);
-            }
+            hidden = imageFeatures is null
+                ? block.ForwardWithoutCrossAttention(hidden)
+                : block.Forward(hidden, imageFeatures);
         }
 
         return hidden;
     }
 
     /// <summary>
-    /// Forward pass through decoder with image conditioning.
+    /// Forward pass through the image-grounded text decoder.
     /// </summary>
-    private Tensor<T> ForwardDecoderNative(Tensor<T> input, Tensor<T> imageFeatures)
+    /// <param name="input">Token ids, <c>[batch, sequence]</c>.</param>
+    /// <param name="imageFeatures">The image patch states <c>[batch, patches, hidden]</c> every block cross-attends to.</param>
+    /// <returns>Vocabulary logits, <c>[batch, sequence, vocabulary]</c>.</returns>
+    internal Tensor<T> ForwardDecoderNative(Tensor<T> input, Tensor<T> imageFeatures)
     {
         // Get embeddings
         Tensor<T> hidden = input;
@@ -1268,10 +1333,11 @@ public partial class BlipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlipM
             hidden = Engine.TensorAdd<T>(hidden, posExpanded);
         }
 
-        // Process through decoder layers
-        foreach (var layer in _textDecoderLayers)
+        // The image-grounded text decoder (Li et al. 2022, §3.1): causal self-attention, then cross-attention to the
+        // image patches, in every block.
+        foreach (var block in _textDecoderLayers)
         {
-            hidden = layer.Forward(hidden);
+            hidden = block.Forward(hidden, imageFeatures);
         }
 
         // Project hidden states to vocabulary logits using the language model head

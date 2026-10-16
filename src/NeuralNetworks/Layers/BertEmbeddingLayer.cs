@@ -9,6 +9,13 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// The three inputs are index lookups over independent tables. Their vectors are added, normalized,
 /// and dropped out. This is intentionally one composite layer: placing the lookup tables sequentially
 /// would feed continuous hidden states into later index lookups and would not represent BERT.
+/// <para>
+/// RoBERTa (Liu et al. 2019; Hugging Face <c>RobertaEmbeddings</c>) uses the same block with one difference: the
+/// position of a token is counted over the NON-padding tokens and offset past the padding index,
+/// <c>position = cumsum(id != pad) * (id != pad) + pad</c>, so real tokens start at <c>pad + 1</c> and every
+/// padding token reads the padding row. Pass <c>paddingTokenId</c> to get that numbering; leave it negative for
+/// BERT's <c>0 .. L-1</c>.
+/// </para>
 /// </remarks>
 [LayerCategory(LayerCategory.Embedding)]
 [LayerTask(LayerTask.SequenceModeling)]
@@ -34,6 +41,7 @@ public partial class BertEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     private readonly int _tokenTypeVocabularySize;
     private readonly double _dropoutProbability;
     private readonly double _layerNormEpsilon;
+    private readonly int _paddingTokenId;
 
     // TrainableParameterGenerator discovers these fields and generates recursive sub-layer
     // registration/parameter plumbing. The composite owns no manual parameter-vector overrides.
@@ -52,7 +60,8 @@ public partial class BertEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         [LayerState] int maxSequenceLength,
         [LayerState] int tokenTypeVocabularySize = 2,
         [LayerState] double dropoutProbability = 0.1,
-        [LayerState] double layerNormEpsilon = 1e-12)
+        [LayerState] double layerNormEpsilon = 1e-12,
+        [LayerState] int paddingTokenId = -1)
         : base([1], [hiddenSize])
     {
         if (vocabularySize <= 0)
@@ -63,6 +72,11 @@ public partial class BertEmbeddingLayer<T> : LayerBase<T>, IShapeContract
             throw new ArgumentOutOfRangeException(nameof(maxSequenceLength));
         if (tokenTypeVocabularySize <= 0)
             throw new ArgumentOutOfRangeException(nameof(tokenTypeVocabularySize));
+        // With a padding index, positions are numbered from paddingTokenId + 1, so a sequence of length L reads rows up
+        // to L + paddingTokenId. Even one token needs paddingTokenId + 1 to be a row: anything higher rejects every input.
+        if (paddingTokenId > maxSequenceLength - 2)
+            throw new ArgumentOutOfRangeException(nameof(paddingTokenId),
+                $"Positions start after the padding index, so it must be at most maxSequenceLength - 2 ({maxSequenceLength - 2}); got {paddingTokenId}.");
 
         _vocabularySize = vocabularySize;
         _hiddenSize = hiddenSize;
@@ -70,6 +84,7 @@ public partial class BertEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         _tokenTypeVocabularySize = tokenTypeVocabularySize;
         _dropoutProbability = dropoutProbability;
         _layerNormEpsilon = layerNormEpsilon;
+        _paddingTokenId = paddingTokenId;
         _wordEmbedding = new EmbeddingLayer<T>(vocabularySize, hiddenSize);
         _positionEmbedding = new EmbeddingLayer<T>(maxSequenceLength, hiddenSize);
         _tokenTypeEmbedding = new EmbeddingLayer<T>(tokenTypeVocabularySize, hiddenSize);
@@ -85,6 +100,13 @@ public partial class BertEmbeddingLayer<T> : LayerBase<T>, IShapeContract
 
     /// <summary>Token-type (segment) lookup table.</summary>
     public EmbeddingLayer<T> TokenTypeEmbedding => _tokenTypeEmbedding;
+
+    /// <summary>The LayerNorm applied to the summed embeddings.</summary>
+    public LayerNormalizationLayer<T> Normalization => _normalization;
+
+    /// <summary>The padding token id that RoBERTa-style positions count around, or a negative value for BERT
+    /// positions <c>0 .. L-1</c>.</summary>
+    public int PaddingTokenId => _paddingTokenId;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -141,10 +163,12 @@ public partial class BertEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         EnsureInitializedFromInput(inputIds);
 
         int sequenceLength = GetSequenceLength(inputIds);
-        if (sequenceLength > _maxSequenceLength)
+        // RoBERTa positions run from pad + 1, so the table needs pad + 1 more rows than the sequence.
+        int positionsNeeded = _paddingTokenId >= 0 ? sequenceLength + _paddingTokenId + 1 : sequenceLength;
+        if (positionsNeeded > _maxSequenceLength)
         {
             throw new ArgumentException(
-                $"Sequence length {sequenceLength} exceeds the configured maximum {_maxSequenceLength}.",
+                $"Sequence length {sequenceLength} needs {positionsNeeded} position rows; the table has {_maxSequenceLength}.",
                 nameof(inputIds));
         }
 
@@ -152,8 +176,27 @@ public partial class BertEmbeddingLayer<T> : LayerBase<T>, IShapeContract
             ValidateMatchingShape(inputIds, tokenTypeIds);
 
         var positionIds = new Tensor<T>(inputIds._shape);
-        for (int i = 0; i < positionIds.Length; i++)
-            positionIds.SetFlat(i, NumOps.FromDouble(i % sequenceLength));
+        if (_paddingTokenId < 0)
+        {
+            for (int i = 0; i < positionIds.Length; i++)
+                positionIds.SetFlat(i, NumOps.FromDouble(i % sequenceLength));
+        }
+        else
+        {
+            // create_position_ids_from_input_ids: count the non-padding tokens of each row.
+            int rows = positionIds.Length / sequenceLength;
+            for (int r = 0; r < rows; r++)
+            {
+                int counted = 0;
+                for (int s = 0; s < sequenceLength; s++)
+                {
+                    int flat = r * sequenceLength + s;
+                    bool padding = (int)Math.Round(NumOps.ToDouble(inputIds.GetFlat(flat))) == _paddingTokenId;
+                    if (!padding) counted++;
+                    positionIds.SetFlat(flat, NumOps.FromDouble(padding ? _paddingTokenId : _paddingTokenId + counted));
+                }
+            }
+        }
 
         var effectiveTokenTypeIds = tokenTypeIds ?? new Tensor<T>(inputIds._shape);
 
