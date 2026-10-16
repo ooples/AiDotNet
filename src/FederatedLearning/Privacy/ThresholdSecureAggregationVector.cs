@@ -543,18 +543,18 @@ public sealed class ThresholdSecureAggregationVector<T> : FederatedLearningCompo
             }
         }
 
-        var keyPairs = new Dictionary<int, ECDiffieHellman>();
+        var keyPairs = new Dictionary<int, EphemeralKeyPair>();
         try
         {
             foreach (var clientId in sortedClientIds)
             {
-                keyPairs[clientId] = ECDiffieHellman.Create();
+                keyPairs[clientId] = EphemeralKeyPair.Create();
             }
 
             var salt = Encoding.UTF8.GetBytes("AiDotNet.SecAgg.v2");
             foreach (var (min, max) in EnumeratePairs(sortedClientIds))
             {
-                var shared = keyPairs[min].DeriveKeyMaterial(keyPairs[max].PublicKey);
+                var shared = keyPairs[min].DeriveSharedSecret(keyPairs[max]);
                 try
                 {
                     var info = Encoding.UTF8.GetBytes($"pair:{min}:{max}");

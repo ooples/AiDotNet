@@ -95,17 +95,11 @@ public class DiceLoss<T> : LossFunctionBase<T>
             Engine.TensorAdd(predSum, targSum),
             NumOps.FromDouble(NumericalStabilityHelper.SmallEpsilon));
 
-        // Divide RANK-1 [1] tensors, not rank-0 scalars. ReduceSum with keepDims: false collapses to
-        // rank-0 [], and while the forward divide is fine, its BACKWARD is not: DivideBackward
-        // receives a [1] upstream gradient against a [] input and throws
-        // "Tensor shapes must match. Got [1] and []" from CpuEngine.TensorDivide, aborting
-        // ComputeGradients. That made DiceLoss unusable for TRAINING whenever it was applied on its
-        // own -- the failure surfaces as an exception mid-Train, which callers see as "no parameters
-        // changed", not as a loss bug. Reshaping is an Engine op so the tape is preserved, and the
-        // returned rank-1 loss matches what the other loss functions here already produce.
-        var numerator1 = Engine.Reshape(numerator, new[] { 1 });
-        var denominator1 = Engine.Reshape(denominator, new[] { 1 });
-        var dice = Engine.TensorDivide(numerator1, denominator1);
+        // Rank-0 [] like every other ComputeTapeLoss (CompositeLoss sums terms and requires matching shapes). Dice used
+        // to reshape to [1] because a rank-0 divide's BACKWARD received a [1] seed gradient and threw "Tensor shapes must
+        // match. Got [1] and []"; AiDotNet.Tensors #1287 (0.137+) seeds the backward with the loss's own shape, so the
+        // workaround now only made Dice disagree with the focal term in the SAM composite.
+        var dice = Engine.TensorDivide(numerator, denominator);
         return Engine.ScalarMinusTensor(NumOps.One, dice);
     }
 }

@@ -7713,20 +7713,32 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 && typeName.StartsWith(
                     "AiDotNet.Audio.Fingerprinting.", System.StringComparison.Ordinal))
             {
-                // CLAP (Wu et al. 2023) retains its 48 kHz / 1024-window preprocessing defaults in
-                // production. The generic audio scaffold supplied a [1,64,32] feature tensor, whose
-                // 32-sample final axis is shorter than the STFT reflection pad and threw before HTSAT.
-                // Supply a real 2048-sample waveform and build the same mel-patch -> Swin -> projection
-                // plus RoBERTa dual-encoder architecture at CI-smoke width/depth. AudioPatchSize is
-                // still exercised by the paper-correct PatchEmbeddingLayer in the production factory.
+                // CLAP (Wu et al. 2023) retains LAION-CLAP's HTSAT-tiny + RoBERTa-base defaults in
+                // production (48 kHz, 1024-window, 10 s clips, a 256 x 256 spectrogram image). The fixture
+                // feeds a real 2048-sample waveform and builds the same network at CI-smoke size: bn0, the
+                // image fold, the patch embedding, two Swin stages joined by a patch merging, the pooled
+                // embedding and the MLP projection; RoBERTa with its pooler and the MLP projection. The clip
+                // is 2048 samples, so the fixture (and its halved variable-length probe) takes the
+                // deterministic repeat-pad path.
+                //
+                // It is the published NON-fusion variant. With fusion, the reference's training forward
+                // routes one random short clip through the fusion branch (htsat.forward: "if self.training:
+                // x['longer'][randint] = True") while inference never does, so an invariant that trains and
+                // then measures in eval mode compares two different networks: measured 0.196 -> 0.314 on this
+                // fixture. Fusion is covered by ClapReferenceTests (reference parity of the fused embedding)
+                // and ClapArchitectureTests (contrastive loss falls with fusion on). SpecAugment's stripes
+                // are off for the same reason sibling fixtures set DropoutRate = 0.0; its masking is covered
+                // by SpectrogramStripeDropLayer's own tests.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Embedding, " +
                     "inputSize: 2048, outputSize: 4), " +
-                    "new AiDotNet.Models.Options.CLAPModelOptions { AudioHiddenDim = 32, " +
-                    "AudioEncoderLayers = 1, AudioEncoderHeads = 2, SwinWindowSize = 2, " +
-                    "TextHiddenDim = 32, TextEncoderLayers = 1, TextEncoderHeads = 2, " +
-                    "VocabSize = 64, MaxTextLength = 8, ProjectionDim = 4 })";
+                    "new AiDotNet.Models.Options.CLAPModelOptions { StftWindowSize = 256, HopLength = 64, " +
+                    "NumMelBands = 8, ClipSamples = 2048, SpecSize = 32, AudioEmbedDim = 8, " +
+                    "AudioStageDepths = new[] { 1, 1 }, AudioStageHeads = new[] { 1, 2 }, SwinWindowSize = 4, " +
+                    "TextHiddenDim = 16, TextEncoderLayers = 1, TextEncoderHeads = 2, TextIntermediateDim = 32, " +
+                    "VocabSize = 64, MaxTextLength = 8, TextMaxPositions = 16, ProjectionDim = 4, " +
+                    "EnableFeatureFusion = false, SpecAugmentTimeStripes = 0, SpecAugmentFreqStripes = 0 })";
             }
             else if (model.ClassName == "ASTModel" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
