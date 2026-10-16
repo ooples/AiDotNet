@@ -202,16 +202,7 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
     private readonly double[] _sceneMax = new double[3];
     private readonly double[] _sceneSize = new double[3];
     private readonly double[] _sceneInvSize = new double[3];
-    [Scratch]
-    private Tensor<T>? _lastPositions;
-    [Scratch]
-    private Tensor<T>? _lastDirections;
-    [Scratch]
-    private Tensor<T>? _lastDensityRaw;
-    [Scratch]
-    private Tensor<T>? _lastRgbRaw;
-    [Scratch]
-    private Tensor<T>? _lastHashFeatureGradients;
+
 
     public override bool SupportsTraining => true;
 
@@ -410,19 +401,6 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
             _sceneSize[i] = size;
             _sceneInvSize[i] = 1.0 / size;
         }
-    }
-
-    private void NormalizePosition(
-        double x,
-        double y,
-        double z,
-        out double nx,
-        out double ny,
-        out double nz)
-    {
-        nx = Clamp01((x - _sceneMin[0]) * _sceneInvSize[0]);
-        ny = Clamp01((y - _sceneMin[1]) * _sceneInvSize[1]);
-        nz = Clamp01((z - _sceneMin[2]) * _sceneInvSize[2]);
     }
 
     private bool TryGetGridCell(
@@ -681,14 +659,6 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
         var rgbRaw = _colorOutputLayer.Forward(colorHidden);
         var rgb = Engine.Sigmoid(rgbRaw);
 
-        if (IsTrainingMode)
-        {
-            _lastPositions = positions;
-            _lastDirections = viewingDirections;
-            _lastDensityRaw = densityRaw;
-            _lastRgbRaw = rgbRaw;
-        }
-
         return (rgb, density);
     }
 
@@ -746,51 +716,20 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
     /// <summary>
     /// Normalizes positions from world space to [0, 1] range based on scene bounds.
     /// </summary>
+    // Engine ops, so a compiled training plan replays the normalization on each step's sample points; a host loop
+    // over the positions was baked into the plan at trace time. The scene bounds are fixed at construction.
     private Tensor<T> NormalizePositionsToUnit(Tensor<T> positions)
     {
-        int numPoints = positions.Shape[0];
-        var normalized = new T[numPoints * 3];
-        var posData = positions.Data.Span;
-
-        for (int i = 0; i < numPoints; i++)
+        var sceneMin = new Tensor<T>(new[] { 1, 3 });
+        var sceneInvSize = new Tensor<T>(new[] { 1, 3 });
+        for (int i = 0; i < 3; i++)
         {
-            double px = NumOps.ToDouble(posData[i * 3]);
-            double py = NumOps.ToDouble(posData[i * 3 + 1]);
-            double pz = NumOps.ToDouble(posData[i * 3 + 2]);
-
-            NormalizePosition(px, py, pz, out double nx, out double ny, out double nz);
-
-            normalized[i * 3] = NumOps.FromDouble(nx);
-            normalized[i * 3 + 1] = NumOps.FromDouble(ny);
-            normalized[i * 3 + 2] = NumOps.FromDouble(nz);
+            sceneMin[i] = NumOps.FromDouble(_sceneMin[i]);
+            sceneInvSize[i] = NumOps.FromDouble(_sceneInvSize[i]);
         }
 
-        return new Tensor<T>(normalized, [numPoints, 3]);
-    }
-
-    private static int SpatialHash(int x, int y, int z)
-    {
-        unchecked
-        {
-            const uint p1 = 73856093;
-            const uint p2 = 19349663;
-            const uint p3 = 83492791;
-
-            uint hx = (uint)x * p1;
-            uint hy = (uint)y * p2;
-            uint hz = (uint)z * p3;
-
-            return (int)(hx ^ hy ^ hz);
-        }
-    }
-
-    private int HashIndex(int x, int y, int z)
-    {
-        unchecked
-        {
-            uint hash = (uint)SpatialHash(x, y, z);
-            return (int)(hash % (uint)_hashTableSize);
-        }
+        var scaled = Engine.TensorMultiply(Engine.TensorSubtract(positions, sceneMin), sceneInvSize);
+        return Engine.TensorClamp(scaled, NumOps.Zero, NumOps.One);
     }
 
     public Tensor<T> RenderImage(
@@ -879,6 +818,17 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
         var densityTensor = Engine.TensorIndexSelect(densityWithEmpty, spreadIndex, 0);
 
         return VolumeRendering(rgbTensor, densityTensor, numRays, numSamples, rayNear, rayFar, sampleTs);
+    }
+
+    /// <summary>
+    /// Queries the field at every sample, zeroes the density of samples in empty occupancy cells, and composites one
+    /// color per ray, <c>[rays, 3]</c>.
+    /// </summary>
+    private Tensor<T> RenderSamples(Tensor<T> positions, Tensor<T> directions, Tensor<T> occupancy, Tensor<T> spacings)
+    {
+        var (rgb, density) = QueryField(positions, directions);
+        var occupiedDensity = Engine.TensorMultiply(Engine.Reshape(density, occupancy._shape), occupancy);
+        return NeuralRadianceFields.Helpers.VolumeRenderer<T>.Render(Engine, rgb, occupiedDensity, spacings);
     }
 
     private (Tensor<T> positions, Tensor<T> directions, bool[] mask, double[] sampleTs, double[] rayNear, double[] rayFar)
@@ -1017,97 +967,6 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
             sampleTs,
             rayNear,
             rayFar);
-    }
-
-    private void ApplyHashTableGradients(Tensor<T> hashFeatureGradients)
-    {
-        if (_lastPositions == null)
-        {
-            throw new InvalidOperationException("Hash table gradients require cached positions from a forward pass.");
-        }
-
-        if (hashFeatureGradients.Shape.Length != 2)
-        {
-            throw new ArgumentException("Hash feature gradients must have shape [N, F].", nameof(hashFeatureGradients));
-        }
-
-        int numPoints = _lastPositions.Shape[0];
-        int hashFeatureDim = _numLevels * _featuresPerLevel;
-        if (hashFeatureGradients.Shape[0] != numPoints || hashFeatureGradients.Shape[1] != hashFeatureDim)
-        {
-            throw new ArgumentException("Hash feature gradients shape does not match cached positions.", nameof(hashFeatureGradients));
-        }
-
-        var posData = _lastPositions.Data.Span;
-        var gradData = hashFeatureGradients.Data.Span;
-        double learningRate = NumOps.ToDouble(_learningRate);
-
-        for (int level = 0; level < _numLevels; level++)
-        {
-            int resolution = GetLevelResolution(level);
-            var table = _hashTables[level];
-
-            for (int i = 0; i < numPoints; i++)
-            {
-                double px = NumOps.ToDouble(posData[i * 3]);
-                double py = NumOps.ToDouble(posData[i * 3 + 1]);
-                double pz = NumOps.ToDouble(posData[i * 3 + 2]);
-                NormalizePosition(px, py, pz, out double x, out double y, out double z);
-
-                double gx = x * resolution;
-                double gy = y * resolution;
-                double gz = z * resolution;
-
-                int x0 = (int)Math.Floor(gx);
-                int y0 = (int)Math.Floor(gy);
-                int z0 = (int)Math.Floor(gz);
-
-                double fx = gx - x0;
-                double fy = gy - y0;
-                double fz = gz - z0;
-
-                int x1 = x0 + 1;
-                int y1 = y0 + 1;
-                int z1 = z0 + 1;
-
-                double w000 = (1 - fx) * (1 - fy) * (1 - fz);
-                double w001 = (1 - fx) * (1 - fy) * fz;
-                double w010 = (1 - fx) * fy * (1 - fz);
-                double w011 = (1 - fx) * fy * fz;
-                double w100 = fx * (1 - fy) * (1 - fz);
-                double w101 = fx * (1 - fy) * fz;
-                double w110 = fx * fy * (1 - fz);
-                double w111 = fx * fy * fz;
-
-                int h000 = HashIndex(x0, y0, z0);
-                int h001 = HashIndex(x0, y0, z1);
-                int h010 = HashIndex(x0, y1, z0);
-                int h011 = HashIndex(x0, y1, z1);
-                int h100 = HashIndex(x1, y0, z0);
-                int h101 = HashIndex(x1, y0, z1);
-                int h110 = HashIndex(x1, y1, z0);
-                int h111 = HashIndex(x1, y1, z1);
-
-                int gradBase = i * hashFeatureDim + level * _featuresPerLevel;
-                for (int f = 0; f < _featuresPerLevel; f++)
-                {
-                    double grad = NumOps.ToDouble(gradData[gradBase + f]);
-                    if (grad == 0.0)
-                    {
-                        continue;
-                    }
-
-                    UpdateHashEntry(table, h000, f, grad, w000, learningRate);
-                    UpdateHashEntry(table, h001, f, grad, w001, learningRate);
-                    UpdateHashEntry(table, h010, f, grad, w010, learningRate);
-                    UpdateHashEntry(table, h011, f, grad, w011, learningRate);
-                    UpdateHashEntry(table, h100, f, grad, w100, learningRate);
-                    UpdateHashEntry(table, h101, f, grad, w101, learningRate);
-                    UpdateHashEntry(table, h110, f, grad, w110, learningRate);
-                    UpdateHashEntry(table, h111, f, grad, w111, learningRate);
-                }
-            }
-        }
     }
 
     private void UpdateHashEntry(
@@ -1270,36 +1129,6 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
         var exp = Engine.TensorExp(input);
         var expPlus = Engine.TensorAddScalar(exp, NumOps.One);
         return Engine.TensorLog(expPlus);
-    }
-
-    private Tensor<T> ApplySigmoidGradient(Tensor<T> raw, Tensor<T> gradient)
-    {
-        var numOps = NumOps;
-        var data = new T[gradient.Length];
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            double rawVal = numOps.ToDouble(raw.Data.Span[i]);
-            double sig = 1.0 / (1.0 + Math.Exp(-rawVal));
-            double grad = numOps.ToDouble(gradient.Data.Span[i]);
-            data[i] = numOps.FromDouble(grad * sig * (1.0 - sig));
-        }
-
-        return new Tensor<T>(data, gradient._shape);
-    }
-
-    private Tensor<T> ApplySoftplusGradient(Tensor<T> raw, Tensor<T> gradient)
-    {
-        var numOps = NumOps;
-        var data = new T[gradient.Length];
-        for (int i = 0; i < gradient.Length; i++)
-        {
-            double rawVal = numOps.ToDouble(raw.Data.Span[i]);
-            double sigmoid = 1.0 / (1.0 + Math.Exp(-rawVal));
-            double grad = numOps.ToDouble(gradient.Data.Span[i]);
-            data[i] = numOps.FromDouble(grad * sigmoid);
-        }
-
-        return new Tensor<T>(data, gradient._shape);
     }
 
     private Tensor<T> AddTensors(Tensor<T> left, Tensor<T> right)
@@ -1572,21 +1401,28 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
         var targetColors = NeuralRadianceFields.Helpers.ImageTrainingHelpers.ApplyPriorToRayTargets(
             Engine, pixels.TargetColors, view, imageTrainingOptions?.PriorConfidenceOverride);
 
+        // The samples are placed on the host (along each ray, against the occupancy grid) and travel as data with their
+        // occupancy and spacings. Every sample is queried and an empty cell's density is masked to zero: the rendered
+        // color is the one the occupancy-skipping render produces (an empty sample has no weight), and the step keeps
+        // one shape per batch size. The step stays on the eager tape until the pinned AiDotNet.Tensors records the
+        // hash encoding in a training trace: a compiled plan without it never trains the hash tables.
         SetTrainingMode(true);
         try
         {
+            int numRays = pixels.RayOrigins.Shape[0];
+            var (positions, directions, occupancyMask, sampleTs, rayNear, rayFar) =
+                SampleRaysWithOccupancy(pixels.RayOrigins, pixels.RayDirections, numSamples, near, far);
+            int totalSamples = numRays * numSamples;
+            var occupancy = new Tensor<T>(new[] { totalSamples, 1 });
+            for (int i = 0; i < totalSamples; i++)
+                occupancy[i] = occupancyMask[i] ? NumOps.One : NumOps.Zero;
+            var spacings = NeuralRadianceFields.Helpers.VolumeRenderer<T>.Spacings(
+                numRays, numSamples, rayNear, rayFar, sampleTs);
+
             using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>();
-            var rendered = RenderRays(
-                pixels.RayOrigins,
-                pixels.RayDirections,
-                numSamples: numSamples,
-                near,
-                far);
-            var diff = Engine.TensorSubtract(rendered, targetColors);
-            var squared = Engine.TensorMultiply(diff, diff);
-            var allAxes = System.Linq.Enumerable.Range(0, squared.Shape.Length).ToArray();
-            var meanLoss = Engine.ReduceMean(squared, allAxes, keepDims: false);
-            return BackwardAndStepOnPrecomputedLoss(tape, meanLoss);
+            var rendered = RenderSamples(positions, directions, occupancy, spacings);
+            return BackwardAndStepOnPrecomputedLoss(
+                tape, NeuralRadianceFields.Helpers.ImageTrainingHelpers.PhotometricLoss(rendered, targetColors));
         }
         finally
         {
@@ -1600,13 +1436,9 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
+        // The hash tables train on the tape with the rest of the model (the encoding routes the feature gradient to
+        // every level's table); only the occupancy grid is updated here.
         TrainWithTape(input, expectedOutput);
-
-        // Hash table and occupancy grid updates (model-specific)
-        if (_lastHashFeatureGradients != null)
-        {
-            ApplyHashTableGradients(_lastHashFeatureGradients);
-        }
 
         _trainingStep++;
         if (_trainingStep % _occupancyUpdateInterval == 0)
