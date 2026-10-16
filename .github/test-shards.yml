@@ -616,7 +616,7 @@ shard:
       FullyQualifiedName~Generated.SO|FullyQualifiedName~Generated.So|FullyQualifiedName~Generated.SP|FullyQualifiedName~Generated.Sp|
       FullyQualifiedName~Generated.SQ|FullyQualifiedName~Generated.Sq|FullyQualifiedName~Generated.Sil|
       FullyQualifiedName~Generated.Sim|FullyQualifiedName~Generated.SIm|
-      FullyQualifiedName~Generated.Sm|FullyQualifiedName~Generated.SN)
+      FullyQualifiedName~Generated.Sm|FullyQualifiedName~Generated.SN|FullyQualifiedName~Generated.Sn)
   # SPLIT FROM "St-Sy", also killed by the runner (MemAvailable floor 218 MB) at ~18
   # minutes with no TRX, on BOTH this run and the baseline. Same treatment: halve the
   # working set rather than extend the clock. The token set is carried over verbatim so
@@ -660,7 +660,7 @@ shard:
     framework: net10.0
     filter: >-
       FullyQualifiedName~ModelFamilyTests.Generated&
-      (FullyQualifiedName~Generated.Tem|FullyQualifiedName~Generated.Tex|FullyQualifiedName~Generated.Tho|FullyQualifiedName~Generated.Thr|FullyQualifiedName~Generated.TiD|FullyQualifiedName~Generated.TiM|FullyQualifiedName~Generated.Tim|FullyQualifiedName~Generated.Tin|FullyQualifiedName~Generated.Tit|FullyQualifiedName~Generated.Too|FullyQualifiedName~Generated.Tor|FullyQualifiedName~Generated.Tra|FullyQualifiedName~Generated.Tri|FullyQualifiedName~Generated.TET|FullyQualifiedName~Generated.TIM|FullyQualifiedName~Generated.Tok|FullyQualifiedName~Generated.TrO)
+      (FullyQualifiedName~Generated.Tem|FullyQualifiedName~Generated.Tex|FullyQualifiedName~Generated.Tho|FullyQualifiedName~Generated.Thr|FullyQualifiedName~Generated.TiD|FullyQualifiedName~Generated.Tie|FullyQualifiedName~Generated.TiM|FullyQualifiedName~Generated.Tim|FullyQualifiedName~Generated.Tin|FullyQualifiedName~Generated.Tit|FullyQualifiedName~Generated.Too|FullyQualifiedName~Generated.Tor|FullyQualifiedName~Generated.Tra|FullyQualifiedName~Generated.Tri|FullyQualifiedName~Generated.TET|FullyQualifiedName~Generated.TIM|FullyQualifiedName~Generated.Tok|FullyQualifiedName~Generated.TrO)
   - name: ModelFamily - Generated Layers U
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1771,7 +1771,6 @@ shard:
       FullyQualifiedName~AiDotNetTests.UnitTests.NeuralNetworks.GANs.GenerativeAdversarialNetworkTests.|
       FullyQualifiedName~AiDotNetTests.UnitTests.NeuralNetworks.Layers.PatchEmbeddingLayerTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.ModelDefectPaperKeyTests.|
-      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Generated.TiedEmbeddingLayerTests.|
       FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.TransformerDecoderCausalityTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.DiffusionBatchedNoisePredictionTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.BlipImageGroundingTests.)

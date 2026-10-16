@@ -763,6 +763,22 @@ public static partial class CloneEngine
             return configuration.CloneConfiguration();
         }
 
+        // #1993: a nested options object. The clone plan copies anything that is not an array or a
+        // collection BY REFERENCE, so a configuration and its copy shared these and a mutation
+        // through one was visible through the other. Measured: 16 options types own a settable
+        // options-typed property, and 11 of them have no copy constructor to deep-copy it, so for
+        // those the sharing was the whole behaviour. OnnxModelOptions had already been given this
+        // treatment one type at a time by implementing IConfigurationCloneable; recursing here
+        // covers every options type instead, including the plain classes that do not derive from
+        // ModelOptions and so could not be fixed in a base.
+        //
+        // That also answers what #1993 asked: a copy constructor is NOT what makes a configuration
+        // independent, because nothing on the clone path calls one. This path does.
+        if (IsConfigurationOptions(value.GetType()))
+        {
+            return CopyConfiguration(value);
+        }
+
         // Noise schedulers are mutable model components even though they are not IFullModel and do
         // not implement AiDotNet's ICloneable<T>. Passing one straight through a reconstructed
         // diffusion model makes the source and clone share Timesteps and solver history. Rebuild it
@@ -893,6 +909,21 @@ public static partial class CloneEngine
         object? componentCopy = DuplicateSubModel(value);
         return ReferenceEquals(componentCopy, value) ? Duplicate(value) : componentCopy;
     }
+
+    /// <summary>
+    /// Whether a value is an options object, i.e. a configuration blueprint whose copy must be
+    /// independent of the original (#1993).
+    /// </summary>
+    /// <remarks>
+    /// The test is deliberately narrow: the type's name ends in <c>Options</c> and it is a plain
+    /// mutable class the clone generator knows about. Widening it to "anything with a clone plan"
+    /// would start deep-copying collaborators that are meant to be shared, and the model, layer
+    /// and architecture cases are already handled by the branches above this one.
+    /// </remarks>
+    private static bool IsConfigurationOptions(Type type)
+        => type.IsClass
+        && !type.IsAbstract
+        && type.Name.EndsWith("Options", StringComparison.Ordinal);
 
     private static object? Duplicate(object? value)
     {
