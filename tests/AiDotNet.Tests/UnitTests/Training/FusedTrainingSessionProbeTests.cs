@@ -51,10 +51,15 @@ public class FusedTrainingSessionProbeTests
     {
         var large = Filled(1 << 20, (1 << 20) - 1, 0.5f);
         AnyGradientNonZero(large); // warm the reflection and JIT
+#if NET5_0_OR_GREATER
         long before = GC.GetAllocatedBytesForCurrentThread();
         Assert.True(AnyGradientNonZero(large));
         long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         Assert.True(allocated < 64 * 1024,
             $"probing a 4 MB gradient allocated {allocated} bytes; squaring it on the engine copied it.");
+#else
+        // .NET Framework has no per-thread allocation counter; the allocation bound is checked on the modern targets.
+        Assert.True(AnyGradientNonZero(large));
+#endif
     }
 }
