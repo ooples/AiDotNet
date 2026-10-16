@@ -270,6 +270,16 @@ internal static class PaperOptimizerFactory
                     break;
             }
 
+            // An optimizer with no weight-decay setting of its own (Adam, SGD with momentum, RMSProp, ...) takes the
+            // paper's decay the way PyTorch's weight_decay applies it: g + λθ before the update, which is explicit L2
+            // regularization of strength λ. These declarations used to be dropped without a report: 43 recipes,
+            // ResNet's 1e-4 among them.
+            if (recipe.WeightDecay > 0 && NativeWeightDecay(options) is null)
+                options.Regularization = new AiDotNet.Regularization.L2Regularization<T, TInput, TOutput>(new RegularizationOptions
+                {
+                    Type = RegularizationType.L2, Strength = recipe.WeightDecay, L1Ratio = 0.0,
+                });
+
             ReportUnsupportedElements(recipe);
             ScaleToConfiguredRun(options, recipe);
             ConfigureScheduleAndClipping(options, recipe);
@@ -447,6 +457,7 @@ internal static class PaperOptimizerFactory
             Compare(options, "Beta2", recipe.Beta2, "Beta2", mismatches);
             Compare(options, "Epsilon", recipe.Epsilon, "Epsilon", mismatches);
             Compare(options, "WeightDecay", recipe.WeightDecay, "WeightDecay", mismatches);
+            CompareCoupledWeightDecay<T, TInput, TOutput>(options, recipe.WeightDecay, mismatches);
             Compare(options, "MaxGradientNorm", recipe.MaxGradientNorm, "MaxGradientNorm", mismatches);
         }
 
@@ -672,6 +683,25 @@ internal static class PaperOptimizerFactory
         if (Math.Abs(actual - declared) <= Math.Abs(declared) * 1e-9) return;
 
         mismatches.Add($"the paper states {label} {declared:G6} but this model builds {actual:G6}");
+    }
+
+    /// <summary>An options object's own weight-decay property, or null when it has none.</summary>
+    private static PropertyInfo? NativeWeightDecay(object options)
+    {
+        var property = options.GetType().GetProperty("WeightDecay", BindingFlags.Public | BindingFlags.Instance);
+        return property is not null && property.PropertyType == typeof(double) ? property : null;
+    }
+
+    /// <summary>Reports a declared weight decay that an optimizer without a decay setting does not apply as explicit L2
+    /// of the same strength.</summary>
+    private static void CompareCoupledWeightDecay<T, TInput, TOutput>(object options, double declared, List<string> mismatches)
+    {
+        if (double.IsNaN(declared) || declared <= 0 || NativeWeightDecay(options) is not null) return;
+        double applied = options is GradientBasedOptimizerOptions<T, TInput, TOutput> { RegularizationExplicitlySet: true } gradientBased
+            && gradientBased.Regularization is AiDotNet.Regularization.L2Regularization<T, TInput, TOutput> l2
+            ? l2.GetOptions().Strength : 0.0;
+        if (Math.Abs(applied - declared) <= declared * 1e-9) return;
+        mismatches.Add($"the paper states WeightDecay {declared:G6} but this model applies {applied:G6}");
     }
 
     internal static IReadOnlyList<TrainingRecipeReport> ReportsFor(object? model)
