@@ -336,22 +336,6 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         return GeneratorForward(input);
     }
 
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        var output = Predict(input);
-
-        // Simple MSE gradient
-        var gradient = new Tensor<T>(output._shape);
-        for (int i = 0; i < output.Length && i < expectedOutput.Length; i++)
-        {
-            gradient[i] = NumOps.FromDouble(
-                2.0 * (NumOps.ToDouble(output[i]) - NumOps.ToDouble(expectedOutput[i])));
-        }
-
-        // Backward through generator
-    }
-
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
     #endregion

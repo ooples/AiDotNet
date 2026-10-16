@@ -334,7 +334,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     // On a GPU engine a training step's gradients live on the device. Publishing them used to download every one,
     // every step (one sync per tensor: 35 per LSTM step, 65 per Transformer step). The layer now keeps OWNED device
     // copies (an async device-to-device copy each, no sync) and downloads only if something reads the gradients.
-    // Owned, not referenced: the step's own gradient buffers are reclaimed when it returns.
+    // Owned, not referenced: the step's own gradient buffers are reclaimed when it returns. A compiled plan's buffers,
+    // device or host, persist until its next step republishes them, so those are referenced instead
+    // (TryPublishDeviceGradients, TryReferenceHostGradients).
     private Dictionary<Tensor<T>, Tensor<T>>? _pendingDeviceGradients;
 
     /// <summary>
@@ -7467,7 +7469,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// this layer owns, on the device. Declines (returns false) when any matched gradient is not device-resident or is
     /// a sparse payload / strided view, so those keep the exact eager copy.
     /// </summary>
-    private bool TryPublishDeviceGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads, out int matched)
+    private bool TryPublishDeviceGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads, bool sourcesOutliveStep, out int matched)
     {
         matched = 0;
         var sources = new List<(Tensor<T> Parameter, Tensor<T> Gradient)>();
@@ -7475,6 +7477,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         if (sources.Count == 0) return false;
 
         var owned = new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        if (sourcesOutliveStep)
+        {
+            // A compiled plan's gradient buffers persist until its next step republishes them (and the plan lands them
+            // on the host before it is retired), so they are referenced, not copied: a device copy per parameter per
+            // step cost as much host time as the rest of the step.
+            foreach (var (parameter, gradient) in sources)
+            {
+                owned[parameter] = gradient;
+                matched += gradient.Length;
+            }
+            _parameterGradients = null;
+            _pendingDeviceGradients = owned;
+            return true;
+        }
         // A device copy made inside a tape step is one of the step's intermediates, which the tape frees on the device
         // when it ends; the published gradient is read after that, so the tape must keep it.
         var tape = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current;
@@ -7492,9 +7508,33 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         return true;
     }
 
-    // Same walk and match rule as FillParameterGradients; false when a matched gradient cannot take the device path.
+    /// <summary>
+    /// CPU path of <see cref="ScatterParameterGradients(IReadOnlyDictionary{Tensor{T}, Tensor{T}}, bool)"/> for a
+    /// compiled plan's gradients: references them and fills the flat vector only if something reads it. Copying them
+    /// into the layer's vector every step -- a clear and a copy of every gradient -- was 15% of a CPU MLP training
+    /// process's main-thread time, for a vector nothing read. Declines (false) for sparse or strided gradients, which
+    /// keep the eager copy.
+    /// </summary>
+    private bool TryReferenceHostGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads, out int matched)
+    {
+        matched = 0;
+        var sources = new List<(Tensor<T> Parameter, Tensor<T> Gradient)>();
+        if (!CollectDeviceGradients(grads, sources, requireDevice: false) || sources.Count == 0) return false;
+        var referenced = new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        foreach (var (parameter, gradient) in sources)
+        {
+            referenced[parameter] = gradient;
+            matched += gradient.Length;
+        }
+        _parameterGradients = null;
+        _pendingDeviceGradients = referenced;
+        return true;
+    }
+
+    // Same walk and match rule as FillParameterGradients; false when a matched gradient cannot be referenced (sparse,
+    // strided, or -- when requireDevice -- not device-resident).
     private bool CollectDeviceGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads,
-        List<(Tensor<T> Parameter, Tensor<T> Gradient)> sources)
+        List<(Tensor<T> Parameter, Tensor<T> Gradient)> sources, bool requireDevice = true)
     {
         var components = GetOrderedParameterComponents();
         for (int i = 0; i < components.Length; i++)
@@ -7509,7 +7549,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 if (!grads.TryGetValue(tensor, out var gradient) || gradient is null
                     || TrainableScalarCount(gradient) != count)
                     continue;
-                if (gradient is SparseTensor<T> || !gradient.IsContiguous || !gradient.HasPendingGpuData)
+                if (gradient is SparseTensor<T> || !gradient.IsContiguous || (requireDevice && !gradient.HasPendingGpuData))
                 {
                     if (System.Environment.GetEnvironmentVariable("AIDOTNET_PUBLISH_TRACE") == "1")
                         System.Console.WriteLine($"[publish] {GetType().Name} declined: sparse={gradient is SparseTensor<T>} contiguous={gradient.IsContiguous} pendingGpu={gradient.HasPendingGpuData} gpuBuffer={gradient.TryGetGpuBuffer() is not null} len={gradient.Length}");
@@ -7523,7 +7563,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             if (sub is null || IsSubLayerParameterFrozen(sub)) continue;
             if (sub is LayerBase<T> layerBase)
             {
-                if (!layerBase.CollectDeviceGradients(grads, sources)) return false;
+                if (!layerBase.CollectDeviceGradients(grads, sources, requireDevice)) return false;
             }
             else
             {
@@ -7643,11 +7683,21 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
 
     public int ScatterParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+        => ScatterParameterGradients(grads, sourcesOutliveStep: false);
+
+    /// <summary>
+    /// <see cref="ScatterParameterGradients(IReadOnlyDictionary{Tensor{T}, Tensor{T}})"/> for gradients that stay
+    /// valid until the next publish (a compiled plan's own buffers, which it republishes every step): device-resident
+    /// ones are then referenced rather than copied.
+    /// </summary>
+    internal int ScatterParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads, bool sourcesOutliveStep)
     {
         if (grads is null || grads.Count == 0) return 0;
 
-        if (Engine.SupportsGpu && TryPublishDeviceGradients(grads, out int deviceMatched))
+        if (Engine.SupportsGpu && TryPublishDeviceGradients(grads, sourcesOutliveStep, out int deviceMatched))
             return deviceMatched;
+        if (sourcesOutliveStep && TryReferenceHostGradients(grads, out int hostMatched))
+            return hostMatched;
 
         int ignored = 0;
         int total = FillParameterGradients(null, 0, grads, ref ignored);

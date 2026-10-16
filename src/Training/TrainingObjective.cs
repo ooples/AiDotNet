@@ -34,12 +34,46 @@ public sealed class TrainingObjective<T>
         Guard.NotNull(loss);
         if (data.Count == 0)
             throw new ArgumentException("A training objective needs at least one data tensor.", nameof(data));
-        Data = data;
+        _data = data;
         Loss = loss;
     }
 
-    /// <summary>The tensors that change from step to step, in the order <see cref="Loss"/> receives them.</summary>
-    public IReadOnlyList<Tensor<T>> Data { get; }
+    /// <summary>
+    /// Creates an objective whose data is drawn when its step runs: after the objectives declared before it have
+    /// stepped. A GAN's critic step draws its fake samples from the generator as it stands at that step.
+    /// </summary>
+    /// <param name="drawData">Draws the step's data; called once, right before the step.</param>
+    /// <param name="loss">Builds the scalar loss from views of the drawn data, with engine operations.</param>
+    public TrainingObjective(Func<IReadOnlyList<Tensor<T>>> drawData, Func<IReadOnlyList<Tensor<T>>, Tensor<T>> loss)
+    {
+        Guard.NotNull(drawData);
+        Guard.NotNull(loss);
+        _drawData = drawData;
+        Loss = loss;
+    }
+
+    private IReadOnlyList<Tensor<T>>? _data;
+    private readonly Func<IReadOnlyList<Tensor<T>>>? _drawData;
+
+    /// <summary>
+    /// The tensors that change from step to step, in the order <see cref="Loss"/> receives them. Drawn on first read
+    /// for an objective created with a draw function.
+    /// </summary>
+    public IReadOnlyList<Tensor<T>> Data
+    {
+        get
+        {
+            if (_data is null && _drawData is not null)
+            {
+                var drawn = _drawData() ?? throw new InvalidOperationException("A training objective's draw returned null.");
+                if (drawn.Count == 0)
+                    throw new InvalidOperationException("A training objective needs at least one data tensor.");
+                _data = drawn;
+            }
+
+            return _data ?? Array.Empty<Tensor<T>>();
+        }
+    }
 
     /// <summary>Builds the scalar loss from views of <see cref="Data"/>.</summary>
     public Func<IReadOnlyList<Tensor<T>>, Tensor<T>> Loss { get; }
@@ -55,4 +89,17 @@ public sealed class TrainingObjective<T>
 
     /// <summary>Runs after the step, whether it succeeded or not: restores state the loss changed.</summary>
     public Action? AfterStep { get; init; }
+
+    /// <summary>
+    /// Receives the step's loss after a successful step: loss histories, and updates that follow an optimizer step
+    /// (weight clipping, a moving average).
+    /// </summary>
+    public Action<T>? OnLoss { get; init; }
+
+    /// <summary>
+    /// The network whose fused session runs this step, or null for the model that declared it. A model that steps several
+    /// networks (a GAN's critic and generator) gives each objective its own network, so each keeps its own compiled plan
+    /// and optimizer state.
+    /// </summary>
+    public AiDotNet.NeuralNetworks.NeuralNetworkBase<T>? Network { get; init; }
 }

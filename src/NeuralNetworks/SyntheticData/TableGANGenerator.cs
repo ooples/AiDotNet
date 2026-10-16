@@ -77,6 +77,13 @@ namespace AiDotNet.NeuralNetworks.SyntheticData;
     Authors = "Noseong Park, Mahmoud Mohammadi, Kshitij Gorde, Sushil Jajodia, Hongkyu Park, Youngmin Kim")]
 public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, ISyntheticTabularGenerator<T>
 {
+    /// <inheritdoc/>
+    /// <remarks>
+    /// TableGAN trains adversarially (generator, discriminator and classifier) through <c>Fit</c>; the supervised
+    /// <c>Train(input, target)</c> contract does not map onto its minimax objective, so it takes no step.
+    /// </remarks>
+    protected override IReadOnlyList<AiDotNet.Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> target)
+        => Array.Empty<AiDotNet.Training.TrainingObjective<T>>();
     // Held across Train calls. The fused plan owns the optimizer state, so a step object built per call
     // re-traced and recompiled every call and restarted the optimizer at t = 1 (Adam ~ lr*sign(g)).
     private AiDotNet.Training.WganGpFusedStep<T>? _wganFusedStep;
@@ -918,12 +925,6 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
         h = ConcatTensors(h, inputTensor);
         h = Layers[^1].Forward(h);
         return h;
-    }
-
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // TableGAN uses its own specialized training via Fit/FitAsync.
     }
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
