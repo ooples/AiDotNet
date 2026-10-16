@@ -282,15 +282,14 @@ public class LayerHelperIntegrationTests
 
         var layers = LayerHelper<double>.CreateDefaultVAELayers(architecture, latentSize: 32).ToList();
 
-        // 1D VAE: 3 encoder dense + MeanLayer + LogVarianceLayer + 2 decoder dense + output = 8
-        Assert.True(layers.Count >= 7, $"Expected at least 7 VAE layers, got {layers.Count}");
-
-        // Should contain encoder dense layers
-        Assert.Contains(layers, l => l is DenseLayer<double>);
-
-        // Should contain MeanLayer and LogVarianceLayer
-        Assert.Contains(layers, l => l is MeanLayer<double>);
-        Assert.Contains(layers, l => l is LogVarianceLayer<double>);
+        // 1D VAE: 3 encoder dense (the last outputs 2 * latent: means | log-variances) + the reparameterization
+        // layer + 2 decoder dense + output = 7.
+        Assert.Equal(7, layers.Count);
+        int latent = layers.FindIndex(l => l is RepParameterizationLayer<double>);
+        Assert.Equal(3, latent);
+        Assert.Single(layers, l => l is RepParameterizationLayer<double>);
+        Assert.All(layers.Take(latent), l => Assert.IsType<DenseLayer<double>>(l));
+        Assert.All(layers.Skip(latent + 1), l => Assert.IsType<DenseLayer<double>>(l));
     }
 
     #endregion
