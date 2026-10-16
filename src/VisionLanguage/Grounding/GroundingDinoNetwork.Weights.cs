@@ -118,7 +118,7 @@ internal sealed partial class GroundingDinoNetwork<T>
         double[] Xavier(int[] shape)
         {
             int count = shape.Aggregate(1, (a, s) => a * s), receptive = shape.Skip(2).Aggregate(1, (a, s) => a * s);
-            double bound = Math.Sqrt(6.0 / (shape[1] * receptive + shape[0] * receptive));
+            double bound = Math.Sqrt(6.0 / ((double)shape[1] * receptive + (double)shape[0] * receptive));
             return Enumerable.Range(0, count).Select(_ => (2 * random.NextDouble() - 1) * bound).ToArray();
         }
         LoadTorchWeights((name, shape) =>

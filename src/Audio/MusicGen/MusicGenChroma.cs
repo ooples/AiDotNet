@@ -87,7 +87,7 @@ internal static class MusicGenChroma
             for (int i = 0; i < fftSize; i++)
             {
                 double d = frq[i] - c;
-                d = ((d + half + 10 * n) % n + n) % n - half;                  // np.remainder (non-negative)
+                d = ((d + half + 10.0 * n) % n + n) % n - half;                  // np.remainder (non-negative)
                 weights[c, i] = Math.Exp(-0.5 * Math.Pow(2 * d / width[i], 2));
             }
         for (int i = 0; i < fftSize; i++)

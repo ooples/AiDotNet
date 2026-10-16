@@ -80,7 +80,7 @@ public partial class ActNormFlowLayer<T> : LayerBase<T>, IInvertibleFlowStep<T>
     private void InitializeFromData(Tensor<T> x)
     {
         int batch = x.Shape[0], time = x.Shape[2];
-        double count = batch * time;
+        double count = (double)batch * time;
         for (int c = 0; c < _channels; c++)
         {
             double sum = 0, sumSq = 0;

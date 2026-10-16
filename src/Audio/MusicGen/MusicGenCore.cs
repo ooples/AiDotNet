@@ -254,7 +254,7 @@ internal sealed class MusicGenCore<T>
             int valid = 0;
             for (int time = 0; time < t; time++) if (MusicGenDelayPattern.Predicted(time, q, t, c.Delays)) valid++;
             if (valid == 0) throw new ArgumentException($"{t} frames leave no target for codebook {q} after its {c.Delays[q]}-step delay.");
-            var weight = NumOps.FromDouble(-1.0 / (valid * k));
+            var weight = NumOps.FromDouble(-1.0 / ((double)valid * k));
             for (int time = 0; time < t; time++)
                 if (MusicGenDelayPattern.Predicted(time, q, t, c.Delays)) weights[q, time + c.Delays[q], codes[q, time]] = weight;
         }

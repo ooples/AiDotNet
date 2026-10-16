@@ -352,7 +352,7 @@ internal sealed class Wav2Vec2Network<T>
         TorchParameters.Linear(MaskEmbedding, 1, c.HiddenSize, mask);
         int perGroup = c.HiddenSize / c.PositionalConvGroups;
         // Wav2Vec2PositionalConvEmbedding: N(0, 2·√(1/(k·C_in))) on the weight, then weight_norm's g = ‖v‖ per tap.
-        var direction = Gaussian(c.HiddenSize * perGroup * c.PositionalConvKernel, 2 * Math.Sqrt(1.0 / (c.PositionalConvKernel * c.HiddenSize)));
+        var direction = Gaussian(c.HiddenSize * perGroup * c.PositionalConvKernel, 2 * Math.Sqrt(1.0 / ((double)c.PositionalConvKernel * c.HiddenSize)));
         LoadPositional(direction, null, new double[c.HiddenSize]);
         foreach (var l in EncoderLayers)
         {

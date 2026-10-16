@@ -119,7 +119,7 @@ internal sealed record ConvModule<T>(ConvolutionalLayer<T> Conv, BatchNormalizat
     public void Initialize(Random random)
     {
         int k = Conv.KernelSize, outputs = Conv.OutputDepth;
-        Conv.SetParameters(TorchParameters.Gaussian<T>(random, outputs * Conv.InputDepth * k * k, Math.Sqrt(2.0 / (outputs * k * k))));
+        Conv.SetParameters(TorchParameters.Gaussian<T>(random, outputs * Conv.InputDepth * k * k, Math.Sqrt(2.0 / ((double)outputs * k * k))));
         TorchParameters.BatchNorm(Norm, Enumerable.Repeat(1.0, outputs).ToArray(), new double[outputs], new double[outputs],
             Enumerable.Repeat(1.0, outputs).ToArray());
     }

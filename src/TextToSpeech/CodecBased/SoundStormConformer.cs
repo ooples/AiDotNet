@@ -330,7 +330,7 @@ internal sealed class SoundStormConformer<T>
             {
                 // The reference computes inv_freq in single precision when the module is built, and the angles in the
                 // model's precision.
-                float inverseFrequency = 1.0f / (float)Math.Pow(10000.0, (float)(2 * i) / headDim);
+                float inverseFrequency = 1.0f / (float)Math.Pow(10000.0, 2f * i / headDim);
                 double angle = t * (double)inverseFrequency;
                 cos[t, i] = cos[t, i + half] = ops.FromDouble(Math.Cos(angle));
                 sin[t, i] = sin[t, i + half] = ops.FromDouble(Math.Sin(angle));

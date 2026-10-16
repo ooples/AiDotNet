@@ -113,7 +113,8 @@ internal sealed partial class GroundingDinoNetwork<T>
             double v = coordinates[order[slot]] * 2 * Math.PI;
             for (int i = 0; i < features; i++)
             {
-                double a = v / Math.Pow(10000, 2.0 * (i / 2) / features);
+                int pair = i / 2;   // sin and cos of one frequency share an index
+                double a = v / Math.Pow(10000, 2.0 * pair / features);
                 output[slot * features + i] = i % 2 == 0 ? Math.Sin(a) : Math.Cos(a);
             }
         }
@@ -132,7 +133,8 @@ internal sealed partial class GroundingDinoNetwork<T>
                 double ye = (y + 1) / (h + 1e-6) * scale, xe = (x + 1) / (w + 1e-6) * scale;
                 for (int i = 0; i < half; i++)
                 {
-                    double t = Math.Pow(temperature, 2.0 * (i / 2) / half);
+                    int pair = i / 2;   // sin and cos of one frequency share an index
+                    double t = Math.Pow(temperature, 2.0 * pair / half);
                     pos[i, y, x] = i % 2 == 0 ? Math.Sin(ye / t) : Math.Cos(ye / t);
                     pos[half + i, y, x] = i % 2 == 0 ? Math.Sin(xe / t) : Math.Cos(xe / t);
                 }

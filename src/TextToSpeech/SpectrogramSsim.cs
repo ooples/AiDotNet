@@ -65,7 +65,8 @@ internal static class SpectrogramSsim
         double total = 0;
         for (int i = 0; i < WindowSize; i++)
         {
-            weights[i] = Math.Exp(-(i - half) * (i - half) / (2 * Sigma * Sigma));
+            double offset = i - half;
+            weights[i] = Math.Exp(-offset * offset / (2 * Sigma * Sigma));
             total += weights[i];
         }
         var band = new Tensor<T>(new[] { n, n });

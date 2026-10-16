@@ -167,7 +167,7 @@ internal sealed class VallETransformer<T>
         void Linear(DenseLayer<T> layer, int fanIn) => Fill(layer, fanIn, Uniform(1 / Math.Sqrt(fanIn)), Uniform(1 / Math.Sqrt(fanIn)));
         foreach (var layer in Layers)
         {
-            Fill(layer.InProjection, d, Uniform(Math.Sqrt(6.0 / (d + 3 * d))), () => 0.0);
+            Fill(layer.InProjection, d, Uniform(Math.Sqrt(6.0 / (d + 3.0 * d))), () => 0.0);
             Fill(layer.OutProjection, d, Uniform(1 / Math.Sqrt(d)), () => 0.0);
             Linear(layer.FeedForwardIn, d);
             Linear(layer.FeedForwardOut, ff);

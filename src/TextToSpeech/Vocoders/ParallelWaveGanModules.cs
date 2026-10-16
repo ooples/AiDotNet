@@ -44,7 +44,7 @@ internal sealed class ParallelWaveGanGenerator<T>
         foreach (int s in upsampleScales)
         {
             var smooth = Add(new NormedConv1DLayer<T>(1, 1, 2 * s + 1, 1, 1, 1, s, false, ConvolutionNormalization.Weight, useBias: false));
-            smooth.Reinitialize(() => 1.0 / (2 * s + 1));
+            smooth.Reinitialize(() => 1.0 / (2.0 * s + 1));
             _upsample.Add((s, smooth));
         }
         _first = Kaiming(new NormedConv1DLayer<T>(1, residualChannels, 1, 1, 1, 1, 0, false, ConvolutionNormalization.Weight), random);

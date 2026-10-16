@@ -57,7 +57,8 @@ public sealed partial class ScaledPositionalEncodingLayer<T> : LayerBase<T>
         for (int pos = 0; pos < time; pos++)
             for (int i = 0; i < _dimension; i++)
             {
-                double angle = pos / Math.Pow(10000.0, 2.0 * (i / 2) / _dimension);
+                int pair = i / 2;   // sin and cos of one frequency share an index
+                double angle = pos / Math.Pow(10000.0, 2.0 * pair / _dimension);
                 encoding[pos * _dimension + i] = NumOps.FromDouble(i % 2 == 0 ? Math.Sin(angle) : Math.Cos(angle));
             }
         var scaled = Engine.TensorMultiply(encoding, Engine.TensorTile(_alpha, new[] { time * _dimension }));

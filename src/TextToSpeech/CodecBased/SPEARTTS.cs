@@ -177,7 +177,7 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
             int fr = Math.Min(i * _options.CodecFrameRate / SampleRate, semFrames - 1);
             double s = 0;
             for (int q = 0; q < nQ; q++)
-                s += acCodes[q, fr] * Math.Sin(i * (q + 1) * 0.004) / nQ;
+                s += acCodes[q, fr] * Math.Sin((double)i * (q + 1) * 0.004) / nQ;
             waveform[i] = NumOps.FromDouble(Math.Tanh(s * 0.9));
         }
         return waveform;

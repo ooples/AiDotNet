@@ -76,7 +76,7 @@ public partial class LocationSensitiveAttentionLayer<T> : LayerBase<T>, IShapeCo
         RegisterSubLayer(_energy);
 
         // Xavier-uniform over fan_in = 2 · k and fan_out = filters · k (NVIDIA ConvNorm, gain 1).
-        double bound = Math.Sqrt(6.0 / (2 * kernelSize + filters * kernelSize));
+        double bound = Math.Sqrt(6.0 / (2.0 * kernelSize + (double)filters * kernelSize));
         var random = RandomSeed.HasValue
             ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value)
             : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
