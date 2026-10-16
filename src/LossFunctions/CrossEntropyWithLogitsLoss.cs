@@ -158,6 +158,15 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
             target = ClassIndicesToOneHot(target, predicted.Shape[classAxis], classAxis, predicted.Shape.ToArray());
         }
 
+        // Dense targets over the last axis: the engine's single softmax cross-entropy op is exactly the objective
+        // composed below (log-softmax, target-weighted sum, mean over the supervised rows), and an engine can run it as
+        // fused kernels -- on CUDA, three kernels instead of about forty per training step.
+        if (classAxis == predicted.Shape.Length - 1 && predicted.Shape.Length >= 2
+            && target.Shape.ToArray().SequenceEqual(predicted.Shape.ToArray()))
+        {
+            return Engine.TensorSoftmaxCrossEntropy(predicted, target);
+        }
+
         // CE per-sample = -Σ_class target_i * log_softmax_i  (sum over class axis only).
         // Match PyTorch's nn.CrossEntropyLoss(reduction='mean') and the scalar CalculateLoss
         // path above — those return the per-sample sum across classes, NOT a mean across
