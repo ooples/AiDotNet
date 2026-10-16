@@ -857,6 +857,12 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
     /// </remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // A GAN that declares its own steps (ConditionalGAN's conditioned pair) trains them; the base GAN step below is
+        // the default.
+        bool declared = false;
+        RunWithTrainingStepHooks(input, expectedOutput, () => declared = TryTrainDeclaredObjectives(input, expectedOutput));
+        if (declared)
+            return;
         // Promote single-sample inputs to batched form before reading the
         // batch axis. DCGAN-style consumers (and the auto-generated tests)
         // pass a rank-1 latent [latentDim] and a rank-3 image [C, H, W],

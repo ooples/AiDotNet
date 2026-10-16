@@ -773,45 +773,9 @@ public partial class Autoencoder<T> : VectorModelLayoutBase<T>, IAuxiliaryLossLa
         return diagnostics;
     }
 
-    /// <summary>
-    /// Trains the autoencoder on the provided data.
-    /// </summary>
-    /// <param name="input">The input data to train on.</param>
-    /// <param name="expectedOutput">The expected output, typically the same as the input for standard autoencoders.</param>
-    /// <remarks>
-    /// <para>
-    /// This method trains the autoencoder to reproduce the input as its output. For standard autoencoders,
-    /// the expectedOutput is typically the same as the input. For denoising autoencoders, the input might be
-    /// a noisy version while expectedOutput is the clean version.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method teaches the autoencoder to compress and reconstruct your data effectively.
-    /// 
-    /// During training:
-    /// - The autoencoder processes your input data through all its layers
-    /// - It compares the reconstructed output with the expected output
-    /// - It calculates how to adjust its internal parameters to make the reconstruction better
-    /// - It updates all parameters to gradually improve performance
-    /// 
-    /// For a standard autoencoder, the expected output is the same as the input (it learns to recreate what it sees).
-    /// For specialized autoencoders like denoising autoencoders, the input could be noisy data while the expected output is clean data.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        foreach (var layer in Layers)
-            layer.SetTrainingMode(true);
-
-        // Multi-epoch training with batching
-        for (int epoch = 0; epoch < _epochs; epoch++)
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-
-        SetTrainingMode(false);
-        foreach (var layer in Layers)
-            layer.SetTrainingMode(false);
-    }
+    /// <inheritdoc/>
+    /// <remarks>One training call takes <c>Epochs</c> steps on its batch.</remarks>
+    protected override int OptimizerStepsPerTrainCall => _epochs;
 
     /// <summary>
     /// Generates new data samples by sampling points in the latent space and decoding them.

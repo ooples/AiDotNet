@@ -1112,15 +1112,6 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     }
 
     /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        var predicted = Predict(input);
-        var loss = _lossFunction.CalculateLoss(
-            TensorToVector(predicted, predicted.Length),
-            TensorToVector(expectedOutput, expectedOutput.Length));
-    }
-
-    /// <inheritdoc />
     public override Dictionary<string, T> GetFeatureImportance()
     {
         var importance = new Dictionary<string, T>();

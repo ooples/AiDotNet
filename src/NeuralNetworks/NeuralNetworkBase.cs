@@ -10539,14 +10539,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             foreach (var objective in objectives)
             {
                 Guard.NotNull(objective);
+                T loss;
                 try
                 {
-                    TrainDeclaredObjective(objective);
+                    loss = (objective.Network ?? this).TrainDeclaredObjective(objective);
                 }
                 finally
                 {
                     objective.AfterStep?.Invoke();
                 }
+
+                objective.OnLoss?.Invoke(loss);
             }
 
             return true;
@@ -10562,7 +10565,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// for a model's training entry points other than <see cref="Train(Tensor{T}, Tensor{T})"/> (image-space NeRF
     /// training, masked-autoencoder pretraining). The caller sets the training mode.
     /// </summary>
-    protected T TrainDeclaredObjective(Training.TrainingObjective<T> objective)
+    protected internal T TrainDeclaredObjective(Training.TrainingObjective<T> objective)
     {
         Guard.NotNull(objective);
         var data = objective.Data;
@@ -10638,12 +10641,22 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Once training has begun, the loss is locked (see SetLossFunction) so the loss reported in metrics
         // matches the loss actually optimized.
         _hasBeenTrained = true;
-        RunWithTrainingStepHooks(input, expectedOutput, () =>
+        for (int step = 0; step < Math.Max(1, OptimizerStepsPerTrainCall); step++)
         {
-            if (!TryTrainDeclaredObjectives(input, expectedOutput))
-                RunTrainStep(input, expectedOutput, optimizerOverride: null);
-        });
+            RunWithTrainingStepHooks(input, expectedOutput, () =>
+            {
+                if (!TryTrainDeclaredObjectives(input, expectedOutput))
+                    RunTrainStep(input, expectedOutput, optimizerOverride: null);
+            });
+        }
     }
+
+    /// <summary>
+    /// How many optimizer steps one <see cref="Train(Tensor{T}, Tensor{T})"/> call takes on its batch. One for almost
+    /// every model; a model whose documented contract is several passes per call (an autoencoder configured with
+    /// epochs) returns that count.
+    /// </summary>
+    protected virtual int OptimizerStepsPerTrainCall => 1;
 
     /// <summary>
     /// One training step with every preparation <see cref="Train(Tensor{T}, Tensor{T})"/> applies: batch-dim
