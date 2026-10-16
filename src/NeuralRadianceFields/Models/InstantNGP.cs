@@ -1401,11 +1401,12 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
         var targetColors = NeuralRadianceFields.Helpers.ImageTrainingHelpers.ApplyPriorToRayTargets(
             Engine, pixels.TargetColors, view, imageTrainingOptions?.PriorConfidenceOverride);
 
-        // The samples are placed on the host (along each ray, against the occupancy grid) and travel as data with their
-        // occupancy and spacings. Every sample is queried and an empty cell's density is masked to zero: the rendered
+        // The samples are placed on the host (along each ray, against the occupancy grid) and travel in the step's data
+        // with their occupancy and spacings, so the shared fused session's compiled plan renders each batch's own
+        // samples and trains the hash tables with the MLPs (AiDotNet.Tensors records the hash encoding in a training
+        // trace from 0.139.0). Every sample is queried and an empty cell's density is masked to zero: the rendered
         // color is the one the occupancy-skipping render produces (an empty sample has no weight), and the step keeps
-        // one shape per batch size. The step stays on the eager tape until the pinned AiDotNet.Tensors records the
-        // hash encoding in a training trace: a compiled plan without it never trains the hash tables.
+        // one shape per batch size, which a compiled plan needs.
         SetTrainingMode(true);
         try
         {
@@ -1419,10 +1420,10 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
             var spacings = NeuralRadianceFields.Helpers.VolumeRenderer<T>.Spacings(
                 numRays, numSamples, rayNear, rayFar, sampleTs);
 
-            using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>();
-            var rendered = RenderSamples(positions, directions, occupancy, spacings);
-            return BackwardAndStepOnPrecomputedLoss(
-                tape, NeuralRadianceFields.Helpers.ImageTrainingHelpers.PhotometricLoss(rendered, targetColors));
+            return TrainDeclaredObjective(new Training.TrainingObjective<T>(
+                new[] { positions, directions, occupancy, spacings, targetColors },
+                data => NeuralRadianceFields.Helpers.ImageTrainingHelpers.PhotometricLoss(
+                    RenderSamples(data[0], data[1], data[2], data[3]), data[4])));
         }
         finally
         {
