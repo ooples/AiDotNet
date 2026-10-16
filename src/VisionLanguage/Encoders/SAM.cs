@@ -194,15 +194,8 @@ public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         // The network's preprocessing normalizes with the options' mean and std; images arrive in 0..1.
         var training = new SamTraining<T>(Engine, Network, 20.0, 1.0, 2.0, 0.25);
         var objective = training.Objective(image, expected, _trainingRandom);
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithCustomLoss(image, _ => objective(), _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        // The objective runs the whole network itself; TrainWithCustomLoss would also run (and discard) a forward pass.
+        TrainWithCustomObjective(image, expected, (_, _) => objective(), _optimizer);
     }
 
     /// <inheritdoc />

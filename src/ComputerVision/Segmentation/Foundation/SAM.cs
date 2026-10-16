@@ -412,15 +412,8 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
         var image = Batched(input);
         var training = new SamTraining<T>(Engine, Network, _options.MaskFocalWeight, _options.MaskDiceWeight, _options.FocalGamma, _options.FocalAlpha);
         var objective = training.Objective(image, expectedOutput, _trainingRandom);
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithCustomLoss(image, _ => objective(), Optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        // The objective runs the whole network itself; TrainWithCustomLoss would also run (and discard) a forward pass.
+        TrainWithCustomObjective(image, expectedOutput, (_, _) => objective(), Optimizer);
     }
 
     /// <inheritdoc />
