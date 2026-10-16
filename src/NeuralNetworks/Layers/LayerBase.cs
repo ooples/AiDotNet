@@ -7467,7 +7467,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// this layer owns, on the device. Declines (returns false) when any matched gradient is not device-resident or is
     /// a sparse payload / strided view, so those keep the exact eager copy.
     /// </summary>
-    private bool TryPublishDeviceGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads, out int matched)
+    private bool TryPublishDeviceGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads, bool sourcesOutliveStep, out int matched)
     {
         matched = 0;
         var sources = new List<(Tensor<T> Parameter, Tensor<T> Gradient)>();
@@ -7475,6 +7475,20 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         if (sources.Count == 0) return false;
 
         var owned = new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        if (sourcesOutliveStep)
+        {
+            // A compiled plan's gradient buffers persist until its next step republishes them (and the plan lands them
+            // on the host before it is retired), so they are referenced, not copied: a device copy per parameter per
+            // step cost as much host time as the rest of the step.
+            foreach (var (parameter, gradient) in sources)
+            {
+                owned[parameter] = gradient;
+                matched += gradient.Length;
+            }
+            _parameterGradients = null;
+            _pendingDeviceGradients = owned;
+            return true;
+        }
         // A device copy made inside a tape step is one of the step's intermediates, which the tape frees on the device
         // when it ends; the published gradient is read after that, so the tape must keep it.
         var tape = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current;
@@ -7643,10 +7657,18 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
 
     public int ScatterParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+        => ScatterParameterGradients(grads, sourcesOutliveStep: false);
+
+    /// <summary>
+    /// <see cref="ScatterParameterGradients(IReadOnlyDictionary{Tensor{T}, Tensor{T}})"/> for gradients that stay
+    /// valid until the next publish (a compiled plan's own buffers, which it republishes every step): device-resident
+    /// ones are then referenced rather than copied.
+    /// </summary>
+    internal int ScatterParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads, bool sourcesOutliveStep)
     {
         if (grads is null || grads.Count == 0) return 0;
 
-        if (Engine.SupportsGpu && TryPublishDeviceGradients(grads, out int deviceMatched))
+        if (Engine.SupportsGpu && TryPublishDeviceGradients(grads, sourcesOutliveStep, out int deviceMatched))
             return deviceMatched;
 
         int ignored = 0;

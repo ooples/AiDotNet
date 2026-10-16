@@ -113,6 +113,8 @@ internal sealed class FusedTrainingSession<T>
     private readonly Action? _onReset;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _lastOptimizer;
     private bool _persistenceVerified;
+    // The plan whose update the numeric probe last saw land; a later plan is verified numerically again.
+    private object? _verifiedPlan;
     private int _stepsSincePersistenceCheck;
     private bool _replayAgreementVerified;
     private bool _zeroGradientCrossChecked;
@@ -154,6 +156,7 @@ internal sealed class FusedTrainingSession<T>
         IsDisabled = stickyDisable;
         IsCommitted = false;
         _persistenceVerified = false;
+        _verifiedPlan = null;
         _stepsSincePersistenceCheck = 0;
         _replayAgreementVerified = false;
         _zeroGradientCrossChecked = false;
@@ -165,6 +168,7 @@ internal sealed class FusedTrainingSession<T>
         IsDisabled = disabled;
         IsCommitted = false;
         _persistenceVerified = false;
+        _verifiedPlan = null;
         _stepsSincePersistenceCheck = 0;
         _replayAgreementVerified = false;
         _zeroGradientCrossChecked = false;
@@ -175,8 +179,23 @@ internal sealed class FusedTrainingSession<T>
     /// <summary>Runs one fused step, or says why it cannot.</summary>
     public FusedStepOutcome TryStep(FusedTrainingStepRequest<T> request, out T loss)
     {
+        var outcome = TryStep(request, out loss, out var lossTensor);
+        if (lossTensor is not null)
+            loss = ReadLoss(loss, lossTensor);
+        return outcome;
+    }
+
+    /// <summary>
+    /// Runs one fused step, or says why it cannot. A compiled step returns its loss as <paramref name="lossTensor"/>
+    /// (and <paramref name="loss"/> is then zero) without reading it: reading the scalar waits for the device to
+    /// finish the step, so a caller that defers the read lets the host prepare the next step meanwhile. Null when
+    /// the step produced only a scalar.
+    /// </summary>
+    public FusedStepOutcome TryStep(FusedTrainingStepRequest<T> request, out T loss, out Tensor<T>? lossTensor)
+    {
         Guard.NotNull(request);
         loss = NumOps.Zero;
+        lossTensor = null;
         LastFallbackException = null;
 
         // The compiled plan carries the optimizer's moments. A different optimizer instance (a new Train call, a
@@ -243,12 +262,20 @@ internal sealed class FusedTrainingSession<T>
 
         bool verifyPersistence = (!_persistenceVerified && !IsCommitted)
             || ++_stepsSincePersistenceCheck >= PersistenceRecheckInterval;
-        var probe = verifyPersistence ? SampleParameters(request) : null;
+        // Once a replay has been seen to update the live tensors, every later replay runs the same plan, so a
+        // periodic re-check only has to confirm the plan still trains the model's live tensors -- a host-side
+        // comparison (ConfiguredPlanTrainsLiveParameters). The numeric probe below costs a slice, a copy and a
+        // reduction per parameter plus a synchronous readback that drains the device (6-14 ms every 16 steps on
+        // the parity Transformer, a fifth of its CUDA step time); it runs only when that comparison cannot answer.
+        bool structuralRecheck = verifyPersistence && _persistenceVerified && _verifiedPlan is not null
+            && ReferenceEquals(_verifiedPlan, CompiledTapeTrainingStep<T>.ConfiguredPlanIdentity);
+        var probe = verifyPersistence && !structuralRecheck ? SampleParameters(request) : null;
         bool gradientsObserved = false;
         bool gradientNonZero = false;
         void OnGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> gradients)
         {
-            if (verifyPersistence)
+            // Only the numeric check reads whether the gradients were nonzero (a reduction per gradient on the device).
+            if (verifyPersistence && !structuralRecheck)
             {
                 gradientsObserved = true;
                 gradientNonZero = AnyGradientNonZero(gradients);
@@ -275,6 +302,7 @@ internal sealed class FusedTrainingSession<T>
         // (#1624 / #1640). Disposed before result handling so a fallback starts from a clean ring.
         bool ran;
         T stepLoss;
+        var deferredLoss = new System.Runtime.CompilerServices.StrongBox<Tensor<T>?>();
         var stepArena = TensorArena.Create();
         try
         {
@@ -300,7 +328,8 @@ internal sealed class FusedTrainingSession<T>
                 onGradients: OnGradients,
                 trainableSelection: request.Selection,
                 owner: _owner,
-                l2Regularization: l2);
+                l2Regularization: l2,
+                deferredLoss: deferredLoss);
         }
         finally
         {
@@ -320,7 +349,7 @@ internal sealed class FusedTrainingSession<T>
 
         if (checkReplay && snapshot is not null)
         {
-            double replayLoss = NumOps.ToDouble(stepLoss);
+            double replayLoss = NumOps.ToDouble(ReadLoss(stepLoss, deferredLoss.Value));
             double scale = Math.Max(1.0, Math.Max(Math.Abs(eagerLoss), Math.Abs(replayLoss)));
             bool agree = (double.IsNaN(eagerLoss) && double.IsNaN(replayLoss))
                 || Math.Abs(eagerLoss - replayLoss) <= ReplayAgreementTolerance * scale;
@@ -338,7 +367,30 @@ internal sealed class FusedTrainingSession<T>
             _replayAgreementVerified = true;
         }
 
-        if (verifyPersistence)
+        if (structuralRecheck)
+        {
+            bool? stillAttached = CompiledTapeTrainingStep<T>.ConfiguredPlanTrainsLiveParameters(
+                (IEnumerable<Tensor<T>>?)request.Selection ?? EnumerateLiveParameters(request));
+            if (stillAttached == true)
+            {
+                _stepsSincePersistenceCheck = 0;
+            }
+            else if (stillAttached == false)
+            {
+                string reason = "the fused compiled plan no longer trains the model's live parameter tensors, so "
+                    + "training continues on the eager tape (ooples/AiDotNet#1822)";
+                Warn(reason);
+                Reset(stickyDisable: true);
+                return Decline(reason);
+            }
+            else
+            {
+                // The plan cannot report its parameters: verify numerically on the next step.
+                _persistenceVerified = false;
+                _stepsSincePersistenceCheck = PersistenceRecheckInterval;
+            }
+        }
+        else if (verifyPersistence)
         {
             bool persisted = probe is not null && AnySampleChanged(probe);
             bool? attached = CompiledTapeTrainingStep<T>.ConfiguredPlanTrainsLiveParameters(
@@ -377,7 +429,7 @@ internal sealed class FusedTrainingSession<T>
             }
             else if (!persisted || detached)
             {
-                string reason = "fused compiled step ran (loss " + NumOps.ToDouble(stepLoss).ToString("G6")
+                string reason = "fused compiled step ran (loss " + NumOps.ToDouble(ReadLoss(stepLoss, deferredLoss.Value)).ToString("G6")
                     + ") but did not persist a parameter update; the plan is decoupled from the model's live "
                     + "parameter tensors, so training continues on the eager tape (ooples/AiDotNet#1822)";
                 Warn(reason);
@@ -391,12 +443,14 @@ internal sealed class FusedTrainingSession<T>
             {
                 _persistenceVerified = true;
                 _stepsSincePersistenceCheck = 0;
+                _verifiedPlan = CompiledTapeTrainingStep<T>.ConfiguredPlanIdentity;
             }
         }
 
         IsCommitted = true;
         LastMissReason = null;
         loss = stepLoss;
+        lossTensor = deferredLoss.Value;
 
         // The plan wrote the weights in place, past the version counters an eager optimizer step bumps, so every
         // derived weight copy (CPU packed inference weights, GPU-resident uploads) is stale. Inference read those
@@ -407,6 +461,10 @@ internal sealed class FusedTrainingSession<T>
             scheduled.OnBatchEnd();
         return FusedStepOutcome.Stepped;
     }
+
+    // The step's loss as a scalar: the deferred tensor's value when the step returned one, else the scalar it produced.
+    private static T ReadLoss(T scalar, Tensor<T>? deferred)
+        => deferred is null ? scalar : deferred.Length > 0 ? deferred[0] : NumOps.Zero;
 
     /// <summary>Maps an optimizer to its fused kernel configuration, when it has one.</summary>
     // Drops every cached derived copy of the weights after the plan updated them in place.
