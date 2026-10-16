@@ -313,6 +313,10 @@ public abstract partial class SegmentationModelBase<T> : NeuralNetworkBase<T>, I
     public int InputWidth => _width;
 
     /// <inheritdoc/>
+    protected override string? TrainingUnavailableReason =>
+        IsOnnxMode ? OnnxTrainingUnavailableReason : base.TrainingUnavailableReason;
+
+    /// <inheritdoc/>
     public bool IsOnnxMode => !_useNativeMode;
 
     /// <inheritdoc/>

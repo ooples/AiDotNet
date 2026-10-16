@@ -70,7 +70,7 @@ public partial class NeuralVaR<T> : RiskModelBase<T>
     /// <summary>
     /// Routes the optimizer selected for NeuralVaR through the shared tape-training path.
     /// </summary>
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;

@@ -10467,8 +10467,43 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return s2 / n;
     }
 
+    /// <summary>
+    /// The optimizer this model trains with by default: the one it built in its constructor (usually its paper recipe,
+    /// or the one passed in). Null keeps the network default. An optimizer configured on the network
+    /// (<c>SetBaseTrainOptimizer</c>, the builder) still wins.
+    /// </summary>
+    /// <remarks>
+    /// The source generator supplies this from a model's <c>_optimizer</c> field, so no model overrides
+    /// <see cref="Train(Tensor{T}, Tensor{T})"/> just to hand its optimizer to the tape step. About 640 models did,
+    /// and those overrides skipped every preparation the base step applies (batch-dim promotion, micro-batching, the
+    /// OOM and device-fault retries).
+    /// </remarks>
+    protected internal virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => null;
+
+    /// <summary>
+    /// Why this instance cannot train, or null when it can: for example, it wraps an ONNX inference session instead of
+    /// native layers. Training then throws <see cref="NotSupportedException"/> with this reason.
+    /// </summary>
+    /// <remarks>
+    /// The model-family bases answer from their ONNX state, and the source generator answers from a model's
+    /// <c>_useNativeMode</c> field, so no model overrides <see cref="Train(Tensor{T}, Tensor{T})"/> to guard it.
+    /// </remarks>
+    protected virtual string? TrainingUnavailableReason => null;
+
+    /// <summary>The reason an ONNX-backed instance cannot train, shared by the model-family bases.</summary>
+    protected string OnnxTrainingUnavailableReason =>
+        $"{GetType().Name} is running an ONNX inference session and cannot be trained. Construct it with the native " +
+        "(layer-based) constructor to train.";
+
+    private void ThrowIfCannotTrain()
+    {
+        if (TrainingUnavailableReason is { } reason)
+            throw new NotSupportedException(reason);
+    }
+
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        ThrowIfCannotTrain();
         // Once training has begun, the loss is locked (see SetLossFunction) so the loss reported in metrics
         // matches the loss actually optimized.
         _hasBeenTrained = true;
@@ -11441,11 +11476,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Guard.NotNull(target);
         Guard.NotNull(forward);
         Guard.NotNull(loss);
+        ThrowIfCannotTrain();
         using var reentrancyGuard = AcquireTrainSentinel();
 
         var configuredOptimizer = _baseTrainOptimizerExplicitlyConfigured && _baseTrainOptimizer is not null
             ? _baseTrainOptimizer
-            : optimizer ?? _baseTrainOptimizer;
+            : optimizer ?? TrainingOptimizer ?? _baseTrainOptimizer;
         var resolvedOptimizer = configuredOptimizer ?? GetOrCreateBaseOptimizer();
 
         // Lazily shaped layers own no parameters until their first forward, and a plan holds only the tensors that
@@ -11523,6 +11559,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // using-declaration generates the try/finally that releases the
         // sentinel on every return path — early returns, exceptions, normal
         // exit. See AcquireTrainSentinel for the contract.
+        ThrowIfCannotTrain();
         using var __reentrancyGuard = AcquireTrainSentinel();
 
         // Every Train override passes its PUBLIC input straight in here, so apply the same public-input
@@ -11543,7 +11580,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // AMSGrad-Adam default instead (a step-1 check cannot tell them apart).
         var configuredOptimizer = _baseTrainOptimizerExplicitlyConfigured && _baseTrainOptimizer is not null
             ? _baseTrainOptimizer
-            : optimizer ?? _baseTrainOptimizer;
+            : optimizer ?? TrainingOptimizer ?? _baseTrainOptimizer;
         bool useStreamingDefaults = configuredOptimizer is null;
         var resolvedOptimizer = configuredOptimizer ?? GetOrCreateBaseOptimizer();
 
@@ -13994,6 +14031,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
     protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
     {
+        if (_baseTrainOptimizerExplicitlyConfigured && _baseTrainOptimizer is not null) return _baseTrainOptimizer;
+        if (TrainingOptimizer is { } own) return own;
         if (_baseTrainOptimizer is not null) return _baseTrainOptimizer;
 
         // G2 (#1624) — optimizer-state memory ladder. Standard fp32 Adam keeps two moment buffers (m, v),

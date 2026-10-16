@@ -115,6 +115,10 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     /// </summary>
     public int HiddenDim { get; protected set; } = 256;
 
+    /// <inheritdoc/>
+    protected override string? TrainingUnavailableReason =>
+        IsOnnxMode ? OnnxTrainingUnavailableReason : base.TrainingUnavailableReason;
+
     /// <summary>
     /// Gets whether this model is running in ONNX inference mode.
     /// </summary>

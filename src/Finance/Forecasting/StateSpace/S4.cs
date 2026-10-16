@@ -108,7 +108,7 @@ public partial class S4<T> : ForecastingModelBase<T>
     /// is null. S4 built its LAMB recipe but never returned it here, so it trained on the default optimizer and
     /// the declared recipe (and the HiPPO learning-rate cap) never ran.
     /// </remarks>
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
     /// <summary>
     /// Start index of each residual sub-block in <see cref="NeuralNetworkBase{T}.Layers"/>, or null

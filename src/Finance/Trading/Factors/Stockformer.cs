@@ -131,7 +131,7 @@ public partial class Stockformer<T> : CrossSectionalGraphModelBase<T>
     /// learning rate was sitting in the options as decoration while training used something else.
     /// </para>
     /// </remarks>
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer =>
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer =>
         _trainingOptimizer ??= PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,

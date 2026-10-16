@@ -456,7 +456,7 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
     protected override bool SupportsFusedCompiledTraining => false;
 
     /// <inheritdoc/>
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.

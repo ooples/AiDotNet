@@ -120,7 +120,7 @@ public partial class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     /// <summary>
     /// Routes finance-base training through the optimizer configured for this FactorVAE instance.
     /// </summary>
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;

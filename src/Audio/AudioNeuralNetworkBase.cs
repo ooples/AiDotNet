@@ -113,6 +113,10 @@ public abstract partial class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>, 
     /// </remarks>
     public int NumMels { get; protected set; } = 80;
 
+    /// <inheritdoc/>
+    protected override string? TrainingUnavailableReason =>
+        IsOnnxMode ? OnnxTrainingUnavailableReason : base.TrainingUnavailableReason;
+
     /// <summary>
     /// Gets whether this model is running in ONNX inference mode.
     /// </summary>

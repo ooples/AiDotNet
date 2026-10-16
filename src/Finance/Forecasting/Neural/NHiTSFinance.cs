@@ -472,7 +472,7 @@ public partial class NHiTSFinance<T> : ForecastingModelBase<T>
     }
 
     /// <inheritdoc />
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
     /// <summary>
     /// Training-mode forward: replays the N-HiTS pipeline (pool →

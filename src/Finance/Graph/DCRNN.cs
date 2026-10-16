@@ -134,7 +134,7 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     public override ModelOptions GetOptions() => _options;
 
     /// <summary>Uses the configured DCRNN Adam recipe in the shared tape trainer.</summary>
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
     private int _sequenceLength;
     private int _forecastHorizon;
