@@ -141,4 +141,34 @@ public class SecureAggregationTests
 
         Assert.Throws<ObjectDisposedException>(() => secureAggregation.ClearSecrets());
     }
+
+    [Fact]
+    public void P521Sha256Agreement_MatchesTheEcdhDeriveKeyMaterialOfThisPlatform()
+    {
+        // The netstandard2.0 build derives pairwise seeds with BouncyCastle; every other build with
+        // ECDiffieHellman.DeriveKeyMaterial. Fixed P-521 key pairs, both directions: the two must agree byte for byte.
+        using var alice = System.Security.Cryptography.ECDiffieHellman.Create(System.Security.Cryptography.ECCurve.NamedCurves.nistP521);
+        using var bob = System.Security.Cryptography.ECDiffieHellman.Create(System.Security.Cryptography.ECCurve.NamedCurves.nistP521);
+        var a = alice.ExportParameters(includePrivateParameters: true);
+        var b = bob.ExportParameters(includePrivateParameters: true);
+
+        byte[] platform = alice.DeriveKeyMaterial(bob.PublicKey);
+        byte[] bouncy = AiDotNet.FederatedLearning.Cryptography.P521Sha256Agreement.Derive(a.D!, b.Q.X!, b.Q.Y!);
+        byte[] reverse = AiDotNet.FederatedLearning.Cryptography.P521Sha256Agreement.Derive(b.D!, a.Q.X!, a.Q.Y!);
+
+        Assert.Equal(32, platform.Length);
+        Assert.Equal(platform, bouncy);
+        Assert.Equal(platform, reverse);
+    }
+
+    [Fact]
+    public void EphemeralKeyPair_RefusesToDeriveAfterDispose()
+    {
+        var a = AiDotNet.FederatedLearning.Cryptography.EphemeralKeyPair.Create();
+        using var b = AiDotNet.FederatedLearning.Cryptography.EphemeralKeyPair.Create();
+        Assert.Equal(a.DeriveSharedSecret(b), b.DeriveSharedSecret(a));
+        a.Dispose();
+        Assert.Throws<ObjectDisposedException>(() => a.DeriveSharedSecret(b));
+        Assert.Throws<ObjectDisposedException>(() => b.DeriveSharedSecret(a));
+    }
 }

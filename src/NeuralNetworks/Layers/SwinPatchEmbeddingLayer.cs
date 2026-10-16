@@ -123,6 +123,12 @@ public partial class SwinPatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public int PatchGridWidth => _inputWidth / _patchSize;
 
+    /// <summary>The patch projection convolution (reference <c>proj</c>).</summary>
+    internal ConvolutionalLayer<T> Projection => _projection;
+
+    /// <summary>The token LayerNorm (reference <c>norm</c>).</summary>
+    internal LayerNormalizationLayer<T> Norm => _norm;
+
     /// <summary>
     /// Creates a new Swin patch embedding layer.
     /// </summary>
