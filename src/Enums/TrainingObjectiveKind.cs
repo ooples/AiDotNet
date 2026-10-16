@@ -40,4 +40,10 @@ public enum TrainingObjectiveKind
     /// targets among distractors); a supplied target is not used.
     /// </summary>
     SelfSupervised,
+
+    /// <summary>
+    /// A symmetric contrastive (InfoNCE) objective aligns paired inputs from two modalities, as CLIP and CLAP
+    /// train: the target is the second modality's batch, paired row by row with the input.
+    /// </summary>
+    ContrastiveAlignment,
 }

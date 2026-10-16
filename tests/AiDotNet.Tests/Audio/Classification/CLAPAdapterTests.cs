@@ -19,9 +19,12 @@ public class CLAPAdapterTests
 {
     private static CLAPModelOptions Network() => new()
     {
-        AudioHiddenDim = 16, AudioEncoderLayers = 1, AudioEncoderHeads = 2, SwinWindowSize = 2,
-        TextHiddenDim = 16, TextEncoderLayers = 1, TextEncoderHeads = 2,
-        VocabSize = 32, MaxTextLength = 6, ProjectionDim = 8, Seed = 3,
+        // LAION-CLAP at test size: two Swin stages over a 32x32 spectrogram image, a one-layer RoBERTa.
+        StftWindowSize = 256, HopLength = 64, NumMelBands = 8, ClipSamples = 2048, SpecSize = 32,
+        AudioEmbedDim = 8, AudioStageDepths = new[] { 1, 1 }, AudioStageHeads = new[] { 1, 2 }, SwinWindowSize = 4,
+        TextHiddenDim = 16, TextEncoderLayers = 1, TextEncoderHeads = 2, TextIntermediateDim = 32,
+        VocabSize = 32, MaxTextLength = 6, TextMaxPositions = 16, ProjectionDim = 8, Seed = 3,
+        EnableFeatureFusion = false, SpecAugmentTimeStripes = 0, SpecAugmentFreqStripes = 0,
     };
 
     private static readonly string[] Labels = { "a", "b", "c" };
@@ -151,5 +154,21 @@ public class CLAPAdapterTests
         Assert.Equal(new[] { "x", "y" }, clap.ClassLabels);
         clap.SetTextPrompts(Array.Empty<string>(), _ => new[] { 1 });
         Assert.Equal(Labels, clap.ClassLabels);
+    }
+
+    // The text tower has dropout (TextDropoutRate 0.1) and every layer starts in training mode: inference must run it in
+    // evaluation mode, or the same caption and the same clip score differently on every call.
+    [Fact(Timeout = 120000)]
+    public async Task Inference_IsDeterministic()
+    {
+        await Task.Yield();
+        var (clap, model) = Twins();
+        Assert.True(Network().TextDropoutRate > 0, "The test needs the text tower's dropout on.");
+        var first = model.EncodeText(Tokenize("b")).ToVector();
+        var second = model.EncodeText(Tokenize("b")).ToVector();
+        for (int i = 0; i < first.Length; i++) Assert.Equal(first[i], second[i]);
+        var p1 = clap.GetEventProbabilities(Wave(4));
+        var p2 = clap.GetEventProbabilities(Wave(4));
+        for (int i = 0; i < p1.Length; i++) Assert.Equal(p1[i], p2[i]);
     }
 }

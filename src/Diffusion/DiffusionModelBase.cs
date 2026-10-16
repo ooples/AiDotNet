@@ -2107,7 +2107,7 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
             if (!copy.TryShareParametersFrom(this))
             {
                 EnsureCloneParameterLayoutMatches(this, copy);
-#if NETFRAMEWORK
+#if AIDN_LEGACY_TFM
                 // IParameterizable's chunked API is unavailable on .NET Framework, so latent
                 // diffusion models deliberately expose no chunks there. Falling through to the
                 // streaming restore would therefore hand a non-empty clone a zero-length vector.

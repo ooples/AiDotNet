@@ -1,4 +1,4 @@
-﻿#if NETFRAMEWORK
+﻿#if AIDN_LEGACY_TFM
 using System.Globalization;
 #else
 using System.Diagnostics.CodeAnalysis;
@@ -318,7 +318,7 @@ public sealed class ShapeNetCorePartSegmentationDataLoader<T> : PointCloudDatase
         return true;
     }
 
-#if NETFRAMEWORK
+#if AIDN_LEGACY_TFM
     private bool TryResolveLabelPath(string root, string pointsPath, out string? labelPath)
 #else
     private bool TryResolveLabelPath(string root, string pointsPath, [NotNullWhen(true)] out string? labelPath)

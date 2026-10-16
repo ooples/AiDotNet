@@ -1226,8 +1226,19 @@ public static class DeserializationHelper
             var activationFuncType = typeof(IActivationFunction<>).MakeGenericType(typeof(T));
             object? activation = TryCreateActivationInstance(additionalParams, "FfnActivationType", activationFuncType);
 
-            double dropoutRate = TryGetDouble(additionalParams, "DropoutRate") ?? 0.0;
-            bool causal = TryGetBool(additionalParams, "Causal") ?? true;
+            // The generated [LayerState] bag writes the parameter names ("dropoutRate", "causal"); GetMetadata also
+            // writes "DropoutRate" and "Causal". A model saved before the causal flag existed has neither and was
+            // built bidirectional (the self-attention was unmasked), so a missing flag restores it that way.
+            string causalKey = additionalParams is not null && additionalParams.ContainsKey("causal") ? "causal" : "Causal";
+            bool? parsedCausal = TryGetBool(additionalParams, causalKey);
+            if (additionalParams is not null && additionalParams.ContainsKey(causalKey) && !parsedCausal.HasValue)
+            {
+                throw new InvalidOperationException(
+                    $"TransformerDecoderLayer has invalid '{causalKey}' metadata '{additionalParams[causalKey]}'; expected true or false.");
+            }
+
+            bool causal = parsedCausal ?? false;
+            double dropoutRate = TryGetDouble(additionalParams, "dropoutRate") ?? TryGetDouble(additionalParams, "DropoutRate") ?? 0.0;
             var ctor = type.GetConstructor(new Type[] { typeof(int), typeof(int), typeof(int), activationFuncType, typeof(double), typeof(bool) });
             if (ctor is null)
             {

@@ -91,45 +91,22 @@ public partial class VariationalAutoencoder<T> : VectorModelLayoutBase<T>, IAuxi
     public int LatentSize { get; private set; }
 
     /// <summary>
-    /// Gets or sets the layer that computes the mean parameters of the latent distribution.
+    /// The layer between encoder and decoder that splits the encoder's [..., 2 * LatentSize] output into the latent
+    /// mean and log-variance and applies the reparameterization trick: a sample in training, the mean in inference.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// This layer computes the mean values for each dimension of the latent probability distribution.
-    /// These means represent the center points of the Gaussian distributions in the latent space.
-    /// </para>
-    /// <para><b>For Beginners:</b> The mean layer determines the "average value" for each feature in the compressed representation.
-    /// 
-    /// For example, if one dimension of your latent space represents hair length:
-    /// - The mean would be the most likely hair length value for a particular input
-    /// - This layer calculates the best "guess" for each attribute in the latent space
-    /// 
-    /// Think of it as finding the most representative value for each feature based on the input data.
-    /// </para>
+    /// <para><b>For Beginners:</b> The encoder describes each input as a range of likely values for every latent
+    /// attribute (a mean and a spread). This layer picks a point in that range while training, so the decoder learns
+    /// from nearby variations, and uses the most likely point (the mean) when predicting.</para>
     /// </remarks>
-    private MeanLayer<T>? _meanLayer { get; set; }
+    private RepParameterizationLayer<T>? _latentLayer;
 
-    /// <summary>
-    /// Gets or sets the layer that computes the log variance parameters of the latent distribution.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This layer computes the log variance values for each dimension of the latent probability distribution.
-    /// Log variance is used instead of variance for numerical stability in training. The variance represents 
-    /// the spread or uncertainty in each dimension of the latent space.
-    /// </para>
-    /// <para><b>For Beginners:</b> The log variance layer determines how much flexibility or uncertainty there is around each feature value.
-    /// 
-    /// Continuing the hair length example:
-    /// - The log variance would indicate how much the hair length could vary
-    /// - A small variance means the model is very certain about the hair length
-    /// - A large variance means there's more flexibility or uncertainty
-    /// 
-    /// We use the logarithm of variance (log variance) because it's more stable for calculations,
-    /// but you can think of it as controlling the "wiggle room" for each attribute.
-    /// </para>
-    /// </remarks>
-    private LogVarianceLayer<T>? _logVarianceLayer { get; set; }
+    /// <summary>Index of <see cref="_latentLayer"/> in <c>Layers</c>: encoder layers precede it, decoder layers follow.</summary>
+    private int _latentIndex = -1;
+
+    /// <summary>The KL term of the most recent training forward, tape-connected, until the trainer consumes it.</summary>
+    [Scratch]
+    private Tensor<T>? _pendingKlLoss;
 
     /// <summary>
     /// Gets or sets the gradient optimizer used for training the VAE.
@@ -274,62 +251,42 @@ public partial class VariationalAutoencoder<T> : VectorModelLayoutBase<T>, IAuxi
     /// <param name="layers">The list of layers to validate.</param>
     /// <remarks>
     /// <para>
-    /// A valid VAE must include a mean layer, a log variance layer, and a pooling layer for the
-    /// reparameterization trick. This method checks for these required components and throws
-    /// an exception if any are missing.
+    /// A VAE needs exactly one <see cref="RepParameterizationLayer{T}"/> with at least one layer before it (the
+    /// encoder, whose output is [..., 2 * LatentSize]: the means then the log-variances) and one after it (the
+    /// decoder).
     /// </para>
-    /// <para><b>For Beginners:</b> This method checks if your custom layers will actually work as a VAE.
-    /// 
-    /// For a VAE to function properly, it needs at minimum:
-    /// - A mean layer (to calculate the central values in the latent space)
-    /// - A log variance layer (to calculate the uncertainty ranges)
-    /// - A pooling layer (for the "reparameterization trick" - a special technique that makes training possible)
-    /// 
-    /// If any of these essential components are missing, it's like trying to build a car without wheels or an engine - it won't work!
-    /// 
-    /// This method checks for these essential components and raises an error if they're missing.
-    /// </para>
+    /// <para><b>For Beginners:</b> Your custom layers must be an encoder, then the reparameterization layer, then a
+    /// decoder. The last encoder layer must output twice as many values as the latent size: the first half are the
+    /// means, the second half the log-variances.</para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when the custom layers don't include required layer types.
+    /// Thrown when there is not exactly one reparameterization layer, or it has no encoder or no decoder around it.
     /// </exception>
     protected override void ValidateCustomLayers(List<ILayer<T>> layers)
     {
         base.ValidateCustomLayers(layers);
 
-        bool hasMeanLayer = false;
-        bool hasLogVarianceLayer = false;
-        bool hasPoolingLayer = false;
-
+        int count = 0, index = -1;
         for (int i = 0; i < layers.Count; i++)
         {
-            if (layers[i] is MeanLayer<T>)
+            if (layers[i] is RepParameterizationLayer<T>)
             {
-                hasMeanLayer = true;
-            }
-            else if (layers[i] is LogVarianceLayer<T>)
-            {
-                hasLogVarianceLayer = true;
-            }
-            else if (layers[i] is PoolingLayer<T>)
-            {
-                hasPoolingLayer = true;
+                count++;
+                index = i;
             }
         }
 
-        if (!hasMeanLayer)
+        if (count != 1)
         {
-            throw new InvalidOperationException("Custom VAE layers must include a MeanLayer.");
+            throw new InvalidOperationException(
+                "Custom VAE layers must include exactly one RepParameterizationLayer between the encoder (whose last " +
+                $"layer outputs 2 * LatentSize values: means then log-variances) and the decoder; found {count}.");
         }
 
-        if (!hasLogVarianceLayer)
+        if (index == 0 || index == layers.Count - 1)
         {
-            throw new InvalidOperationException("Custom VAE layers must include a LogVarianceLayer.");
-        }
-
-        if (!hasPoolingLayer)
-        {
-            throw new InvalidOperationException("Custom VAE layers must include a PoolingLayer for the reparameterization trick.");
+            throw new InvalidOperationException(
+                "Custom VAE layers need at least one encoder layer before the RepParameterizationLayer and one decoder layer after it.");
         }
     }
 
@@ -338,9 +295,7 @@ public partial class VariationalAutoencoder<T> : VectorModelLayoutBase<T>, IAuxi
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This method finds and sets references to the mean layer and log variance layer, which are
-    /// essential components of a VAE. These layers are needed for computing the parameters of the
-    /// latent space distribution.
+    /// This method finds the reparameterization layer, which separates the encoder from the decoder.
     /// </para>
     /// <para><b>For Beginners:</b> This method identifies and saves references to the special layers that make a VAE work.
     /// 
@@ -355,17 +310,16 @@ public partial class VariationalAutoencoder<T> : VectorModelLayoutBase<T>, IAuxi
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when the mean layer or log variance layer cannot be found.
+    /// Thrown when no reparameterization layer is present.
     /// </exception>
     private void SetSpecificLayers()
     {
-        _meanLayer = Layers.OfType<MeanLayer<T>>().FirstOrDefault();
-        _logVarianceLayer = Layers.OfType<LogVarianceLayer<T>>().FirstOrDefault();
-
-        if (_meanLayer == null || _logVarianceLayer == null)
+        _latentIndex = Layers.FindIndex(l => l is RepParameterizationLayer<T>);
+        if (_latentIndex < 0)
         {
-            throw new InvalidOperationException("MeanLayer and LogVarianceLayer must be present in the network.");
+            throw new InvalidOperationException("A RepParameterizationLayer must be present in the network.");
         }
+        _latentLayer = (RepParameterizationLayer<T>)Layers[_latentIndex];
     }
 
     /// <summary>
@@ -395,30 +349,28 @@ public partial class VariationalAutoencoder<T> : VectorModelLayoutBase<T>, IAuxi
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when the mean layer or log variance layer have not been properly initialized.
+    /// Thrown when the layers have not been initialized.
     /// </exception>
     public (Vector<T> Mean, Vector<T> LogVariance) Encode(Vector<T> input)
     {
-        if (_meanLayer == null || _logVarianceLayer == null)
+        if (_latentLayer is null)
         {
-            throw new InvalidOperationException("MeanLayer and LogVarianceLayer have not been properly initialized.");
+            throw new InvalidOperationException("The VAE's layers have not been initialized.");
         }
 
-        var current = input;
-        // Process encoder layers, skipping MeanLayer and LogVarianceLayer
-        // (they are processed separately after the encoder loop)
-        for (int i = 0; i < Layers.Count / 2; i++)
+        // The encoder's output is [2 * LatentSize]: the means, then the log-variances.
+        var current = Tensor<T>.FromVector(input);
+        for (int i = 0; i < _latentIndex; i++)
+            current = Layers[i].Forward(current);
+        var parameters = current.ToVector();
+        int latent = parameters.Length / 2;
+        var mean = new Vector<T>(latent);
+        var logVariance = new Vector<T>(latent);
+        for (int i = 0; i < latent; i++)
         {
-            if (Layers[i] is MeanLayer<T> || Layers[i] is LogVarianceLayer<T>)
-            {
-                continue; // Skip special layers - they're processed separately
-            }
-            current = Layers[i].Forward(Tensor<T>.FromVector(current)).ToVector();
+            mean[i] = parameters[i];
+            logVariance[i] = parameters[latent + i];
         }
-
-        // Use MeanLayer/LogVarianceLayer to preserve gradient flow
-        var mean = _meanLayer.Forward(Tensor<T>.FromVector(current)).ToVector();
-        var logVariance = _logVarianceLayer.Forward(Tensor<T>.FromVector(current)).ToVector();
         return (mean, logVariance);
     }
 
@@ -505,19 +457,15 @@ public partial class VariationalAutoencoder<T> : VectorModelLayoutBase<T>, IAuxi
     /// </remarks>
     public Vector<T> Decode(Vector<T> latentVector)
     {
-        var current = latentVector;
-        // Process decoder layers, skipping MeanLayer and LogVarianceLayer
-        // (they are encoder-specific and shouldn't be in the decoder path)
-        for (int i = Layers.Count / 2; i < Layers.Count; i++)
+        if (_latentLayer is null)
         {
-            if (Layers[i] is MeanLayer<T> || Layers[i] is LogVarianceLayer<T>)
-            {
-                continue; // Skip special layers - they're not part of the decoder
-            }
-            current = Layers[i].Forward(Tensor<T>.FromVector(current)).ToVector();
+            throw new InvalidOperationException("The VAE's layers have not been initialized.");
         }
 
-        return current;
+        var current = Tensor<T>.FromVector(latentVector);
+        for (int i = _latentIndex + 1; i < Layers.Count; i++)
+            current = Layers[i].Forward(current);
+        return current.ToVector();
     }
 
     // UpdateParameters restated a fold the base now derives from generated component registration.
@@ -551,23 +499,68 @@ public partial class VariationalAutoencoder<T> : VectorModelLayoutBase<T>, IAuxi
         if (TryForwardGpuOptimized(input, out var gpuResult))
             return gpuResult;
 
-        // Flatten the input tensor to a vector
-        var inputVector = input.ToVector();
+        // Encoder, latent mean (the reparameterization layer samples only in training), decoder.
+        var current = input;
+        foreach (var layer in Layers)
+            current = layer.Forward(current);
+        RememberLatent();
+        return current.Length == input.Length ? current.Reshape(input._shape) : current;
+    }
 
-        // Encode the input
-        var (mean, logVariance) = Encode(inputVector);
-        _lastMean = mean;
-        _lastLogVariance = logVariance;
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The training forward samples the latent through the reparameterization layer and records the KL divergence
+    /// from the standard normal prior (summed over latent dimensions, averaged over the batch, weighted by
+    /// <see cref="AuxiliaryLossWeight"/>) for <see cref="ConsumeAuxiliaryTapeLoss"/>, so the trainer optimizes
+    /// reconstruction + beta * KL.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        // Statistics from an earlier forward must never reach this step's KL term.
+        _latentLayer?.ResetState();
+        _pendingKlLoss = null;
+        var output = base.ForwardForTraining(input);
+        if (UseAuxiliaryLoss && _latentLayer?.LastMean is { } mean && _latentLayer.LastLogVariance is { } logVariance)
+        {
+            // KL(N(mu, sigma^2) || N(0, I)) = 0.5 * sum(exp(logvar) + mu^2 - 1 - logvar), per sample.
+            var perElement = Engine.TensorSubtract(
+                Engine.TensorAdd(Engine.TensorExp(logVariance), Engine.TensorMultiply(mean, mean)),
+                Engine.TensorAddScalar(logVariance, NumOps.One));
+            int batch = mean._shape.Length > 1 ? mean._shape[0] : 1;
+            var allAxes = Enumerable.Range(0, perElement._shape.Length).ToArray();
+            var kl = Engine.TensorMultiplyScalar(
+                Engine.ReduceSum(perElement, allAxes, keepDims: false),
+                NumOps.Multiply(AuxiliaryLossWeight, NumOps.FromDouble(0.5 / batch)));
+            _pendingKlLoss = kl;
+        }
+        RememberLatent();
+        return output;
+    }
 
-        // For inference, use the mean (no sampling) for deterministic output.
-        // Reparameterize is only used during training for gradient flow per Kingma & Welling 2014.
-        var latentSample = mean;
+    /// <inheritdoc/>
+    /// <remarks>
+    /// False: GPU-resident training runs <c>ForwardGpu</c> and the reconstruction loss only, so it would drop the KL term
+    /// the objective needs. The VAE trains on the tape path, which <see cref="ConsumeAuxiliaryTapeLoss"/> feeds.
+    /// </remarks>
+    public override bool SupportsGpuTraining => false;
 
-        // Decode the latent representation
-        var reconstructed = Decode(latentSample);
+    /// <inheritdoc/>
+    protected override Tensor<T>? ConsumeAuxiliaryTapeLoss()
+    {
+        var term = _pendingKlLoss;
+        _pendingKlLoss = null;
+        return term;
+    }
 
-        // Reshape the output to match the input shape
-        return new Tensor<T>(input._shape, reconstructed);
+    // Keeps the latest latent statistics (first sample) for ComputeAuxiliaryLoss and the diagnostics.
+    private void RememberLatent()
+    {
+        if (_latentLayer?.LastMean is not { } mean || _latentLayer.LastLogVariance is not { } logVariance) return;
+        var meanValues = mean.ToArray();
+        var logVarianceValues = logVariance.ToArray();
+        int latent = mean._shape[mean._shape.Length - 1];
+        _lastMean = new Vector<T>(meanValues.Take(latent).ToArray());
+        _lastLogVariance = new Vector<T>(logVarianceValues.Take(latent).ToArray());
     }
 
     /// <summary>
@@ -606,63 +599,6 @@ public partial class VariationalAutoencoder<T> : VectorModelLayoutBase<T>, IAuxi
         {
             SetTrainingMode(false);
         }
-    }
-
-    /// <summary>
-    /// Calculates the gradients for the latent space (mean and log variance) of the VAE.
-    /// </summary>
-    /// <param name="upstreamGradient">The gradient flowing back from the decoder.</param>
-    /// <returns>A tuple containing the gradients for the mean and log variance.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method computes the gradients for the latent space parameters:
-    /// 1. It calculates the gradient for the mean, considering both the upstream gradient and the KL divergence.
-    /// 2. It calculates the gradient for the log variance, incorporating the reparameterization trick.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method figures out how to adjust the "compression" part of the VAE.
-    /// 
-    /// The VAE compresses data into two parts: a "best guess" (mean) and an "uncertainty range" (variance):
-    /// - This method calculates how to change both parts to make the VAE work better
-    /// - It considers both how well the VAE is reconstructing data and how well it's compressing information
-    /// - The calculations are complex because they need to balance good reconstruction with efficient compression
-    /// 
-    /// This process is key to making the VAE learn a useful compressed representation of the data.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown when the mean layer or log variance layer have not been properly initialized.
-    /// </exception>
-    private (Tensor<T> MeanGradient, Tensor<T> LogVarianceGradient) CalculateLatentGradients(Tensor<T> upstreamGradient)
-    {
-        if (_meanLayer == null || _logVarianceLayer == null)
-        {
-            throw new InvalidOperationException("MeanLayer and LogVarianceLayer have not been properly initialized.");
-        }
-
-        // Use cached mean/logVariance from the forward pass (per Kingma & Welling 2014 §2.4)
-        // The upstream gradient from the decoder flows through the reparameterization trick.
-        var mean = _lastMean ?? throw new InvalidOperationException("Mean not cached from forward pass.");
-        var logVar = _lastLogVariance ?? throw new InvalidOperationException("LogVariance not cached from forward pass.");
-
-        int latentDim = mean.Length;
-        var meanGradient = new Tensor<T>([latentDim]);
-        var logVarianceGradient = new Tensor<T>([latentDim]);
-
-        for (int i = 0; i < latentDim; i++)
-        {
-            // ∂L/∂μ = upstream_grad[i] + ∂KL/∂μ = upstream_grad[i] + μ[i]
-            T upGrad = i < upstreamGradient.Length ? upstreamGradient[i] : NumOps.Zero;
-            meanGradient[i] = NumOps.Add(upGrad, mean[i]);
-
-            // ∂L/∂log_σ² = 0.5 * (exp(log_σ²) - 1) + upstream_grad through reparameterization
-            var expLogVar = NumOps.Exp(logVar[i]);
-            logVarianceGradient[i] = NumOps.Add(
-                NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Subtract(expLogVar, NumOps.One)),
-                NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Multiply(expLogVar, upGrad))
-            );
-        }
-
-        return (meanGradient, logVarianceGradient);
     }
 
     /// <summary>
@@ -824,8 +760,8 @@ public partial class VariationalAutoencoder<T> : VectorModelLayoutBase<T>, IAuxi
                 { "InputDimension", Layers[0].GetInputShape()[0] },
                 { "LatentSize", LatentSize },
                 { "LayerCount", Layers.Count },
-                { "EncoderLayers", Layers.Take(Layers.Count / 2).Select(l => l.GetType().Name).ToArray() },
-                { "DecoderLayers", Layers.Skip(Layers.Count / 2).Select(l => l.GetType().Name).ToArray() }
+                { "EncoderLayers", Layers.Take(_latentIndex).Select(l => l.GetType().Name).ToArray() },
+                { "DecoderLayers", Layers.Skip(_latentIndex + 1).Select(l => l.GetType().Name).ToArray() }
             },
             ModelDataProvider = () => SerializeForMetadata()
         };
