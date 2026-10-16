@@ -94,13 +94,14 @@ public class TrainingContractGenerator : IIncrementalGenerator
 
         var chain = new List<INamedTypeSymbol>();
         for (var outer = type.ContainingType; outer is not null; outer = outer.ContainingType) chain.Insert(0, outer);
-        var indent = string.Empty;
-        foreach (var outer in chain)
+        for (int depth = 0; depth < chain.Count; depth++)
         {
-            sb.AppendLine($"{indent}partial class {outer.Name}{TypeParametersOf(outer)}");
-            sb.AppendLine($"{indent}{{");
-            indent += "    ";
+            var outerIndent = new string(' ', 4 * depth);
+            sb.AppendLine($"{outerIndent}partial class {chain[depth].Name}{TypeParametersOf(chain[depth])}");
+            sb.AppendLine($"{outerIndent}{{");
         }
+
+        var indent = new string(' ', 4 * chain.Count);
 
         sb.AppendLine($"{indent}partial class {type.Name}{TypeParametersOf(type)}");
         sb.AppendLine($"{indent}{{");
@@ -139,11 +140,8 @@ public class TrainingContractGenerator : IIncrementalGenerator
         }
 
         sb.AppendLine($"{indent}}}");
-        for (int i = chain.Count - 1; i >= 0; i--)
-        {
-            indent = indent.Substring(4);
-            sb.AppendLine($"{indent}}}");
-        }
+        for (int depth = chain.Count - 1; depth >= 0; depth--)
+            sb.AppendLine($"{new string(' ', 4 * depth)}}}");
 
         string hint = type.ToDisplayString().Replace('<', '_').Replace('>', '_').Replace(',', '_').Replace(' ', '_');
         return new Contract($"{hint}.TrainingContract.g.cs", sb.ToString());
