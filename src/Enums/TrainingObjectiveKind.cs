@@ -34,4 +34,10 @@ public enum TrainingObjectiveKind
 
     /// <summary>Several explicitly structured task objectives are optimized together.</summary>
     MultiTask,
+
+    /// <summary>
+    /// A symmetric contrastive (InfoNCE) objective aligns paired inputs from two modalities, as CLIP and CLAP
+    /// train: the target is the second modality's batch, paired row by row with the input.
+    /// </summary>
+    ContrastiveAlignment,
 }

@@ -408,3 +408,41 @@ namespace System.IO
         }
     }
 }
+
+#if NET462
+namespace System.Linq
+{
+    /// <summary>
+    /// Enumerable.Append and Enumerable.Prepend, which .NET Framework gained in 4.7.1: the net462 build (#2326) polyfills
+    /// them with the same semantics (lazy, one extra element).
+    /// </summary>
+    internal static class EnumerableAppendPolyfill
+    {
+        /// <summary>Returns the sequence followed by <paramref name="element"/>.</summary>
+        public static IEnumerable<TSource> Append<TSource>(this IEnumerable<TSource> source, TSource element)
+        {
+            if (source is null) throw new ArgumentNullException(nameof(source));
+            return AppendIterator(source, element);
+        }
+
+        /// <summary>Returns <paramref name="element"/> followed by the sequence.</summary>
+        public static IEnumerable<TSource> Prepend<TSource>(this IEnumerable<TSource> source, TSource element)
+        {
+            if (source is null) throw new ArgumentNullException(nameof(source));
+            return PrependIterator(source, element);
+        }
+
+        private static IEnumerable<TSource> AppendIterator<TSource>(IEnumerable<TSource> source, TSource element)
+        {
+            foreach (var item in source) yield return item;
+            yield return element;
+        }
+
+        private static IEnumerable<TSource> PrependIterator<TSource>(IEnumerable<TSource> source, TSource element)
+        {
+            yield return element;
+            foreach (var item in source) yield return item;
+        }
+    }
+}
+#endif

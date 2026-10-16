@@ -389,7 +389,11 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
          Bumped 0.138.0 to 0.138.1 for AiDotNet.Tensors #1301: the arena's tensor ring reissued a tensor after a reset
          with its previous owner's GradFn, so a later graph backward walked into an earlier step's node whose tensors
          had been reissued under other shapes (StyleGAN after its R1 penalty: "Multiples length (1) must match tensor
-         dimensions (3)"). -->
+         dimensions (3)").
+
+         For #2326: AiDotNet.Tensors ships lib/net462 and lib/netstandard2.0 since 0.137.1
+         (AiDotNet.Tensors #679), which the new AiDotNet targets need. 0.138.1 depends on AiDotNet.Evolution
+         0.3.0, so Evolution moves with it. -->
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.139.0" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.139.0" />
     <PackageVersion Include="AiDotNet.Tensors" Version="0.139.0" />

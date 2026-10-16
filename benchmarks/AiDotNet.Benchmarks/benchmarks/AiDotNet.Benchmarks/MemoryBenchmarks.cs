@@ -49,9 +49,10 @@ public class MemoryBenchmarks
     public void IterationSetup()
     {
         // Reset scratch tensor before each iteration so in-place ops don't accumulate.
-        // Tensor<T>.AsSpan is internal since AiDotNet.Tensors 0.136, so copy through the
-        // indexer, as Setup does; this runs outside the measured region.
-        for (int i = 0; i < _inputA.Length; i++) _scratchA[i] = _inputA[i];
+        // Tensor<T>.AsSpan and AsWritableSpan are internal since AiDotNet.Tensors 0.136.0; ToArray is the public
+        // copy, and iteration setup is not part of the measured time.
+        var source = _inputA.ToArray();
+        for (int i = 0; i < source.Length; i++) _scratchA[i] = source[i];
     }
 
     [Benchmark(Description = "TensorAdd (allocating)")]

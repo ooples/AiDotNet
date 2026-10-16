@@ -8,6 +8,7 @@ using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tokenization.Interfaces;
 
 using System.Linq;
 
@@ -23,11 +24,19 @@ namespace AiDotNet.Audio.Fingerprinting;
 /// <para>
 /// CLAP (Wu et al. 2023) trains an audio encoder and a text encoder so that
 /// matching (audio, caption) pairs produce nearby embeddings and unrelated
-/// pairs produce distant embeddings. The audio side is HTSAT (Chen et al. 2022),
-/// a hierarchical Swin Transformer (Liu et al. 2021) over mel-spectrogram
-/// patches. The text side is a RoBERTa-style transformer stack (Liu et al. 2019)
-/// over BPE token IDs. A learnable temperature τ scales the cosine-similarity
-/// logits during contrastive training (CLIP / CLAP convention).
+/// pairs produce distant embeddings. The network is LAION-CLAP's (reference <c>LAION-AI/CLAP</c>):
+/// </para>
+/// <list type="bullet">
+/// <item><b>Audio</b>: HTS-AT (Chen et al. 2022) — BatchNorm over the mel bins, the spectrogram folded into a
+/// square image, a patch embedding, four hierarchical Swin stages (Liu et al. 2021) joined by patch merging, and
+/// the mean over the final tokens. With <see cref="CLAPModelOptions.EnableFeatureFusion"/>, clips longer than
+/// 10 s are fused from a global view and three local crops (Wu et al. 2023 §3.3).</item>
+/// <item><b>Text</b>: RoBERTa (Liu et al. 2019) and its pooled <c>&lt;s&gt;</c> output.</item>
+/// <item><b>Projections</b>: <c>Linear → ReLU → Linear</c> into the joint space, then L2 normalization.</item>
+/// </list>
+/// <para>
+/// A learnable temperature τ scales the cosine-similarity logits during contrastive training (CLIP / CLAP
+/// convention). Published LAION checkpoints load through <see cref="LoadLaionWeights"/>.
 /// </para>
 /// <para>
 /// <b>Capabilities</b>:
@@ -57,24 +66,24 @@ namespace AiDotNet.Audio.Fingerprinting;
     Authors = "Yusong Wu, Ke Chen, Tianyu Zhang, Yuchen Hui, Taylor Berg-Kirkpatrick, Shlomo Dubnov")]
 // The inherited [Batch, Features] input is CORRECT - CLAP takes raw audio, per EncodeAudio's own
 // contract of "[samples] or [batch, samples]". What the declared-input check saw is the log-mel front
-// end: EncodeAudio calls PreprocessAudio BEFORE folding the stack, so Layers[0] - a
-// PatchEmbeddingLayer over Swin blocks, rank 3 or 4 - receives a spectrogram image and never the
-// waveform. Both declarations describe different tensors, so the exemption is the honest fix here; an
+// end: EncodeAudio fits the clip and computes the log-mel views BEFORE folding the stack, so Layers[0] - HTS-AT's
+// bn0 over the mel bins, ahead of the image fold, the patch embedding and the Swin stages - receives
+// [batch, views, frames, mels] and never the waveform. Both declarations describe different tensors, so the exemption is the honest fix here; an
 // override claiming a spectrogram input would advertise a shape Predict does not accept.
 [PreprocessesInput("PreprocessAudio converts the waveform to a log-mel spectrogram image before the "
     + "audio stack runs, so Layers[0] never sees the raw samples - see EncodeAudio.")]
 [StackInputLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     BatchOptional = true)]
-public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>
+public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinter<T>, ITrainingObjectiveProvider<T>
 {
 
     /// <inheritdoc />
     /// <remarks>
     /// Measured: <c>PredictCore</c> delegates to <c>EncodeAudio</c>, which folds the AUDIO stack
     /// (<c>Layers</c>) and L2-normalizes - a normalization that rescales, never reshapes.
-    /// <c>CreateDefaultCLAPAudioEncoderLayers</c> ends with global average pooling then
-    /// <c>DenseLayer&lt;T&gt;(outputSize: projectionDim)</c>, wired from <c>_options.ProjectionDim</c>
-    /// (512 in the paper). Not <c>AudioHiddenDim</c>, which the Swin blocks run at, and not
+    /// <c>CreateDefaultCLAPAudioEncoderLayers</c> ends with the <c>Linear → ReLU → Linear</c> audio projection,
+    /// whose output width is <c>_options.ProjectionDim</c> (512 in the paper). Not the HTS-AT width
+    /// (<c>AudioEmbedDim · 2^(stages−1)</c>, 768), which the projection reads, and not
     /// <c>VocabSize</c>, which belongs to the TEXT stack in <c>TextEncoderLayers</c> - Predict never
     /// touches that stack.
     /// </remarks>
@@ -94,9 +103,12 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _logTemperature = null!;
 
-    // Cached Hann window for the STFT preprocessing step. Built once on the
-    // first PreprocessAudio call and reused across batches.
-    private Tensor<T>? _hannWindow;
+    // The waveform -> log-mel pipeline (clip fitting, feature-fusion views, filterbank).
+    private readonly ClapAudioFrontEnd<T> _frontEnd;
+
+    // Random crops of long clips. Training draws from one advancing stream; inference reseeds per call so the
+    // same audio always gives the same embedding.
+    private readonly Random _trainingRandom;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -133,6 +145,8 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         // precede the text-encoder check below, which reads _options.TextEncoderPath and so
         // needs the options to be valid first.
         _options.Validate();
+        _frontEnd = new ClapAudioFrontEnd<T>(_options);
+        _trainingRandom = RandomHelper.CreateSeededRandom(_options.Seed ?? 0);
 
         SampleRate = _options.SampleRate;
         _useNativeMode = false;
@@ -169,6 +183,8 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     {
         _options = options ?? new CLAPModelOptions();
         _options.Validate();
+        _frontEnd = new ClapAudioFrontEnd<T>(_options);
+        _trainingRandom = RandomHelper.CreateSeededRandom(_options.Seed ?? 0);
         SampleRate = _options.SampleRate;
         _useNativeMode = true;
 
@@ -213,28 +229,45 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
             Layers.AddRange(Architecture.Layers);
             TextEncoderLayers.AddRange(LayerHelper<T>.CreateDefaultCLAPTextEncoderLayers(
                 vocabSize: _options.VocabSize,
-                maxTextLength: _options.MaxTextLength,
+                maxPositions: _options.TextMaxPositions,
                 textHiddenDim: _options.TextHiddenDim,
                 textEncoderLayers: _options.TextEncoderLayers,
                 textEncoderHeads: _options.TextEncoderHeads,
+                intermediateDim: _options.TextIntermediateDim,
+                paddingTokenId: _options.TextPaddingTokenId,
+                dropoutRate: _options.TextDropoutRate,
+                layerNormEpsilon: _options.TextLayerNormEpsilon,
                 projectionDim: _options.ProjectionDim));
         }
         else
         {
             // Default both stacks from the paper-faithful LayerHelper factories.
             Layers.AddRange(LayerHelper<T>.CreateDefaultCLAPAudioEncoderLayers(
-                audioPatchSize: _options.AudioPatchSize,
-                audioHiddenDim: _options.AudioHiddenDim,
-                audioEncoderLayers: _options.AudioEncoderLayers,
-                audioEncoderHeads: _options.AudioEncoderHeads,
-                swinWindowSize: _options.SwinWindowSize,
-                projectionDim: _options.ProjectionDim));
+                numMelBands: _options.NumMelBands,
+                specSize: _options.SpecSize,
+                patchSize: _options.AudioPatchSize,
+                embedDim: _options.AudioEmbedDim,
+                stageDepths: _options.AudioStageDepths,
+                stageHeads: _options.AudioStageHeads,
+                windowSize: _options.SwinWindowSize,
+                mlpRatio: _options.AudioMlpRatio,
+                dropPathRate: _options.AudioDropPathRate,
+                featureFusion: _options.EnableFeatureFusion,
+                projectionDim: _options.ProjectionDim,
+                specAugmentTimeDropWidth: _options.SpecAugmentTimeDropWidth,
+                specAugmentTimeStripes: _options.SpecAugmentTimeStripes,
+                specAugmentFreqDropWidth: _options.SpecAugmentFreqDropWidth,
+                specAugmentFreqStripes: _options.SpecAugmentFreqStripes));
             TextEncoderLayers.AddRange(LayerHelper<T>.CreateDefaultCLAPTextEncoderLayers(
                 vocabSize: _options.VocabSize,
-                maxTextLength: _options.MaxTextLength,
+                maxPositions: _options.TextMaxPositions,
                 textHiddenDim: _options.TextHiddenDim,
                 textEncoderLayers: _options.TextEncoderLayers,
                 textEncoderHeads: _options.TextEncoderHeads,
+                intermediateDim: _options.TextIntermediateDim,
+                paddingTokenId: _options.TextPaddingTokenId,
+                dropoutRate: _options.TextDropoutRate,
+                layerNormEpsilon: _options.TextLayerNormEpsilon,
                 projectionDim: _options.ProjectionDim));
         }
 
@@ -247,72 +280,37 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
 
     #endregion
 
-    #region Preprocessing — Mel Spectrogram
+    #region Preprocessing — LAION-CLAP audio pipeline
 
     /// <summary>
-    /// Converts raw audio samples into a log-mel spectrogram via the engine's
-    /// fused <see cref="IEngine.MelSpectrogram{T}"/> kernel (Hann window → STFT
-    /// → triangular HTK mel filterbank → log power). This is the same librosa-
-    /// style pipeline the published CLAP checkpoint was trained on (Wu 2023
-    /// §3.1), routed through a single BLAS / GPU-eligible engine op instead of
-    /// scalar inner loops over <c>double[]</c>.
+    /// Fits raw audio to the 10-second clip and converts it to the log-mel input of the audio tower (see
+    /// <see cref="ClapAudioFrontEnd{T}"/>): <c>[batch, 1, frames, mels]</c>, or four views
+    /// <c>[batch, 4, frames, mels]</c> with feature fusion.
     /// </summary>
     /// <param name="rawAudio">Audio samples — shape <c>[samples]</c> or <c>[batch, samples]</c>.</param>
-    /// <returns>Log-mel spectrogram with shape <c>[batch, 1, numFrames, numMels]</c>,
-    /// ready to feed into the HTSAT 2D patch encoder.</returns>
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
+    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => PrepareAudio(rawAudio).Features;
+
+    private (Tensor<T> Features, Tensor<T> Longer) PrepareAudio(Tensor<T> rawAudio)
     {
-        if (rawAudio.Shape.Length == 1)
-            rawAudio = Engine.Reshape(rawAudio, [1, rawAudio.Shape[0]]);
+        Guard.NotNull(rawAudio);
+        var random = IsTrainingMode ? _trainingRandom : RandomHelper.CreateSeededRandom(_options.Seed ?? 0);
+        using (new NoGradScope<T>())
+            return _frontEnd.Prepare(Engine, rawAudio, random);
+    }
 
-        int batchSize = rawAudio.Shape[0];
-        int numSamples = rawAudio.Shape[1];
-        int windowSize = _options.StftWindowSize;
-        int hop = _options.HopLength;
-        int numMels = _options.NumMelBands;
-        int sampleRate = _options.SampleRate;
-
-        // Hann window built once via NumOps (T-generic; no double[] state).
-        _hannWindow ??= BuildHannWindow(windowSize);
-
-        // Single engine op: Hann × STFT → power → mel filterbank → log.
-        // Returns [batch, numFrames, numMels]. Engine-resident throughout —
-        // tape sees one node, BLAS / GPU paths take it when bound.
-        var mel = Engine.MelSpectrogram(
-            input: rawAudio,
-            sampleRate: sampleRate,
-            nFft: windowSize,
-            hopLength: hop,
-            nMels: numMels,
-            fMin: NumOps.Zero,
-            fMax: NumOps.FromDouble(sampleRate / 2.0),
-            window: _hannWindow,
-            powerToDb: true);
-
-        // Reshape to [batch, 1, numFrames, numMels] for the HTSAT 2D patch encoder.
-        int numFrames = mel.Length / (batchSize * numMels);
-        return Engine.Reshape(mel, [batchSize, 1, numFrames, numMels]);
+    /// <summary>
+    /// The log-mel spectrogram of each row of <paramref name="waveforms"/>, <c>[batch, frames, mels]</c>, computed
+    /// with the filterbank of this model variant and no clip fitting.
+    /// </summary>
+    /// <param name="waveforms">Audio <c>[batch, samples]</c>.</param>
+    public Tensor<T> ComputeLogMel(Tensor<T> waveforms)
+    {
+        Guard.NotNull(waveforms);
+        return _frontEnd.LogMel(Engine, waveforms.Rank == 1 ? Engine.Reshape(waveforms, new[] { 1, waveforms.Shape[0] }) : waveforms);
     }
 
     /// <inheritdoc/>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => L2Normalize(modelOutput);
-
-    /// <summary>
-    /// Builds a periodic Hann window of length <paramref name="windowSize"/>
-    /// as a <see cref="Tensor{T}"/>: <c>w[n] = 0.5·(1 − cos(2πn/(N−1)))</c>.
-    /// Generic in <typeparamref name="T"/> via <see cref="LayerBase{T}.NumOps"/>;
-    /// no <c>double[]</c> state.
-    /// </summary>
-    private Tensor<T> BuildHannWindow(int windowSize)
-    {
-        var window = new Tensor<T>([windowSize]);
-        for (int n = 0; n < windowSize; n++)
-        {
-            double w = 0.5 * (1.0 - Math.Cos(2.0 * Math.PI * n / (windowSize - 1)));
-            window[n] = NumOps.FromDouble(w);
-        }
-        return window;
-    }
 
     #endregion
 
@@ -321,28 +319,94 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     /// <summary>
     /// Encodes audio into a CLAP embedding vector in the shared text-audio space.
     /// </summary>
-    /// <param name="audio">Raw audio tensor [samples] or [batch, samples].</param>
+    /// <param name="audio">Raw audio tensor [samples] or [batch, samples] at <see cref="CLAPModelOptions.SampleRate"/>.</param>
     /// <returns>Audio embedding [batch, projectionDim], L2-normalised.</returns>
     public Tensor<T> EncodeAudio(Tensor<T> audio)
     {
         ThrowIfDisposed();
-        var preprocessed = PreprocessAudio(audio);
+        var (features, longer) = PrepareAudio(audio);
         if (!_useNativeMode && OnnxEncoder is not null)
         {
-            return PostprocessOutput(OnnxEncoder.Run(preprocessed));
+            return PostprocessOutput(RunOnnxAudioEncoder(OnnxEncoder, features, longer));
+        }
+        return L2Normalize(RunAudioTower(features, longer));
+    }
+
+    /// <summary>
+    /// Runs an exported audio encoder. The features go to the graph's feature input; a graph that also declares an
+    /// input whose name contains <c>longer</c> (LAION-CLAP's fusion mask, <c>[batch]</c>, 1 where a sample's local
+    /// views are fused) receives the mask there, so a fusion export behaves like the native tower.
+    /// </summary>
+    /// <remarks>
+    /// The ONNX contract: one feature input <c>[batch, views, frames, mels]</c> (one view, or the four fusion views)
+    /// and at most one more input, the mask, named with <c>longer</c>. The embedding is the graph's only output, or
+    /// else the one output whose name contains <c>embed</c>. Any other layout is ambiguous and is rejected by name
+    /// rather than fed or read by position.
+    /// </remarks>
+    private static Tensor<T> RunOnnxAudioEncoder(OnnxModel<T> encoder, Tensor<T> features, Tensor<T> longer)
+    {
+        var inputs = encoder.Metadata.Inputs;
+        var maskInputs = inputs
+            .Where(input => input.Name.IndexOf("longer", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            .ToList();
+        var featureInputs = inputs.Where(input => !maskInputs.Contains(input)).ToList();
+        if (featureInputs.Count != 1 || maskInputs.Count > 1)
+        {
+            throw new InvalidOperationException(
+                "The CLAP audio ONNX graph must declare one feature input and at most one 'longer' mask input; it "
+                + $"declares {string.Join(", ", inputs.Select(input => input.Name))}.");
         }
 
-        // Native path: run the audio encoder layers (the inherited Layers list,
-        // populated by InitializeLayers) in sequence, then L2-normalise.
-        var hidden = preprocessed;
-        foreach (var layer in Layers) hidden = layer.Forward(hidden);
-        return L2Normalize(hidden);
+        var feeds = new System.Collections.Generic.Dictionary<string, Tensor<T>> { [featureInputs[0].Name] = features };
+        if (maskInputs.Count == 1)
+            feeds[maskInputs[0].Name] = longer;
+
+        var outputs = encoder.Run(feeds);
+        if (outputs.Count == 1)
+            return outputs.Values.First();
+        var embeddings = outputs
+            .Where(output => output.Key.IndexOf("embed", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            .ToList();
+        if (embeddings.Count == 1)
+            return embeddings[0].Value;
+        throw new InvalidOperationException(
+            "The CLAP audio ONNX graph returns several outputs and not exactly one named with 'embed'; it returns "
+            + $"{string.Join(", ", outputs.Keys)}.");
+    }
+
+    /// <summary>
+    /// Encodes log-mel input directly, bypassing clip fitting: <paramref name="mel"/> is
+    /// <c>[batch, views, frames, mels]</c> (one view, or the four fusion views) and <paramref name="longer"/> the
+    /// optional <c>[batch]</c> 0/1 mask of samples whose local views are fused.
+    /// </summary>
+    /// <returns>Audio embedding [batch, projectionDim], L2-normalised.</returns>
+    public Tensor<T> EncodeLogMel(Tensor<T> mel, Tensor<T>? longer = null)
+    {
+        ThrowIfDisposed();
+        Guard.NotNull(mel);
+        if (!_useNativeMode)
+            throw new NotSupportedException("EncodeLogMel runs the native audio tower; this instance is in ONNX mode.");
+        return L2Normalize(RunAudioTower(mel, longer));
+    }
+
+    // The audio tower is a plain sequence except for the fusion patch embedding, which also reads the mask.
+    private Tensor<T> RunAudioTower(Tensor<T> features, Tensor<T>? longer)
+    {
+        var hidden = features;
+        foreach (var layer in Layers)
+        {
+            hidden = layer is HtsatFusionPatchEmbeddingLayer<T> fusion && longer is not null
+                ? fusion.Forward(hidden, longer)
+                : layer.Forward(hidden);
+        }
+        return hidden;
     }
 
     /// <summary>
     /// Encodes a tokenised text caption into a CLAP embedding vector.
     /// </summary>
-    /// <param name="tokens">Token IDs [batch, seqLen] or [seqLen].</param>
+    /// <param name="tokens">RoBERTa token IDs [batch, seqLen] or [seqLen], padded with
+    /// <see cref="CLAPModelOptions.TextPaddingTokenId"/>; padding positions are masked out.</param>
     /// <returns>Text embedding [batch, projectionDim], L2-normalised.</returns>
     public Tensor<T> EncodeText(Tensor<T> tokens)
     {
@@ -369,13 +433,69 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         return L2Normalize(hidden);
     }
 
-    /// <summary>Convenience overload: tokenise + encode.</summary>
+    /// <summary>Convenience overload: encodes one caption's token ids.</summary>
     public Tensor<T> EncodeText(int[] tokenIds)
     {
+        Guard.NotNull(tokenIds);
         var tokenTensor = new Tensor<T>([1, tokenIds.Length]);
         for (int i = 0; i < tokenIds.Length; i++)
             tokenTensor[0, i] = NumOps.FromDouble(tokenIds[i]);
         return EncodeText(tokenTensor);
+    }
+
+    /// <summary>
+    /// Tokenizes <paramref name="captions"/> as LAION-CLAP does — special tokens added, truncated and padded to
+    /// <see cref="CLAPModelOptions.MaxTextLength"/> — and encodes them. Pass the RoBERTa tokenizer, for example
+    /// <c>HuggingFaceTokenizerLoader.LoadFromHub("roberta-base")</c>.
+    /// </summary>
+    /// <returns>Text embeddings [captions, projectionDim], L2-normalised.</returns>
+    public Tensor<T> EncodeText(IReadOnlyList<string> captions, ITokenizer tokenizer)
+    {
+        return EncodeText(Tokenize(captions, tokenizer));
+    }
+
+    /// <summary>
+    /// Token ids <c>[captions, MaxTextLength]</c> for <paramref name="captions"/>: <c>tokenizer(text,
+    /// padding="max_length", truncation=True, max_length=77)</c> in LAION-CLAP's <c>hook.py</c>.
+    /// </summary>
+    public Tensor<T> Tokenize(IReadOnlyList<string> captions, ITokenizer tokenizer)
+    {
+        Guard.NotNull(captions);
+        Guard.NotNull(tokenizer);
+        int length = _options.MaxTextLength;
+        var ids = new Tensor<T>(new[] { captions.Count, length });
+        var encoding = new AiDotNet.Tokenization.Models.EncodingOptions
+        {
+            AddSpecialTokens = true,
+            MaxLength = length,
+            Truncation = true,
+            Padding = true,
+        };
+        for (int c = 0; c < captions.Count; c++)
+        {
+            var tokens = tokenizer.Encode(captions[c] ?? string.Empty, encoding).TokenIds;
+            for (int i = 0; i < length; i++)
+                ids[c, i] = NumOps.FromDouble(i < tokens.Count ? tokens[i] : _options.TextPaddingTokenId);
+        }
+        return ids;
+    }
+
+    /// <summary>
+    /// Zero-shot audio classification with the RoBERTa tokenizer: ranks <paramref name="labels"/> by cosine
+    /// similarity between their caption embeddings and the clip's audio embedding.
+    /// </summary>
+    public Dictionary<string, double> ZeroShotClassify(Tensor<T> audio, string[] labels, ITokenizer tokenizer)
+    {
+        Guard.NotNull(tokenizer);
+        return ZeroShotClassify(audio, labels, label => TokenIdsOf(label, tokenizer));
+    }
+
+    private int[] TokenIdsOf(string label, ITokenizer tokenizer)
+    {
+        var ids = Tokenize(new[] { label }, tokenizer);
+        var result = new int[ids.Shape[1]];
+        for (int i = 0; i < result.Length; i++) result[i] = (int)Math.Round(NumOps.ToDouble(ids[0, i]));
+        return result;
     }
 
     /// <summary>
@@ -484,6 +604,166 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
 
     #endregion
 
+    #region Published weights
+
+    /// <summary>
+    /// Loads a LAION-CLAP checkpoint (an HTSAT audio branch with a RoBERTa text branch, e.g.
+    /// <c>630k-audioset-fusion-best.pt</c> for the default options, or <c>630k-audioset-best.pt</c> with
+    /// <see cref="CLAPModelOptions.EnableFeatureFusion"/> off) by its <c>state_dict</c> names.
+    /// </summary>
+    /// <param name="read">Returns the row-major values of the named tensor, which must have the given PyTorch
+    /// shape. Names are those of the checkpoint's <c>state_dict</c> with any <c>module.</c> prefix removed.</param>
+    /// <returns>The state-dict names that were read.</returns>
+    /// <remarks>
+    /// <para>Read: <c>audio_branch.bn0</c>, <c>audio_branch.patch_embed.*</c> (with <c>mel_conv2d</c> and
+    /// <c>fusion_model</c> when fused), <c>audio_branch.layers.{s}.blocks.{i}.*</c>,
+    /// <c>audio_branch.layers.{s}.downsample.*</c>, <c>audio_branch.norm</c>, <c>text_branch.*</c> (Hugging Face
+    /// <c>RobertaModel</c>), <c>audio_projection.{0,2}</c>, <c>text_projection.{0,2}</c> and
+    /// <c>logit_scale_a</c>.</para>
+    /// <para>Not read, because the CLAP embedding never uses them: HTS-AT's AudioSet head (<c>tscam_conv</c>,
+    /// <c>head</c>), the spectrogram extractor buffers, <c>audio_transform</c> / <c>text_transform</c> (the optional
+    /// MLP-loss heads) and <c>logit_scale_t</c> (the text-side scale of that loss).</para>
+    /// <para>A <c>.pt</c> checkpoint is a PyTorch pickle; export it once, e.g. with
+    /// <c>safetensors.torch.save_file(torch.load(path)["state_dict"], out)</c>, and serve the reader from the
+    /// safetensors file.</para>
+    /// </remarks>
+    public IReadOnlyCollection<string> LoadLaionWeights(Func<string, int[], double[]> read)
+    {
+        Guard.NotNull(read);
+        if (!_useNativeMode)
+            throw new NotSupportedException("LAION weights load into the native network; this instance is in ONNX mode.");
+        MaterializeForLoading();
+        var loader = new TorchStateDictLoader<T>(read, Engine);
+
+        int index = 0;
+        ILayer<T> Next() => index < Layers.Count
+            ? Layers[index++]
+            : throw new InvalidOperationException(
+                $"LoadLaionWeights expects the default CLAP audio tower; it ended after {Layers.Count} layers, before the checkpoint's layers were all placed.");
+        TLayer Expect<TLayer>(ILayer<T> layer) where TLayer : class =>
+            layer as TLayer ?? throw new InvalidOperationException(
+                $"LoadLaionWeights expects the default CLAP audio tower; found {layer.GetType().Name} where {typeof(TLayer).Name} belongs.");
+
+        loader.BatchNorm(Expect<BatchNormalizationLayer<T>>(Next()), "audio_branch.bn0");
+        Expect<SpectrogramStripeDropLayer<T>>(Next());
+        Expect<HtsatSpectrogramImageLayer<T>>(Next());
+        var embedding = Next();
+        if (embedding is HtsatFusionPatchEmbeddingLayer<T> fused)
+        {
+            loader.Conv2d(fused.Projection, "audio_branch.patch_embed.proj");
+            loader.LayerNorm(fused.Norm, "audio_branch.patch_embed.norm");
+            loader.PatchConvAsLinear(fused.LocalProjection, "audio_branch.patch_embed.mel_conv2d", 1,
+                _options.AudioPatchSize, 3 * _options.AudioPatchSize);
+            const string aff = "audio_branch.patch_embed.fusion_model";
+            var (lr, lrn, le, len) = fused.Fusion.LocalBranch;
+            loader.Conv2d(lr, aff + ".local_att.0");
+            loader.BatchNorm(lrn, aff + ".local_att.1");
+            loader.Conv2d(le, aff + ".local_att.3");
+            loader.BatchNorm(len, aff + ".local_att.4");
+            var (gr, grn, ge, gen) = fused.Fusion.GlobalBranch;
+            loader.Conv2d(gr, aff + ".global_att.1");
+            loader.BatchNorm(grn, aff + ".global_att.2");
+            loader.Conv2d(ge, aff + ".global_att.4");
+            loader.BatchNorm(gen, aff + ".global_att.5");
+        }
+        else
+        {
+            var plain = Expect<SwinPatchEmbeddingLayer<T>>(embedding);
+            loader.Conv2d(plain.Projection, "audio_branch.patch_embed.proj");
+            loader.LayerNorm(plain.Norm, "audio_branch.patch_embed.norm");
+        }
+
+        for (int stage = 0; stage < _options.AudioStageCount; stage++)
+        {
+            for (int b = 0; b < _options.AudioStageDepths[stage]; b++)
+            {
+                var block = Expect<SwinTransformerBlockLayer<T>>(Next()).ReferenceModules;
+                string p = $"audio_branch.layers.{stage}.blocks.{b}";
+                loader.LayerNorm(block.Norm1, p + ".norm1");
+                loader.Linear(block.Qkv, p + ".attn.qkv");
+                loader.Linear(block.Projection, p + ".attn.proj");
+                loader.Tensor(block.RelativePositionBiasTable, p + ".attn.relative_position_bias_table");
+                loader.LayerNorm(block.Norm2, p + ".norm2");
+                loader.Linear(block.Fc1, p + ".mlp.fc1");
+                loader.Linear(block.Fc2, p + ".mlp.fc2");
+            }
+            if (stage < _options.AudioStageCount - 1)
+            {
+                var merge = Expect<SwinPatchMergingLayer<T>>(Next());
+                loader.LayerNorm(merge.Norm, $"audio_branch.layers.{stage}.downsample.norm");
+                loader.Linear(merge.Reduction, $"audio_branch.layers.{stage}.downsample.reduction");
+            }
+        }
+        loader.LayerNorm(Expect<LayerNormalizationLayer<T>>(Next()), "audio_branch.norm");
+        Expect<GlobalPoolingLayer<T>>(Next());
+        loader.Linear(Expect<DenseLayer<T>>(Next()), "audio_projection.0");
+        loader.Linear(Expect<DenseLayer<T>>(Next()), "audio_projection.2");
+        if (index != Layers.Count)
+            throw new InvalidOperationException(
+                $"LoadLaionWeights expects the default CLAP audio tower; {Layers.Count - index} layer(s) after the projection have no checkpoint weights.");
+
+        if (TextEncoderLayers.Count != 3 || TextEncoderLayers[0] is not RobertaEncoderLayer<T> roberta)
+            throw new InvalidOperationException("LoadLaionWeights expects the default CLAP text tower (RoBERTa and its projection).");
+        var embeddings = roberta.Embeddings;
+        loader.Embedding(embeddings.WordEmbedding, "text_branch.embeddings.word_embeddings");
+        loader.Embedding(embeddings.PositionEmbedding, "text_branch.embeddings.position_embeddings");
+        loader.Embedding(embeddings.TokenTypeEmbedding, "text_branch.embeddings.token_type_embeddings");
+        loader.LayerNorm(embeddings.Normalization, "text_branch.embeddings.LayerNorm");
+        for (int i = 0; i < roberta.NumLayers; i++)
+        {
+            var layer = roberta.EncoderLayer(i);
+            string p = $"text_branch.encoder.layer.{i}";
+            loader.Linear(layer.Query, p + ".attention.self.query");
+            loader.Linear(layer.Key, p + ".attention.self.key");
+            loader.Linear(layer.Value, p + ".attention.self.value");
+            loader.Linear(layer.AttentionOutput, p + ".attention.output.dense");
+            loader.LayerNorm(layer.AttentionNorm, p + ".attention.output.LayerNorm");
+            loader.Linear(layer.Intermediate, p + ".intermediate.dense");
+            loader.Linear(layer.Output, p + ".output.dense");
+            loader.LayerNorm(layer.OutputNorm, p + ".output.LayerNorm");
+        }
+        loader.Linear(roberta.Pooler, "text_branch.pooler.dense");
+        loader.Linear(Expect<DenseLayer<T>>(TextEncoderLayers[1]), "text_projection.0");
+        loader.Linear(Expect<DenseLayer<T>>(TextEncoderLayers[2]), "text_projection.2");
+
+        loader.Scalar(_logTemperature, "logit_scale_a");
+        return loader.Loaded;
+    }
+
+    // Sub-layers allocate their tensors on first use, so one inference pass of each tower (with the fusion branch
+    // engaged) gives every parameter its storage before values are copied in. Nothing is recorded or trained.
+    private void MaterializeForLoading()
+    {
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            using (new NoGradScope<T>())
+            {
+                int views = _options.EnableFeatureFusion ? 4 : 1;
+                var mel = new Tensor<T>(new[] { 1, views, _frontEnd.ClipFrames, _options.NumMelBands });
+                var longer = new Tensor<T>(new[] { 1 });
+                longer[0] = NumOps.One;
+                RunAudioTower(mel, _options.EnableFeatureFusion ? longer : null);
+                var ids = new Tensor<T>(new[] { 1, 2 });
+                ids[0, 1] = NumOps.FromDouble(2);
+                foreach (var layer in TextEncoderLayers) ids = layer.Forward(ids);
+            }
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
+    }
+
+    /// <summary>The text tower (RoBERTa, then the text projection), for structural tests.</summary>
+    internal IReadOnlyList<ILayer<T>> TextEncoderLayersForTests => TextEncoderLayers;
+
+    /// <summary>The learned logit scale <c>exp(logit_scale_a) = 1 / τ</c>.</summary>
+    public double LogitScale => Math.Exp(NumOps.ToDouble(_logTemperature[0]));
+
+    #endregion
+
     #region Training (tape-based)
 
     /// <inheritdoc/>
@@ -547,21 +827,8 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
             Tensor<T> FwdCLAP(Tensor<T> audioIn) => EncodeAudio(audioIn); // audio embedding — the loss closure re-runs the text side.
             Tensor<T> LossCLAP(Tensor<T> audioEmb, Tensor<T> textBatch)
             {
-                // Re-run text encoder on this replay's text batch.
-                var textEmb = EncodeText(textBatch);
-                int batchSize = audioEmb.Shape[0];
-                int projDim = audioEmb.Shape[audioEmb.Shape.Length - 1];
-                var audioEmb2D = audioEmb.Shape.Length == 2 ? audioEmb : Engine.Reshape(audioEmb, new[] { batchSize, projDim });
-                var textEmb2D = textEmb.Shape.Length == 2 ? textEmb : Engine.Reshape(textEmb, new[] { batchSize, projDim });
-                var textEmbT = Engine.TensorTranspose<T>(textEmb2D);
-                var sim = Engine.TensorMatMul<T>(audioEmb2D, textEmbT);
-                var tau = Engine.TensorExp<T>(_logTemperature);
-                var tauBroadcast = Engine.TensorTile(Engine.Reshape(tau, new[] { 1, 1 }), new[] { batchSize, batchSize });
-                var logitsA2T = Engine.TensorMultiply<T>(sim, tauBroadcast);
-                var logitsT2A = Engine.TensorTranspose<T>(logitsA2T);
-                var halfA2T = SymmetricRowCrossEntropy(logitsA2T, batchSize);
-                var halfT2A = SymmetricRowCrossEntropy(logitsT2A, batchSize);
-                return Engine.TensorAdd<T>(halfA2T, halfT2A);
+                // Re-run the text encoder on this replay's text batch.
+                return ContrastiveLoss(audioEmb, EncodeText(textBatch));
             }
             // One step through the shared training step: the fused plan when it applies, otherwise the shared eager
             // tape step with the same objective. Both encoders and the temperature are trained.
@@ -584,6 +851,61 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// The symmetric contrastive loss of paired, L2-normalised embeddings (Radford 2021 Eq. 1; Wu 2023 §3.2):
+    /// <c>0.5 · (CE(s · A Tᵀ, diag) + CE(s · T Aᵀ, diag))</c> with <c>s = exp(logit_scale)</c>, on the tape.
+    /// </summary>
+    private Tensor<T> ContrastiveLoss(Tensor<T> audioEmb, Tensor<T> textEmb)
+    {
+        int batchSize = audioEmb.Shape[0];
+        int projDim = audioEmb.Shape[audioEmb.Shape.Length - 1];
+        if (textEmb.Shape[0] != batchSize)
+            throw new ArgumentException(
+                $"CLAP pairs audio and captions row by row; got {batchSize} clips and {textEmb.Shape[0]} captions.", nameof(textEmb));
+        var audioEmb2D = audioEmb.Shape.Length == 2 ? audioEmb : Engine.Reshape(audioEmb, new[] { batchSize, projDim });
+        var textEmb2D = textEmb.Shape.Length == 2 ? textEmb : Engine.Reshape(textEmb, new[] { batchSize, projDim });
+        var sim = Engine.TensorMatMul<T>(audioEmb2D, Engine.TensorTranspose<T>(textEmb2D));
+        // Broadcast scalar exp(logTemp) across the [batch, batch] grid.
+        var tau = Engine.TensorExp<T>(_logTemperature);
+        var tauBroadcast = Engine.TensorTile(Engine.Reshape(tau, new[] { 1, 1 }), new[] { batchSize, batchSize });
+        var logitsA2T = Engine.TensorMultiply<T>(sim, tauBroadcast);
+        // Both directions explicitly (rather than relying on transpose-eq) so the autodiff graph is unambiguous.
+        var logitsT2A = Engine.TensorTranspose<T>(logitsA2T);
+        return Engine.TensorAdd<T>(SymmetricRowCrossEntropy(logitsA2T, batchSize), SymmetricRowCrossEntropy(logitsT2A, batchSize));
+    }
+
+    /// <inheritdoc />
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.ContrastiveAlignment;
+
+    /// <inheritdoc />
+    /// <remarks>The target of a CLAP step is the caption batch paired with the audio batch. A proposed target is
+    /// read as token ids: rounded and clamped into the vocabulary.</remarks>
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget)
+    {
+        Guard.NotNull(proposedTarget);
+        var ids = new Tensor<T>(proposedTarget._shape);
+        for (int i = 0; i < ids.Length; i++)
+        {
+            double id = Math.Round(Math.Abs(NumOps.ToDouble(proposedTarget.GetFlat(i))));
+            ids.SetFlat(i, NumOps.FromDouble(Math.Min(id, _options.VocabSize - 1)));
+        }
+        return ids;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The contrastive loss <see cref="Train"/> minimizes, for audio <paramref name="input"/> and caption
+    /// token ids <paramref name="target"/>, without recording gradients.</remarks>
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        Guard.NotNull(input);
+        Guard.NotNull(target);
+        using (new NoGradScope<T>())
+        {
+            var loss = ContrastiveLoss(EncodeAudio(input), EncodeText(target));
+            return loss[0];
+        }
     }
 
     /// <summary>
@@ -700,16 +1022,20 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         {
             Name = Name,
             Description = "CLAP — Contrastive Language-Audio Pre-training (Wu et al. 2023).",
-            Complexity = _options.AudioEncoderLayers + _options.TextEncoderLayers,
+            Complexity = _options.AudioStageDepths.Sum() + _options.TextEncoderLayers,
             AdditionalInfo = new Dictionary<string, object>
             {
-                ["AudioHiddenDim"] = _options.AudioHiddenDim,
+                ["AudioEncoder"] = "HTS-AT",
+                ["AudioEmbedDim"] = _options.AudioEmbedDim,
+                ["AudioStageDepths"] = string.Join(",", _options.AudioStageDepths),
+                ["AudioFeatureDim"] = _options.AudioFeatureDim,
+                ["TextEncoder"] = "RoBERTa",
                 ["TextHiddenDim"] = _options.TextHiddenDim,
+                ["TextEncoderLayers"] = _options.TextEncoderLayers,
                 ["ProjectionDim"] = _options.ProjectionDim,
                 ["SampleRate"] = _options.SampleRate,
                 ["NumMelBands"] = _options.NumMelBands,
-                ["AudioEncoderLayers"] = _options.AudioEncoderLayers,
-                ["TextEncoderLayers"] = _options.TextEncoderLayers,
+                ["FeatureFusion"] = _options.EnableFeatureFusion,
             }
         };
     }

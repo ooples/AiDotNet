@@ -113,7 +113,7 @@ public partial class CSPDarknet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     private int GetBlockCount(int stage, int depth)
     {
         int[] baseCounts = { 1, 2, 8, 8 };
-        return Math.Max(1, (int)Math.Round(baseCounts[stage] * depth * 0.33));
+        return Math.Max(1, (int)Math.Round((double)baseCounts[stage] * depth * 0.33));
     }
 
     public List<Tensor<T>> ExtractFeatures(Tensor<T> input)

@@ -824,7 +824,7 @@ public partial class MemoryNetwork<T> : SequenceModelLayoutBase<T>
             }
         }
 
-        avgMemValue /= _memorySize * _embeddingSize;
+        avgMemValue /= (double)_memorySize * _embeddingSize;
 
         return new ModelMetadata<T>
         {

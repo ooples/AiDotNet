@@ -55,7 +55,7 @@ public partial class SwinPatchMergingLayer<T> : LayerBase<T>, IShapeContract
     /// instead was worse than a missing count: with nothing declared, the base sized the children by
     /// CHAINING them in registration order, so reduction was built from this layer's own 8-wide
     /// input and norm from reduction's 16-wide output, for 176 values. The forward feeds both the
-    /// 4x-concatenated tensor, and norm runs BEFORE reduction, so the real block is 592 values and
+    /// 4x-concatenated tensor, and norm runs BEFORE reduction, so the real block is 576 values (592 while the reduction still carried a bias) and
     /// every one of those 176 had the wrong shape. Declaring the width states what the doc comments
     /// above already say.
     /// </remarks>
@@ -67,6 +67,12 @@ public partial class SwinPatchMergingLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     [SubLayerInput("_inputDim * 4")]
     private readonly LayerNormalizationLayer<T> _norm;
+
+    /// <summary>The LayerNorm over the concatenated patches (reference <c>norm</c>).</summary>
+    internal LayerNormalizationLayer<T> Norm => _norm;
+
+    /// <summary>The bias-free 4C → 2C reduction (reference <c>reduction</c>).</summary>
+    internal DenseLayer<T> Reduction => _reduction;
 
     // Cached values for backward pass
     private int _cachedBatch;
@@ -93,8 +99,11 @@ public partial class SwinPatchMergingLayer<T> : LayerBase<T>, IShapeContract
         // Layer normalization over concatenated dimension (4 * inputDim)
         _norm = new LayerNormalizationLayer<T>();
 
-        // Linear reduction: 4 * inputDim -> 2 * inputDim
-        _reduction = new DenseLayer<T>(_outputDim);
+        // Linear reduction: 4 * inputDim -> 2 * inputDim, WITHOUT a bias. The reference PatchMerging
+        // (Liu et al. 2021, microsoft/Swin-Transformer, and every Swin derivative such as HTS-AT) declares
+        // nn.Linear(4 * dim, 2 * dim, bias=False); the reduction follows a LayerNorm whose beta already
+        // supplies the offset, so a bias here is a redundant parameter the published checkpoints do not have.
+        _reduction = new DenseLayer<T>(_outputDim, biasMode: BiasMode.Never);
 
         RegisterSubLayer(_reduction);
         RegisterSubLayer(_norm);
@@ -167,6 +176,12 @@ public partial class SwinPatchMergingLayer<T> : LayerBase<T>, IShapeContract
         // channels. TensorGather/TensorConcatenate are tape-tracked; a manual
         // element copy here would detach the reduction branch in compiled
         // training and prevent gradients from reaching the preceding stage.
+        //
+        // The channel order is the reference's: x0 = x[0::2, 0::2], x1 = x[1::2, 0::2],
+        // x2 = x[0::2, 1::2], x3 = x[1::2, 1::2], concatenated as [x0, x1, x2, x3]. It used to be
+        // [x0, x2, x1, x3], which trains identically from a random start but scrambles the reduction
+        // weights of any published Swin / HTS-AT checkpoint: its column blocks 1 and 2 would read the
+        // wrong neighbours.
         var topLeft = new Tensor<int>([newSeqLen]);
         var topRight = new Tensor<int>([newSeqLen]);
         var bottomLeft = new Tensor<int>([newSeqLen]);
@@ -186,8 +201,8 @@ public partial class SwinPatchMergingLayer<T> : LayerBase<T>, IShapeContract
         var merged = Engine.TensorConcatenate(
             [
                 Engine.TensorGather(input, topLeft, axis: 1),
-                Engine.TensorGather(input, topRight, axis: 1),
                 Engine.TensorGather(input, bottomLeft, axis: 1),
+                Engine.TensorGather(input, topRight, axis: 1),
                 Engine.TensorGather(input, bottomRight, axis: 1)
             ],
             axis: 2);
