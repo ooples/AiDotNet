@@ -17,7 +17,7 @@ namespace AiDotNet.Tests.VisionLanguage;
 /// <summary>
 /// The Grounding DINO network against Hugging Face's port of the official code (tools/reference-data/grounding_dino_reference.py):
 /// Swin and BERT backbones, feature enhancer, language-guided query selection and decoder, every decoder layer's logits
-/// and boxes for two prompts (one padded), and the loss before and after one SGD step.
+/// and boxes for two prompts (one padded), and the loss before and after one SGD step; and the paper's training loss.
 /// </summary>
 public class GroundingDinoReferenceTests
 {
@@ -59,14 +59,10 @@ public class GroundingDinoReferenceTests
         }
     }
 
-    [Fact(Timeout = 600000)]
-    public async Task Network_MatchesTheReference_AndAfterOneSgdStep()
+    private static (GroundingDinoNetwork<double> Net, List<LayerBase<double>> Layers, Tensor<double> Images, int[,] Ids, bool[,] Mask) Load(JsonElement k)
     {
-        await Task.Yield();
-        var engine = AiDotNetEngine.Current;
-        var k = Fixture();
         var layers = new List<LayerBase<double>>();
-        var net = new GroundingDinoNetwork<double>(engine, layers, SmallConfiguration());
+        var net = new GroundingDinoNetwork<double>(AiDotNetEngine.Current, layers, SmallConfiguration());
         var state = k.GetProperty("state");
         net.LoadTorchWeights((name, shape) =>
         {
@@ -80,6 +76,63 @@ public class GroundingDinoReferenceTests
         var ids = new int[2, idRows[0].Length];
         var mask = new bool[2, idRows[0].Length];
         for (int i = 0; i < 2; i++) for (int j = 0; j < idRows[0].Length; j++) { ids[i, j] = idRows[i][j]; mask[i, j] = maskRows[i][j]; }
+        return (net, layers, images, ids, mask);
+    }
+
+    /// <summary>
+    /// The paper's training loss (Hungarian matching; contrastive focal, L1 and GIoU losses on the final layer, every earlier
+    /// decoder layer and the encoder's selected queries) against the reference's, term by term, and after one SGD step on it.
+    /// </summary>
+    [Fact(Timeout = 600000)]
+    public async Task PaperLoss_MatchesTheReference_AndAfterOneSgdStep()
+    {
+        await Task.Yield();
+        var engine = AiDotNetEngine.Current;
+        var k = Fixture();
+        var (net, layers, images, ids, mask) = Load(k);
+        var paper = k.GetProperty("paper_loss");
+        var targets = paper.GetProperty("labels").EnumerateArray().Select(t => new GroundingTarget(
+            t.GetProperty("boxes").EnumerateArray().Select(Values).ToArray(),
+            t.GetProperty("class_labels").EnumerateArray().Select(v => v.GetInt32()).ToArray())).ToArray();
+        var objective = new GroundingDinoLoss<double>(engine);
+
+        var parameters = AiDotNet.Training.TapeTrainingStep<double>.CollectParameters(layers);
+        var terms = new Dictionary<string, double>();
+        Dictionary<Tensor<double>, Tensor<double>> grads;
+        Tensor<double> loss;
+        using (var tape = new GradientTape<double>())
+        {
+            loss = objective.Compute(net.Forward(images, ids, mask), ids, mask, targets, terms);
+            grads = tape.ComputeGradients(loss, sources: parameters);
+        }
+        foreach (var term in paper.GetProperty("terms").EnumerateObject())
+        {
+            Assert.True(terms.TryGetValue(term.Name, out var actual), $"{term.Name} is missing");
+            // Relative: each term sums a few hundred token or box terms whose inputs agree to 1e-8.
+            Assert.True(Math.Abs(term.Value.GetDouble() - actual) < 1e-7 * Math.Max(1, Math.Abs(actual)), $"{term.Name}: {term.Value.GetDouble()} vs {actual}");
+        }
+        double expectedLoss = paper.GetProperty("loss").GetDouble();
+        Assert.True(Math.Abs(expectedLoss - loss[0]) < 1e-7 * Math.Max(1, expectedLoss), $"{expectedLoss} vs {loss[0]}");
+        foreach (var p in parameters)
+        {
+            if (!grads.TryGetValue(p, out var g)) continue;
+            for (int i = 0; i < p.Length; i++) p[i] -= 0.001 * g[i];
+            engine.InvalidatePersistentTensor(p);
+        }
+        double after;
+        using (new NoGradScope<double>())
+            after = objective.Compute(net.Forward(images, ids, mask), ids, mask, targets)[0];
+        double reference = paper.GetProperty("loss_after_sgd").GetDouble();
+        Assert.True(Math.Abs(reference - after) < 1e-7 * Math.Max(1, reference), $"{reference} vs {after}");
+    }
+
+    [Fact(Timeout = 600000)]
+    public async Task Network_MatchesTheReference_AndAfterOneSgdStep()
+    {
+        await Task.Yield();
+        var engine = AiDotNetEngine.Current;
+        var k = Fixture();
+        var (net, layers, images, ids, mask) = Load(k);
 
         Tensor<double> Loss(GroundingDinoOutput<double> o)
         {

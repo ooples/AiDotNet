@@ -6,7 +6,8 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <summary>The shape of Grounding DINO; the defaults are Grounding DINO-T (Swin-T and BERT-base).</summary>
 internal sealed record GroundingDinoConfiguration
 {
-    public SwinConfiguration Backbone { get; init; } = new();
+    /// <summary>Swin-T, with the official backbone's stochastic depth (0.2, SwinTransformer's default, which build_swin_transformer keeps).</summary>
+    public SwinConfiguration Backbone { get; init; } = new() { DropPathRate = 0.2 };
 
     public BertConfiguration Text { get; init; } = new();
 
@@ -43,8 +44,8 @@ internal sealed record GroundingDinoConfiguration
 
     public int GroupNormGroups { get; init; } = 32;
 
-    /// <summary>Dropout in the encoder and decoder layers (0.1).</summary>
-    public double Dropout { get; init; } = 0.1;
+    /// <summary>Dropout in the encoder and decoder layers (0: the official configuration's dropout, text_dropout and fusion_dropout).</summary>
+    public double Dropout { get; init; } = 0.0;
 
     /// <summary>Stochastic depth on the fusion layers' residual branches (0.1).</summary>
     public double FusionDropPath { get; init; } = 0.1;

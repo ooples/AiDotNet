@@ -10,9 +10,15 @@ them, so the comparison is not limited to float32 precision. The port also casts
 integer dtype of the position ids, truncating it to 0s and 1s; the official code (get_sine_pos_embed) keeps the floats,
 and so does the patch.
 
-For two 3x64x64 images and two prompts (the second padded), the fixture records the final layer's logits and boxes,
+For two 3x64x64 images and two two-phrase prompts (the second padded), the fixture records the final layer's logits and boxes,
 every decoder layer's logits and boxes, and the loss: the mean squared box plus the mean squared logit over the scored
 (unmasked) prompt tokens, summed over decoder layers; and the loss after one plain SGD step (lr 0.001) on every parameter.
+It also records the paper's training loss on grounding targets (the port's GroundingDinoForObjectDetectionLoss with
+auxiliary_loss on and two_stage, as the paper trains): Hungarian matching on the focal token cost, L1 and GIoU; the
+contrastive sigmoid focal loss over the prompt's tokens (weight 2), L1 (5) and GIoU (2) on the matched boxes, for the
+final layer, every earlier decoder layer and the encoder's selected queries; per term, and after one SGD step (lr 0.001)
+on that loss from the original weights. The encoder term uses the official code's encoder outputs (the selected encoder
+tokens and their undetached boxes), not the port's (see official_encoder_outputs).
 Default: verify; --write: regenerate tests/AiDotNet.Tests/VisionLanguage/ReferenceData/grounding_dino_reference.json.
 """
 import argparse
@@ -23,8 +29,13 @@ import sys
 
 FIXTURE = "tests/AiDotNet.Tests/VisionLanguage/ReferenceData/grounding_dino_reference.json"
 
-IDS = [[101, 1500, 1600, 1012, 1700, 1012, 102], [101, 1800, 1012, 102, 0, 0, 0]]
-MASK = [[1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 0, 0, 0]]
+IDS = [[101, 1500, 1600, 1012, 1700, 1012, 102], [101, 1800, 1012, 1900, 1012, 102, 0]]
+MASK = [[1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 0]]
+# Grounding targets: per image, (cx, cy, w, h) boxes normalized by the image size and the phrase (label group) each names.
+# Both prompts have two phrases: the port offsets image i's labels by image i's own phrase count rather than the count
+# before it, which indexes the wrong phrase when the counts differ (the official code keeps one positive map per box).
+LABELS = [{"boxes": [[0.30, 0.40, 0.20, 0.30], [0.62, 0.55, 0.25, 0.20]], "class_labels": [0, 1]},
+          {"boxes": [[0.50, 0.45, 0.40, 0.35]], "class_labels": [1]}]
 
 
 def patch_float64():
@@ -82,6 +93,50 @@ def build():
             if p.abs().sum() == 0 or name.endswith("vision_param") or name.endswith("text_param"):
                 p.normal_(0, 0.05)
     return model
+
+
+def paper_loss(model, images, ids, mask):
+    import torch
+    labels = [{"boxes": torch.tensor(t["boxes"], dtype=torch.float64), "class_labels": torch.tensor(t["class_labels"])}
+              for t in LABELS]
+    out = model(pixel_values=images, input_ids=ids, attention_mask=mask, labels=labels)
+    return out.loss, out.loss_dict
+
+
+def official_encoder_outputs(model):
+    """The official code's encoder ("interm") outputs: the selected encoder tokens scored against the encoded text, and
+    their boxes, not detached (GroundingDINO.py: enc_out_class_embed(hs_enc, text_dict) and refpoint_embed_undetach).
+    The port instead scores its learned query embeddings against the text before the encoder, with the boxes detached;
+    its encoder loss is replaced here by the official one."""
+    import torch
+    forward = model.model.forward
+
+    def patched(*args, **kwargs):
+        o = forward(*args, **kwargs)
+        top = torch.topk(o.enc_outputs_class.max(-1)[0], model.config.num_queries, dim=1)[1]
+        o.encoder_logits = torch.gather(o.enc_outputs_class, 1, top.unsqueeze(-1).repeat(1, 1, o.enc_outputs_class.shape[-1]))
+        o.encoder_pred_boxes = torch.gather(o.enc_outputs_coord_logits, 1, top.unsqueeze(-1).repeat(1, 1, 4)).sigmoid()
+        return o
+
+    model.model.forward = patched
+
+
+def compute_paper_loss(images, ids, mask):
+    import torch
+    model = build()
+    model.config.auxiliary_loss = True
+    official_encoder_outputs(model)
+    # Eval mode: no dropout or stochastic depth, so the loss is deterministic (the loss itself does not depend on it).
+    loss, terms = paper_loss(model, images, ids, mask)
+    model.zero_grad()
+    loss.backward()
+    with torch.no_grad():
+        for p in model.parameters():
+            if p.grad is not None:
+                p -= 0.001 * p.grad
+        after, _ = paper_loss(model, images, ids, mask)
+    return {"labels": LABELS, "loss": loss.item(), "loss_after_sgd": after.item(),
+            "terms": {k: float(v.detach()) for k, v in terms.items() if not k.startswith("cardinality")}}
 
 
 def compute():
@@ -170,7 +225,7 @@ def compute():
     return {"state": state, "images": images.flatten().tolist(), "ids": IDS, "mask": MASK,
             "logits": [finite(t) for t in logits], "boxes": [t.detach().flatten().tolist() for t in boxes],
             "final_logits": finite(out.logits), "final_boxes": out.pred_boxes.detach().flatten().tolist(),
-            "loss": loss.item(), "loss_after_sgd": after,
+            "loss": loss.item(), "loss_after_sgd": after, "paper_loss": compute_paper_loss(images, ids, mask),
             "trace": {k: v.detach().flatten().tolist() for k, v in trace.items()}}
 
 
@@ -183,11 +238,12 @@ def main():
         os.makedirs(os.path.dirname(FIXTURE), exist_ok=True)
         with open(FIXTURE, "w", encoding="utf-8", newline="\n") as f:
             json.dump(result, f)
-        print("wrote", round(result["loss"], 9), round(result["loss_after_sgd"], 9))
+        print("wrote", round(result["loss"], 9), round(result["loss_after_sgd"], 9), result["paper_loss"])
         return
     with open(FIXTURE, encoding="utf-8") as f:
         stored = json.load(f)
-    same = abs(stored["loss"] - result["loss"]) < 1e-12 and abs(stored["loss_after_sgd"] - result["loss_after_sgd"]) < 1e-12
+    same = all(abs(stored[k] - result[k]) < 1e-12 for k in ("loss", "loss_after_sgd")) and all(
+        abs(stored["paper_loss"][k] - result["paper_loss"][k]) < 1e-12 for k in ("loss", "loss_after_sgd"))
     print("fixture matches" if same else "fixture differs")
     sys.exit(0 if same else 1)
 

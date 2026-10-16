@@ -33,21 +33,7 @@ internal sealed partial class GroundingDinoNetwork<T>
         var text = Rows(TextProjection, bert);                                                                    // [B, L, D]
         Record("text_projected", text);
 
-        // Image: backbone levels and stride-2 extra levels, each projected to D and group-normalized.
-        var features = Backbone.Forward(images);
-        for (int j = 0; j < features.Count; j++) Record($"swin{j}", features[j]);
-        var maps = new List<Tensor<T>>();
-        for (int level = 0; level < c.Levels; level++)
-        {
-            bool fromBackbone = level < features.Count;
-            var source = fromBackbone ? features[level] : level == features.Count ? features[^1] : maps[^1];
-            int k = InputKernel[level], stride = fromBackbone ? 1 : 2, pad = fromBackbone ? 0 : 1;
-            int h = (source.Shape[2] + 2 * pad - k) / stride + 1, w = (source.Shape[3] + 2 * pad - k) / stride + 1;
-            var columns = _engine.Unfold(source, new[] { k, k }, new[] { stride, stride }, new[] { pad, pad });           // [B, C·k·k, h·w]
-            var projected = Rows(InputProjections[level], _engine.TensorPermute(columns, new[] { 0, 2, 1 }));          // [B, h·w, D]
-            maps.Add(InputNorms[level].Forward(_engine.Reshape(_engine.TensorPermute(projected, new[] { 0, 2, 1 }), new[] { b, c.Dim, h, w })));
-            Record($"projected{level}", maps[^1]);
-        }
+        var maps = ProjectImage(images);
 
         // Flatten the levels, with each level's sine position plus its learned level embedding.
         var shapes = maps.Select(m => (m.Shape[2], m.Shape[3])).ToArray();
@@ -135,7 +121,16 @@ internal sealed partial class GroundingDinoNetwork<T>
                     reference[i, q, k] = NumOps.FromDouble(1.0 / (1.0 + Math.Exp(-NumOps.ToDouble(coordinateLogits[i, selected[i, q], k]))));
         var target = _engine.TensorBroadcastTo(_engine.Reshape(_engine.TensorSlice(_engine.Reshape(Value(QueryEmbedding), new[] { c.Queries, c.Dim }),
             new[] { 0, 0 }, new[] { queries, c.Dim }), new[] { 1, queries, c.Dim }), new[] { b, queries, c.Dim });
-        var encoderLogits = Contrast(target, text, mask);
+        // The encoder's outputs for its auxiliary loss, as the official code takes them (hs_enc and refpoint_embed_undetach):
+        // the selected tokens' scores against the encoded text, and their boxes, on the tape.
+        var rows = new int[b * queries];
+        for (int i = 0; i < b; i++)
+            for (int q = 0; q < queries; q++) rows[i * queries + q] = i * tokens + selected[i, q];
+        int width = encoderClass.Shape[2];
+        var encoderLogits = _engine.Reshape(AiDotNet.ComputerVision.CvTensorOps<T>.Select(
+            _engine.Reshape(encoderClass, new[] { b * tokens, width }), rows, 0), new[] { b, queries, width });
+        var encoderBoxes = _engine.Sigmoid(_engine.Reshape(AiDotNet.ComputerVision.CvTensorOps<T>.Select(
+            _engine.Reshape(coordinateLogits, new[] { b * tokens, 4 }), rows, 0), new[] { b, queries, 4 }));
         var initialReference = reference;
         Record("init_reference", reference);
 
@@ -180,7 +175,32 @@ internal sealed partial class GroundingDinoNetwork<T>
         }
         if (Trace is not null)
             Record("intermediate", _engine.TensorStack(intermediate.ToArray(), 1));
-        return new GroundingDinoOutput<T>(logits, boxes, encoderLogits, initialReference, mask);
+        return new GroundingDinoOutput<T>(logits, boxes, encoderLogits, encoderBoxes, mask);
+    }
+
+    /// <summary>
+    /// The image side alone: the backbone's levels and the stride-2 extra levels, each projected to the model width and
+    /// group-normalized, <c>[B, Dim, h, w]</c> per level. This is what the feature enhancer fuses with the text.
+    /// </summary>
+    public List<Tensor<T>> ProjectImage(Tensor<T> images)
+    {
+        var c = Configuration;
+        int b = images.Shape[0];
+        var features = Backbone.Forward(images);
+        for (int j = 0; j < features.Count; j++) Record($"swin{j}", features[j]);
+        var maps = new List<Tensor<T>>();
+        for (int level = 0; level < c.Levels; level++)
+        {
+            bool fromBackbone = level < features.Count;
+            var source = fromBackbone ? features[level] : level == features.Count ? features[^1] : maps[^1];
+            int k = InputKernel[level], stride = fromBackbone ? 1 : 2, pad = fromBackbone ? 0 : 1;
+            int h = (source.Shape[2] + 2 * pad - k) / stride + 1, w = (source.Shape[3] + 2 * pad - k) / stride + 1;
+            var columns = _engine.Unfold(source, new[] { k, k }, new[] { stride, stride }, new[] { pad, pad });           // [B, C·k·k, h·w]
+            var projected = Rows(InputProjections[level], _engine.TensorPermute(columns, new[] { 0, 2, 1 }));          // [B, h·w, D]
+            maps.Add(InputNorms[level].Forward(_engine.Reshape(_engine.TensorPermute(projected, new[] { 0, 2, 1 }), new[] { b, c.Dim, h, w })));
+            Record($"projected{level}", maps[^1]);
+        }
+        return maps;
     }
 
     /// <summary>When set, the forward records its intermediate tensors here by name (for reference comparisons).</summary>

@@ -114,6 +114,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// Production defaults are untouched; nothing on the shipping construction path calls the scaler.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Grounding models built as their papers' networks: they read images and train on grounded phrases (TrainGrounding,
+    /// routed by VisionLanguageTestBase), so they take neither the grounding token input nor its iteration settings.
+    /// </summary>
+    private static readonly System.Collections.Generic.HashSet<string> GroundingNetworkModels =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal) { "GroundingDINO" };
+
     private static readonly System.Collections.Generic.HashSet<string> FoundationScaleVisionLanguageModels =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
     {
@@ -4601,6 +4608,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
          : className is "KOSMOS1" or "KOSMOS2" ? 28
          // Florence-2: DaViT has a total stride of 32; 64 px is the smallest image with a 2x2 grid.
          : className == "Florence2" ? 64
+         // Grounding DINO's fixture: a 64 px image gives the Swin levels 8x8, 4x4 and 2x2 and the extra level 1x1.
+         : className == "GroundingDINO" ? 64
          // SAM, SAM21, SlimSAM, MaskAdapter and Mask2Former are deliberately NOT in this list.
          // Their constructor overrides pin 112 (SAM, SAM21) and 128 (the other three), and this arm
          // shadows the IsPatchVisionModel branch below, so listing them here fed a 32px fixture to a
@@ -5542,7 +5551,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         => className switch
         {
             // Liu 2023 — DETR-style transformer decoder dim.
-            "GroundingDINO" or "GroundingDINO15" or "DINOX" => 256,
+            "GroundingDINO15" or "DINOX" => 256,
             "GroundedSAM2" => 32, // Generated public-options fixture; production default remains 256.
             "OWLViT" => 32, // Generated public-options fixture; production default remains 768.
             "OWLv2" => 32, // Generated public-options fixture; production default remains 1024.
@@ -6223,6 +6232,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 2), " +
                     "options: new AiDotNet.Video.Options.GMFlowOptions { NumFeatures = 8, NumTransformerLayers = 1, NumHeads = 1 }" + ")";
+            }
+            else if (model.ClassName == "GroundingDINO" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.VisionLanguage.Grounding.", System.StringComparison.Ordinal))
+            {
+                // Grounding DINO's network at fixture scale through its public options: Swin (width 16, blocks 1-1-2-1,
+                // window 4), BERT (width 32, two layers; the BERT-base-uncased vocabulary the tokenizer reads), width 32,
+                // one encoder and one decoder layer, 10 queries and a 16-token text head. Production keeps Swin-T,
+                // BERT-base and the released widths.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ObjectDetection, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 32), " +
+                    "new AiDotNet.VisionLanguage.Grounding.GroundingDINOOptions { ImageSize = 64, VisionDim = 16, " +
+                    "SwinDepths = new[] { 1, 1, 2, 1 }, SwinHeads = new[] { 1, 2, 2, 4 }, SwinWindowSize = 4, SwinDropPathRate = 0.0, " +
+                    "TextHiddenSize = 32, TextLayers = 2, TextHeads = 2, TextIntermediateSize = 64, DecoderDim = 32, " +
+                    "NumVisionLayers = 1, NumDecoderLayers = 1, NumHeads = 4, FeedForwardDim = 64, NumSamplingPoints = 2, " +
+                    "NumQueryPositions = 10, MaxSequenceLength = 16, MaxDetections = 10, FusionDropPathRate = 0.0 })";
             }
             else if (model.ClassName == "GroundedSAM2" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.VisionLanguage.Grounding.", System.StringComparison.Ordinal))
@@ -13574,7 +13600,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Ferret, FerretV2, Groma and Shikra sit in the Grounding namespace but are LLaVA-style: their
                 // stack opens with an image patch embedding, so they take the image input, not grounding tokens.
                 bool isGrounding = model.FullyQualifiedName.Contains("VisionLanguage.Grounding")
-                    && !FoundationScaleVisionLanguageModels.Contains(model.ClassName);
+                    && !FoundationScaleVisionLanguageModels.Contains(model.ClassName)
+                    && !GroundingNetworkModels.Contains(model.ClassName);
                 bool isVision = (model.Domains.Contains(1) || model.Domains.Contains(11)) // Vision=1, ThreeD=11
                     && !model.ExtendsForecastingModelBase
                     && !isTokenConsumingVlm
@@ -14523,6 +14550,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // VisionDim=32), matching the generated-only constructor above.
             sb.AppendLine("    protected override int[] InputShape => new[] { 4, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+        }
+        else if (isVisionModel && model.ClassName == "GroundingDINO")
+        {
+            // Grounding DINO reads a 64 px RGB image; Predict returns its image tokens before they meet the text: the
+            // Swin levels 8x8, 4x4 and 2x2 and the extra 1x1 level, 85 tokens of the fixture's width 32. Every
+            // invariant trains through TrainGrounding with synthetic grounded phrases (VisionLanguageTestBase). A step
+            // runs the whole network, so the repeated-training probes take a few steps each.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 3, 64, 64 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 85, 32 };");
+            sb.AppendLine("    protected override int TrainingIterations => 3;");
+            sb.AppendLine("    protected override int MoreDataShortIterations => 2;");
+            sb.AppendLine("    protected override int MoreDataLongIterations => 6;");
+            sb.AppendLine("    protected override int MemorizationTaskIterations => 20;");
         }
         else if (isVisionModel &&
                  model.FullyQualifiedName.Contains("VisionLanguage.Grounding")

@@ -210,24 +210,36 @@ public class ClapArchitectureTests
             for (int i = 0; i < span.Length; i++) span[i] = rng.NextDouble() * 2 - 1;
             return t;
         }
-        var x = Map();
-        var y = Map();
-
-        using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<double>();
-        var fused = layer.Forward(x, y);
-        var parameters = AiDotNet.Training.TapeTrainingStep<double>.CollectParameters(new[] { layer }, structureVersion: -1);
-        Assert.NotEmpty(parameters);
         var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
-        var projection = Map();
-        var loss = engine.ReduceSum(engine.TensorMultiply(fused, projection), new[] { 0, 1, 2, 3 }, keepDims: false);
-        var gradients = tape.ComputeGradients(loss, parameters);
+        IReadOnlyList<Tensor<double>>? parameters = null;
+        double[]? largest = null;
+
+        // Several input pairs: the global branch's ReLU reads only four pooled values per pair, so in evaluation mode a
+        // single draw can leave it inactive by chance (that depends on the initialization). The gradient path is what
+        // is under test: every parameter must receive a nonzero gradient from some pair.
+        for (int draw = 0; draw < 8; draw++)
+        {
+            var x = Map();
+            var y = Map();
+            var projection = Map();
+            using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<double>();
+            var fused = layer.Forward(x, y);
+            parameters ??= AiDotNet.Training.TapeTrainingStep<double>.CollectParameters(new[] { layer }, structureVersion: -1);
+            Assert.NotEmpty(parameters);
+            largest ??= new double[parameters.Count];
+            var loss = engine.ReduceSum(engine.TensorMultiply(fused, projection), new[] { 0, 1, 2, 3 }, keepDims: false);
+            var gradients = tape.ComputeGradients(loss, parameters);
+            for (int i = 0; i < parameters.Count; i++)
+            {
+                Assert.True(gradients.TryGetValue(parameters[i], out var gradient) && gradient is not null,
+                    $"a {string.Join("x", parameters[i].Shape.ToArray())} parameter received no gradient");
+                foreach (var g in gradient!.ToArray()) largest[i] = Math.Max(largest[i], Math.Abs(g));
+            }
+        }
 
         // Both attention branches (local and global context) and their batch norms train.
-        foreach (var parameter in parameters)
-        {
-            Assert.True(gradients.TryGetValue(parameter, out var gradient) && gradient is not null,
-                $"a {string.Join("x", parameter.Shape.ToArray())} parameter received no gradient");
-            Assert.Contains(gradient!.ToArray(), g => Math.Abs(g) > 1e-12);
-        }
+        for (int i = 0; i < parameters!.Count; i++)
+            Assert.True(largest![i] > 1e-12,
+                $"parameter {i} ({string.Join("x", parameters[i].Shape.ToArray())}) received only zero gradients");
     }
 }
