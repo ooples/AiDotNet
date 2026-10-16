@@ -261,14 +261,6 @@ public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
     /// <param name="adjacencyMatrix">The graph adjacency matrix.</param>
     // Points every graph layer at an adjacency without changing the model's own: a training step's packed copy, then
     // the model's again.
-    private void SetLayerAdjacency(Tensor<T> adjacency)
-    {
-        foreach (var layer in Layers)
-        {
-            if (layer is IGraphConvolutionLayer<T> graphLayer)
-                graphLayer.SetAdjacencyMatrix(adjacency);
-        }
-    }
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
         _cachedAdjacencyMatrix = adjacencyMatrix;
@@ -679,75 +671,24 @@ public partial class LinkPredictionModel<T> : GraphModelLayoutBase<T>
         return Forward(input);
     }
 
-    /// <summary>
-    /// Trains the network on a single batch under the generic node-feature contract, consistent with
-    /// <see cref="PredictCore"/> (both operate on node EMBEDDINGS, not decoded edge scores).
-    /// </summary>
-    /// <param name="input">The input node features.</param>
-    /// <param name="expectedOutput">
-    /// The target in node-embedding space (this generic overload trains the GNN encoder directly).
-    /// NOTE: this is NOT edge-level link-prediction training — actual edge scoring is a separate
-    /// decode step (<see cref="PredictEdges"/> via <see cref="ComputeEdgeScore"/>), and end-to-end
-    /// link-prediction training with real edge pairs + labels goes through the edge-aware graph path.
-    /// This overload exists for the generic model-family training contract.
-    /// </param>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Trains the node embeddings this generic contract outputs (see <c>PredictCore</c>; edge scoring is the separate
+    /// <c>PredictEdges</c> decode) over the input's graph. It needs a tape-differentiable loss: substituting one would
+    /// train a different objective than the caller configured.
+    /// </remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> target)
     {
         EnsureDefaultAdjacencyForInput(input);
-
-        foreach (var layer in Layers)
-        {
-            layer.SetTrainingMode(true);
-        }
-
-        // ILayer.Backward was removed in favour of GradientTape autodiff. The previous code computed a
-        // loss derivative but NEVER ran a backward pass — it read GetParameterGradients() (stale zeros)
-        // straight away — so the optimizer applied a zero step and training was a silent no-op ("No
-        // parameters changed after training — gradients may all be zero"). Record the GNN forward
-        // (node embeddings — this generic contract's output, see PredictCore; edge scoring is the
-        // separate PredictEdges decode) and the loss on the tape, compute real gradients for every
-        // trainable parameter, then drive the update through the model's configured optimizer
-        // (default Adam) so the loss actually converges.
-        // Tape-based training requires a tape-differentiable loss — a LossFunctionBase<T>, which
-        // exposes ComputeTapeLoss. Silently substituting BinaryCrossEntropyLoss for a
-        // non-LossFunctionBase<T> would train a DIFFERENT objective than the caller configured (a
-        // surprising correctness trap), so fail fast with a clear message instead. The default loss
-        // (BinaryCrossEntropyLoss, set in the ctor) is a LossFunctionBase<T>, so the default path is
-        // unaffected — this only rejects a custom non-tape loss.
         if (_lossFunction is not LossFunctionBase<T> tapeLoss)
             throw new InvalidOperationException(
                 $"LinkPredictionModel tape-based training requires a LossFunctionBase<T> (one that "
                 + $"implements ComputeTapeLoss); the configured loss '{_lossFunction.GetType().Name}' is "
                 + "not tape-differentiable. Supply a LossFunctionBase<T>-derived loss such as BinaryCrossEntropyLoss.");
-
-        // The adjacency is part of the step's data: the graph layers read it in the forward, and a compiled plan
-        // bakes anything its forward reads other than its input. Packed with the node features, it reaches the
-        // layers from the step's own input, so a plan traced on one graph trains the next graph on its own
-        // structure (graph classification sets one per graph). The layers get the model's adjacency back after.
         var adjacency = _cachedAdjacencyMatrix ?? throw new InvalidOperationException(
             "Adjacency matrix must be set before training. Call SetAdjacencyMatrix() first.");
-        int[] featureShape = input._shape;
-        int[] adjacencyShape = adjacency._shape;
-        int featureLength = input.Length;
-        try
-        {
-            TrainCustomTapeStep(
-                Training.StepInputPacking<T>.Pack(input, adjacency),
-                expectedOutput,
-                packed =>
-                {
-                    SetLayerAdjacency(Training.StepInputPacking<T>.Slice(packed, featureLength, adjacencyShape));
-                    return Forward(Training.StepInputPacking<T>.Slice(packed, 0, featureShape));
-                },
-                tapeLoss.ComputeTapeLoss,
-                _optimizer,
-                () => Training.TapeTrainingStep<T>.CollectParameters(Layers, LayerStructureVersion));
-        }
-        finally
-        {
-            SetLayerAdjacency(adjacency);
-        }    }
-
+        return GraphTrainingObjective(input, adjacency, target, Forward, tapeLoss);
+    }
     /// <summary>
     /// Gets metadata about this model for serialization and identification.
     /// </summary>

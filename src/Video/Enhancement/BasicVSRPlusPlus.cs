@@ -509,40 +509,26 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     }
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The configured loss (Charbonnier by default) of the enhanced clip against the target, with the paper's plain
+    /// SGD.
+    /// </remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is not supported in ONNX mode.");
-
         var loss = LossFunction as LossFunctionBase<T>
             ?? throw new InvalidOperationException(
                 "BasicVSR++ tape training requires a LossFunctionBase<T> (Charbonnier by default).");
-
-        // BasicVSR++ is a RECURRENT architecture: the same alignment/propagation
-        // layers are reapplied across frames and propagation iterations, and the
-        // reconstruction is assembled by stacking per-frame outputs. The generic
-        // sequential layer-chain forward (NeuralNetworkBase.ForwardForTraining) does
-        // not model this — it would feed SPyNet a single frame and throw
-        // ("expects two stacked frames"). Instead we drive the model's real forward
-        // (EnhanceVideo) through the autodiff tape so gradients reach every
-        // trainable layer, exactly as PyTorch's loss.backward() would over the
-        // recurrent graph. This is the paper's end-to-end training of the
-        // reconstruction network under the Charbonnier objective (Chan et al. 2022).
-        // One step on the shared fused session: the compiled plan when it applies, the eager tape otherwise, with
-        // plain SGD at Options.LearningRate (the update this step has always applied) unless SetBaseTrainOptimizer
-        // configured another.
-        SetTrainingMode(true);
-        try
+        return new[]
         {
-            TrainCustomTapeStep(input, expectedOutput, EnhanceVideo,
-                (prediction, target) => loss.ComputeTapeLoss(prediction, target),
-                PlainSgd(),
-                () => TapeTrainingStep<T>.CollectParameters(Layers));
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+            new Training.TrainingObjective<T>(
+                new[] { input, expectedOutput },
+                data => loss.ComputeTapeLoss(EnhanceVideo(data[0]), data[1]))
+            {
+                Optimizer = PlainSgd(),
+                Parameters = () => TapeTrainingStep<T>.CollectParameters(Layers),
+            },
+        };
     }
 
     /// <inheritdoc/>

@@ -575,50 +575,10 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         // ParameterCount was overridden here as Layers.Sum(layer => layer.ParameterCount) -- exactly
         // what the base already computes. Deleted along with the matching GetParameters above.
 
-        /// <summary>
-        /// Performs a basic supervised training step using MSE loss.
-        /// </summary>
-        /// <param name="input">Training input tensor.</param>
-        /// <param name="expectedOutput">Expected output tensor.</param>
-        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-        {
-            if (input == null)
-            {
-                throw new ArgumentNullException(nameof(input));
-            }
-
-            if (expectedOutput == null)
-            {
-                throw new ArgumentNullException(nameof(expectedOutput));
-            }
-
-            SetTrainingMode(true);
-            foreach (var layer in Layers)
-            {
-                layer.SetTrainingMode(true);
-            }
-            foreach (var layer in _fourierLayers)
-            {
-                layer.SetTrainingMode(true);
-            }
-
-            try
-            {
-                TapeTrainStep(input, expectedOutput);
-            }
-            finally
-            {
-                foreach (var layer in _fourierLayers)
-                {
-                    layer.SetTrainingMode(false);
-                }
-                foreach (var layer in Layers)
-                {
-                    layer.SetTrainingMode(false);
-                }
-                SetTrainingMode(false);
-            }
-        }
+        /// <inheritdoc/>
+        /// <remarks>The mean squared error of the lifted, Fourier-propagated, projected field (Li et al. 2021).</remarks>
+        protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> expectedOutput)
+            => TapeTrainStep(input, expectedOutput);
 
         /// <summary>
         /// Tape-based FNO training step. Runs the full lift → FourierLayers →
@@ -639,7 +599,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         // Built on the first step and kept, so its state (none for plain SGD, but a schedule's position) persists.
         private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainingOptimizer;
 
-        private void TapeTrainStep(Tensor<T> input, Tensor<T> expectedOutput)
+        private IReadOnlyList<Training.TrainingObjective<T>> TapeTrainStep(Tensor<T> input, Tensor<T> expectedOutput)
         {
             ValidateInputShape(input);
 
@@ -674,8 +634,17 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
 
             _trainingOptimizer ??= new StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(
                 this, new StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = 0.001 });
-            TrainCustomTapeStep(input, expectedOutput, Forward, MeanSquaredError, _trainingOptimizer,
-                () => Training.TapeTrainingStep<T>.CollectParameters(Layers));        }
+            return new[]
+            {
+                new Training.TrainingObjective<T>(
+                    new[] { input, expectedOutput },
+                    data => MeanSquaredError(Forward(data[0]), data[1]))
+                {
+                    Optimizer = _trainingOptimizer,
+                    Parameters = () => Training.TapeTrainingStep<T>.CollectParameters(Layers),
+                },
+            };
+        }
 
         /// <summary>
         /// Gets metadata about the FNO model.

@@ -1208,17 +1208,10 @@ public partial class NeRF<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>,
         try
         {
             var samples = SampleRays(pixels.RayOrigins, pixels.RayDirections, numSamples, near, far);
-            int[] pointShape = samples.Positions._shape;
-            int[] spacingShape = samples.Spacings._shape;
-            int pointLength = samples.Positions.Length;
-            return TrainCustomTapeStep(
-                Training.StepInputPacking<T>.Pack(samples.Positions, samples.Directions, samples.Spacings),
-                targetColors,
-                packed => RenderSamples(
-                    Training.StepInputPacking<T>.Slice(packed, 0, pointShape),
-                    Training.StepInputPacking<T>.Slice(packed, pointLength, pointShape),
-                    Training.StepInputPacking<T>.Slice(packed, 2 * pointLength, spacingShape)),
-                NeuralRadianceFields.Helpers.ImageTrainingHelpers.PhotometricLoss);
+            return TrainDeclaredObjective(new Training.TrainingObjective<T>(
+                new[] { samples.Positions, samples.Directions, samples.Spacings, targetColors },
+                data => NeuralRadianceFields.Helpers.ImageTrainingHelpers.PhotometricLoss(
+                    RenderSamples(data[0], data[1], data[2]), data[3])));
         }
         finally
         {
@@ -1244,22 +1237,6 @@ public partial class NeRF<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBase<T>,
     // Per-model image-space training step counter used to drive the progressive schedule.
     // Facade calls TrainOnImageBatch once per iteration; we increment monotonically.
     private int _imageTrainingIteration;
-
-    /// <summary>
-    /// Trains the model on input data.
-    /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
 
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <summary>
