@@ -360,16 +360,19 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
     /// </remarks>
     public (T criticLoss, T generatorLoss) TrainStep(Tensor<T> realImages, Tensor<T> noise)
     {
-        if (realImages is null)
-        {
-            throw new ArgumentNullException(nameof(realImages), "Real images tensor cannot be null.");
-        }
+        Train(noise, realImages);
+        return (_criticLosses[_criticLosses.Count - 1], _generatorLosses[_generatorLosses.Count - 1]);
+    }
 
-        if (noise is null)
-        {
-            throw new ArgumentNullException(nameof(noise), "Noise tensor cannot be null.");
-        }
-
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The WGAN step (Arjovsky et al. 2017, Algorithm 1): <c>CriticIterations</c> critic steps on
+    /// <c>E[f(fake)] - E[f(real)]</c>, each on fakes drawn from the generator as it stands and followed by weight
+    /// clipping, then one generator step on <c>-E[f(G(z))]</c> with fresh noise and the critic frozen. The input is the
+    /// noise, the target the real batch. Each step runs on its own network's fused session.
+    /// </remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> noise, Tensor<T> realImages)
+    {
         if (realImages.Shape[0] != noise.Shape[0])
         {
             throw new ArgumentException(
@@ -379,71 +382,56 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
 
         Generator.SetTrainingMode(true);
         Critic.SetTrainingMode(true);
-
         T totalCriticLoss = NumOps.Zero;
-
-        // Train critic multiple times
+        var objectives = new List<Training.TrainingObjective<T>>(_criticIterations + 1);
         for (int i = 0; i < _criticIterations; i++)
         {
-            // Generate fake images
-            Tensor<T> fakeImages = GenerateImages(noise);
-
-            // Algorithm 1, lines 2-8: the critic ascends E[f(x)] - E[f(g(z))], so it descends
-            // mean f(fake) - mean f(real). It used to be trained by Critic.Train(real, 1) and
-            // Critic.Train(fake, 0) with the critic network's configured loss -- a regression towards
-            // 0/1 labels, which is not the Wasserstein estimate at all.
-            // On the critic's fused session, with the real and generated samples packed into the step's data.
-            int[] realShape = realImages._shape;
-            int[] fakeShape = fakeImages._shape;
-            int realLength = realImages.Length;
-            T criticLoss = Critic.TrainObjectiveFused(
-                Training.StepInputPacking<T>.Pack(realImages, fakeImages),
-                packed =>
+            objectives.Add(new Training.TrainingObjective<T>(
+                () => new[] { realImages, GenerateImages(noise) },
+                data =>
                 {
-                    var realScores = Critic.ForwardForTraining(Training.StepInputPacking<T>.Slice(packed, 0, realShape));
-                    var fakeScores = Critic.ForwardForTraining(Training.StepInputPacking<T>.Slice(packed, realLength, fakeShape));
+                    var realScores = Critic.ForwardForTraining(data[0]);
+                    var fakeScores = Critic.ForwardForTraining(data[1]);
                     return Engine.TensorSubtract(
                         Engine.ReduceMean(fakeScores, Enumerable.Range(0, fakeScores.Shape.Length).ToArray(), keepDims: false),
                         Engine.ReduceMean(realScores, Enumerable.Range(0, realScores.Shape.Length).ToArray(), keepDims: false));
+                })
+            {
+                Network = Critic,
+                Optimizer = _criticOptimizer,
+                OnLoss = loss =>
+                {
+                    totalCriticLoss = NumOps.Add(totalCriticLoss, loss);
+                    ClipCriticWeights();
                 },
-                _criticOptimizer);
-
-            totalCriticLoss = NumOps.Add(totalCriticLoss, criticLoss);
-
-            // Clip weights to enforce Lipschitz constraint
-            ClipCriticWeights();
+            });
         }
 
-        // Average critic loss across iterations
-        T avgCriticLoss = NumOps.Divide(totalCriticLoss, NumOps.FromDouble(_criticIterations));
-
-        // Train generator: minimize -mean(Critic(fake)) (Wasserstein objective)
-        Tensor<T> newNoise = GenerateRandomNoiseTensor(noise.Shape[0], Generator.Architecture.InputSize);
-        var trainableGen = (NeuralNetworkBase<T>)Generator;
-        T generatorLoss = trainableGen.TrainWithCustomLossFused(newNoise, (_, genOutput) =>
+        objectives.Add(new Training.TrainingObjective<T>(
+            () => new[] { GenerateRandomNoiseTensor(noise.Shape[0], Generator.Architecture.InputSize) },
+            data =>
+            {
+                var criticScore = Critic.ForwardFrozenOnTape(Generator.ForwardForTraining(data[0]));
+                var negScore = Engine.TensorNegate(criticScore);
+                return Engine.ReduceMean(negScore, Enumerable.Range(0, negScore.Shape.Length).ToArray(), keepDims: false);
+            })
         {
-            // On the tape, with the critic frozen. Critic.Predict opened a NoGradScope, which detached
-            // the critic's forward and left the generator with exactly zero gradient.
-            var criticScore = Critic.ForwardFrozenOnTape(genOutput);
-            // WGAN generator loss = -mean(critic(fake))
-            var negScore = Engine.TensorNegate(criticScore);
-            var allAxes = Enumerable.Range(0, negScore.Shape.Length).ToArray();
-            return Engine.ReduceMean(negScore, allAxes, keepDims: false);
-        }, _generatorOptimizer);
-
-        // Track losses
-        _criticLosses.Add(avgCriticLoss);
-        _generatorLosses.Add(generatorLoss);
-
-        if (_criticLosses.Count > 100)
-        {
-            _criticLosses.RemoveAt(0);
-            _generatorLosses.RemoveAt(0);
-        }
-
-        return (avgCriticLoss, generatorLoss);
+            Network = Generator,
+            Optimizer = _generatorOptimizer,
+            AfterStep = () => Generator.SetTrainingMode(false),
+            OnLoss = generatorLoss =>
+            {
+                _criticLosses.Add(NumOps.Divide(totalCriticLoss, NumOps.FromDouble(_criticIterations)));
+                _generatorLosses.Add(generatorLoss);
+                if (_criticLosses.Count > 100)
+                {
+                    _criticLosses.RemoveAt(0);
+                    _generatorLosses.RemoveAt(0);
+                }
+            },
+        });
+        return objectives;
     }
-
     /// <summary>
     /// Clips the critic's weights to enforce the Lipschitz constraint.
     /// </summary>
@@ -584,28 +572,6 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
             return gpuResult;
 
         return Generator.Predict(input);
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// For WGAN, the parameters have GAN-specific semantics:
-    /// - <paramref name="input"/>: The real images tensor (training data)
-    /// - <paramref name="expectedOutput"/>: The noise tensor for the generator
-    /// </para>
-    /// <para><b>For Beginners:</b> In WGAN training:
-    /// - Pass your real images as the first parameter
-    /// - Pass random noise vectors as the second parameter
-    /// - The network will train both critic and generator in one step
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // input = noise, expectedOutput = realImages. Predict(input) runs Generator(input), so the
-        // IFullModel contract - Train(x, y) teaches Predict(x) ~ y - makes the input the noise and the
-        // target the image, exactly as WGANGP and StyleGAN already call TrainStep(expectedOutput,
-        // input). This used to pass them the other way round, so the critic was shown noise as real.
-        TrainStep(expectedOutput, input);
     }
 
     /// <summary>

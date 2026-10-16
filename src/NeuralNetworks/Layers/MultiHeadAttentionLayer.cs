@@ -1339,14 +1339,22 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _originalKeyShape = key._shape;
         _originalValueShape = value._shape;
 
+        // Self-attention passes one tensor as query, key and value. Each reshape below then happens once and is shared:
+        // separate reshapes of one tensor are separate graph nodes whose gradients each had to be added into the
+        // input's (two extra accumulation kernels per layer per training step), where one shared reshape gives the
+        // three projections one gradient buffer to accumulate into.
+        bool keyIsQuery = ReferenceEquals(key, query);
+        bool valueIsKey = ReferenceEquals(value, key);
+        bool valueIsQuery = ReferenceEquals(value, query);
+
         // Handle 1D input by reshaping to 2D [1, dim]
         bool was1D = query.Rank == 1;
         if (was1D)
         {
             // Treat 1D [dim] as single token sequence [1, dim]
             query = Engine.Reshape(query, [1, query.Shape[0]]);
-            key = Engine.Reshape(key, [1, key.Shape[0]]);
-            value = Engine.Reshape(value, [1, value.Shape[0]]);
+            key = keyIsQuery ? query : Engine.Reshape(key, [1, key.Shape[0]]);
+            value = valueIsKey ? key : valueIsQuery ? query : Engine.Reshape(value, [1, value.Shape[0]]);
         }
 
         // Flatten all batch dimensions to get 3D [batch, seq, dim]
@@ -1373,8 +1381,8 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
         // Reshape to 3D for processing
         query = Engine.Reshape(query, [batchQ, seqLenQ, dimQ]);
-        key = Engine.Reshape(key, [batchK, seqLenK, dimK]);
-        value = Engine.Reshape(value, [batchV, seqLenV, dimV]);
+        key = keyIsQuery ? query : Engine.Reshape(key, [batchK, seqLenK, dimK]);
+        value = valueIsKey ? key : valueIsQuery ? query : Engine.Reshape(value, [batchV, seqLenV, dimV]);
 
         // #1624: these _last* fields are manual-backward caches that are write-only
         // under tape autodiff (the engine ops record their own backward state, and
@@ -1407,9 +1415,12 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 $"Query shape: [{string.Join(", ", query._shape)}], Weights shape: [{string.Join(", ", _queryWeights._shape)}]");
         }
 
+        // One shared reshape where query, key and value are one tensor (see the self-attention note above).
         var q2D = Engine.Reshape(query, [batchSize * seqLengthQ, embeddingDimension]);
-        var k2D = Engine.Reshape(key, [batchSize * seqLengthKV, embeddingDimension]);
-        var v2D = Engine.Reshape(value, [batchSize * seqLengthKV, embeddingDimension]);
+        var k2D = ReferenceEquals(key, query) ? q2D : Engine.Reshape(key, [batchSize * seqLengthKV, embeddingDimension]);
+        var v2D = ReferenceEquals(value, key) ? k2D
+            : ReferenceEquals(value, query) ? q2D
+            : Engine.Reshape(value, [batchSize * seqLengthKV, embeddingDimension]);
 
         static Tensor<T> ApplyQkvTransform(Tensor<T>? produced, Tensor<T> original, string method)
         {

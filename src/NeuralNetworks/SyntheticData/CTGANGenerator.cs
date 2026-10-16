@@ -346,15 +346,6 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
         return GeneratorForwardWithResidual(input);
     }
 
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        Tensor<T> prediction = Predict(input);
-        LastLoss = _lossFunction.CalculateLoss(prediction.ToVector(), expectedOutput.ToVector());
-        Tensor<T> error = prediction.Subtract(expectedOutput);
-        UpdateNetworkParameters();
-    }
-
     private void UpdateNetworkParameters()
     {
         _generatorOptimizer.UpdateParameters(Layers);

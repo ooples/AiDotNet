@@ -917,53 +917,43 @@ public partial class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeec
         return base.ForwardForTraining(input);
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The decoder is teacher-forced with the target mel frames (Shen et al. 2018), which must be <c>[batch, time*mels]</c>.
+    /// </remarks>
+    protected override void OnTrainingStepStarting(Tensor<T> input, Tensor<T> target)
     {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Cannot train in ONNX inference mode.");
-        }
-
-        if (expectedOutput is null)
-            throw new ArgumentException("expectedOutput cannot be null for teacher-forced training.", nameof(expectedOutput));
-        if (expectedOutput.Shape.Length < 2)
-            throw new ArgumentException($"expectedOutput must have at least rank 2 [batch, time*mels], got rank {expectedOutput.Shape.Length}.", nameof(expectedOutput));
-        if (expectedOutput.Shape[^1] % NumMels != 0)
-            throw new ArgumentException($"expectedOutput last dimension ({expectedOutput.Shape[^1]}) must be divisible by NumMels ({NumMels}).", nameof(expectedOutput));
-        int melFrameCount = MelFrameCount(expectedOutput);
-        if (melFrameCount == 0)
-            throw new ArgumentException($"expectedOutput has {expectedOutput.Shape[^1]} mel values in its last axis but NumMels is {NumMels}, resulting in zero frames.", nameof(expectedOutput));
-
-        _teacherForcingTarget = expectedOutput;
-        try
-        {
-            SetTrainingMode(true);
-            // Pass the configured optimizer through. The two-argument overload left the optimizer
-            // built in the constructor assigned but never read, so training silently fell back to the
-            // framework default and the memorization loss came back byte-identical between step 1 and
-            // step 100 (0.371638 both times) — the model was not learning at all.
-            // Paper objective (Shen et al. 2018, sec. 3): "summed mean squared error (MSE) from
-            // before and after the post-net". Only the refined output was supervised before, so the
-            // decoder got a gradient solely THROUGH the post-net and never directly — which is the
-            // convergence role the paper gives the pre-post-net term.
-            TrainWithCustomLoss(
-                input,
-                refined =>
-                {
-                    var afterPostnet = MeanSquaredDifference(refined, expectedOutput);
-                    if (_lastPrePostnetMel is null) return afterPostnet;
-                    return Engine.TensorAdd(
-                        afterPostnet, MeanSquaredDifference(_lastPrePostnetMel, expectedOutput));
-                },
-                _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-            _teacherForcingTarget = null;
-        }
+        base.OnTrainingStepStarting(input, target);
+        if (target.Shape.Length < 2)
+            throw new ArgumentException($"expectedOutput must have at least rank 2 [batch, time*mels], got rank {target.Shape.Length}.", nameof(target));
+        if (target.Shape[^1] % NumMels != 0)
+            throw new ArgumentException($"expectedOutput last dimension ({target.Shape[^1]}) must be divisible by NumMels ({NumMels}).", nameof(target));
+        if (MelFrameCount(target) == 0)
+            throw new ArgumentException($"expectedOutput has {target.Shape[^1]} mel values in its last axis but NumMels is {NumMels}, resulting in zero frames.", nameof(target));
+        _teacherForcingTarget = target;
     }
 
+    /// <inheritdoc/>
+    protected override void OnTrainingStepEnded(bool succeeded)
+    {
+        _teacherForcingTarget = null;
+        base.OnTrainingStepEnded(succeeded);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>The Tacotron 2 loss: the mel MSE after the post-net plus the mel MSE before it.</remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> expectedOutput)
+        => new[]
+        {
+            new Training.TrainingObjective<T>(
+                new[] { input, expectedOutput },
+                data =>
+                {
+                    var afterPostnet = MeanSquaredDifference(ForwardForTraining(data[0]), data[1]);
+                    if (_lastPrePostnetMel is null) return afterPostnet;
+                    return Engine.TensorAdd(afterPostnet, MeanSquaredDifference(_lastPrePostnetMel, data[1]));
+                }),
+        };
     /// <summary>
     /// Gets metadata about the model.
     /// </summary>
