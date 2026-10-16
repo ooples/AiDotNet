@@ -221,7 +221,7 @@ public partial class SoundStream<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
     {
         int nq = numQuantizers ?? _options.NumQuantizers;
         double bitsPerToken = Math.Log(_options.CodebookSize) / Math.Log(2.0);
-        return nq * TokenFrameRate * bitsPerToken;
+        return (double)nq * TokenFrameRate * bitsPerToken;
     }
 
     #endregion

@@ -254,7 +254,7 @@ internal static class TensorModelTrainer<T>
     {
         public static readonly TensorReferenceComparer Instance = new();
 
-        public bool Equals(Tensor<T>? x, Tensor<T>? y) => ReferenceEquals(x, y);
+        public bool Equals(Tensor<T>? x, Tensor<T>? y) => (object?)x == y;   // reference comparison
 
         public int GetHashCode(Tensor<T> obj) => RuntimeHelpers.GetHashCode(obj);
     }

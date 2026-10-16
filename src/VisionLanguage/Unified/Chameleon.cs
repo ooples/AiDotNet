@@ -253,7 +253,7 @@ public partial class Chameleon<T> : VisionLanguageModelBase<T>, IUnifiedVisionMo
             for (int v = 0; v < checkRange; v++)
             {
                 double lv = NumOps.ToDouble(logits[v % logitDim]);
-                double tokenBias = Math.Sin(v * t * 0.001) * 0.1; // Position-dependent bias
+                double tokenBias = Math.Sin((double)v * t * 0.001) * 0.1; // Position-dependent bias
                 double score = lv + tokenBias;
                 if (score > maxLogit)
                 {

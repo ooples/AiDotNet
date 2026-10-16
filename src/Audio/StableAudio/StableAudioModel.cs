@@ -757,9 +757,10 @@ public partial class StableAudioModel<T> : AudioNeuralNetworkBase<T>, IAudioGene
         double startSeconds = 0.0;
         double endSeconds = durationSeconds;
 
+        int halfDim = embeddingDim / 2;
         for (int i = 0; i < embeddingDim / 4; i++)
         {
-            double freq = Math.Pow(10000, -2.0 * i / (embeddingDim / 2));
+            double freq = Math.Pow(10000, -2.0 * i / halfDim);
 
             // Duration embedding
             embedding[0, i] = NumOps.FromDouble(Math.Sin(durationSeconds * freq));

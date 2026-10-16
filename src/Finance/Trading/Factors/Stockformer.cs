@@ -747,7 +747,7 @@ public partial class Stockformer<T> : CrossSectionalGraphModelBase<T>
         {
             for (int f = 0; f < width; f++)
             {
-                double angle = t / Math.Pow(10000.0, 2.0 * (f / 2) / width);
+                double angle = t / Math.Pow(10000.0, (double)(f - f % 2) / width);   // 2*(f/2): the sin/cos pair index
                 te[t, f] = Ops.FromDouble(f % 2 == 0 ? Math.Sin(angle) : Math.Cos(angle));
             }
         }

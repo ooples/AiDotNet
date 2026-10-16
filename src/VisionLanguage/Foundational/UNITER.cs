@@ -68,6 +68,13 @@ public partial class UNITER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusi
 
     public override ModelOptions GetOptions() => _options;
 
+    // The configured warmup start, or LearningRate / WarmupSteps when none is set.
+    private static double WarmupInitialLearningRateOrDefault(UNITEROptions options)
+    {
+        double? configured = options.WarmupInitialLearningRate;
+        return configured ?? options.LearningRate / System.Math.Max(1, options.WarmupSteps);
+    }
+
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly ITokenizer? _tokenizer;
     private bool _useNativeMode;
@@ -137,8 +144,7 @@ public partial class UNITER<T> : VisionLanguageModelBase<T>, IVisionLanguageFusi
                         baseLearningRate: _options.LearningRate,
                         warmupSteps: _options.WarmupSteps,
                         totalSteps: _options.TotalTrainingSteps,
-                        warmupInitLr: _options.WarmupInitialLearningRate
-                            ?? _options.LearningRate / System.Math.Max(1, _options.WarmupSteps),
+                        warmupInitLr: WarmupInitialLearningRateOrDefault(_options),
                         decayMode: AiDotNet.LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Linear,
                         endLr: _options.EndLearningRate),
                 }));

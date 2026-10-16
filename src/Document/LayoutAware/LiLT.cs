@@ -539,8 +539,8 @@ public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         int row = index / gridSize;
         int col = index % gridSize;
 
-        double x1 = col * cellWidth;
-        double y1 = row * cellHeight;
+        double x1 = (double)col * cellWidth;
+        double y1 = (double)row * cellHeight;
         double x2 = Math.Min(imageWidth, x1 + cellWidth);
         double y2 = Math.Min(imageHeight, y1 + cellHeight);
 

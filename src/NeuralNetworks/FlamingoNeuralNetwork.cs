@@ -351,7 +351,7 @@ public partial class FlamingoNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IF
         {
             for (int j = 0; j < embeddings.Shape[1]; j++)
             {
-                double angle = i / Math.Pow(10000, 2.0 * (j / 2) / embeddings.Shape[1]);
+                double angle = i / Math.Pow(10000, (double)(j - j % 2) / embeddings.Shape[1]);   // 2*(j/2): the sin/cos pair index
                 double value = j % 2 == 0 ? Math.Sin(angle) : Math.Cos(angle);
                 embeddings[i, j] = NumOps.FromDouble(value);
             }

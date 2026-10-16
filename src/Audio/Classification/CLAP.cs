@@ -185,7 +185,8 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
             options.ModelPath = mp;
         }
 
-        var labels = options.CustomLabels
+        var customLabels = options.CustomLabels;
+        var labels = customLabels
             ?? (options.TextPrompts is { Length: > 0 } tp ? tp : AudioSetLabels);
         var arch = new NeuralNetworkArchitecture<T>(
             inputFeatures: options.AudioEmbeddingDim,

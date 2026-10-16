@@ -246,7 +246,7 @@ public partial class KimiVL<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
                         double qVal =
                             NumOps.ToDouble(questionTokens[(s + step) % qLen]) / _options.VocabSize;
                         // Step-biased routing: each step prefers different experts
-                        routerScore += (visVal + qVal * 0.3) * Math.Cos((e + 1) * (step + 1) * 0.4);
+                        routerScore += (visVal + qVal * 0.3) * Math.Cos((e + 1.0) * (step + 1) * 0.4);
                     }
                     routerScore /= numSamples;
                     double expertProb = Math.Exp(routerScore * 0.5);
@@ -258,7 +258,7 @@ public partial class KimiVL<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
                     {
                         int vIdx = (v + e * 11 + step * 17) % visDim;
                         double visVal = NumOps.ToDouble(visualFeatures[vIdx]);
-                        double stepBias = Math.Sin((step + 1) * (v + 1) * 0.008) * 0.3;
+                        double stepBias = Math.Sin((step + 1.0) * (v + 1) * 0.008) * 0.3;
                         expertVal += visVal * (1.0 + stepBias);
                     }
                     expertVal /= patchCount;

@@ -659,7 +659,7 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
         }
 
         // Scale by number of elements
-        return Engine.TensorMultiplyScalar(gradient, NumOps.FromDouble(1.0 / (numNodes * numNodes)));
+        return Engine.TensorMultiplyScalar(gradient, NumOps.FromDouble(1.0 / ((double)numNodes * numNodes)));
     }
 
     /// <summary>

@@ -178,7 +178,7 @@ public partial class VITS2<T> : TtsModelBase<T>, IEndToEndTts<T>
             for (int d = 0; d < Math.Min(hiddenDim, 16); d++)
             {
                 double latent = z[melFrame * hiddenDim + d];
-                sample += Math.Tanh(latent) * Math.Sin(i * (d + 1) * 0.01 + latent) / 16.0;
+                sample += Math.Tanh(latent) * Math.Sin((double)i * (d + 1) * 0.01 + latent) / 16.0;
             }
             waveform[i] = NumOps.FromDouble(Math.Tanh(sample));
         }

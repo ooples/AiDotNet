@@ -213,7 +213,7 @@ public partial class VideoLLaVA<T> : VisionLanguageModelBase<T>, IVideoLanguageM
             double pos = (double)f / Math.Max(1, count - 1);
             for (int d = 0; d < dim; d++)
             {
-                double freq = 1.0 / Math.Pow(10000.0, (2.0 * (d / 2)) / dim);
+                double freq = 1.0 / Math.Pow(10000.0, (double)(d - d % 2) / dim);   // 2*(d/2): the sin/cos pair index
                 double embedding =
                     d % 2 == 0 ? Math.Sin(pos * freq * Math.PI) : Math.Cos(pos * freq * Math.PI);
                 double val = NumOps.ToDouble(frameFeatures[f][d]);

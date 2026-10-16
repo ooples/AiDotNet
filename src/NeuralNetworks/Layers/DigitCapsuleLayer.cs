@@ -504,7 +504,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private void InitializeParameters()
     {
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_inputCapsules * _inputCapsuleDimension)));
+        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / ((double)_inputCapsules * _inputCapsuleDimension)));
 
         // Calculate total elements for flat tensor initialization
         int totalElements = _inputCapsules * _numClasses * _inputCapsuleDimension * _outputCapsuleDimension;
