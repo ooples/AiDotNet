@@ -168,7 +168,8 @@ internal sealed class SamTraining<T>
         for (int i = 0; i < map.Length; i++) if (where(map[i])) candidates.Add(i);
         if (candidates.Count == 0) return null;
         int pick = candidates[random.Next(candidates.Count)];
-        return (pick % w, pick / w);
+        int column = pick % w, row = pick / w;   // the pixel's integer coordinates
+        return (column, row);
     }
 
     /// <summary>The mask's box with noise: each coordinate moved by N(0, (0.1·side)²), at most 20 pixels.</summary>

@@ -73,9 +73,10 @@ internal static class CodecSignal
         var points = new double[mels + 2];
         for (int i = 0; i < mels + 2; i++) points[i] = ToHz(mMin + (mMax - mMin) * i / (mels + 1));
         var fb = new double[bins, mels];
+        int nyquist = sampleRate / 2;   // integer, as torchaudio's sample_rate // 2
         for (int k = 0; k < bins; k++)
         {
-            double f = bins == 1 ? 0 : (sampleRate / 2) * (double)k / (bins - 1);
+            double f = bins == 1 ? 0 : nyquist * (double)k / (bins - 1);
             for (int m = 0; m < mels; m++)
             {
                 double down = (f - points[m]) / (points[m + 1] - points[m]);

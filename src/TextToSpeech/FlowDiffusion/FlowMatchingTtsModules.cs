@@ -63,7 +63,8 @@ internal static class FlowMatchingTts
         for (int t = 0; t < length; t++)
             for (int i = 0; i < d; i++)
             {
-                double a = t / Math.Pow(10000.0, 2.0 * (i / 2) / d);
+                int pair = i / 2;   // sin and cos of one frequency share an index
+                double a = t / Math.Pow(10000.0, 2.0 * pair / d);
                 cos[t, i] = ops.FromDouble(Math.Cos(a));
                 sin[t, i] = ops.FromDouble(Math.Sin(a));
             }

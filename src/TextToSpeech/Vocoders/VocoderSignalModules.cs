@@ -49,7 +49,7 @@ internal sealed class PseudoQmf<T>
             double phase = (k % 2 == 0 ? 1 : -1) * Math.PI / 4;
             for (int i = 0; i < n; i++)
             {
-                double arg = (2 * k + 1) * (Math.PI / (2 * bands)) * (i - taps / 2.0);
+                double arg = (2.0 * k + 1) * (Math.PI / (2.0 * bands)) * (i - taps / 2.0);
                 _analysis[k, 0, 0, i] = NumOps.FromDouble(2 * prototype[i] * Math.Cos(arg + phase));
                 _synthesis[0, k, 0, i] = NumOps.FromDouble(2 * prototype[i] * Math.Cos(arg - phase));
             }
@@ -164,7 +164,7 @@ internal sealed class MultiResolutionStftLoss<T>
     public (Tensor<T> SpectralConvergence, Tensor<T> LogMagnitude) Forward(IReadOnlyList<Tensor<T>> generated, IReadOnlyList<Tensor<T>> real)
     {
         Tensor<T>? sc = null, mag = null;
-        double scale = 1.0 / (_resolutions.Count * generated.Count);
+        double scale = 1.0 / ((double)_resolutions.Count * generated.Count);
         foreach (var (fft, hop, cos, sin) in _resolutions)
         {
             for (int i = 0; i < generated.Count; i++)

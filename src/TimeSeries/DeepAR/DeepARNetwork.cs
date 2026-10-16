@@ -299,7 +299,7 @@ internal sealed class DeepARNetwork<T>
             var nll = NegativeLogLikelihood(Parameters(top, scale), z);
             total = total is null ? nll : _engine.TensorAdd(total, nll);
         }
-        return _engine.TensorMultiplyScalar(_engine.ReduceSum(total!, new[] { 0, 1 }, keepDims: false), NumOps.FromDouble(1.0 / (batch * steps)));
+        return _engine.TensorMultiplyScalar(_engine.ReduceSum(total!, new[] { 0, 1 }, keepDims: false), NumOps.FromDouble(1.0 / ((double)batch * steps)));
     }
 
     // ------------------------------------------------------------------ forecasting

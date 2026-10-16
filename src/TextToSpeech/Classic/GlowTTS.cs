@@ -356,7 +356,7 @@ public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
         var squared = Engine.ReduceSum(Engine.TensorMultiply(diff, diff), new[] { 0, 1 }, keepDims: false);
         var negLogLikelihood = Engine.TensorSubtract(Engine.TensorMultiplyScalar(squared, NumOps.FromDouble(0.5)), logDet!);
         var mle = Engine.TensorAddScalar(
-            Engine.TensorMultiplyScalar(negLogLikelihood, NumOps.FromDouble(1.0 / (frames * channels))),
+            Engine.TensorMultiplyScalar(negLogLikelihood, NumOps.FromDouble(1.0 / ((double)frames * channels))),
             NumOps.FromDouble(0.5 * Math.Log(2 * Math.PI)));
 
         var target = new Tensor<T>(new[] { tokenCount });

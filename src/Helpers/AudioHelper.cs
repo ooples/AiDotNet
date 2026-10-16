@@ -495,7 +495,7 @@ public static class AudioHelper<T>
         const int zeroCrossings = 6;
         const double rolloff = 0.99;
         double baseFrequency = Math.Min(orig, target) * rolloff;
-        int width = (int)Math.Ceiling(zeroCrossings * orig / baseFrequency);
+        int width = (int)Math.Ceiling((double)zeroCrossings * orig / baseFrequency);
         int taps = 2 * width + orig;
         var kernel = new Tensor<T>(new[] { target, 1, 1, taps });
         for (int phase = 0; phase < target; phase++)

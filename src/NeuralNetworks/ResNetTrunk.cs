@@ -174,7 +174,7 @@ internal sealed class ResNetTrunk<T>
         {
             int outputs = conv.OutputDepth, inputs = conv.InputDepth, k = conv.KernelSize;
             conv.SetParameters(TextToSpeech.CodecBased.TorchParameters.Gaussian<T>(random, outputs * inputs * k * k,
-                Math.Sqrt(2.0 / (outputs * k * k))));
+                Math.Sqrt(2.0 / ((double)outputs * k * k))));
             TextToSpeech.CodecBased.TorchParameters.BatchNorm(norm, Fill(norm, 1.0), new double[outputs], new double[outputs], Fill(norm, 1.0));
         }
         if (Configuration.ZeroInitResidual)

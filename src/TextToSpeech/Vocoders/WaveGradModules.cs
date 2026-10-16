@@ -139,7 +139,7 @@ internal sealed class WaveGradNetwork<T>
     private NormedConv1DLayer<T> Xavier(int input, int output, int kernel, int padding)
     {
         var conv = Conv(input, output, kernel, 1, 1, padding);
-        double bound = Math.Sqrt(6.0 / (input * kernel + output * kernel));
+        double bound = Math.Sqrt(6.0 / ((double)input * kernel + (double)output * kernel));
         conv.Reinitialize(() => (2 * _random.NextDouble() - 1) * bound);
         return conv;
     }

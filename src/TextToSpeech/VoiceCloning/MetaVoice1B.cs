@@ -158,7 +158,8 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
             double posPhase = (s + 1.0) / (seq + 1.0);
             for (int c = 0; c < condDim; c++)
             {
-                double freq = 1.0 / Math.Pow(10000.0, (2.0 * (c / 2)) / condDim);
+                int pair = c / 2;   // sin and cos of one frequency share an index
+                double freq = 1.0 / Math.Pow(10000.0, 2.0 * pair / condDim);
                 double tokEmb = Math.Sin(token * (c + 1)) * 0.5;
                 double posEmb = ((c & 1) == 0 ? Math.Sin(posPhase / freq) : Math.Cos(posPhase / freq)) * 0.5;
                 double spkEmb = speakerEmbedding is not null

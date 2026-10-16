@@ -83,7 +83,7 @@ public partial class GatedConvolutionBlockLayer<T> : LayerBase<T>, IShapeContrac
         _residual = residual;
         _stdMultiplier = stdMultiplier;
 
-        double std = Math.Sqrt(stdMultiplier * (1.0 - dropoutRate) / (kernelSize * inChannels));
+        double std = Math.Sqrt(stdMultiplier * (1.0 - dropoutRate) / ((double)kernelSize * inChannels));
         int padding = causal ? 0 : (kernelSize - 1) / 2 * dilation;
         _conv = new WeightNormConv1DLayer<T>(inChannels, 2 * outChannels, kernelSize, dilation, padding, std);
         RegisterSubLayer(_conv);
