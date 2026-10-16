@@ -61,4 +61,23 @@ public class BatchNormalizationLayoutAndRecalibrationTests
             Assert.Equal(sum / count, runningMean[channel], 9);
         }
     }
+
+    [Fact]
+    public void Recalibration_MakesTheEvaluationForwardReproduceTheTrainingForward()
+    {
+        // The recalibrated statistics are the batch's own, biased variance included, so the eval-mode function on that
+        // batch is the one training optimized. Storing the unbiased m/(m-1) estimate here (as the momentum update does)
+        // perturbed every normalized feature by sqrt(m/(m-1)) and failed Non-Attentive Tacotron's training probes.
+        var layer = new BatchNormalizationLayer<double>(4);
+        var input = Ramp(1, 4, 2, 2);                       // four values per feature: the correction would be 4/3
+        layer.SetTrainingMode(true);
+        var training = layer.Forward(input);
+        layer.SetTrainingMode(false);
+        layer.OverwriteRunningStatistics = true;
+        try { layer.Forward(input); }
+        finally { layer.OverwriteRunningStatistics = false; }
+        var evaluation = layer.Forward(input);
+        for (int i = 0; i < training.Length; i++)
+            Assert.Equal(training[i], evaluation[i], 9);
+    }
 }
