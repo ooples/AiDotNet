@@ -393,7 +393,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.VisionLanguage.Grounding.GLaMM<T>",
             "AiDotNet.VisionLanguage.Grounding.Groma<T>",
             "AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>",
-            "AiDotNet.VisionLanguage.Grounding.GroundingDINO<T>",
             "AiDotNet.VisionLanguage.Grounding.GroundingDINO15<T>",
             "AiDotNet.VisionLanguage.Grounding.OWLv2<T>",
             "AiDotNet.VisionLanguage.Grounding.OWLViT<T>",
