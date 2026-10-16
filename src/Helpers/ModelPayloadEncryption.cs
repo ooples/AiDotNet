@@ -43,8 +43,9 @@ internal sealed class EncryptedPayload
 /// encrypted payload. These values are not secret — they are required for decryption
 /// but do not reveal the key or plaintext.
 ///
-/// <b>Note:</b> AES-GCM requires .NET Core 3.0 or later. On .NET Framework 4.7.1,
-/// both Encrypt and Decrypt throw <see cref="PlatformNotSupportedException"/>.
+/// <b>Note:</b> AES-GCM requires .NET Core 3.0 or later. On the net462, net471 and netstandard2.0 builds,
+/// every method here throws <see cref="PlatformNotSupportedException"/>, so encrypted model files can only be
+/// written and read by the net8.0 and net10.0 builds.
 /// </remarks>
 internal static class ModelPayloadEncryption
 {
@@ -66,7 +67,7 @@ internal static class ModelPayloadEncryption
     /// <returns>An <see cref="EncryptedPayload"/> containing salt, nonce, tag, and ciphertext.</returns>
     /// <exception cref="ArgumentNullException">Thrown when payload is null.</exception>
     /// <exception cref="ArgumentException">Thrown when licenseKey is null or whitespace.</exception>
-    /// <exception cref="PlatformNotSupportedException">Thrown on .NET Framework 4.7.1.</exception>
+    /// <exception cref="PlatformNotSupportedException">Thrown on the net462, net471 and netstandard2.0 builds.</exception>
     public static EncryptedPayload Encrypt(byte[] payload, string licenseKey, string aadText)
     {
         if (payload is null)
@@ -79,9 +80,9 @@ internal static class ModelPayloadEncryption
             throw new ArgumentException("License key cannot be null or empty.", nameof(licenseKey));
         }
 
-#if NET471
+#if AIDN_LEGACY_TFM
         throw new PlatformNotSupportedException(
-            "AIMF payload encryption requires .NET Core 3.0 or later.");
+            "AIMF payload encryption requires .NET Core 3.0 or later (the net8.0 or net10.0 build of AiDotNet).");
 #else
         var salt = RandomNumberGenerator.GetBytes(SaltSize);
         var nonce = RandomNumberGenerator.GetBytes(NonceSize);
@@ -124,7 +125,7 @@ internal static class ModelPayloadEncryption
     /// <exception cref="ArgumentNullException">Thrown when ciphertext, salt, nonce, or tag is null.</exception>
     /// <exception cref="ArgumentException">Thrown when licenseKey is null or whitespace.</exception>
     /// <exception cref="CryptographicException">Thrown when the key is wrong or data has been tampered with.</exception>
-    /// <exception cref="PlatformNotSupportedException">Thrown on .NET Framework 4.7.1.</exception>
+    /// <exception cref="PlatformNotSupportedException">Thrown on the net462, net471 and netstandard2.0 builds.</exception>
     public static byte[] Decrypt(byte[] ciphertext, string licenseKey, byte[] salt, byte[] nonce, byte[] tag, string aadText)
     {
         if (ciphertext is null)
@@ -152,9 +153,9 @@ internal static class ModelPayloadEncryption
             throw new ArgumentNullException(nameof(tag));
         }
 
-#if NET471
+#if AIDN_LEGACY_TFM
         throw new PlatformNotSupportedException(
-            "AIMF payload encryption requires .NET Core 3.0 or later.");
+            "AIMF payload encryption requires .NET Core 3.0 or later (the net8.0 or net10.0 build of AiDotNet).");
 #else
         var plaintext = new byte[ciphertext.Length];
         byte[] key = Array.Empty<byte>();
@@ -218,9 +219,9 @@ internal static class ModelPayloadEncryption
             throw new ArgumentException("License key cannot be null or empty.", nameof(licenseKey));
         }
 
-#if NET471
+#if AIDN_LEGACY_TFM
         throw new PlatformNotSupportedException(
-            "AIMF payload encryption requires .NET Core 3.0 or later.");
+            "AIMF payload encryption requires .NET Core 3.0 or later (the net8.0 or net10.0 build of AiDotNet).");
 #else
         // Integrity check (Layer 3)
         if (!AssemblyIntegrityChecker.VerifyIntegrity())
@@ -287,9 +288,9 @@ internal static class ModelPayloadEncryption
             throw new ArgumentNullException(nameof(tag));
         }
 
-#if NET471
+#if AIDN_LEGACY_TFM
         throw new PlatformNotSupportedException(
-            "AIMF payload encryption requires .NET Core 3.0 or later.");
+            "AIMF payload encryption requires .NET Core 3.0 or later (the net8.0 or net10.0 build of AiDotNet).");
 #else
         // Integrity check (Layer 3)
         if (!AssemblyIntegrityChecker.VerifyIntegrity())
@@ -320,7 +321,7 @@ internal static class ModelPayloadEncryption
 #endif
     }
 
-#if !NET471
+#if !AIDN_LEGACY_TFM
     /// <summary>
     /// Derives a 256-bit AES key from a license key string and salt using PBKDF2-SHA256.
     /// </summary>

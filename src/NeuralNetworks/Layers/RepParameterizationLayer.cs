@@ -5,6 +5,8 @@ using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.Engines.Gpu;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Helpers;
+using AiDotNet.Extensions;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.NeuralNetworks.Layers;
 
@@ -110,6 +112,12 @@ public partial class RepParameterizationLayer<T> : LayerBase<T>, IShapeContract
     /// This is critical for training a variational autoencoder.
     /// </para>
     /// </remarks>
+    /// <summary>The latent means of the most recent forward ([batch, latent]), on the tape when it was a training forward.</summary>
+    internal Tensor<T>? LastMean => _lastMean;
+
+    /// <summary>The latent log-variances of the most recent forward ([batch, latent]).</summary>
+    internal Tensor<T>? LastLogVariance => _lastLogVar;
+
     public override bool SupportsTraining => false; // Reparameterization trick computes state during forward, no trainable parameters
 
     /// <summary>
@@ -292,26 +300,20 @@ public partial class RepParameterizationLayer<T> : LayerBase<T>, IShapeContract
         _lastMean = Engine.TensorSlice(processInput, [0, 0], [batchSize, latentSize]);
         _lastLogVar = Engine.TensorSlice(processInput, [0, latentSize], [batchSize, latentSize]);
 
-        // Generate random epsilon during training; use zero epsilon for deterministic inference
+        Tensor<T> output;
         if (IsTrainingMode)
         {
-            _lastEpsilon = Tensor<T>.CreateRandom(Random, batchSize, latentSize);
+            // z = mean + exp(0.5 * logvar) * epsilon, epsilon ~ N(0, I) (Kingma & Welling 2014, eq. 10). The noise
+            // carries no gradient; mean and logvar receive theirs through the engine ops.
+            var stdDev = Engine.TensorExp(Engine.TensorMultiplyScalar(_lastLogVar, NumOps.FromDouble(0.5)));
+            output = Engine.TensorAdd(_lastMean, ScaleByStandardNormalNoise(stdDev));
         }
         else
         {
-            _lastEpsilon = TensorAllocator.Rent<T>([batchSize, latentSize]);
-            _lastEpsilon.Fill(NumOps.Zero);
+            // Deterministic inference uses the posterior mean (no sampling).
+            _lastEpsilon = null;
+            output = _lastMean;
         }
-
-        // Compute stdDev = exp(logvar * 0.5) using Engine operations
-        var halfTensor = TensorAllocator.Rent<T>([batchSize, latentSize]);
-        halfTensor.Fill(NumOps.FromDouble(0.5));
-        var scaledLogVar = Engine.TensorMultiply(_lastLogVar, halfTensor);
-        var stdDev = Engine.TensorExp(scaledLogVar);
-
-        // Compute output = mean + stdDev * epsilon using Engine operations
-        var scaledEpsilon = Engine.TensorMultiply(stdDev, _lastEpsilon);
-        var output = Engine.TensorAdd(_lastMean, scaledEpsilon);
 
         // Restore original shape for any-rank support (output is half the input size)
         if (_originalInputShape != null && _originalInputShape.Length > 2)
@@ -328,6 +330,61 @@ public partial class RepParameterizationLayer<T> : LayerBase<T>, IShapeContract
         }
 
         return output;
+    }
+
+    /// <summary>
+    /// <paramref name="stdDev"/> times fresh standard-normal noise. Eagerly the noise is drawn here; while a
+    /// compiled graph is traced it is drawn each time the node replays, so every compiled step samples new noise as
+    /// the eager tape does (a noise tensor captured at trace time would replay the same sample forever). The
+    /// gradient with respect to <paramref name="stdDev"/> is the noise of that step.
+    /// </summary>
+    private Tensor<T> ScaleByStandardNormalNoise(Tensor<T> stdDev)
+    {
+        if (!AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+        {
+            _lastEpsilon = StandardNormal(stdDev._shape);
+            return Engine.TensorMultiply(stdDev, _lastEpsilon);
+        }
+
+        var scope = AiDotNet.Tensors.Engines.Compilation.GraphMode.Current
+            ?? throw new InvalidOperationException("GraphMode reported active without a scope.");
+        var captured = stdDev;
+        var stepNoise = new Tensor<T>?[1];
+        return scope.RecordUnary(
+            AiDotNet.Tensors.Engines.Compilation.LazyNodeType.Custom,
+            "VaeReparameterizationNoise",
+            stdDev,
+            stdDev._shape,
+            (replayEngine, result) =>
+            {
+                using var noGrad = new NoGradScope<T>();
+                var noise = StandardNormal(captured._shape);
+                stepNoise[0] = noise;
+                _lastEpsilon = noise;
+                var scaled = replayEngine.TensorMultiply(captured, noise);
+                AiDotNet.Tensors.Engines.DirectGpuTensorEngine.CopyResultInto(replayEngine, scaled, result);
+            },
+            (gradOutput, inputs, _, _, gradEngine, gradAccumulator) =>
+                DifferentiableOps.AccumulateGrad(
+                    gradAccumulator, inputs[0],
+                    gradEngine.TensorMultiply(gradOutput, stepNoise[0]
+                        ?? throw new InvalidOperationException("The reparameterization noise node was differentiated before it ran.")),
+                    gradEngine));
+    }
+
+    private static int[] LatentShape(int[] inputShape, int latentSize)
+    {
+        var shape = (int[])inputShape.Clone();
+        shape[shape.Length - 1] = latentSize;
+        return shape;
+    }
+
+    private Tensor<T> StandardNormal(int[] shape)
+    {
+        var noise = new Tensor<T>(shape);
+        var span = noise.AsWritableSpan();
+        for (int i = 0; i < span.Length; i++) span[i] = NumOps.FromDouble(Random.NextGaussian());
+        return noise;
     }
 
     /// <summary>
@@ -406,6 +463,14 @@ public partial class RepParameterizationLayer<T> : LayerBase<T>, IShapeContract
             backend.Copy(input.Buffer, srcBatchOffset, meanBuffer, dstBatchOffset, latentSize);
             // Copy logvar for this batch
             backend.Copy(input.Buffer, srcBatchOffset + latentSize, logvarBuffer, dstBatchOffset, latentSize);
+        }
+
+        if (!IsTrainingMode)
+        {
+            // Deterministic inference uses the posterior mean, as the CPU path does.
+            logvarBuffer.Dispose();
+            int[] meanShape = rank == 1 ? [latentSize] : rank == 2 ? [batchSize, latentSize] : LatentShape(shape, latentSize);
+            return GpuTensorHelper.UploadToGpu<T>(backend, meanBuffer, meanShape, GpuTensorRole.Activation, ownsBuffer: true);
         }
 
         // Generate random epsilon on CPU (no GPU RNG available) and upload

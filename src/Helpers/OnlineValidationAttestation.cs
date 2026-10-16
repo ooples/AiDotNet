@@ -153,7 +153,7 @@ internal static class OnlineValidationAttestation
     private static string KeyHash(string key)
     {
         byte[] bytes = Encoding.UTF8.GetBytes("license-attest:" + key);
-#if NET471
+#if AIDN_LEGACY_TFM
         using var sha = SHA256.Create();
         return Convert.ToBase64String(sha.ComputeHash(bytes));
 #else
@@ -167,7 +167,7 @@ internal static class OnlineValidationAttestation
     {
         string machineId = MachineFingerprint.GetMachineId();
         byte[] keyMaterial = Encoding.UTF8.GetBytes("AiDotNet.OnlineValidation.v1:" + machineId);
-#if NET471
+#if AIDN_LEGACY_TFM
         using var sha = SHA256.Create();
         byte[] signingKey = sha.ComputeHash(keyMaterial);
 #else
