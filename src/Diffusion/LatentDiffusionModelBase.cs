@@ -50,19 +50,11 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
     public override IEnumerable<Tensor<T>> GetParameterChunks()
     {
 #if AIDN_LEGACY_TFM
-        // GetParameterChunks is part of IParameterizable's chunked-API
-        // contract, which IParameterizable.cs gates behind
-        // `#if !NETFRAMEWORK` because default interface methods need
-        // .NET-Standard-2.1+ runtime dispatch that net471 doesn't
-        // provide. The interface cast on net471 therefore can't reach
-        // a chunked enumeration through the IParameterizable surface.
-        // Until the chunked API is widened on net471 (would require
-        // declaring it as a regular interface member with concrete
-        // overrides on every implementer), foundation-scale parameter
-        // counting on net471 is unsupported — return empty so the
-        // ParameterCount property's flat-vector path stays the only
-        // way to enumerate.
-        yield break;
+        // On net462, net471 and netstandard2.0 IParameterizable has no chunked members (default interface
+        // methods need .NET Standard 2.1 runtime support), so the registry-driven chunking below is unavailable.
+        // Yield the base's single flat chunk rather than nothing: SaveState and Clone walk these chunks, and an
+        // empty enumeration wrote and copied a model with no parameters.
+        foreach (var chunk in base.GetParameterChunks()) yield return chunk;
 #else
         // DRIVEN BY THE COMPONENT REGISTRY, not by a hand-written list of the three sub-models
         // this base happens to know about.

@@ -516,8 +516,10 @@ public partial class VariationalAutoencoder<T> : VectorModelLayoutBase<T>, IAuxi
     /// </remarks>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {
-        var output = base.ForwardForTraining(input);
+        // Statistics from an earlier forward must never reach this step's KL term.
+        _latentLayer?.ResetState();
         _pendingKlLoss = null;
+        var output = base.ForwardForTraining(input);
         if (UseAuxiliaryLoss && _latentLayer?.LastMean is { } mean && _latentLayer.LastLogVariance is { } logVariance)
         {
             // KL(N(mu, sigma^2) || N(0, I)) = 0.5 * sum(exp(logvar) + mu^2 - 1 - logvar), per sample.
@@ -534,6 +536,13 @@ public partial class VariationalAutoencoder<T> : VectorModelLayoutBase<T>, IAuxi
         RememberLatent();
         return output;
     }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// False: GPU-resident training runs <c>ForwardGpu</c> and the reconstruction loss only, so it would drop the KL term
+    /// the objective needs. The VAE trains on the tape path, which <see cref="ConsumeAuxiliaryTapeLoss"/> feeds.
+    /// </remarks>
+    public override bool SupportsGpuTraining => false;
 
     /// <inheritdoc/>
     protected override Tensor<T>? ConsumeAuxiliaryTapeLoss()

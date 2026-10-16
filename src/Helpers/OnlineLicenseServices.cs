@@ -336,7 +336,7 @@ internal static class OnlineLicenseServices
     private static string? HttpGet(string url)
     {
 #if AIDN_LEGACY_TFM
-        using var client = new System.Net.WebClient();
+        using var client = new TimedWebClient(TimeSpan.FromSeconds(10));   // as Http
         return client.DownloadString(url);
 #else
         using var resp = Http.GetAsync(url).ConfigureAwait(false).GetAwaiter().GetResult();
@@ -347,7 +347,7 @@ internal static class OnlineLicenseServices
     private static string? HttpPost(string url, string json)
     {
 #if AIDN_LEGACY_TFM
-        using var client = new System.Net.WebClient();
+        using var client = new TimedWebClient(TimeSpan.FromSeconds(10));   // as Http
         client.Headers[System.Net.HttpRequestHeader.ContentType] = "application/json";
         try
         {

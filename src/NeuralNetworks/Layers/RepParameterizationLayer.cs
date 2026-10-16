@@ -333,18 +333,6 @@ public partial class RepParameterizationLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Performs GPU-accelerated forward pass for the reparameterization trick.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Implements the reparameterization trick on GPU: z = mean + exp(logvar * 0.5) * epsilon
-    /// The epsilon values are generated on CPU (no GPU RNG available) and uploaded once.
-    /// All other operations (exp, multiply, add) are performed on GPU.
-    /// </para>
-    /// </remarks>
-    /// <param name="inputs">Input GPU tensors (uses first input containing [mean, logvar]).</param>
-    /// <returns>GPU-resident output tensor with sampled latent values.</returns>
-    /// <summary>
     /// <paramref name="stdDev"/> times fresh standard-normal noise. Eagerly the noise is drawn here; while a
     /// compiled graph is traced it is drawn each time the node replays, so every compiled step samples new noise as
     /// the eager tape does (a noise tensor captured at trace time would replay the same sample forever). The
@@ -399,6 +387,18 @@ public partial class RepParameterizationLayer<T> : LayerBase<T>, IShapeContract
         return noise;
     }
 
+    /// <summary>
+    /// Performs GPU-accelerated forward pass for the reparameterization trick.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Implements the reparameterization trick on GPU: z = mean + exp(logvar * 0.5) * epsilon
+    /// The epsilon values are generated on CPU (no GPU RNG available) and uploaded once.
+    /// All other operations (exp, multiply, add) are performed on GPU.
+    /// </para>
+    /// </remarks>
+    /// <param name="inputs">Input GPU tensors (uses first input containing [mean, logvar]).</param>
+    /// <returns>GPU-resident output tensor with sampled latent values.</returns>
     public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 0)

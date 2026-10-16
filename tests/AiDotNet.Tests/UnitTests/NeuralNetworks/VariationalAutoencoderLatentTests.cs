@@ -92,6 +92,16 @@ public class VariationalAutoencoderLatentTests
             layers: new() { new DenseLayer<double>(4), new DenseLayer<double>(8) });
         Assert.Throws<InvalidOperationException>(() => new VariationalAutoencoder<double>(withoutLatent, 2));
 
+        var twoLatents = new NeuralNetworkArchitecture<double>(
+            inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
+            inputSize: 8, outputSize: 8,
+            layers: new()
+            {
+                new DenseLayer<double>(4), new RepParameterizationLayer<double>(), new DenseLayer<double>(4),
+                new RepParameterizationLayer<double>(), new DenseLayer<double>(8),
+            });
+        Assert.Throws<InvalidOperationException>(() => new VariationalAutoencoder<double>(twoLatents, 2));
+
         var valid = new NeuralNetworkArchitecture<double>(
             inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
             inputSize: 8, outputSize: 8,

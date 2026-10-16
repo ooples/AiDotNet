@@ -698,7 +698,7 @@ internal sealed class LicenseValidator
 #if AIDN_LEGACY_TFM
     private LicenseValidationResult ValidateOnlineNet471(string url, string json)
     {
-        using var client = new System.Net.WebClient();
+        using var client = new TimedWebClient(TimeSpan.FromSeconds(15));   // as SharedHttpClient
         client.Headers[System.Net.HttpRequestHeader.ContentType] = "application/json";
         try
         {

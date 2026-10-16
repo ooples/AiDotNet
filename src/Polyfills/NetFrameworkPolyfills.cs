@@ -416,7 +416,7 @@ namespace System.Linq
     /// Enumerable.Append and Enumerable.Prepend, which .NET Framework gained in 4.7.1: the net462 build (#2326) polyfills
     /// them with the same semantics (lazy, one extra element).
     /// </summary>
-    public static class EnumerableAppendPolyfill
+    internal static class EnumerableAppendPolyfill
     {
         /// <summary>Returns the sequence followed by <paramref name="element"/>.</summary>
         public static IEnumerable<TSource> Append<TSource>(this IEnumerable<TSource> source, TSource element)
