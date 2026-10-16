@@ -203,7 +203,7 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
         return result;
     }
 
-    public override void Train(AiDotNet.Tensors.LinearAlgebra.Tensor<T> input, AiDotNet.Tensors.LinearAlgebra.Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         throw new NotSupportedException("CLIP neural network in inference mode does not support training.");
     }

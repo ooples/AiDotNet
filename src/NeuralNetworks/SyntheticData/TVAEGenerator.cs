@@ -343,7 +343,7 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
     /// Trains the TVAE on a single sample by running one tape-connected ELBO
     /// optimization step (encode → reparameterize → decode → reconstruction + KL).
     /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
         try
@@ -354,6 +354,8 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
         {
             SetTrainingMode(false);
         }
+
+        return true;
     }
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks

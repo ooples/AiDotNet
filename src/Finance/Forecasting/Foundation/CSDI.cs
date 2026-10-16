@@ -299,7 +299,7 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
     public override bool SupportsTraining => _useNativeMode;
     protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
 
-    public override void Train(Tensor<T> input, Tensor<T> target)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
     {
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
@@ -332,7 +332,7 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
         // apart. Null means a degenerate (zero-length) target, so there is nothing to train.
         var slots = BuildCsdiSlots(input, target);
         if (slots is null)
-            return;
+            return true;
 
         // Every training entry point on the base puts the layers in training mode for the
         // duration of the step. This override is a training entry point too, and without
@@ -370,7 +370,7 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
                         out T fusedLoss))
                 {
                     LastLoss = fusedLoss;
-                    return;
+                    return true;
                 }
             }
 
@@ -391,6 +391,8 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
         {
             SetTrainingMode(false);
         }
+
+        return true;
     }
 
     /// <summary>

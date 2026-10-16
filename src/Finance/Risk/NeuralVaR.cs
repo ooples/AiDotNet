@@ -251,7 +251,7 @@ public partial class NeuralVaR<T> : RiskModelBase<T>
     /// <b>For Beginners:</b> In the NeuralVaR model, Train performs a training step. This updates the NeuralVaR architecture so it learns from data.
     /// </para>
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
     {
         if (!UseNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
@@ -267,7 +267,7 @@ public partial class NeuralVaR<T> : RiskModelBase<T>
         double lossBefore = NumOps.ToDouble(
             _lossFunction.CalculateLoss(Predict(input).ToVector(), target.ToVector()));
 
-        base.Train(input, target);
+        TrainStandardStep(input, target);
 
         double lossAfter = NumOps.ToDouble(
             _lossFunction.CalculateLoss(Predict(input).ToVector(), target.ToVector()));
@@ -306,6 +306,8 @@ public partial class NeuralVaR<T> : RiskModelBase<T>
             if (!accepted)
                 UpdateParameters(parametersBefore);
         }
+
+        return true;
     }
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks

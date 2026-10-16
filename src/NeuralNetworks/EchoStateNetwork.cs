@@ -1280,7 +1280,7 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
             $"{nameof(EchoStateNetwork<T>)} is trained by ridge regression on the linear readout, not gradient "
             + "descent, so it has no parameter gradients to report.");
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // ESN training per Jaeger 2001 "The 'echo state' approach" §3.4 /
         // Lukoševičius 2012 §4: the reservoir is FIXED random; the only
@@ -1338,6 +1338,8 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
         // joined the regression set.
         Vector<T> prediction = ComputeOutput();
         LastLoss = _lossFunction.CalculateLoss(prediction, targetVector);
+
+        return true;
     }
 
     /// <summary>

@@ -771,7 +771,7 @@ public partial class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
     /// You should see the error decrease over time as the DBM learns.
     /// </para>
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // Handle 1D input [features] → treat as single sample [1, features]
         if (input.Rank == 1)
@@ -799,6 +799,8 @@ public partial class DeepBoltzmannMachine<T> : VectorModelLayoutBase<T>
             var (_, loss) = TrainOnBatch(input, _learningRate);
             LastLoss = loss;
         }
+
+        return true;
     }
 
     /// <summary>

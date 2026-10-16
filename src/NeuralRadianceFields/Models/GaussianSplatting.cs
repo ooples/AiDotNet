@@ -2053,7 +2053,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         return LastLoss ?? NumOps.Zero;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (LossFunction == null)
         {
@@ -2080,7 +2080,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         if (input.Rank == 2 && input.Shape[1] == 6)
         {
             TrainOnRays(input, expectedOutput);
-            return;
+            return true;
         }
 
         ParseCameraInput(input, expectedOutput,
@@ -2130,6 +2130,8 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         {
             DensifyAndPrune(gradients);
         }
+
+        return true;
     }
 
     /// <summary>

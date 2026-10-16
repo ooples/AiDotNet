@@ -795,7 +795,7 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     }
 
     /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // The full adversarial training (data + mask GANs) runs in Fit. This
         // single-step entry point trains the data generator (the Layers chain,
@@ -824,6 +824,8 @@ public partial class MisGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         {
             SetTrainingMode(false);
         }
+
+        return true;
     }
 
     /// <inheritdoc />

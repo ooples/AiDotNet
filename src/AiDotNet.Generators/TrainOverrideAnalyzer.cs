@@ -16,8 +16,9 @@ namespace AiDotNet.Generators;
 /// micro-batching, the out-of-memory and device-fault retries, the model's optimizer, and the shared fused session.
 /// A model supplies what differs through declarations instead: its optimizer (the generated <c>TrainingOptimizer</c>),
 /// why it cannot train (<c>TrainingUnavailableReason</c>), how its input or target is prepared
-/// (<c>PrepareTrainingPair</c>, <c>PrepareInputForTraining</c>), and a non-standard objective
-/// (<c>DefineTrainingObjectives</c>). About 700 overrides that re-did the base step, and skipped half of it, were
+/// (<c>PrepareTrainingPair</c>, <c>PrepareInputForTraining</c>), a non-standard objective
+/// (<c>DefineTrainingObjectives</c>), and a step that is not a single gradient objective (<c>TryApplyLearningRule</c>:
+/// contrastive divergence, a Hebbian rule, a closed-form solve, a multi-network orchestration). About 700 overrides that re-did the base step, and skipped half of it, were
 /// deleted when this rule was added.
 /// </para>
 /// <para>
@@ -34,7 +35,7 @@ public class TrainOverrideAnalyzer : DiagnosticAnalyzer
         "AIDN107",
         "A model overrides Train instead of declaring its training step",
         "'{0}' overrides Train. The base class runs every model's training step; declare what differs instead: "
-            + "DefineTrainingObjectives for a non-standard objective, PrepareTrainingPair or PrepareInputForTraining for "
+            + "DefineTrainingObjectives for a non-standard objective, TryApplyLearningRule for a non-gradient rule, PrepareTrainingPair or PrepareInputForTraining for "
             + "the data, TrainingUnavailableReason for a guard. Its optimizer comes from its _optimizer field.",
         "AiDotNet.Design",
         DiagnosticSeverity.Warning,
@@ -109,41 +110,5 @@ internal static class TrainOverrideBaseline
 {
     internal static readonly HashSet<string> Types = new HashSet<string>(System.StringComparer.Ordinal)
     {
-        "AiDotNet.Audio.Fingerprinting.CLAPModel<T>",
-        "AiDotNet.Document.GraphBased.PICK<T>",
-        "AiDotNet.Finance.Forecasting.Foundation.CSDI<T>",
-        "AiDotNet.Finance.Risk.NeuralVaR<T>",
-        "AiDotNet.NeuralNetworks.ClipNeuralNetwork<T>",
-        "AiDotNet.NeuralNetworks.CycleGAN<T>",
-        "AiDotNet.NeuralNetworks.DeepBoltzmannMachine<T>",
-        "AiDotNet.NeuralNetworks.DeepQNetwork<T>",
-        "AiDotNet.NeuralNetworks.EchoStateNetwork<T>",
-        "AiDotNet.NeuralNetworks.ExtremeLearningMachine<T>",
-        "AiDotNet.NeuralNetworks.GenerativeAdversarialNetwork<T>",
-        "AiDotNet.NeuralNetworks.HopfieldNetwork<T>",
-        "AiDotNet.NeuralNetworks.HTMNetwork<T>",
-        "AiDotNet.NeuralNetworks.LiquidStateMachine<T>",
-        "AiDotNet.NeuralNetworks.NEAT<T>",
-        "AiDotNet.NeuralNetworks.RestrictedBoltzmannMachine<T>",
-        "AiDotNet.NeuralNetworks.SelfOrganizingMap<T>",
-        "AiDotNet.NeuralNetworks.SpikingNeuralNetwork<T>",
-        "AiDotNet.NeuralNetworks.StyleGAN<T>",
-        "AiDotNet.NeuralNetworks.SyntheticData.CopulaGANGenerator<T>",
-        "AiDotNet.NeuralNetworks.SyntheticData.CTABGANPlusGenerator<T>",
-        "AiDotNet.NeuralNetworks.SyntheticData.GOGGLEGenerator<T>",
-        "AiDotNet.NeuralNetworks.SyntheticData.MisGANGenerator<T>",
-        "AiDotNet.NeuralNetworks.SyntheticData.OCTGANGenerator<T>",
-        "AiDotNet.NeuralNetworks.SyntheticData.PATEGANGenerator<T>",
-        "AiDotNet.NeuralNetworks.SyntheticData.TVAEGenerator<T>",
-        "AiDotNet.NeuralNetworks.WGANGP<T>",
-        "AiDotNet.NeuralRadianceFields.Models.GaussianSplatting<T>",
-        "AiDotNet.PhysicsInformed.NeuralOperators.GraphNeuralOperator<T>",
-        "AiDotNet.PhysicsInformed.ScientificML.UniversalDifferentialEquation<T>",
-        "AiDotNet.SpeechRecognition.AlibabaASR.SeACo<T>",
-        "AiDotNet.TextToSpeech.CodecBased.BarkModel<T>",
-        "AiDotNet.Video.Enhancement.StableVideoSR<T>",
-        "AiDotNet.Video.Generation.OpenSora<T>",
-        "AiDotNet.Video.RealESRGAN<T>",
-        "AiDotNet.VisionLanguage.Unified.Transfusion<T>",
     };
 }

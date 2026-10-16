@@ -386,7 +386,7 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     /// This method is provided for compatibility with the NeuralNetworkBase pattern.
     /// </para>
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // CopulaGAN is trained adversarially through Fit() / FitAsync (the copula
         // transform is fit statistically and the GAN is trained with the

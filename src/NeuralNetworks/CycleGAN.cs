@@ -639,11 +639,13 @@ public partial class CycleGAN<T> : ImageTranslationModelLayoutBase<T>
         return GeneratorAtoB.ForwardForTraining(input);
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         TrainStep(
             WithBatchAxis(input, GeneratorAtoB.Architecture.InputType),
             WithBatchAxis(expectedOutput, GeneratorBtoA.Architecture.InputType));
+
+        return true;
     }
 
     /// <inheritdoc/>

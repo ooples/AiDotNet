@@ -495,7 +495,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     /// the standard tape-based training path so all gradients (including the
     /// learnable temperature) flow correctly through every layer.
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
     {
         if (!_useNativeMode)
             throw new NotSupportedException(
@@ -582,6 +582,8 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         {
             SetTrainingMode(false);
         }
+
+        return true;
     }
 
     /// <summary>

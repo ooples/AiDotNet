@@ -389,7 +389,7 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITr
     /// </summary>
     /// <param name="input">Clean input video latents.</param>
     /// <param name="expectedOutput">Target (typically the same as input for diffusion training).</param>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // DDPM epsilon-prediction (Ho et al. 2020, Algorithm 1), the objective Open-Sora trains its DiT on: draw a
         // timestep and noise, form x_t = sqrt(alpha_bar_t) x_0 + sqrt(1 - alpha_bar_t) eps, and fit the network's
@@ -423,6 +423,8 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITr
             _trainingTime = null;
             SetTrainingMode(false);
         }
+
+        return true;
     }
 
     /// <summary>

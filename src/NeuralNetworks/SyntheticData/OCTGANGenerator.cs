@@ -813,7 +813,7 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     }
 
     /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // Full OCT-GAN training (SVDD discriminator + generator) runs in Fit. This
         // single-step entry point trains the generator (the Layers chain) to
@@ -830,6 +830,8 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
             }, BuildGeneratorLayerList(), _generatorOptimizer);
         }
         finally { SetTrainingMode(false); }
+
+        return true;
     }
 
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.

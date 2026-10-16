@@ -10553,6 +10553,26 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     protected virtual IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> target)
         => null;
 
+    private bool _applyingLearningRule;
+
+    /// <summary>
+    /// A model's own training step, when it is not a gradient objective the base class can run: contrastive divergence,
+    /// a Hebbian or spike-timing rule, a closed-form solve, a step that orchestrates several networks with their own
+    /// optimizers. Returns true when it took the step; false (the default) for the standard step.
+    /// </summary>
+    /// <param name="input">The training input.</param>
+    /// <param name="target">The training target.</param>
+    /// <remarks>
+    /// The base class still owns <see cref="Train(Tensor{T}, Tensor{T})"/>: the guards, the step hooks and the loss lock
+    /// run around this rule, and a rule that wants the standard gradient step as part of it calls
+    /// <see cref="TrainStandardStep"/>. Declared objectives take precedence.
+    /// </remarks>
+    protected virtual bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target) => false;
+
+    /// <summary>The standard gradient step on (input, target), for a learning rule that includes it.</summary>
+    protected void TrainStandardStep(Tensor<T> input, Tensor<T> target)
+        => RunTrainStep(input, target, optimizerOverride: null);
+
     /// <summary>
     /// Runs the objectives <see cref="DefineTrainingObjectives"/> declares, in training mode; returns false when the model
     /// declares none. A family base that overrides <see cref="Train(Tensor{T}, Tensor{T})"/> calls this first, so its
@@ -10565,7 +10585,19 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         try
         {
             var objectives = DefineTrainingObjectives(input, target);
-            if (objectives is null) return false;
+            if (objectives is null)
+            {
+                if (_applyingLearningRule) return false;
+                _applyingLearningRule = true;
+                try
+                {
+                    return TryApplyLearningRule(input, target);
+                }
+                finally
+                {
+                    _applyingLearningRule = false;
+                }
+            }
             foreach (var objective in objectives)
             {
                 Guard.NotNull(objective);
