@@ -7629,6 +7629,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                 }
                 else
                 {
+                    // A reused publish buffer still holds an earlier step's values here; a slot with no gradient
+                    // this step must read as zero, exactly as in a fresh array.
+                    dest.AsSpan(offset, count).Clear();
                     offset += count;
                 }
                 continue;
@@ -7705,8 +7708,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
         bool reuse = !_scatterVectorHandedOut && _scatterBuffer is { } owned && owned.Length == total;
         var filled = reuse && _scatterBuffer is { } buffer ? buffer : new T[total];
-        // Slots with no gradient this step must read as zero, exactly as in a fresh array.
-        if (reuse) Array.Clear(filled, 0, total);
+        // No up-front clear of a reused buffer: the fill overwrites every gradient slot and clears the ones with no
+        // gradient this step. Buffer components and non-LayerBase sub-layers are never written, so they keep the
+        // zeros of the buffer's first allocation.
         int matched = 0;
         FillParameterGradients(filled, 0, grads, ref matched);
 

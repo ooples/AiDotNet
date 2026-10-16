@@ -97,6 +97,30 @@ public class ParameterGradientPublicationTests
     }
 
     [Fact]
+    public void Publication_ZeroesAReusedLayerSliceThatGetsNoGradientThisStep()
+    {
+        // Two publishes with no read in between: the second reuses the layer's buffer from the first. The layer's
+        // bias gets no gradient the second time, so it must read as zero, not the first publish's 7.
+        using var network = new PublicationNetwork();
+        var parameters = network.TrainableTensors;
+        network.Publish(parameters.ToDictionary(
+            parameter => parameter,
+            parameter => FilledLike(parameter, 7)));
+
+        network.Publish(new Dictionary<Tensor<float>, Tensor<float>>
+        {
+            [parameters[0]] = FilledLike(parameters[0], 11)
+        });
+        var flat = network.GetParameterGradients();
+
+        int weights = parameters[0].Length;
+        int bias = parameters[1].Length;
+        for (int i = 0; i < weights; i++) Assert.Equal(11, flat[i]);
+        for (int i = weights; i < weights + bias; i++) Assert.Equal(0, flat[i]);
+        for (int i = weights + bias; i < flat.Length; i++) Assert.Equal(0, flat[i]);
+    }
+
+    [Fact]
     public void FlatPublication_RejectsAParameterMisalignedVector()
     {
         using var network = new PublicationNetwork();
