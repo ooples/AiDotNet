@@ -67,6 +67,20 @@ public sealed class ActivationLayerInvariantTests : LayerTestBase<double>
         new ActivationLayer<double>((IActivationFunction<double>)new TanhActivation<double>());
 }
 
+// Attentional feature fusion (CLAP's HTS-AT fusion, #2313). Its dual-tensor API keeps the generated harness away, and
+// the single-input forward fuses the input with itself, so the invariants still apply here.
+public sealed class AttentionalFeatureFusionInvariantTests : LayerTestBase<double>
+{
+    protected override int[] InputShape => [2, 8, 4, 4];
+    protected override ILayer<double> CreateLayer() => new AttentionalFeatureFusionLayer<double>(8, 4);
+
+    // With one input the layer fuses the map with itself: x - residual is exactly zero, so the attention weight
+    // multiplies zero and no fusion parameter can receive a gradient. That is the math, not a tape break;
+    // ClapArchitectureTests.AttentionalFeatureFusion_DistinctMaps_GradientsReachEveryParameter checks the gradients
+    // with two different maps.
+    protected override bool ExpectsNonZeroGradients => false;
+}
+
 public sealed class LayerNormalizationInvariantTests : LayerTestBase<double>
 {
     protected override int[] InputShape => [1, 4];

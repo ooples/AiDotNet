@@ -62,6 +62,10 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
     // per-sample with this probability during training and scaled by 1/(1-rate) so the expected
     // activation is preserved; at inference it is the identity. 0 (default) keeps the block unchanged.
     private readonly double _dropPathRate;
+    // The reference Swin MLP (Liu et al. 2021; HTS-AT, Chen et al. 2022) is Linear -> nn.GELU -> Linear, and
+    // nn.GELU is the exact erf form. The historical default here is the tanh approximation (up to ~1e-3 apart),
+    // so the exact form is opt-in: models loaded from a PyTorch checkpoint need it to reproduce the reference.
+    private readonly bool _exactGelu;
     // Forward-call counter so RandomSeed-seeded drop masks are bit-identical across reruns at the
     // same step (mirrors DropoutLayer's determinism contract).
     private long _dropPathForwardCounter;
@@ -117,6 +121,19 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public bool UsesShiftedWindows => _shiftSize > 0;
 
+    /// <summary>Whether the MLP uses the exact (erf) GELU rather than the tanh approximation.</summary>
+    public bool UsesExactGelu => _exactGelu;
+
+    /// <summary>The attention window side.</summary>
+    public int WindowSize => _windowSize;
+
+    /// <summary>The block's sub-modules in the reference Swin naming (<c>norm1</c>, <c>attn.qkv</c>,
+    /// <c>attn.proj</c>, <c>attn.relative_position_bias_table</c>, <c>norm2</c>, <c>mlp.fc1</c>, <c>mlp.fc2</c>), for
+    /// loading published checkpoints.</summary>
+    internal (LayerNormalizationLayer<T> Norm1, DenseLayer<T> Qkv, DenseLayer<T> Projection, Tensor<T> RelativePositionBiasTable,
+        LayerNormalizationLayer<T> Norm2, DenseLayer<T> Fc1, DenseLayer<T> Fc2) ReferenceModules =>
+        (_norm1, _qkvProj, _outProj, _relativePositionBiasTable, _norm2, _mlpFc1, _mlpFc2);
+
     /// <summary>
     /// Creates a new Swin Transformer block layer.
     /// </summary>
@@ -125,6 +142,9 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
     /// <param name="windowSize">Window size for attention (default: 7 from paper, 10 for Donut).</param>
     /// <param name="shiftSize">Shift size for SW-MSA (0 for W-MSA, windowSize/2 for SW-MSA).</param>
     /// <param name="mlpRatio">Ratio of MLP hidden dim to embedding dim (default: 4).</param>
+    /// <param name="dropPathRate">Stochastic-depth rate of both residual branches (default: 0).</param>
+    /// <param name="exactGelu">Use the exact (erf) GELU in the MLP, as PyTorch's <c>nn.GELU</c> does, instead of the
+    /// tanh approximation (default: false). Required to reproduce a published PyTorch Swin checkpoint.</param>
     /// <exception cref="ArgumentException">Thrown if dim is not divisible by numHeads.</exception>
     public SwinTransformerBlockLayer(
         int dim,
@@ -132,7 +152,8 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
         int windowSize = 7,
         int shiftSize = 0,
         int mlpRatio = 4,
-        double dropPathRate = 0.0)
+        double dropPathRate = 0.0,
+        bool exactGelu = false)
         : base([dim], [dim])
     {
         if (dim % numHeads != 0)
@@ -147,6 +168,7 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
         _shiftSize = shiftSize;
         _mlpRatio = mlpRatio;
         _dropPathRate = dropPathRate;
+        _exactGelu = exactGelu;
         _scale = 1.0 / Math.Sqrt(_headDim);
 
         // Layer normalizations (pre-norm architecture)
@@ -168,7 +190,9 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
 
         // MLP (2-layer with GELU)
         int mlpHiddenDim = dim * mlpRatio;
-        _mlpFc1 = new DenseLayer<T>(mlpHiddenDim, (IActivationFunction<T>)new GELUActivation<T>());
+        _mlpFc1 = exactGelu
+            ? new DenseLayer<T>(mlpHiddenDim, (IActivationFunction<T>)new IdentityActivation<T>())
+            : new DenseLayer<T>(mlpHiddenDim, (IActivationFunction<T>)new GELUActivation<T>());
         _mlpFc2 = new DenseLayer<T>(dim);
 
         RegisterSubLayer(_norm1);
@@ -543,6 +567,7 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
         // Batch all tokens for correct Forward/Backward (single _lastInput)
         var flat = x.Reshape([batch * seqLen, _dim]);
         var hidden = _mlpFc1.Forward(flat);
+        if (_exactGelu) hidden = ActivationHelper.ExactGelu(hidden, Engine);
         var flatOut = _mlpFc2.Forward(hidden);
         return flatOut.Reshape([batch, seqLen, _dim]);
     }
@@ -611,6 +636,8 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
         metadata["WindowSize"] = _windowSize.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["ShiftSize"] = _shiftSize.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["MlpRatio"] = _mlpRatio.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["DropPathRate"] = _dropPathRate.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+        metadata["ExactGelu"] = _exactGelu.ToString();
         return metadata;
     }
 
