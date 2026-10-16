@@ -157,7 +157,12 @@ public partial class DBNet<T> : TextDetectorBase<T>
         var probabilityLoss = WeightedMean(bce, HardNegativeWeights(bce, kernelT, maskT, 3.0));
         var thresholdLoss = WeightedMean(Engine.TensorAbs(Engine.TensorSubtract(thresh, borderT)), borderMaskT);
         var binaryLoss = DiceLoss(binary, kernelT, maskT);
-        return Engine.TensorAdd(Engine.TensorAdd(probabilityLoss, binaryLoss), Engine.TensorMultiplyScalar(thresholdLoss, NumOps.FromDouble(10.0)));
+        // One shape for the three terms: the reductions above return rank 0 or [1] depending on the path, and adding a
+        // rank-0 term to a [1] term broadcasts forward but hands the rank-0 input a [1] gradient in backward, which
+        // failed the step ("Tensor shapes must match. Got [] and [1]").
+        Tensor<T> Scalar(Tensor<T> t) => Engine.Reshape(t, new[] { 1 });
+        return Engine.TensorAdd(Engine.TensorAdd(Scalar(probabilityLoss), Scalar(binaryLoss)),
+            Engine.TensorMultiplyScalar(Scalar(thresholdLoss), NumOps.FromDouble(10.0)));
     }
 
     /// <summary>
