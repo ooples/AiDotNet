@@ -7763,6 +7763,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                     // One span copy for a dense slot, as the slot's own CopyFrom does. Writing it a scalar at a time
                     // through SetFlat cost about 150 ns per value: 1.6 s to load ResNet-18's 11.7M weights.
                     source.AsSpan().Slice(offset, count).CopyTo(dense.AsWritableSpan());
+                    // A span write does not bump the tensor's version, and observers of parameter changes (policy
+                    // ownership, compiled-plan caches) compare versions: mark the slot written, as SetFlat did.
+                    dense.IncrementVersion();
                     offset += count;
                     continue;
                 }
