@@ -412,9 +412,18 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     protected T? LastLoss
     {
-        get => _lastLoss;
+        get
+        {
+            if (_pendingLossTensor is { } pending)
+            {
+                _pendingLossTensor = null;
+                _lastLoss = pending.Length > 0 ? pending[0] : NumOps.Zero;
+            }
+            return _lastLoss;
+        }
         set
         {
+            _pendingLossTensor = null;
             _lastLoss = value;
             _lastLossRecorded = true;
         }
@@ -422,6 +431,18 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
     private T? _lastLoss;
     private bool _lastLossRecorded;
+
+    // A compiled step's loss tensor, read into _lastLoss only when something asks for the loss. Reading it waits for
+    // the device to finish that step; a training loop that never looks at the loss lets the host prepare the next
+    // step while the device runs this one. The plan reuses the tensor every step and the next step replaces this
+    // reference, so a read always sees the most recent step's loss.
+    private Tensor<T>? _pendingLossTensor;
+
+    private void SetLastLossDeferred(Tensor<T> lossTensor)
+    {
+        _pendingLossTensor = lossTensor;
+        _lastLossRecorded = true;
+    }
 
     /// <summary>
     /// Indicates whether the network is currently in training mode.
@@ -5024,10 +5045,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// Receives the fused kernel's gradients and publishes them to the layer surface.
     /// </summary>
     /// <remarks>
-    /// No copy is taken here on purpose. The plan hands over its pre-allocated buffers by reference
-    /// and overwrites them on the next step, but the scatter READS the scalars into each layer's own
-    /// vector rather than retaining the tensors, so the published surface is already independent of
-    /// the plan's buffers by the time this returns.
+    /// No copy is taken here on purpose. The plan hands over its pre-allocated buffers by reference and overwrites
+    /// them only on its next step, which publishes again; it lands them on the host before it is retired. Layers
+    /// therefore keep device-resident gradients by reference and read them only if something asks.
     /// </remarks>
     private protected void ScatterFusedGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
     {
@@ -5035,7 +5055,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // so the reachability probe is told here. A tensor the step's loss does not reach gets an all-zero
         // gradient from the plan, which the probe counts as unreached.
         TapeReachabilityProbe<T>.Current?.Record(this, grads);
-        PublishParameterGradients(grads);
+        PublishParameterGradients(grads, sourcesOutliveStep: true);
     }
 
     private void ClearPublishedLayerGradientSlices()
@@ -5051,6 +5071,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     protected int ScatterParameterGradientsToLayers(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+        => ScatterParameterGradientsToLayers(grads, sourcesOutliveStep: false);
+
+    private int ScatterParameterGradientsToLayers(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads, bool sourcesOutliveStep)
     {
         if (grads is null || grads.Count == 0) return 0;
 
@@ -5059,13 +5082,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             if (Layers[i] is LayerBase<T> layer)
             {
-                matched += layer.ScatterParameterGradients(grads);
+                matched += layer.ScatterParameterGradients(grads, sourcesOutliveStep);
             }
         }
 
         foreach (var layer in GetExtraTrainableLayers())
         {
-            if (layer is not null) matched += layer.ScatterParameterGradients(grads);
+            if (layer is not null) matched += layer.ScatterParameterGradients(grads, sourcesOutliveStep);
         }
 
         return matched;
@@ -5073,6 +5096,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
     /// <summary>Publishes one backward pass to the public model and layer gradient surfaces.</summary>
     protected int PublishParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+        => PublishParameterGradients(grads, sourcesOutliveStep: false);
+
+    /// <summary>
+    /// <see cref="PublishParameterGradients(IReadOnlyDictionary{Tensor{T}, Tensor{T}})"/> for gradients that stay
+    /// valid until the next publish, which layers may then keep by reference.
+    /// </summary>
+    private int PublishParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads, bool sourcesOutliveStep)
     {
         _gradientSurfaceUnavailable = false;
         _publishedExtraTensorGradients = null;
@@ -5082,7 +5112,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         if (grads is null || grads.Count == 0) return 0;
 
-        int matched = ScatterParameterGradientsToLayers(grads);
+        int matched = ScatterParameterGradientsToLayers(grads, sourcesOutliveStep);
         Dictionary<Tensor<T>, Vector<T>>? extras = null;
         foreach (var tensor in GetExtraTrainableTensors())
         {
@@ -10318,7 +10348,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // The flag says a value was assigned; this second check is the reference-type case, where a
         // nullable T could legitimately have been assigned null. Written as a real check rather than
         // a null-forgiving operator.
-        var recorded = _lastLoss;
+        var recorded = LastLoss;
         return recorded is null ? NumOps.Zero : recorded;
     }
 
@@ -13246,10 +13276,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             OnGradients = ScatterFusedGradients,
         };
 
-        var outcome = FusedSession.TryStep(request, out T lossValue);
+        var outcome = FusedSession.TryStep(request, out T lossValue, out var lossTensor);
         if (outcome == Training.FusedStepOutcome.Stepped)
         {
-            LastLoss = lossValue;
+            if (lossTensor is not null)
+                SetLastLossDeferred(lossTensor);
+            else
+                LastLoss = lossValue;
 
             // The plan updated the weights in place; GPU-resident parameters were updated ON the device, which is
             // exactly the case the host-authoritative invalidation must skip. Without this flush, fused-compatible
@@ -13273,7 +13306,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     Configuration.TrainingDiagnosticsConfig.Emit(
                         new Configuration.TrainingLossEvent(
                             StepIndex: stepIdx,
-                            LossValue: NumOps.ToDouble(lossValue),
+                            LossValue: NumOps.ToDouble(GetLastLoss()),
                             OutputRank: -1,    // fused path doesn't materialize output here
                             OutputLength: -1));
                 }
