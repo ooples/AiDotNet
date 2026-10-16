@@ -925,31 +925,30 @@ public class AudioIntegrationTests
     [Fact(Timeout = 120000)]
     public async Task ASTOptions_DefaultValues()
     {
+        // The paper's AudioSet configuration (Gong et al. 2021, Secs. 2.1, 3.1.1) and the official recipe's statistics.
         var options = new ASTOptions();
         Assert.Equal(16000, options.SampleRate);
-        Assert.Equal(400, options.FftSize);
-        Assert.Equal(160, options.HopLength);
         Assert.Equal(128, options.NumMels);
-        Assert.Equal(0, options.FMin);
-        Assert.Equal(8000, options.FMax);
+        Assert.Equal(1024, options.TargetLength);
+        Assert.Equal(AiDotNet.Audio.Features.WindowType.Hamming, options.Window);
+        Assert.Equal(-4.2677393, options.DatasetMean, Tolerance);
+        Assert.Equal(4.5689974, options.DatasetStd, Tolerance);
         Assert.Equal(16, options.PatchSize);
-        Assert.Equal(10, options.PatchStride);
+        Assert.Equal(10, options.FrequencyStride);
+        Assert.Equal(10, options.TimeStride);
         Assert.Equal(768, options.EmbeddingDim);
         Assert.Equal(12, options.NumEncoderLayers);
         Assert.Equal(12, options.NumAttentionHeads);
         Assert.Equal(3072, options.FeedForwardDim);
-        Assert.Equal(0.1, options.DropoutRate, Tolerance);
-        Assert.Equal(0.0, options.AttentionDropoutRate, Tolerance);
+        Assert.Equal(0.5, options.MixupRate, Tolerance);
+        Assert.Equal(48, options.FrequencyMaskLength);
+        Assert.Equal(192, options.TimeMaskLength);
         Assert.Equal(0.3, options.Threshold, Tolerance);
         Assert.Equal(10.0, options.WindowSize, Tolerance);
         Assert.Equal(0.5, options.WindowOverlap, Tolerance);
         Assert.Null(options.CustomLabels);
         Assert.Null(options.ModelPath);
         Assert.NotNull(options.OnnxOptions);
-        Assert.Equal(1e-4, options.LearningRate, 1e-10);
-        Assert.Equal(5, options.WarmUpEpochs);
-        Assert.Equal(0.1, options.LabelSmoothing, Tolerance);
-        Assert.True(options.UseImageNetPretrain);
     }
 
     #endregion

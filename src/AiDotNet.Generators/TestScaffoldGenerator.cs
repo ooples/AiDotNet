@@ -44,6 +44,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     // Fixtures for such models shorten the ramp to this, which reaches the recipe's peak rate.
     private const string SmokeWarmupSteps = "WarmupSteps = 2";
 
+    /// <summary>Both AST models at CI scale: 2048 samples give 11 Kaldi frames, padded to 16.</summary>
+    private const string AstSmokeOptions = "new AiDotNet.Audio.Classification.ASTOptions { NumMels = 32, TargetLength = 16, " +
+        "PatchSize = 8, FrequencyStride = 8, TimeStride = 8, EmbeddingDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 2, " +
+        "FeedForwardDim = 64, FrequencyMaskLength = 12, TimeMaskLength = 3, CustomLabels = new[] { \"a\", \"b\", \"c\", \"d\" } }";
+
     // Codec-LM models that share one constructor branch below but need the short warmup.
     private static readonly HashSet<string> ShortWarmupCodecModels = new(System.StringComparer.Ordinal)
     {
@@ -1628,7 +1633,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // MoreData probes exceed the 120-second gate. Keep the explicit precision-first
         // classification even though the current T-Z resource-shard rule also selects them.
         "ZambaLanguageModel", "Zamba2LanguageModel",
-        // AST (Gong et al. 2021): a 12-layer ViT-style residual transformer (CreateDefaultASTLayers,
+        // AST (Gong et al. 2021): the official 12-layer DeiT body (AstNetwork,
         // AudioClassifier family — AudioClassifierTestBase<T> is generic). Restoring the paper's residual
         // TransformerEncoderLayer blocks (commit 297f65351) fixed its flat-loss training failures, but the
         // <double> 12-layer residual encoder's per-step forward+backward overran the 120 s gate
@@ -8069,10 +8074,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Embedding, " +
                     "inputSize: 2048, outputSize: 4), " +
-                    "new AiDotNet.Models.Options.ASTModelOptions { StftWindowSize = 400, HopLength = 160, " +
-                    "NumMelBands = 32, TargetLength = 16, PatchSize = 4, NumClasses = 4, " +
-                    "EmbeddingDim = 32, NumLayers = 1, NumHeads = 4, FeedForwardDim = 128, " +
-                    "DropoutRate = 0.0 })";
+                    AstSmokeOptions + ")";
             }
             else if (model.ClassName == "Dessurt" && model.TypeParameterCount == 1)
             {
@@ -9855,20 +9857,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "AST" && model.TypeParameterCount == 1)
             {
-                // AST's production default remains the paper-faithful ViT-Base encoder (768-wide,
-                // 12 layers, 12 heads, 3072-wide FFNs, and 527 AudioSet labels). FP32 was applied
-                // first, but its exact Training_ShouldReduceLoss backward still exhausted the
-                // 16 GB runner in FusedLinearBackwardCore. Exercise the same patch projection,
-                // residual TransformerEncoderLayer, and classifier topology at bounded CI scale
-                // through public options. The dimensions match the generic audio [1,64,32] input.
+                // AST's production default remains the paper's AST-Base (768-wide, 12 layers, 1024 frames, 527 AudioSet
+                // labels). Exercise the same network (AstNetwork: Kaldi filterbank -> overlapping patches -> DeiT tokens
+                // -> pre-norm blocks -> sigmoid head) at CI scale on a 2048-sample waveform, with the SpecAugment masks
+                // scaled to the smaller filterbank.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiLabelClassification, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.Audio.Classification.ASTOptions { NumMels = 32, PatchSize = 8, PatchStride = 8, " +
-                    "EmbeddingDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 2, FeedForwardDim = 64, " +
-                    "DropoutRate = 0.0, AttentionDropoutRate = 0.0, UseImageNetPretrain = false, " +
-                    "CustomLabels = new[] { \"a\", \"b\", \"c\", \"d\" } })";
+                    "inputSize: 2048, outputSize: 4), " + AstSmokeOptions + ")";
             }
             else if (model.ClassName == "BEATs" && model.TypeParameterCount == 1)
             {
@@ -14823,11 +14819,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("        return tensor;");
             sb.AppendLine("    }");
         }
-        else if (model.ClassName == "ASTModel"
-                 && typeName.StartsWith(
-                     "AiDotNet.Audio.Fingerprinting.", System.StringComparison.Ordinal))
+        else if ((model.ClassName == "ASTModel"
+                  && typeName.StartsWith("AiDotNet.Audio.Fingerprinting.", System.StringComparison.Ordinal))
+                 || (model.ClassName == "AST"
+                  && typeName.StartsWith("AiDotNet.Audio.Classification.", System.StringComparison.Ordinal)))
         {
-            // Raw waveform batch long enough for the 400-sample STFT window.
+            // Raw waveform batch long enough for the 400-sample Kaldi frame.
             // The reduced classifier emits one four-class row per waveform.
             sb.AppendLine("    protected override int[] InputShape => new[] { 1, 2048 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 4 };");
@@ -17981,6 +17978,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override AiDotNet.ComputerVision.Detection.TextDetection.TextDetectorBase<double> CreatePositiveTextDetector(");
             sb.AppendLine("        AiDotNet.ComputerVision.Detection.TextDetection.TextDetectionOptions<double> options)");
             sb.AppendLine($"        => new {typeName}<double>(options);");
+            if (model.ClassName == "EAST" || model.ClassName == "DBNet")
+            {
+                // Both train from scratch here, where their papers start from ImageNet weights. EAST's stem is VGG16 with
+                // no normalization layer: on this fixture H-mean 0.8 at 80 steps and 1.0 from 120 on, through 240.
+                // DBNet trains at the paper's SGD rate (0.007): H-mean 0.667 at 60 steps with the loss still falling
+                // (2.99 to 0.73), 1.0 within 160. Neither could train on the fixture before its text was drawn in the
+                // detectors' [0, 255] pixel domain.
+                sb.AppendLine();
+                sb.AppendLine("    protected override int OverfitStepBudget => 160;");
+            }
         }
         if (family == TestFamily.ObjectDetection && model.HasOptionsOnlyConstructor)
         {
