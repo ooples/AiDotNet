@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.TimeSeries;
 
 namespace AiDotNet.Models.Options;
 
@@ -33,76 +34,113 @@ public class InformerOptions<T> : TimeSeriesRegressionOptions<T>
         // changes deterministic initialization.
         Seed = other.Seed;
         LookbackWindow = other.LookbackWindow;
+        LabelLength = other.LabelLength;
         ForecastHorizon = other.ForecastHorizon;
         EmbeddingDim = other.EmbeddingDim;
+        FeedForwardDim = other.FeedForwardDim;
         NumEncoderLayers = other.NumEncoderLayers;
         NumDecoderLayers = other.NumDecoderLayers;
         NumAttentionHeads = other.NumAttentionHeads;
+        SamplingFactor = other.SamplingFactor;
+        Attention = other.Attention;
+        Distil = other.Distil;
+        Mix = other.Mix;
+        UseGelu = other.UseGelu;
         DropoutRate = other.DropoutRate;
         LearningRate = other.LearningRate;
         Epochs = other.Epochs;
         BatchSize = other.BatchSize;
-        DistillingFactor = other.DistillingFactor;
     }
 
     /// <summary>
-    /// Gets or sets the lookback window (encoder input length).
+    /// Gets or sets the lookback window, the encoder input length (seq_len; the reference's default 96).
     /// </summary>
     public int LookbackWindow { get; set; } = 96;
 
     /// <summary>
-    /// Gets or sets the forecast horizon (decoder output length).
+    /// Gets or sets the start-token length: the last steps of the lookback window that open the decoder input
+    /// (label_len, 48).
+    /// </summary>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> Informer's decoder predicts the whole horizon in one pass. It is given the end of
+    /// the known history as a "start", followed by empty placeholders it fills in.</para>
+    /// </remarks>
+    public int LabelLength { get; set; } = 48;
+
+    /// <summary>
+    /// Gets or sets the forecast horizon, the number of predicted steps (pred_len, 24).
     /// </summary>
     public int ForecastHorizon { get; set; } = 24;
 
     /// <summary>
-    /// Gets or sets the embedding dimension.
+    /// Gets or sets the model width (d_model, 512).
     /// </summary>
-    public int EmbeddingDim { get; set; } = 64;
+    public int EmbeddingDim { get; set; } = 512;
 
     /// <summary>
-    /// Gets or sets the number of encoder layers.
+    /// Gets or sets the feed-forward width (d_ff, 2048).
+    /// </summary>
+    public int FeedForwardDim { get; set; } = 2048;
+
+    /// <summary>
+    /// Gets or sets the number of encoder layers (e_layers, 2).
     /// </summary>
     public int NumEncoderLayers { get; set; } = 2;
 
     /// <summary>
-    /// Gets or sets the number of decoder layers.
+    /// Gets or sets the number of decoder layers (d_layers, 1).
     /// </summary>
     public int NumDecoderLayers { get; set; } = 1;
 
     /// <summary>
-    /// Gets or sets the number of attention heads.
+    /// Gets or sets the number of attention heads (n_heads, 8).
     /// </summary>
     public int NumAttentionHeads { get; set; } = 8;
 
     /// <summary>
-    /// Gets or sets the dropout rate.
+    /// Gets or sets the ProbSparse sampling factor c (factor, 5): c·⌈ln L⌉ keys are sampled per query and as many
+    /// queries attend.
+    /// </summary>
+    public int SamplingFactor { get; set; } = 5;
+
+    /// <summary>
+    /// Gets or sets the self-attention of the encoder and decoder (attn, ProbSparse).
+    /// </summary>
+    public InformerAttention Attention { get; set; } = InformerAttention.ProbSparse;
+
+    /// <summary>
+    /// Gets or sets whether a distilling layer (conv, batch norm, ELU, max-pool halving the length) follows every
+    /// encoder layer but the last (distil, true).
+    /// </summary>
+    public bool Distil { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether the decoder self-attention mixes its heads as the reference does (mix, true).
+    /// </summary>
+    public bool Mix { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether the feed-forward activation is GELU (activation 'gelu'; false: ReLU).
+    /// </summary>
+    public bool UseGelu { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the dropout rate (dropout, 0.05).
     /// </summary>
     public double DropoutRate { get; set; } = 0.05;
 
     /// <summary>
-    /// Gets or sets the learning rate.
+    /// Gets or sets the initial learning rate of Adam (learning_rate, 1e-4), halved after every epoch (lradj 'type1').
     /// </summary>
     public double LearningRate { get; set; } = 0.0001;
 
     /// <summary>
-    /// Gets or sets the number of training epochs.
+    /// Gets or sets the number of training epochs (train_epochs, 6).
     /// </summary>
-    public int Epochs { get; set; } = 10;
+    public int Epochs { get; set; } = 6;
 
     /// <summary>
-    /// Gets or sets the batch size.
+    /// Gets or sets the batch size (batch_size, 32).
     /// </summary>
     public int BatchSize { get; set; } = 32;
-
-    /// <summary>
-    /// Gets or sets the distilling factor for self-attention distilling.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This controls how much the model compresses
-    /// information between layers. A factor of 2 means each layer has half
-    /// the sequence length of the previous one.
-    /// </para>
-    /// </remarks>
-    public int DistillingFactor { get; set; } = 2;
 }

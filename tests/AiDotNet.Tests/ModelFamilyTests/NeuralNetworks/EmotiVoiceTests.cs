@@ -32,7 +32,7 @@ public class EmotiVoiceTests : TTSModelTestBase<float>
     protected override int[] InputShape => [1, 32, 80];
     protected override int[] OutputShape => [1, 32, 80];
 
-    protected override INeuralNetworkModel<float> CreateNetwork()
+    protected override INeuralNetworkModel<float> CreateTtsNetwork()
     {
         // Architecture's input size mirrors the mel/prosody feature grid;
         // outputSize is the mel-channel count (80 per upstream config).

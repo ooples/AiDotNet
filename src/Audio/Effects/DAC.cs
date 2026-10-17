@@ -1,334 +1,260 @@
+using System.Collections.Generic;
+using System.Linq;
 using AiDotNet.Attributes;
+using AiDotNet.Audio.Codecs;
 using AiDotNet.Enums;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LearningRateSchedulers;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.TextToSpeech;
+using AiDotNet.TextToSpeech.Vocoders;
 
 namespace AiDotNet.Audio.Effects;
 
 /// <summary>
-/// Descript Audio Codec (DAC) - high-fidelity universal neural audio codec (Kumar et al., 2024, Descript).
+/// DAC, the Descript Audio Codec: a Snake-activated convolutional encoder–decoder with a residual vector quantizer of
+/// factorized, L2-normalized codes, trained with quantizer dropout against multi-period and multi-band multi-scale STFT
+/// discriminators and a multi-scale mel loss.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
+/// <para><b>Reference:</b> "High-Fidelity Audio Compression with Improved RVQGAN" (Kumar et al., 2023), with
+/// descriptinc/descript-audio-codec for what the paper leaves unstated.</para>
 /// <para>
-/// DAC is a high-fidelity neural audio codec that compresses audio to approximately 8 kbps
-/// while maintaining near-lossless quality. It uses residual vector quantization (RVQ) with
-/// improved codebook utilization, periodic activation functions (Snake activations), and
-/// multi-scale STFT discriminators. Unlike EnCodec which was designed primarily for speech,
-/// DAC is universal - handling speech, music, and environmental sounds at 16/24/44.1 kHz.
+/// The encoder and decoder (§3.1, §4.3) are SoundStream's fully convolutional design with Snake activations: strides
+/// (2, 4, 8, 8) to a 1024-dimensional latent (hop 512, about 86 frames per second at 44.1 kHz) and rates (8, 8, 4, 2) from a
+/// 1536-wide decoder to a tanh waveform. The quantizer (§3.2, App. A) projects each residual to 8 dimensions, picks the
+/// nearest of 1024 codes by cosine similarity, and projects back; its codebooks learn by the VQ-VAE codebook and commitment
+/// losses. Quantizer dropout (§3.3) draws n_q ~ U[1, 9] for each example.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> DAC is like a super-efficient audio compressor. While MP3 typically
-/// uses 128-320 kbps, DAC achieves similar quality at just 8 kbps (16-40x smaller files).
-/// It works by:
-///
-/// 1. <b>Encoding</b>: Converting audio into compact numerical codes (tokens)
-/// 2. <b>Quantizing</b>: Discretizing the codes using improved residual vector quantization
-/// 3. <b>Decoding</b>: Reconstructing audio from the tokens using Snake activations
-///
-/// Key improvements over EnCodec:
-/// - Better codebook utilization (more of the codebook entries are actually used)
-/// - Snake activations for better periodic signal reconstruction (important for music)
-/// - Works with any audio type, not just speech
-///
-/// <b>Usage:</b>
-/// <code>
-/// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 1, outputSize: 64);
-/// var model = new DAC&lt;float&gt;(arch, "dac.onnx");
-/// int[,] tokens = model.Encode(audioWaveform);
-/// var reconstructed = model.Decode(tokens);
-/// </code>
+/// Training (§3.4–3.5, §4.3) minimizes 15 · the L1 distance of log-mel spectrograms over seven windows (32 … 2048 samples,
+/// 5 … 320 mel bins) + 2 · feature matching + 1 · the hinge adversarial loss + 1 · codebook + 0.25 · commitment, against
+/// five period discriminators (2, 3, 5, 7, 11) and complex STFT discriminators at windows 2048, 1024 and 512 split into five
+/// frequency bands. AdamW (1e-4, β = 0.8, 0.9) trains both, its rate decaying by 0.999996 each step.
 /// </para>
+/// <para><b>For Beginners:</b> DAC compresses any kind of audio — speech, music, sound effects — into about 86 frames of
+/// codes per second and reconstructs it with very little loss; using fewer codebooks lowers the bitrate.</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
-[ModelCategory(ModelCategory.Autoencoder)]
+[ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Compression)]
-[ModelTask(ModelTask.Restoration)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("High-Fidelity Audio Compression with Improved RVQGAN", "https://doi.org/10.48550/arXiv.2306.06546", Year = 2024, Authors = "Rithesh Kumar, Prem Seetharaman, Alejandro Luebs, Ishaan Kumar, Kundan Kumar")]
-[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, Beta1 = 0.8, Beta2 = 0.9,
-                Source = "Kumar et al. 2023, Sec. 4: the AdamW optimizer with a learning rate of 1e-4, "
-                        + "beta1 0.8 and beta2 0.9, used for both the generator and the discriminator, "
-                        + "so the single recipe covers both.")]
-public partial class DAC<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>
+[ResearchPaper("High-Fidelity Audio Compression with Improved RVQGAN", "https://arxiv.org/abs/2306.06546", Year = 2023, Authors = "Kumar et al.")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, Beta1 = 0.8, Beta2 = 0.9, WeightDecay = 0.01, DecayRate = 0.999996,
+                ReferenceBatchSize = 72,
+                Source = "Kumar et al. 2023, Sec. 4.3: AdamW with a learning rate of 1e-4, beta1 0.8 and beta2 0.9 for the generator and "
+                        + "the discriminator, decayed by 0.999996 every step, batch 72.")]
+public partial class DAC<T> : NeuralAudioCodecBase<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Measured: <c>PredictCore</c> folds <c>Layers</c> in order and <c>PostprocessOutput</c> is the
-    /// identity, so the width is the last layer's output size. <c>CreateDefaultDACLayers</c> runs the
-    /// full encode/decode round trip and ends at "output projection to mono waveform",
-    /// <c>FullyConnectedLayer&lt;T&gt;(1)</c>. The codebook width (<c>_options.CodebookDim</c>) is an
-    /// INTERIOR bottleneck, not the output - the decoder half runs after it.
-    /// </remarks>
-    protected override int OutputFeatureWidth => 1;
+    private DacEncoder<T>? _encoder;
+    private DacDecoder<T>? _decoder;
+    private FactorizedVectorQuantizerLayer<T>? _quantizer;
+    private HiFiGanDiscriminators<T>? _periods;
+    private readonly List<DacBandDiscriminator<T>> _bands = new();
+    private List<(CenteredComplexStft<T> Stft, Tensor<T> Filterbank)>? _melScales;
 
-    #region Fields
-
-    private readonly DACOptions _options;
-    public override ModelOptions GetOptions() => _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-
-    #endregion
-
-    #region IAudioCodec Properties
-
-    /// <inheritdoc />
-    public int NumQuantizers => _options.NumCodebooks;
-
-    /// <inheritdoc />
-    public int CodebookSize => _options.CodebookSize;
-
-    /// <inheritdoc />
-    public int TokenFrameRate => _options.TokenFrameRate;
-
-    #endregion
-
-    #region Constructors
-
-    /// <summary>Creates a DAC model in ONNX inference mode.</summary>
+    /// <summary>Creates a DAC that runs an exported ONNX graph.</summary>
     public DAC(NeuralNetworkArchitecture<T> architecture, string modelPath, DACOptions? options = null)
-        : base(architecture)
+        : base(architecture, modelPath, options ?? new DACOptions())
     {
-        _options = options ?? new DACOptions();
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        _options.ModelPath = modelPath;
-        OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
     }
 
-    /// <summary>Creates a DAC model in native training mode.</summary>
+    /// <summary>Creates a trainable DAC.</summary>
     public DAC(NeuralNetworkArchitecture<T> architecture, DACOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture)
+        : base(architecture, options ?? new DACOptions(), optimizer)
     {
-        _options = options ?? new DACOptions();
-        _useNativeMode = true;
-        // Official DAC 44.1 kHz training recipe:
-        // AdamW(lr=1e-4, betas=[0.8, 0.99]), ExponentialLR(gamma=0.999996)
-        // after every generator update, and generator gradient clipping at 1e3.
-        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
-            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-                this,
-                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-                {
-                    InitialLearningRate = _options.LearningRate,
-                    Beta1 = 0.8,
-                    Beta2 = 0.99,
-                    Epsilon = 1e-8,
-                    WeightDecay = 0.01,
-                    EnableGradientClipping = true,
-                    MaxGradientNorm = 1e3,
-                    LearningRateScheduler = new ExponentialLRScheduler(
-                        _options.LearningRate,
-                        gamma: 0.999996),
-                    SchedulerStepMode = SchedulerStepMode.StepPerBatch
-                }));
-        base.SampleRate = _options.SampleRate;
-        InitializeLayers();
     }
 
-    internal static async Task<DAC<T>> CreateAsync(DACOptions? options = null, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
-    {
-        options ??= new DACOptions();
-        string mp = options.ModelPath ?? string.Empty;
-        if (string.IsNullOrEmpty(mp))
-        {
-            var dl = new OnnxModelDownloader();
-            mp = await dl.DownloadAsync("dac", $"dac_{options.Variant}.onnx", progress: progress, cancellationToken);
-            options.ModelPath = mp;
-        }
-        var arch = new NeuralNetworkArchitecture<T>(inputFeatures: 1, outputSize: options.EncoderDim);
-        return new DAC<T>(arch, mp, options);
-    }
-
-    #endregion
-
-    #region IAudioCodec
+    private DACOptions PaperOptions => (DACOptions)CodecSettings;
 
     /// <inheritdoc />
-    public int[,] Encode(Tensor<T> audio)
+    public override int HopLength => PaperOptions.EncoderRates.Aggregate(1, (a, b) => a * b);
+
+    private int Latent => PaperOptions.LatentDim > 0 ? PaperOptions.LatentDim : PaperOptions.EncoderDim << PaperOptions.EncoderRates.Length;
+
+    /// <inheritdoc />
+    protected override IResidualVectorQuantizer<T> CreateCodec(List<LayerBase<T>> layers)
     {
-        ThrowIfDisposed();
-        Tensor<T> embeddings = EncodeEmbeddings(audio);
-
-        // Residual vector quantization: quantize embeddings to discrete tokens
-        int numFrames = Math.Max(1, embeddings.Length / _options.EncoderDim);
-        int nq = _options.NumCodebooks;
-        var tokens = new int[nq, numFrames];
-
-        for (int f = 0; f < numFrames; f++)
+        var o = PaperOptions;
+        _encoder = new DacEncoder<T>(Engine, o.EncoderDim, o.EncoderRates, Latent, layers);
+        _quantizer = new FactorizedVectorQuantizerLayer<T>(Latent, o.NumQuantizers, o.CodebookSize, o.CodebookDim, o.CodebookLossesOnRawVectors);
+        layers.Add(_quantizer);
+        _decoder = new DacDecoder<T>(Engine, Latent, o.DecoderDim, o.DecoderRates, layers);
+        if (o.MelWindows.Length != o.MelBins.Length) throw new ArgumentException("Every mel window needs a mel bin count.");
+        _melScales = new List<(CenteredComplexStft<T>, Tensor<T>)>();
+        for (int i = 0; i < o.MelWindows.Length; i++)
         {
-            for (int q = 0; q < nq; q++)
+            int w = o.MelWindows[i];
+            var stft = new CenteredComplexStft<T>(Engine, w, w / 4, w);
+            var basis = new TacotronSpectrogram(o.SampleRate, w, w / 4, w, o.MelBins[i], 0.0, o.SampleRate / 2.0).MelBasis;   // [mels, bins]
+            var fb = new Tensor<T>(new[] { stft.Bins, o.MelBins[i] });
+            for (int m = 0; m < o.MelBins[i]; m++)
+                for (int k = 0; k < stft.Bins; k++) fb[k, m] = NumOps.FromDouble(basis[m, k]);
+            _melScales.Add((stft, fb));
+        }
+        return _quantizer;
+    }
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<LayerBase<T>> CreateDiscriminators()
+    {
+        var o = PaperOptions;
+        var layers = new List<LayerBase<T>>();
+        _periods = new HiFiGanDiscriminators<T>(Engine, o.DiscriminatorPeriods, 0, useScaleDiscriminator: false, widthDivisor: o.DiscriminatorWidthDivisor,
+            spectralFirstScale: false, slope: 0.1, padFullPeriod: true);
+        layers.AddRange(_periods.Layers);
+        foreach (int w in o.DiscriminatorWindows)
+            _bands.Add(new DacBandDiscriminator<T>(Engine, w, o.DiscriminatorBands, o.DiscriminatorChannels, layers));
+        return layers;
+    }
+
+    /// <inheritdoc />
+    protected override Tensor<T> EncodeLatent(Tensor<T> audio) => _encoder!.Forward(audio);
+
+    /// <inheritdoc />
+    protected override Tensor<T> DecodeLatent(Tensor<T> latent) => _decoder!.Forward(latent);
+
+    /// <inheritdoc />
+    /// <remarks>Zero-padded on the right to whole hops (reference <c>preprocess</c>) and trimmed back to the input's length.</remarks>
+    protected override Tensor<T> Reconstruct(Tensor<T> audio, int quantizers)
+    {
+        int length = audio.Shape[2], hop = HopLength, padded = (length + hop - 1) / hop * hop;
+        var input = padded == length ? audio : Seanet.Pad(Engine, audio, 0, padded - length, reflect: false);
+        var output = base.Reconstruct(input, quantizers);
+        return output.Shape[2] > length ? Engine.TensorSlice(output, new[] { 0, 0, 0 }, new[] { 1, output.Shape[1], length }) : output;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Quantizer dropout (§3.3): with probability p, n_q ~ U[1, N_q]; otherwise every codebook.</remarks>
+    protected override (int Quantizers, int Bandwidth) SampleTrainingBandwidth(Random random)
+    {
+        int n = PaperOptions.NumQuantizers;
+        return (random.NextDouble() < PaperOptions.QuantizerDropout ? random.Next(1, n + 1) : n, 0);
+    }
+
+    // ---------------------------------------------------------------- losses
+
+    // The reference discriminators' input normalization: y − mean(y), then 0.8 · y / (max|y| + 1e-9).
+    private Tensor<T> Normalize(Tensor<T> audio)
+    {
+        var flat = Flat(audio);
+        var centred = Engine.TensorSubtract(flat, Engine.TensorBroadcastTo(Engine.Reshape(Mean(flat), new[] { 1 }), flat._shape));
+        var peak = Engine.ReduceMax(Engine.TensorAbs(centred), new[] { 0 }, keepDims: true);                   // [1]
+        var scaled = Engine.TensorDivide(centred, Engine.TensorBroadcastTo(Engine.TensorAddScalar(peak, NumOps.FromDouble(1e-9)), centred._shape));
+        return Engine.TensorMultiplyScalar(scaled, NumOps.FromDouble(0.8));
+    }
+
+    private List<(Tensor<T> Logits, List<Tensor<T>> Features)> Discriminate(Tensor<T> audio)
+    {
+        var x = Normalize(audio);
+        var outputs = _periods!.Forward(x);
+        foreach (var band in _bands) outputs.Add(band.Forward(x));
+        return outputs;
+    }
+
+    // Σ over windows of the mean |log10 max(mel(x), 1e-5) − log10 max(mel(x̂), 1e-5)| (magnitude STFT, centred, Hann; Slaney mel).
+    private Tensor<T> MelLoss(Tensor<T> real, Tensor<T> generated)
+    {
+        var x = Flat(real);
+        var y = Flat(generated);
+        var terms = new List<Tensor<T>>();
+        foreach (var (stft, filterbank) in _melScales!)
+        {
+            Tensor<T> target;
+            using (new NoGradScope<T>()) target = Detached(LogMel(stft, filterbank, x));
+            terms.Add(Mean(Engine.TensorAbs(Engine.TensorSubtract(target, LogMel(stft, filterbank, y)))));
+        }
+        return Sum(terms);
+    }
+
+    private Tensor<T> LogMel(CenteredComplexStft<T> stft, Tensor<T> filterbank, Tensor<T> audio)
+    {
+        var (re, im) = stft.Forward(audio);                                                       // [1, bins, frames]
+        var magnitude = Engine.TensorPow(Engine.TensorAddScalar(Engine.TensorAdd(Engine.TensorMultiply(re, re), Engine.TensorMultiply(im, im)),
+            NumOps.FromDouble(1e-12)), NumOps.FromDouble(0.5));
+        var rows = Engine.TensorTranspose(Engine.Reshape(magnitude, new[] { magnitude.Shape[1], magnitude.Shape[2] }));   // [frames, bins]
+        var mel = Engine.TensorMatMul(rows, filterbank);
+        var clamped = Engine.TensorAddScalar(Engine.ReLU(Engine.TensorAddScalar(mel, NumOps.FromDouble(-1e-5))), NumOps.FromDouble(1e-5));
+        return Engine.TensorMultiplyScalar(Engine.TensorLog(clamped), NumOps.FromDouble(1.0 / Math.Log(10.0)));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>15 · mel + 2 · feature matching + 1 · hinge adversarial + 1 · codebook + 0.25 · commitment (§3.5).</remarks>
+    protected override Tensor<T> GeneratorObjective(Tensor<T> real, Tensor<T> generated, int bandwidth)
+    {
+        var o = PaperOptions;
+        var fake = Discriminate(generated);
+        List<(Tensor<T> Logits, List<Tensor<T>> Features)> realOut;
+        using (new NoGradScope<T>()) realOut = Discriminate(real);
+        // HingeGAN (Lim and Ye 2017): the generator minimizes −D(G(z)).
+        var adversarial = Sum(fake.Select(f => Engine.TensorNegate(Mean(f.Logits))));
+        var featureTerms = new List<Tensor<T>>();
+        for (int k = 0; k < fake.Count; k++)
+            for (int l = 0; l < fake[k].Features.Count - 1; l++)
+                featureTerms.Add(Mean(Engine.TensorAbs(Engine.TensorSubtract(fake[k].Features[l], Detached(realOut[k].Features[l])))));
+        var terms = new List<Tensor<T>>
+        {
+            Engine.TensorMultiplyScalar(MelLoss(real, generated), NumOps.FromDouble(o.MelLossWeight)),
+            Engine.TensorMultiplyScalar(Sum(featureTerms), NumOps.FromDouble(o.FeatureLossWeight)),
+            Engine.TensorMultiplyScalar(adversarial, NumOps.FromDouble(o.AdversarialLossWeight)),
+        };
+        if (_quantizer!.CodebookLoss is { } codebook) terms.Add(Engine.TensorMultiplyScalar(codebook, NumOps.FromDouble(o.CodebookLossWeight)));
+        if (_quantizer.CommitmentLoss is { } commitment) terms.Add(Engine.TensorMultiplyScalar(commitment, NumOps.FromDouble(o.CommitmentLossWeight)));
+        return Sum(terms);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The hinge loss Σ_k mean(max(0, 1 − D_k(x))) + mean(max(0, 1 + D_k(x̂))).</remarks>
+    protected override Tensor<T> DiscriminatorObjective(Tensor<T> real, Tensor<T> generated, int bandwidth)
+    {
+        var r = Discriminate(real);
+        var g = Discriminate(generated);
+        return Sum(Enumerable.Range(0, r.Count).Select(k => Engine.TensorAdd(
+            Mean(Engine.ReLU(Engine.TensorAddScalar(Engine.TensorNegate(r[k].Logits), NumOps.One))),
+            Mean(Engine.ReLU(Engine.TensorAddScalar(g[k].Logits, NumOps.One))))));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The multi-scale mel distance (§4.4's "Mel distance").</remarks>
+    protected override Tensor<T> ReconstructionObjective(Tensor<T> real, Tensor<T> generated) => MelLoss(real, generated);
+
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer(string group)
+    {
+        var o = PaperOptions;
+        var scheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(o.LearningRate, step => Math.Pow(o.LearningRateDecay, step));
+        return PaperOptimizerFactory.VerifyHandBuilt(this, new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                int idx = f * _options.EncoderDim + q;
-                if (idx < embeddings.Length)
-                {
-                    double val = NumOps.ToDouble(embeddings[idx]);
-                    tokens[q, f] = Math.Max(0, Math.Min(_options.CodebookSize - 1,
-                        (int)(((val + 1.0) / 2.0) * _options.CodebookSize)));
-                }
-            }
-        }
-        return tokens;
+                InitialLearningRate = o.LearningRate,
+                Beta1 = o.Beta1,
+                Beta2 = o.Beta2,
+                WeightDecay = o.WeightDecay,
+                LearningRateScheduler = scheduler,
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+            }));
     }
 
     /// <inheritdoc />
-    public Task<int[,]> EncodeAsync(Tensor<T> audio, CancellationToken cancellationToken = default)
-    {
-        return Task.Run(() => Encode(audio), cancellationToken);
-    }
-
-    /// <inheritdoc />
-    public Tensor<T> Decode(int[,] tokens)
-    {
-        ThrowIfDisposed();
-        int nq = tokens.GetLength(0);
-        int numFrames = tokens.GetLength(1);
-
-        // Convert tokens to embeddings via codebook lookup.
-        // Each quantizer contributes a learned embedding vector per token. Without pretrained
-        // codebook weights, we approximate with evenly-spaced embeddings across [-1, 1] per
-        // quantizer, summing across quantizers as in proper RVQ.
-        var embeddings = new Tensor<T>([numFrames * _options.EncoderDim]);
-        int dimPerQuantizer = Math.Max(1, _options.EncoderDim / nq);
-        for (int f = 0; f < numFrames; f++)
-        {
-            for (int q = 0; q < nq; q++)
-            {
-                double normalizedToken = (tokens[q, f] / (double)Math.Max(1, _options.CodebookSize - 1)) * 2.0 - 1.0;
-                int startDim = q * dimPerQuantizer;
-                int endDim = Math.Min(startDim + dimPerQuantizer, _options.EncoderDim);
-                for (int d = startDim; d < endDim; d++)
-                {
-                    double existing = NumOps.ToDouble(embeddings[f * _options.EncoderDim + d]);
-                    embeddings[f * _options.EncoderDim + d] = NumOps.FromDouble(existing + normalizedToken);
-                }
-            }
-        }
-
-        return DecodeEmbeddings(embeddings);
-    }
-
-    /// <inheritdoc />
-    public Task<Tensor<T>> DecodeAsync(int[,] tokens, CancellationToken cancellationToken = default)
-    {
-        return Task.Run(() => Decode(tokens), cancellationToken);
-    }
-
-    /// <inheritdoc />
-    public Tensor<T> EncodeEmbeddings(Tensor<T> audio)
-    {
-        ThrowIfDisposed();
-        return IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(audio) : Predict(audio);
-    }
-
-    /// <inheritdoc />
-    public Tensor<T> DecodeEmbeddings(Tensor<T> embeddings)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxDecoder is not null) return OnnxDecoder.Run(embeddings);
-        if (IsOnnxMode && OnnxDecoder is null)
-            throw new InvalidOperationException("ONNX decoder model is not loaded. Provide a decoder ONNX model path.");
-        // In native mode, use the decoder layers (second half of the network)
-        var c = embeddings;
-        int decoderStart = Layers.Count / 2;
-        for (int i = decoderStart; i < Layers.Count; i++) c = Layers[i].Forward(c);
-        return c;
-    }
-
-    /// <inheritdoc />
-    public double GetBitrate(int? numQuantizers = null)
-    {
-        int nq = numQuantizers ?? _options.NumCodebooks;
-        double bitsPerToken = Math.Log(_options.CodebookSize) / Math.Log(2.0);
-        return nq * _options.TokenFrameRate * bitsPerToken / 1000.0;
-    }
-
-    #endregion
-
-    #region NeuralNetworkBase
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers);
-        else Layers.AddRange(LayerHelper<T>.CreateDefaultDACLayers(
-            encoderDim: _options.EncoderDim, encoderChannels: _options.EncoderChannels,
-            codebookDim: _options.CodebookDim, dropoutRate: _options.DropoutRate));
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
-    protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
-
     public override ModelMetadata<T> GetModelMetadata()
     {
+        var o = PaperOptions;
         var m = new ModelMetadata<T>
         {
-            Name = _useNativeMode ? "DAC-Native" : "DAC-ONNX",
-            Description = $"Descript Audio Codec {_options.Variant} at {_options.SampleRate / 1000} kHz (Kumar et al., 2024)",
-            Complexity = _options.EncoderChannels.Length
+            Name = IsOnnxMode ? "DAC-ONNX" : "DAC-Native",
+            Description = "High-Fidelity Audio Compression with Improved RVQGAN (Kumar et al., 2023)",
+            FeatureCount = o.Channels,
+            Complexity = o.NumQuantizers,
         };
-        m.AdditionalInfo["Variant"] = _options.Variant;
-        m.AdditionalInfo["NumCodebooks"] = _options.NumCodebooks.ToString();
-        m.AdditionalInfo["CodebookSize"] = _options.CodebookSize.ToString();
-        m.AdditionalInfo["TargetBitrate"] = _options.TargetBitrate.ToString();
+        m.AdditionalInfo["SampleRate"] = o.SampleRate.ToString();
+        m.AdditionalInfo["FrameRate"] = TokenFrameRate.ToString();
+        m.AdditionalInfo["Bandwidth"] = o.TargetBandwidthKbps.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return m;
     }
-
-
-
-
-
-    #endregion
-
-    #region Disposal
-
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(DAC<T>)); }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed) return;
-        if (disposing) { OnnxEncoder?.Dispose(); OnnxDecoder?.Dispose(); }
-        _disposed = true;
-        base.Dispose(disposing);
-    }
-
-    #endregion
 }

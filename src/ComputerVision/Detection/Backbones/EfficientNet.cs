@@ -1,4 +1,3 @@
-using AiDotNet.Tensors.Engines;
 using System.IO;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
@@ -36,182 +35,102 @@ namespace AiDotNet.ComputerVision.Detection.Backbones;
     Direction = TensorLayoutDirection.Input, BatchOptional = true)]
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width,
     Direction = TensorLayoutDirection.Output, BatchOptional = true)]
+[TaskVariantOf(typeof(AiDotNet.NeuralNetworks.EfficientNetNetwork<>), "detection backbone")]
 public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 {
-
-    private readonly ConvolutionalLayer<T> _stem;
-    private readonly List<MBConvBlock<T>> _blocks;
     private readonly EfficientNetVariant _variant;
-    private readonly int _stemChannels;
-    private readonly int _inChannels;
-    private readonly int[] _featureIndices;
-    /// <summary>
-    /// Activation throughout the network. Defaults to Swish per the EfficientNet
-    /// paper (mathematically identical to SiLU); callers can override.
-    /// </summary>
-    private readonly IActivationFunction<T> _activation;
+    private readonly EfficientNetTrunkConfiguration _trunkConfiguration;
+    private EfficientNetTrunk<T>? _trunk;
 
     public bool IsFrozen { get; private set; }
     public string Name => $"EfficientNet-{_variant}";
     public IReadOnlyList<int> OutputChannels { get; }
     public IReadOnlyList<int> Strides => new[] { 4, 8, 16, 32 };
 
+    /// <summary>The convolutional trunk, shared with <see cref="EfficientNetNetwork{T}"/>.</summary>
+    internal EfficientNetTrunk<T> Trunk => _trunk ?? throw new InvalidOperationException("The backbone is not initialized.");
+
     /// <summary>
-    /// Creates a new EfficientNet backbone.
+    /// Creates a new EfficientNet backbone: the classifier's trunk without its head convolution, producing the C2–C5
+    /// pyramid from the ends of stages 2, 3, 5 and 7 (strides 4, 8, 16 and 32), as EfficientDet reads it.
     /// </summary>
-    /// <param name="activation">
-    /// Activation throughout stem + MBConv + SE blocks. <c>null</c> resolves
-    /// to the EfficientNet paper default <see cref="SwishActivation{T}"/>.
-    /// </param>
-    public EfficientNet(IActivationFunction<T>? activation = null,
-        EfficientNetBackboneOptions? options = null)
+    public EfficientNet(EfficientNetBackboneOptions? options = null)
         : base(DetectionBackboneArchitecture<T>.Create((options ??= new EfficientNetBackboneOptions()).InChannels),
               new MeanSquaredErrorLoss<T>())
     {
         _variant = options.Variant;
-        _inChannels = options.InChannels;
-        _activation = activation ?? new SwishActivation<T>();
-        _blocks = new List<MBConvBlock<T>>();
-
-        var (widthMult, depthMult) = GetScalingFactors(options.Variant);
-
-        var blockConfigs = new[]
-        {
-            (1, 16, 1, 1, 3),
-            (6, 24, 2, 2, 3),
-            (6, 40, 2, 2, 5),
-            (6, 80, 3, 2, 3),
-            (6, 112, 3, 1, 5),
-            (6, 192, 4, 2, 5),
-            (6, 320, 1, 1, 3),
-        };
-
-        _stemChannels = ScaleChannels(32, widthMult);
-        OutputChannels = new[]
-        {
-            ScaleChannels(24, widthMult),
-            ScaleChannels(40, widthMult),
-            ScaleChannels(192, widthMult),
-            ScaleChannels(320, widthMult)
-        };
-
-        _stem = new ConvolutionalLayer<T>(_stemChannels, kernelSize: 3, stride: 2, padding: 1);
-
-        int currentChannels = _stemChannels;
-        var featureIndicesList = new List<int>();
-        int blockIdx = 0;
-
-        for (int stageIdx = 0; stageIdx < blockConfigs.Length; stageIdx++)
-        {
-            var (expandRatio, outChannels, numBlocks, stride, kernelSize) = blockConfigs[stageIdx];
-            int scaledChannels = ScaleChannels(outChannels, widthMult);
-            int scaledBlocks = ScaleDepth(numBlocks, depthMult);
-
-            for (int i = 0; i < scaledBlocks; i++)
-            {
-                int blockStride = i == 0 ? stride : 1;
-                int blockInChannels = i == 0 ? currentChannels : scaledChannels;
-
-                _blocks.Add(new MBConvBlock<T>(blockInChannels, scaledChannels, kernelSize, blockStride, expandRatio, useSE: true, activation: _activation));
-                blockIdx++;
-            }
-            currentChannels = scaledChannels;
-
-            if (stageIdx == 1 || stageIdx == 2 || stageIdx == 5 || stageIdx == 6)
-                featureIndicesList.Add(blockIdx - 1);
-        }
-
-        _featureIndices = featureIndicesList.ToArray();
+        var (width, depth) = EfficientNetTrunkConfiguration.MultipliersOf(options.Variant);
+        _trunkConfiguration = new EfficientNetTrunkConfiguration(width, depth, options.InChannels, IncludeHead: false);
+        OutputChannels = _trunkConfiguration.PyramidChannels;
+        InitializeLayers();
+        // A backbone starts in inference mode: its parent detector switches it to training when it trains, and the
+        // base default (training) would otherwise normalize every detection with the batch's own statistics.
+        SetTrainingMode(false);
     }
 
-    private static (double width, double depth) GetScalingFactors(EfficientNetVariant variant) => variant switch
+    private static Tensor<T> Batched(Tensor<T> input)
     {
-        EfficientNetVariant.B0 => (1.0, 1.0),
-        EfficientNetVariant.B1 => (1.0, 1.1),
-        EfficientNetVariant.B2 => (1.1, 1.2),
-        EfficientNetVariant.B3 => (1.2, 1.4),
-        EfficientNetVariant.B4 => (1.4, 1.8),
-        EfficientNetVariant.B5 => (1.6, 2.2),
-        EfficientNetVariant.B6 => (1.8, 2.6),
-        EfficientNetVariant.B7 => (2.0, 3.1),
-        _ => (1.0, 1.0)
-    };
-
-    private static int ScaleChannels(int channels, double multiplier)
-    {
-        int scaled = (int)(channels * multiplier);
-        return Math.Max(8, ((scaled + 4) / 8) * 8);
+        if (input.Shape.Length == 3)
+            return input.Reshape(new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
+        if (input.Shape.Length != 4)
+            throw new ArgumentException(
+                $"EfficientNet expects a [C,H,W] or [N,C,H,W] image tensor, but got rank-{input.Shape.Length}.", nameof(input));
+        return input;
     }
 
-    private static int ScaleDepth(int depth, double multiplier) => (int)Math.Ceiling(depth * multiplier);
+    /// <summary>Draws the stochastic-depth decisions while a parent detector trains.</summary>
+    private readonly Random _trainingRandom = LayerInitializationSeedScope.NextRandom();
 
     public List<Tensor<T>> ExtractFeatures(Tensor<T> input)
     {
-        var features = new List<Tensor<T>>();
-        var x = _stem.Forward(input);
-        x = _activation.Activate(x);
-        for (int i = 0; i < _blocks.Count; i++)
-        {
-            x = _blocks[i].Forward(x);
-            if (_featureIndices.Contains(i)) features.Add(x);
-        }
-        return features;
+        var stages = Trunk.Forward(Batched(input), IsTrainingMode, _trainingRandom);
+        return EfficientNetTrunkConfiguration.PyramidStages.Select(i => stages[i]).ToList();
     }
 
     public IReadOnlyList<Tensor<T>> GetFeatureMaps(Tensor<T> input) => ExtractFeatures(input);
 
-    // ParameterCount is NOT overridden. It folds the same enumeration GetParameters
-    // does -- Layers, then GetExtraTrainableLayers() -- so the two cannot disagree. The
-    // override that was here summed the stem and blocks through GetParameterCount(),
-    // a SEPARATE source, and once the vector started folding the base enumeration the
-    // two drifted apart immediately.
+    /// <summary>Loads a timm <c>tf_efficientnet</c> state dict (its head and classifier entries are not read).</summary>
+    internal void LoadTorchWeights(Func<string, int[], double[]> read) => Trunk.LoadTorchWeights(read);
 
     public void WriteParameters(BinaryWriter writer)
     {
         writer.Write((int)_variant);
-        writer.Write(_blocks.Count);
-        writer.Write(_featureIndices.Length);
-        foreach (int idx in _featureIndices) writer.Write(idx);
-        BackboneSerialization.WriteLayerParameters(writer, _stem);
-        foreach (var block in _blocks) block.WriteParameters(writer);
+        writer.Write(Layers.Count);
+        foreach (var layer in Layers) BackboneSerialization.WriteLayerParameters(writer, (LayerBase<T>)layer);
     }
 
     public void ReadParameters(BinaryReader reader)
     {
         var variant = (EfficientNetVariant)reader.ReadInt32();
-        int blockCount = reader.ReadInt32();
-        int featureIndexCount = reader.ReadInt32();
-        var featureIndices = new int[featureIndexCount];
-        for (int i = 0; i < featureIndexCount; i++) featureIndices[i] = reader.ReadInt32();
-
+        int layerCount = reader.ReadInt32();
         if (variant != _variant)
             throw new InvalidOperationException($"EfficientNet variant mismatch: expected {_variant}, got {variant}.");
-        if (blockCount != _blocks.Count)
-            throw new InvalidOperationException($"EfficientNet block count mismatch: expected {_blocks.Count}, got {blockCount}.");
-        if (featureIndexCount != _featureIndices.Length)
-            throw new InvalidOperationException($"EfficientNet feature index count mismatch: expected {_featureIndices.Length}, got {featureIndexCount}.");
-        for (int i = 0; i < featureIndexCount; i++)
-            if (featureIndices[i] != _featureIndices[i])
-                throw new InvalidOperationException($"EfficientNet feature index mismatch at position {i}: expected {_featureIndices[i]}, got {featureIndices[i]}.");
-
-        BackboneSerialization.ReadLayerParameters(reader, _stem);
-        foreach (var block in _blocks) block.ReadParameters(reader);
+        if (layerCount != Layers.Count)
+            throw new InvalidOperationException($"EfficientNet layer count mismatch: expected {Layers.Count}, got {layerCount}.");
+        foreach (var layer in Layers) BackboneSerialization.ReadLayerParameters(reader, (LayerBase<T>)layer);
     }
 
     public virtual void Freeze() => IsFrozen = true;
     public virtual void Unfreeze() => IsFrozen = false;
     public (int Height, int Width) GetExpectedInputSize() => (640, 640);
 
-    protected override Tensor<T> PredictCore(Tensor<T> input)
+    protected override Tensor<T> PredictCore(Tensor<T> input) => ExtractFeatures(input)[3];
+
+    protected override void InitializeLayers()
     {
-        var features = ExtractFeatures(input);
-        if (features.Count == 0)
-            throw new InvalidOperationException(
-                $"{GetType().Name}.ExtractFeatures returned no feature maps.");
-        return features[features.Count - 1];
+        // The base constructor calls this before the configuration is set; the constructor calls it again.
+        if (_trunkConfiguration is null || _trunk is not null) return;
+        var layers = new List<LayerBase<T>>();
+        _trunk = new EfficientNetTrunk<T>(Engine, layers, _trunkConfiguration);
+        _trunk.InitializeLikeReference(LayerInitializationSeedScope.NextRandom());
+        Layers.AddRange(layers);
     }
 
-    protected override void InitializeLayers() { }
+    /// <inheritdoc />
+    /// <remarks>Every layer is sized at construction and <see cref="NeuralNetworkBase{T}.Layers"/> is not a chain.</remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+    }
 
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
     {
@@ -226,229 +145,9 @@ public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<
 
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput) =>
         throw new NotSupportedException(
-            $"{GetType().Name}: detection backbones train as part of a parent detector.");
-
-
-
+            $"{GetType().Name}: detection backbones train as part of a parent detector. Train the parent detection model instead.");
 
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
         throw new NotSupportedException(
             $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on backbones.");
-
-    // ApplySwish moved to BackboneOps<T>.ApplySwish — was duplicated 3 times in this file.
-}
-
-/// <summary>
-/// EfficientNet variant enumeration.
-/// </summary>
-public enum EfficientNetVariant
-{
-    /// <summary>EfficientNet-B0: baseline model.</summary>
-    B0,
-    /// <summary>EfficientNet-B1: 1.1x depth scaling.</summary>
-    B1,
-    /// <summary>EfficientNet-B2: 1.1x width, 1.2x depth.</summary>
-    B2,
-    /// <summary>EfficientNet-B3: 1.2x width, 1.4x depth.</summary>
-    B3,
-    /// <summary>EfficientNet-B4: 1.4x width, 1.8x depth.</summary>
-    B4,
-    /// <summary>EfficientNet-B5: 1.6x width, 2.2x depth.</summary>
-    B5,
-    /// <summary>EfficientNet-B6: 1.8x width, 2.6x depth.</summary>
-    B6,
-    /// <summary>EfficientNet-B7: 2.0x width, 3.1x depth.</summary>
-    B7
-}
-
-/// <summary>
-/// Mobile Inverted Bottleneck Convolution block (MBConv).
-/// </summary>
-internal class MBConvBlock<T>
-{
-
-
-    /// <summary>The trainable layers this type owns, in forward order.</summary>
-    internal IEnumerable<LayerBase<T>> EnumerateLayers()
-    {
-        if (_expand is not null) yield return _expand;
-        yield return _depthwise;
-        yield return _project;
-    }
-
-    private readonly ConvolutionalLayer<T>? _expand;
-    private readonly ConvolutionalLayer<T> _depthwise;
-    private readonly SqueezeExcitation<T>? _se;
-    private readonly ConvolutionalLayer<T> _project;
-    private readonly bool _useResidual;
-    private readonly int _inChannels;
-    private readonly int _outChannels;
-    private readonly int _expandRatio;
-
-    private readonly IActivationFunction<T> _activation;
-
-    public MBConvBlock(int inChannels, int outChannels, int kernelSize, int stride, int expandRatio, bool useSE, IActivationFunction<T> activation)
-    {
-        _inChannels = inChannels;
-        _outChannels = outChannels;
-        _expandRatio = expandRatio;
-        _useResidual = inChannels == outChannels && stride == 1;
-        _activation = activation;
-
-        int hiddenDim = inChannels * expandRatio;
-
-        if (expandRatio != 1)
-            _expand = new ConvolutionalLayer<T>(hiddenDim, kernelSize: 1, stride: 1, padding: 0);
-
-        int padding = (kernelSize - 1) / 2;
-
-        // groups: hiddenDim. The field is named _depthwise and it was built dense, which is the
-        // MBConv block's entire economy thrown away: Tan and Le 2019 ("EfficientNet", section 3)
-        // inherit MobileNetV2's inverted residual, whose middle convolution is DEPTHWISE so the
-        // expanded hiddenDim channels cost hiddenDim*k*k weights rather than hiddenDim^2*k*k.
-        //
-        // Measured on B0, whose published size is 5.3M parameters: the backbone reported
-        // 160,765,424 -- thirty times too large -- because every MBConv block paid the square.
-        // ConvolutionalLayer has supported groups since #639; this call simply never passed it.
-        _depthwise = new ConvolutionalLayer<T>(
-            hiddenDim, kernelSize: kernelSize, stride: stride, padding: padding, groups: hiddenDim);
-
-        if (useSE)
-        {
-            int seChannels = Math.Max(1, inChannels / 4);
-            _se = new SqueezeExcitation<T>(hiddenDim, seChannels, activation);
-        }
-
-        _project = new ConvolutionalLayer<T>(outChannels, kernelSize: 1, stride: 1, padding: 0);
-    }
-
-    public Tensor<T> Forward(Tensor<T> input)
-    {
-        var x = input;
-
-        if (_expand is not null)
-        {
-            x = _expand.Forward(x);
-            x = _activation.Activate(x);
-        }
-
-        x = _depthwise.Forward(x);
-        x = _activation.Activate(x);
-
-        if (_se is not null) x = _se.Forward(x);
-
-        x = _project.Forward(x);
-
-        if (_useResidual) x = BackboneOps<T>.AddResidual(x, input);
-
-        return x;
-    }
-
-    public long GetParameterCount()
-    {
-        long count = (_expand?.ParameterCount ?? 0) + _depthwise.ParameterCount + _project.ParameterCount;
-        if (_se is not null) count += _se.GetParameterCount();
-        return count;
-    }
-
-    public void WriteParameters(BinaryWriter writer)
-    {
-        writer.Write(_expand is not null);
-        writer.Write(_se is not null);
-        if (_expand is not null) BackboneSerialization.WriteLayerParameters(writer, _expand);
-        BackboneSerialization.WriteLayerParameters(writer, _depthwise);
-        if (_se is not null) _se.WriteParameters(writer);
-        BackboneSerialization.WriteLayerParameters(writer, _project);
-    }
-
-    public void ReadParameters(BinaryReader reader)
-    {
-        bool hasExpand = reader.ReadBoolean();
-        bool hasSE = reader.ReadBoolean();
-        if (hasExpand != (_expand is not null))
-            throw new InvalidOperationException("MBConvBlock expand configuration mismatch.");
-        if (hasSE != (_se is not null))
-            throw new InvalidOperationException("MBConvBlock SE configuration mismatch.");
-        if (_expand is not null) BackboneSerialization.ReadLayerParameters(reader, _expand);
-        BackboneSerialization.ReadLayerParameters(reader, _depthwise);
-        if (_se is not null) _se.ReadParameters(reader);
-        BackboneSerialization.ReadLayerParameters(reader, _project);
-    }
-
-    // ApplySwish moved to BackboneOps<T>.ApplySwish — was duplicated 3 times in this file.
-}
-
-/// <summary>
-/// Squeeze-and-Excitation block for channel attention.
-/// </summary>
-internal class SqueezeExcitation<T>
-{
-    private readonly INumericOperations<T> _numOps;
-    private readonly DenseLayer<T> _fc1;
-    private readonly DenseLayer<T> _fc2;
-    private readonly IActivationFunction<T> _activation;
-
-    public SqueezeExcitation(int channels, int reducedChannels, IActivationFunction<T> activation)
-    {
-        _numOps = MathHelper.GetNumericOperations<T>();
-        _activation = activation;
-        _fc1 = new DenseLayer<T>(reducedChannels, (Interfaces.IActivationFunction<T>?)null);
-        _fc2 = new DenseLayer<T>(channels, (Interfaces.IActivationFunction<T>?)null);
-    }
-
-    public Tensor<T> Forward(Tensor<T> input)
-    {
-        int batch = input.Shape[0];
-        int channels = input.Shape[1];
-        int height = input.Shape[2];
-        int width = input.Shape[3];
-
-        var engine = AiDotNetEngine.Current;
-
-        // Global average pool -> [batch, channels]. Engine ops throughout: the pooled loop and the
-        // per-channel rescale loop below each severed the tape, so neither the SE block nor anything
-        // upstream of it in the MBConv block trained.
-        var squeezed = engine.ReduceMean(input, new[] { 2, 3 }, false);
-
-        var excited = _fc1.Forward(squeezed);
-        excited = _activation.Activate(excited);
-        excited = _fc2.Forward(excited);
-        // Per EfficientNet paper, the SE channel-attention gate ALWAYS uses
-        // sigmoid (not the configurable backbone activation) — the gate must
-        // be in [0,1] to act as a multiplicative attention mask.
-        excited = ApplySigmoid(excited);
-
-        // Per-channel gate: broadcast [batch, channels] over the spatial axes.
-        var gate = engine.TensorBroadcastTo(
-            engine.Reshape(excited, new[] { batch, channels, 1, 1 }),
-            new[] { batch, channels, height, width });
-        return engine.TensorMultiply(input, gate);
-    }
-
-    public long GetParameterCount() => _fc1.ParameterCount + _fc2.ParameterCount;
-
-    public void WriteParameters(BinaryWriter writer)
-    {
-        BackboneSerialization.WriteLayerParameters(writer, _fc1);
-        BackboneSerialization.WriteLayerParameters(writer, _fc2);
-    }
-
-    public void ReadParameters(BinaryReader reader)
-    {
-        BackboneSerialization.ReadLayerParameters(reader, _fc1);
-        BackboneSerialization.ReadLayerParameters(reader, _fc2);
-    }
-
-    // ApplySwish moved to BackboneOps<T>.ApplySwish — was duplicated 3 times in this file.
-
-    /// <summary>
-    /// Elementwise Sigmoid, delegated to the engine.
-    /// </summary>
-    /// <remarks>
-    /// This was a scalar loop that read each element out to <c>double</c> and wrote a fresh
-    /// tensor. Arithmetically identical, but it severed the autodiff tape: the gradient chain
-    /// stopped here, so every trainable layer UPSTREAM of this call received no gradient and
-    /// silently never trained. The engine op records itself on the tape.
-    /// </remarks>
-    private Tensor<T> ApplySigmoid(Tensor<T> x) => AiDotNetEngine.Current.Sigmoid(x);
 }

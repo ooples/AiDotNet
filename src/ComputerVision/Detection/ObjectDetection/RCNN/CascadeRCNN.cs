@@ -124,6 +124,11 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
         };
     }
 
+    /// <summary>Output 2, the boxes the last stage received, is data: training cannot change it.</summary>
+    protected override IReadOnlyCollection<int> DataOutputIndices => ReceivedBoxesOutput;
+
+    private static readonly int[] ReceivedBoxesOutput = { 2 };
+
     /// <inheritdoc/>
     protected override List<Tensor<T>> Forward(Tensor<T> input)
     {

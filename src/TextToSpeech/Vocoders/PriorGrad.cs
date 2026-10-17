@@ -1,36 +1,31 @@
-using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
-using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
 
-/// <summary>PriorGrad: adaptive diffusion vocoder that uses data-dependent prior (mel-conditioned noise) instead of isotropic Gaussian.</summary>
+/// <summary>
+/// PriorGrad vocoder: DiffWave whose diffusion prior is a data-dependent diagonal Gaussian N(0, Σ_c) with the
+/// standard deviation of each frame taken from the mel spectrogram's normalized frame energy.
+/// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "PriorGrad: Improving Conditional Denoising Diffusion Models with Data-Dependent Adaptive Prior" (Lee et al., 2022)</item></list></para><para><b>For Beginners:</b> PriorGrad: adaptive diffusion vocoder that uses data-dependent prior (mel-conditioned noise) instead of isotropic Gaussian.. This model converts text input into speech audio output.</para></remarks>
-/// <example>
-/// <code>
-/// // Create a PriorGrad vocoder with data-dependent adaptive prior
-/// // using mel-conditioned noise instead of isotropic Gaussian
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new PriorGrad&lt;double&gt;(architecture, "priorgrad.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new PriorGrad&lt;double&gt;(architecture, new PriorGradOptions());
-/// </code>
-/// </example>
+/// <remarks>
+/// <para><b>References:</b> "PriorGrad: Improving Conditional Denoising Diffusion Models with Data-Dependent Adaptive
+/// Prior" (Lee et al., ICLR 2022) and microsoft/NeuralSpeech PriorGrad-vocoder for what the paper leaves unstated.</para>
+/// <para>
+/// Training (Algorithm 1): ε ~ N(0, Σ), t uniform, <c>x_t = √ᾱ_t x₀ + √(1 − ᾱ_t) ε</c> and the Mahalanobis loss
+/// <c>‖ε − ε_θ(x_t, c, t)‖²_{Σ⁻¹}</c>. Sampling (Algorithm 2): x_T ~ N(0, Σ) and every step's noise z ~ N(0, Σ). Σ is
+/// the frame energy √Σ_bands exp(mel) normalized to (0, 1], clipped below at 0.1 and repeated over each frame's hop
+/// (§4). The network is DiffWave's, unchanged.
+/// </para>
+/// <para><b>For Beginners:</b> DiffWave starts every synthesis from the same plain noise; PriorGrad starts from noise
+/// that is already loud where the speech is loud and quiet where it is quiet, so there is less left to learn.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]
@@ -42,256 +37,183 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2022,
     Authors = "Lee et al."
 )]
-[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4,
-                Source = "Lee et al. 2022, Sec. 4: following the publicly available implementation, a "
-                        + "2.62M parameter model with an Adam optimizer and a learning rate of 2e-4 over "
-                        + "a total of 1M iterations.")]
-public partial class PriorGrad<T> : VocoderBase<T>
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4, ReferenceBatchSize = 16,
+                Source = "Lee et al. 2022, Sec. 4: Adam at 2e-4 for 1M iterations; batch 16 from the PriorGrad-vocoder params.py.")]
+public partial class PriorGrad<T> : DiffusionVocoderBase<T>
 {
-    private readonly PriorGradOptions _options;
+    private DiffWaveNetwork<T>? _network;
+    private DifferentiableMel<T>? _features;
 
-    public override ModelOptions GetOptions() => _options;
-
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _preserveSuppliedOptimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-
-    public PriorGrad(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        PriorGradOptions? options = null
-    )
-        : base(architecture, maxGradNorm: options?.MaxGradientNorm ?? 0.0)
+    /// <summary>Creates a PriorGrad that runs an exported ONNX graph.</summary>
+    public PriorGrad(NeuralNetworkArchitecture<T> architecture, string modelPath, PriorGradOptions? options = null)
+        : base(architecture, modelPath, options ?? new PriorGradOptions(), options?.SamplingSeed ?? 0)
     {
-        _options = options ?? new PriorGradOptions();
-        _useNativeMode = false;
-        _preserveSuppliedOptimizer = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
     }
 
-    public PriorGrad(
-        NeuralNetworkArchitecture<T> architecture,
-        PriorGradOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture, maxGradNorm: options?.MaxGradientNorm ?? 0.0)
+    /// <summary>Creates a trainable PriorGrad.</summary>
+    public PriorGrad(NeuralNetworkArchitecture<T> architecture, PriorGradOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture, options ?? new PriorGradOptions(), optimizer, options?.SamplingSeed ?? 0)
     {
-        _options = options ?? new PriorGradOptions();
-        _useNativeMode = true;
-        _preserveSuppliedOptimizer = optimizer is not null;
-        _optimizer = optimizer ?? CreateDefaultOptimizer();
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        InitializeLayers();
     }
 
-    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase - see BigVGAN for why
-    // these three restated what the base already derives from the same _options fields.
+    private PriorGradOptions PaperOptions => (PriorGradOptions)VocoderSettings;
 
-    /// <summary>
-    /// Converts mel to waveform using PriorGrad's data-dependent adaptive prior diffusion.
-    /// Per the paper (Lee et al., 2022): Instead of N(0,I) prior, uses N(0, sigma^2(mel)) where sigma depends on mel energy. This focuses diffusion on harder-to-model regions, enabling 6-step generation matching 50-step DiffWave.
-    /// </summary>
-    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    /// <inheritdoc />
+    public override int UpsampleFactor => PaperOptions.UpsampleStrides.Aggregate(1, (a, b) => a * b);
+
+    /// <inheritdoc />
+    protected override int SegmentSize => PaperOptions.CropFrames * UpsampleFactor;
+
+    /// <inheritdoc />
+    protected override double[] TrainingBetas => PaperOptions.NoiseSchedule;
+
+    /// <inheritdoc />
+    protected override double[]? InferenceBetas => PaperOptions.UseFastSampling ? PaperOptions.InferenceNoiseSchedule : null;
+
+    /// <inheritdoc />
+    protected override bool ClampEachStep => true;
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<LayerBase<T>> CreateNetwork()
     {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(melSpectrogram);
-        int melLen = melSpectrogram.Length;
-        int waveLen = melLen * _options.HopSize;
-        double[] x = new double[waveLen];
-        // Data-dependent prior: noise variance proportional to mel energy
-        for (int i = 0; i < waveLen; i++)
-        {
-            int melIdx = Math.Min(i / _options.HopSize, melLen - 1);
-            double melEnergy = Math.Abs(NumOps.ToDouble(melSpectrogram[melIdx]));
-            double sigma = 0.3 + melEnergy * 0.5;
-            x[i] = Math.Sin(i * 0.15 + melIdx) * sigma;
-        }
-        int steps = _options.NumDiffusionSteps;
-        for (int t = steps; t > 0; t--)
-        {
-            double alpha = 1.0 - (double)t / steps;
-            for (int s = 0; s < waveLen; s++)
-            {
-                int melIdx = Math.Min(s / _options.HopSize, melLen - 1);
-                double melCond = NumOps.ToDouble(melSpectrogram[melIdx]);
-                double score = -(x[s] - melCond * 0.8) * (1 - alpha);
-                x[s] = x[s] + score * (1.0 / steps);
-            }
-        }
-        var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-            waveform[i] = NumOps.FromDouble(Math.Tanh(x[i]));
-        return waveform;
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        var t = new Tensor<T>([1]);
-        t[0] = NumOps.FromDouble(0.0);
-        return t;
-    }
-
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultDiffusionVocoderLayers(
-                    _options.MelChannels,
-                    _options.HiddenDim,
-                    _options.NumResBlocks,
-                    _options.NumHeads,
-                    _options.DropoutRate
-                )
-            );
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        // No-grad scope so Predict doesn't pollute any active GradientTape
-        // (e.g. when the caller invokes Predict mid-training to monitor
-        // loss). Mirrors NeuralNetworkBase.Predict's NoGradScope guard.
-        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        // Inference mode so Dropout / GaussianNoise / etc. behave deterministically.
-        // Restore prior mode so a Predict-during-training-loop call doesn't permanently
-        // flip the network out of training mode.
-        // Concurrency note: this state toggle is intentionally NOT
-        // thread-safe — callers running parallel Predict on a single
-        // model instance must serialize externally OR explicitly call
-        // SetTrainingMode(false) once before the parallel batch. Same
-        // contract as NeuralNetworkBase.Predict's mode flip; matches
-        // PyTorch nn.Module's non-thread-safe `.eval()` convention.
-        bool wasTraining = IsTrainingMode;
-        if (wasTraining)
-            SetTrainingMode(false);
-        try
-        {
-            var c = input;
-            foreach (var l in Layers)
-                c = l.Forward(c);
-            return c;
-        }
-        finally
-        {
-            if (wasTraining)
-                SetTrainingMode(true);
-        }
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        var o = PaperOptions;
+        if (UpsampleFactor != o.HopSize)
+            throw new ArgumentException($"The upsampler's strides ({string.Join("x", o.UpsampleStrides)}) must multiply to the hop ({o.HopSize}).");
+        _network = new DiffWaveNetwork<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7),
+            o.MelChannels, o.ResChannels, o.NumResLayers, o.DilationCycle, o.NoiseSchedule.Length, o.UpsampleStrides);
+        _features = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels,
+            o.MelMinFrequency, o.MelMaxFrequency);
+        return _network.Layers;
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
-    public override ModelMetadata<T> GetModelMetadata()
+    protected override Tensor<T> Denoise(Tensor<T> noisy, double level, Tensor<T> mel) => _network!.Forward(noisy, level, mel);
+
+    /// <inheritdoc />
+    /// <remarks>The natural-log mel spectrogram <c>ln(max(mel, 1e-5))</c> of the HiFi-GAN pipeline.</remarks>
+    protected override Tensor<T> ComputeInputMel(Tensor<T> audio)
     {
-        return new ModelMetadata<T>
-        {
-            Name = _useNativeMode ? "PriorGrad-Native" : "PriorGrad-ONNX",
-            Description = "PriorGrad: Data-Dependent Adaptive Prior Diffusion (Lee et al., 2022)",
-            FeatureCount = _options.MelChannels,
-            AdditionalInfo = new Dictionary<string, object>
-            {
-                ["MelChannels"] = _options.MelChannels,
-                ["Mode"] = _useNativeMode ? "Native" : "ONNX",
-            },
-        };
+        var rows = _features!.Forward(audio);
+        return Engine.Reshape(Engine.TensorTranspose(rows), new[] { 1, PaperOptions.MelChannels, rows.Shape[0] });
     }
 
-
-
-
-
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+    /// <summary>The prior's standard deviation per sample <c>[1, 1, samples]</c> for a mel spectrogram
+    /// <c>[1, mel, frames]</c>: each frame's energy normalized to (0, 1], clipped below at the minimum standard deviation,
+    /// repeated over the hop.</summary>
+    public Tensor<T> PriorStd(Tensor<T> mel)
     {
-        bool clipGradients = _options.MaxGradientNorm > 0.0;
+        mel = MelInput(mel);
+        return EnergyPrior.Std<T>(EnergyPrior.FrameEnergies(mel, 0, PaperOptions.MelChannels), PaperOptions, UpsampleFactor);
+    }
 
-        // The official PriorGrad recipe uses Adam at 2e-4 with no weight decay. A non-zero
-        // user-supplied WeightDecay opts into AdamW while preserving every public setting.
-        if (_options.WeightDecay > 0.0)
-        {
-            return PaperOptimizerFactory.VerifyHandBuilt(this,
-            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-                    this,
-                    new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-                    {
-                        BatchSize = _options.OptimizerBatchSize,
-                        InitialLearningRate = _options.LearningRate,
-                        Beta1 = _options.OptimizerBeta1,
-                        Beta2 = _options.OptimizerBeta2,
-                        Epsilon = _options.OptimizerEpsilon,
-                        WeightDecay = _options.WeightDecay,
-                        UseAdaptiveBetas = false,
-                        UseAMSGrad = false,
-                        EnableGradientClipping = clipGradients,
-                        MaxGradientNorm = _options.MaxGradientNorm,
-                    }));
-        }
+    /// <summary>Sets <see cref="PriorGradOptions.EnergyMin"/> (and, with <paramref name="useDataMaximum"/>,
+    /// <see cref="PriorGradOptions.EnergyMax"/>) to the extremes of the recordings' frame energies, as the reference
+    /// computes them over the training set.</summary>
+    /// <param name="recordings">The training waveforms.</param>
+    /// <param name="useDataMaximum">Whether the maximum also comes from the data rather than the override of 4.</param>
+    public void FitEnergyStatistics(IEnumerable<Tensor<T>> recordings, bool useDataMaximum = false)
+    {
+        if (recordings is null) throw new ArgumentNullException(nameof(recordings));
+        EnergyPrior.Fit(recordings.Select(ComputeMel), PaperOptions, useDataMaximum);
+    }
 
-        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
+    /// <inheritdoc />
+    /// <remarks>ε ~ N(0, Σ_c): standard-normal noise scaled by the prior's standard deviation.</remarks>
+    protected override Tensor<T> PriorNoise(Tensor<T> mel, int samples, Random random)
+        => Engine.TensorMultiply(Gaussian(new[] { 1, 1, samples }, random), PriorStd(mel));
+
+    /// <inheritdoc />
+    /// <remarks>The Mahalanobis distance under the diagonal prior, <c>mean(((ε − ε_θ) / σ)²)</c>.</remarks>
+    protected override Tensor<T> NoiseLoss(Tensor<T> noise, Tensor<T> predicted, Tensor<T> mel)
+    {
+        Tensor<T> inverse;
+        using (new NoGradScope<T>())
+            inverse = Engine.TensorReciprocal(PriorStd(mel));
+        var d = Engine.TensorMultiply(Engine.TensorSubtract(noise, predicted), inverse);
+        return Mean(Engine.TensorMultiply(d, d));
+    }
+
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
+        => PaperOptimizerFactory.VerifyHandBuilt(this, new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                BatchSize = _options.OptimizerBatchSize,
-                InitialLearningRate = _options.LearningRate,
-                Beta1 = _options.OptimizerBeta1,
-                Beta2 = _options.OptimizerBeta2,
-                Epsilon = _options.OptimizerEpsilon,
-                UseAdaptiveLearningRate = false,
+                InitialLearningRate = PaperOptions.LearningRate,
                 UseAdaptiveBetas = false,
-                UseAMSGrad = false,
-                EnableGradientClipping = clipGradients,
-                MaxGradientNorm = _options.MaxGradientNorm,
-            });
+            }));
+
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
+    {
+        var o = PaperOptions;
+        var m = new ModelMetadata<T>
+        {
+            Name = IsOnnxMode ? "PriorGrad-ONNX" : "PriorGrad-Native",
+            Description = "PriorGrad: Improving Conditional Denoising Diffusion Models with Data-Dependent Adaptive Prior (Lee et al., 2022)",
+            FeatureCount = o.MelChannels,
+            Complexity = o.NumResLayers,
+        };
+        m.AdditionalInfo["Architecture"] = "PriorGrad";
+        m.AdditionalInfo["SampleRate"] = o.SampleRate.ToString();
+        return m;
+    }
+}
+
+/// <summary>
+/// PriorGrad's data-dependent prior (Lee et al. 2022, §4; reference <c>dataset.py</c>), shared with FreGrad: the frame
+/// energy √Σ exp(mel) over a range of mel bands, normalized by the training-set extremes to (0, 1], clipped below at the
+/// minimum standard deviation and repeated over the frame's samples.
+/// </summary>
+internal static class EnergyPrior
+{
+    /// <summary>The frame energies √Σ_{bands from..to} exp(mel) of a mel spectrogram <c>[1, mel, frames]</c>.</summary>
+    public static double[] FrameEnergies<T>(Tensor<T> mel, int fromBand, int toBand)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        int frames = mel.Shape[2];
+        var energy = new double[frames];
+        for (int f = 0; f < frames; f++)
+        {
+            double sum = 0;
+            for (int m = fromBand; m < toBand; m++) sum += Math.Exp(ops.ToDouble(mel[0, m, f]));
+            energy[f] = Math.Sqrt(sum);
+        }
+        return energy;
     }
 
-    private void ThrowIfDisposed()
+    /// <summary>The standard deviation <c>[1, 1, frames · repeat]</c> of the frame energies: (min(e, max) − min) /
+    /// (max − min), at least the minimum standard deviation, each repeated <paramref name="repeat"/> times. Without a
+    /// fitted minimum it is the energy of silence over every band, √(bands · 1e-5).</summary>
+    public static Tensor<T> Std<T>(double[] energy, PriorGradOptions o, int repeat)
     {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(PriorGrad<T>));
+        var ops = MathHelper.GetNumericOperations<T>();
+        double min = o.EnergyMin ?? Math.Sqrt(o.MelChannels * 1e-5), max = o.EnergyMax;
+        if (!(max > min))
+            throw new InvalidOperationException($"The energy range is empty (min {min}, max {max}).");
+        var std = new Tensor<T>(new[] { 1, 1, energy.Length * repeat });
+        for (int f = 0; f < energy.Length; f++)
+        {
+            double s = Math.Max((Math.Min(energy[f], max) - min) / (max - min), o.MinStd);
+            for (int i = 0; i < repeat; i++) std[0, 0, f * repeat + i] = ops.FromDouble(s);
+        }
+        return std;
     }
 
-    protected override void Dispose(bool disposing)
+    /// <summary>Sets the options' energy minimum (and, with <paramref name="useDataMaximum"/>, maximum) to the extremes
+    /// of the full-band frame energies of <paramref name="mels"/>.</summary>
+    public static void Fit<T>(IEnumerable<Tensor<T>> mels, PriorGradOptions o, bool useDataMaximum)
     {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
+        double min = double.PositiveInfinity, max = double.NegativeInfinity;
+        foreach (var mel in mels)
+            foreach (var e in FrameEnergies(mel, 0, mel.Shape[1]))
+            {
+                min = Math.Min(min, e);
+                max = Math.Max(max, e);
+            }
+        if (double.IsInfinity(min))
+            throw new ArgumentException("No frames to measure.", nameof(mels));
+        o.EnergyMin = min;
+        if (useDataMaximum) o.EnergyMax = max;
     }
 }

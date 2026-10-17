@@ -1,36 +1,31 @@
-using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
-using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
 
-/// <summary>iSTFTNet: vocoder that predicts STFT magnitude and phase, then uses inverse STFT for waveform reconstruction.</summary>
+/// <summary>
+/// iSTFTNet: a fast, lightweight mel-spectrogram vocoder — HiFi-GAN with its output-side upsampling replaced by an
+/// inverse STFT of a small magnitude and phase spectrogram it predicts.
+/// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "iSTFTNet: Fast and Lightweight Mel-Spectrogram Vocoder Incorporating Inverse Short-Time Fourier Transform" (Kaneko et al., 2022)</item></list></para><para><b>For Beginners:</b> iSTFTNet: vocoder that predicts STFT magnitude and phase, then uses inverse STFT for waveform reconstruction.. This model converts text input into speech audio output.</para></remarks>
-/// <example>
-/// <code>
-/// // Create an iSTFTNet vocoder for fast mel-to-waveform conversion
-/// // using inverse short-time Fourier transform for reconstruction
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new ISTFTNet&lt;double&gt;(architecture, "istftnet.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new ISTFTNet&lt;double&gt;(architecture, new ISTFTNetOptions());
-/// </code>
-/// </example>
+/// <remarks>
+/// <para><b>References:</b> "iSTFTNet: Fast and Lightweight Mel-Spectrogram Vocoder Incorporating Inverse Short-Time
+/// Fourier Transform" (Kaneko et al., ICASSP 2022).</para>
+/// <para>
+/// After two ×8 upsamplings the output convolution gives (f/2 + 1) × 2 channels; an exponential makes the first half a
+/// linear magnitude and a sine makes the second half the phase (§3.3), and iSTFT(16, 4, 16) turns them into the waveform
+/// (Eq. 1). Training is HiFi-GAN's — its discriminators, LSGAN, feature matching (×2) and mel L1 (×45) — with Adam
+/// (β = 0.5, 0.9) at 2e-4 (§4.1).
+/// </para>
+/// <para><b>For Beginners:</b> Instead of building every audio sample with neural layers, the network predicts a tiny
+/// spectrogram and a fixed mathematical transform turns it into sound, which is much faster.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]
@@ -42,186 +37,148 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2022,
     Authors = "Kaneko et al."
 )]
-[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.0002, Beta1 = 0.5, Beta2 = 0.9,
-                Source = "Kaneko et al. 2022, Sec. 4: trained for 2.5M iterations using the Adam "
-                        + "optimizer with an initial learning rate of 0.0002 and momentum terms beta1 "
-                        + "0.5 and beta2 0.9. The paper's word momentum here names the Adam betas.")]
-public partial class ISTFTNet<T> : VocoderBase<T>
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4, Beta1 = 0.5, Beta2 = 0.9, DecayRate = 0.999, ReferenceBatchSize = 16,
+                Source = "Kaneko et al. 2022, Sec. 4.1: Adam with an initial learning rate of 0.0002 and momentum terms 0.5 and "
+                        + "0.9; the HiFi-GAN configuration's 0.999 per-epoch decay and batch size 16.")]
+public partial class ISTFTNet<T> : GanVocoderBase<T>
 {
-    private readonly ISTFTNetOptions _options;
+    private HiFiGanGenerator<T>? _generator;
+    private InverseStft<T>? _istft;
+    private HiFiGanDiscriminators<T>? _discriminators;
+    private DifferentiableMel<T>? _inputMel;
+    private DifferentiableMel<T>? _lossMel;
 
-    public override ModelOptions GetOptions() => _options;
-
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-
-    public ISTFTNet(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        ISTFTNetOptions? options = null
-    )
-        : base(architecture)
+    /// <summary>Creates an iSTFTNet that runs an exported ONNX graph.</summary>
+    public ISTFTNet(NeuralNetworkArchitecture<T> architecture, string modelPath, ISTFTNetOptions? options = null)
+        : base(architecture, modelPath, options ?? new ISTFTNetOptions(), options?.SamplingSeed ?? 0)
     {
-        _options = options ?? new ISTFTNetOptions();
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
     }
 
-    public ISTFTNet(
-        NeuralNetworkArchitecture<T> architecture,
-        ISTFTNetOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
+    /// <summary>Creates a trainable iSTFTNet.</summary>
+    public ISTFTNet(NeuralNetworkArchitecture<T> architecture, ISTFTNetOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture, options ?? new ISTFTNetOptions(), optimizer, options?.SamplingSeed ?? 0)
     {
-        _options = options ?? new ISTFTNetOptions();
-        _useNativeMode = true;
-        _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        InitializeLayers();
     }
 
-    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase - see BigVGAN for why
-    // these three restated what the base already derives from the same _options fields.
+    private ISTFTNetOptions PaperOptions => (ISTFTNetOptions)VocoderSettings;
 
-    /// <summary>
-    /// Converts mel to waveform by predicting STFT coefficients then applying inverse STFT.
-    /// Per the paper (Kaneko et al., 2022): Replaces the final upsample layers of HiFi-GAN with iSTFT, predicting magnitude and phase spectra at a reduced temporal resolution, then applying inverse STFT for exact reconstruction. 2.4x faster than HiFi-GAN.
-    /// </summary>
-    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    /// <inheritdoc />
+    public override int UpsampleFactor => PaperOptions.UpsampleRates.Aggregate(1, (a, b) => a * b) * PaperOptions.InverseHopSize;
+
+    /// <inheritdoc />
+    protected override int SegmentSize => PaperOptions.SegmentSize;
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<LayerBase<T>> CreateGenerator()
     {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(melSpectrogram);
-        return Predict(melSpectrogram);
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        var t = new Tensor<T>([1]);
-        t[0] = NumOps.FromDouble(0.0);
-        return t;
-    }
-
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            return;
-        }
-        var d = new ISTFTNetOptions();
-        if (
-            _options.NumUpsampleLayers != d.NumUpsampleLayers
-            || _options.DropoutRate > double.Epsilon
-        )
-            throw new InvalidOperationException(
-                "ISTFTNetOptions.NumUpsampleLayers/DropoutRate are configured but not applied by the paper-faithful HiFi-GAN generator default; supply explicit Architecture.Layers for a custom upsample stack."
-            );
-        Layers.AddRange(
-            LayerHelper<T>.CreateDefaultHiFiGANLayers(
-                _options.MelChannels,
-                512,
-                _options.StftWindow / 2 + 1
-            )
-        );
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        // Force eval mode for the duration of the forward pass so Dropout
-        // (DropoutRate=0.1 by default in TtsModelOptions) doesn't randomize
-        // outputs across consecutive Predict calls — pattern matches PyTorch
-        // model.eval() and TF model(x, training=False). Without this the
-        // SpeakerConsistency invariant fails because Dropout fires fresh
-        // randomness on every forward.
-        bool prev = IsTrainingMode;
-        SetTrainingMode(false);
-        try
-        {
-            var c = input;
-            foreach (var l in Layers)
-                c = l.Forward(c);
-            return c;
-        }
-        finally
-        {
-            SetTrainingMode(prev);
-        }
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        var o = PaperOptions;
+        if (UpsampleFactor != o.HopSize)
+            throw new ArgumentException($"The upsampling ({string.Join("x", o.UpsampleRates)}) times the inverse STFT hop ({o.InverseHopSize}) must equal the hop ({o.HopSize}).");
+        int bins = o.InverseFftSize / 2 + 1;
+        _generator = new HiFiGanGenerator<T>(Engine, o.MelChannels, o.UpsampleInitialChannels, o.UpsampleRates, o.UpsampleKernelSizes,
+            o.ResblockKernelSizes, o.ResblockDilationSizes, o.ResblockType == 1, outputChannels: 2 * bins, tanhOutput: false, outputReflectPad: 1,
+            initialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7));
+        _istft = new InverseStft<T>(Engine, o.InverseFftSize, o.InverseHopSize, o.InverseWindowSize);
+        _inputMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.MelMaxFrequency);
+        _lossMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.SampleRate / 2.0);
+        return _generator.Layers;
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
+    protected override IReadOnlyList<LayerBase<T>> CreateDiscriminators()
+    {
+        var o = PaperOptions;
+        _discriminators = new HiFiGanDiscriminators<T>(Engine, o.DiscriminatorPeriods, 3, true, o.DiscriminatorWidthDivisor);
+        return _discriminators.Layers;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>magnitude = exp(first half), phase = sin(second half), waveform = iSTFT(magnitude, phase).</remarks>
+    protected override Tensor<T> Generate(Tensor<T> mel)
+    {
+        var spectrum = _generator!.Forward(mel);                                         // [1, 2·bins, frames + 1]
+        int bins = PaperOptions.InverseFftSize / 2 + 1, frames = spectrum.Shape[2];
+        var magnitude = Engine.TensorExp(Engine.TensorSlice(spectrum, new[] { 0, 0, 0 }, new[] { 1, bins, frames }));
+        var phase = Engine.TensorSin(Engine.TensorSlice(spectrum, new[] { 0, bins, 0 }, new[] { 1, bins, frames }));
+        var wave = _istft!.Forward(magnitude, phase);
+        return Engine.Reshape(wave, new[] { 1, 1, wave.Length });
+    }
+
+    /// <inheritdoc />
+    /// <remarks>HiFi-GAN's <c>mel_spectrogram</c> (natural log, floor 1e-5), up to
+    /// <see cref="ISTFTNetOptions.MelMaxFrequency"/>.</remarks>
+    protected override Tensor<T> ComputeInputMel(Tensor<T> audio)
+    {
+        var rows = _inputMel!.Forward(audio);
+        return Engine.Reshape(Engine.TensorTranspose(rows), new[] { 1, PaperOptions.MelChannels, rows.Shape[0] });
+    }
+
+    /// <inheritdoc />
+    protected override Tensor<T> DiscriminatorLoss(Tensor<T> real, Tensor<T> generated)
+    {
+        var realScores = _discriminators!.Forward(real);
+        var fakeScores = _discriminators.Forward(generated);
+        return Sum(Enumerable.Range(0, realScores.Count).Select(k => LeastSquaresDiscriminator(realScores[k].Score, fakeScores[k].Score)));
+    }
+
+    /// <inheritdoc />
+    protected override Tensor<T> GeneratorLoss(Tensor<T> mel, Tensor<T> real, bool adversarial)
+    {
+        var generated = Flat(Generate(mel));
+        var fake = _discriminators!.Forward(generated);
+        List<(Tensor<T> Score, List<Tensor<T>> Features)> realOut;
+        using (new NoGradScope<T>()) realOut = _discriminators.Forward(real);
+        var adversarialTerm = Sum(fake.Select(f => LeastSquaresGenerator(f.Score)));
+        var featureMatching = Sum(Enumerable.Range(0, fake.Count).Select(k => FeatureMatching(realOut[k].Features, fake[k].Features)));
+        Tensor<T> realMel;
+        using (new NoGradScope<T>()) realMel = Detached(_lossMel!.Forward(real));
+        var melLoss = Mean(Engine.TensorAbs(Engine.TensorSubtract(_lossMel.Forward(generated), realMel)));
+        return Engine.TensorAdd(Engine.TensorAdd(adversarialTerm,
+                Engine.TensorMultiplyScalar(featureMatching, NumOps.FromDouble(PaperOptions.FeatureMatchingWeight))),
+            Engine.TensorMultiplyScalar(melLoss, NumOps.FromDouble(PaperOptions.MelLossWeight)));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The mel reconstruction term (×45) of the generator objective.</remarks>
+    protected override Tensor<T> ReconstructionObjective(Tensor<T> mel, Tensor<T> real)
+    {
+        var (generated, target) = GeneratedAndReal(mel, real);
+        return Engine.TensorMultiplyScalar(Mean(Engine.TensorAbs(Engine.TensorSubtract(_lossMel!.Forward(generated), _lossMel.Forward(target)))),
+            NumOps.FromDouble(PaperOptions.MelLossWeight));
+    }
+
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer(string group)
+    {
+        var o = PaperOptions;
+        int perEpoch = Math.Max(1, o.UpdatesPerEpoch);
+        var scheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(o.LearningRate, step => Math.Pow(o.LearningRateDecay, step / perEpoch));
+        return PaperOptimizerFactory.VerifyHandBuilt(this, new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = o.LearningRate,
+                Beta1 = o.Beta1,
+                Beta2 = o.Beta2,
+                UseAdaptiveBetas = false,
+                LearningRateScheduler = scheduler,
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+            }));
+    }
+
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var o = PaperOptions;
+        var m = new ModelMetadata<T>
         {
-            Name = _useNativeMode ? "iSTFTNet-Native" : "iSTFTNet-ONNX",
-            Description =
-                "iSTFTNet: Fast Mel-Spectrogram Vocoder with Inverse STFT (Kaneko et al., 2022)",
-            FeatureCount = _options.MelChannels,
-            AdditionalInfo = new Dictionary<string, object>
-            {
-                ["MelChannels"] = _options.MelChannels,
-                ["Mode"] = _useNativeMode ? "Native" : "ONNX",
-            },
+            Name = IsOnnxMode ? "ISTFTNet-ONNX" : "ISTFTNet-Native",
+            Description = "iSTFTNet: Fast and Lightweight Mel-Spectrogram Vocoder Incorporating Inverse STFT (Kaneko et al., 2022)",
+            FeatureCount = o.MelChannels,
+            Complexity = o.UpsampleRates.Length + o.ResblockKernelSizes.Length,
         };
-    }
-
-
-
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(ISTFTNet<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
+        m.AdditionalInfo["Architecture"] = "ISTFTNet";
+        m.AdditionalInfo["SampleRate"] = o.SampleRate.ToString();
+        return m;
     }
 }

@@ -1,229 +1,208 @@
-using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
-using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
 
-/// <summary>UnivNet: universal neural vocoder with location-variable convolution (LVC) for adaptive kernel generation.</summary>
+/// <summary>
+/// UnivNet: a GAN vocoder whose generator uses location-variable convolutions with kernels predicted from the mel
+/// spectrogram, trained against multi-resolution spectrogram and multi-period waveform discriminators.
+/// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "UnivNet: A Neural Vocoder with Multi-Resolution Spectrogram Discriminator for High-Fidelity Waveform Generation" (Jang et al., 2021)</item></list></para><para><b>For Beginners:</b> UnivNet: universal neural vocoder with location-variable convolution (LVC) for adaptive kernel generation.. This model converts text input into speech audio output.</para></remarks>
-/// <example>
-/// <code>
-/// // Create a UnivNet vocoder with location-variable convolution (LVC)
-/// // for adaptive kernel generation and high-fidelity waveform synthesis
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new UnivNet&lt;double&gt;(architecture, "univnet.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new UnivNet&lt;double&gt;(architecture, new UnivNetOptions());
-/// </code>
-/// </example>
+/// <remarks>
+/// <para><b>References:</b> "UnivNet: A Neural Vocoder with Multi-Resolution Spectrogram Discriminators for High-Fidelity
+/// Waveform Generation" (Jang et al., Interspeech 2021) and maum-ai/univnet for what the paper leaves unstated.</para>
+/// <para>
+/// The generator shapes Gaussian noise into a waveform through three LVC residual stacks (§3.1). It first trains alone
+/// for 200k steps on λ · L_aux, the multi-resolution STFT loss (§3.3, §4.3); afterwards each step updates the generator on
+/// λ · L_aux plus the LSGAN generator loss averaged over the three resolution and five period discriminators (§3.2), and
+/// the discriminators on the averaged LSGAN loss against that same generation. Adam (β = 0.5, 0.9) at 1e-4.
+/// </para>
+/// <para><b>For Beginners:</b> Every short stretch of the spectrogram designs its own small filter, which the network uses
+/// to shape noise into the matching stretch of audio; critics looking at spectrograms of several resolutions keep the
+/// result sharp.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
-    // Title corrected to the published plural form ("Discriminators"); the arXiv id was already right.
     "UnivNet: A Neural Vocoder with Multi-Resolution Spectrogram Discriminators for High-Fidelity Waveform Generation",
     "https://arxiv.org/abs/2106.07889",
     Year = 2021,
     Authors = "Jang et al."
 )]
-[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, Beta1 = 0.5, Beta2 = 0.9,
-                Source = "Jang et al. 2021, Sec. 3: the model was trained using the Adam optimizer with "
-                        + "beta1 0.5, beta2 0.9 and a 1e-4 learning rate. Those betas are the "
-                        + "adversarial-training convention rather than Adam's defaults, so they are "
-                        + "declared explicitly.")]
-public partial class UnivNet<T> : VocoderBase<T>
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, Beta1 = 0.5, Beta2 = 0.9, ReferenceBatchSize = 32,
+                Source = "Jang et al. 2021, Sec. 4.3: Adam with beta1 0.5, beta2 0.9 and a learning rate of 1e-4; maum-ai/univnet "
+                        + "trains with batch size 32.")]
+public partial class UnivNet<T> : GanVocoderBase<T>
 {
-    private readonly UnivNetOptions _options;
+    private UnivNetGenerator<T>? _generator;
+    private MultiResolutionSpectrogramDiscriminators<T>? _resolutions;
+    private HiFiGanDiscriminators<T>? _periods;
+    private DifferentiableMel<T>? _features;
+    private MultiResolutionStftLoss<T>? _stftLoss;
+    private Random _noise;
 
-    public override ModelOptions GetOptions() => _options;
-
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-
-    public UnivNet(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        UnivNetOptions? options = null
-    )
-        : base(architecture)
+    /// <summary>Creates a UnivNet that runs an exported ONNX graph.</summary>
+    public UnivNet(NeuralNetworkArchitecture<T> architecture, string modelPath, UnivNetOptions? options = null)
+        : base(architecture, modelPath, options ?? new UnivNetOptions(), options?.SamplingSeed ?? 0)
     {
-        _options = options ?? new UnivNetOptions();
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
+        _noise = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(PaperOptions.SamplingSeed + 1);
     }
 
-    public UnivNet(
-        NeuralNetworkArchitecture<T> architecture,
-        UnivNetOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
+    /// <summary>Creates a trainable UnivNet.</summary>
+    public UnivNet(NeuralNetworkArchitecture<T> architecture, UnivNetOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture, options ?? new UnivNetOptions(), optimizer, options?.SamplingSeed ?? 0)
     {
-        _options = options ?? new UnivNetOptions();
-        _useNativeMode = true;
-        _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        InitializeLayers();
+        _noise = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(PaperOptions.SamplingSeed + 1);
+    }
+
+    private UnivNetOptions PaperOptions => (UnivNetOptions)VocoderSettings;
+
+    /// <inheritdoc />
+    public override int UpsampleFactor => PaperOptions.UpsampleRates.Aggregate(1, (a, b) => a * b);
+
+    /// <inheritdoc />
+    protected override int SegmentSize => PaperOptions.SegmentSize;
+
+    /// <inheritdoc />
+    protected override long DiscriminatorStartStep => PaperOptions.PretrainingSteps;
+
+    /// <inheritdoc />
+    /// <remarks>The reference updates the generator first, then the discriminators on that same generation.</remarks>
+    protected override bool DiscriminatorStepFirst => false;
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<LayerBase<T>> CreateGenerator()
+    {
+        var o = PaperOptions;
+        if (UpsampleFactor != o.HopSize)
+            throw new ArgumentException($"The strides ({string.Join("x", o.UpsampleRates)}) must multiply to the hop ({o.HopSize}).");
+        _generator = new UnivNetGenerator<T>(Engine, o.MelChannels, o.NoiseDim, o.ChannelSize, o.UpsampleRates, o.Dilations,
+            o.LeakyReluSlope, o.KernelPredictorHidden, o.KernelPredictorConvSize);
+        _features = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.MelMaxFrequency);
+        _stftLoss = new MultiResolutionStftLoss<T>(Engine, o.StftFftSizes, o.StftHopSizes, o.StftWindowSizes);
+        return _generator.Layers;
     }
 
     /// <inheritdoc />
-    /// <remarks>
-    /// MEASURED: <c>[1,80,8] -&gt; [1,1,2048]</c>, 8 mel frames x an UpsampleFactor of 256. One of the
-    /// three vocoders whose Predict is a whole-waveform synthesis.
-    /// </remarks>
-    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-        => WaveformUpsampleContract(inputRank);
-
-    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase - see BigVGAN for why
-    // these three restated what the base already derives from the same _options fields.
-
-    /// <summary>
-    /// Converts mel to waveform using UnivNet's LVC (Location-Variable Convolution) blocks.
-    /// Per the paper (Jang et al., 2021):
-    /// (1) Noise input + mel conditioning,
-    /// (2) LVC blocks: kernel weights are dynamically generated from mel features (not fixed),
-    /// (3) GABlock with gated activation + location-variable conv for adaptive frequency modeling,
-    /// (4) Multi-resolution spectrogram discriminator (MRSD) for training.
-    /// </summary>
-    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    protected override IReadOnlyList<LayerBase<T>> CreateDiscriminators()
     {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(melSpectrogram);
-        return Predict(melSpectrogram);
+        var o = PaperOptions;
+        _resolutions = new MultiResolutionSpectrogramDiscriminators<T>(Engine, o.StftFftSizes, o.StftHopSizes, o.StftWindowSizes,
+            o.ResolutionDiscriminatorChannels, o.LeakyReluSlope);
+        _periods = new HiFiGanDiscriminators<T>(Engine, o.DiscriminatorPeriods, 0, useScaleDiscriminator: false,
+            widthDivisor: o.DiscriminatorWidthDivisor, periodChannels: o.PeriodDiscriminatorChannels, slope: o.LeakyReluSlope);
+        return _resolutions.Layers.Concat(_periods.Layers).ToList();
     }
 
-    protected override Tensor<T> PreprocessText(string text)
+    /// <inheritdoc />
+    /// <remarks>Fresh noise <c>[1, 64, frames]</c> at every training forward; at synthesis, noise seeded by
+    /// <see cref="UnivNetOptions.SamplingSeed"/>.</remarks>
+    protected override Tensor<T> Generate(Tensor<T> mel)
     {
-        var t = new Tensor<T>([1]);
-        t[0] = NumOps.FromDouble(0.0);
-        return t;
-    }
-
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        var o = PaperOptions;
+        var random = IsTrainingMode ? _noise : AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed);
+        var noise = new Tensor<T>(new[] { 1, o.NoiseDim, mel.Shape[2] });
+        for (int i = 0; i < noise.Length; i++)
         {
-            Layers.AddRange(Architecture.Layers);
-            return;
+            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
+            noise[i] = NumOps.FromDouble(Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
         }
-        var d = new UnivNetOptions();
-        if (_options.NumLMBlocks != d.NumLMBlocks || _options.DropoutRate > double.Epsilon)
-            throw new InvalidOperationException(
-                "UnivNetOptions.NumLMBlocks/DropoutRate are configured but not applied by the paper-faithful HiFi-GAN generator default; supply explicit Architecture.Layers for a custom LVCNet configuration."
-            );
-        Layers.AddRange(LayerHelper<T>.CreateDefaultHiFiGANLayers(_options.MelChannels, 512, 1));
+        return _generator!.Forward(mel, noise);
     }
 
-    protected override Tensor<T> PredictCore(Tensor<T> input)
+    /// <inheritdoc />
+    /// <remarks>The reference's <c>inference</c>: ten frames of log(1e-5) appended, their samples trimmed.</remarks>
+    protected override Tensor<T> GenerateForInference(Tensor<T> mel)
     {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+        int extra = PaperOptions.InferencePaddingFrames;
+        if (extra <= 0) return Generate(mel);
+        var silence = new Tensor<T>(new[] { 1, mel.Shape[1], extra });
+        for (int i = 0; i < silence.Length; i++) silence[i] = NumOps.FromDouble(Math.Log(1e-5));
+        var wave = Flat(Generate(Engine.TensorConcatenate(new[] { mel, silence }, 2)));
+        int keep = mel.Shape[2] * UpsampleFactor;
+        return Engine.Reshape(Engine.TensorSlice(wave, new[] { 0 }, new[] { keep }), new[] { 1, 1, keep });
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
+    /// <inheritdoc />
+    protected override Tensor<T> ComputeInputMel(Tensor<T> audio)
     {
-        ThrowIfDisposed();
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        var rows = _features!.Forward(audio);
+        return Engine.Reshape(Engine.TensorTranspose(rows), new[] { 1, PaperOptions.MelChannels, rows.Shape[0] });
     }
 
-    /// <summary>
-    /// Refuses parameter work on a disposed model, on every entry point rather than one.
-    /// </summary>
-    /// <remarks>
-    /// This check used to live inside UpdateParameters, which meant ParameterCount, GetParameters
-    /// and SetParameters reached a disposed model unguarded. The base calls this hook from all of
-    /// them, so moving it here widens the guard and lets the hand-written UpdateParameters -- whose
-    /// only other content was a walk the base already performs -- be deleted.
-    /// </remarks>
-    protected override void EnsureParametersReady()
+    private List<(Tensor<T> Score, List<Tensor<T>> Features)> Discriminate(Tensor<T> audio)
+        => _resolutions!.Forward(audio).Concat(_periods!.Forward(audio)).ToList();
+
+    /// <inheritdoc />
+    protected override Tensor<T> DiscriminatorLoss(Tensor<T> real, Tensor<T> generated)
     {
-        ThrowIfDisposed();
-        base.EnsureParametersReady();
+        var realScores = Discriminate(real);
+        var fakeScores = Discriminate(generated);
+        var total = Sum(Enumerable.Range(0, realScores.Count).Select(k => LeastSquaresDiscriminator(realScores[k].Score, fakeScores[k].Score)));
+        return Engine.TensorMultiplyScalar(total, NumOps.FromDouble(1.0 / realScores.Count));
     }
 
-    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
+    /// <inheritdoc />
+    protected override Tensor<T> GeneratorLoss(Tensor<T> mel, Tensor<T> real, bool adversarial)
+    {
+        var generated = Flat(Generate(mel));
+        if (adversarial) RememberGeneration(generated);
+        var loss = Engine.TensorMultiplyScalar(StftLoss(generated, real), NumOps.FromDouble(PaperOptions.StftLossWeight));
+        if (!adversarial) return loss;
+        var fake = Discriminate(generated);
+        var score = Engine.TensorMultiplyScalar(Sum(fake.Select(f => LeastSquaresGenerator(f.Score))), NumOps.FromDouble(1.0 / fake.Count));
+        return Engine.TensorAdd(loss, score);
+    }
+
+    private Tensor<T> StftLoss(Tensor<T> generated, Tensor<T> real)
+    {
+        int n = Math.Min(generated.Length, real.Length);
+        var (sc, mag) = _stftLoss!.Forward(new[] { Engine.TensorSlice(generated, new[] { 0 }, new[] { n }) },
+            new[] { Engine.TensorSlice(Flat(real), new[] { 0 }, new[] { n }) });
+        return Engine.TensorAdd(sc, mag);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>λ · L_aux, the weighted multi-resolution STFT loss.</remarks>
+    protected override Tensor<T> ReconstructionObjective(Tensor<T> mel, Tensor<T> real)
+    {
+        var (generated, target) = GeneratedAndReal(mel, real);
+        return Engine.TensorMultiplyScalar(StftLoss(generated, target), NumOps.FromDouble(PaperOptions.StftLossWeight));
+    }
+
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer(string group)
+        => PaperOptimizerFactory.VerifyHandBuilt(this, new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = PaperOptions.LearningRate,
+                Beta1 = PaperOptions.Beta1,
+                Beta2 = PaperOptions.Beta2,
+                UseAdaptiveBetas = false,
+            }));
+
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var o = PaperOptions;
+        var m = new ModelMetadata<T>
         {
-            Name = _useNativeMode ? "UnivNet-Native" : "UnivNet-ONNX",
-            Description = "UnivNet: Universal Neural Vocoder (Jang et al., 2021)",
-            FeatureCount = _options.MelChannels,
-            AdditionalInfo = new Dictionary<string, object>
-            {
-                ["MelChannels"] = _options.MelChannels,
-                ["Mode"] = _useNativeMode ? "Native" : "ONNX",
-            },
+            Name = IsOnnxMode ? "UnivNet-ONNX" : "UnivNet-Native",
+            Description = "UnivNet: Neural Vocoder with Multi-Resolution Spectrogram Discriminators (Jang et al., 2021)",
+            FeatureCount = o.MelChannels,
+            Complexity = o.UpsampleRates.Length * o.Dilations.Length,
         };
-    }
-
-
-
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(UnivNet<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
+        m.AdditionalInfo["Architecture"] = "UnivNet";
+        m.AdditionalInfo["SampleRate"] = o.SampleRate.ToString();
+        return m;
     }
 }

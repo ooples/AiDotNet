@@ -53,6 +53,7 @@ namespace AiDotNet.Finance.Risk;
 [PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.999, WeightDecay = 0.01,
                 LearningRate = 0.0001, ReferenceBatchSize = 256,
                 Source = "Somepalli et al. 2021, Training: AdamW with beta1 0.9, beta2 0.999, decay 0.01 and a learning rate of 0.0001 with batches of size 256.")]
+[TaskVariantOf(typeof(AiDotNet.NeuralNetworks.Tabular.SAINTNetwork<>), "financial risk scoring")]
 public partial class SAINT<T> : RiskModelBase<T>
 {
     #region Shared Fields

@@ -108,7 +108,7 @@ public partial class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// Synthesizes speech from text.
     /// Per Li et al. (2024): StyleTTS 2 extended for zero-shot cloning with diffusion-based style predictor.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);
@@ -116,15 +116,6 @@ public partial class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
             return OnnxModel.Run(input);
         var output = Predict(input);
         return PostprocessAudio(output);
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
     }
 
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;

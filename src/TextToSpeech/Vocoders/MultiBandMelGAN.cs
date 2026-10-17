@@ -1,36 +1,32 @@
-using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
-using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
 
-/// <summary>Multi-band MelGAN: decomposes target into sub-bands, generates each in parallel, then synthesizes full-band.</summary>
+/// <summary>
+/// Multi-band MelGAN: a MelGAN generator that predicts PQMF sub-bands of the waveform at a quarter of its rate, trained
+/// with full- and sub-band multi-resolution STFT losses and multi-scale discriminators.
+/// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Multi-band MelGAN: Faster Waveform Generation for High-Quality Text-to-Speech" (Yang et al., 2021)</item></list></para><para><b>For Beginners:</b> Multi-band MelGAN: decomposes target into sub-bands, generates each in parallel, then synthesizes full-band.. This model converts text input into speech audio output.</para></remarks>
-/// <example>
-/// <code>
-/// // Create a Multi-band MelGAN vocoder for parallel sub-band synthesis
-/// // decomposing target waveform into sub-bands for faster generation
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new MultiBandMelGAN&lt;double&gt;(architecture, "multibandmelgan.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new MultiBandMelGAN&lt;double&gt;(architecture, new MultiBandMelGANOptions());
-/// </code>
-/// </example>
+/// <remarks>
+/// <para><b>References:</b> "Multi-band MelGAN: Faster Waveform Generation for High-Quality Text-to-Speech" (Yang et al.,
+/// SLT 2021) and kan-bayashi/ParallelWaveGAN for what the paper leaves unstated.</para>
+/// <para>
+/// The generator predicts four sub-band signals; the PQMF synthesis filter merges them into the full-band waveform the
+/// discriminators see (§2.2, §3.2). The generator first trains alone for 200k steps on
+/// <c>L_mr_stft = ½ (L_full + L_sub)</c> (Eq. 9; sub-band targets from the PQMF analysis filter), then the
+/// discriminators train on the LSGAN loss (Eq. 1) and the generator on <c>λ_adv Σ_k (D_k(G(s)) − 1)² + L_mr_stft</c>
+/// (Eq. 8). Both use Adam at 1e-4, halved every 100k steps to 1e-6.
+/// </para>
+/// <para><b>For Beginners:</b> Instead of generating every audio sample, the network generates four narrow frequency
+/// bands at a quarter of the sample rate and a fixed filter bank merges them, which makes it several times faster.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]
@@ -43,163 +39,149 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Authors = "Yang et al."
 )]
 [PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, ReferenceBatchSize = 128,
-                Source = "Yang et al. 2020, Sec. 3: Adam with an initial learning rate of 1e-4 for both generator and discriminator; batch size 128 for multi-band MelGAN (48 for the basic and full-band variants).")]
-public partial class MultiBandMelGAN<T> : VocoderBase<T>
+                Source = "Yang et al. 2021, Sec. 3.2: Adam with an initial learning rate of 1e-4 for G and D, halved every "
+                        + "100K steps until 1e-6; batch size 128 for MB-MelGAN, one second of audio per example.")]
+public partial class MultiBandMelGAN<T> : GanVocoderBase<T>
 {
-    private readonly MultiBandMelGANOptions _options;
+    private MelGanGenerator<T>? _generator;
+    private PseudoQmf<T>? _pqmf;
+    private MelGanDiscriminators<T>? _discriminators;
+    private CenteredLogMel<T>? _features;
+    private MultiResolutionStftLoss<T>? _fullBand;
+    private MultiResolutionStftLoss<T>? _subBand;
 
-    public override ModelOptions GetOptions() => _options;
-
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-
-    public MultiBandMelGAN(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        MultiBandMelGANOptions? options = null
-    )
-        : base(architecture)
+    /// <summary>Creates a Multi-band MelGAN that runs an exported ONNX graph.</summary>
+    public MultiBandMelGAN(NeuralNetworkArchitecture<T> architecture, string modelPath, MultiBandMelGANOptions? options = null)
+        : base(architecture, modelPath, options ?? new MultiBandMelGANOptions(), options?.SamplingSeed ?? 0)
     {
-        _options = options ?? new MultiBandMelGANOptions();
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
     }
 
-    public MultiBandMelGAN(
-        NeuralNetworkArchitecture<T> architecture,
-        MultiBandMelGANOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
+    /// <summary>Creates a trainable Multi-band MelGAN.</summary>
+    public MultiBandMelGAN(NeuralNetworkArchitecture<T> architecture, MultiBandMelGANOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture, options ?? new MultiBandMelGANOptions(), optimizer, options?.SamplingSeed ?? 0)
     {
-        _options = options ?? new MultiBandMelGANOptions();
-        _useNativeMode = true;
-        _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        InitializeLayers();
     }
 
-    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase - see BigVGAN for why
-    // these three restated what the base already derives from the same _options fields.
+    private MultiBandMelGANOptions PaperOptions => (MultiBandMelGANOptions)VocoderSettings;
 
-    /// <summary>
-    /// Converts mel to waveform using Multi-band MelGAN's sub-band parallel generation.
-    /// Per the paper (Yang et al., 2021):
-    /// (1) PQMF analysis filter bank decomposes target audio into N sub-bands (typically 4),
-    /// (2) Generator predicts N sub-band signals simultaneously (each at 1/N sample rate),
-    /// (3) PQMF synthesis filter bank reconstructs full-band waveform from sub-bands,
-    /// (4) Multi-resolution STFT loss applied per sub-band + full-band.
-    /// Key: 7x speedup over original MelGAN with equal quality.
-    /// </summary>
-    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    /// <inheritdoc />
+    public override int UpsampleFactor => PaperOptions.NumBands * PaperOptions.UpsampleRates.Aggregate(1, (a, b) => a * b);
+
+    /// <inheritdoc />
+    protected override int SegmentSize => PaperOptions.SegmentSize;
+
+    /// <inheritdoc />
+    protected override long DiscriminatorStartStep => PaperOptions.PretrainingSteps;
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<LayerBase<T>> CreateGenerator()
     {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(melSpectrogram);
-        return Predict(melSpectrogram);
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        var t = new Tensor<T>([1]);
-        t[0] = NumOps.FromDouble(0.0);
-        return t;
-    }
-
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            return;
-        }
-        var d = new MultiBandMelGANOptions();
-        if (_options.NumBands != d.NumBands || _options.DropoutRate > double.Epsilon)
-            throw new InvalidOperationException(
-                "MultiBandMelGANOptions.NumBands/DropoutRate are configured but not applied by the paper-faithful HiFi-GAN generator default; supply explicit Architecture.Layers for a custom multi-band configuration."
-            );
-        Layers.AddRange(LayerHelper<T>.CreateDefaultHiFiGANLayers(_options.MelChannels, 384, 1));
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        var o = PaperOptions;
+        if (o.UpsampleRates.Aggregate(1, (a, b) => a * b) * o.NumBands != o.HopSize)
+            throw new ArgumentException($"The bands ({o.NumBands}) times the upsampling ({string.Join("x", o.UpsampleRates)}) must equal the hop ({o.HopSize}).");
+        _generator = new MelGanGenerator<T>(Engine, o.MelChannels, o.UpsampleInitialChannels, o.UpsampleRates, o.ResidualLayers, o.NumBands);
+        _pqmf = new PseudoQmf<T>(Engine, o.NumBands, o.PqmfTaps, o.PqmfCutoffRatio, o.PqmfBeta);
+        _features = new CenteredLogMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, o.MelMinFrequency, o.MelMaxFrequency, 1e-10);
+        _fullBand = new MultiResolutionStftLoss<T>(Engine, o.FullBandFftSizes, o.FullBandHopSizes, o.FullBandWindowSizes);
+        _subBand = new MultiResolutionStftLoss<T>(Engine, o.SubBandFftSizes, o.SubBandHopSizes, o.SubBandWindowSizes);
+        return _generator.Layers;
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
+    protected override IReadOnlyList<LayerBase<T>> CreateDiscriminators()
+    {
+        var o = PaperOptions;
+        _discriminators = new MelGanDiscriminators<T>(Engine, o.NumDiscriminators, o.DiscriminatorChannels, o.DiscriminatorWidthDivisor);
+        return _discriminators.Layers;
+    }
+
+    /// <summary>The sub-bands <c>[1, bands, frames · Π r]</c> the generator predicts for <paramref name="mel"/>.</summary>
+    private Tensor<T> SubBands(Tensor<T> mel) => _generator!.Forward(mel);
+
+    /// <inheritdoc />
+    protected override Tensor<T> Generate(Tensor<T> mel) => _pqmf!.Synthesis(SubBands(mel));
+
+    /// <inheritdoc />
+    protected override Tensor<T> ComputeInputMel(Tensor<T> audio) => _features!.Forward(audio, PaperOptions.MelMean, PaperOptions.MelScale);
+
+    /// <inheritdoc />
+    protected override Tensor<T> DiscriminatorLoss(Tensor<T> real, Tensor<T> generated)
+    {
+        var realScores = _discriminators!.Forward(real);
+        var fakeScores = _discriminators.Forward(generated);
+        return Sum(Enumerable.Range(0, realScores.Count).Select(k => LeastSquaresDiscriminator(realScores[k].Score, fakeScores[k].Score)));
+    }
+
+    /// <inheritdoc />
+    protected override Tensor<T> GeneratorLoss(Tensor<T> mel, Tensor<T> real, bool adversarial)
+    {
+        var bands = SubBands(mel);
+        var generated = Flat(_pqmf!.Synthesis(bands));
+        var loss = StftLoss(bands, generated, real);
+        if (!adversarial) return loss;
+        var fake = _discriminators!.Forward(generated);
+        var adversarialTerm = Sum(fake.Select(f => LeastSquaresGenerator(f.Score)));
+        return Engine.TensorAdd(loss, Engine.TensorMultiplyScalar(adversarialTerm, NumOps.FromDouble(PaperOptions.AdversarialWeight)));
+    }
+
+    // Eq. 9: ½ (full-band + sub-band multi-resolution STFT losses), each the sum of its spectral convergence and
+    // log-magnitude terms.
+    private Tensor<T> StftLoss(Tensor<T> bands, Tensor<T> generated, Tensor<T> real)
+    {
+        int n = Math.Min(generated.Length, real.Length);
+        var g = Engine.TensorSlice(generated, new[] { 0 }, new[] { n });
+        var r = Engine.TensorSlice(Flat(real), new[] { 0 }, new[] { n });
+        var (fullSc, fullMag) = _fullBand!.Forward(new[] { g }, new[] { r });
+
+        Tensor<T> realBands;
+        using (new NoGradScope<T>()) realBands = Detached(_pqmf!.Analysis(Engine.Reshape(r, new[] { 1, 1, n })));
+        int k = PaperOptions.NumBands, length = Math.Min(bands.Shape[2], realBands.Shape[2]);
+        var generatedBands = Enumerable.Range(0, k).Select(b => Engine.Reshape(Engine.TensorSlice(bands, new[] { 0, b, 0 }, new[] { 1, 1, length }), new[] { length })).ToList();
+        var targetBands = Enumerable.Range(0, k).Select(b => Engine.Reshape(Engine.TensorSlice(realBands, new[] { 0, b, 0 }, new[] { 1, 1, length }), new[] { length })).ToList();
+        var (subSc, subMag) = _subBand!.Forward(generatedBands, targetBands);
+        return Engine.TensorMultiplyScalar(Engine.TensorAdd(Engine.TensorAdd(fullSc, fullMag), Engine.TensorAdd(subSc, subMag)), NumOps.FromDouble(0.5));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The multi-resolution STFT loss (Eq. 9) of the whole generation.</remarks>
+    protected override Tensor<T> ReconstructionObjective(Tensor<T> mel, Tensor<T> real)
+    {
+        var bands = SubBands(mel);
+        return StftLoss(bands, Flat(_pqmf!.Synthesis(bands)), real);
+    }
+
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer(string group)
+    {
+        var o = PaperOptions;
+        int halving = Math.Max(1, o.LearningRateHalvingSteps);
+        var scheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(o.LearningRate,
+            step => Math.Max(Math.Pow(0.5, step / halving), o.MinimumLearningRate / o.LearningRate));
+        return PaperOptimizerFactory.VerifyHandBuilt(this, new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = o.LearningRate,
+                LearningRateScheduler = scheduler,
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+                // Adam's options adapt the betas during training by default; the paper's stay fixed.
+                UseAdaptiveBetas = false,
+            }));
+    }
+
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
+        var o = PaperOptions;
         var m = new ModelMetadata<T>
         {
-            Name = _useNativeMode ? "MultiBandMelGAN-Native" : "MultiBandMelGAN-ONNX",
-            Description = "Multi-band MelGAN (Yang et al., 2021)",
-            FeatureCount = _options.MelChannels,
-            Complexity = _options.NumBands * 4,
+            Name = IsOnnxMode ? "MultiBandMelGAN-ONNX" : "MultiBandMelGAN-Native",
+            Description = "Multi-band MelGAN: Faster Waveform Generation for High-Quality Text-to-Speech (Yang et al., 2021)",
+            FeatureCount = o.MelChannels,
+            Complexity = o.UpsampleRates.Length * o.ResidualLayers,
         };
         m.AdditionalInfo["Architecture"] = "MultiBandMelGAN";
+        m.AdditionalInfo["SampleRate"] = o.SampleRate.ToString();
         return m;
-    }
-
-
-
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(MultiBandMelGAN<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
     }
 }

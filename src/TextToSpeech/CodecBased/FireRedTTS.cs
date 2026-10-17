@@ -102,7 +102,7 @@ public partial class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
     public int CodecFrameRate => _options.CodecFrameRate;
 
     /// <summary>Synthesizes speech. FireRedTTS: text -> LLM AR generation -> multi-codebook tokens -> neural codec decoder -> waveform.</summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);
@@ -126,15 +126,6 @@ public partial class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(tokens);
         return Predict(tokens);
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
     }
 
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;

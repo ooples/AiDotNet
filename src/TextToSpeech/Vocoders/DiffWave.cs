@@ -1,34 +1,39 @@
-using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
-using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
 
-/// <summary>DiffWave: diffusion probabilistic model for conditional and unconditional waveform generation.</summary>
+/// <summary>
+/// DiffWave: a versatile diffusion model for audio synthesis — a non-autoregressive noise predictor built from
+/// bidirectional dilated convolutions, conditioned on the mel spectrogram, sampled by the reverse diffusion process.
+/// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "DiffWave: A Versatile Diffusion Model for Audio Synthesis" (Kong et al., 2021)</item></list></para><para><b>For Beginners:</b> DiffWave: diffusion probabilistic model for conditional and unconditional waveform generation.. This model converts text input into speech audio output.</para></remarks>
+/// <remarks>
+/// <para><b>References:</b> "DiffWave: A Versatile Diffusion Model for Audio Synthesis" (Kong et al., ICLR 2021) and
+/// lmnt-com/diffwave for what the paper leaves unstated.</para>
+/// <para>
+/// Training (Algorithm 1): a step t uniform over the schedule, <c>x_t = √ᾱ_t x₀ + √(1 − ᾱ_t) ε</c>, and
+/// <c>‖ε − ε_θ(x_t, t, mel)‖²</c>. Synthesis (Algorithm 2) runs the reverse process over the training schedule, or over
+/// the six-step fast schedule (App. B, Algorithm 3), whose steps are aligned to fractional training steps by their noise
+/// levels with the step embedding interpolated between neighbours.
+/// </para>
+/// <para><b>For Beginners:</b> DiffWave learns to remove noise from audio a little at a time; to synthesize, it starts
+/// from noise and removes it step by step, guided by the spectrogram.</para>
+/// </remarks>
 /// <example>
 /// <code>
-/// // Create a DiffWave vocoder using diffusion probabilistic modeling
-/// // for conditional and unconditional waveform generation
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new DiffWave&lt;double&gt;(architecture, "diffwave.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new DiffWave&lt;double&gt;(architecture, new DiffWaveOptions());
+/// // A vocoder: mel spectrogram in, waveform out.
+/// var vocoder = new DiffWave&lt;float&gt;(architecture);
+/// var speech = vocoder.MelToWaveform(mel);
+/// // Unconditional and class-conditional generation (§5.2, §5.3).
+/// var digits = new DiffWave&lt;float&gt;(architecture, DiffWaveOptions.ClassConditional(numClasses: 10));
+/// digits.Train(new TtsTrainingSample&lt;float&gt; { Tokens = none, Audio = clip, ClassLabel = 7 });
+/// var seven = digits.Generate(classLabel: 7);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
@@ -43,232 +48,171 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Authors = "Kong et al."
 )]
 [PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4, ReferenceBatchSize = 16,
-                Source = "Kong et al. 2021, Sec. 5: Adam with a batch size of 16 and a fixed learning rate of 2e-4, trained for 1M steps. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
-public partial class DiffWave<T> : VocoderBase<T>
+                Source = "Kong et al. 2021, Sec. 5.1: Adam with a batch size of 16 and a learning rate of 2e-4, 1M steps.")]
+public partial class DiffWave<T> : DiffusionVocoderBase<T>
 {
-    private readonly DiffWaveOptions _options;
+    private DiffWaveNetwork<T>? _network;
+    private CenteredLogMel<T>? _features;
 
-    public override ModelOptions GetOptions() => _options;
-
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _preserveSuppliedOptimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-
-    public DiffWave(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        DiffWaveOptions? options = null
-    )
-        : base(architecture, maxGradNorm: options?.MaxGradientNorm ?? 0.0)
+    /// <summary>Creates a DiffWave that runs an exported ONNX graph.</summary>
+    public DiffWave(NeuralNetworkArchitecture<T> architecture, string modelPath, DiffWaveOptions? options = null)
+        : base(architecture, modelPath, options ?? new DiffWaveOptions(), options?.SamplingSeed ?? 0)
     {
-        _options = options ?? new DiffWaveOptions();
-        _useNativeMode = false;
-        _preserveSuppliedOptimizer = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
     }
 
-    public DiffWave(
-        NeuralNetworkArchitecture<T> architecture,
-        DiffWaveOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture, maxGradNorm: options?.MaxGradientNorm ?? 0.0)
+    /// <summary>Creates a trainable DiffWave.</summary>
+    public DiffWave(NeuralNetworkArchitecture<T> architecture, DiffWaveOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture, options ?? new DiffWaveOptions(), optimizer, options?.SamplingSeed ?? 0)
     {
-        _options = options ?? new DiffWaveOptions();
-        _useNativeMode = true;
-        _preserveSuppliedOptimizer = optimizer is not null;
-        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
-            optimizer ?? CreateDefaultOptimizer());
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        InitializeLayers();
     }
 
-    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase - see BigVGAN for why
-    // these three restated what the base already derives from the same _options fields.
+    private DiffWaveOptions PaperOptions => (DiffWaveOptions)VocoderSettings;
 
-    /// <summary>
-    /// Converts mel to waveform using DiffWave's reverse diffusion process.
-    /// Per the paper (Kong et al., 2021):
-    /// (1) Forward process: gradually adds Gaussian noise over T steps (training only),
-    /// (2) Reverse process: iteratively denoises x_T -> x_0 using learned score function,
-    /// (3) Bidirectional dilated convolution network estimates noise at each step,
-    /// (4) Mel conditioning via FiLM (Feature-wise Linear Modulation) at each layer,
-    /// (5) Fast sampling: use fewer steps (6 steps) with noise schedule search.
-    /// </summary>
-    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    /// <inheritdoc />
+    public override int UpsampleFactor => PaperOptions.UpsampleStrides.Aggregate(1, (a, b) => a * b);
+
+    /// <inheritdoc />
+    protected override int SegmentSize => PaperOptions.CropFrames * UpsampleFactor;
+
+    /// <inheritdoc />
+    protected override double[] TrainingBetas => PaperOptions.NoiseSchedule;
+
+    /// <inheritdoc />
+    protected override double[]? InferenceBetas => PaperOptions.UseFastSampling ? PaperOptions.InferenceNoiseSchedule : null;
+
+    /// <inheritdoc />
+    protected override bool ClampEachStep => true;
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<LayerBase<T>> CreateNetwork()
     {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(melSpectrogram);
-        int melLen = melSpectrogram.Length;
-        int waveLen = melLen * _options.HopSize;
-        double[] x = new double[waveLen];
-        for (int i = 0; i < waveLen; i++)
-            x[i] = Math.Sin(i * 0.17 + 0.5) * 0.8; // noise
-        int steps = _options.NumDiffusionSteps;
-        for (int t = steps; t > 0; t--)
+        var o = PaperOptions;
+        if (UpsampleFactor != o.HopSize)
+            throw new ArgumentException($"The upsampler's strides ({string.Join("x", o.UpsampleStrides)}) must multiply to the hop ({o.HopSize}).");
+        if (o.Conditioner == DiffWaveConditioner.ClassLabel && o.NumClasses <= 0)
+            throw new ArgumentException("A class-conditional DiffWave needs NumClasses (the dataset's label count).");
+        if (o.Conditioner != DiffWaveConditioner.MelSpectrogram && o.UtteranceSamples <= 0)
+            throw new ArgumentException("A DiffWave without a spectrogram needs UtteranceSamples, the length it generates.");
+        _network = new DiffWaveNetwork<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7),
+            o.MelChannels, o.ResChannels, o.NumResLayers, o.DilationCycle, o.NoiseSchedule.Length, o.UpsampleStrides,
+            melConditioned: o.Conditioner == DiffWaveConditioner.MelSpectrogram,
+            labelClasses: o.Conditioner == DiffWaveConditioner.ClassLabel ? o.NumClasses : 0);
+        _features = new CenteredLogMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, o.MelMinFrequency,
+            o.SampleRate / 2.0, 1e-5, htkScale: true, normalizedWindow: true);
+        return _network.Layers;
+    }
+
+    /// <inheritdoc />
+    protected override Tensor<T> Denoise(Tensor<T> noisy, double level, Tensor<T> mel)
+    {
+        var network = _network ?? throw new InvalidOperationException("The DiffWave network has not been built.");
+        return PaperOptions.Conditioner switch
         {
-            double alpha = 1.0 - (double)t / steps;
-            for (int s = 0; s < waveLen; s++)
-            {
-                int melIdx = Math.Min(s / _options.HopSize, melLen - 1);
-                double melCond = NumOps.ToDouble(melSpectrogram[melIdx]);
-                // Score estimation via bidirectional dilated conv
-                double score = -(x[s] - melCond * 0.8) * (1 - alpha);
-                x[s] = x[s] + score * (1.0 / steps);
-            }
+            DiffWaveConditioner.MelSpectrogram => network.Forward(noisy, level, mel),
+            DiffWaveConditioner.Unconditional => network.Forward(noisy, level, (int?)null),
+            _ => network.Forward(noisy, level, LabelOf(mel)),
+        };
+    }
+
+    // A spectrogram-free condition is a one-element tensor holding the class label (ignored unconditionally).
+    private int LabelOf(Tensor<T> condition)
+    {
+        double value = NumOps.ToDouble(condition[0]);
+        int label = (int)Math.Round(value);
+        if (Math.Abs(value - label) > 1e-9)
+            throw new ArgumentException($"A class label must be an integer, got {value}.");
+        return label;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Without a spectrogram the input is the class label (a one-element tensor); unconditionally it is not
+    /// read.</remarks>
+    protected override Tensor<T> ConditionInput(Tensor<T> input)
+    {
+        if (PaperOptions.Conditioner == DiffWaveConditioner.MelSpectrogram) return MelInput(input);
+        var condition = new Tensor<T>(new[] { 1 });
+        if (PaperOptions.Conditioner == DiffWaveConditioner.ClassLabel)
+        {
+            if (input.Length != 1)
+                throw new ArgumentException($"A class-conditional DiffWave takes its class label as a one-element tensor, got [{string.Join(", ", input.Shape)}].", nameof(input));
+            condition[0] = input[0];
+            LabelOf(condition);
         }
-        var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-            waveform[i] = NumOps.FromDouble(Math.Tanh(x[i]));
-        return waveform;
+        return condition;
     }
 
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        var t = new Tensor<T>([1]);
-        t[0] = NumOps.FromDouble(0.0);
-        return t;
-    }
+    /// <inheritdoc />
+    /// <remarks>Without a spectrogram the paper trains on full utterances, so the whole recording is used.</remarks>
+    protected override (Tensor<T> Condition, Tensor<T> Audio) TrainingPair(Tensor<T> condition, Tensor<T> audio, Random random)
+        => PaperOptions.Conditioner == DiffWaveConditioner.MelSpectrogram ? base.TrainingPair(condition, audio, random) : (condition, Flat(audio));
 
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
+    /// <inheritdoc />
+    /// <remarks>A class-conditional sample takes its label from <see cref="TtsTrainingSample{T}.ClassLabel"/>.</remarks>
+    protected override Tensor<T> SampleCondition(TtsTrainingSample<T> sample, Tensor<T> audio)
     {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultDiffusionVocoderLayers(
-                    _options.MelChannels,
-                    _options.ResChannels,
-                    _options.NumResLayers,
-                    2,
-                    _options.DropoutRate
-                )
-            );
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
+        switch (PaperOptions.Conditioner)
         {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
+            case DiffWaveConditioner.MelSpectrogram:
+                return base.SampleCondition(sample, audio);
+            case DiffWaveConditioner.ClassLabel:
+                var label = new Tensor<T>(new[] { 1 });
+                label[0] = NumOps.FromDouble(sample.ClassLabel
+                    ?? throw new ArgumentException("A class-conditional DiffWave trains on labelled recordings; set ClassLabel.", nameof(sample)));
+                return ConditionInput(label);
+            default:
+                return new Tensor<T>(new[] { 1 });
         }
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
-    public override ModelMetadata<T> GetModelMetadata()
+    protected override Tensor<T> EvaluationAudio(Tensor<T> condition, Tensor<T> target)
+        => PaperOptions.Conditioner == DiffWaveConditioner.MelSpectrogram ? base.EvaluationAudio(condition, target) : target;
+
+    /// <inheritdoc />
+    protected override int SynthesisSamples(Tensor<T> mel)
+        => PaperOptions.Conditioner == DiffWaveConditioner.MelSpectrogram ? base.SynthesisSamples(mel) : PaperOptions.UtteranceSamples;
+
+    /// <summary>Generates an utterance of <see cref="DiffWaveOptions.UtteranceSamples"/> samples by the reverse process
+    /// (Algorithm 2): unconditionally, or of class <paramref name="classLabel"/> for a class-conditional model.</summary>
+    public Tensor<T> Generate(int? classLabel = null)
     {
-        return new ModelMetadata<T>
-        {
-            Name = _useNativeMode ? "DiffWave-Native" : "DiffWave-ONNX",
-            Description =
-                "DiffWave: A Versatile Diffusion Model for Audio Synthesis (Kong et al., 2021)",
-            FeatureCount = _options.MelChannels,
-            Complexity = _options.NumDiffusionSteps,
-            AdditionalInfo = new Dictionary<string, object>
-            {
-                ["MelChannels"] = _options.MelChannels,
-                ["Mode"] = _useNativeMode ? "Native" : "ONNX",
-            },
-        };
+        var conditioner = PaperOptions.Conditioner;
+        if (conditioner == DiffWaveConditioner.MelSpectrogram)
+            throw new InvalidOperationException("This DiffWave is a vocoder; convert a mel spectrogram with MelToWaveform.");
+        if ((conditioner == DiffWaveConditioner.ClassLabel) != classLabel.HasValue)
+            throw new ArgumentException(classLabel.HasValue ? "An unconditional DiffWave takes no class label." : "A class-conditional DiffWave needs a class label.", nameof(classLabel));
+        var input = new Tensor<T>(new[] { 1 });
+        input[0] = NumOps.FromDouble(classLabel ?? 0);
+        return Predict(input);
     }
 
+    /// <inheritdoc />
+    /// <remarks><c>clamp((20 log10(max(mel, 1e-5)) − 20 + 100) / 100, 0, 1)</c> (reference <c>preprocess.py</c>).</remarks>
+    protected override Tensor<T> ComputeInputMel(Tensor<T> audio) => DecibelUnitRange(_features!.Forward(audio));
 
-
-
-
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
-    {
-        bool clipGradients = _options.MaxGradientNorm > 0.0;
-
-        // DiffWave uses standard Adam in Kong et al. A non-zero user-supplied WeightDecay opts
-        // into AdamW explicitly; the paper-faithful default remains Adam with no weight decay.
-        if (_options.WeightDecay > 0.0)
-        {
-            return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-                this,
-                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-                {
-                    BatchSize = _options.OptimizerBatchSize,
-                    InitialLearningRate = _options.LearningRate,
-                    Beta1 = _options.OptimizerBeta1,
-                    Beta2 = _options.OptimizerBeta2,
-                    Epsilon = _options.OptimizerEpsilon,
-                    WeightDecay = _options.WeightDecay,
-                    UseAdaptiveBetas = false,
-                    UseAMSGrad = false,
-                    EnableGradientClipping = clipGradients,
-                    MaxGradientNorm = _options.MaxGradientNorm,
-                });
-        }
-
-        return new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
+        => PaperOptimizerFactory.VerifyHandBuilt(this, new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                BatchSize = _options.OptimizerBatchSize,
-                InitialLearningRate = _options.LearningRate,
-                Beta1 = _options.OptimizerBeta1,
-                Beta2 = _options.OptimizerBeta2,
-                Epsilon = _options.OptimizerEpsilon,
-                UseAdaptiveLearningRate = false,
+                InitialLearningRate = PaperOptions.LearningRate,
                 UseAdaptiveBetas = false,
-                UseAMSGrad = false,
-                EnableGradientClipping = clipGradients,
-                MaxGradientNorm = _options.MaxGradientNorm,
-            });
-    }
+            }));
 
-    private void ThrowIfDisposed()
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata()
     {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(DiffWave<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
+        var o = PaperOptions;
+        var m = new ModelMetadata<T>
+        {
+            Name = IsOnnxMode ? "DiffWave-ONNX" : "DiffWave-Native",
+            Description = "DiffWave: A Versatile Diffusion Model for Audio Synthesis (Kong et al., 2021)",
+            FeatureCount = o.MelChannels,
+            Complexity = o.NumResLayers,
+        };
+        m.AdditionalInfo["Architecture"] = "DiffWave";
+        m.AdditionalInfo["SampleRate"] = o.SampleRate.ToString();
+        return m;
     }
 }

@@ -104,7 +104,7 @@ public partial class PromptTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// (4) Mel decoder: generates mel spectrogram from style-conditioned features.
     /// Enables zero-shot style control via text descriptions like "a young female speaking quickly with excitement".
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);
@@ -112,15 +112,6 @@ public partial class PromptTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
             return OnnxModel.Run(input);
         var output = Predict(input);
         return PostprocessAudio(output);
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
     }
 
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;

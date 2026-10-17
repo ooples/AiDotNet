@@ -1,40 +1,36 @@
-using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
-using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
 
-/// <summary>BigVGAN: large-scale universal vocoder with anti-aliased multi-periodicity composition (AMP) and Snake activation for high-fidelity synthesis.</summary>
+/// <summary>
+/// BigVGAN: a universal GAN vocoder — HiFi-GAN with anti-aliased periodic (Snake) activations, trained at scale against
+/// multi-period and multi-resolution discriminators.
+/// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "BigVGAN: A Universal Neural Vocoder with Large-Scale Training" (Lee et al., 2023)</item></list></para><para><b>For Beginners:</b> BigVGAN: large-scale universal vocoder with anti-aliased multi-periodicity composition (AMP) and Snake activation for high-fidelity synthesis.. This model converts text input into speech audio output.</para></remarks>
-/// <example>
-/// <code>
-/// // Create a BigVGAN universal vocoder with anti-aliased
-/// // multi-periodicity composition (AMP) and Snake activation
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new BigVGAN&lt;double&gt;(architecture, "bigvgan.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new BigVGAN&lt;double&gt;(architecture, new BigVGANOptions());
-/// </code>
-/// </example>
+/// <remarks>
+/// <para><b>References:</b> "BigVGAN: A Universal Neural Vocoder with Large-Scale Training" (Lee et al., ICLR 2023) and
+/// NVIDIA/BigVGAN for what the paper leaves unstated.</para>
+/// <para>
+/// The generator replaces HiFi-GAN's leaky ReLUs with Snake, made anti-aliased by 2× sinc up- and down-sampling around it
+/// (the AMP module, §3.2–3.3). Training is HiFi-GAN's with the multi-scale discriminator replaced by UnivNet's
+/// multi-resolution discriminator (§3.1): LSGAN, feature matching (×2) and mel L1 (×45), AdamW (0.8, 0.99) at 1e-4
+/// decayed 0.999 per epoch, gradient norms clipped at 1000 — the generator's, the period discriminators' and the
+/// resolution discriminators' separately (§3.4, reference <c>train.py</c>).
+/// </para>
+/// <para><b>For Beginners:</b> BigVGAN turns spectrograms into audio for any voice, language or instrument; its
+/// activations ripple periodically like sound does, and a filter keeps them from adding high-frequency artefacts.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
     "BigVGAN: A Universal Neural Vocoder with Large-Scale Training",
@@ -42,203 +38,146 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2023,
     Authors = "Lee et al."
 )]
-[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.8, Beta2 = 0.99, WeightDecay = 0.01,
-                LearningRate = 1e-4, Schedule = LearningRateSchedulerType.Exponential,
-                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
-                DecayRate = 0.999, ReferenceBatchSize = 32,
-                Source = "Lee et al. 2023, Sec. 4: batch size 32 and an initial learning rate of 1e-4 over 1M steps, explicitly halved from HiFi-GAN default of 2e-4 because that caused early training collapse. The optimizer and scheduler are stated to follow HiFi-GAN, so the AdamW betas, weight decay and 0.999 epoch decay come from Kong et al. 2020.")]
-public partial class BigVGAN<T> : VocoderBase<T>
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, Beta1 = 0.8, Beta2 = 0.99, WeightDecay = 0.01, DecayRate = 0.999,
+                ReferenceBatchSize = 32,
+                Source = "Lee et al. 2023, Sec. 3.4 and 4.2: batch 32, learning rate 1e-4, gradient norm clipped at 1000; the "
+                        + "optimizer (AdamW 0.8/0.99) and 0.999 per-epoch decay of HiFi-GAN's official configuration.")]
+public partial class BigVGAN<T> : GanVocoderBase<T>
 {
-    private readonly BigVGANOptions _options;
+    private BigVganGenerator<T>? _generator;
+    private HiFiGanDiscriminators<T>? _periods;
+    private MultiResolutionSpectrogramDiscriminators<T>? _resolutions;
+    private DifferentiableMel<T>? _inputMel;
+    private DifferentiableMel<T>? _lossMel;
 
-    public override ModelOptions GetOptions() => _options;
-
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-
-    public BigVGAN(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        BigVGANOptions? options = null
-    )
-        : base(architecture)
+    /// <summary>Creates a BigVGAN that runs an exported ONNX graph.</summary>
+    public BigVGAN(NeuralNetworkArchitecture<T> architecture, string modelPath, BigVGANOptions? options = null)
+        : base(architecture, modelPath, options ?? new BigVGANOptions(), options?.SamplingSeed ?? 0)
     {
-        _options = options ?? new BigVGANOptions();
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
     }
 
-    public BigVGAN(
-        NeuralNetworkArchitecture<T> architecture,
-        BigVGANOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
+    /// <summary>Creates a trainable BigVGAN.</summary>
+    public BigVGAN(NeuralNetworkArchitecture<T> architecture, BigVGANOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture, options ?? new BigVGANOptions(), optimizer, options?.SamplingSeed ?? 0)
     {
-        _options = options ?? new BigVGANOptions();
-        _useNativeMode = true;
-        _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        InitializeLayers();
     }
 
-    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase. Each constructor already
-    // assigns base.SampleRate / .MelChannels / .HopSize from these same _options fields, and the base
-    // UpsampleFactor is HopSize, so the three members deleted here restated values the base derives.
+    private BigVGANOptions PaperOptions => (BigVGANOptions)VocoderSettings;
 
-    /// <summary>
-    /// Converts mel to waveform using BigVGAN's AMP blocks with Snake activation.
-    /// Per the paper (Lee et al., 2023): Uses anti-aliased multi-periodicity composition (AMP) modules replacing standard residual blocks. Snake activation (x + sin^2(alpha*x)/alpha) captures periodic patterns better than LeakyReLU. Trained on large-scale data (LibriTTS + others) for universal vocoding across unseen speakers, languages, and recording conditions.
-    /// </summary>
-    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    /// <inheritdoc />
+    public override int UpsampleFactor => PaperOptions.UpsampleRates.Aggregate(1, (a, b) => a * b);
+
+    /// <inheritdoc />
+    protected override int SegmentSize => PaperOptions.SegmentSize;
+
+    /// <inheritdoc />
+    protected override double GradientClipNorm(string group) => PaperOptions.GradientClipNorm;
+
+    /// <inheritdoc />
+    /// <remarks>The period and the resolution discriminators are clipped separately.</remarks>
+    protected override IReadOnlyList<IReadOnlyList<LayerBase<T>>>? ClippingLayerGroups(string group)
+        => group == "discriminator" ? new[] { _periods!.Layers, _resolutions!.Layers } : null;
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<LayerBase<T>> CreateGenerator()
     {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(melSpectrogram);
-        // Run mel through learned vocoder layers for feature extraction
-        var features = melSpectrogram;
-        foreach (var l in Layers)
-            features = l.Forward(features);
-        int melLen = features.Length;
-        int waveLen = melLen * _options.HopSize;
-        var waveform = new Tensor<T>([waveLen]);
-        // Progressive upsampling through AMP blocks with Snake activation
-        int currentLen = melLen;
-        double[] signal = new double[melLen];
-        for (int i = 0; i < melLen; i++)
-            signal[i] = NumOps.ToDouble(features[i]);
-        // Multi-stage upsampling (each stage doubles resolution)
-        int numStages = (int)Math.Ceiling(Math.Log((double)_options.HopSize) / Math.Log(2.0));
-        for (int stage = 0; stage < numStages; stage++)
-        {
-            int nextLen = Math.Min(currentLen * 2, waveLen);
-            double[] upsampled = new double[nextLen];
-            for (int i = 0; i < nextLen; i++)
-            {
-                int srcIdx = Math.Min(i * currentLen / nextLen, currentLen - 1);
-                double x = signal[srcIdx];
-                // Snake activation: x + sin^2(alpha * x) / alpha
-                double alpha = _options.SnakeAlpha;
-                double snake = x + Math.Pow(Math.Sin(alpha * x), 2) / alpha;
-                // AMP: anti-aliased multi-periodicity composition
-                double amp = 0;
-                for (int p = 0; p < _options.NumPeriods; p++)
-                {
-                    double period = 2.0 + p * 3.0;
-                    amp += Math.Sin(2.0 * Math.PI * i / period + x * 0.5) / _options.NumPeriods;
-                }
-                upsampled[i] = Math.Tanh(snake * 0.5 + amp * 0.3);
-            }
-            signal = upsampled;
-            currentLen = nextLen;
-        }
-        // Copy to output
-        for (int i = 0; i < waveLen; i++)
-        {
-            int srcIdx = Math.Min(i * currentLen / waveLen, currentLen - 1);
-            waveform[i] = NumOps.FromDouble(signal[srcIdx]);
-        }
-        return waveform;
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        var t = new Tensor<T>([1]);
-        t[0] = NumOps.FromDouble(0.0);
-        return t;
-    }
-
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultVocoderLayers(
-                    _options.MelChannels,
-                    _options.HiddenChannels,
-                    1,
-                    _options.NumUpsampleLayers,
-                    3,
-                    _options.DropoutRate
-                )
-            );
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
+        var o = PaperOptions;
+        _generator = new BigVganGenerator<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7),
+            o.MelChannels, o.UpsampleInitialChannels, o.UpsampleRates, o.UpsampleKernelSizes, o.ResblockKernelSizes, o.ResblockDilationSizes);
+        _inputMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.MelMaxFrequency);
+        _lossMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.SampleRate / 2.0);
+        return _generator.Layers;
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
+    protected override IReadOnlyList<LayerBase<T>> CreateDiscriminators()
+    {
+        var o = PaperOptions;
+        _periods = new HiFiGanDiscriminators<T>(Engine, o.DiscriminatorPeriods, 0, useScaleDiscriminator: false, widthDivisor: o.DiscriminatorWidthDivisor);
+        _resolutions = new MultiResolutionSpectrogramDiscriminators<T>(Engine, o.ResolutionFftSizes, o.ResolutionHopSizes, o.ResolutionWindowSizes,
+            o.ResolutionDiscriminatorChannels, 0.1);
+        return _periods.Layers.Concat(_resolutions.Layers).ToList();
+    }
+
+    /// <inheritdoc />
+    protected override Tensor<T> Generate(Tensor<T> mel) => _generator!.Forward(mel);
+
+    /// <inheritdoc />
+    protected override Tensor<T> ComputeInputMel(Tensor<T> audio)
+    {
+        var rows = _inputMel!.Forward(audio);
+        return Engine.Reshape(Engine.TensorTranspose(rows), new[] { 1, PaperOptions.MelChannels, rows.Shape[0] });
+    }
+
+    private List<(Tensor<T> Score, List<Tensor<T>> Features)> Discriminate(Tensor<T> audio)
+        => _periods!.Forward(audio).Concat(_resolutions!.Forward(audio)).ToList();
+
+    /// <inheritdoc />
+    protected override Tensor<T> DiscriminatorLoss(Tensor<T> real, Tensor<T> generated)
+    {
+        var realScores = Discriminate(real);
+        var fakeScores = Discriminate(generated);
+        return Sum(Enumerable.Range(0, realScores.Count).Select(k => LeastSquaresDiscriminator(realScores[k].Score, fakeScores[k].Score)));
+    }
+
+    /// <inheritdoc />
+    protected override Tensor<T> GeneratorLoss(Tensor<T> mel, Tensor<T> real, bool adversarial)
+    {
+        var generated = Flat(Generate(mel));
+        var fake = Discriminate(generated);
+        List<(Tensor<T> Score, List<Tensor<T>> Features)> realOut;
+        using (new NoGradScope<T>()) realOut = Discriminate(real);
+        var adversarialTerm = Sum(fake.Select(f => LeastSquaresGenerator(f.Score)));
+        var featureMatching = Sum(Enumerable.Range(0, fake.Count).Select(k => FeatureMatching(realOut[k].Features, fake[k].Features)));
+        Tensor<T> realMel;
+        using (new NoGradScope<T>()) realMel = Detached(_lossMel!.Forward(real));
+        var melLoss = Mean(Engine.TensorAbs(Engine.TensorSubtract(_lossMel.Forward(generated), realMel)));
+        return Engine.TensorAdd(Engine.TensorAdd(adversarialTerm,
+                Engine.TensorMultiplyScalar(featureMatching, NumOps.FromDouble(PaperOptions.FeatureMatchingWeight))),
+            Engine.TensorMultiplyScalar(melLoss, NumOps.FromDouble(PaperOptions.MelLossWeight)));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The mel reconstruction term (×45) of the generator objective.</remarks>
+    protected override Tensor<T> ReconstructionObjective(Tensor<T> mel, Tensor<T> real)
+    {
+        var (generated, target) = GeneratedAndReal(mel, real);
+        return Engine.TensorMultiplyScalar(Mean(Engine.TensorAbs(Engine.TensorSubtract(_lossMel!.Forward(generated), _lossMel.Forward(target)))),
+            NumOps.FromDouble(PaperOptions.MelLossWeight));
+    }
+
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer(string group)
+    {
+        var o = PaperOptions;
+        int perEpoch = Math.Max(1, o.UpdatesPerEpoch);
+        var scheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(o.LearningRate, step => Math.Pow(o.LearningRateDecay, step / perEpoch));
+        return PaperOptimizerFactory.VerifyHandBuilt(this, new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = o.LearningRate,
+                Beta1 = o.Beta1,
+                Beta2 = o.Beta2,
+                WeightDecay = o.WeightDecay,
+                LearningRateScheduler = scheduler,
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+            }));
+    }
+
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var o = PaperOptions;
+        var m = new ModelMetadata<T>
         {
-            Name = _useNativeMode ? "BigVGAN-Native" : "BigVGAN-ONNX",
-            Description = "BigVGAN: Universal Neural Vocoder with AMP + Snake (Lee et al., 2023)",
-            FeatureCount = _options.MelChannels,
-            AdditionalInfo = new Dictionary<string, object>
-            {
-                ["MelChannels"] = _options.MelChannels,
-                ["Mode"] = _useNativeMode ? "Native" : "ONNX",
-            },
+            Name = IsOnnxMode ? "BigVGAN-ONNX" : "BigVGAN-Native",
+            Description = "BigVGAN: A Universal Neural Vocoder with Large-Scale Training (Lee et al., 2023)",
+            FeatureCount = o.MelChannels,
+            Complexity = o.UpsampleRates.Length + o.ResblockKernelSizes.Length,
         };
-    }
-
-
-
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(BigVGAN<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
+        m.AdditionalInfo["Architecture"] = "BigVGAN";
+        m.AdditionalInfo["SampleRate"] = o.SampleRate.ToString();
+        return m;
     }
 }

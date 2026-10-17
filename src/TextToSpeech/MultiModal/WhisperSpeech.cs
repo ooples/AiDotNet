@@ -107,7 +107,7 @@ public partial class WhisperSpeech<T> : TtsModelBase<T>, ICodecTts<T>
     public int CodecFrameRate => _options.CodecFrameRate;
 
     /// <summary>Synthesizes speech. WhisperSpeech inverts Whisper: text -> semantic tokens (S2A) -> acoustic tokens (T2A) -> EnCodec decoder.</summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

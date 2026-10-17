@@ -20,8 +20,8 @@ public class Wav2Vec2ModelOptions : AudioNeuralNetworkOptions
     /// changed in one place.
     /// </para>
     /// <para>
-    /// Carried over unchanged. Whether each matches the published paper is verified, and
-    /// corrected where it does not, in a later phase of issue #2090.
+    /// The defaults are wav2vec 2.0 BASE (Baevski et al. 2020, Table 6 / fairseq): 12 layers of width 768 with 12
+    /// heads and a 3072-wide feed-forward over the 7-layer feature encoder.
     /// </para>
     /// </remarks>
     public Wav2Vec2ModelOptions()
@@ -80,5 +80,56 @@ public class Wav2Vec2ModelOptions : AudioNeuralNetworkOptions
     public void Validate()
     {
         ValidateCore();
+        if (FinalDropout < 0 || FinalDropout >= 1) throw new ArgumentException("FinalDropout must be in [0, 1).");
     }
+
+    /// <summary>
+    /// Gets or sets whether the feature encoder uses layer norm on every layer with pre-norm "stable layer norm"
+    /// Transformer layers (wav2vec 2.0 LARGE-LV60) instead of group norm on the first layer with post-norm layers
+    /// (BASE).
+    /// </summary>
+    public bool StableLayerNorm { get; set; }
+
+    /// <summary>
+    /// Gets or sets the dropout before the CTC head (transformers' <c>final_dropout</c>, 0.1).
+    /// </summary>
+    public double FinalDropout { get; set; } = 0.1;
+
+    /// <summary>
+    /// Gets or sets whether fine-tuning leaves the convolutional feature encoder frozen (the paper: "the feature
+    /// encoder is not trained during fine-tuning").
+    /// </summary>
+    public bool FreezeFeatureEncoder { get; set; } = true;
+
+    /// <summary>Gets or sets the encoder dropout (hidden_dropout, 0.1).</summary>
+    public double HiddenDropout { get; set; } = 0.1;
+
+    /// <summary>Gets or sets the attention dropout (0.1).</summary>
+    public double AttentionDropout { get; set; } = 0.1;
+
+    /// <summary>Gets or sets the feed-forward activation dropout (0.1).</summary>
+    public double ActivationDropout { get; set; } = 0.1;
+
+    /// <summary>Gets or sets the probability of skipping a Transformer layer in training (LayerDrop, 0.1).</summary>
+    public double LayerDrop { get; set; } = 0.1;
+
+    /// <summary>Gets or sets the SpecAugment time-mask probability during fine-tuning (0.05).</summary>
+    public double MaskTimeProbability { get; set; } = 0.05;
+
+    /// <summary>The network these options describe.</summary>
+    internal AiDotNet.Audio.Foundations.Wav2Vec2Configuration ToConfiguration() => new()
+    {
+        HiddenSize = HiddenDim,
+        Layers = NumTransformerLayers,
+        Heads = NumHeads,
+        IntermediateSize = FfDim,
+        LayerNormFeatureEncoder = StableLayerNorm,
+        StableLayerNorm = StableLayerNorm,
+        ConvBias = StableLayerNorm,
+        HiddenDropout = HiddenDropout,
+        AttentionDropout = AttentionDropout,
+        ActivationDropout = ActivationDropout,
+        LayerDrop = LayerDrop,
+        MaskTimeProbability = MaskTimeProbability,
+    };
 }

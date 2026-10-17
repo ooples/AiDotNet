@@ -209,6 +209,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     internal IReadOnlyList<ILayer<T>> LayersReadOnly => _layers;
 
     /// <summary>
+    /// Every top-level layer the model runs: <see cref="Layers"/> followed by the trainable layers it owns outside that
+    /// stack (<see cref="GetExtraTrainableLayers"/>), each once, in a stable order.
+    /// </summary>
+    /// <remarks>A walk over <see cref="Layers"/> alone misses a model's component sub-networks — a post-net's
+    /// BatchNorm, a duration predictor — which take part in training, mode switching and serialization.</remarks>
+    internal IEnumerable<ILayer<T>> LayersIncludingComponents()
+    {
+        var seen = new HashSet<ILayer<T>>(ReferenceEqualityComparer<ILayer<T>>.Instance);
+        foreach (var layer in _layers)
+            if (seen.Add(layer)) yield return layer;
+        foreach (var layer in GetExtraTrainableLayers())
+            if (layer is not null && seen.Add(layer)) yield return layer;
+    }
+
+    /// <summary>
     /// Inserts a layer into the internal layer collection and invalidates the parameter count cache.
     /// </summary>
     /// <remarks>
@@ -2731,7 +2746,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // resolved, allocation-free slots. KnownParameterCount retains those exact widths while
             // unknown slots contribute zero. MaterializedParameterCount can still be larger when a
             // deferred slot already owns live storage, so capacity planning takes the greater truth.
-            long declared = layout.DeclaredParameterCount ?? layout.KnownParameterCount;
+            long? declaredCount = layout.DeclaredParameterCount;
+            long declared = declaredCount ?? layout.KnownParameterCount;
             return Math.Max(layout.MaterializedParameterCount, declared);
         }
     }
@@ -3853,7 +3869,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         string memberName)
     {
         var rebound = RebindLayerGraphAlias(graph, previousLayers, replacementLayers, memberName);
-        if (!ReferenceEquals(graph, rebound))
+        if ((object?)graph != rebound)   // reference comparison; LayerGraph<T> is a class
         {
             throw new InvalidOperationException(
                 $"Readonly layer graph member '{memberName}' aliases the canonical Layers graph and cannot " +
@@ -5194,6 +5210,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     protected virtual IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(
         IReadOnlyList<Tensor<T>> parameters) => parameters;
 
+    /// <summary>
+    /// Parameter groups whose gradients a custom-objective training step clips to <c>MaxGradNorm</c> separately, or
+    /// null to clip the layer-owned parameters as one group.
+    /// </summary>
+    /// <remarks>Some papers clip parts of a model independently — Grad-TTS clips its encoder's and its decoder's
+    /// gradients to norm 1 each. Each group's norm is computed over that group alone and only its gradients are scaled.</remarks>
+    protected virtual IReadOnlyList<IReadOnlyList<Tensor<T>>>? GradientClippingGroups(IReadOnlyList<Tensor<T>> trainableParameters)
+        => null;
+
+    /// <summary>
+    /// A bound applied to every gradient component after the norm clip in a custom-objective training step, or 0 for
+    /// none. Deep Voice 3 states both a maximum gradient norm (100) and a gradient clipping value (5).
+    /// </summary>
+    protected virtual double GradientValueClip => 0.0;
+
     private bool? _hasCustomTrainableParameterSelection;
 
     private bool HasCustomTrainableParameterSelection()
@@ -5350,7 +5381,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         foreach (var layer in GetExtraTrainableLayers())
         {
             if (layer is null || !layer.SupportsTraining || layer.ParameterCount <= 0) continue;
-            allGradients.Add(layer.ScatteredParameterGradients ?? (_hasPublishedParameterGradients
+            var scattered = layer.ScatteredParameterGradients;
+            allGradients.Add(scattered ?? (_hasPublishedParameterGradients
                 ? new Vector<T>(ParameterCountHelper.ToFlatVectorSize(layer.ParameterCount))
                 : layer.GetParameterGradients()));
         }
@@ -13680,12 +13712,54 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         try
         {
             var opt = optimizer ?? GetOrCreateBaseOptimizer();
+            // The step's own arena, as TrainWithTape has: the top-level tape's Dispose Resets the CURRENT arena
+            // (Tensors #1804), and without a step arena that was the caller's. A model that runs several steps on the
+            // same inputs in one Train call (a GAN's discriminator then generator step, VITS's discriminator, generator
+            // and duration steps) then had those inputs recycled between steps: the arena's tensor ring re-issued the
+            // same Tensor objects and reshaped them in place. Tensors escaping a nested arena are never re-issued.
+            using var stepArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
             using var tape = new GradientTape<T>();
             var lossTensor = RecomputeObjective(input, expected);
             var trainableParams = CollectModelTrainableTensors();
             var grads = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParams);
             T lossValue = lossTensor[0];
             LastLoss = lossValue;
+
+            // Global gradient-norm clipping at MaxGradNorm, over the same layer-owned set and in the same order as
+            // TrainWithTape and the gradient-accumulation step. This path used to skip it, so a model trained through
+            // its own objective (FastSpeech 2, AlignTTS, AdaSpeech) took unclipped steps that every other entry point
+            // would have clipped.
+            double maxGradNorm = MaxGradNormValue;
+            if (maxGradNorm > 0.0 && grads.Count > 0)
+            {
+                var groups = GradientClippingGroups(trainableParams);
+                if (groups is null)
+                {
+                    ApplyGradientClipping(grads, maxGradNorm, CollectLayerOwnedTrainableTensorsForClipping(trainableParams));
+                }
+                else
+                {
+                    foreach (var group in groups)
+                        ApplyGradientClipping(grads, maxGradNorm, group);
+                }
+                PublishParameterGradients(grads);
+            }
+            double clipValue = GradientValueClip;
+            if (clipValue > 0.0 && grads.Count > 0)
+            {
+                T lower = NumOps.FromDouble(-clipValue), upper = NumOps.FromDouble(clipValue);
+                foreach (var g in grads.Values)
+                {
+                    if (g is null || g.Length == 0) continue;
+                    var span = g.Data.Span;
+                    for (int i = 0; i < span.Length; i++)
+                    {
+                        if (NumOps.LessThan(span[i], lower)) span[i] = lower;
+                        else if (NumOps.GreaterThan(span[i], upper)) span[i] = upper;
+                    }
+                }
+                PublishParameterGradients(grads);
+            }
 
             Tensor<T> RecomputeObjective(Tensor<T> currentInput, Tensor<T> currentExpected)
             {
@@ -15901,7 +15975,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         var definitionType = runtimeType.IsGenericType
             ? runtimeType.GetGenericTypeDefinition()
             : runtimeType;
-        return definitionType.FullName ?? definitionType.Name;
+        string? fullName = definitionType.FullName;
+        return fullName ?? definitionType.Name;
     }
 
     private sealed class SerializedAdditionalLayer
@@ -18301,6 +18376,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             }
         }
 
+        return ObservedLayerActivations(input, activations);
+    }
+
+    /// <summary>
+    /// The activations of every layer call made by <see cref="Predict"/> on <paramref name="input"/>, keyed by the
+    /// layer's position in <see cref="Layers"/> (or its call order when it is not a top-level layer).
+    /// </summary>
+    /// <remarks>For models whose forward is not a fold of <see cref="Layers"/> and whose family base folds anyway.</remarks>
+    protected Dictionary<string, Tensor<T>> ObservedLayerActivations(Tensor<T> input, Dictionary<string, Tensor<T>>? activations = null)
+    {
+        activations ??= new Dictionary<string, Tensor<T>>();
         // The observer is already wired into LayerBase.Forward and composes with an enclosing trace,
         // so this asks the model to run itself and writes down what actually happened. Correct for a
         // branched model, a custom PredictCore, and a plain chain alike.

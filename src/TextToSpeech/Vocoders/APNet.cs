@@ -1,36 +1,30 @@
-using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
-using AiDotNet.Optimizers;
-using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
 
-/// <summary>APNet: amplitude-phase network that predicts amplitude and phase spectra separately then reconstructs waveform via iSTFT.</summary>
+/// <summary>
+/// APNet: an all-frame-level neural vocoder that predicts the log amplitude spectrum (ASP) and the phase spectrum (PSP)
+/// directly from the mel spectrogram with residual convolution networks and reconstructs the waveform by an inverse STFT.
+/// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "APNet: Neural Vocoder that Generates Complex Spectrogram with Amplitude and Phase" (Ai et al., 2023)</item></list></para><para><b>For Beginners:</b> APNet: amplitude-phase network that predicts amplitude and phase spectra separately then reconstructs waveform via iSTFT.. This model converts text input into speech audio output.</para></remarks>
-/// <example>
-/// <code>
-/// // Create an APNet vocoder for amplitude-phase spectrum prediction
-/// // with separate amplitude and phase branches reconstructed via iSTFT
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new APNet&lt;double&gt;(architecture, "apnet.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new APNet&lt;double&gt;(architecture, new APNetOptions());
-/// </code>
-/// </example>
+/// <remarks>
+/// <para><b>References:</b> "APNet: An All-Frame-Level Neural Vocoder Incorporating Direct Prediction of Amplitude and
+/// Phase Spectra" (Ai and Ling, IEEE/ACM TASLP 2023) and yangai520/APNet for what the paper leaves unstated.</para>
+/// <para>
+/// The ASP and PSP are residual convolution networks (§III-A/B, Fig. 3); the phase losses use the negative cosine as the
+/// anti-wrapping function (Eq. 11, 17, 22); L_W is HiFi-GAN's least-squares GAN loss against the MPD and MSD, twice the
+/// feature-matching loss and λ_Mel times the mel loss (§III-C4).
+/// </para>
+/// <para><b>For Beginners:</b> Rather than drawing the waveform sample by sample, APNet predicts how loud each frequency
+/// is (amplitude) and where each wave is in its cycle (phase) for every frame, and an inverse Fourier transform turns
+/// that into audio, which is very fast.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]
@@ -40,171 +34,97 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     "APNet: An All-Frame-Level Neural Vocoder Incorporating Direct Prediction of Amplitude and Phase Spectra",
     "https://arxiv.org/abs/2305.07952",
     Year = 2023,
-    Authors = "Ai et al."
+    Authors = "Ai and Ling"
 )]
-[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 0.0002, Beta1 = 0.8, Beta2 = 0.99,
-                DecayRate = 0.999, Schedule = LearningRateSchedulerType.Exponential,
-                ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
-                Source = "Ai and Ling 2023, Sec. 4: the AdamW optimizer with beta1 0.8 and beta2 0.99, "
-                        + "an initial learning rate of 0.0002 and decay scheduled by a 0.999 factor "
-                        + "every epoch. Its successor APNet 2 states the same 0.999 per-epoch decay.")]
-public partial class APNet<T> : VocoderBase<T>
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-4, Beta1 = 0.8, Beta2 = 0.99, WeightDecay = 0.01, DecayRate = 0.999,
+                ReferenceBatchSize = 16,
+                Source = "Ai and Ling 2023, Sec. IV-A: AdamW with beta1 0.8 and beta2 0.99, an initial learning rate of 0.0002 decayed "
+                        + "by 0.999 every epoch, batch 16 (weight decay: torch.optim.AdamW's default in the reference).")]
+public partial class APNet<T> : AmplitudePhaseVocoderBase<T>
 {
-    private readonly APNetOptions _options;
+    private ApNetPredictor<T>? _amplitude;
+    private ApNetPredictor<T>? _phase;
+    private HiFiGanDiscriminators<T>? _discriminators;
 
-    public override ModelOptions GetOptions() => _options;
-
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-
-    public APNet(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        APNetOptions? options = null
-    )
-        : base(architecture)
+    /// <summary>Creates an APNet that runs an exported ONNX graph.</summary>
+    public APNet(NeuralNetworkArchitecture<T> architecture, string modelPath, APNetOptions? options = null)
+        : base(architecture, modelPath, options ?? new APNetOptions(), options?.SamplingSeed ?? 0)
     {
-        _options = options ?? new APNetOptions();
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
     }
 
-    public APNet(
-        NeuralNetworkArchitecture<T> architecture,
-        APNetOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
+    /// <summary>Creates a trainable APNet.</summary>
+    public APNet(NeuralNetworkArchitecture<T> architecture, APNetOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture, options ?? new APNetOptions(), optimizer, options?.SamplingSeed ?? 0)
     {
-        _options = options ?? new APNetOptions();
-        _useNativeMode = true;
-        _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        InitializeLayers();
     }
 
-    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase - see BigVGAN for why
-    // these three restated what the base already derives from the same _options fields.
+    private APNetOptions PaperOptions => (APNetOptions)VocoderSettings;
 
-    /// <summary>
-    /// Converts mel to waveform using APNet's dual-stream amplitude and phase prediction.
-    /// Per the paper (Ai et al., 2023): Two parallel sub-networks predict amplitude spectrum A(f,t) and phase spectrum P(f,t) separately from mel input. An anti-wrapping loss constrains phase continuity. Final waveform is reconstructed via iSTFT: x(n) = iSTFT(A * exp(j*P)). Achieves better phase prediction than Griffin-Lim.
-    /// </summary>
-    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    /// <inheritdoc />
+    protected override void CreatePredictors(List<LayerBase<T>> layers, Random initialization)
     {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(melSpectrogram);
-        return Predict(melSpectrogram);
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        var t = new Tensor<T>([1]);
-        t[0] = NumOps.FromDouble(0.0);
-        return t;
-    }
-
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            return;
-        }
-        if (_options.DropoutRate > double.Epsilon)
-            throw new InvalidOperationException(
-                "APNetOptions.DropoutRate is configured but the paper-faithful HiFi-GAN generator (Kong 2020) applies no dropout; leave DropoutRate at 0 for native mode or supply explicit Architecture.Layers."
-            );
-        Layers.AddRange(
-            LayerHelper<T>.CreateDefaultHiFiGANLayers(
-                _options.MelChannels,
-                512,
-                _options.FftSize / 2 + 1
-            )
-        );
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        var o = PaperOptions;
+        int bins = o.FftSize / 2 + 1;
+        _amplitude = new ApNetPredictor<T>(Engine, initialization, o.MelChannels, o.Channels, o.ResblockKernelSizes, o.ResblockDilationSizes,
+            o.InputKernelSize, o.OutputKernelSize, bins, 1, layers);
+        _phase = new ApNetPredictor<T>(Engine, initialization, o.MelChannels, o.Channels, o.ResblockKernelSizes, o.ResblockDilationSizes,
+            o.InputKernelSize, o.OutputKernelSize, bins, 2, layers);
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
+    protected override (Tensor<T> LogAmplitude, Tensor<T> Real, Tensor<T> Imaginary) PredictComponents(Tensor<T> mel)
+    {
+        var parts = _phase!.Forward(mel);
+        return (_amplitude!.Forward(mel)[0], parts[0], parts[1]);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The negative cosine (§III-C2): even, 2π-periodic and increasing on [0, π].</remarks>
+    protected override Tensor<T> PhaseError(Tensor<T> difference) => Engine.TensorNegate(Engine.TensorCos(difference));
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<LayerBase<T>> CreateDiscriminators()
+    {
+        var o = PaperOptions;
+        _discriminators = new HiFiGanDiscriminators<T>(Engine, o.DiscriminatorPeriods, 3, true, o.DiscriminatorWidthDivisor);
+        return _discriminators.Layers;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Σ_k (D_k(x) − 1)² + D_k(x̂)² over the MPD and MSD (reference <c>discriminator_loss</c>).</remarks>
+    protected override Tensor<T> DiscriminatorLoss(Tensor<T> real, Tensor<T> generated)
+    {
+        var realScores = _discriminators!.Forward(real);
+        var fakeScores = _discriminators.Forward(generated);
+        return Sum(Enumerable.Range(0, realScores.Count).Select(k => LeastSquaresDiscriminator(realScores[k].Score, fakeScores[k].Score)));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Σ_k (D_k(x̂) − 1)² + 2 L_FM (reference <c>generator_loss</c>, <c>feature_loss</c>).</remarks>
+    protected override Tensor<T> AdversarialTerms(Tensor<T> generated, Tensor<T> real)
+    {
+        var fake = _discriminators!.Forward(generated);
+        List<(Tensor<T> Score, List<Tensor<T>> Features)> realOut;
+        using (new NoGradScope<T>()) realOut = _discriminators.Forward(real);
+        return Engine.TensorAdd(Sum(fake.Select(f => LeastSquaresGenerator(f.Score))),
+            Engine.TensorMultiplyScalar(Sum(Enumerable.Range(0, fake.Count).Select(k => FeatureMatching(realOut[k].Features, fake[k].Features))),
+                NumOps.FromDouble(PaperOptions.FeatureMatchingWeight)));
+    }
+
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var o = PaperOptions;
+        var m = new ModelMetadata<T>
         {
-            Name = _useNativeMode ? "APNet-Native" : "APNet-ONNX",
-            Description = "APNet: Amplitude-Phase Network Vocoder (Ai et al., 2023)",
-            FeatureCount = _options.MelChannels,
-            AdditionalInfo = new Dictionary<string, object>
-            {
-                ["MelChannels"] = _options.MelChannels,
-                ["Mode"] = _useNativeMode ? "Native" : "ONNX",
-            },
+            Name = IsOnnxMode ? "APNet-ONNX" : "APNet-Native",
+            Description = "APNet: An All-Frame-Level Neural Vocoder Incorporating Direct Prediction of Amplitude and Phase Spectra (Ai and Ling, 2023)",
+            FeatureCount = o.MelChannels,
+            Complexity = o.Channels,
         };
-    }
-
-
-
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(APNet<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
+        m.AdditionalInfo["Architecture"] = "APNet";
+        m.AdditionalInfo["SampleRate"] = o.SampleRate.ToString();
+        return m;
     }
 }

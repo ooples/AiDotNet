@@ -70,11 +70,11 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks", "https://arxiv.org/abs/1905.11946", Year = 2019, Authors = "Mingxing Tan, Quoc V. Le")]
-[PaperOptimizer(OptimizerKind.RmsProp, Rho = 0.9, Momentum = 0.9, LearningRate = 0.256,
-                Schedule = LearningRateSchedulerType.Exponential, DecayRate = 0.97,
+[PaperOptimizer(OptimizerKind.RmsProp, Rho = 0.9, Momentum = 0.9, Epsilon = 1e-3, LearningRate = 0.256, ReferenceBatchSize = 4096,
+                Schedule = LearningRateSchedulerType.Exponential, DecayRate = 0.9873893,
                 ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
                 WeightDecay = 1e-5,
-                Source = "Tan and Le 2019, Sec. 5.2: RMSProp with decay 0.9 and momentum 0.9, and weight decay 1e-5. The paper also gives an initial learning rate of 0.256 decaying by 0.97 every 2.4 epochs; neither is declared. The rate is tuned for the paper scale and RMSProp has no published batch-scaling rule, and a 2.4-epoch interval is not a whole number of epochs, which the step schedule cannot express. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
+                Source = "Tan and Le 2019, Sec. 5.2: RMSProp with decay 0.9 and momentum 0.9, weight decay 1e-5, and an initial learning rate of 0.256 decaying by 0.97 every 2.4 epochs. The batch size (4096) and the epsilon (1e-3) are the official TPU code's (tpu/models/official/efficientnet, after MnasNet), which scales the rate linearly with the batch. The decay is applied per epoch at 0.97^(1/2.4), the same decay over every 2.4 epochs without the official staircase.")]
 public partial class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly EfficientNetOptions _options;
@@ -82,7 +82,6 @@ public partial class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
 
-    private readonly ILossFunction<T> _lossFunction;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly EfficientNetConfiguration _configuration;
 
@@ -145,28 +144,17 @@ public partial class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
             InputType.ThreeDimensional,
             nameof(EfficientNetNetwork<T>));
 
-        // Adam with a paper-faithful conservative LR. Tan & Le 2019
-        // "EfficientNet" §5.1 / Table 8 trains with RMSprop at LR
-        // 0.256 / batchSize=4096 (effective LR ~6e-5/sample). The
-        // codebase-wide AdamOptimizer default of 1e-3 is calibrated
-        // for small MLPs and explodes EfficientNet's deeply nested
-        // MBConv stack — verified by Training_ShouldReduceLoss
-        // observing loss go 0.33 → 6.79e80 over the default 30-iter
-        // memorization run. Pin LR=1e-4 + eps=1e-6 (Vaswani 2017
-        // §5.4 paper-standard for transformers / deep CNNs which
-        // raises eps over Kingma & Ba's 1e-8 default for fp32
-        // numerical stability) when no optimizer is explicitly
-        // supplied — matches the AdamW fine-tuning LRs used by
-        // EfficientNet-as-backbone papers (PaLI-V, Liu 2023).
-        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
-            optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-                this,
-                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-                {
-                    InitialLearningRate = 1e-4,
-                    Epsilon = 1e-6,
-                }));
-        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? throw new InvalidOperationException("EfficientNet declares its paper recipe.");
+        // The official code trains with TensorFlow 1's tf.train.RMSPropOptimizer, whose mean-square accumulator starts
+        // at 1 and whose epsilon sits inside the root. Starting it at 0 divides the first steps by a near-zero root and
+        // moves every weight by about 3·lr, which the paper's rate does not survive.
+        if (optimizer is null && _optimizer.GetOptions() is RootMeanSquarePropagationOptimizerOptions<T, Tensor<T>, Tensor<T>> rmsProp)
+        {
+            rmsProp.InitialAccumulatorValue = 1.0;
+            rmsProp.EpsilonInsideRoot = true;
+        }
 
         InitializeLayers();
     }
@@ -296,42 +284,84 @@ public partial class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         );
     }
 
-    /// <inheritdoc />
+    /// <summary>The convolutional trunk, shared with the detection backbone.</summary>
+    internal EfficientNetTrunk<T> Trunk => _trunk ?? throw new InvalidOperationException("The network is not initialized.");
+
+    /// <summary>The fully connected classifier over the pooled head features.</summary>
+    internal DenseLayer<T>? Classifier { get; private set; }
+
+    private EfficientNetTrunk<T>? _trunk;
+
+    /// <summary>Draws the stochastic-depth and dropout masks during training.</summary>
+    private Random _trainingRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
+
+    /// <summary>
+    /// Builds the network: the shared EfficientNet trunk (stem, seven MBConv stages and the head convolution), global
+    /// average pooling, dropout and the fully connected classifier, initialized as the official code initializes them.
+    /// </summary>
     protected sealed override void InitializeLayers()
     {
-        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
-        {
-            // Use the layers provided by the user
-            Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
-        }
-        else
-        {
-            // Use EfficientNet-specific layer configuration
-            Layers.AddRange(LayerHelper<T>.CreateDefaultEfficientNetLayers(Architecture, _configuration));
-        }
+        if (Architecture.Layers is { Count: > 0 })
+            throw new NotSupportedException(
+                $"{nameof(EfficientNetNetwork<T>)} builds the paper's network from its {nameof(EfficientNetConfiguration)}; custom layers are not supported.");
+        var config = _configuration;
+        var layers = new List<LayerBase<T>>();
+        _trunk = new EfficientNetTrunk<T>(Engine, layers, new EfficientNetTrunkConfiguration(
+            config.GetWidthMultiplier(), config.GetDepthMultiplier(), config.InputChannels, config.DropConnectRate));
+        int seed = _options.Seed ?? 42;
+        var random = Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
+        _trainingRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(seed + 1);
+        _trunk.InitializeLikeReference(random);
+        var outputActivation = Architecture.TaskType == NeuralNetworkTaskType.BinaryClassification
+            ? (IActivationFunction<T>)new SigmoidActivation<T>()
+            : new SoftmaxActivation<T>();
+        Classifier = new DenseLayer<T>(config.NumClasses, outputActivation);
+        layers.Add(Classifier);
+        // The official dense initializer: U(±1/√out) for the weight, a zero bias.
+        int inputs = _trunk.Configuration.HeadChannels;
+        double bound = 1.0 / Math.Sqrt(config.NumClasses);
+        var w = new double[config.NumClasses * inputs];
+        for (int i = 0; i < w.Length; i++) w[i] = (2 * random.NextDouble() - 1) * bound;
+        TextToSpeech.CodecBased.TorchParameters.Linear(Engine, Classifier, inputs, config.NumClasses, w, new double[config.NumClasses]);
+        Layers.AddRange(layers);
+    }
+
+    /// <summary>Loads a timm <c>tf_efficientnet</c> state dict (the trunk, then <c>classifier.weight</c> and
+    /// <c>classifier.bias</c>).</summary>
+    internal void LoadTorchWeights(Func<string, int[], double[]> read)
+    {
+        Trunk.LoadTorchWeights(read);
+        int inputs = Trunk.Configuration.HeadChannels, classes = _configuration.NumClasses;
+        TextToSpeech.CodecBased.TorchParameters.Linear(Engine, Classifier!, inputs, classes,
+            read("classifier.weight", new[] { classes, inputs }), read("classifier.bias", new[] { classes }));
     }
 
     /// <summary>
-    /// Performs a forward pass through the network.
+    /// The class probabilities of an image <c>[C, H, W]</c> or a batch <c>[B, C, H, W]</c>: the trunk, global average
+    /// pooling, dropout (training only) and the classifier.
     /// </summary>
-    /// <param name="input">The input tensor [C, H, W] or [B, C, H, W].</param>
-    /// <returns>The output class logits.</returns>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
-
-
-        Tensor<T> output = input;
-        foreach (var layer in Layers)
-        {
-            output = layer.Forward(output);
-        }
-        return output;
+        bool single = input.Rank == 3;
+        var x = single ? PromoteToBatchedTensor(input) : input;
+        var head = Trunk.Forward(x, IsTrainingMode, _trainingRandom)[^1];
+        var pooled = Engine.ReduceMean(head, new[] { 2, 3 }, false);
+        double rate = _configuration.GetDropoutRate();
+        if (IsTrainingMode && rate > 0)
+            pooled = TextToSpeech.CodecBased.T5Seq2Seq<T>.Dropout(Engine, pooled, rate, _trainingRandom);
+        var output = Classifier!.Forward(pooled);
+        return single ? Engine.Reshape(output, new[] { output.Shape[1] }) : output;
     }
 
+    /// <inheritdoc />
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
+
+    /// <inheritdoc />
+    /// <remarks>Every layer is sized and initialized at construction, and <see cref="NeuralNetworkBase{T}.Layers"/> is
+    /// not a chain (an excitation layer reads its block's pooled features), so there is nothing to walk.</remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+    }
     /// <inheritdoc />
     /// <summary>
     /// Routes inference through <see cref="NeuralNetworkBase{T}.PredictCompiled"/> for
@@ -386,11 +416,7 @@ public partial class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// broadcast (#1224 Cluster F). Promote rank-3 → rank-4 so the
     /// pipeline sees the canonical NCHW shape it was built for.
     /// </summary>
-    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
-    {
-        var promoted = input.Rank == 3 ? PromoteToBatchedTensor(input) : input;
-        return base.GetNamedLayerActivations(promoted);
-    }
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input) => ObservedLayerActivations(input);
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.

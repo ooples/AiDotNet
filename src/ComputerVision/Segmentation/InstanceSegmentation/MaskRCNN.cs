@@ -108,6 +108,11 @@ public partial class MaskRCNN<T> : InstanceSegmenterBase<T>
     /// </remarks>
     protected override List<Tensor<T>> Forward(Tensor<T> input) => ForwardDetection(input, null, out _, out _);
 
+    /// <summary>Output 2, the proposal boxes the RoI heads classified, is data: training cannot change it.</summary>
+    protected override IReadOnlyCollection<int> DataOutputIndices => ProposalBoxesOutput;
+
+    private static readonly int[] ProposalBoxesOutput = { 2 };
+
     /// <inheritdoc/>
     protected override void MaterializeAuxiliaryHeads()
         => _maskHead.Forward(new Tensor<T>(new[] { 1, FpnChannels, _maskHead.RoiSize, _maskHead.RoiSize }));

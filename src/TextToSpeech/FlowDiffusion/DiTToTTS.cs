@@ -57,7 +57,7 @@ public partial class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// Synthesizes speech from text.
     /// Per Lee et al. (2024): DiT blocks with adaptive layer norm for iterative denoising.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed(); var input = PreprocessText(text); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
         // Run preprocessed text through learned layers for feature extraction

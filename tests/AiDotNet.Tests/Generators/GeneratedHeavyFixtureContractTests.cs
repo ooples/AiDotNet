@@ -121,10 +121,12 @@ public sealed class GeneratedHeavyFixtureContractTests
         ObjectCreationExpressionSyntax creation = ModelConstructor(fixture, "MelGAN");
         ObjectCreationExpressionSyntax options = Assert.Single(creation.DescendantNodes()
             .OfType<ObjectCreationExpressionSyntax>(), node => node.Type.ToString().EndsWith("MelGANOptions"));
-        AssignmentExpressionSyntax width = Assert.Single(options.DescendantNodes()
-            .OfType<AssignmentExpressionSyntax>());
-        Assert.Equal("NgfBase", width.Left.ToString());
-        Assert.Equal(32, Assert.IsType<LiteralExpressionSyntax>(width.Right).Token.Value);
+        // Only widths are reduced: the generator's ngf and the discriminators' width divisor.
+        var assignments = options.DescendantNodes().OfType<AssignmentExpressionSyntax>()
+            .ToDictionary(a => a.Left.ToString(), a => Assert.IsType<LiteralExpressionSyntax>(a.Right).Token.Value);
+        Assert.Equal(new[] { "DiscriminatorWidthDivisor", "Ngf" }, assignments.Keys.OrderBy(k => k, StringComparer.Ordinal).ToArray());
+        Assert.Equal(4, assignments["Ngf"]);
+        Assert.Equal(16, assignments["DiscriminatorWidthDivisor"]);
         AssertShape(fixture, "InputShape", 1, 80, 1);
         AssertShape(fixture, "OutputShape", 1, 1, 256);
     }
@@ -242,7 +244,8 @@ public sealed class GeneratedHeavyFixtureContractTests
     private static ObjectCreationExpressionSyntax ModelConstructor(ClassDeclarationSyntax fixture, string modelName)
     {
         MethodDeclarationSyntax factory = Assert.Single(fixture.Members.OfType<MethodDeclarationSyntax>(),
-            method => method.Identifier.ValueText == "CreateNetwork");
+            // TTS fixtures (MelGAN now trains through the TTS base) build the model in CreateTtsNetwork.
+            method => method.Identifier.ValueText is "CreateNetwork" or "CreateTtsNetwork");
         return Assert.Single(factory.DescendantNodes().OfType<ObjectCreationExpressionSyntax>(),
             creation => creation.Type.DescendantNodesAndSelf().OfType<GenericNameSyntax>()
                 .Any(type => type.Identifier.ValueText == modelName));

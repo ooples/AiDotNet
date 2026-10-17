@@ -27,8 +27,6 @@ internal static class DefectBaselines
             "global::AiDotNet.AutoML.DiffusionAutoML<T>",
             "global::AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer<T, TInput, TOutput>",
             "global::AiDotNet.Diffusion.NoisePredictors.AsymmDiTPredictor<T>",
-            "global::AiDotNet.Finance.Probabilistic.CSDI<T>",
-            "global::AiDotNet.Finance.Probabilistic.TSDiff<T>",
             "global::AiDotNet.Diffusion.NoisePredictors.DiTNoisePredictor<T>",
             "global::AiDotNet.Diffusion.NoisePredictors.EMMDiTPredictor<T>",
             "global::AiDotNet.Diffusion.NoisePredictors.FlagDiTPredictor<T>",
@@ -121,11 +119,5 @@ internal static class DefectBaselines
             "global::AiDotNet.SelfSupervisedLearning.MoCoV3<T>",
             "global::AiDotNet.SelfSupervisedLearning.SimCLR<T>",
             "global::AiDotNet.SelfSupervisedLearning.SimSiam<T>",
-            "global::AiDotNet.TextToSpeech.ProprietaryAPI.AmazonPolly<T>",
-            "global::AiDotNet.TextToSpeech.ProprietaryAPI.AzureNeuralTTS<T>",
-            "global::AiDotNet.TextToSpeech.ProprietaryAPI.ElevenLabsTTS<T>",
-            "global::AiDotNet.TextToSpeech.ProprietaryAPI.GoogleCloudTTS<T>",
-            "global::AiDotNet.TextToSpeech.ProprietaryAPI.Murf<T>",
-            "global::AiDotNet.TextToSpeech.ProprietaryAPI.NVIDIARivaTTS<T>",
         };
 }

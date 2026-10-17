@@ -7,7 +7,9 @@ using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
+using AiDotNet.Validation;
 
 namespace AiDotNet.TextToSpeech;
 
@@ -184,11 +186,372 @@ public abstract partial class TtsModelBase<T> : NeuralNetworkBase<T>, IShapeCont
     }
 
     /// <summary>
-    /// Preprocesses raw text into a token tensor for model input.
+    /// Trainable sub-networks a model runs outside its sequential <see cref="NeuralNetworkBase{T}.Layers"/> stack:
+    /// a duration predictor reading the raw text (AlignTTS), an alignment network used only in training, and the like.
     /// </summary>
-    /// <param name="text">Raw text input.</param>
-    /// <returns>Token tensor suitable for model input.</returns>
-    protected abstract Tensor<T> PreprocessText(string text);
+    /// <remarks>Layers added here take part in parameter counting, training, serialization and cloning exactly as
+    /// stack layers do; a model declares them rather than wiring each of those surfaces itself.</remarks>
+    protected readonly List<LayerBase<T>> ComponentLayers = new();
+
+    /// <summary>Surfaces <see cref="ComponentLayers"/> to the parameter walk.</summary>
+    protected override IEnumerable<LayerBase<T>?> GetExtraTrainableLayers()
+    {
+        foreach (var layer in base.GetExtraTrainableLayers())
+            yield return layer;
+        foreach (var layer in ComponentLayers)
+            yield return layer;
+    }
+
+    private int _encoderLayerCount;
+
+    /// <summary>
+    /// The number of leading <see cref="NeuralNetworkBase{T}.Layers"/> that form the text encoder.
+    /// </summary>
+    /// <remarks>
+    /// Synthesis runs the encoder, then the model's own step (variance adaptor, length regulator, alignment), then
+    /// the decoder. The split is recorded by <see cref="AddEncoderDecoderLayers"/> from the layers actually built.
+    /// Thirteen acoustic models used to recompute it from a per-block layer count; the factory had since changed to
+    /// one layer per block, so the computed boundary (25 for a 10-layer FastSpeech 2) ran past the end of the stack
+    /// and every call to <c>Synthesize</c> threw.
+    /// </remarks>
+    protected int EncoderLayerCount => _encoderLayerCount;
+
+    /// <summary>
+    /// Adds an encoder and a decoder to the layer stack and records where the encoder ends.
+    /// </summary>
+    protected void AddEncoderDecoderLayers(IEnumerable<ILayer<T>> encoderLayers, IEnumerable<ILayer<T>> decoderLayers)
+    {
+        Guard.NotNull(encoderLayers);
+        Guard.NotNull(decoderLayers);
+        Layers.AddRange(encoderLayers);
+        _encoderLayerCount = Layers.Count;
+        Layers.AddRange(decoderLayers);
+    }
+
+    /// <summary>
+    /// Adds caller-supplied layers, which carry no declared encoder/decoder split.
+    /// </summary>
+    /// <remarks>The first half is taken as the encoder, as before; supply the split through
+    /// <see cref="AddEncoderDecoderLayers"/> wherever it is known.</remarks>
+    protected void AddUnsplitLayers(IEnumerable<ILayer<T>> layers)
+    {
+        Guard.NotNull(layers);
+        Layers.AddRange(layers);
+        _encoderLayerCount = Layers.Count / 2;
+    }
+
+    /// <summary>Runs the encoder layers (<c>Layers[0 .. EncoderLayerCount)</c>).</summary>
+    protected Tensor<T> RunEncoder(Tensor<T> input)
+    {
+        var x = input;
+        for (int i = 0; i < _encoderLayerCount; i++)
+            x = Layers[i].Forward(x);
+        return x;
+    }
+
+    /// <summary>Runs the decoder layers (<c>Layers[EncoderLayerCount ..]</c>).</summary>
+    protected Tensor<T> RunDecoder(Tensor<T> hidden)
+    {
+        var x = hidden;
+        for (int i = _encoderLayerCount; i < Layers.Count; i++)
+            x = Layers[i].Forward(x);
+        return x;
+    }
+
+    /// <summary>Runs <c>Layers[start .. end)</c> in order.</summary>
+    protected Tensor<T> RunLayers(Tensor<T> input, int start, int end)
+    {
+        if (start < 0 || end > Layers.Count || start > end)
+            throw new ArgumentOutOfRangeException(nameof(start), $"Layer range [{start}, {end}) is outside 0..{Layers.Count}.");
+        var x = input;
+        for (int i = start; i < end; i++)
+            x = Layers[i].Forward(x);
+        return x;
+    }
+
+    /// <summary>
+    /// Converts text to the token tensor the model's first layer reads, one token per character.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The input domain the network declares decides the encoding. A model whose first layer is an embedding
+    /// declares integer token indices in <c>[min, max)</c>; each character becomes <c>min + code % (max - min)</c>,
+    /// so every token is a valid row of that embedding (character input, which FastSpeech 2 notes its method
+    /// applies to directly, Ren et al. 2021 §2.2 fn. 2). A model with a continuous front end gets character codes
+    /// scaled by 1/128, the encoding these models used before tokenization moved here.
+    /// </para>
+    /// <para>Text longer than the model's maximum text length is truncated.</para>
+    /// </remarks>
+    protected virtual Tensor<T> PreprocessText(string text)
+    {
+        Guard.NotNull(text);
+        int length = Math.Min(text.Length, MaxTextTokens);
+        if (length <= 0)
+            throw new ArgumentException("Text must contain at least one character.", nameof(text));
+
+        var tokens = new Tensor<T>(new[] { length });
+        var domain = GetInputDomain(new[] { length });
+        if (domain.IsResolved && domain.Kind == LayerInputDomainKind.IntegerIndices)
+        {
+            int range = Math.Max(1, domain.MaxExclusive - domain.MinInclusive);
+            for (int i = 0; i < length; i++)
+                tokens[i] = NumOps.FromDouble(domain.MinInclusive + text[i] % range);
+        }
+        else
+        {
+            for (int i = 0; i < length; i++)
+                tokens[i] = NumOps.FromDouble(text[i] / 128.0);
+        }
+        return tokens;
+    }
+
+    /// <summary>Longest text, in tokens, the model reads.</summary>
+    protected virtual int MaxTextTokens =>
+        this is AiDotNet.TextToSpeech.Interfaces.ITtsModel<T> tts && tts.MaxTextLength > 0 ? tts.MaxTextLength : int.MaxValue;
+
+    /// <summary>
+    /// Synthesizes speech (or the model's acoustic output) from text: tokenize, run the network, postprocess.
+    /// </summary>
+    /// <remarks>
+    /// The network forward is <see cref="NeuralNetworkBase{T}.Predict"/>, the same graph training updates, so what a
+    /// user hears is what was trained. ONNX models run their loaded graph instead.
+    /// </remarks>
+    /// <summary>The tokens <see cref="Synthesize"/> feeds the model for <paramref name="text"/> (phoneme or character
+    /// ids, as this model's front end reads text).</summary>
+    public Tensor<T> TextToTokens(string text) => PreprocessText(text);
+
+    public virtual Tensor<T> Synthesize(string text)
+    {
+        var tokens = PreprocessText(text);
+        var output = IsOnnxMode && OnnxModel is not null ? OnnxModel.Run(tokens) : Predict(tokens);
+        return PostprocessAudio(output);
+    }
+
+    /// <summary>
+    /// Supervision this model's paper trains on that a token/mel pair does not carry and that cannot be derived from
+    /// the recording. A plain token/mel <c>Train</c> call refuses to train such a model.
+    /// </summary>
+    protected virtual TtsSupervision RequiredSupervision => TtsSupervision.None;
+
+    /// <summary>
+    /// Supervision outside the recording that this model trains on; anything other than
+    /// <see cref="TtsSupervision.None"/> means training goes through <see cref="Train(TtsTrainingSample{T})"/>.
+    /// </summary>
+    public TtsSupervision TrainingSupervision => RequiredSupervision;
+
+    /// <summary>Trains on one utterance with the supervision its paper uses.</summary>
+    /// <returns>The training loss of the step.</returns>
+    public T Train(TtsTrainingSample<T> sample)
+    {
+        Guard.NotNull(sample);
+        if ((RequiredSupervision & TtsSupervision.Durations) != 0 && sample.Durations is null)
+            throw new ArgumentException(
+                $"{GetType().Name} trains on per-token durations from a forced alignment; set {nameof(sample.Durations)}.",
+                nameof(sample));
+        if ((RequiredSupervision & TtsSupervision.SpeakerId) != 0 && sample.SpeakerId is null)
+            throw new ArgumentException(
+                $"{GetType().Name} trains a speaker table; set {nameof(sample.SpeakerId)}.", nameof(sample));
+        if ((RequiredSupervision & TtsSupervision.Recording) != 0 && sample.Audio is null && sample.LinearSpectrogram is null)
+            throw new ArgumentException(
+                $"{GetType().Name} trains on the recording's linear spectrogram; set {nameof(sample.Audio)} or {nameof(sample.LinearSpectrogram)}.",
+                nameof(sample));
+        if ((RequiredSupervision & TtsSupervision.SpeakerReference) != 0 && sample.SpeakerReference is null)
+            throw new ArgumentException(
+                $"{GetType().Name} trains on a reference recording of the speaker; set {nameof(sample.SpeakerReference)}.",
+                nameof(sample));
+        if ((RequiredSupervision & TtsSupervision.LanguageId) != 0 && sample.LanguageId is null)
+            throw new ArgumentException(
+                $"{GetType().Name} trains a language table; set {nameof(sample.LanguageId)}.", nameof(sample));
+        if ((RequiredSupervision & TtsSupervision.CodecTokens) != 0 && sample.CodecTokens is null && sample.Audio is null)
+            throw new ArgumentException(
+                $"{GetType().Name} trains on the recording's codec tokens; set {nameof(sample.CodecTokens)} or {nameof(sample.Audio)}.",
+                nameof(sample));
+        if ((RequiredSupervision & TtsSupervision.PromptCodecTokens) != 0 && sample.PromptCodecTokens is null)
+            throw new ArgumentException(
+                $"{GetType().Name} trains with the codec tokens of another utterance of the same speaker as a prompt; set " +
+                $"{nameof(sample.PromptCodecTokens)}.", nameof(sample));
+        if ((RequiredSupervision & TtsSupervision.ReferenceRecording) != 0 && sample.SpeakerReference is null && sample.Audio is null)
+            throw new ArgumentException(
+                $"{GetType().Name} reads the speaker from a recording; set {nameof(sample.SpeakerReference)} or {nameof(sample.Audio)}.",
+                nameof(sample));
+        return TrainOnSample(sample);
+    }
+
+    /// <summary>Codebooks per frame of the codec tokens this model trains on (0 for a model that does not).</summary>
+    public virtual int CodecTokenCodebooks => 0;
+
+    /// <summary>Codes per codebook of those codec tokens (0 for a model that does not train on them).</summary>
+    public virtual int CodecTokenVocabulary => 0;
+
+    /// <summary>
+    /// The voice synthesis and prediction use, for models whose paper defines inference relative to a speaker or a
+    /// reference recording (see <see cref="SynthesisVoiceRequirement"/>).
+    /// </summary>
+    public TtsVoice<T>? Voice { get; set; }
+
+    /// <summary>
+    /// What <see cref="Voice"/> must carry for this model to synthesize: <see cref="TtsSupervision.SpeakerId"/>,
+    /// <see cref="TtsSupervision.SpeakerReference"/>, or <see cref="TtsSupervision.None"/> for a model that
+    /// synthesizes from text alone.
+    /// </summary>
+    protected virtual TtsSupervision RequiredVoice => TtsSupervision.None;
+
+    /// <summary>What a voice must carry for this model to synthesize; <see cref="TtsSupervision.None"/> when text
+    /// alone determines the output.</summary>
+    public TtsSupervision SynthesisVoiceRequirement => RequiredVoice;
+
+    /// <summary>
+    /// Returns <see cref="Voice"/>, or throws naming what is missing when the model's paper needs a voice to
+    /// synthesize and none (or an incomplete one) is set.
+    /// </summary>
+    protected TtsVoice<T> RequireVoice()
+    {
+        var voice = Voice ?? throw new InvalidOperationException(
+            $"{GetType().Name} synthesizes in a given voice ({RequiredVoice}); set {nameof(Voice)} first.");
+        if ((RequiredVoice & TtsSupervision.SpeakerReference) != 0 && voice.Reference is null)
+            throw new InvalidOperationException(
+                $"{GetType().Name} reads a reference recording of the speaker; set {nameof(TtsVoice<T>.Reference)} on {nameof(Voice)}.");
+        if ((RequiredVoice & TtsSupervision.ReferenceRecording) != 0 && voice.ReferenceAudio is null)
+            throw new InvalidOperationException(
+                $"{GetType().Name} reads a recording of the speaker; set {nameof(TtsVoice<T>.ReferenceAudio)} on {nameof(Voice)}.");
+        if ((RequiredVoice & TtsSupervision.LanguageId) != 0 && voice.LanguageId is null)
+            throw new InvalidOperationException(
+                $"{GetType().Name} speaks one of several languages; set {nameof(TtsVoice<T>.LanguageId)} on {nameof(Voice)}.");
+        return voice;
+    }
+
+    /// <summary>
+    /// Evaluates the training objective on <paramref name="sample"/> without updating the model, for models whose
+    /// training goes through <see cref="Train(TtsTrainingSample{T})"/>.
+    /// </summary>
+    public virtual T EvaluateTrainingObjective(TtsTrainingSample<T> sample)
+        => throw new NotSupportedException($"{GetType().Name} does not define a sample-level training objective.");
+
+    /// <summary>Trains on several utterances, one step each.</summary>
+    public void Train(IEnumerable<TtsTrainingSample<T>> samples)
+    {
+        Guard.NotNull(samples);
+        foreach (var sample in samples) Train(sample);
+    }
+
+    /// <summary>
+    /// One training step on <paramref name="sample"/>. The default trains the token/mel pair through the ordinary
+    /// <c>Train</c>, deriving the mel from the recording when it is absent; models with richer objectives override it.
+    /// </summary>
+    protected virtual T TrainOnSample(TtsTrainingSample<T> sample)
+    {
+        var targets = DeriveAcousticTargets(sample);
+        Train(sample.Tokens, targets.Mel);
+        return LastLoss ?? NumOps.Zero;
+    }
+
+    /// <summary>
+    /// Throws when this model needs supervision that a token/mel pair cannot provide. Models call it at the top of
+    /// their token/mel <c>Train</c>.
+    /// </summary>
+    protected void ThrowIfTokenMelTrainingUnsupported()
+    {
+        if (RequiredSupervision != TtsSupervision.None)
+            throw new NotSupportedException(
+                $"{GetType().Name} trains on {RequiredSupervision} that a token/mel pair does not carry; " +
+                "use Train(TtsTrainingSample) instead.");
+    }
+
+    /// <summary>
+    /// Completes an utterance's acoustic targets from its recording, as the papers derive them: the Tacotron 2 mel
+    /// spectrogram, WORLD F0 at the mel frame period, and the STFT frame energy. Supplied values are kept. Pitch and
+    /// energy are aligned to the mel frame count.
+    /// </summary>
+    protected AcousticTargets<T> DeriveAcousticTargets(TtsTrainingSample<T> sample)
+    {
+        Guard.NotNull(sample);
+        // Tacotron 2's 8 kHz mel ceiling assumes 22.05 kHz audio; at lower rates the bands stop at Nyquist.
+        var spectrogram = new TacotronSpectrogram(SampleRate, TargetFftSize, HopSize, TargetWindowSize, MelChannels,
+            maxFrequency: Math.Min(8000.0, SampleRate / 2.0));
+        double[]? audio = sample.Audio is null ? null : ToDoubles(sample.Audio);
+        double[,]? magnitude = audio is null ? null : spectrogram.Magnitude(PreEmphasize(audio));
+
+        Tensor<T> mel;
+        if (sample.Mel is not null)
+        {
+            mel = sample.Mel;
+        }
+        else
+        {
+            if (magnitude is null)
+                throw new ArgumentException("Supply the recording or its mel spectrogram.", nameof(sample));
+            var logMel = spectrogram.LogMel(magnitude);
+            mel = new Tensor<T>(new[] { logMel.GetLength(0), logMel.GetLength(1) });
+            for (int f = 0; f < logMel.GetLength(0); f++)
+                for (int m = 0; m < logMel.GetLength(1); m++)
+                    mel[f, m] = NumOps.FromDouble(logMel[f, m]);
+        }
+        int frames = mel.Shape[0];
+
+        double[]? pitch = sample.Pitch;
+        if (pitch is null && audio is not null)
+            pitch = new AiDotNet.Audio.Pitch.WorldPitchDetector<T>(SampleRate).EstimateF0(audio, spectrogram.FramePeriodMs).F0;
+        double[]? energy = sample.Energy;
+        if (energy is null && magnitude is not null)
+            energy = spectrogram.Energy(magnitude);
+
+        Tensor<T>? linear = sample.LinearSpectrogram;
+        if (linear is null && magnitude is not null)
+        {
+            int rows = magnitude.GetLength(0), bins = magnitude.GetLength(1);
+            linear = new Tensor<T>(new[] { rows, bins });
+            for (int f = 0; f < rows; f++)
+                for (int k = 0; k < bins; k++)
+                    linear[f, k] = NumOps.FromDouble(Math.Log(Math.Max(spectrogram.ClipValue, magnitude[f, k])));
+        }
+
+        return new AcousticTargets<T>(mel, frames,
+            pitch is null ? null : AlignToFrames(pitch, frames),
+            energy is null ? null : AlignToFrames(energy, frames),
+            linear);
+    }
+
+    /// <summary>Analysis window length, in samples, of the spectrograms the targets are computed with.</summary>
+    protected virtual int TargetWindowSize => TargetFftSize;
+
+    /// <summary>Pre-emphasis coefficient applied to the recording before its spectrograms (Tacotron: 0.97); 0 for none.
+    /// Pitch is estimated from the recording as recorded.</summary>
+    protected virtual double PreEmphasis => 0.0;
+
+    /// <summary>Bins of the linear spectrogram target, <c>fftSize / 2 + 1</c>.</summary>
+    public int LinearSpectrogramBins => TargetFftSize / 2 + 1;
+
+    private double[] PreEmphasize(double[] audio)
+    {
+        double k = PreEmphasis;
+        if (k == 0.0)
+            return audio;
+        var y = new double[audio.Length];
+        if (audio.Length > 0) y[0] = audio[0];
+        for (int n = 1; n < audio.Length; n++) y[n] = audio[n] - k * audio[n - 1];
+        return y;
+    }
+
+    /// <summary>FFT and window size used to derive targets from a recording (Tacotron 2: 1024).</summary>
+    protected virtual int TargetFftSize => 1024;
+
+    private static double[] AlignToFrames(double[] values, int frames)
+    {
+        if (values.Length == frames) return values;
+        // The pitch tracker and the STFT can disagree by a frame at the end; repeat or drop the last value.
+        var aligned = new double[frames];
+        for (int i = 0; i < frames; i++) aligned[i] = values[Math.Min(i, values.Length - 1)];
+        return aligned;
+    }
+
+    private double[] ToDoubles(Tensor<T> tensor)
+    {
+        var span = tensor.AsSpan();
+        var values = new double[span.Length];
+        for (int i = 0; i < values.Length; i++) values[i] = NumOps.ToDouble(span[i]);
+        return values;
+    }
+
 
     /// <summary>
     /// Postprocesses model output into the final audio format.

@@ -1,66 +1,35 @@
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Models;
-using AiDotNet.NeuralNetworks.Layers.SSM;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.NeuralNetworks;
 
 /// <summary>
-/// Implements the Vision Mamba (Vim) model: PatchEmbed + scan pattern + bidirectional Mamba + classifier.
+/// Vision Mamba (Vim) image classification: the official network with a linear classifier on its class token.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Vision Mamba adapts the Mamba SSM architecture for image classification by:
-/// 1. Dividing the image into non-overlapping patches (like ViT)
-/// 2. Projecting patches to an embedding dimension
-/// 3. Adding learnable positional embeddings
-/// 4. Scanning patches through Mamba blocks using configurable spatial scan patterns
-/// 5. Pooling the output and projecting to class logits
-/// </para>
-/// <para>
-/// Different scan patterns capture different spatial relationships:
-/// - <see cref="VisionScanPattern.Bidirectional"/>: forward + reverse (Vim paper)
-/// - <see cref="VisionScanPattern.CrossScan"/>: 4 directional scans (VMamba)
-/// - <see cref="VisionScanPattern.Continuous"/>: zigzag preserving locality (PlainMamba)
+/// The image is cut into patches; a class token is inserted in the middle of the patch sequence; each layer runs a
+/// bidirectional Mamba mixer (a forward and a backward selective-scan branch, averaged) on the RMS-normalized
+/// residual stream; and the class token's final features are classified. The network is shared with the Vision Mamba
+/// segmenter and checked against the official code (hustvl/Vim).
 /// </para>
 /// <para><b>For Beginners:</b> This model classifies images using Mamba instead of attention.
-/// It cuts the image into small patches, reads them in a specific order (the scan pattern),
-/// processes with Mamba blocks (fast sequence processing), and outputs class probabilities.
-/// Vision Mamba needs O(n) computation vs O(n^2) for Transformers, making it faster for
-/// high-resolution images like medical imaging and satellite photos.</para>
+/// It cuts the image into small patches, reads them forwards and backwards with Mamba blocks (fast sequence
+/// processing), and outputs class probabilities. Vision Mamba needs O(n) computation vs O(n^2) for Transformers,
+/// making it faster for high-resolution images.</para>
 /// <para>
-/// <b>References:</b>
-/// <list type="bullet">
-/// <item><description>Zhu et al., "Vision Mamba: Efficient Visual Representation Learning with Bidirectional State Space Model", 2024</description></item>
-/// <item><description>Liu et al., "VMamba: Visual State Space Model", 2024</description></item>
-/// <item><description>Yang et al., "PlainMamba: Improving Non-Hierarchical Mamba in Visual Recognition", 2024</description></item>
-/// </list>
+/// <b>Reference:</b> Zhu et al., "Vision Mamba: Efficient Visual Representation Learning with Bidirectional State Space
+/// Model", ICML 2024.
 /// </para>
 /// </remarks>
-/// <example>
-/// <code>
-/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     InputType.ThreeDimensional, NeuralNetworkTaskType.ImageClassification,
-///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 10);
-/// var image = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 224, 224 });
-/// var trainX = Tensor&lt;float&gt;.CreateRandom(4, 8);
-/// var trainY = Tensor&lt;float&gt;.CreateRandom(4, 2);
-/// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
-///     .ConfigureModel(new VisionMambaModel&lt;float&gt;(
-///         architecture,
-///         new AiDotNet.NeuralNetworks.Options.VisionMambaOptions
-///         {
-///             ImageHeight = 224, ImageWidth = 224, PatchSize = 16,
-///             ModelDimension = 384, NumLayers = 24
-///         }))
-///     .Build(trainX, trainY);
-/// var output = result.Predict(image);
-/// </code>
-/// </example>
-/// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.RecurrentNetwork)]
@@ -69,268 +38,133 @@ namespace AiDotNet.NeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Vision Mamba: Efficient Visual Representation Learning with Bidirectional State Space Model", "https://arxiv.org/abs/2401.09417", Year = 2024, Authors = "Lianghui Zhu, Bencheng Liao, Qian Zhang, Xinlong Wang, Wenyu Liu, Xinggang Wang")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-3, Beta1 = 0.9, WeightDecay = 0.05, ReferenceBatchSize = 1024,
+                Schedule = LearningRateSchedulerType.CosineAnnealing, ScheduleStepMode = SchedulerStepMode.StepPerEpoch,
+                MinLearningRate = 0,
+                Source = "Zhu et al. 2024, Sec. 4.1: AdamW with a momentum of 0.9, a total batch size of 1024 and a weight decay of 0.05, 300 epochs with a cosine schedule and a 1e-3 initial learning rate, and EMA (whose decay the paper does not state).")]
 public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
 {
     private readonly VisionMambaOptions _options;
-    private readonly int _imageHeight;
-    private readonly int _imageWidth;
-    private readonly int _patchSize;
-    private readonly int _channels;
-    private readonly int _modelDimension;
-    private readonly int _numLayers;
-    private readonly int _numClasses;
-    private readonly int _stateDimension;
-    private readonly int _numPatchesH;
-    private readonly int _numPatchesW;
-    private readonly int _numPatches;
-    private readonly int _mambaInputDim;
-    private readonly VisionScanPattern _scanPattern;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private readonly VimConfiguration _configuration;
+    private VimNetwork<T>? _network;
 
-    // Patch embedding weights (model-level state, not in Layers)
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T> _patchProjectionWeights;
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T> _patchProjectionBias;
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T> _positionalEmbedding;
+    /// <summary>Draws stochastic-depth decisions during training.</summary>
+    private Random _trainingRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
 
-    // Final normalization and classification head
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T> _finalNormGamma;
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T> _classifierWeights;
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T> _classifierBias;
-
-    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
-    /// <inheritdoc />
     public override ModelOptions GetOptions() => _options;
 
-    /// <summary>Gets the image height.</summary>
-    public int ImageHeight => _imageHeight;
+    public int ImageHeight => _configuration.ImageHeight;
+    public int ImageWidth => _configuration.ImageWidth;
+    public int PatchSize => _configuration.PatchSize;
+    public int ModelDimension => _configuration.Dim;
+    public int NumLayers => _configuration.Depth;
+    public int NumClasses => _options.NumClasses;
+    public int NumPatches => _configuration.Patches;
 
-    /// <summary>Gets the image width.</summary>
-    public int ImageWidth => _imageWidth;
+    /// <summary>The network, shared with the Vision Mamba segmenter.</summary>
+    internal VimNetwork<T> Network => _network ?? throw new InvalidOperationException("The network is not initialized.");
 
-    /// <summary>Gets the patch size.</summary>
-    public int PatchSize => _patchSize;
+    /// <summary>The linear classifier on the class token (softmax output).</summary>
+    internal DenseLayer<T>? Classifier { get; private set; }
 
-    /// <summary>Gets the model dimension (d_model).</summary>
-    public int ModelDimension => _modelDimension;
-
-    /// <summary>Gets the number of Mamba layers.</summary>
-    public int NumLayers => _numLayers;
-
-    /// <summary>Gets the number of output classes.</summary>
-    public int NumClasses => _numClasses;
-
-    /// <summary>Gets the total number of patches.</summary>
-    public int NumPatches => _numPatches;
-
-    /// <summary>Gets the scan pattern used.</summary>
-    public VisionScanPattern ScanPattern => _scanPattern;
-
-    #region Constructors
-
+    /// <summary>Creates a Vision Mamba classifier.</summary>
     public VisionMambaModel(
         NeuralNetworkArchitecture<T> architecture,
         VisionMambaOptions? options = null,
-        ILossFunction<T>? lossFunction = null)
+        ILossFunction<T>? lossFunction = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
         : base(architecture,
             lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.ImageClassification))
     {
         _options = options ?? new VisionMambaOptions();
         _options.Validate();
-
         Options = _options;
-        _imageHeight = _options.ImageHeight;
-        _imageWidth = _options.ImageWidth;
-        _patchSize = _options.PatchSize;
-        _channels = _options.Channels;
-        _modelDimension = _options.ModelDimension;
-        _numLayers = _options.NumLayers;
-        _numClasses = _options.NumClasses;
-        _stateDimension = _options.StateDimension;
-        _scanPattern = _options.ScanPattern;
-
-        _numPatchesH = _options.ImageHeight / _options.PatchSize;
-        _numPatchesW = _options.ImageWidth / _options.PatchSize;
-        _numPatches = _numPatchesH * _numPatchesW;
-        _mambaInputDim = _options.ScanPattern == VisionScanPattern.Bidirectional
-            ? _options.ModelDimension * 2
-            : _options.ModelDimension;
-
-        // Initialize patch embedding weights
-        int patchDim = _options.PatchSize * _options.PatchSize * _options.Channels;
-        _patchProjectionWeights = new Tensor<T>(new[] { patchDim, _options.ModelDimension });
-        _patchProjectionBias = new Tensor<T>(new[] { _options.ModelDimension });
-        InitializeTensor(_patchProjectionWeights);
-        _patchProjectionBias.Fill(NumOps.Zero);
-
-        _positionalEmbedding = new Tensor<T>(new[] { _numPatches, _options.ModelDimension });
-        InitializeTensor(_positionalEmbedding, scale: 0.02);
-
-        // Final norm
-        _finalNormGamma = new Tensor<T>(new[] { _mambaInputDim });
-        _finalNormGamma.Fill(NumOps.One);
-
-        // Classification head
-        _classifierWeights = new Tensor<T>(new[] { _mambaInputDim, _options.NumClasses });
-        InitializeTensor(_classifierWeights);
-        _classifierBias = new Tensor<T>(new[] { _options.NumClasses });
-        _classifierBias.Fill(NumOps.Zero);
-
+        _configuration = new VimConfiguration
+        {
+            ImageHeight = _options.ImageHeight, ImageWidth = _options.ImageWidth, Channels = _options.Channels,
+            PatchSize = _options.PatchSize, Stride = _options.EffectiveStride, Dim = _options.ModelDimension, Depth = _options.NumLayers,
+            StateDim = _options.StateDimension, DropPathRate = _options.DropPathRate,
+        };
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? throw new InvalidOperationException("Vision Mamba declares its paper recipe.");
         InitializeLayers();
     }
 
-    #endregion
-
-    #region Initialization
-
     protected override void InitializeLayers()
     {
-        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-        }
-        else
-        {
-            Layers.AddRange(LayerHelper<T>.CreateVisionMambaClassifierLayers(
-                _numPatches, _mambaInputDim, _numLayers, _stateDimension));
-        }
+        if (_options is null || _network is not null) return;
+        if (Architecture.Layers is { Count: > 0 })
+            throw new NotSupportedException("VisionMambaModel builds the paper's network; custom layers are not supported.");
+        var layers = new List<LayerBase<T>>();
+        _network = new VimNetwork<T>(Engine, layers, _configuration);
+        int seed = _options.Seed ?? 42;
+        var random = Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
+        _trainingRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(seed + 1);
+        _network.InitializeLikeReference(random);
+        Classifier = new DenseLayer<T>(_options.NumClasses, (IActivationFunction<T>)new SoftmaxActivation<T>());
+        layers.Add(Classifier);
+        // segm_init_weights: N(0, 0.02²) truncated at ±2, zero bias.
+        var w = TextToSpeech.CodecBased.TorchParameters.Gaussian<T>(random, _options.NumClasses * _configuration.Dim, 0.02);
+        TextToSpeech.CodecBased.TorchParameters.Linear(Engine, Classifier, _configuration.Dim, _options.NumClasses,
+            w.ToArray().Select(v => NumOps.ToDouble(v)).ToArray(), new double[_options.NumClasses]);
+        Layers.AddRange(layers);
     }
 
-    private void InitializeTensor(Tensor<T> tensor, double scale = -1)
+    /// <summary>Loads an official VisionMamba state dict (the network, then <c>head.weight</c> and <c>head.bias</c>).</summary>
+    internal void LoadTorchWeights(Func<string, int[], double[]> read)
     {
-        int fanIn = tensor.Shape[0];
-        int fanOut = tensor.Shape[1];
-        T s = scale > 0
-            ? NumOps.FromDouble(scale)
-            : NumOps.Sqrt(NumOps.FromDouble(2.0 / (fanIn + fanOut)));
-
-        var rand = Tensors.Helpers.RandomHelper.CreateSecureRandom();
-        for (int i = 0; i < tensor.Length; i++)
-        {
-            tensor[i] = NumOps.Multiply(
-                NumOps.FromDouble(rand.NextDouble() - 0.5), s);
-        }
+        Network.LoadTorchWeights(read);
+        int d = _configuration.Dim, classes = _options.NumClasses;
+        TextToSpeech.CodecBased.TorchParameters.Linear(Engine, Classifier!, d, classes,
+            read("head.weight", new[] { classes, d }), read("head.bias", new[] { classes }));
     }
 
-    #endregion
-
-    #region NeuralNetworkBase Overrides
+    /// <summary>The class probabilities of an image <c>[C, H, W]</c> or a batch <c>[B, C, H, W]</c>.</summary>
+    public Tensor<T> Forward(Tensor<T> input)
+    {
+        bool single = input.Rank == 3;
+        if (input.Rank is not (3 or 4))
+            throw new ArgumentException($"Input must be 3D [C,H,W] or 4D [batch,C,H,W], got {input.Rank}D.", nameof(input));
+        var x = single ? Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] }) : input;
+        var features = Network.ClassFeatures(Network.Forward(x, IsTrainingMode, _trainingRandom));
+        var output = Classifier!.Forward(features);
+        return single ? Engine.Reshape(output, new[] { output.Shape[1] }) : output;
+    }
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);
-        return Accelerate(input, () => RunForward(input));
+        return Forward(input);
     }
 
-    /// <summary>
-    /// ForwardForTraining MUST execute the same pipeline as Predict (patch
-    /// embed → positional → scan pattern → Mamba blocks → pool → norm →
-    /// classifier). The base implementation walks <c>Layers</c> directly,
-    /// but VisionMamba's Layers list only contains the MambaBlock stack —
-    /// patch embedding lives in this class's custom forward code. Without
-    /// the override, Train() feeds the raw [B,C,H,W] image straight into
-    /// MambaBlock[0] and crashes on the [16,16] x [32,128] matmul mismatch.
-    /// </summary>
-    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
+
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
-        return RunForward(input);
+        try
+        {
+            TrainWithTape(input, expectedOutput, _optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
     }
 
-    private Tensor<T> RunForward(Tensor<T> input)
+    /// <inheritdoc />
+    /// <remarks>Every layer is sized at construction and <see cref="NeuralNetworkBase{T}.Layers"/> is not a chain.</remarks>
+    protected override void ResolveLazyLayerShapes()
     {
-        int rank = input.Shape.Length;
-        int batchSize;
-        Tensor<T> input4D;
-
-        if (rank == 3)
-        {
-            batchSize = 1;
-            input4D = input.Reshape(1, _channels, _imageHeight, _imageWidth);
-        }
-        else if (rank == 4)
-        {
-            batchSize = input.Shape[0];
-            input4D = input;
-        }
-        else
-        {
-            throw new ArgumentException(
-                $"Input must be 3D [C,H,W] or 4D [batch,C,H,W], got {rank}D.");
-        }
-
-        // Step 1: Extract and flatten patches
-        var patches = ExtractPatches(input4D, batchSize);
-
-        // Step 2: Project patches to embeddings
-        int patchDim = _patchSize * _patchSize * _channels;
-        var patchesFlat = patches.Reshape(batchSize * _numPatches, patchDim);
-        var embeddedFlat = Engine.TensorMatMul(patchesFlat, _patchProjectionWeights);
-        // Issue #1678: Engine.Reshape (tape-safe), NOT tensor.Reshape — a raw reshape of the trainable
-        // bias/positional-embedding weights or of a tape-tracked intermediate severs the gradient path
-        // (the param never learns / the upstream projection is disconnected from the loss).
-        var bias2D = Engine.Reshape(_patchProjectionBias, new[] { 1, _modelDimension });
-        embeddedFlat = Engine.TensorAdd(embeddedFlat, bias2D);
-        var embedded = Engine.Reshape(embeddedFlat, new[] { batchSize, _numPatches, _modelDimension });
-
-        // Add positional embedding
-        var posEmb3D = Engine.Reshape(_positionalEmbedding, new[] { 1, _numPatches, _modelDimension });
-        embedded = Engine.TensorAdd(embedded, posEmb3D);
-
-        // Step 3: Apply scan pattern
-        Tensor<T> scannedInput;
-        if (_scanPattern == VisionScanPattern.Bidirectional)
-        {
-            scannedInput = ScanPatterns<T>.BidirectionalScan(embedded);
-        }
-        else if (_scanPattern == VisionScanPattern.CrossScan)
-        {
-            var scans = ScanPatterns<T>.CrossScan(embedded, _numPatchesH, _numPatchesW);
-            scannedInput = ScanPatterns<T>.MergeScanOutputs(scans);
-        }
-        else
-        {
-            scannedInput = ScanPatterns<T>.ContinuousScan(embedded, _numPatchesH, _numPatchesW);
-        }
-
-        // Step 4: Pass through Mamba blocks (Layers) with residuals
-        var current = scannedInput;
-        for (int i = 0; i < Layers.Count; i++)
-        {
-            var blockOut = Layers[i].Forward(current);
-            current = Engine.TensorAdd(current, blockOut);
-        }
-
-        // Step 5: Global average pooling over sequence dimension
-        int featureDim = current.Shape[2];
-        var pooled = Engine.ReduceSum(current, new int[] { 1 });
-        T seqLenT = NumOps.FromDouble(_numPatches);
-        for (int i = 0; i < pooled.Length; i++)
-        {
-            pooled[i] = NumOps.Divide(pooled[i], seqLenT);
-        }
-
-        // Step 6: Final RMS norm on pooled output
-        var normedPooled = ApplyRMSNorm1D(pooled, _finalNormGamma, batchSize, featureDim);
-
-        // Step 7: Classification head
-        var logits = Engine.TensorMatMul(normedPooled, _classifierWeights);
-        var clsBias = Engine.Reshape(_classifierBias, new[] { 1, _numClasses });
-        logits = Engine.TensorAdd(logits, clsBias);
-
-        if (rank == 3)
-            return Engine.Reshape(logits, new[] { _numClasses });
-
-        return logits;
     }
 
-    // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
+    /// <inheritdoc />
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input) => ObservedLayerActivations(input);
+
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -338,90 +172,19 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "Architecture", "VisionMamba" },
-                { "ImageHeight", _imageHeight },
-                { "ImageWidth", _imageWidth },
-                { "PatchSize", _patchSize },
-                { "Channels", _channels },
-                { "ModelDimension", _modelDimension },
-                { "NumLayers", _numLayers },
-                { "NumClasses", _numClasses },
-                { "StateDimension", _stateDimension },
-                { "ScanPattern", _scanPattern.ToString() },
-                { "NumPatches", _numPatches },
+                { "ImageHeight", _configuration.ImageHeight },
+                { "ImageWidth", _configuration.ImageWidth },
+                { "PatchSize", _configuration.PatchSize },
+                { "Stride", _configuration.Stride },
+                { "Channels", _configuration.Channels },
+                { "ModelDimension", _configuration.Dim },
+                { "NumLayers", _configuration.Depth },
+                { "NumClasses", _options.NumClasses },
+                { "StateDimension", _configuration.StateDim },
+                { "NumPatches", _configuration.Patches },
                 { "LayerCount", Layers.Count }
             },
             ModelDataProvider = () => SerializeForMetadata()
         };
     }
-
-
-
-
-
-    #endregion
-
-    #region Private Helpers
-
-    private Tensor<T> ExtractPatches(Tensor<T> input, int batchSize)
-    {
-        int patchDim = _patchSize * _patchSize * _channels;
-        var patches = new Tensor<T>(new[] { batchSize, _numPatches, patchDim });
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            int patchIdx = 0;
-            for (int ph = 0; ph < _numPatchesH; ph++)
-            {
-                for (int pw = 0; pw < _numPatchesW; pw++)
-                {
-                    int flatIdx = 0;
-                    for (int c = 0; c < _channels; c++)
-                    {
-                        for (int h = 0; h < _patchSize; h++)
-                        {
-                            for (int w = 0; w < _patchSize; w++)
-                            {
-                                int srcH = ph * _patchSize + h;
-                                int srcW = pw * _patchSize + w;
-                                patches[new[] { b, patchIdx, flatIdx }] =
-                                    input[new[] { b, c, srcH, srcW }];
-                                flatIdx++;
-                            }
-                        }
-                    }
-                    patchIdx++;
-                }
-            }
-        }
-
-        return patches;
-    }
-
-    private Tensor<T> ApplyRMSNorm1D(Tensor<T> input, Tensor<T> gamma, int batchSize, int dim)
-    {
-        var output = TensorAllocator.Rent<T>(input._shape);
-        T eps = NumOps.FromDouble(1e-6);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            T sumSq = NumOps.Zero;
-            for (int d = 0; d < dim; d++)
-            {
-                T val = input[new[] { b, d }];
-                sumSq = NumOps.Add(sumSq, NumOps.Multiply(val, val));
-            }
-            T meanSq = NumOps.Divide(sumSq, NumOps.FromDouble(dim));
-            T rms = NumOps.Sqrt(NumOps.Add(meanSq, eps));
-
-            for (int d = 0; d < dim; d++)
-            {
-                output[new[] { b, d }] = NumOps.Multiply(
-                    NumOps.Divide(input[new[] { b, d }], rms), gamma[d]);
-            }
-        }
-
-        return output;
-    }
-
-    #endregion
 }

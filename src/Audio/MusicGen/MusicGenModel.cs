@@ -1,1091 +1,789 @@
-using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Attributes;
+using AiDotNet.Audio.Generation;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LossFunctions;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Models;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
-using AiDotNet.Tensors.Helpers;
-using AiDotNet.Tensors.LinearAlgebra;
-using AiDotNet.Tokenization.Interfaces;
-using AiDotNet.Validation;
+using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.TextToSpeech.CodecBased;
+using AiDotNet.Tokenization.Specialized;
 
 namespace AiDotNet.Audio.MusicGen;
 
 /// <summary>
-/// Meta's MusicGen model for generating music from text descriptions.
+/// MusicGen (Copet et al. 2023): text-to-music generation with one transformer language model over the four codebooks
+/// of a 32 kHz EnCodec, interleaved by the "delay" pattern and conditioned on frozen T5 text embeddings through
+/// cross-attention, sampled with classifier-free guidance.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// MusicGen is a state-of-the-art text-to-music generation model from Meta AI Research.
-/// It uses a single-stage transformer language model that operates directly on EnCodec
-/// audio codes, generating high-quality music from text descriptions.
+/// The text is tokenized with t5-base's SentencePiece model and encoded by a T5 encoder (frozen, as the paper's
+/// pretrained conditioner), projected to the model width. The language model (<see cref="MusicGenCore{T}"/>) reads the
+/// delay-interleaved codes and is trained with each codebook's cross-entropy over its valid steps. Training applies the
+/// paper's condition merging, description dropout, word dropout and condition dropout; the optimizer is AdamW (or
+/// D-Adaptation for the 300M model) with clipping and a cosine schedule, and an EMA of the weights is what generation
+/// uses once training has updated it. Generation fills the pattern step by step with
+/// <c>uncond + 3 · (cond − uncond)</c> logits and top-k sampling, then decodes the codes with EnCodec.
 /// </para>
-/// <para>
-/// Architecture components:
-/// <list type="number">
-/// <item><description><b>Text Encoder:</b> T5-based encoder that converts text prompts to embeddings</description></item>
-/// <item><description><b>Language Model:</b> Transformer decoder that generates audio codes autoregressively</description></item>
-/// <item><description><b>EnCodec Decoder:</b> Neural audio codec that converts discrete codes to waveforms</description></item>
-/// </list>
-/// </para>
-/// <para><b>For Beginners:</b> MusicGen creates original music from your descriptions:
-///
-/// How it works:
-/// 1. You describe the music you want ("upbeat jazz piano")
-/// 2. The text encoder understands your description
-/// 3. The language model generates a sequence of "music tokens"
-/// 4. The EnCodec decoder converts tokens to actual audio
-///
-/// Key features:
-/// - 30 seconds of high-quality 32kHz audio
-/// - Multiple genres and styles
-/// - Control over instruments, tempo, mood
-/// - Stereo output option
-///
-/// Usage:
-/// <code>
-/// var model = new MusicGenModel&lt;float&gt;(options);
-/// var audio = model.GenerateMusic("Calm piano melody with soft strings");
-/// </code>
-/// </para>
-/// <para>
-/// Reference: "Simple and Controllable Music Generation" by Copet et al., Meta AI, 2023
-/// </para>
+/// <para>The T5 encoder and EnCodec are implemented natively; their published weights load with
+/// <see cref="LoadTextEncoderWeights"/> and the codec's own loader, and the language model's with
+/// <see cref="LoadLanguageModelWeights"/> (audiocraft state-dict names).</para>
+/// <para><b>For Beginners:</b> Describe the music you want and MusicGen writes it: it predicts compressed audio a
+/// frame at a time, steered toward the description, and a codec turns those frames into sound.</para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var musicGen = new MusicGenModel&lt;float&gt;(architecture, new MusicGenOptions { ModelSize = MusicGenModelSize.Small });
+/// musicGen.Train(new MusicGenTrainingSample&lt;float&gt; { Audio = clip, Description = "lofi hip hop with a mellow piano" });
+/// var music = musicGen.GenerateMusic("an upbeat 80s synth-pop track", durationSeconds: 10);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Audio)]
 [ModelDomain(ModelDomain.Generative)]
-[ModelCategory(ModelCategory.NeuralNetwork)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
 [ModelComplexity(ModelComplexity.VeryHigh)]
-[ModelInput(typeof(string), typeof(Tensor<>))]
-[ResearchPaper("Simple and Controllable Music Generation", "https://doi.org/10.48550/arXiv.2306.05284", Year = 2023, Authors = "Jade Copet, Felix Kreuk, Itai Gat, Tal Remez, David Kant, Gabriel Synnaeve, Yossi Adi, Alexandre Défossez")]
-[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.95, WeightDecay = 0.1,
-                ReferenceBatchSize = 192, WarmupSteps = 4000, MaxGradientNorm = 1.0,
-                Schedule = LearningRateSchedulerType.CosineAnnealing,
-                Source = "Copet et al. 2023, Sec. 4: 1M steps with the AdamW optimizer, a batch size of "
-                        + "192 examples, beta1 0.9, beta2 0.95, a decoupled weight decay of 0.1 and "
-                        + "gradient clipping of 1.0, under a cosine learning rate schedule with a "
-                        + "4000-step warmup. No peak rate is stated, so the recipe is recorded but not "
-                        + "routed.")]
-public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
+[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
+[ResearchPaper("Simple and Controllable Music Generation", "https://arxiv.org/abs/2306.05284", Year = 2023,
+    Authors = "Jade Copet, Felix Kreuk, Itai Gat, Tal Remez, David Kant, Gabriel Synnaeve, Yossi Adi, Alexandre Défossez")]
+[PaperOptimizer(OptimizerKind.DAdaptAdam, LearningRate = 1.0, Beta1 = 0.9, Beta2 = 0.95, WeightDecay = 0.1,
+    Variant = nameof(MusicGenModelSize.Small), Provenance = RecipeProvenance.Stated,
+    Source = "Section 3.1: AdamW with beta1 = 0.9, beta2 = 0.95, decoupled weight decay 0.1, gradient clipping 1.0 and a "
+             + "cosine schedule with 4000 warmup steps; D-Adaptation step sizes for the 300M model (audiocraft: lr 1).")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, Beta1 = 0.9, Beta2 = 0.95, WeightDecay = 0.1,
+    Provenance = RecipeProvenance.Stated,
+    Source = "Section 3.1: AdamW with beta1 = 0.9, beta2 = 0.95, decoupled weight decay 0.1, gradient clipping 1.0 and a "
+             + "cosine schedule with 4000 warmup steps. The paper gives no learning rate; 1e-4 is audiocraft's.")]
+public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>, IPaperOptimizerVariant,
+    ITrainingObjectiveProvider<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Traced from output construction: PredictCore calls Forward, the sequential fold over Layers.
-    /// CreateDefaultMusicGenLayers ends with a <c>numCodebooks</c>-long run of
-    /// <c>DenseLayer&lt;T&gt;(codebookSize)</c> heads (the delay-pattern output projection) appended
-    /// flat to Layers, so the fold chains them and the LAST one sets the width -
-    /// <c>_options.CodebookSize</c> (2048). Note the heads are per-codebook, so the width is
-    /// CodebookSize alone, NOT CodebookSize * NumCodebooks; and LmHiddenDim is the width one layer
-    /// earlier.
-    /// </remarks>
-    protected override int OutputFeatureWidth => _options.CodebookSize;
-
-    #region Fields
-
     private readonly MusicGenOptions _options;
-
-    /// <inheritdoc/>
-    public override ModelOptions GetOptions() => _options;
-
-    private readonly ITokenizer _tokenizer;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private ILossFunction<T> _lossFunction;
-    private readonly Random _random;
-
-    // Model dimensions based on size
-    private readonly int _textHiddenDim;
-    private readonly int _lmHiddenDim;
-    private readonly int _numLmLayers;
-    private readonly int _numHeads;
-
-    // ONNX models for inference mode
-    private readonly OnnxModel<T>? _textEncoder;
-    private readonly OnnxModel<T>? _languageModel;
-    private readonly OnnxModel<T>? _encodecDecoder;
-    private readonly bool _useNativeMode;
-
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _suppliedOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _paperOptimizer;
+    private readonly T5TextTokenizer _tokenizer = new();
+    private readonly List<LayerBase<T>> _lmLayers = new();
+    private readonly List<LayerBase<T>> _textLayers = new();
+    private MusicGenCore<T>? _core;
+    private T5Seq2Seq<T>? _textEncoder;
+    private DenseLayer<T>? _projection;
+    private DenseLayer<T>? _melodyProjection;
+    private AudioCodecLayer<T>? _codec;
+    private int _hopLength;
+    private Random _trainingRandom;
+    private Dictionary<Tensor<T>, double[]>? _ema;
+    private double _emaCount;
+    private int _updates;
     private bool _disposed;
 
-    #endregion
+    /// <inheritdoc />
+    public override ModelOptions GetOptions() => _options;
 
-    #region IAudioGenerator Properties
-
-    /// <summary>
-    /// Gets the sample rate of generated audio.
-    /// </summary>
-    public new int SampleRate => _options.SampleRate;
-
-    /// <summary>
-    /// Gets the maximum duration of audio that can be generated.
-    /// </summary>
-    public double MaxDurationSeconds => _options.MaxDurationSeconds;
-
-    /// <summary>
-    /// Gets whether this model supports text-to-audio generation.
-    /// </summary>
-    public bool SupportsTextToAudio => false; // MusicGen is specifically for music
-
-    /// <summary>
-    /// Gets whether this model supports text-to-music generation.
-    /// </summary>
-    public bool SupportsTextToMusic => true;
-
-    /// <summary>
-    /// Gets whether this model supports audio continuation.
-    /// </summary>
-    public bool SupportsAudioContinuation => true; // MusicGen supports melody conditioning
-
-    /// <summary>
-    /// Gets whether this model supports audio inpainting.
-    /// </summary>
-    public bool SupportsAudioInpainting => false;
-
-    #endregion
-
-    #region Constructors
-
-    /// <summary>
-    /// Creates a MusicGen model with default configuration for native training.
-    /// </summary>
-    public MusicGenModel()
-        : this(new NeuralNetworkArchitecture<T>(
-            inputType: InputType.OneDimensional,
-            taskType: NeuralNetworkTaskType.Generative,
-            inputSize: 128,
-            outputSize: 2048))
-    {
-    }
-
-    /// <summary>
-    /// Creates a MusicGen model using pretrained ONNX models for inference.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="textEncoderPath">Path to the T5 text encoder ONNX model.</param>
-    /// <param name="languageModelPath">Path to the transformer LM ONNX model.</param>
-    /// <param name="encodecDecoderPath">Path to the EnCodec decoder ONNX model.</param>
-    /// <param name="tokenizer">T5 tokenizer for text processing (REQUIRED).</param>
-    /// <param name="options">MusicGen configuration options.</param>
-    /// <param name="optimizer">Optional optimizer for fine-tuning.</param>
-    /// <param name="lossFunction">Optional loss function.</param>
-    /// <exception cref="ArgumentException">Thrown when required paths are empty.</exception>
-    /// <exception cref="FileNotFoundException">Thrown when model files don't exist.</exception>
-    /// <exception cref="ArgumentNullException">Thrown when tokenizer is null.</exception>
-    public MusicGenModel(
-        NeuralNetworkArchitecture<T> architecture,
-        string textEncoderPath,
-        string languageModelPath,
-        string encodecDecoderPath,
-        ITokenizer tokenizer,
-        MusicGenOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
-    {
-        // Validate paths
-        if (string.IsNullOrWhiteSpace(textEncoderPath))
-            throw new ArgumentException("Text encoder path is required.", nameof(textEncoderPath));
-        if (string.IsNullOrWhiteSpace(languageModelPath))
-            throw new ArgumentException("Language model path is required.", nameof(languageModelPath));
-        if (string.IsNullOrWhiteSpace(encodecDecoderPath))
-            throw new ArgumentException("EnCodec decoder path is required.", nameof(encodecDecoderPath));
-        if (!File.Exists(textEncoderPath))
-            throw new FileNotFoundException($"Text encoder not found: {textEncoderPath}");
-        if (!File.Exists(languageModelPath))
-            throw new FileNotFoundException($"Language model not found: {languageModelPath}");
-        if (!File.Exists(encodecDecoderPath))
-            throw new FileNotFoundException($"EnCodec decoder not found: {encodecDecoderPath}");
-
-        _options = options ?? new MusicGenOptions();
-        Options = _options;
-        Guard.NotNull(tokenizer);
-        _tokenizer = tokenizer;
-        _useNativeMode = false;
-
-        // Set dimensions based on model size
-        (_textHiddenDim, _lmHiddenDim, _numLmLayers, _numHeads) = GetModelDimensions(_options.ModelSize);
-
-        // Load ONNX models
-        OnnxModel<T>? textEncoder = null;
-        OnnxModel<T>? languageModel = null;
-        OnnxModel<T>? encodecDecoder = null;
-
-        try
-        {
-            textEncoder = new OnnxModel<T>(textEncoderPath);
-            languageModel = new OnnxModel<T>(languageModelPath);
-            encodecDecoder = new OnnxModel<T>(encodecDecoderPath);
-
-            _textEncoder = textEncoder;
-            _languageModel = languageModel;
-            _encodecDecoder = encodecDecoder;
-
-            // Set base class ONNX model
-            OnnxModel = encodecDecoder;
-        }
-        catch
-        {
-            textEncoder?.Dispose();
-            languageModel?.Dispose();
-            encodecDecoder?.Dispose();
-            throw;
-        }
-
-        _optimizer = optimizer;
-        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
-        _random = _options.Seed.HasValue
-            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
-            : RandomHelper.CreateSecureRandom();
-
-        base.SampleRate = _options.SampleRate;
-
-        InitializeLayers();
-    }
-
-    /// <summary>
-    /// Creates a MusicGen model using native layers for training from scratch.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="options">MusicGen configuration options.</param>
-    /// <param name="tokenizer">Optional tokenizer. If null, creates T5-compatible tokenizer.</param>
-    /// <param name="optimizer">Optional optimizer. Defaults to AdamW.</param>
-    /// <param name="lossFunction">Optional loss function. Defaults to CrossEntropy.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Use this constructor when:
-    /// - Training MusicGen from scratch (requires significant data)
-    /// - Fine-tuning on custom music styles
-    /// - Research and experimentation
-    ///
-    /// For most use cases, load pretrained ONNX models instead.
-    /// </para>
-    /// </remarks>
-    public MusicGenModel(
-        NeuralNetworkArchitecture<T> architecture,
-        MusicGenOptions? options = null,
-        ITokenizer? tokenizer = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
-        ILossFunction<T>? lossFunction = null)
-        : base(architecture, lossFunction ?? new CrossEntropyWithLogitsLoss<T>(), 1.0)
+    /// <summary>Creates a trainable MusicGen.</summary>
+    public MusicGenModel(NeuralNetworkArchitecture<T> architecture, MusicGenOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture)
     {
         _options = options ?? new MusicGenOptions();
         Options = _options;
-        _useNativeMode = true;
-
-        // Set dimensions based on model size
-        (_textHiddenDim, _lmHiddenDim, _numLmLayers, _numHeads) = GetModelDimensions(_options.ModelSize);
-
-        // Use T5-compatible tokenizer as default
-        _tokenizer = tokenizer ?? Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.FlanT5);
-        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
-            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this));
-        _lossFunction = lossFunction ?? new CrossEntropyWithLogitsLoss<T>();
-        _random = _options.Seed.HasValue
-            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
-            : RandomHelper.CreateSecureRandom();
-
-        base.SampleRate = _options.SampleRate;
-
+        _suppliedOptimizer = optimizer;
+        _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.Seed ?? 0);
+        base.SampleRate = _options.Codec.SampleRate;
         InitializeLayers();
     }
 
-    #endregion
+    // ------------------------------------------------------------------ configuration
 
-    #region Layer Initialization - Golden Standard Pattern
-
-    /// <summary>
-    /// Initializes the neural network layers following the golden standard pattern.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method follows the AiDotNet golden standard pattern:
-    /// 1. First, check if the user provided custom layers via Architecture.Layers
-    /// 2. If custom layers exist, use them (allows full customization)
-    /// 3. Otherwise, use LayerHelper.CreateDefaultMusicGenLayers() for standard architecture
-    /// </para>
-    /// <para><b>For Beginners:</b> This gives you flexibility:
-    /// - Want standard MusicGen? Just create the model, it auto-configures.
-    /// - Want custom architecture? Pass your own layers in the Architecture.
-    /// </para>
-    /// </remarks>
-    protected override void InitializeLayers()
+    /// <summary>The width D, heads and layers of the configured size (preset unless overridden).</summary>
+    public (int ModelDim, int Heads, int Layers) Dimensions
     {
-        // ONNX mode - layers are handled by ONNX runtime
-        if (!_useNativeMode)
+        get
         {
-            return;
-        }
-
-        // Golden standard pattern: check for user-provided custom layers first
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            // Use custom layers provided by the user
-            Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
-        }
-        else
-        {
-            // Use default MusicGen layer configuration
-            Layers.AddRange(LayerHelper<T>.CreateDefaultMusicGenLayers(
-                textHiddenDim: _textHiddenDim,
-                lmHiddenDim: _lmHiddenDim,
-                numLmLayers: _numLmLayers,
-                numHeads: _numHeads,
-                numCodebooks: _options.NumCodebooks,
-                codebookSize: _options.CodebookSize,
-                maxTextLength: _options.MaxTextLength,
-                maxAudioTokens: (int)(_options.MaxDurationSeconds * 50), // ~50 tokens/sec
-                dropoutRate: _options.DropoutRate));
-        }
-    }
-
-    private static (int textHiddenDim, int lmHiddenDim, int numLmLayers, int numHeads) GetModelDimensions(MusicGenModelSize size)
-    {
-        return size switch
-        {
-            MusicGenModelSize.Small => (256, 1024, 24, 16),
-            MusicGenModelSize.Medium => (768, 1536, 24, 16),
-            MusicGenModelSize.Large => (1024, 2048, 48, 16),
-            MusicGenModelSize.Melody => (768, 1536, 24, 16),
-            MusicGenModelSize.Stereo => (768, 1536, 24, 16),
-            _ => (768, 1536, 24, 16)
-        };
-    }
-
-    #endregion
-
-    #region IAudioGenerator Implementation
-
-    /// <summary>
-    /// Generates audio from a text description.
-    /// </summary>
-    /// <remarks>
-    /// MusicGen is optimized for music, not general audio.
-    /// For best results, use GenerateMusic instead.
-    /// </remarks>
-    public Tensor<T> GenerateAudio(
-        string prompt,
-        string? negativePrompt = null,
-        double durationSeconds = 5.0,
-        int numInferenceSteps = 100,
-        double guidanceScale = 3.0,
-        int? seed = null)
-    {
-        // Redirect to music generation
-        return GenerateMusic(prompt, negativePrompt, durationSeconds, numInferenceSteps, guidanceScale, seed);
-    }
-
-    /// <summary>
-    /// Generates audio asynchronously.
-    /// </summary>
-    public Task<Tensor<T>> GenerateAudioAsync(
-        string prompt,
-        string? negativePrompt = null,
-        double durationSeconds = 5.0,
-        int numInferenceSteps = 100,
-        double guidanceScale = 3.0,
-        int? seed = null,
-        CancellationToken cancellationToken = default)
-    {
-        return Task.Run(() => GenerateAudio(prompt, negativePrompt, durationSeconds, numInferenceSteps, guidanceScale, seed), cancellationToken);
-    }
-
-    /// <summary>
-    /// Generates music from a text description.
-    /// </summary>
-    /// <param name="prompt">Text description of the desired music.</param>
-    /// <param name="negativePrompt">What to avoid in the generated music.</param>
-    /// <param name="durationSeconds">Duration of music to generate (max 30s).</param>
-    /// <param name="numInferenceSteps">Not used in autoregressive generation.</param>
-    /// <param name="guidanceScale">How closely to follow the prompt.</param>
-    /// <param name="seed">Random seed for reproducibility.</param>
-    /// <returns>Generated music waveform tensor.</returns>
-    public Tensor<T> GenerateMusic(
-        string prompt,
-        string? negativePrompt = null,
-        double durationSeconds = 10.0,
-        int numInferenceSteps = 100,
-        double guidanceScale = 3.0,
-        int? seed = null)
-    {
-        ThrowIfDisposed();
-
-        // Clamp duration to maximum
-        durationSeconds = Math.Min(durationSeconds, _options.MaxDurationSeconds);
-
-        int seedUsed = seed ?? _random.Next();
-        var random = RandomHelper.CreateSeededRandom(seedUsed);
-
-        // Encode text prompt
-        var textEmbeddings = EncodeText(prompt);
-
-        // Generate audio codes with optional classifier-free guidance
-        Tensor<T> audioCodes;
-        if (negativePrompt is string negPrompt && !string.IsNullOrEmpty(negPrompt) && guidanceScale > 1.0)
-        {
-            var negativeEmbeddings = EncodeText(negPrompt);
-            audioCodes = GenerateWithGuidance(textEmbeddings, negativeEmbeddings, guidanceScale, durationSeconds, random);
-        }
-        else
-        {
-            audioCodes = GenerateAudioCodes(textEmbeddings, durationSeconds, random);
-        }
-
-        // Decode to waveform
-        return DecodeToWaveform(audioCodes, durationSeconds);
-    }
-
-    /// <summary>
-    /// Continues existing audio by extending it.
-    /// </summary>
-    /// <param name="inputAudio">Audio to continue from.</param>
-    /// <param name="prompt">Optional text guidance for continuation.</param>
-    /// <param name="extensionSeconds">How many seconds to add.</param>
-    /// <param name="numInferenceSteps">Not used.</param>
-    /// <param name="seed">Random seed.</param>
-    /// <returns>Extended audio (original + continuation).</returns>
-    public Tensor<T> ContinueAudio(
-        Tensor<T> inputAudio,
-        string? prompt = null,
-        double extensionSeconds = 5.0,
-        int numInferenceSteps = 100,
-        int? seed = null)
-    {
-        ThrowIfDisposed();
-
-        int seedUsed = seed ?? _random.Next();
-        var random = RandomHelper.CreateSeededRandom(seedUsed);
-
-        // Encode the input audio to get conditioning
-        var inputCodes = EncodeAudioToCodes(inputAudio);
-
-        // Encode text prompt if provided
-        Tensor<T>? textEmbeddings = null;
-        if (prompt is string textPrompt && !string.IsNullOrEmpty(textPrompt))
-        {
-            textEmbeddings = EncodeText(textPrompt);
-        }
-
-        // Generate continuation codes
-        var continuationCodes = GenerateContinuation(inputCodes, textEmbeddings, extensionSeconds, random);
-
-        // Concatenate and decode
-        var allCodes = ConcatenateCodes(inputCodes, continuationCodes);
-        double totalDuration = (double)inputAudio.Length / _options.SampleRate + extensionSeconds;
-
-        return DecodeToWaveform(allCodes, totalDuration);
-    }
-
-    /// <summary>
-    /// Inpainting is not supported by MusicGen.
-    /// </summary>
-    public Tensor<T> InpaintAudio(
-        Tensor<T> audio,
-        Tensor<T> mask,
-        string? prompt = null,
-        int numInferenceSteps = 100,
-        int? seed = null)
-    {
-        throw new NotSupportedException("MusicGen does not support audio inpainting.");
-    }
-
-    /// <summary>
-    /// Gets default generation options.
-    /// </summary>
-    public AudioGenerationOptions<T> GetDefaultOptions()
-    {
-        return new AudioGenerationOptions<T>
-        {
-            DurationSeconds = _options.DurationSeconds,
-            NumInferenceSteps = 100,
-            GuidanceScale = _options.GuidanceScale,
-            Seed = _options.Seed,
-            Stereo = _options.Stereo,
-            SchedulerType = "autoregressive"
-        };
-    }
-
-    #endregion
-
-    #region Core Generation Methods
-
-    private Tensor<T> EncodeText(string prompt)
-    {
-        // Tokenize the prompt
-        var encoding = _tokenizer.Encode(prompt);
-        var tokens = new int[_options.MaxTextLength];
-        int copyCount = Math.Min(encoding.TokenIds.Count, _options.MaxTextLength);
-        for (int i = 0; i < copyCount; i++)
-        {
-            tokens[i] = encoding.TokenIds[i];
-        }
-
-        // Create input tensor
-        var inputTensor = new Tensor<T>([1, _options.MaxTextLength]);
-        for (int i = 0; i < _options.MaxTextLength; i++)
-        {
-            inputTensor[0, i] = NumOps.FromDouble(tokens[i]);
-        }
-
-        if (!_useNativeMode && _textEncoder is not null)
-        {
-            return _textEncoder.Run(inputTensor);
-        }
-
-        // Native mode: forward through text encoder layers
-        return ForwardTextEncoder(inputTensor);
-    }
-
-    private Tensor<T> ForwardTextEncoder(Tensor<T> input)
-    {
-        // Text encoder uses the first portion of layers
-        // This is a simplified approach - real implementation would track layer indices
-        var output = input;
-        int textEncoderLayerCount = 6 * 5 + 3; // 6 blocks * 5 layers each + embedding/position layers
-
-        for (int i = 0; i < Math.Min(textEncoderLayerCount, Layers.Count); i++)
-        {
-            output = Layers[i].Forward(output);
-        }
-
-        return output;
-    }
-
-    private Tensor<T> GenerateAudioCodes(Tensor<T> textEmbeddings, double durationSeconds, Random random)
-    {
-        // Calculate number of tokens needed (~50 tokens/second for EnCodec at 32kHz)
-        int tokensPerSecond = 50;
-        int numTokens = (int)(durationSeconds * tokensPerSecond);
-
-        var codes = new Tensor<T>([1, _options.NumCodebooks, numTokens]);
-
-        // Initialize with start token
-        var currentTokens = new Tensor<T>([1, _options.NumCodebooks, 1]);
-        for (int cb = 0; cb < _options.NumCodebooks; cb++)
-        {
-            currentTokens[0, cb, 0] = NumOps.Zero; // Start token
-        }
-
-        // Generate tokens autoregressively with delay pattern
-        for (int t = 0; t < numTokens; t++)
-        {
-            Tensor<T> logits;
-
-            if (!_useNativeMode && _languageModel is not null)
+            var (d, h, l) = _options.ModelSize switch
             {
-                var inputs = new Dictionary<string, Tensor<T>>
-                {
-                    ["text_embeddings"] = textEmbeddings,
-                    ["audio_codes"] = currentTokens
-                };
-                var outputs = _languageModel.Run(inputs);
-                logits = outputs.Values.First();
-            }
-            else
-            {
-                logits = ForwardLanguageModel(textEmbeddings, currentTokens);
-            }
-
-            // Sample next token for each codebook with delay pattern
-            for (int cb = 0; cb < _options.NumCodebooks; cb++)
-            {
-                // Delay pattern: codebook i is delayed by i tokens
-                int effectiveT = t - cb;
-                if (effectiveT < 0) continue;
-                if (effectiveT >= numTokens) continue;
-
-                int nextToken = SampleFromLogits(logits, cb, random);
-                codes[0, cb, effectiveT] = NumOps.FromDouble(nextToken);
-            }
-
-            // Extend current tokens
-            if (t < numTokens - 1)
-            {
-                var newTokens = new Tensor<T>([1, _options.NumCodebooks, currentTokens.Shape[2] + 1]);
-                for (int cb = 0; cb < _options.NumCodebooks; cb++)
-                {
-                    for (int i = 0; i < currentTokens.Shape[2]; i++)
-                    {
-                        newTokens[0, cb, i] = currentTokens[0, cb, i];
-                    }
-                    newTokens[0, cb, currentTokens.Shape[2]] = codes[0, cb, Math.Max(0, t - cb)];
-                }
-                currentTokens = newTokens;
-            }
+                MusicGenModelSize.Small => (1024, 16, 24),
+                MusicGenModelSize.Large => (2048, 32, 48),
+                _ => (1536, 24, 48),
+            };
+            return (_options.ModelDim > 0 ? _options.ModelDim : d, _options.NumHeads > 0 ? _options.NumHeads : h,
+                _options.NumLayers > 0 ? _options.NumLayers : l);
         }
-
-        return codes;
-    }
-
-    private Tensor<T> GenerateWithGuidance(
-        Tensor<T> condEmbeddings,
-        Tensor<T> uncondEmbeddings,
-        double guidanceScale,
-        double durationSeconds,
-        Random random)
-    {
-        int tokensPerSecond = 50;
-        int numTokens = (int)(durationSeconds * tokensPerSecond);
-
-        var codes = new Tensor<T>([1, _options.NumCodebooks, numTokens]);
-        var currentTokens = new Tensor<T>([1, _options.NumCodebooks, 1]);
-
-        for (int cb = 0; cb < _options.NumCodebooks; cb++)
-        {
-            currentTokens[0, cb, 0] = NumOps.Zero;
-        }
-
-        for (int t = 0; t < numTokens; t++)
-        {
-            Tensor<T> condLogits, uncondLogits;
-
-            if (!_useNativeMode && _languageModel is not null)
-            {
-                var condInputs = new Dictionary<string, Tensor<T>>
-                {
-                    ["text_embeddings"] = condEmbeddings,
-                    ["audio_codes"] = currentTokens
-                };
-                condLogits = _languageModel.Run(condInputs).Values.First();
-
-                var uncondInputs = new Dictionary<string, Tensor<T>>
-                {
-                    ["text_embeddings"] = uncondEmbeddings,
-                    ["audio_codes"] = currentTokens
-                };
-                uncondLogits = _languageModel.Run(uncondInputs).Values.First();
-            }
-            else
-            {
-                condLogits = ForwardLanguageModel(condEmbeddings, currentTokens);
-                uncondLogits = ForwardLanguageModel(uncondEmbeddings, currentTokens);
-            }
-
-            // Apply classifier-free guidance
-            var guidedLogits = ApplyGuidance(condLogits, uncondLogits, guidanceScale);
-
-            for (int cb = 0; cb < _options.NumCodebooks; cb++)
-            {
-                int effectiveT = t - cb;
-                if (effectiveT < 0 || effectiveT >= numTokens) continue;
-
-                int nextToken = SampleFromLogits(guidedLogits, cb, random);
-                codes[0, cb, effectiveT] = NumOps.FromDouble(nextToken);
-            }
-
-            if (t < numTokens - 1)
-            {
-                var newTokens = new Tensor<T>([1, _options.NumCodebooks, currentTokens.Shape[2] + 1]);
-                for (int cb = 0; cb < _options.NumCodebooks; cb++)
-                {
-                    for (int i = 0; i < currentTokens.Shape[2]; i++)
-                    {
-                        newTokens[0, cb, i] = currentTokens[0, cb, i];
-                    }
-                    newTokens[0, cb, currentTokens.Shape[2]] = codes[0, cb, Math.Max(0, t - cb)];
-                }
-                currentTokens = newTokens;
-            }
-        }
-
-        return codes;
-    }
-
-    private Tensor<T> ForwardLanguageModel(Tensor<T> textEmbeddings, Tensor<T> audioCodes)
-    {
-        // Forward through language model layers
-        var output = audioCodes;
-
-        // Skip text encoder layers and process through LM layers
-        int textEncoderLayerCount = 6 * 5 + 3;
-        for (int i = textEncoderLayerCount; i < Layers.Count; i++)
-        {
-            output = Layers[i].Forward(output);
-        }
-
-        return output;
-    }
-
-    private Tensor<T> ApplyGuidance(Tensor<T> condLogits, Tensor<T> uncondLogits, double scale)
-    {
-        var guided = new Tensor<T>(condLogits._shape);
-
-        for (int i = 0; i < condLogits.Length; i++)
-        {
-            double cond = NumOps.ToDouble(condLogits[i]);
-            double uncond = NumOps.ToDouble(uncondLogits[i]);
-            double guidedValue = uncond + scale * (cond - uncond);
-            guided[i] = NumOps.FromDouble(guidedValue);
-        }
-
-        return guided;
-    }
-
-    private int SampleFromLogits(Tensor<T> logits, int codebook, Random random)
-    {
-        int vocabSize = _options.CodebookSize;
-        var scaledLogits = new double[vocabSize];
-
-        for (int i = 0; i < vocabSize; i++)
-        {
-            int idx = codebook * vocabSize + i;
-            if (idx < logits.Length)
-            {
-                scaledLogits[i] = NumOps.ToDouble(logits[idx]) / _options.Temperature;
-            }
-        }
-
-        // Apply top-k filtering
-        if (_options.TopK > 0 && _options.TopK < vocabSize)
-        {
-            var sorted = scaledLogits
-                .Select((v, i) => (Value: v, Index: i))
-                .OrderByDescending(x => x.Value)
-                .ToList();
-
-            double threshold = sorted[Math.Min(_options.TopK - 1, sorted.Count - 1)].Value;
-            for (int i = 0; i < vocabSize; i++)
-            {
-                if (scaledLogits[i] < threshold)
-                {
-                    scaledLogits[i] = double.NegativeInfinity;
-                }
-            }
-        }
-
-        // Apply top-p filtering
-        if (_options.TopP > 0 && _options.TopP < 1.0)
-        {
-            var probs = Softmax(scaledLogits);
-            var sorted = probs
-                .Select((v, i) => (Value: v, Index: i))
-                .OrderByDescending(x => x.Value)
-                .ToList();
-
-            double cumSum = 0;
-            var keepIndices = new HashSet<int>();
-            foreach (var item in sorted)
-            {
-                keepIndices.Add(item.Index);
-                cumSum += item.Value;
-                if (cumSum >= _options.TopP) break;
-            }
-
-            for (int i = 0; i < vocabSize; i++)
-            {
-                if (!keepIndices.Contains(i))
-                {
-                    scaledLogits[i] = double.NegativeInfinity;
-                }
-            }
-        }
-
-        // Sample from distribution
-        var finalProbs = Softmax(scaledLogits);
-        double r = random.NextDouble();
-        double cumulative = 0;
-
-        for (int i = 0; i < vocabSize; i++)
-        {
-            cumulative += finalProbs[i];
-            if (r <= cumulative)
-            {
-                return i;
-            }
-        }
-
-        return vocabSize - 1;
-    }
-
-    private static double[] Softmax(double[] logits)
-    {
-        double maxLogit = logits.Where(x => !double.IsNegativeInfinity(x)).DefaultIfEmpty(0).Max();
-        var expValues = logits.Select(x => double.IsNegativeInfinity(x) ? 0 : Math.Exp(x - maxLogit)).ToArray();
-        double sumExp = expValues.Sum();
-        if (sumExp == 0) sumExp = 1;
-        return expValues.Select(x => x / sumExp).ToArray();
-    }
-
-    private Tensor<T> DecodeToWaveform(Tensor<T> codes, double durationSeconds)
-    {
-        if (!_useNativeMode && _encodecDecoder is not null)
-        {
-            return _encodecDecoder.Run(codes);
-        }
-
-        // Native mode: use EnCodec-style decoding
-        // This is a simplified placeholder - real EnCodec has complex architecture
-        int targetSamples = (int)(durationSeconds * _options.SampleRate);
-        var waveform = new Tensor<T>([_options.Stereo ? 2 : 1, targetSamples]);
-
-        // In production, this would use the actual EnCodec decoder layers
-        // For now, convert discrete codes to continuous through learned embeddings
-        int numTokens = codes.Shape[2];
-        int samplesPerToken = targetSamples / Math.Max(1, numTokens);
-
-        for (int t = 0; t < numTokens && t * samplesPerToken < targetSamples; t++)
-        {
-            // Aggregate codebook values for this timestep
-            double value = 0;
-            for (int cb = 0; cb < _options.NumCodebooks; cb++)
-            {
-                value += NumOps.ToDouble(codes[0, cb, t]) / _options.CodebookSize;
-            }
-            value = (value / _options.NumCodebooks - 0.5) * 2; // Normalize to [-1, 1]
-
-            // Apply to sample range
-            for (int s = 0; s < samplesPerToken && t * samplesPerToken + s < targetSamples; s++)
-            {
-                int sampleIdx = t * samplesPerToken + s;
-                T sampleValue = NumOps.FromDouble(value);
-                waveform[0, sampleIdx] = sampleValue;
-                if (_options.Stereo && waveform.Shape[0] > 1)
-                {
-                    waveform[1, sampleIdx] = sampleValue;
-                }
-            }
-        }
-
-        return waveform;
-    }
-
-    private Tensor<T> EncodeAudioToCodes(Tensor<T> audio)
-    {
-        // In ONNX mode, this would use an EnCodec encoder
-        // For native mode, this is a simplified version
-        int numSamples = audio.Length;
-        int tokensPerSecond = 50;
-        double durationSeconds = (double)numSamples / _options.SampleRate;
-        int numTokens = (int)(durationSeconds * tokensPerSecond);
-
-        var codes = new Tensor<T>([1, _options.NumCodebooks, numTokens]);
-
-        // Simple quantization (real EnCodec uses RVQ)
-        int samplesPerToken = numSamples / Math.Max(1, numTokens);
-        for (int t = 0; t < numTokens; t++)
-        {
-            double sum = 0;
-            for (int s = 0; s < samplesPerToken && t * samplesPerToken + s < numSamples; s++)
-            {
-                sum += NumOps.ToDouble(audio[t * samplesPerToken + s]);
-            }
-            double avg = sum / samplesPerToken;
-            int code = (int)((avg + 1) / 2 * _options.CodebookSize);
-            // Use MathHelper.Clamp for net471 compatibility (Math.Clamp not available)
-            code = MathHelper.Clamp(code, 0, _options.CodebookSize - 1);
-
-            for (int cb = 0; cb < _options.NumCodebooks; cb++)
-            {
-                codes[0, cb, t] = NumOps.FromDouble(code);
-            }
-        }
-
-        return codes;
-    }
-
-    private Tensor<T> GenerateContinuation(Tensor<T> inputCodes, Tensor<T>? textEmbeddings, double extensionSeconds, Random random)
-    {
-        int tokensPerSecond = 50;
-        int numNewTokens = (int)(extensionSeconds * tokensPerSecond);
-
-        var codes = new Tensor<T>([1, _options.NumCodebooks, numNewTokens]);
-
-        // Use input codes as context
-        var currentTokens = inputCodes;
-
-        for (int t = 0; t < numNewTokens; t++)
-        {
-            Tensor<T> logits;
-
-            if (!_useNativeMode && _languageModel is not null)
-            {
-                var inputs = new Dictionary<string, Tensor<T>>
-                {
-                    ["audio_codes"] = currentTokens
-                };
-                if (textEmbeddings is not null)
-                {
-                    inputs["text_embeddings"] = textEmbeddings;
-                }
-                logits = _languageModel.Run(inputs).Values.First();
-            }
-            else
-            {
-                logits = ForwardLanguageModel(textEmbeddings ?? new Tensor<T>([1, _lmHiddenDim]), currentTokens);
-            }
-
-            for (int cb = 0; cb < _options.NumCodebooks; cb++)
-            {
-                int nextToken = SampleFromLogits(logits, cb, random);
-                codes[0, cb, t] = NumOps.FromDouble(nextToken);
-            }
-
-            // Extend context
-            if (t < numNewTokens - 1)
-            {
-                var newTokens = new Tensor<T>([1, _options.NumCodebooks, currentTokens.Shape[2] + 1]);
-                for (int cb = 0; cb < _options.NumCodebooks; cb++)
-                {
-                    for (int i = 0; i < currentTokens.Shape[2]; i++)
-                    {
-                        newTokens[0, cb, i] = currentTokens[0, cb, i];
-                    }
-                    newTokens[0, cb, currentTokens.Shape[2]] = codes[0, cb, t];
-                }
-                currentTokens = newTokens;
-            }
-        }
-
-        return codes;
-    }
-
-    private Tensor<T> ConcatenateCodes(Tensor<T> first, Tensor<T> second)
-    {
-        int totalTokens = first.Shape[2] + second.Shape[2];
-        var result = new Tensor<T>([1, _options.NumCodebooks, totalTokens]);
-
-        for (int cb = 0; cb < _options.NumCodebooks; cb++)
-        {
-            for (int t = 0; t < first.Shape[2]; t++)
-            {
-                result[0, cb, t] = first[0, cb, t];
-            }
-            for (int t = 0; t < second.Shape[2]; t++)
-            {
-                result[0, cb, first.Shape[2] + t] = second[0, cb, t];
-            }
-        }
-
-        return result;
-    }
-
-    #endregion
-
-    #region NeuralNetworkBase Overrides
-
-    /// <summary>
-    /// Preprocesses raw audio for model input.
-    /// </summary>
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
-    {
-        // For MusicGen, we primarily work with text input
-        return rawAudio;
-    }
-
-    /// <summary>
-    /// Postprocesses model output.
-    /// </summary>
-    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
-    {
-        return modelOutput;
-    }
-
-    /// <summary>
-    /// Makes a prediction using the model.
-    /// </summary>
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        if (_useNativeMode)
-        {
-            return Forward(input);
-        }
-
-        if (_textEncoder is null)
-            throw new InvalidOperationException("Text encoder not loaded.");
-
-        return _textEncoder.Run(input);
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
+    public string? PaperOptimizerVariant => UsesDAdaptation ? nameof(MusicGenModelSize.Small) : null;
+
+    private bool UsesDAdaptation => _options.UseDAdaptation ?? _options.ModelSize == MusicGenModelSize.Small;
+
+    /// <inheritdoc />
+    public new int SampleRate => _options.Codec.SampleRate;
+
+    /// <summary>The codec's frames per second (50).</summary>
+    public double FrameRate => (double)SampleRate / _hopLength;
+
+    /// <inheritdoc />
+    public double MaxDurationSeconds => _options.DurationSeconds;
+
+    /// <inheritdoc />
+    public bool SupportsTextToAudio => false;
+
+    /// <inheritdoc />
+    public bool SupportsTextToMusic => true;
+
+    /// <inheritdoc />
+    public bool SupportsAudioContinuation => true;
+
+    /// <inheritdoc />
+    public bool SupportsAudioInpainting => false;
+
+    /// <inheritdoc />
+    public new bool IsOnnxMode => false;
+
+    private MusicGenCore<T> Core => _core ?? throw new InvalidOperationException("The language model is not built.");
+
+    /// <summary>The language model, for tests.</summary>
+    internal MusicGenCore<T> CoreForTests => Core;
+
+    /// <summary>The description a training step reads, for tests.</summary>
+    internal string? AugmentDescriptionForTests(MusicGenTrainingSample<T> sample, Random random) => AugmentDescription(sample, random);
+
+    /// <summary>The words that survive word dropout, for tests.</summary>
+    internal string? DropWordsForTests(string text, Random random) => DropWords(text, random);
+
+    /// <summary>The code drawn from logits, for tests.</summary>
+    internal int ChooseForTests(double[] logits, Random random) => Choose(logits, random);
+
+    /// <summary>The optimizer training uses, for tests.</summary>
+    internal IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> OptimizerForTests => OptimizerFor();
+
+    /// <summary>Whether training has produced EMA weights, for tests.</summary>
+    internal bool HasEmaForTests => _ema is not null;
+
+    /// <summary>The conditioning <c>[L, D]</c> of token ids, for tests.</summary>
+    internal Tensor<T> ConditionForTests(Tensor<T>? tokens) => Condition(tokens, false, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(0));
+
+    /// <summary>The prefix of token ids and a melody, for tests.</summary>
+    internal Tensor<T> MelodyConditionForTests(Tensor<T>? tokens, Tensor<T>? melody) =>
+        Condition(tokens, melody is null ? null : Chroma(melody), false, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(0));
+    private T5Seq2Seq<T> TextEncoder => _textEncoder ?? throw new InvalidOperationException("The text encoder is not built.");
+    private DenseLayer<T> Projection => _projection ?? throw new InvalidOperationException("The text projection is not built.");
+    private AudioCodecLayer<T> Codec => _codec ?? throw new InvalidOperationException("The codec is not built.");
+
+    /// <inheritdoc />
+    protected override void InitializeLayers()
+    {
+        if (_core is not null) return;
+        var o = _options;
+        var (d, heads, layers) = Dimensions;
+        var initialization = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Architecture.RandomSeed ?? o.Seed ?? 0);
+        _core = new MusicGenCore<T>(Engine, _lmLayers, new MusicGenConfiguration(o.ResolveDelays().Length, o.Codec.CodebookSize, d,
+            heads, layers, o.FeedForwardScale * d, o.DropoutRate, o.ResolveDelays(), CrossAttention: !o.MelodyConditioning));
+        _core.InitializeLikeReference(initialization);
+        _textEncoder = new T5Seq2Seq<T>(Engine, _textLayers, new T5Configuration(o.TextVocabularySize, o.TextModelDim,
+            o.TextFeedForwardDim, o.TextKeyValueDim, o.TextHeads, o.TextLayers, DecoderLayers: 0, Dropout: 0.1));
+        _textEncoder.InitializeLikeHuggingFace(initialization);
+        // audiocraft T5Conditioner.output_proj: nn.Linear(768, D) with PyTorch's default initialization.
+        _projection = new DenseLayer<T>(d, (IActivationFunction<T>)new AiDotNet.ActivationFunctions.IdentityActivation<T>());
+        double bound = 1 / Math.Sqrt(o.TextModelDim);
+        var weight = new double[d * o.TextModelDim];
+        var bias = new double[d];
+        for (int i = 0; i < weight.Length; i++) weight[i] = (2 * initialization.NextDouble() - 1) * bound;
+        for (int i = 0; i < bias.Length; i++) bias[i] = (2 * initialization.NextDouble() - 1) * bound;
+        TorchParameters.Linear(Engine, _projection, o.TextModelDim, d, weight, bias);
+        if (o.MelodyConditioning)
+        {
+            // audiocraft ChromaStemConditioner.output_proj: nn.Linear(12, D), PyTorch's default initialization.
+            _melodyProjection = new DenseLayer<T>(d, (IActivationFunction<T>)new AiDotNet.ActivationFunctions.IdentityActivation<T>());
+            double chromaBound = 1 / Math.Sqrt(MusicGenChroma.Bins);
+            var chromaWeight = new double[d * MusicGenChroma.Bins];
+            var chromaBias = new double[d];
+            for (int i = 0; i < chromaWeight.Length; i++) chromaWeight[i] = (2 * initialization.NextDouble() - 1) * chromaBound;
+            for (int i = 0; i < chromaBias.Length; i++) chromaBias[i] = (2 * initialization.NextDouble() - 1) * chromaBound;
+            TorchParameters.Linear(Engine, _melodyProjection, MusicGenChroma.Bins, d, chromaWeight, chromaBias);
+        }
+        var codecOptions = (EnCodecOptions)AiDotNet.Models.CloneEngine.CopyConfiguration(o.Codec);
+        codecOptions.IncludeDiscriminators = false;
+        var codec = new EnCodec<T>(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
+            inputSize: 1, outputSize: 1) { RandomSeed = Architecture.RandomSeed }, codecOptions);
+        int codebooks = codec.QuantizersForBandwidth(codecOptions.TargetBandwidthKbps);
+        int modelled = (o.Stereo ? 2 : 1) * codebooks;
+        if (codebooks != o.Codec.NumQuantizers || o.ResolveDelays().Length != modelled)
+            throw new ArgumentException($"MusicGen models {o.ResolveDelays().Length} delayed codebooks; the codec's bandwidth gives {modelled}.");
+        _hopLength = codec.HopLength;
+        _codec = new AudioCodecLayer<T>(codec);
+        // Every stage owns its parameters through the layer list, the text encoder first: its token embedding is
+        // what the model's input (T5 ids) feeds.
+        Layers.AddRange(_textLayers);
+        Layers.Add(_projection);
+        if (_melodyProjection is not null) Layers.Add(_melodyProjection);
+        Layers.AddRange(_lmLayers);
+        Layers.Add(_codec);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The frozen T5 encoder and the codec are not trained.</remarks>
+    protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(IReadOnlyList<Tensor<T>> parameters)
+    {
+        var trainable = new HashSet<Tensor<T>>(Training.TapeTrainingStep<T>.CollectParameters(TrainableLayers().Cast<ILayer<T>>().ToList(), -1),
+            TensorReferenceComparer<Tensor<T>>.Instance);
+        return parameters.Where(trainable.Contains).ToList();
+    }
+
+    private IEnumerable<LayerBase<T>> TrainableLayers()
+    {
+        foreach (var layer in _lmLayers) yield return layer;
+        if (_projection is not null) yield return _projection;
+        if (_melodyProjection is not null) yield return _melodyProjection;
+        if (!_options.FreezeTextEncoder) foreach (var layer in _textLayers) yield return layer;
+    }
+
+    // ------------------------------------------------------------------ text conditioning
+
+    /// <summary>The T5 token ids of <paramref name="text"/> (t5-base's tokenizer, ending with <c>&lt;/s&gt;</c>).</summary>
+    public Tensor<T> TextToTokens(string text)
+    {
+        var ids = _tokenizer.Encode(text ?? throw new ArgumentNullException(nameof(text)));
+        int length = Math.Min(ids.Length, _options.MaxTextLength);
+        var tensor = new Tensor<T>(new[] { length });
+        for (int i = 0; i < length; i++)
+        {
+            if (ids[i] >= _options.TextVocabularySize)
+                throw new ArgumentException($"T5's tokenizer produced id {ids[i]}, beyond the text encoder's {_options.TextVocabularySize} " +
+                    "embedding rows; set TextVocabularySize to at least 32100.", nameof(text));
+            tensor[i] = NumOps.FromDouble(ids[i]);
+        }
+        return tensor;
+    }
+
     /// <summary>
-    /// Trains the model on input data.
+    /// The conditioning: for a text model the text's <c>[L, D]</c> (zeros <c>[1, D]</c> without text, as the reference
+    /// masks an absent description); for a melody model the prefix <c>[text; chroma]</c>, the melody's one-hot
+    /// chromagram projected to D (zeros when it is absent or dropped: the reference masks a nullified melody but keeps
+    /// its frames, five for a missing one, the chromagram of a window of silence).
     /// </summary>
+    private Tensor<T> Condition(Tensor<T>? tokens, double[,]? chroma, bool training, Random random)
+    {
+        var text = Condition(tokens, training, random);
+        if (!_options.MelodyConditioning) return text;
+        int d = Dimensions.ModelDim;
+        int frames = chroma?.GetLength(0) ?? 1 + _options.ChromaWindow / _options.ChromaHop;
+        Tensor<T> melody;
+        if (chroma is null)
+        {
+            melody = new Tensor<T>(new[] { frames, d });
+        }
+        else
+        {
+            var oneHot = new Tensor<T>(new[] { frames, MusicGenChroma.Bins });
+            for (int f = 0; f < frames; f++)
+                for (int c = 0; c < MusicGenChroma.Bins; c++) oneHot[f, c] = NumOps.FromDouble(chroma[f, c]);
+            melody = (_melodyProjection ?? throw new InvalidOperationException("The melody projection is not built.")).Forward(oneHot);
+        }
+        return Engine.TensorConcatenate(new[] { text, melody }, 0);
+    }
+
+    /// <summary>The one-hot chromagram of a waveform (§2.3).</summary>
+    private double[,] Chroma(Tensor<T> audio)
+    {
+        var values = audio.ToVector().ToArray().Select(v => NumOps.ToDouble(v)).ToArray();
+        // Several channels [C, samples] are mixed down to mono, as audiocraft's convert_audio does.
+        int channels = audio.Rank == 2 ? audio.Shape[0] : 1, length = values.Length / channels;
+        var flat = new double[length];
+        for (int c = 0; c < channels; c++)
+            for (int i = 0; i < length; i++) flat[i] += values[c * length + i] / channels;
+        return MusicGenChroma.Extract(flat, SampleRate, _options.ChromaWindow, _options.ChromaHop);
+    }
+
+    private Tensor<T> Condition(Tensor<T>? tokens, bool training, Random random)
+    {
+        if (tokens is null || tokens.Length == 0) return new Tensor<T>(new[] { 1, Dimensions.ModelDim });
+        var ids = tokens.Rank == 1 ? tokens : Engine.Reshape(tokens, new[] { tokens.Length });
+        Tensor<T> hidden;
+        if (_options.FreezeTextEncoder)
+        {
+            using (new NoGradScope<T>()) hidden = TextEncoder.Encode(ids, false, random);
+        }
+        else hidden = TextEncoder.Encode(ids, training, random);
+        return Projection.Forward(hidden);
+    }
+
+    /// <summary>
+    /// The description a training step reads (audiocraft <c>augment_music_info_description</c>): with probability
+    /// <see cref="MusicGenOptions.MergeMetadataProbability"/>, the metadata fields each kept with probability
+    /// <see cref="MusicGenOptions.KeepMetadataFieldProbability"/>, shuffled and joined as "name: value", are appended
+    /// to the description, which is itself dropped with probability <see cref="MusicGenOptions.DropDescriptionProbability"/>.
+    /// </summary>
+    private string? AugmentDescription(MusicGenTrainingSample<T> sample, Random random)
+    {
+        string? description = sample.Description;
+        string metadata = "";
+        if (random.NextDouble() < _options.MergeMetadataProbability)
+        {
+            var fields = new[] { "key", "bpm", "genre", "moods", "instrument", "keywords" };
+            var pairs = new List<string>();
+            foreach (var field in fields)
+            {
+                bool keep = random.NextDouble() < _options.KeepMetadataFieldProbability;
+                if (keep && sample.Metadata is not null && sample.Metadata.TryGetValue(field, out var value) && value is not null)
+                    pairs.Add($"{field}: {value}");
+            }
+            for (int i = pairs.Count - 1; i > 0; i--)
+            {
+                int j = random.Next(i + 1);
+                (pairs[i], pairs[j]) = (pairs[j], pairs[i]);
+            }
+            metadata = string.Join(". ", pairs);
+            if (random.NextDouble() < _options.DropDescriptionProbability) description = null;
+        }
+        string? merged = description is null
+            ? (metadata.Length > 1 ? metadata : null)
+            : string.Join(". ", description.TrimEnd('.'), metadata);
+        return merged is null || merged.Trim().Length == 0 ? null : merged.Trim();
+    }
+
+    // The words of `text` each kept with probability 1 − WordDropout (audiocraft T5Conditioner.tokenize); null when
+    // none survive, which the reference masks like an absent description.
+    private string? DropWords(string text, Random random)
+    {
+        var kept = text.Split(' ').Where(_ => random.NextDouble() >= _options.WordDropout).ToArray();
+        string joined = string.Join(" ", kept);
+        return joined.Length == 0 ? null : joined;
+    }
+
+    // ------------------------------------------------------------------ codes
+
+    private int[,] CodesOf(Tensor<T>? codes, Tensor<T>? audio)
+    {
+        int k = Core.Configuration.Codebooks, n = _options.Codec.CodebookSize;
+        if (codes is not null)
+        {
+            if (codes.Rank != 2 || codes.Shape[1] != k)
+                throw new ArgumentException($"MusicGen codes are [frames, {k}], got [{string.Join(", ", codes.Shape)}].", nameof(codes));
+            var byCodebook = new int[k, codes.Shape[0]];
+            for (int f = 0; f < codes.Shape[0]; f++)
+                for (int q = 0; q < k; q++)
+                {
+                    int code = (int)Math.Round(NumOps.ToDouble(codes[f, q]));
+                    if (code < 0 || code >= n) throw new ArgumentOutOfRangeException(nameof(codes), $"Codes lie in [0, {n}).");
+                    byCodebook[q, f] = code;
+                }
+            return byCodebook;
+        }
+        if (audio is null) throw new ArgumentException("MusicGen trains on codec codes or the recording.");
+        using var _ = new NoGradScope<T>();
+        if (!_options.Stereo) return Codec.Encode(audio.Rank == 1 ? audio : Engine.Reshape(audio, new[] { audio.Length }));
+        // Stereo: each channel through the codec, interleaved [L0, R0, L1, R1, ...].
+        if (audio.Rank != 2 || audio.Shape[0] != 2)
+            throw new ArgumentException($"Stereo MusicGen audio is [2, samples], got [{string.Join(", ", audio.Shape)}].", nameof(audio));
+        int samples = audio.Shape[1];
+        var left = Codec.Encode(Engine.Reshape(Engine.TensorSlice(audio, new[] { 0, 0 }, new[] { 1, samples }), new[] { samples }));
+        var right = Codec.Encode(Engine.Reshape(Engine.TensorSlice(audio, new[] { 1, 0 }, new[] { 1, samples }), new[] { samples }));
+        int levels = left.GetLength(0), frames = left.GetLength(1);
+        var interleaved = new int[2 * levels, frames];
+        for (int q = 0; q < levels; q++)
+            for (int t = 0; t < frames; t++)
+            {
+                interleaved[2 * q, t] = left[q, t];
+                interleaved[2 * q + 1, t] = right[q, t];
+            }
+        return interleaved;
+    }
+
+    // ------------------------------------------------------------------ training
+
+    /// <summary>Trains one step on a clip and its description; returns the loss.</summary>
+    public T Train(MusicGenTrainingSample<T> sample)
+    {
+        Guard.NotNull(sample);
+        var codes = CodesOf(sample.Codes, sample.Audio);
+        string? description = AugmentDescription(sample, _trainingRandom);
+        var words = description is null ? null : DropWords(description, _trainingRandom);
+        double[,]? chroma = null;
+        if (_options.MelodyConditioning)
+            chroma = Chroma(sample.Melody ?? sample.Audio ?? Decode(codes));
+        return TrainOnCodes(codes, words is null ? null : TextToTokens(words), chroma);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The input is the description's T5 token ids (<see cref="TextToTokens"/>; empty for none) and the
+    /// target the clip's codes <c>[frames, codebooks]</c> or its waveform. The step drops the condition with
+    /// probability <see cref="MusicGenOptions.ConditionDropout"/>.</remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Cannot train in ONNX mode.");
-        }
+        ThrowIfDisposed();
+        Guard.NotNull(expectedOutput);
+        bool codes = expectedOutput.Rank == 2 && expectedOutput.Shape[1] == Core.Configuration.Codebooks;
+        var c = CodesOf(codes ? expectedOutput : null, codes ? null : expectedOutput);
+        TrainOnCodes(c, input, _options.MelodyConditioning ? Chroma(codes ? Decode(c) : expectedOutput) : null);
+    }
 
+    private T TrainOnCodes(int[,] codes, Tensor<T>? tokens, double[,]? chroma)
+    {
+        ThrowIfDisposed();
+        // Classifier-free guidance dropout (§3.1): the whole condition is dropped for the step.
+        bool dropped = _trainingRandom.NextDouble() < _options.ConditionDropout;
+        var condition = dropped ? null : tokens;
+        // A melody model also drops the melody alone (attribute dropout); its frames stay, zeroed.
+        double[,]? melody = chroma;
+        if (melody is not null && (dropped || _trainingRandom.NextDouble() < _options.MelodyDropout))
+            melody = new double[melody.GetLength(0), MusicGenChroma.Bins];
+        bool zeroMelody = melody is not null && !ReferenceEquals(melody, chroma);
+        int seed = _trainingRandom.Next();
+        var placeholder = new Tensor<T>(new[] { 1 });
+        SetTrainingMode(true);
         try
         {
-            SetTrainingMode(true);
-            TrainWithTape(input, expectedOutput, _optimizer);
+            TrainWithCustomObjective(placeholder, placeholder, (_, _) =>
+            {
+                var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
+                return Core.Loss(codes, ConditionWithMelody(condition, melody, zeroMelody, true, random), true, random);
+            }, OptimizerFor());
         }
         finally
         {
             SetTrainingMode(false);
         }
+        _updates++;
+        if (_options.EmaEveryUpdates > 0 && _updates % _options.EmaEveryUpdates == 0) UpdateEma();
+        return LastLoss ?? NumOps.Zero;
     }
 
-    /// <summary>
-    /// Gets model metadata.
-    /// </summary>
+    // The conditioning with a melody that is absent, present, or present but zeroed (dropped: its frames are kept).
+    private Tensor<T> ConditionWithMelody(Tensor<T>? tokens, double[,]? chroma, bool zeroMelody, bool training, Random random)
+    {
+        if (!_options.MelodyConditioning) return Condition(tokens, training, random);
+        if (!zeroMelody || chroma is null) return Condition(tokens, chroma, training, random);
+        var text = Condition(tokens, training, random);
+        return Engine.TensorConcatenate(new[] { text, new Tensor<T>(new[] { chroma.GetLength(0), Dimensions.ModelDim }) }, 0);
+    }
+
+    /// <summary>The training objective on codes and token ids, deterministic and without dropout.</summary>
+    public T EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        bool codes = target.Rank == 2 && target.Shape[1] == Core.Configuration.Codebooks;
+        var c = CodesOf(codes ? target : null, codes ? null : target);
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(false);
+        try
+        {
+            using var _ = new NoGradScope<T>();
+            var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(0);
+            var chroma = _options.MelodyConditioning ? Chroma(codes ? Decode(c) : target) : null;
+            return Core.Loss(c, Condition(input, chroma, false, random), false, random)[0];
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
+    }
+
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
+
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
+
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target) => EvaluateTrainingObjective(input, target);
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> OptimizerFor()
+    {
+        if (_suppliedOptimizer is not null) return _suppliedOptimizer;
+        if (_paperOptimizer is not null) return _paperOptimizer;
+        var o = _options;
+        double rate = o.LearningRate ?? (UsesDAdaptation ? 1.0 : 1e-4);
+        int warmup = o.WarmupSteps, total = Math.Max(o.TrainingSteps, warmup + 1);
+        // audiocraft CosineLRScheduler: linear warmup, then a half cosine to zero at the last step.
+        var schedule = new LambdaLRScheduler(rate, step =>
+            step < warmup ? (double)step / Math.Max(1, warmup)
+            : step <= total ? 0.5 * (1 + Math.Cos(Math.PI * (step - warmup) / (total - warmup)))
+            : 0.0);
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer = UsesDAdaptation
+            ? new DAdaptAdamOptimizer<T, Tensor<T>, Tensor<T>>(this, new DAdaptAdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = rate, Beta1 = o.Beta1, Beta2 = o.Beta2, WeightDecay = o.WeightDecay,
+                EnableGradientClipping = o.GradientClipNorm > 0, MaxGradientNorm = o.GradientClipNorm, LearningRateScheduler = schedule,
+            })
+            : new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = rate, Beta1 = o.Beta1, Beta2 = o.Beta2, Epsilon = 1e-8, WeightDecay = o.WeightDecay,
+                EnableGradientClipping = o.GradientClipNorm > 0, MaxGradientNorm = o.GradientClipNorm, LearningRateScheduler = schedule,
+                UseAdaptiveBetas = false,
+            });
+        return _paperOptimizer = PaperOptimizerFactory.VerifyHandBuilt(this, optimizer);
+    }
+
+    // The EMA of the trained weights (audiocraft ModuleDictEMA, unbiased): w = 1/count with count ← decay·count + 1.
+    private void UpdateEma()
+    {
+        var parameters = Training.TapeTrainingStep<T>.CollectParameters(TrainableLayers().Cast<ILayer<T>>().ToList(), -1);
+        if (_ema is null)
+        {
+            _ema = new Dictionary<Tensor<T>, double[]>(TensorReferenceComparer<Tensor<T>>.Instance);
+            foreach (var p in parameters) _ema[p] = p.ToVector().ToArray().Select(v => NumOps.ToDouble(v)).ToArray();
+            _emaCount = 0;
+        }
+        _emaCount = _emaCount * _options.EmaDecay + 1;
+        double w = 1 / _emaCount;
+        foreach (var p in parameters)
+        {
+            var shadow = _ema[p];
+            var span = p.AsSpan();
+            for (int i = 0; i < shadow.Length; i++) shadow[i] = shadow[i] * (1 - w) + NumOps.ToDouble(span[i]) * w;
+        }
+    }
+
+    // Runs `action` with the EMA weights in place, if training has produced them.
+    private TResult WithEmaWeights<TResult>(Func<TResult> action)
+    {
+        if (_ema is null) return action();
+        var saved = new List<(Tensor<T> Parameter, T[] Values)>();
+        foreach (var (p, shadow) in _ema)
+        {
+            var span = p.AsWritableSpan();
+            saved.Add((p, span.ToArray()));
+            for (int i = 0; i < span.Length; i++) span[i] = NumOps.FromDouble(shadow[i]);
+            Engine.InvalidatePersistentTensor(p);
+        }
+        try
+        {
+            return action();
+        }
+        finally
+        {
+            foreach (var (p, values) in saved)
+            {
+                values.AsSpan().CopyTo(p.AsWritableSpan());
+                Engine.InvalidatePersistentTensor(p);
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ generation
+
+    /// <summary>Generates codes <c>[codebooks, frames]</c> for token ids (empty for unconditional generation),
+    /// continuing an optional prompt of codes <c>[codebooks, prompt frames]</c>.</summary>
+    public int[,] GenerateCodes(Tensor<T>? tokens, int frames, int seed, double? guidanceScale = null, int[,]? prompt = null)
+        => GenerateCodes(tokens, null, frames, seed, guidanceScale, prompt);
+
+    /// <summary>Generates codes conditioned on token ids and, for a melody model, a melody waveform.</summary>
+    public int[,] GenerateCodes(Tensor<T>? tokens, Tensor<T>? melody, int frames, int seed, double? guidanceScale = null, int[,]? prompt = null)
+    {
+        if (melody is not null && !_options.MelodyConditioning)
+            throw new InvalidOperationException("This MusicGen is a text model; set MelodyConditioning to condition on a melody.");
+        ThrowIfDisposed();
+        if (frames <= (prompt?.GetLength(1) ?? 0)) throw new ArgumentOutOfRangeException(nameof(frames), "Generate more frames than the prompt.");
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
+        return WithEmaWeights(() =>
+        {
+            bool wasTraining = IsTrainingMode;
+            SetTrainingMode(false);
+            try
+            {
+                using var _ = new NoGradScope<T>();
+                var chroma = melody is null ? null : Chroma(melody);
+                var condition = Condition(tokens, chroma, false, random);
+                bool guided = tokens is { Length: > 0 } || chroma is not null;
+                // The unconditional branch: the same prefix length, zeroed (the reference batches the two and pads).
+                var unconditional = !guided ? null
+                    : _options.MelodyConditioning ? new Tensor<T>(condition._shape) : Condition(null, false, random);
+                return Core.Generate(condition, unconditional, guidanceScale ?? _options.GuidanceScale,
+                    frames, logits => Choose(logits, random), prompt);
+            }
+            finally
+            {
+                SetTrainingMode(wasTraining);
+            }
+        });
+    }
+
+    // The next code from a codebook's logits (audiocraft LMModel._sample_next_token): argmax without sampling,
+    // otherwise softmax(logits / T) restricted to the top p or top k and drawn.
+    private int Choose(double[] logits, Random random)
+    {
+        int argmax = 0;
+        for (int i = 1; i < logits.Length; i++) if (logits[i] > logits[argmax]) argmax = i;
+        if (!_options.UseSampling || _options.Temperature <= 0) return argmax;
+        double max = logits[argmax];
+        var probabilities = logits.Select(l => Math.Exp((l - max) / _options.Temperature)).ToArray();
+        double sum = probabilities.Sum();
+        for (int i = 0; i < probabilities.Length; i++) probabilities[i] /= sum;
+        if (_options.TopP > 0)
+        {
+            // utils.sample_top_p: keep the smallest prefix of the descending order whose mass reaches p.
+            var order = Enumerable.Range(0, probabilities.Length).OrderByDescending(i => probabilities[i]).ToArray();
+            double cumulative = 0;
+            var kept = new double[probabilities.Length];
+            foreach (int i in order)
+            {
+                if (cumulative > _options.TopP) break;
+                kept[i] = probabilities[i];
+                cumulative += probabilities[i];
+            }
+            probabilities = kept;
+        }
+        else if (_options.TopK > 0 && _options.TopK < probabilities.Length)
+        {
+            // utils.sample_top_k: every probability at least the k-th largest survives (ties included).
+            double threshold = probabilities.OrderByDescending(p => p).ElementAt(_options.TopK - 1);
+            for (int i = 0; i < probabilities.Length; i++) if (probabilities[i] < threshold) probabilities[i] = 0;
+        }
+        double total = probabilities.Sum(), draw = random.NextDouble() * total, running = 0;
+        for (int i = 0; i < probabilities.Length; i++)
+        {
+            running += probabilities[i];
+            if (draw < running && probabilities[i] > 0) return i;
+        }
+        return Array.FindLastIndex(probabilities, p => p > 0);
+    }
+
+    // The waveform of codes: [samples], or for stereo [2, samples] from the de-interleaved channels.
+    private Tensor<T> Decode(int[,] codes)
+    {
+        using var _ = new NoGradScope<T>();
+        if (!_options.Stereo)
+        {
+            var audio = Codec.Decode(codes);
+            return audio.Reshape(new[] { audio.Length });
+        }
+        int levels = codes.GetLength(0) / 2, frames = codes.GetLength(1);
+        var left = new int[levels, frames];
+        var right = new int[levels, frames];
+        for (int q = 0; q < levels; q++)
+            for (int t = 0; t < frames; t++)
+            {
+                left[q, t] = codes[2 * q, t];
+                right[q, t] = codes[2 * q + 1, t];
+            }
+        var l = Codec.Decode(left);
+        var r = Codec.Decode(right);
+        return Engine.TensorConcatenate(new[] { l.Reshape(new[] { 1, l.Length }), r.Reshape(new[] { 1, r.Length }) }, 0);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Autoregressive generation runs one step per codec frame, so <paramref name="numInferenceSteps"/> does
+    /// not apply; MusicGen has no negative prompts (the guidance contrasts the description with no condition).</remarks>
+    public Tensor<T> GenerateMusic(string prompt, string? negativePrompt = null, double durationSeconds = 10.0,
+        int numInferenceSteps = 100, double guidanceScale = 3.0, int? seed = null)
+    {
+        if (negativePrompt is not null)
+            throw new NotSupportedException("MusicGen's guidance contrasts the description with no condition; it has no negative prompt.");
+        int frames = Math.Max(1, (int)Math.Round(durationSeconds * FrameRate));
+        return Decode(GenerateCodes(TextToTokens(prompt), frames, seed ?? _options.Seed ?? 0, guidanceScale));
+    }
+
+    /// <summary>Generates music following a melody and a description (the melody model, §2.3): the melody's
+    /// chromagram, quantized to its dominant pitch class per frame, conditions the generation.</summary>
+    public Tensor<T> GenerateWithMelody(string prompt, Tensor<T> melody, double durationSeconds = 10.0, double guidanceScale = 3.0,
+        int? seed = null)
+    {
+        Guard.NotNull(melody);
+        int frames = Math.Max(1, (int)Math.Round(durationSeconds * FrameRate));
+        return Decode(GenerateCodes(TextToTokens(prompt), melody, frames, seed ?? _options.Seed ?? 0, guidanceScale));
+    }
+
+    /// <inheritdoc />
+    public Tensor<T> GenerateAudio(string prompt, string? negativePrompt = null, double durationSeconds = 5.0,
+        int numInferenceSteps = 100, double guidanceScale = 3.0, int? seed = null)
+        => GenerateMusic(prompt, negativePrompt, durationSeconds, numInferenceSteps, guidanceScale, seed);
+
+    /// <inheritdoc />
+    public Task<Tensor<T>> GenerateAudioAsync(string prompt, string? negativePrompt = null, double durationSeconds = 5.0,
+        int numInferenceSteps = 100, double guidanceScale = 3.0, int? seed = null, CancellationToken cancellationToken = default)
+        => Task.Run(() => GenerateAudio(prompt, negativePrompt, durationSeconds, numInferenceSteps, guidanceScale, seed), cancellationToken);
+
+    /// <inheritdoc />
+    /// <remarks>The input's codes are the prompt the generation continues (audiocraft <c>generate_continuation</c>);
+    /// the result includes the prompt.</remarks>
+    public Tensor<T> ContinueAudio(Tensor<T> inputAudio, string? prompt = null, double extensionSeconds = 5.0,
+        int numInferenceSteps = 100, int? seed = null)
+    {
+        var promptCodes = CodesOf(null, inputAudio);
+        int frames = promptCodes.GetLength(1) + Math.Max(1, (int)Math.Round(extensionSeconds * FrameRate));
+        return Decode(GenerateCodes(prompt is null ? null : TextToTokens(prompt), frames, seed ?? _options.Seed ?? 0, null, promptCodes));
+    }
+
+    /// <inheritdoc />
+    public Tensor<T> InpaintAudio(Tensor<T> audio, Tensor<T> mask, string? prompt = null, int numInferenceSteps = 100, int? seed = null)
+        => throw new NotSupportedException("MusicGen generates left to right; it does not inpaint.");
+
+    /// <inheritdoc />
+    public AudioGenerationOptions<T> GetDefaultOptions() => new()
+    {
+        DurationSeconds = _options.DurationSeconds,
+        GuidanceScale = _options.GuidanceScale,
+        Seed = _options.Seed,
+    };
+
+    /// <inheritdoc />
+    /// <remarks>The input is the description's token ids; the output is <see cref="MusicGenOptions.DurationSeconds"/>
+    /// of generated audio, seeded by <see cref="ModelOptions.Seed"/>.</remarks>
+    protected override Tensor<T> PredictCore(Tensor<T> input)
+    {
+        int frames = Math.Max(1, (int)Math.Round(_options.DurationSeconds * FrameRate));
+        return Decode(GenerateCodes(input, frames, _options.Seed ?? 0));
+    }
+
+    /// <inheritdoc />
+    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
+
+    /// <inheritdoc />
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => modelOutput;
+
+    // ------------------------------------------------------------------ weights
+
+    /// <summary>Loads an audiocraft MusicGen language model: the <c>LMModel</c> state dict and the text projection
+    /// <c>condition_provider.conditioners.description.output_proj</c>.</summary>
+    public void LoadLanguageModelWeights(Func<string, int[], double[]> read)
+    {
+        Guard.NotNull(read);
+        Core.LoadTorchWeights(read);
+        int d = Dimensions.ModelDim, text = _options.TextModelDim;
+        TorchParameters.Linear(Engine, Projection, text, d,
+            read("condition_provider.conditioners.description.output_proj.weight", new[] { d, text }),
+            read("condition_provider.conditioners.description.output_proj.bias", new[] { d }));
+        if (_melodyProjection is not null)
+            TorchParameters.Linear(Engine, _melodyProjection, MusicGenChroma.Bins, d,
+                read("condition_provider.conditioners.self_wav.output_proj.weight", new[] { d, MusicGenChroma.Bins }),
+                read("condition_provider.conditioners.self_wav.output_proj.bias", new[] { d }));
+        _ema = null;
+    }
+
+    /// <summary>Loads a Hugging Face T5 encoder state dict (<c>T5EncoderModel</c>, e.g. t5-base).</summary>
+    public void LoadTextEncoderWeights(Func<string, int[], double[]> read) => TextEncoder.LoadHuggingFaceWeights(read);
+
+    /// <inheritdoc />
+    protected override bool SupportsParameterMutation => true;
+
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var (d, heads, layers) = Dimensions;
+        var m = new ModelMetadata<T>
         {
-            Name = $"MusicGen-{_options.ModelSize}",
-            Description = $"Meta MusicGen text-to-music model ({_options.ModelSize})",
-            FeatureCount = _options.MaxTextLength,
-            Complexity = (int)_options.ModelSize,
-            AdditionalInfo = new Dictionary<string, object>
-            {
-                ["SampleRate"] = _options.SampleRate,
-                ["MaxDuration"] = _options.MaxDurationSeconds,
-                ["NumCodebooks"] = _options.NumCodebooks,
-                ["Stereo"] = _options.Stereo,
-                ["Mode"] = _useNativeMode ? "Native" : "ONNX"
-            }
+            Name = "MusicGen",
+            Description = "Simple and Controllable Music Generation (Copet et al., 2023)",
+            FeatureCount = d,
+            Complexity = layers,
         };
+        m.AdditionalInfo["Size"] = _options.ModelSize.ToString();
+        m.AdditionalInfo["Heads"] = heads.ToString();
+        m.AdditionalInfo["SampleRate"] = SampleRate.ToString();
+        return m;
     }
-
-    /// <summary>
-    /// Serializes network-specific data.
-    /// </summary>
-
-
-    /// <summary>
-    /// Deserializes network-specific data.
-    /// </summary>
-
-
-    #endregion
-
-    #region IDisposable
 
     private void ThrowIfDisposed()
     {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName);
+        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(MusicGenModel<T>));
     }
 
-    /// <summary>
-    /// Disposes of resources.
-    /// </summary>
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed) return;
-
-        if (disposing)
-        {
-            _textEncoder?.Dispose();
-            _languageModel?.Dispose();
-            // _encodecDecoder is disposed by base class (OnnxModel)
-        }
-
         _disposed = true;
         base.Dispose(disposing);
     }
-
-    #endregion
 }

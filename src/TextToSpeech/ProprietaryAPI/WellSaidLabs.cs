@@ -1,235 +1,70 @@
-using AiDotNet.Attributes;
+using System.Net.Http;
+using System.Text;
+using AiDotNet.Audio.Codecs;
 using AiDotNet.Helpers;
-using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
-using AiDotNet.Models.Options;
-using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
-using AiDotNet.Optimizers;
-using AiDotNet.TextToSpeech.Interfaces;
+using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 
-/// <summary>WellSaid Labs: enterprise neural TTS with custom voice avatars for brand consistency.</summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
+/// <summary>A client of the WellSaid Labs text-to-speech API.</summary>
+/// <typeparam name="T">The numeric type of the returned waveform.</typeparam>
 /// <remarks>
-/// <para><b>For Beginners:</b> WellSaid Labs specializes in enterprise neural TTS with custom
-/// voice avatars that maintain brand consistency across all content. Their models focus on
-/// natural prosody and expressiveness, making them popular for corporate training,
-/// marketing, and internal communications. This local implementation provides offline inference.</para>
+/// <para>Sends <c>POST https://api.wellsaidlabs.com/v1/tts/stream</c> with the <c>X-Api-Key</c> header,
+/// <c>Accept: audio/mpeg</c> and <c>{ text, speaker_id[, model] }</c>; the response is MP3, decoded by
+/// <see cref="Mp3Decoder"/>, mixed to mono and resampled to the requested rate when needed.</para>
+/// <para><b>For Beginners:</b> <c>new WellSaidLabs&lt;float&gt;(new WellSaidLabsOptions { ApiKey = "…" }).Synthesize("Hello")</c>
+/// returns the spoken audio.</para>
 /// </remarks>
-/// <example>
-/// <code>
-/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Generative,
-///     inputSize: 256, outputSize: 24000);
-///
-/// var model = new WellSaidLabs&lt;float&gt;(architecture, "wellsaid.onnx");
-/// Tensor&lt;float&gt; audio = model.Synthesize("Hello from WellSaid Labs!");
-/// </code>
-/// </example>
-[ModelDomain(ModelDomain.Audio)]
-[ModelCategory(ModelCategory.Transformer)]
-[ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
-[ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("WellSaid Labs", "https://wellsaidlabs.com")]
-public partial class WellSaidLabs<T> : TtsModelBase<T>, IEndToEndTts<T>
+public class WellSaidLabs<T> : CloudTtsClientBase<T>
 {
-    private readonly WellSaidLabsOptions _options;
-
-    public override ModelOptions GetOptions() => _options;
-
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-
-    public WellSaidLabs(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        WellSaidLabsOptions? options = null
-    )
-        : base(architecture)
+    /// <summary>Creates the client; a supplied <see cref="HttpClient"/> is used as is and not disposed.</summary>
+    public WellSaidLabs(WellSaidLabsOptions? options = null, HttpClient? httpClient = null)
+        : base(options ?? new WellSaidLabsOptions(), httpClient)
     {
-        _options = options ?? new WellSaidLabsOptions();
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
     }
 
-    public WellSaidLabs(
-        NeuralNetworkArchitecture<T> architecture,
-        WellSaidLabsOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
+    private WellSaidLabsOptions Options => (WellSaidLabsOptions)Settings;
+
+    /// <inheritdoc />
+    public override string ProviderName => "WellSaid Labs";
+
+    /// <inheritdoc />
+    protected override void ValidateConfiguration()
     {
-        _options = options ?? new WellSaidLabsOptions();
-        _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
-        InitializeLayers();
+        RequireApiKey();
+        if (string.IsNullOrWhiteSpace(Options.VoiceId)) throw new InvalidOperationException("WellSaid Labs needs a speaker id.");
+        if (Options.SampleRate <= 0) throw new InvalidOperationException("The sample rate must be positive.");
     }
 
-    int ITtsModel<T>.SampleRate => _options.SampleRate;
-    public int MaxTextLength => _options.MaxTextLength;
-    public new int HiddenDim => _options.HiddenDim;
-    public int NumFlowSteps => _options.NumFlowSteps;
-
-    /// <summary>Synthesizes speech using WellSaidLabs's API-compatible local inference pipeline.</summary>
-    public Tensor<T> Synthesize(string text)
+    /// <inheritdoc />
+    protected override HttpRequestMessage CreateRequest(string text)
     {
-        ThrowIfDisposed();
-        var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return PostprocessAudio(OnnxModel.Run(input));
-        var output = Predict(input);
-        return PostprocessAudio(output);
-    }
-
-    /// <summary>Converts text to normalized character embeddings (char/128.0). Uses character-level encoding as the default; model-specific tokenization applies when corresponding weights are loaded.</summary>
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
-    }
-
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultProprietaryTTSLayers(
-                    _options.HiddenDim,
-                    _options.HiddenDim,
-                    _options.NumEncoderLayers,
-                    _options.NumDecoderLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate,
-                    _options.VocabSize
-                )
-            );
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        // Force eval mode so Dropout (DropoutRate=0.1 default) doesn't fire
-        // fresh randomness on every Predict call — required for the
-        // SpeakerConsistency invariant. PyTorch / TF idiom: inference disables
-        // training-mode randomization regardless of caller's prior state.
-        bool prev = IsTrainingMode;
-        SetTrainingMode(false);
-        try
+        var o = Options;
+        var body = new JObject { ["text"] = text, ["speaker_id"] = o.VoiceId };
+        if (!string.IsNullOrWhiteSpace(o.Model)) body["model"] = o.Model;
+        var request = new HttpRequestMessage(HttpMethod.Post, $"{BaseUrl("https://api.wellsaidlabs.com")}/v1/tts/stream")
         {
-            var c = input;
-            foreach (var l in Layers)
-                c = l.Forward(c);
-            return c;
-        }
-        finally
-        {
-            SetTrainingMode(prev);
-        }
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <summary>
-    /// Refuses parameter work on a disposed model, on every entry point rather than one.
-    /// </summary>
-    /// <remarks>
-    /// This check used to live inside UpdateParameters, which meant ParameterCount, GetParameters
-    /// and SetParameters reached a disposed model unguarded. The base calls this hook from all of
-    /// them, so moving it here widens the guard and lets the hand-written UpdateParameters -- whose
-    /// only other content was a walk the base already performs -- be deleted.
-    /// </remarks>
-    protected override void EnsureParametersReady()
-    {
-        ThrowIfDisposed();
-        base.EnsureParametersReady();
-    }
-
-    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
-    public override ModelMetadata<T> GetModelMetadata()
-    {
-        var m = new ModelMetadata<T>
-        {
-            Name = _useNativeMode ? "WellSaidLabs-Native" : "WellSaidLabs-ONNX",
-            Description = "WellSaid Labs: enterprise neural TTS with custom voice avatars",
-            FeatureCount = _options.HiddenDim,
-            // Reflect the realized layer graph: when a caller supplies custom
-            // Architecture.Layers (the same list InitializeLayers consumes), report
-            // its actual count instead of the default option block-counts, which no
-            // longer describe the instantiated model.
-            Complexity = Architecture.Layers is { Count: > 0 }
-                ? Architecture.Layers.Count
-                : (long)_options.NumEncoderLayers + _options.NumDecoderLayers,
+            Content = new StringContent(body.ToString(Newtonsoft.Json.Formatting.None), Encoding.UTF8, "application/json"),
         };
-        m.AdditionalInfo["Architecture"] = "WellSaidLabs";
-        m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
-        m.AdditionalInfo["HiddenDim"] = _options.HiddenDim;
-        m.AdditionalInfo["NumEncoderLayers"] = _options.NumEncoderLayers;
-        m.AdditionalInfo["NumDecoderLayers"] = _options.NumDecoderLayers;
-        m.AdditionalInfo["NumHeads"] = _options.NumHeads;
-        m.AdditionalInfo["SampleRate"] = _options.SampleRate;
-        m.AdditionalInfo["MelChannels"] = _options.MelChannels;
-        m.AdditionalInfo["HopSize"] = _options.HopSize;
-        return m;
+        request.Headers.Add("X-Api-Key", o.ApiKey);
+        request.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("audio/mpeg"));
+        return request;
     }
 
-
-
-
-
-    private void ThrowIfDisposed()
+    /// <inheritdoc />
+    protected override Tensor<T> DecodeAudio(byte[] body, string? mediaType)
     {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(WellSaidLabs<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
+        var decoded = Mp3Decoder.Decode(body);
+        int channels = decoded.Channels, n = decoded.Samples.Length / channels;
+        var wave = new Tensor<T>(new[] { 1, 1, n });
+        for (int i = 0; i < n; i++)
+        {
+            double sum = 0;
+            for (int c = 0; c < channels; c++) sum += decoded.Samples[i * channels + c];
+            wave[0, 0, i] = NumOps.FromDouble(sum / channels);
+        }
+        if (decoded.SampleRate != Settings.SampleRate)
+            wave = AudioHelper<T>.Resample(wave, decoded.SampleRate, Settings.SampleRate);
+        return Mono(wave);
     }
 }

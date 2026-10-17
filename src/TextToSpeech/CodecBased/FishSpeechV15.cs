@@ -104,7 +104,7 @@ public partial class FishSpeechV15<T> : TtsModelBase<T>, ICodecTts<T>
     /// Synthesizes speech from text.
     /// Per Fish Audio (2025): Dual-AR (slow semantic + fast acoustic) with VQGAN decoder.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);
@@ -178,15 +178,6 @@ public partial class FishSpeechV15<T> : TtsModelBase<T>, ICodecTts<T>
             wave[i] = NumOps.FromDouble(normalized * Math.Sin(phase) * 0.8);
         }
         return wave;
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
     }
 
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;

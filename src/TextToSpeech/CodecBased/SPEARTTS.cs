@@ -142,7 +142,7 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
     /// first understanding what to say (semantic tokens), then how it should sound (acoustic tokens),
     /// and finally creating the actual audio waveform.</para>
     /// </remarks>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);
@@ -177,7 +177,7 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
             int fr = Math.Min(i * _options.CodecFrameRate / SampleRate, semFrames - 1);
             double s = 0;
             for (int q = 0; q < nQ; q++)
-                s += acCodes[q, fr] * Math.Sin(i * (q + 1) * 0.004) / nQ;
+                s += acCodes[q, fr] * Math.Sin((double)i * (q + 1) * 0.004) / nQ;
             waveform[i] = NumOps.FromDouble(Math.Tanh(s * 0.9));
         }
         return waveform;
@@ -227,16 +227,6 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
             wave[i] = NumOps.FromDouble(normalized * Math.Sin(phase) * 0.8);
         }
         return wave;
-    }
-
-    /// <inheritdoc />
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
     }
 
     /// <inheritdoc />

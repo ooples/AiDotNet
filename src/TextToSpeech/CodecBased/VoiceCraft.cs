@@ -109,7 +109,7 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
     /// Synthesizes speech from text.
     /// Per Peng et al. (2024): Token rearrangement with delayed stacking for speech editing + generation.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);
@@ -138,7 +138,7 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
             int fr = Math.Min(i * _options.CodecFrameRate / SampleRate, cF - 1);
             double s = 0;
             for (int q = 0; q < nQ; q++)
-                s += tok[q, fr + q] * Math.Sin(i * (q + 1) * 0.005) / nQ;
+                s += tok[q, fr + q] * Math.Sin((double)i * (q + 1) * 0.005) / nQ;
             waveform[i] = NumOps.FromDouble(Math.Tanh(s));
         }
         return waveform;
@@ -178,15 +178,6 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
             wave[i] = NumOps.FromDouble(normalized * Math.Sin(phase) * 0.8);
         }
         return wave;
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
     }
 
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;

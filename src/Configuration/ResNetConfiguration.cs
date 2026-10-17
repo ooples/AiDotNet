@@ -180,7 +180,24 @@ public class ResNetConfiguration
     /// For BasicBlock: actual channels = base channels
     /// For BottleneckBlock: actual channels = base channels * 4 (due to expansion)
     /// </remarks>
-    public int[] BaseChannels => [64, 128, 256, 512];
+    public int[] BaseChannels => (_widths ?? new[] { 64, 64, 128, 256, 512 }).Skip(1).ToArray();
+
+    /// <summary>The stem and stage widths and the block counts, overridden by tests that check the network against
+    /// torchvision at a reduced size.</summary>
+    private int[]? _widths;
+    private int[]? _blocks;
+
+    internal ResNetConfiguration WithShape(int[] blockCounts, int[] widths)
+    {
+        var copy = (ResNetConfiguration)MemberwiseClone();
+        copy._blocks = blockCounts;
+        copy._widths = widths;
+        return copy;
+    }
+
+    /// <summary>The trunk this configuration describes.</summary>
+    internal ResNetTrunkConfiguration Trunk
+        => new(_blocks ?? BlockCounts, UsesBottleneck, InputChannels, _widths, ZeroInitResidual);
 
     /// <summary>
     /// Gets the expansion factor for the blocks.
@@ -217,7 +234,7 @@ public class ResNetConfiguration
     /// <param name="inputWidth">The width of input images (default: 224).</param>
     /// <param name="inputChannels">The number of input channels (default: 3 for RGB).</param>
     /// <param name="includeClassifier">Whether to include the classifier layers (default: true).</param>
-    /// <param name="zeroInitResidual">Whether to use zero-initialization for residual branches (default: true).</param>
+    /// <param name="zeroInitResidual">Whether to use zero-initialization for residual branches (Goyal et al. 2017; default false, as in the paper and torchvision).</param>
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown when numClasses is less than or equal to 0, or when image dimensions are invalid.
     /// </exception>
@@ -228,7 +245,7 @@ public class ResNetConfiguration
         int inputWidth = 224,
         int inputChannels = 3,
         bool includeClassifier = true,
-        bool zeroInitResidual = true)
+        bool zeroInitResidual = false)
     {
         if (numClasses <= 0)
         {

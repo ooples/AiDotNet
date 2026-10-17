@@ -30,12 +30,13 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// - Foundation for downstream segmentation tasks
 /// </para>
 /// <para>
-/// <b>Technical Details:</b>
-/// - ViT-H/L/B image encoder with 16x16 patch embedding
-/// - Lightweight prompt encoder for points, boxes, and masks
-/// - Two-way transformer mask decoder with IoU prediction head
-/// - Ambiguity-aware: predicts 3 masks per prompt (whole, part, subpart)
-/// - 1024x1024 input resolution; encoder runs once per image
+/// <b>Technical Details:</b> the official network (facebookresearch/segment-anything), checked against the official code:
+/// - ViT-B/L/H image encoder on 16x16 patches, windowed and global attention with relative positions, and a neck
+/// - Prompt encoder for points, boxes and masks (random Fourier positions)
+/// - Two-way transformer mask decoder with an IoU prediction head
+/// - Ambiguity-aware: three masks for a single point
+/// - SetImage encodes once (longest side resized to the encoder size); prompts then only run the decoder
+/// - SegmentEverything is the official automatic mask generator; Train is the paper's interactive training simulation
 /// </para>
 /// <para>
 /// <b>Reference:</b> Kirillov et al., "Segment Anything", ICCV 2023.
@@ -51,7 +52,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
 /// var model = new SAM&lt;double&gt;(architecture);
 /// // Every tunable is now set through the options object; these are the defaults:
 /// var custom = new SAM&lt;double&gt;(architecture,
-///     options: new SAMOptions { NumClasses = 1, DropRate = 0.1, ModelSize = SAMModelSize.ViTHuge });
+///     options: new SAMOptions { ModelSize = SAMModelSize.ViTHuge });
 ///
 /// // Or load a pre-trained ONNX model for zero-shot segmentation
 /// var onnxModel = new SAM&lt;double&gt;(architecture, "sam_vit_h.onnx");
@@ -71,333 +72,380 @@ namespace AiDotNet.ComputerVision.Segmentation.Foundation;
                 Source = "Kirillov et al. 2023, Training recipe: AdamW with beta1 0.9, beta2 0.999, linear warmup for 250 iterations, initial rate 8e-4 after warmup, decreased 10x at 60k and again at 86666 iterations over a 90k-iteration run, batch size 256, weight decay 0.1.")]
 public partial class SAM<T> : Common.PromptableSegmentationBase<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// This encoder downsamples by 16, not the family's 32. Measured, not assumed: a [1,3,64,64] input
-    /// returns [1,C,4,4] where the inherited /32 law claims [1,C,2,2]. The conformance sweep surfaced
-    /// the difference - which is what a virtual family law plus per-model overrides exists for.
-    /// </remarks>
-    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-        => SpatialStrideContract(inputRank, 16);
-
     private readonly SAMOptions _options;
+    private SamNetwork<T>? _network;
 
-    /// <summary>
-    /// Gets the configuration options for this SAM model.
-    /// </summary>
+    /// <summary>Draws the prompts SAM's interactive training simulates.</summary>
+    private Random _trainingRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
+
+    // The image set by SetImage: its size, the size the encoder saw it at, and the embedding (the base's field).
+    private int _originalHeight, _originalWidth, _inputHeight, _inputWidth;
+
     public override ModelOptions GetOptions() => _options;
 
-    #region Fields
-
-    // Only SAM's OWN configuration lives here. _height, _width, _channels, _numClasses,
-    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed, _encoderLayerEnd and the
-    // promptable state (_imageEmbedding, _imageSet) all come from PromptableSegmentationBase ->
-    // SegmentationModelBase.
-    private readonly SAMModelSize _modelSize;
-    private readonly int[] _channelDims;
-    private readonly int _decoderDim;
-    private readonly int[] _depths;
-    private readonly double _dropRate;
-    /// <summary>
-    /// Builds the paper's mask objective from <paramref name="options"/>.
-    /// </summary>
-    /// <remarks>
-    /// Kirillov et al. 2023 (§3) supervises masks with "a linear combination of focal loss and dice
-    /// loss in a 20:1 ratio", focal being the RetinaNet form. Every coefficient comes from
-    /// <see cref="SAMOptions"/> — <see cref="SAMOptions.MaskFocalWeight"/>,
-    /// <see cref="SAMOptions.MaskDiceWeight"/>, <see cref="SAMOptions.FocalGamma"/> and
-    /// <see cref="SAMOptions.FocalAlpha"/> — whose defaults ARE the paper's values, so the objective
-    /// is paper-faithful out of the box and fully overridable. Static because it is invoked from the
-    /// base-constructor initializer, before instance fields are assigned.
-    /// </remarks>
-    private static ILossFunction<T> BuildMaskLoss(SAMOptions options)
-    {
-        // Multi-class masks generalize to softmax CE rather than the binary focal+dice pair.
-        if (options.NumClasses != 1)
-        {
-            return new CrossEntropyWithLogitsLoss<T>();
-        }
-
-        return new CompositeLossWithLogits<T>(
-            (new FocalLoss<T>(gamma: options.FocalGamma, alpha: options.FocalAlpha), options.MaskFocalWeight),
-            (new DiceLoss<T>(), options.MaskDiceWeight));
-    }
-
-    // SAM's own promptable state. _imageEmbedding and _imageSet live on PromptableSegmentationBase.
-    [Scratch]
-    private Tensor<T>? _imageProbabilities;
-
-    #endregion
-
-    #region Properties
-
-    // SupportsTraining, NumClasses, InputHeight, InputWidth and IsOnnxMode are inherited from
-    // SegmentationModelBase and say exactly the same thing.
     internal bool UseNativeMode => _useNativeMode;
-    internal SAMModelSize ModelSize => _modelSize;
+    internal SAMModelSize ModelSize => _options.ModelSize;
 
-    #endregion
+    /// <summary>The network (image encoder, prompt encoder and mask decoder).</summary>
+    internal SamNetwork<T> Network => _network ?? throw new InvalidOperationException("The native network is not initialized.");
 
-    #region Constructors
-
-    /// <summary>
-    /// Initializes SAM in native (trainable) mode.
-    /// </summary>
-    /// <param name="architecture">Neural network architecture defining input dimensions.</param>
-    /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
-    /// <param name="lossFunction">Loss function. Default for <paramref name="numClasses"/> == 1 is the paper's objective: a logits-aware <see cref="CompositeLossWithLogits{T}"/> of <see cref="FocalLoss{T}"/> (gamma 2, alpha 0.25) and <see cref="DiceLoss{T}"/> in a 20:1 ratio (Kirillov et al. 2023, §3). Multi-class uses <see cref="CrossEntropyWithLogitsLoss{T}"/>.</param>
-    /// <param name="options">Optional model options.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a trainable SAM model from scratch. The original SAM was
-    /// trained on SA-1B (1B+ masks from 11M images). Fine-tuning on domain data typically uses
-    /// ViT-B for efficiency.
-    /// </para>
-    /// </remarks>
+    /// <summary>Creates a trainable SAM.</summary>
+    /// <param name="architecture">The architecture; its input height and width are the encoder's square size (1024 by
+    /// default).</param>
+    /// <param name="optimizer">The optimizer (default: the paper's AdamW recipe).</param>
+    /// <param name="lossFunction">Reported by the base; training minimizes the paper's focal, dice and IoU losses.</param>
+    /// <param name="options">Model options.</param>
     public SAM(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         SAMOptions? options = null)
-        // Kirillov et al. 2023 ("Segment Anything", §3 Segment Anything Model / Training) supervises
-        // mask prediction with "a linear combination of focal loss and dice loss in a 20:1 ratio",
-        // focal being the RetinaNet form (gamma=2, alpha=0.25) the paper cites. The previous plain
-        // BinaryCrossEntropyWithLogitsLoss was NOT that objective: it weights every pixel equally,
-        // where focal deliberately down-weights easy background and dice corrects the foreground/
-        // background imbalance a promptable segmenter depends on. Use the paper's composite for the
-        // single-mask case; multi-class keeps softmax CE, which is the correct generalisation.
-        //
-        // The base resolves numClasses/native-mode and defaults the optimizer, but SAM's default is
-        // not the base's plain AdamW - it carries the paper's warmup schedule - so it is still built
-        // here, EAGERLY, exactly as before. `_optimizer` is a settable field on SegmentationModelBase
-        // precisely so a model can do this.
-        : base(architecture, optimizer, lossFunction ?? BuildMaskLoss(options ??= new SAMOptions()), (options ??= new SAMOptions()).NumClasses)
+        : base(architecture, optimizer, lossFunction ?? MaskLoss(options ??= new SAMOptions()), 1)
     {
-        _options = options;
-        Options = _options;
-        // SAM's own 1024x1024 input default, which differs from the base's 512x512.
+        _options = options ?? new SAMOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
-        _modelSize = _options.ModelSize;
-        _dropRate = _options.DropRate;
-        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this,
-            optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-                this,
-                new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-                {
-                    InitialLearningRate = _options.LearningRate,
-                    Beta1 = _options.AdamBeta1,
-                    Beta2 = _options.AdamBeta2,
-                    Epsilon = _options.AdamEpsilon,
-                    WeightDecay = _options.WeightDecay,
-                    UseAdaptiveLearningRate = false,
-                    UseAdaptiveBetas = false,
-                    // Kirillov et al. 2023 ("Segment Anything", §A Training algorithm) reaches its
-                    // lr only AFTER a LINEAR WARMUP over the first 250 iterations, then holds it until
-                    // the step decays at 60k/86.6k of 90k iterations. SAMOptions.LearningRate is that
-                    // post-warmup PEAK, so applying it from step 0 was not paper-faithful. Constant
-                    // decay after warmup is faithful for every horizon the suite exercises -- the
-                    // paper's first step decay is at 60k iterations, far beyond any test.
-                    //
-                    // Measured effect: this removes the first-step overshoot that drove
-                    // Training_ShouldReduceLoss and MoreData_ShouldNotDegrade (loss was RISING
-                    // 0.44 -> 29.95) and takes SAM from 3 failures to 1. It does NOT fix
-                    // LossStrictlyDecreasesOnMemorizationTask: with warmup the divergence is only
-                    // DELAYED (0.694916 -> 7.090303 by step 300, past the 250-step warmup), and the
-                    // generated fixture already runs at LearningRate = 1e-5 -- 1/80th of the paper's
-                    // peak -- so the remaining divergence is NOT a learning-rate-scale problem. That
-                    // is a separate open defect in this model's training path, still under
-                    // investigation; the warmup here is correct on its own merits.
-                    LearningRateScheduler = new LinearWarmupScheduler(
-                        baseLearningRate: _options.LearningRate,
-                        warmupSteps: _options.WarmupSteps,
-                        totalSteps: 0,
-                        // Start at ONE STEP's worth of the peak rather than exactly 0. A 0 start makes the
-                        // first optimizer step a no-op, which left parameters bit-identical after a single
-                        // Train call and tripped GradientFlow_ShouldBeNonZeroAndFinite ("No parameters
-                        // changed after training"). Ramping from base/warmupSteps is the standard linear
-                        // warmup (equivalent to PyTorch LinearLR with start_factor = 1/warmup_steps) and
-                        // still reaches the paper's peak exactly at step warmupSteps.
-                        warmupInitLr: _options.LearningRate / System.Math.Max(1, _options.WarmupSteps),
-                        decayMode: LinearWarmupScheduler.DecayMode.Constant),
-                    // Warmup is defined per ITERATION, so the schedule must advance per optimizer step.
-                    SchedulerStepMode = SchedulerStepMode.StepPerBatch,
-                }));
-
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
         InitializeLayers();
     }
 
-    /// <summary>
-    /// Initializes SAM in ONNX (inference-only) mode.
-    /// </summary>
-    /// <param name="architecture">Neural network architecture defining input dimensions.</param>
-    /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="options">Optional model options.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Loads a pre-trained SAM model from ONNX for fast inference.
-    /// Download pre-trained weights from Meta's SAM repository.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
-    /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
-    /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
+    /// <summary>Creates an inference-only SAM from an ONNX model.</summary>
     public SAM(NeuralNetworkArchitecture<T> architecture,
         string onnxModelPath,
         SAMOptions? options = null)
-        // Same paper objective as the native constructor above (focal + dice, 20:1), kept in sync so
-        // the two entry points do not disagree about what SAM optimises.
-        // The base's ONNX constructor already validates the path, sets ONNX mode, resolves the input
-        // geometry and opens the InferenceSession - the same twenty lines this used to repeat.
-        : base(architecture, onnxModelPath, (options ??= new SAMOptions()).NumClasses)
+        : base(architecture, onnxModelPath, 1)
     {
-        // The base's ONNX constructor installs a plain CrossEntropyWithLogitsLoss because it has no
-        // lossFunction parameter. Restore SAM's paper objective so the two entry points still agree
-        // about what SAM optimises, exactly as the old `: base(architecture, BuildMaskLoss(...))` did.
-        LossFunction = BuildMaskLoss(options);
-        _options = options;
-        Options = _options;
+        _options = options ?? new SAMOptions(); Options = _options;
         _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
         _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
-        _modelSize = _options.ModelSize;
-        _dropRate = _options.DropRate;
-
-        (_channelDims, _depths, _decoderDim) = GetModelConfig(_options.ModelSize);
-
-        InitializeLayers();
     }
 
-    #endregion
+    /// <summary>The loss the base reports: the paper's focal and dice terms on mask logits.</summary>
+    private static ILossFunction<T> MaskLoss(SAMOptions options) => new CompositeLossWithLogits<T>(
+        (new FocalLoss<T>(gamma: options.FocalGamma, alpha: options.FocalAlpha), options.MaskFocalWeight),
+        (new DiceLoss<T>(), options.MaskDiceWeight));
 
-    #region Public Methods
+    /// <summary>The official configuration of the selected size at the architecture's (square) image size.</summary>
+    private SamConfiguration Configuration()
+    {
+        if (_height != _width || _height % 16 != 0)
+            throw new ArgumentException($"SAM encodes square images of a multiple of 16 pixels; got {_height}x{_width}.");
+        return SamConfiguration.For(_options.ModelSize) with { ImageSize = _height, Channels = _channels };
+    }
+
+    protected override void InitializeLayers()
+    {
+        if (_options is null || _network is not null) return;
+        if (!_useNativeMode) { ClearLayers(); return; }
+        if (Architecture.Layers is { Count: > 0 })
+            throw new NotSupportedException("SAM builds the paper's network; custom layers are not supported.");
+        var layers = new List<LayerBase<T>>();
+        _network = new SamNetwork<T>(Engine, layers, Configuration());
+        int seed = _options.Seed ?? 42;
+        _network.InitializeLikeReference(Tensors.Helpers.RandomHelper.CreateSeededRandom(seed));
+        _trainingRandom = Tensors.Helpers.RandomHelper.CreateSeededRandom(seed + 1);
+        Layers.AddRange(layers);
+        _encoderLayerEnd = layers.Count;
+    }
+
+    /// <summary>Loads an official SAM checkpoint's state dict.</summary>
+    internal void LoadTorchWeights(Func<string, int[], double[]> read) => Network.LoadTorchWeights(read);
+
+    // ------------------------------------------------------------------ image setting (SamPredictor)
+
+    /// <summary>The official ResizeLongestSide: the longer side becomes the encoder size, the other scales with it.</summary>
+    private (int Height, int Width) ResizedSize(int height, int width)
+    {
+        double scale = (double)Network.Configuration.ImageSize / Math.Max(height, width);
+        return ((int)(height * scale + 0.5), (int)(width * scale + 0.5));
+    }
+
+    private Tensor<T> Batched(Tensor<T> image)
+    {
+        if (image.Rank == 3) return AddBatchDimension(image);
+        if (image.Rank != 4 || image.Shape[0] != 1) throw new ArgumentException("SAM takes one image [C,H,W] or [1,C,H,W].", nameof(image));
+        return image;
+    }
+
+    /// <summary>The embedding of an image (pixel values in 0..255, as the official pixel mean and std expect), resized
+    /// so its longer side is the encoder size and zero-padded to a square.</summary>
+    protected override Tensor<T> EncodeImage(Tensor<T> image)
+    {
+        var x = Batched(image);
+        int h = x.Shape[2], w = x.Shape[3];
+        var (rh, rw) = ResizedSize(h, w);
+        if (rh != h || rw != w) x = SpatialResampling.ResizeAntialias(Engine, x, rh, rw);
+        return Network.EncodeImage(Network.Preprocess(x));
+    }
+
+    /// <inheritdoc />
+    public override void SetImage(Tensor<T> image)
+    {
+        var x = Batched(image);
+        _originalHeight = x.Shape[2];
+        _originalWidth = x.Shape[3];
+        (_inputHeight, _inputWidth) = ResizedSize(_originalHeight, _originalWidth);
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            _imageEmbedding = EncodeImage(x);
+        _imageSet = true;
+    }
+
+    /// <summary>Original-image coordinates in the encoder's frame (the official <c>apply_coords</c>).</summary>
+    private double Scale(double coordinate, bool horizontal)
+        => coordinate * (horizontal ? (double)_inputWidth / _originalWidth : (double)_inputHeight / _originalHeight);
+
+    /// <summary>The official stability score: the IoU of the masks thresholded at ±offset around the mask threshold.</summary>
+    private static double StabilityScore(double[] logits, double offset)
+    {
+        int high = 0, low = 0;
+        foreach (double v in logits)
+        {
+            if (v > offset) high++;
+            if (v > -offset) low++;
+        }
+        return low == 0 ? 0.0 : (double)high / low;
+    }
+
+    /// <summary>Runs the decoder for prompts in the encoder frame and returns the masks at the original size.</summary>
+    private (Tensor<T> Logits, Tensor<T> Iou, Tensor<T> LowRes) Predict(Tensor<T>? points, Tensor<T>? labels, Tensor<T>? boxes, Tensor<T>? masks, bool multimask)
+    {
+        EnsureImageSet();
+        var net = Network;
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var (sparse, dense) = net.EncodePrompts(points, labels, boxes, masks);
+        var (low, iou) = net.DecodeMasks(_imageEmbedding!, net.DensePositional(), sparse, dense, multimask);
+        return (net.Postprocess(low, _inputHeight, _inputWidth, _originalHeight, _originalWidth), iou, low);
+    }
+
+    private PromptedSegmentationResult<T> Result(Tensor<T> logits, Tensor<T> iou, Tensor<T> low)
+    {
+        int count = logits.Shape[1], h = logits.Shape[2], w = logits.Shape[3];
+        var masks = new Tensor<T>(new[] { count, h, w });
+        var scores = new double[count];
+        var stability = new double[count];
+        var values = logits.ToArray();
+        for (int m = 0; m < count; m++)
+        {
+            var plane = new double[h * w];
+            for (int i = 0; i < h * w; i++)
+            {
+                plane[i] = NumOps.ToDouble(values[m * h * w + i]);
+                masks[m * h * w + i] = plane[i] > 0 ? NumOps.One : NumOps.Zero;
+            }
+            scores[m] = NumOps.ToDouble(iou[0, m]);
+            stability[m] = StabilityScore(plane, 1.0);
+        }
+        return new PromptedSegmentationResult<T> { Masks = masks, Scores = scores, StabilityScores = stability, LowResLogits = low };
+    }
+
+    /// <summary>The three ambiguity-aware masks for points <c>[k, 2]</c> (x, y in the image) with labels <c>[k]</c>
+    /// (1 foreground, 0 background), as SamPredictor gives them with multimask output.</summary>
+    public override PromptedSegmentationResult<T> SegmentFromPoints(Tensor<T> points, Tensor<T> labels)
+    {
+        int k = points.Shape[0];
+        var p = new Tensor<T>(new[] { 1, k, 2 });
+        var l = new Tensor<T>(new[] { 1, k });
+        for (int i = 0; i < k; i++)
+        {
+            p[0, i, 0] = NumOps.FromDouble(Scale(NumOps.ToDouble(points[i, 0]), true));
+            p[0, i, 1] = NumOps.FromDouble(Scale(NumOps.ToDouble(points[i, 1]), false));
+            l[0, i] = labels[i];
+        }
+        var (logits, iou, low) = Predict(p, l, null, null, multimask: true);
+        return Result(logits, iou, low);
+    }
+
+    /// <summary>The mask for a box <c>[4]</c> (x0, y0, x1, y1 in the image): a single unambiguous mask.</summary>
+    public override PromptedSegmentationResult<T> SegmentFromBox(Tensor<T> box)
+    {
+        var b = new Tensor<T>(new[] { 1, 4 });
+        for (int i = 0; i < 4; i++) b[0, i] = NumOps.FromDouble(Scale(NumOps.ToDouble(box[i]), i % 2 == 0));
+        var (logits, iou, low) = Predict(null, null, b, null, multimask: false);
+        return Result(logits, iou, low);
+    }
 
     /// <summary>
-    /// Runs a forward pass through SAM to produce segmentation mask logits.
+    /// The mask for a mask prompt of logits: either low-resolution logits <c>[4·g, 4·g]</c> (a previous result's
+    /// <see cref="PromptedSegmentationResult{T}.LowResLogits"/> plane, SamPredictor's <c>mask_input</c>), or a map of the
+    /// image's size <c>[H, W]</c>, which is brought to the prompt resolution the way the image reaches the encoder
+    /// (longest side resized, padded to a square) and then downscaled 4×.
     /// </summary>
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-        => _useNativeMode ? Forward(input) : PredictOnnx(input);
+    public override PromptedSegmentationResult<T> SegmentFromMask(Tensor<T> mask)
+    {
+        EnsureImageSet();
+        int side = 4 * Network.Configuration.Grid, size = Network.Configuration.ImageSize;
+        Tensor<T> m;
+        if (mask.Length == side * side)
+        {
+            m = Engine.Reshape(mask, new[] { 1, 1, side, side });
+        }
+        else if (mask.Length == _originalHeight * _originalWidth)
+        {
+            m = Engine.Reshape(mask, new[] { 1, 1, _originalHeight, _originalWidth });
+            if (_inputHeight != _originalHeight || _inputWidth != _originalWidth)
+                m = SpatialResampling.ResizeAntialias(Engine, m, _inputHeight, _inputWidth);
+            if (_inputWidth < size) m = Engine.TensorConcatenate(new[] { m, new Tensor<T>(new[] { 1, 1, _inputHeight, size - _inputWidth }) }, 3);
+            if (_inputHeight < size) m = Engine.TensorConcatenate(new[] { m, new Tensor<T>(new[] { 1, 1, size - _inputHeight, size }) }, 2);
+            m = SpatialResampling.ResizeAntialias(Engine, m, side, side);
+        }
+        else
+        {
+            throw new ArgumentException(
+                $"A mask prompt is a {side}x{side} plane of low-resolution logits or a {_originalHeight}x{_originalWidth} map of the image.", nameof(mask));
+        }
+        var (logits, iou, low) = Predict(null, null, null, m, multimask: false);
+        return Result(logits, iou, low);
+    }
 
     /// <summary>
-    /// Performs one training step.
+    /// The official automatic mask generator with its default settings: a 32×32 grid of foreground points, three masks
+    /// per point, kept when the predicted IoU exceeds 0.88 and the stability score (offset 1.0) reaches 0.95, then box
+    /// non-maximum suppression at IoU 0.7, highest predicted IoU first.
     /// </summary>
-    /// <exception cref="InvalidOperationException">Thrown when called on an ONNX-mode model.</exception>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    public override List<PromptedSegmentationResult<T>> SegmentEverything()
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
-
-        // Match Predict/Forward's unbatched-input handling: a rank-3 [C,H,W]
-        // input gets a leading batch dim. The expected mask follows the same
-        // promotion so the tape-trainer sees a consistent rank-4 pair.
-        if (input.Shape.Length == 3) input = AddBatchDimension(input);
-        if (expectedOutput.Shape.Length == 3) expectedOutput = AddBatchDimension(expectedOutput);
-        if (input.Shape.Length != 4) throw new ArgumentException($"Tape-based training requires rank 3 (CHW) or rank 4 (NCHW), got rank {input.Shape.Length}.", nameof(input));
-        if (expectedOutput.Shape.Length != 4) throw new ArgumentException($"Tape-based training target requires rank 3 (CHW) or rank 4 (NCHW), got rank {expectedOutput.Shape.Length}.", nameof(expectedOutput));
-        SetTrainingMode(true);
-        try
+        EnsureImageSet();
+        const int perSide = 32, perBatch = 64;
+        const double iouThreshold = 0.88, stabilityThreshold = 0.95, nmsThreshold = 0.7;
+        var candidates = new List<(double Iou, double Stability, double[] Box, Tensor<T> Mask, Tensor<T> Low)>();
+        var grid = new List<(double X, double Y)>();
+        for (int i = 0; i < perSide; i++)
+            for (int j = 0; j < perSide; j++)
+            {
+                double offset = 1.0 / (2 * perSide), step = (1 - 2 * offset) / (perSide - 1);
+                grid.Add(((offset + j * step) * _originalWidth, (offset + i * step) * _originalHeight));
+            }
+        for (int start = 0; start < grid.Count; start += perBatch)
         {
-            // Use the constructor-selected AdamW instance. The overload without an
-            // optimizer falls back to NeuralNetworkBase's Adam and would silently
-            // discard SAM's paper hyperparameters and any user-supplied optimizer.
-            TrainWithTape(input, expectedOutput, Optimizer);
+            int n = Math.Min(perBatch, grid.Count - start);
+            var points = new Tensor<T>(new[] { n, 1, 2 });
+            var labels = new Tensor<T>(new[] { n, 1 });
+            for (int i = 0; i < n; i++)
+            {
+                points[i, 0, 0] = NumOps.FromDouble(Scale(grid[start + i].X, true));
+                points[i, 0, 1] = NumOps.FromDouble(Scale(grid[start + i].Y, false));
+                labels[i, 0] = NumOps.One;
+            }
+            var (logits, iou, low) = Predict(points, labels, null, null, multimask: true);
+            int masks = logits.Shape[1], h = logits.Shape[2], w = logits.Shape[3];
+            var values = logits.ToArray();
+            for (int b = 0; b < n; b++)
+                for (int m = 0; m < masks; m++)
+                {
+                    double predicted = NumOps.ToDouble(iou[b, m]);
+                    if (predicted <= iouThreshold) continue;
+                    var plane = new double[h * w];
+                    Array.Copy(values.Select(v => NumOps.ToDouble(v)).Skip((b * masks + m) * h * w).Take(h * w).ToArray(), plane, h * w);
+                    double stability = StabilityScore(plane, 1.0);
+                    if (stability < stabilityThreshold) continue;
+                    var mask = new Tensor<T>(new[] { 1, h, w });
+                    int x0 = int.MaxValue, y0 = int.MaxValue, x1 = -1, y1 = -1;
+                    for (int y = 0; y < h; y++)
+                        for (int x = 0; x < w; x++)
+                        {
+                            if (plane[y * w + x] <= 0) continue;
+                            mask[0, y, x] = NumOps.One;
+                            x0 = Math.Min(x0, x); y0 = Math.Min(y0, y); x1 = Math.Max(x1, x); y1 = Math.Max(y1, y);
+                        }
+                    // An empty mask's box is [0, 0, 0, 0], as batched_mask_to_box gives it.
+                    var box = x1 < 0 ? new double[4] : new double[] { x0, y0, x1, y1 };
+                    var lowPlane = Engine.Reshape(Engine.TensorSlice(low, new[] { b, m, 0, 0 }, new[] { 1, 1, low.Shape[2], low.Shape[3] }),
+                        new[] { low.Shape[2], low.Shape[3] });
+                    candidates.Add((predicted, stability, box, mask, lowPlane));
+                }
         }
-        finally
+        // torchvision's batched_nms with one category: highest score first, drop boxes overlapping a kept one above the
+        // threshold (areas without +1, as torchvision computes them).
+        var order = Enumerable.Range(0, candidates.Count).OrderByDescending(i => candidates[i].Iou).ToList();
+        var kept = new List<int>();
+        foreach (int i in order)
         {
-            SetTrainingMode(false);
+            var a = candidates[i].Box;
+            bool suppressed = kept.Any(j =>
+            {
+                var b = candidates[j].Box;
+                double iw = Math.Max(0, Math.Min(a[2], b[2]) - Math.Max(a[0], b[0]));
+                double ih = Math.Max(0, Math.Min(a[3], b[3]) - Math.Max(a[1], b[1]));
+                double inter = iw * ih;
+                double union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter;
+                return union > 0 && inter / union > nmsThreshold;
+            });
+            if (!suppressed) kept.Add(i);
         }
+        return kept.Select(i => new PromptedSegmentationResult<T>
+        {
+            Masks = candidates[i].Mask, Scores = new[] { candidates[i].Iou }, StabilityScores = new[] { candidates[i].Stability },
+            LowResLogits = candidates[i].Low,
+        }).ToList();
     }
 
-    #endregion
+    // ------------------------------------------------------------------ inference without prompts, and training
 
-    #region Private Methods
-
-    // SAM paper: ViT-B = 12 blocks / 768 dim, ViT-L = 24 blocks / 1024 dim, ViT-H = 32 blocks / 1280 dim
-    private static (int[] ChannelDims, int[] Depths, int DecoderDim) GetModelConfig(SAMModelSize modelSize)
-    {
-        return modelSize switch
-        {
-            SAMModelSize.ViTBase => ([768, 768, 768, 768], [12, 0, 0, 0], 256),
-            SAMModelSize.ViTLarge => ([1024, 1024, 1024, 1024], [24, 0, 0, 0], 256),
-            SAMModelSize.ViTHuge => ([1280, 1280, 1280, 1280], [32, 0, 0, 0], 256),
-            _ => ([1280, 1280, 1280, 1280], [32, 0, 0, 0], 256)
-        };
-    }
-
+    /// <summary>The single-mask logits <c>[B, 1, H, W]</c> (or <c>[1, H, W]</c>) of images at the encoder size with no
+    /// prompt: the decoder's output tokens alone over the "no mask" embedding.</summary>
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4;
         if (!hasBatch) input = AddBatchDimension(input);
-
-        var features = input;
-        for (int i = 0; i < Layers.Count; i++)
-            features = Layers[i].Forward(features);
-
-        if (!hasBatch) features = RemoveBatchDimension(features);
-        return features;
+        var net = Network;
+        int b = input.Shape[0], h = input.Shape[2], w = input.Shape[3];
+        var embedding = net.EncodeImage(net.Preprocess(input));
+        var positional = net.DensePositional();
+        var outputs = new Tensor<T>[b];
+        for (int i = 0; i < b; i++)
+        {
+            var one = Engine.TensorSlice(embedding, new[] { i, 0, 0, 0 }, new[] { 1, embedding.Shape[1], embedding.Shape[2], embedding.Shape[3] });
+            var (sparse, dense) = net.EncodePrompts(null, null, null, null);
+            outputs[i] = net.Postprocess(net.DecodeMasks(one, positional, sparse, dense, multimask: false).Logits, h, w, h, w);
+        }
+        var logits = b == 1 ? outputs[0] : Engine.TensorConcatenate(outputs, 0);
+        return hasBatch ? logits : RemoveBatchDimension(logits);
     }
+
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
+
+    /// <summary>
+    /// One step of SAM's training (Kirillov et al. 2023, Appendix A) on an image <c>[C,H,W]</c> (or <c>[1,C,H,W]</c>,
+    /// at most the encoder size) and its ground-truth mask (<c>H·W</c> values): see <see cref="SamTraining{T}"/>.
+    /// </summary>
+    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
+        var image = Batched(input);
+        var training = new SamTraining<T>(Engine, Network, _options.MaskFocalWeight, _options.MaskDiceWeight, _options.FocalGamma, _options.FocalAlpha);
+        var objective = training.Objective(image, expectedOutput, _trainingRandom);
+        // The objective runs the whole network itself; TrainWithCustomLoss would also run (and discard) a forward pass.
+        TrainWithCustomObjective(image, expectedOutput, (_, _) => objective(), Optimizer);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Every layer is sized at construction and <see cref="NeuralNetworkBase{T}.Layers"/> is not a chain.</remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+    }
+
+    /// <inheritdoc />
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input) => ObservedLayerActivations(input);
 
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null)
             throw new InvalidOperationException("ONNX session is not initialized.");
-
         bool hasBatch = input.Rank == 4;
         if (!hasBatch) input = AddBatchDimension(input);
-
         var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++)
-            inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-
+        var values = input.ToArray();
+        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(values[i]);
         var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
         string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "pixel_values";
         var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
-
         using var results = _onnxSession.Run(inputs);
         var outputTensor = results.First().AsTensor<float>();
         var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++)
-            outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-
+        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
         var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
         if (!hasBatch) result = RemoveBatchDimension(result);
         return result;
     }
 
-    // AddBatchDimension and RemoveBatchDimension come from SegmentationModelBase.
-
-    #endregion
-
-    #region Abstract Implementation
-
-    /// <summary>
-    /// Initializes the ViT encoder and mask decoder layers.
-    /// </summary>
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode) { ClearLayers(); return; }
-        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            _encoderLayerEnd = _options.EncoderLayerCount ?? Architecture.Layers.Count / 2;
-        }
-        else
-        {
-            var encoderLayers = LayerHelper<T>.CreateSAMEncoderLayers(
-                _channels, _height, _width, _channelDims, _depths, _dropRate).ToList();
-            _encoderLayerEnd = encoderLayers.Count;
-            Layers.AddRange(encoderLayers);
-            int featureH = _height / 16;
-            int featureW = _width / 16;
-            var decoderLayers = LayerHelper<T>.CreateSAMDecoderLayers(
-                _channelDims[^1], _decoderDim, _numClasses, featureH, featureW);
-            Layers.AddRange(decoderLayers);
-        }
-    }
-
-    // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
-    /// <summary>
-    /// Collects metadata describing this SAM model's configuration.
-    /// </summary>
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>
@@ -405,158 +453,10 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
             { "ModelName", "SAM" },
             { "InputHeight", _height },
             { "InputWidth", _width },
-            { "NumClasses", _numClasses },
-            { "ModelSize", _modelSize.ToString() },
+            { "ModelSize", _options.ModelSize.ToString() },
             { "UseNativeMode", _useNativeMode },
             { "NumLayers", Layers.Count },
-            { "EncoderLayerEnd", _encoderLayerEnd }
         },
         ModelDataProvider = () => SerializeForMetadata()
     };
-
-    // Dispose is inherited: SegmentationModelBase already disposes _onnxSession and sets _disposed,
-    // and SAM owns no further unmanaged resources.
-
-    #endregion
-
-    #region IPromptableSegmentation Implementation
-
-    // NumClasses, InputHeight, InputWidth, IsOnnxMode and Segment come from SegmentationModelBase;
-    // SupportsPointPrompts/BoxPrompts/MaskPrompts/TextPrompts come from PromptableSegmentationBase
-    // with exactly these values (true, true, true, false).
-
-    /// <summary>
-    /// Encodes an image into the embedding the prompt methods score against. SAM's encoder is the
-    /// full forward pass, so this is simply <see cref="NeuralNetworkBase{T}.Predict"/>.
-    /// </summary>
-    protected override Tensor<T> EncodeImage(Tensor<T> image) => Predict(image);
-
-    /// <inheritdoc/>
-    public override void SetImage(Tensor<T> image)
-    {
-        // Same two steps as before - encode once, then cache the softmax of that embedding for
-        // SegmentEverything - plus the base's _imageSet flag that EnsureImageSet() reads.
-        var embedding = EncodeImage(image);
-        _imageEmbedding = embedding;
-        _imageSet = true;
-        _imageProbabilities = Common.SegmentationTensorOps.SoftmaxAlongClassDim(embedding);
-    }
-
-    /// <inheritdoc/>
-    public override PromptedSegmentationResult<T> SegmentFromPoints(Tensor<T> points, Tensor<T> labels)
-    {
-        var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
-        int numC = features.Shape[0], h = features.Shape[1], w = features.Shape[2];
-        var attention = new Tensor<T>([h, w]);
-        int numPts = points.Shape[0];
-        double sigma = Math.Max(h, w) / 10.0;
-        for (int i = 0; i < numPts; i++)
-        {
-            double px = NumOps.ToDouble(points[i, 0]), py = NumOps.ToDouble(points[i, 1]);
-            double sign = NumOps.Compare(labels[i], NumOps.One) == 0 ? 1.0 : -1.0;
-            var g = Common.SegmentationTensorOps.GaussianMask<T>(h, w, px, py, sigma);
-            for (int j = 0; j < h * w; j++)
-                attention.Data.Span[j] = NumOps.Add(attention.Data.Span[j], NumOps.FromDouble(sign * NumOps.ToDouble(g.Data.Span[j])));
-        }
-        var sigAtt = Common.SegmentationTensorOps.Sigmoid(attention);
-        var scoreMap = new Tensor<T>([h, w]);
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
-            {
-                double s = 0; for (int c = 0; c < numC; c++) s += NumOps.ToDouble(features[c, y, x]);
-                scoreMap[y, x] = NumOps.FromDouble(s / numC * NumOps.ToDouble(sigAtt[y, x]));
-            }
-        return BuildPromptMaskResult(scoreMap, h, w);
-    }
-
-    /// <inheritdoc/>
-    public override PromptedSegmentationResult<T> SegmentFromBox(Tensor<T> box)
-    {
-        var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
-        int numC = features.Shape[0], h = features.Shape[1], w = features.Shape[2];
-        int bx1 = (int)NumOps.ToDouble(box[0]), by1 = (int)NumOps.ToDouble(box[1]);
-        int bx2 = (int)NumOps.ToDouble(box[2]), by2 = (int)NumOps.ToDouble(box[3]);
-        var boxMask = Common.SegmentationTensorOps.BoxMask<T>(h, w, bx1, by1, bx2, by2);
-        var scoreMap = new Tensor<T>([h, w]);
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
-            {
-                double s = 0; for (int c = 0; c < numC; c++) s += NumOps.ToDouble(features[c, y, x]);
-                scoreMap[y, x] = NumOps.FromDouble(s / numC * NumOps.ToDouble(boxMask[y, x]));
-            }
-        return BuildPromptMaskResult(scoreMap, h, w);
-    }
-
-    /// <inheritdoc/>
-    public override PromptedSegmentationResult<T> SegmentFromMask(Tensor<T> mask)
-    {
-        var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
-        int numC = features.Shape[0], h = features.Shape[1], w = features.Shape[2];
-        var scoreMap = new Tensor<T>([h, w]);
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
-            {
-                double mVal = y < mask.Shape[0] && x < mask.Shape[1] ? NumOps.ToDouble(mask[y, x]) : 0;
-                double s = 0; for (int c = 0; c < numC; c++) s += NumOps.ToDouble(features[c, y, x]);
-                scoreMap[y, x] = NumOps.FromDouble(s / numC * (mVal > 0 ? 1.0 : 0.0));
-            }
-        return BuildPromptMaskResult(scoreMap, h, w);
-    }
-
-    /// <inheritdoc/>
-    public override List<PromptedSegmentationResult<T>> SegmentEverything()
-    {
-        var features = _imageEmbedding ?? Predict(new Tensor<T>([_channels, _height, _width]));
-        var probs = _imageProbabilities ?? Common.SegmentationTensorOps.SoftmaxAlongClassDim(features);
-        var classMap = Common.SegmentationTensorOps.ArgmaxAlongClassDim(features);
-        int numC = features.Shape[0], h = classMap.Shape[0], w = classMap.Shape[1];
-        var results = new List<PromptedSegmentationResult<T>>();
-        for (int cls = 0; cls < numC && results.Count < 100; cls++)
-        {
-            double area = 0, confSum = 0;
-            var mask = new Tensor<T>([1, h, w]);
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                    if ((int)NumOps.ToDouble(classMap[y, x]) == cls)
-                    { mask[0, y, x] = NumOps.FromDouble(1.0); area++; confSum += NumOps.ToDouble(probs[cls, y, x]); }
-            if (area < 4) continue;
-            double conf = confSum / area;
-            results.Add(new PromptedSegmentationResult<T> { Masks = mask, Scores = [conf], StabilityScores = [conf > 0.7 ? 0.95 : conf] });
-        }
-        if (results.Count == 0)
-            results.Add(new PromptedSegmentationResult<T> { Masks = new Tensor<T>([1, features.Shape[1], features.Shape[2]]), Scores = [0.0], StabilityScores = [0.0] });
-        return results;
-    }
-
-    private PromptedSegmentationResult<T> BuildPromptMaskResult(Tensor<T> scoreMap, int h, int w)
-    {
-        var probs = Common.SegmentationTensorOps.Sigmoid(scoreMap);
-        double[] thresholds = [0.3, 0.5, 0.7];
-        var masks = new Tensor<T>([3, h, w]);
-        var scores = new double[3];
-        var stability = new double[3];
-        for (int m = 0; m < 3; m++)
-        {
-            double area = 0, confSum = 0, areaLo = 0, areaHi = 0;
-            double tLo = thresholds[m] - 0.05, tHi = thresholds[m] + 0.05;
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                {
-                    double v = NumOps.ToDouble(probs[y, x]);
-                    if (v >= thresholds[m]) { masks[m, y, x] = NumOps.FromDouble(1.0); area++; confSum += v; }
-                    if (v >= tLo) areaLo++;
-                    if (v >= tHi) areaHi++;
-                }
-            scores[m] = area > 0 ? confSum / area : 0;
-            stability[m] = areaLo > 0 ? areaHi / areaLo : 0;
-        }
-        int lrH = Math.Max(1, h / 4), lrW = Math.Max(1, w / 4);
-        var lowRes = new Tensor<T>([1, lrH, lrW]);
-        for (int y = 0; y < lrH; y++)
-            for (int x = 0; x < lrW; x++)
-                lowRes[0, y, x] = scoreMap[Math.Min(y * 4, h - 1), Math.Min(x * 4, w - 1)];
-        return new PromptedSegmentationResult<T> { Masks = masks, Scores = scores, LowResLogits = lowRes, StabilityScores = stability };
-    }
-
-    #endregion
 }

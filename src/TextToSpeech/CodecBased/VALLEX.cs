@@ -1,42 +1,57 @@
 using AiDotNet.Attributes;
-using AiDotNet.Helpers;
+using AiDotNet.Enums;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
-using AiDotNet.Optimizers;
-using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.TextToSpeech.FrontEnd;
 
 namespace AiDotNet.TextToSpeech.CodecBased;
 
 /// <summary>
-/// VALL-E X: cross-lingual zero-shot text-to-speech extending VALL-E with language ID conditioning.
+/// VALL-E X: VALL-E trained on English and Mandarin with a language ID, which speaks a language in the voice of a prompt
+/// recorded in another.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "VALL-E X: Speak Foreign Languages with Your Own Voice" (Zhang et al., 2023)</item></list></para>
-/// <para><b>For Beginners:</b> VALL-E X extends the original VALL-E model to work across different languages.
-/// Given a short 3-second recording of someone speaking in one language, it can generate that person's
-/// voice speaking in a completely different language. It achieves this by adding language ID conditioning
-/// to VALL-E's autoregressive and non-autoregressive transformer stages, enabling cross-lingual
-/// voice cloning without parallel training data.</para>
+/// <para>
+/// Reference: "Speak Foreign Languages with Your Own Voice: Cross-Lingual Neural Codec Language Modeling" (Zhang et al.,
+/// 2023). Microsoft released no code; the runnable reproduction is Plachtaa/VALL-E-X, whose Mandarin front end
+/// <see cref="MandarinG2P"/> reproduces. The networks are VALL-E's (<see cref="VallEModelBase{T}"/>).
+/// </para>
+/// <para>
+/// <b>Languages</b> (§3.3): a language embedding added to the AR model's acoustic-token embeddings — the prompt's codes
+/// in the prompt's language, the generated ones in the text's — guides the speaking style.
+/// <see cref="VALLEXOptions.LanguagePlacement"/> selects the reference's placement instead (the phoneme embeddings of
+/// both models).
+/// </para>
+/// <para>
+/// <b>Training</b> (§3.2, §5.2): the AR model as VALL-E's; the NAR model, at a uniformly drawn stage, reads the
+/// phonemes, an acoustic prompt from another sentence of the same speaker (all codebooks, Eq. 2) and the lower
+/// codebooks. Each model is optimized on its own.
+/// </para>
+/// <para>
+/// <b>Synthesis</b> (§3.4): the prompt's transcript and the text precede the prompt's first-codebook codes in the AR
+/// model (Eq. 3, sampled to the end token); the NAR reads the text alone and the prompt's codes (Eq. 4, greedy);
+/// EnCodec decodes. Text is phonemized by script: Chinese characters through <see cref="MandarinG2P"/>, the rest
+/// through <see cref="EnglishG2P"/>, so mixed sentences work.
+/// </para>
+/// <para>
+/// <b>Training data</b>: <see cref="TtsTrainingSample{T}.Tokens"/> (phoneme ids,
+/// <see cref="VallEModelBase{T}.EncodePhonemes"/>), <see cref="TtsTrainingSample{T}.CodecTokens"/> (or the recording),
+/// <see cref="TtsTrainingSample{T}.PromptCodecTokens"/> (another sentence of the same speaker) and
+/// <see cref="TtsTrainingSample{T}.LanguageId"/> (<see cref="VallEXLanguage"/>).
+/// </para>
+/// <para><b>For Beginners:</b> Record a few seconds of yourself in English, and VALL-E X can speak Chinese in your
+/// voice — or the other way round.</para>
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a VALL-E X model for cross-lingual zero-shot TTS
-/// // extending VALL-E with language ID conditioning for multilingual synthesis
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new VALLEX&lt;double&gt;(architecture, "vallex.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new VALLEX&lt;double&gt;(architecture, new VALLEXOptions());
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional,
+///     NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
+/// var vallex = new VALLEX&lt;float&gt;(architecture, new VALLEXOptions());
+/// vallex.Voice = vallex.CreateVoice(englishPrompt24kHz, "the prompt's transcript");
+/// var audio = vallex.Synthesize("你好，世界。");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
@@ -45,330 +60,224 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
-    "VALL-E X: Speak Foreign Languages with Your Own Voice: Cross-Lingual Neural Codec Language Modeling",
+    "Speak Foreign Languages with Your Own Voice: Cross-Lingual Neural Codec Language Modeling",
     "https://arxiv.org/abs/2303.03926",
     Year = 2023,
     Authors = "Zhang et al."
 )]
-public partial class VALLEX<T> : TtsModelBase<T>, ICodecTts<T>
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-4, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, WeightDecay = 0.01,
+    Schedule = LearningRateSchedulerType.LinearWarmup, WarmupSteps = 8_000,
+    PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
+    Component = "autoregressive", Provenance = RecipeProvenance.DerivedFromCitedWork,
+    Source = "Section 5.2 states the maximum learning rate 5e-4, 8,000 warm-up steps and 800k steps, but not the "
+             + "optimizer; VALL-E (Wang et al. 2023 §5.1), which the paper extends, uses AdamW with linear decay "
+             + "(PyTorch's default betas and weight decay).")]
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 5e-4, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, WeightDecay = 0.01,
+    Schedule = LearningRateSchedulerType.LinearWarmup, WarmupSteps = 8_000,
+    PostWarmupDecay = LinearWarmupScheduler.DecayMode.Linear,
+    Component = "non-autoregressive", Provenance = RecipeProvenance.DerivedFromCitedWork,
+    Source = "Section 5.2 states the maximum learning rate 5e-4, 8,000 warm-up steps and 800k steps, but not the "
+             + "optimizer; VALL-E (Wang et al. 2023 §5.1), which the paper extends, uses AdamW with linear decay "
+             + "(PyTorch's default betas and weight decay).")]
+public partial class VALLEX<T> : VallEModelBase<T>
 {
-    private readonly VALLEXOptions _options;
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-    private int _encoderLayerEnd;
+    private static readonly Lazy<string[]> Table = new(() =>
+        LibriTtsPhonemeTable.Symbols.Concat(MandarinG2P.Symbols).Distinct(StringComparer.Ordinal).ToArray(), isThreadSafe: true);
 
-    public override ModelOptions GetOptions() => _options;
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="VALLEX{T}"/> class in ONNX inference mode.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="modelPath">Path to the ONNX model file.</param>
-    /// <param name="options">Optional model configuration options.</param>
-    public VALLEX(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        VALLEXOptions? options = null
-    )
-        : base(architecture)
+    private static readonly Lazy<(HashSet<string> English, HashSet<string> Mandarin)> LanguageOnly = new(() =>
     {
-        _options = options ?? new VALLEXOptions();
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.LLMDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
+        var english = new HashSet<string>(LibriTtsPhonemeTable.Symbols, StringComparer.Ordinal);
+        var mandarin = new HashSet<string>(MandarinG2P.Symbols, StringComparer.Ordinal);
+        return (new HashSet<string>(english.Except(mandarin), StringComparer.Ordinal),
+            new HashSet<string>(mandarin.Except(english), StringComparer.Ordinal));
+    }, isThreadSafe: true);
+
+    /// <summary>Creates an ONNX-backed VALL-E X for inference.</summary>
+    public VALLEX(NeuralNetworkArchitecture<T> architecture, string modelPath, VALLEXOptions? options = null)
+        : base(architecture, modelPath, options ?? new VALLEXOptions())
+    {
     }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="VALLEX{T}"/> class in native training/inference mode.
-    /// </summary>
-    /// <param name="architecture">The neural network architecture configuration.</param>
-    /// <param name="options">Optional model configuration options.</param>
-    /// <param name="optimizer">Optional gradient-based optimizer for training.</param>
-    public VALLEX(
-        NeuralNetworkArchitecture<T> architecture,
-        VALLEXOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
+    /// <summary>Creates a native, trainable VALL-E X.</summary>
+    public VALLEX(NeuralNetworkArchitecture<T> architecture, VALLEXOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture, options ?? new VALLEXOptions(), optimizer)
     {
-        _options = options ?? new VALLEXOptions();
-        _useNativeMode = true;
-        _optimizer = optimizer ?? CreateDefaultOptimizer();
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.LLMDim;
-        InitializeLayers();
     }
 
-    int ITtsModel<T>.SampleRate => _options.SampleRate;
-    public int MaxTextLength => _options.MaxTextLength;
-    public int NumCodebooks => _options.NumCodebooks;
-    public int CodebookSize => _options.CodebookSize;
+    private VALLEXOptions XOptions => (VALLEXOptions)Settings;
 
     /// <inheritdoc />
-    /// <remarks>Traced: InitializeLayers passes NumCodebooks * CodebookSize as the codec vocabulary.</remarks>
-    protected override int OutputFeatureWidth => _options.NumCodebooks * _options.CodebookSize;
-    public int CodecFrameRate => _options.CodecFrameRate;
+    public override ModelOptions GetOptions() => Settings;
 
-    /// <summary>
-    /// Synthesizes cross-lingual speech using VALL-E X's language-conditioned codec language model.
-    /// </summary>
-    /// <param name="text">The input text to synthesize.</param>
-    /// <returns>A tensor containing the generated waveform.</returns>
-    /// <remarks>
-    /// <para>Per the paper (Zhang et al., 2023):</para>
-    /// <para>(1) Cross-lingual text encoder with language embedding encodes text in the target language.</para>
-    /// <para>(2) AR stage: autoregressive transformer predicts first codebook tokens conditioned on text + source language prompt.</para>
-    /// <para>(3) NAR stage: non-autoregressive transformer predicts remaining codebook layers with language-agnostic codec prediction.</para>
-    /// <para>(4) EnCodec decoder: converts multi-layer codec tokens to waveform.</para>
-    /// <para><b>For Beginners:</b> This method takes text in any supported language and generates speech
-    /// that sounds like the reference speaker. Unlike standard VALL-E which only works within one language,
-    /// VALL-E X can take a voice sample in English and generate that voice speaking Chinese, or vice versa.
-    /// It does this by separating the "what to say" (language-specific text encoding) from "how to sound"
-    /// (speaker characteristics from the prompt).</para>
-    /// </remarks>
-    public Tensor<T> Synthesize(string text)
+    /// <inheritdoc />
+    /// <remarks>The English espeak table and <see cref="MandarinG2P.Symbols"/>, in one table (symbols both languages use,
+    /// such as punctuation and the word separator, once).</remarks>
+    protected override IReadOnlyList<string> PhonemeTable => Table.Value;
+
+    /// <inheritdoc />
+    protected override int LanguageCount => 2;
+
+    /// <inheritdoc />
+    protected override VallELanguagePlacement LanguagePlacement => ((VALLEXOptions)Settings).LanguagePlacement;
+
+    /// <inheritdoc />
+    /// <remarks>Symbols outside the table are skipped, as the reference's tokenizer skips them.</remarks>
+    protected override bool RejectsUnknownSymbols => false;
+
+    /// <inheritdoc />
+    protected override TtsSupervision RequiredSupervision =>
+        TtsSupervision.CodecTokens | TtsSupervision.PromptCodecTokens | TtsSupervision.LanguageId;
+
+    /// <inheritdoc />
+    /// <remarks>Runs of Chinese characters (and Chinese punctuation) through <see cref="MandarinG2P"/>, the rest through
+    /// <see cref="EnglishG2P"/>, joined by word separators.</remarks>
+    protected override IReadOnlyList<string> PhonemizeText(string text)
     {
-        ThrowIfDisposed();
-        var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-
-        // Run preprocessed text through learned layers for feature extraction
-        var features = input;
-        foreach (var l in Layers)
-            features = l.Forward(features);
-
-        // VALL-E X: Cross-lingual VALL-E variant (Zhang et al. 2023)
-        // Cross-lingual text encoder with language embedding
-        int textLen = Math.Min(text.Length, _options.MaxTextLength);
-        int codecFrames = textLen * 3;
-        double[] xlingEnc = new double[codecFrames];
-        for (int f = 0; f < codecFrames; f++)
+        var symbols = new List<string>();
+        foreach (var (mandarin, run) in ScriptRuns(text))
         {
-            int ci = Math.Min(f * textLen / codecFrames, textLen - 1);
-            double e = (text[ci] % 128) / 128.0;
-            double langEmb = Math.Sin(ci * 0.15) * 0.1;
-            xlingEnc[f] = Math.Tanh(e * 0.8 + langEmb);
+            var phonemes = mandarin ? MandarinG2P.Default.Phonemize(run) : EnglishG2P.Default.Phonemize(run);
+            if (phonemes.Count == 0) continue;
+            if (symbols.Count > 0 && symbols[symbols.Count - 1] != "_" && phonemes[0] != "_") symbols.Add("_");
+            symbols.AddRange(phonemes);
         }
+        return symbols;
+    }
 
-        // AR + NAR with language-agnostic codec prediction
-        double[] tokens = new double[codecFrames];
-        double h = 0;
-        for (int f = 0; f < codecFrames; f++)
-        {
-            h = Math.Tanh(xlingEnc[f] * 0.75 + h * 0.2);
-            tokens[f] = h;
-        }
+    private static bool IsChinese(char c) =>
+        c is >= '一' and <= '鿿' or >= '㐀' and <= '䶿' or '，' or '。' or '！' or '？' or '、' or '；' or '：' or '—';
 
-        int waveLen = codecFrames * (SampleRate / _options.CodecFrameRate);
-        var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
+    private static IEnumerable<(bool Mandarin, string Text)> ScriptRuns(string text)
+    {
+        if (text is null) throw new ArgumentNullException(nameof(text));
+        int start = 0;
+        for (int i = 1; i <= text.Length; i++)
         {
-            int fr = Math.Min(i * _options.CodecFrameRate / SampleRate, codecFrames - 1);
-            waveform[i] = NumOps.FromDouble(
-                tokens[fr] * Math.Sin(i * 2.0 * Math.PI * 193 / SampleRate) * 0.71
-            );
+            if (i == text.Length || IsChinese(text[i]) != IsChinese(text[start]))
+            {
+                string run = text.Substring(start, i - start);
+                if (run.Trim().Length > 0) yield return (IsChinese(text[start]), run);
+                start = i;
+            }
         }
-        return waveform;
     }
 
     /// <summary>
-    /// Encodes audio into discrete codec tokens using SoundStream-style quantization.
+    /// The language of each token, decided word by word (words are separated by <c>_</c>): a word speaks the language
+    /// most of its single-language symbols belong to (an English multi-letter phoneme, a Mandarin tone or IPA character);
+    /// a word with none takes the previous word's language, else the next one's, else English. Separators and the frame
+    /// tokens take the previous word's.
     /// </summary>
-    /// <param name="audio">The input audio tensor.</param>
-    /// <returns>A tensor of discrete codec tokens.</returns>
-    public Tensor<T> EncodeToTokens(Tensor<T> audio)
+    internal int[] TokenLanguages(IReadOnlyList<int> ids)
     {
-        int samplesPerFrame = Math.Max(1, SampleRate / _options.CodecFrameRate);
-        int frames = Math.Max(1, audio.Length / samplesPerFrame);
-        var tokens = new Tensor<T>([frames]);
-        for (int f = 0; f < frames; f++)
+        var (english, mandarin) = LanguageOnly.Value;
+        // Words: maximal runs of tokens other than the separator and the frame tokens.
+        var words = new List<(int Start, int End, int? Language)>();
+        for (int i = 0; i < ids.Count;)
         {
-            double sum = 0;
-            int start = f * samplesPerFrame;
-            int count = Math.Min(samplesPerFrame, audio.Length - start);
-            for (int s = 0; s < count; s++)
-                sum += NumOps.ToDouble(audio[start + s]);
-            double avg = sum / Math.Max(1, count);
-            int bin = (int)Math.Round((Math.Tanh(avg) + 1.0) * 0.5 * (_options.CodebookSize - 1));
-            bin = Math.Max(0, Math.Min(_options.CodebookSize - 1, bin));
-            tokens[f] = NumOps.FromDouble(bin);
+            if (IsBoundary(ids[i])) { i++; continue; }
+            int start = i, englishCount = 0, mandarinCount = 0;
+            for (; i < ids.Count && !IsBoundary(ids[i]); i++)
+            {
+                string symbol = Symbol(ids[i]);
+                if (english.Contains(symbol)) englishCount++;
+                else if (mandarin.Contains(symbol)) mandarinCount++;
+            }
+            int? language = englishCount == 0 && mandarinCount == 0 ? null
+                : mandarinCount > englishCount ? (int)VallEXLanguage.Mandarin : (int)VallEXLanguage.English;
+            words.Add((start, i, language));
         }
-        return tokens;
-    }
-
-    /// <summary>
-    /// Decodes discrete codec tokens back into an audio waveform.
-    /// </summary>
-    /// <param name="tokens">The codec tokens to decode.</param>
-    /// <returns>A tensor containing the reconstructed audio waveform.</returns>
-    public Tensor<T> DecodeFromTokens(Tensor<T> tokens)
-    {
-        int samplesPerFrame = Math.Max(1, SampleRate / _options.CodecFrameRate);
-        int waveLen = tokens.Length * samplesPerFrame;
-        var wave = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
+        var decided = new int[words.Count];
+        int? last = null;
+        for (int w = 0; w < words.Count; w++)
         {
-            int f = Math.Min(i / samplesPerFrame, tokens.Length - 1);
-            double tokenVal = NumOps.ToDouble(tokens[f]);
-            double normalized = tokenVal / Math.Max(1, _options.CodebookSize - 1) * 2.0 - 1.0;
-            double phase = i * 2.0 * Math.PI * 200.0 / SampleRate;
-            wave[i] = NumOps.FromDouble(normalized * Math.Sin(phase) * 0.8);
+            last = words[w].Language ?? last;
+            decided[w] = last ?? -1;
         }
-        return wave;
-    }
-
-    /// <inheritdoc />
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        int vocabSize = Math.Max(1, _options.VocabSize);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] % vocabSize);
-        return t;
-    }
-
-    /// <inheritdoc />
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    /// <inheritdoc />
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultCodecLMLayers(
-                    _options.TextEncoderDim,
-                    _options.LLMDim,
-                    _options.NumCodebooks * _options.CodebookSize,
-                    _options.NumEncoderLayers,
-                    _options.NumLLMLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate,
-                    _options.VocabSize
-                )
-            );
-        ComputeEncoderDecoderBoundary();
-    }
-
-    private void ComputeEncoderDecoderBoundary()
-    {
-        int total = Layers.Count;
-        _encoderLayerEnd =
-            total > 4 ? total / 3
-            : total > 0 ? 1
-            : 0;
-    }
-
-    /// <inheritdoc />
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
+        int? next = null;
+        for (int w = words.Count - 1; w >= 0; w--)
         {
-            TrainWithTape(input, expected, _optimizer);
+            next = words[w].Language ?? next;
+            if (decided[w] < 0) decided[w] = next ?? (int)VallEXLanguage.English;
         }
-        finally
+        var languages = new int[ids.Count];
+        int current = decided.Length > 0 ? decided[0] : (int)VallEXLanguage.English, word = 0;
+        for (int i = 0; i < ids.Count; i++)
         {
-            SetTrainingMode(false);
+            if (word < words.Count && i >= words[word].Start && i < words[word].End) current = decided[word];
+            languages[i] = current;
+            if (word < words.Count && i == words[word].End - 1) word++;
         }
+        return languages;
+    }
+
+    private bool IsBoundary(int id) => id < 3 || Symbol(id) == "_";
+
+    private int SampleLanguage(TtsTrainingSample<T> sample)
+    {
+        int language = sample.LanguageId ?? throw new ArgumentException("VALL-E X trains with the utterance's language.", nameof(sample));
+        if (language is < 0 or > 1) throw new ArgumentOutOfRangeException(nameof(sample), "VALL-E X's languages are 0 (English) and 1 (Mandarin).");
+        return language;
+    }
+
+    private bool OnText => LanguagePlacement == VallELanguagePlacement.TextTokens;
+
+    /// <inheritdoc />
+    /// <remarks>The utterance's codes and phonemes are in its language (<see cref="TtsTrainingSample{T}.LanguageId"/>).</remarks>
+    protected override Func<Tensor<T>, Tensor<T>, Tensor<T>> AutoRegressiveObjective(TtsTrainingSample<T> sample, int[] text,
+        int[,] codes, bool training, Random random)
+    {
+        int language = SampleLanguage(sample);
+        var first = FirstCodebook(codes);
+        var textLanguages = OnText ? Enumerable.Repeat(language, text.Length).ToArray() : null;
+        var codeLanguages = OnText ? null : Enumerable.Repeat(language, first.Length).ToArray();
+        return (_, _) => PaperCore.ArLoss(text, first, training, random, textLanguages, codeLanguages);
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <remarks>The prompt is another sentence of the same speaker (<see cref="TtsTrainingSample{T}.PromptCodecTokens"/>,
+    /// Eq. 2).</remarks>
+    protected override Func<Tensor<T>, Tensor<T>, Tensor<T>> NonAutoRegressiveObjective(TtsTrainingSample<T> sample,
+        int[] text, int[,] codes, bool training, Random random)
+    {
+        int language = SampleLanguage(sample);
+        var prompt = CodesOf(sample.PromptCodecTokens ?? throw new ArgumentException(
+            "VALL-E X's NAR model trains with another sentence of the same speaker as its prompt; set PromptCodecTokens.",
+            nameof(sample)), null, nameof(sample));
+        var textLanguages = OnText ? Enumerable.Repeat(language, text.Length).ToArray() : null;
+        return (_, _) => PaperCore.NarLossWithPrompt(text, prompt, codes, training, random, textLanguages);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Eq. 3 and 4: the AR model reads the prompt's transcript and the text (the prompt's codes in the prompt's
+    /// language, the new ones in the text's); the NAR reads the text alone.</remarks>
+    protected override int[,] Generate(int[] target, int[] enrolled, int[,] prompt, TtsVoice<T> voice, Random random)
+    {
+        var core = PaperCore;
+        var full = JoinPrompt(enrolled, target);
+        var fullLanguages = TokenLanguages(full);
+        var targetLanguages = TokenLanguages(target);
+        int targetLanguage = targetLanguages.Length > 2 ? targetLanguages[1] : (int)VallEXLanguage.English;
+        int promptLanguage = voice.LanguageId ?? (enrolled.Length > 0 ? fullLanguages[1] : targetLanguage);
+        var first = core.ArGenerate(full, FirstCodebook(prompt), Settings.Temperature, Settings.TopK,
+            Settings.MaxCodesPerTextToken * full.Length + 1, random, OnText ? fullLanguages : null, promptLanguage, targetLanguage);
+        return core.NarGenerate(target, prompt, first.ToArray(), random, OnText ? targetLanguages : null);
+    }
+
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var metadata = new ModelMetadata<T>
         {
-            Name = _useNativeMode ? "VALLEX-Native" : "VALLEX-ONNX",
-            Description = "VALL-E X: Cross-Lingual Zero-Shot TTS (Zhang et al., 2023)",
-            FeatureCount = _options.LLMDim,
-            AdditionalInfo = new Dictionary<string, object>
-            {
-                ["Architecture"] = "VALL-E X",
-                ["Mode"] = _useNativeMode ? "Native" : "ONNX",
-                ["SampleRate"] = _options.SampleRate,
-                ["MelChannels"] = _options.MelChannels,
-                ["HopSize"] = _options.HopSize,
-                ["CodecFrameRate"] = _options.CodecFrameRate,
-                ["NumCodebooks"] = _options.NumCodebooks,
-                ["CodebookSize"] = _options.CodebookSize,
-                ["TextEncoderDim"] = _options.TextEncoderDim,
-                ["LLMDim"] = _options.LLMDim,
-                ["NumEncoderLayers"] = _options.NumEncoderLayers,
-                ["NumLLMLayers"] = _options.NumLLMLayers,
-                ["NumHeads"] = _options.NumHeads,
-                ["MaxTextLength"] = _options.MaxTextLength,
-                ["LayerCount"] = Layers.Count,
-            },
-            ModelDataProvider = () => SerializeForMetadata(),
+            Name = IsNative ? "VALL-E-X-Native" : "VALL-E-X-ONNX",
+            Description = "VALL-E X: Cross-Lingual Neural Codec Language Modeling (Zhang et al., 2023)",
+            FeatureCount = Settings.HiddenDim,
+            Complexity = Settings.NumEncoderLayers + Settings.NumDecoderLayers,
         };
-    }
-
-    /// <inheritdoc />
-
-
-    /// <inheritdoc />
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(VALLEX<T>));
-    }
-
-    private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer() =>
-        new(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-                UseAdaptiveLearningRate = false,
-            }
-        );
-
-    /// <inheritdoc />
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
+        metadata.AdditionalInfo["Architecture"] = "VALL-E X";
+        metadata.AdditionalInfo["LanguagePlacement"] = XOptions.LanguagePlacement.ToString();
+        metadata.AdditionalInfo["SampleRate"] = Settings.SampleRate.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return metadata;
     }
 }

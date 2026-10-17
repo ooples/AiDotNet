@@ -101,7 +101,7 @@ public partial class OpenVoice<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceClon
     /// (1) Base TTS: generates speech in base speaker voice,
     /// (2) Tone color converter: transfers speaker identity from reference audio.
     /// Decouples style (emotion, rhythm, etc.) from tone color for flexible control.
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);
@@ -162,15 +162,6 @@ public partial class OpenVoice<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceClon
             emb[i] = referenceAudio[idx];
         }
         return emb;
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
     }
 
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;

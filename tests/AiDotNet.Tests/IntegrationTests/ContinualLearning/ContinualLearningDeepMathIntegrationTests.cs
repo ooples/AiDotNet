@@ -17,10 +17,11 @@ namespace AiDotNet.Tests.IntegrationTests.ContinualLearning;
 ///
 /// Key formulas tested:
 /// - EWC loss: (λ/2) * Σ F_i * (θ_i - θ*_i)²
-/// - Fisher Information: F_i = (1/N) * Σ g_i²
+/// - EWC penalty gradient: λ * F_i * (θ_i - θ*_i)
+/// - Fisher Information: F_i = (1/N) * Σ_n g_(n,i)², one gradient per example
 /// - SI loss: (λ/2) * Σ Ω_i * (θ_i - θ*_i)²
 /// - SI importance: Ω_i = ω_i / (Δθ_i² + ξ)
-/// - Online EWC: F_new = γ·F_old + F_new
+/// - Online EWC: F*_i = γ·F*_(i-1) + F_i (Schwarz et al. 2018)
 /// - Reservoir sampling properties
 /// </summary>
 public class ContinualLearningDeepMathIntegrationTests
@@ -28,21 +29,35 @@ public class ContinualLearningDeepMathIntegrationTests
     private const double Tol = 1e-6;
 
     // ═══════════════════════════════════════════════════════════════════
-    // EWC: Elastic Weight Consolidation
+    // EWC: Elastic Weight Consolidation (Kirkpatrick et al. 2017)
     // ═══════════════════════════════════════════════════════════════════
+
+    private static ElasticWeightConsolidation<double, Tensor<double>, Tensor<double>> Ewc(double lambda, int samples = 5, EWCOptions<double>? options = null)
+    {
+        options ??= new EWCOptions<double>();
+        options.Lambda = lambda;
+        options.NumFisherSamples = samples;
+        return new ElasticWeightConsolidation<double, Tensor<double>, Tensor<double>>(new MeanSquaredErrorLoss<double>(), options);
+    }
+
+    // One EWC task: the mock returns `gradient` for every example, so the empirical Fisher is gradient².
+    private static void LearnTask(ElasticWeightConsolidation<double, Tensor<double>, Tensor<double>> ewc, CLMockModel model, double[] gradient)
+    {
+        model.GradientFunction = (_, _, _) => new Vector<double>(gradient);
+        ewc.PrepareForTask(model, CreateMockDataset(10));
+        ewc.FinalizeTask(model);
+    }
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
     public async Task EWC_NoTasks_RegularizationLossIsZero()
     {
         await Task.Yield();
-        var ewc = new ElasticWeightConsolidation<double, Tensor<double>, Tensor<double>>(
-            new MeanSquaredErrorLoss<double>(),
-            lambda: 1000.0);
+        var ewc = Ewc(1000.0);
         var model = CreateMockModel(5);
-
-        var loss = ewc.ComputeRegularizationLoss(model);
-        Assert.Equal(0.0, loss, Tol);
+        Assert.Equal(0.0, ewc.ComputeRegularizationLoss(model), Tol);
+        var g = new Vector<double>(new double[] { 1, 2, 3, 4, 5 });
+        Assert.Equal(g.ToArray(), ewc.AdjustGradients(model, g).ToArray());
     }
 
     [Fact(Timeout = 120000)]
@@ -50,49 +65,46 @@ public class ContinualLearningDeepMathIntegrationTests
     public async Task EWC_OriginalFormulation_HandCalculatedLoss()
     {
         await Task.Yield();
-        // Setup: lambda=10, 3 parameters
-        // After task 1: optimal params = [1, 2, 3], Fisher = [0.5, 1.0, 0.2]
-        // Current params = [1.5, 2.5, 3.5]
-        // EWC loss = (10/2) * [0.5*(1.5-1)² + 1.0*(2.5-2)² + 0.2*(3.5-3)²]
-        //          = 5 * [0.5*0.25 + 1.0*0.25 + 0.2*0.25]
-        //          = 5 * [0.125 + 0.25 + 0.05]
-        //          = 5 * 0.425
-        //          = 2.125
-        var ewc = new ElasticWeightConsolidation<double, Tensor<double>, Tensor<double>>(
-            new MeanSquaredErrorLoss<double>(),
-            lambda: 10.0, numFisherSamples: 5);
-
+        // Per-example gradients [0.5, 1.0, 0.2] give F = [0.25, 1.0, 0.04] (no normalization: the paper has none).
+        // Loss = (10/2) · Σ F_i (0.5)² = 5 · 0.25 · 1.29 = 1.6125.
+        var ewc = Ewc(10.0);
         var model = CreateMockModel(3, new double[] { 1.0, 2.0, 3.0 });
-        var dataset = CreateMockDataset(10);
-
-        // Simulate: PrepareForTask, submit gradients, FinalizeTask
-        ewc.PrepareForTask(model, dataset);
-
-        // Submit 5 gradient batches with known values to build Fisher
-        for (int i = 0; i < 5; i++)
-        {
-            var grads = new Vector<double>(new double[] { 0.5, 1.0, 0.2 });
-            ewc.AdjustGradients(grads);
-        }
-
-        ewc.FinalizeTask(model);
-
-        // Now change params and compute loss
+        LearnTask(ewc, model, new[] { 0.5, 1.0, 0.2 });
+        Assert.Equal(new[] { 0.25, 1.0, 0.04 }, ewc.FisherInformation[0].ToArray().Select(v => Math.Round(v, 12)).ToArray());
         model.SetParameters(new Vector<double>(new double[] { 1.5, 2.5, 3.5 }));
-        var loss = ewc.ComputeRegularizationLoss(model);
+        Assert.Equal(1.6125, ewc.ComputeRegularizationLoss(model), Tol);
+    }
 
-        // Fisher from gradients: F_i = (minFisher + Σ g_i²) / N
-        // With 5 identical gradient samples [0.5, 1.0, 0.2]:
-        // F[0] = (1e-8 + 5*0.25) / 5 = (1e-8 + 1.25) / 5 = 0.25
-        // F[1] = (1e-8 + 5*1.0) / 5 = (1e-8 + 5.0) / 5 = 1.0
-        // F[2] = (1e-8 + 5*0.04) / 5 = (1e-8 + 0.2) / 5 = 0.04
-        // After normalization (max = 1.0): F = [0.25, 1.0, 0.04]
-        // EWC loss = (10/2) * [0.25*(0.5)² + 1.0*(0.5)² + 0.04*(0.5)²]
-        //          = 5 * [0.25*0.25 + 1.0*0.25 + 0.04*0.25]
-        //          = 5 * [0.0625 + 0.25 + 0.01]
-        //          = 5 * 0.3225
-        //          = 1.6125
-        Assert.True(loss > 0, $"EWC loss {loss} should be positive");
+    [Fact(Timeout = 120000)]
+    [Trait("Category", "Integration")]
+    public async Task EWC_AdjustGradients_AddsThePenaltyGradient()
+    {
+        await Task.Yield();
+        // ∂/∂θ (λ/2) Σ F (θ − θ*)² = λ F (θ − θ*) = 10 · [0.25, 1, 0.04] · 0.5 = [1.25, 5, 0.2], added to the task gradient.
+        // Before the fix AdjustGradients returned the task gradient unchanged, so the trainer never applied EWC.
+        var ewc = Ewc(10.0);
+        var model = CreateMockModel(3, new double[] { 1.0, 2.0, 3.0 });
+        LearnTask(ewc, model, new[] { 0.5, 1.0, 0.2 });
+        model.SetParameters(new Vector<double>(new double[] { 1.5, 2.5, 3.5 }));
+        var adjusted = ewc.AdjustGradients(model, new Vector<double>(new double[] { 1.0, 1.0, 1.0 }));
+        Assert.Equal(2.25, adjusted[0], Tol);
+        Assert.Equal(6.0, adjusted[1], Tol);
+        Assert.Equal(1.2, adjusted[2], Tol);
+    }
+
+    [Fact(Timeout = 120000)]
+    [Trait("Category", "Integration")]
+    public async Task EWC_Fisher_IsTheMeanOfPerExampleSquaredGradients()
+    {
+        await Task.Yield();
+        // Example n has gradient n·[1, 1]: F = mean(n²) over n = 0..3 = 3.5, not the squared mean gradient (2.25).
+        var ewc = Ewc(1.0, samples: 4);
+        var model = CreateMockModel(2);
+        model.GradientFunction = (input, _, _) => new Vector<double>(new[] { input[0], input[0] });
+        ewc.PrepareForTask(model, CreateMockDataset(4));
+        ewc.FinalizeTask(model);
+        Assert.Equal(3.5, ewc.FisherInformation[0][0], Tol);
+        Assert.Equal(3.5, ewc.FisherInformation[0][1], Tol);
     }
 
     [Fact(Timeout = 120000)]
@@ -100,20 +112,10 @@ public class ContinualLearningDeepMathIntegrationTests
     public async Task EWC_SameParameters_LossIsZero()
     {
         await Task.Yield();
-        var ewc = new ElasticWeightConsolidation<double, Tensor<double>, Tensor<double>>(
-            new MeanSquaredErrorLoss<double>(),
-            lambda: 1000.0);
-
+        var ewc = Ewc(100.0);
         var model = CreateMockModel(3, new double[] { 1.0, 2.0, 3.0 });
-        var dataset = CreateMockDataset(5);
-
-        ewc.PrepareForTask(model, dataset);
-        ewc.AdjustGradients(new Vector<double>(new double[] { 0.1, 0.2, 0.3 }));
-        ewc.FinalizeTask(model);
-
-        // Parameters haven't changed → (θ - θ*)² = 0 for all i → loss = 0
-        var loss = ewc.ComputeRegularizationLoss(model);
-        Assert.Equal(0.0, loss, Tol);
+        LearnTask(ewc, model, new[] { 0.1, 0.2, 0.3 });
+        Assert.Equal(0.0, ewc.ComputeRegularizationLoss(model), Tol);
     }
 
     [Fact(Timeout = 120000)]
@@ -121,93 +123,48 @@ public class ContinualLearningDeepMathIntegrationTests
     public async Task EWC_LambdaScaling_LossProportionalToLambda()
     {
         await Task.Yield();
-        // With same Fisher and parameter deviation, loss should scale linearly with lambda
-        var model1 = CreateMockModel(3, new double[] { 1.0, 2.0, 3.0 });
-        var model2 = CreateMockModel(3, new double[] { 1.0, 2.0, 3.0 });
-        var dataset = CreateMockDataset(5);
-
-        var ewc1 = new ElasticWeightConsolidation<double, Tensor<double>, Tensor<double>>(
-            new MeanSquaredErrorLoss<double>(), lambda: 10.0);
-        var ewc2 = new ElasticWeightConsolidation<double, Tensor<double>, Tensor<double>>(
-            new MeanSquaredErrorLoss<double>(), lambda: 20.0);
-
-        ewc1.PrepareForTask(model1, dataset);
-        ewc1.AdjustGradients(new Vector<double>(new double[] { 1.0, 1.0, 1.0 }));
-        ewc1.FinalizeTask(model1);
-
-        ewc2.PrepareForTask(model2, dataset);
-        ewc2.AdjustGradients(new Vector<double>(new double[] { 1.0, 1.0, 1.0 }));
-        ewc2.FinalizeTask(model2);
-
-        // Change params
-        model1.SetParameters(new Vector<double>(new double[] { 2.0, 3.0, 4.0 }));
-        model2.SetParameters(new Vector<double>(new double[] { 2.0, 3.0, 4.0 }));
-
-        var loss1 = ewc1.ComputeRegularizationLoss(model1);
-        var loss2 = ewc2.ComputeRegularizationLoss(model2);
-
-        // loss2/loss1 should equal lambda2/lambda1 = 20/10 = 2
-        Assert.Equal(2.0, loss2 / loss1, 1e-4);
+        var ewc1 = Ewc(10.0);
+        var ewc2 = Ewc(20.0);
+        var model1 = CreateMockModel(3, new double[] { 0, 0, 0 });
+        var model2 = CreateMockModel(3, new double[] { 0, 0, 0 });
+        LearnTask(ewc1, model1, new[] { 1.0, 1.0, 1.0 });
+        LearnTask(ewc2, model2, new[] { 1.0, 1.0, 1.0 });
+        model1.SetParameters(new Vector<double>(new double[] { 1, 1, 1 }));
+        model2.SetParameters(new Vector<double>(new double[] { 1, 1, 1 }));
+        Assert.Equal(2.0, ewc2.ComputeRegularizationLoss(model2) / ewc1.ComputeRegularizationLoss(model1), 1e-9);
     }
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public async Task EWC_OnlineMode_AccumulatesFisher()
+    public async Task EWC_OnlineMode_FollowsProgressAndCompress()
     {
         await Task.Yield();
-        var options = new EWCOptions<double>
-        {
-            Lambda = 100.0,
-            UseOnlineEWC = true,
-            OnlineDecayFactor = 0.9
-        };
-        var ewc = new ElasticWeightConsolidation<double, Tensor<double>, Tensor<double>>(
-            new MeanSquaredErrorLoss<double>(), options);
-
+        // Schwarz et al. 2018, Eqs. 8–9: F*_i = γ F*_(i−1) + F_i, anchored at the latest task's parameters, and the
+        // penalty weighted by γ F*.
+        var ewc = Ewc(1.0, options: new EWCOptions<double> { UseOnlineEWC = true, OnlineDecayFactor = 0.9 });
         Assert.Equal("Online-EWC", ewc.Name);
-
-        var model = CreateMockModel(3, new double[] { 1.0, 1.0, 1.0 });
-        var dataset = CreateMockDataset(5);
-
-        // Task 1
-        ewc.PrepareForTask(model, dataset);
-        ewc.AdjustGradients(new Vector<double>(new double[] { 1.0, 0.5, 0.2 }));
-        ewc.FinalizeTask(model);
-
-        Assert.NotNull(ewc.AccumulatedFisher);
-
-        // Task 2 with different model params
-        model.SetParameters(new Vector<double>(new double[] { 2.0, 2.0, 2.0 }));
-        ewc.PrepareForTask(model, dataset);
-        ewc.AdjustGradients(new Vector<double>(new double[] { 0.3, 0.8, 1.0 }));
-        ewc.FinalizeTask(model);
-
-        // Fisher should be accumulated: F_new = γ*F_old + F_task2
-        Assert.NotNull(ewc.AccumulatedFisher);
-        Assert.NotNull(ewc.ConsolidatedParameters);
+        var model = CreateMockModel(3, new double[] { 1.0, 2.0, 3.0 });
+        LearnTask(ewc, model, new[] { 1.0, 0.5, 0.2 });
+        model.SetParameters(new Vector<double>(new double[] { 1.5, 2.5, 3.5 }));
+        LearnTask(ewc, model, new[] { 0.3, 0.8, 1.0 });
+        var f = ewc.AccumulatedFisher ?? throw new InvalidOperationException("no accumulated Fisher");
+        Assert.Equal(0.9 * 1.0 + 0.09, f[0], Tol);
+        Assert.Equal(0.9 * 0.25 + 0.64, f[1], Tol);
+        Assert.Equal(0.9 * 0.04 + 1.0, f[2], Tol);
+        Assert.Equal(new[] { 1.5, 2.5, 3.5 }, (ewc.ConsolidatedParameters ?? throw new InvalidOperationException()).ToArray());
+        model.SetParameters(new Vector<double>(new double[] { 2.5, 2.5, 3.5 }));
+        var adjusted = ewc.AdjustGradients(model, new Vector<double>(3));
+        Assert.Equal(0.9 * f[0] * 1.0, adjusted[0], Tol);
+        Assert.Equal(0.0, adjusted[1], Tol);
     }
 
     [Fact(Timeout = 120000)]
     [Trait("Category", "Integration")]
-    public async Task EWC_FisherComputation_EmptyCache_UniformImportance()
+    public async Task EWC_FinalizeWithoutTaskData_Throws()
     {
         await Task.Yield();
-        var ewc = new ElasticWeightConsolidation<double, Tensor<double>, Tensor<double>>(
-            new MeanSquaredErrorLoss<double>(), lambda: 100.0);
-
-        var model = CreateMockModel(3, new double[] { 1.0, 2.0, 3.0 });
-        var dataset = CreateMockDataset(5);
-
-        // Don't submit any gradients → empty cache → uniform Fisher = [1, 1, 1]
-        ewc.PrepareForTask(model, dataset);
-        ewc.FinalizeTask(model);
-
-        // After normalization, Fisher should be uniform
-        Assert.Single(ewc.FisherInformation);
-        var fisher = ewc.FisherInformation[0];
-        // All values should be equal (normalized from [1,1,1])
-        Assert.Equal(fisher[0], fisher[1], Tol);
-        Assert.Equal(fisher[1], fisher[2], Tol);
+        var ewc = Ewc(1.0);
+        Assert.Throws<InvalidOperationException>(() => ewc.FinalizeTask(CreateMockModel(3)));
     }
 
     [Fact(Timeout = 120000)]
@@ -215,22 +172,13 @@ public class ContinualLearningDeepMathIntegrationTests
     public async Task EWC_OptimalParameters_StoredCorrectly()
     {
         await Task.Yield();
-        var ewc = new ElasticWeightConsolidation<double, Tensor<double>, Tensor<double>>(
-            new MeanSquaredErrorLoss<double>(), lambda: 100.0);
-
-        var expectedParams = new double[] { 3.14, 2.72, 1.41 };
+        var expectedParams = new double[] { 1.5, -0.3, 2.7 };
+        var ewc = Ewc(100.0);
         var model = CreateMockModel(3, expectedParams);
-        var dataset = CreateMockDataset(5);
-
-        ewc.PrepareForTask(model, dataset);
-        ewc.AdjustGradients(new Vector<double>(new double[] { 1.0, 1.0, 1.0 }));
-        ewc.FinalizeTask(model);
-
+        LearnTask(ewc, model, new[] { 1.0, 1.0, 1.0 });
         Assert.Single(ewc.OptimalParameters);
-        for (int i = 0; i < 3; i++)
-        {
+        for (int i = 0; i < expectedParams.Length; i++)
             Assert.Equal(expectedParams[i], ewc.OptimalParameters[0][i], Tol);
-        }
     }
 
     [Fact(Timeout = 120000)]
@@ -238,23 +186,50 @@ public class ContinualLearningDeepMathIntegrationTests
     public async Task EWC_Reset_ClearsAllState()
     {
         await Task.Yield();
-        var ewc = new ElasticWeightConsolidation<double, Tensor<double>, Tensor<double>>(
-            new MeanSquaredErrorLoss<double>(), lambda: 100.0);
-
-        var model = CreateMockModel(3, new double[] { 1.0, 2.0, 3.0 });
-        var dataset = CreateMockDataset(5);
-
-        ewc.PrepareForTask(model, dataset);
-        ewc.AdjustGradients(new Vector<double>(new double[] { 1.0, 1.0, 1.0 }));
-        ewc.FinalizeTask(model);
-
+        var ewc = Ewc(100.0);
+        var model = CreateMockModel(3, new double[] { 1, 2, 3 });
+        LearnTask(ewc, model, new[] { 1.0, 1.0, 1.0 });
         Assert.NotEmpty(ewc.OptimalParameters);
-
         ewc.Reset();
-
         Assert.Empty(ewc.OptimalParameters);
         Assert.Empty(ewc.FisherInformation);
         Assert.Null(ewc.AccumulatedFisher);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    // MAS: Memory Aware Synapses (Aljundi et al. 2018)
+    // ═══════════════════════════════════════════════════════════════════
+
+    [Fact(Timeout = 120000)]
+    [Trait("Category", "Integration")]
+    public async Task MAS_ImportanceAndPenaltyGradient_FollowEquations2And3()
+    {
+        await Task.Yield();
+        // Ω = mean_k |∂ℓ2²(F(x_k))/∂θ| (Eq. 2): the mock reports ±[0.5, 1.0, 0.2] for the squared-output-norm objective,
+        // so Ω = [0.5, 1.0, 0.2]. Penalty λ Σ Ω (θ − θ*)² (Eq. 3) has gradient 2 λ Ω (θ − θ*) = 2 · 3 · Ω · 0.5 = 3 Ω.
+        var mas = new MemoryAwareSynapses<double, Tensor<double>, Tensor<double>>(new MeanSquaredErrorLoss<double>(),
+            new MASOptions<double> { Lambda = 3.0, NumSamples = 4 });
+        var model = CreateMockModel(3, new double[] { 1.0, 2.0, 3.0 });
+        int calls = 0;
+        model.GradientFunction = (input, target, loss) =>
+        {
+            calls++;
+            // The objective MAS differentiates is the squared norm of the output, whatever the target.
+            Assert.NotNull(loss);
+            Assert.Equal(1.0 * 1.0 + 2.0 * 2.0, loss!.CalculateLoss(new Vector<double>(new[] { 1.0, 2.0 }), new Vector<double>(2)), Tol);
+            double sign = calls % 2 == 0 ? 1 : -1;
+            return new Vector<double>(new[] { 0.5 * sign, -1.0 * sign, 0.2 * sign });
+        };
+        mas.PrepareForTask(model, CreateMockDataset(4));
+        mas.FinalizeTask(model);
+        Assert.Equal(4, calls);
+        model.SetParameters(new Vector<double>(new double[] { 1.5, 2.5, 3.5 }));
+        var adjusted = mas.AdjustGradients(model, new Vector<double>(3));
+        Assert.Equal(1.5, adjusted[0], Tol);
+        Assert.Equal(3.0, adjusted[1], Tol);
+        Assert.Equal(0.6, adjusted[2], Tol);
+        // λ Σ Ω (θ − θ*)² = 3 · 0.25 · 1.7 = 1.275
+        Assert.Equal(1.275, mas.ComputeRegularizationLoss(model), Tol);
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -307,7 +282,7 @@ public class ContinualLearningDeepMathIntegrationTests
         Assert.True(si.IsTrackingTask);
 
         // Submit gradients - first call caches gradient
-        si.AdjustGradients(new Vector<double>(new double[] { 0.5, 1.0, 0.2 }));
+        si.AdjustGradients(model, new Vector<double>(new double[] { 0.5, 1.0, 0.2 }));
 
         // Simulate parameter update
         var newParams = new Vector<double>(new double[] { 1.1, 2.2, 3.3 });
@@ -333,7 +308,7 @@ public class ContinualLearningDeepMathIntegrationTests
         var dataset = CreateMockDataset(5);
 
         si.PrepareForTask(model, dataset);
-        si.AdjustGradients(new Vector<double>(new double[] { 0.1, 0.2, 0.3 }));
+        si.AdjustGradients(model, new Vector<double>(new double[] { 0.1, 0.2, 0.3 }));
         si.NotifyParameterUpdate(new Vector<double>(new double[] { 1.1, 2.1, 3.1 }));
         model.SetParameters(new Vector<double>(new double[] { 1.1, 2.1, 3.1 }));
         si.FinalizeTask(model);
@@ -363,7 +338,7 @@ public class ContinualLearningDeepMathIntegrationTests
 
         // Task 1
         si.PrepareForTask(model, dataset);
-        si.AdjustGradients(new Vector<double>(new double[] { 1.0, 2.0 }));
+        si.AdjustGradients(model, new Vector<double>(new double[] { 1.0, 2.0 }));
         si.NotifyParameterUpdate(new Vector<double>(new double[] { 0.5, 1.0 }));
         model.SetParameters(new Vector<double>(new double[] { 0.5, 1.0 }));
         si.FinalizeTask(model);
@@ -375,7 +350,7 @@ public class ContinualLearningDeepMathIntegrationTests
 
         // Task 2
         si.PrepareForTask(model, dataset);
-        si.AdjustGradients(new Vector<double>(new double[] { 0.5, 0.5 }));
+        si.AdjustGradients(model, new Vector<double>(new double[] { 0.5, 0.5 }));
         si.NotifyParameterUpdate(new Vector<double>(new double[] { 1.0, 1.5 }));
         model.SetParameters(new Vector<double>(new double[] { 1.0, 1.5 }));
         si.FinalizeTask(model);
@@ -407,14 +382,14 @@ public class ContinualLearningDeepMathIntegrationTests
 
         // Task 1
         si.PrepareForTask(model, dataset);
-        si.AdjustGradients(new Vector<double>(new double[] { 2.0, 0.5 }));
+        si.AdjustGradients(model, new Vector<double>(new double[] { 2.0, 0.5 }));
         si.NotifyParameterUpdate(new Vector<double>(new double[] { 0.5, 0.5 }));
         model.SetParameters(new Vector<double>(new double[] { 0.5, 0.5 }));
         si.FinalizeTask(model);
 
         // Task 2
         si.PrepareForTask(model, dataset);
-        si.AdjustGradients(new Vector<double>(new double[] { 0.5, 2.0 }));
+        si.AdjustGradients(model, new Vector<double>(new double[] { 0.5, 2.0 }));
         si.NotifyParameterUpdate(new Vector<double>(new double[] { 1.0, 1.0 }));
         model.SetParameters(new Vector<double>(new double[] { 1.0, 1.0 }));
         si.FinalizeTask(model);
@@ -443,7 +418,7 @@ public class ContinualLearningDeepMathIntegrationTests
 
         // Task 1
         si.PrepareForTask(model, dataset);
-        si.AdjustGradients(new Vector<double>(new double[] { 1.0, 1.0 }));
+        si.AdjustGradients(model, new Vector<double>(new double[] { 1.0, 1.0 }));
         si.NotifyParameterUpdate(new Vector<double>(new double[] { 0.5, 0.5 }));
         model.SetParameters(new Vector<double>(new double[] { 0.5, 0.5 }));
         si.FinalizeTask(model);
@@ -465,7 +440,7 @@ public class ContinualLearningDeepMathIntegrationTests
         var dataset = CreateMockDataset(5);
 
         si.PrepareForTask(model, dataset);
-        si.AdjustGradients(new Vector<double>(new double[] { 0.1, 0.2, 0.3 }));
+        si.AdjustGradients(model, new Vector<double>(new double[] { 0.1, 0.2, 0.3 }));
         si.NotifyParameterUpdate(new Vector<double>(new double[] { 1.1, 2.1, 3.1 }));
         model.SetParameters(new Vector<double>(new double[] { 1.1, 2.1, 3.1 }));
         si.FinalizeTask(model);
@@ -498,7 +473,7 @@ public class ContinualLearningDeepMathIntegrationTests
         var dataset = CreateMockDataset(5);
 
         si.PrepareForTask(model, dataset);
-        si.AdjustGradients(new Vector<double>(new double[] { 1.0, 1.0 }));
+        si.AdjustGradients(model, new Vector<double>(new double[] { 1.0, 1.0 }));
         // Don't change params → Δθ = 0 → Ω = ω / (0 + ξ)
         si.FinalizeTask(model);
 
@@ -918,8 +893,11 @@ public class ContinualLearningDeepMathIntegrationTests
         public IFullModel<double, Tensor<double>, Tensor<double>> DeepCopy() =>
             new CLMockModel(_parameters.Length, Enumerable.Range(0, _parameters.Length).Select(i => _parameters[i]).ToArray());
         public IFullModel<double, Tensor<double>, Tensor<double>> Clone() => DeepCopy();
+        /// <summary>Per-example gradients the mock reports; zeros unless a test sets it.</summary>
+        public Func<Tensor<double>, Tensor<double>, ILossFunction<double>?, Vector<double>>? GradientFunction { get; set; }
+
         public Vector<double> ComputeGradients(Tensor<double> input, Tensor<double> target, ILossFunction<double>? lossFunction = null)
-            => new(_parameters.Length);
+            => GradientFunction?.Invoke(input, target, lossFunction) ?? new Vector<double>(_parameters.Length);
         public void ApplyGradients(Vector<double> gradients, double learningRate) { }
 
     public Vector<double> SanitizeParameters(Vector<double> parameters) => parameters;

@@ -1,33 +1,41 @@
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
-using AiDotNet.LossFunctions;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
-using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
 
-/// <summary>WaveGrad: gradient-based conditional waveform generation using continuous noise level conditioning.</summary>
+/// <summary>
+/// WaveGrad: estimating gradients for waveform generation — a diffusion vocoder whose noise predictor is conditioned on
+/// the continuous noise level √ᾱ, built from GAN-TTS-style upsampling blocks over the mel spectrogram modulated by
+/// FiLM from downsampling blocks over the noisy waveform.
+/// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "WaveGrad: Estimating Gradients for Waveform Generation" (Chen et al., 2021)</item></list></para><para><b>For Beginners:</b> WaveGrad: gradient-based conditional waveform generation using continuous noise level conditioning.. This model converts text input into speech audio output.</para></remarks>
+/// <remarks>
+/// <para><b>References:</b> "WaveGrad: Estimating Gradients for Waveform Generation" (Chen et al., ICLR 2021) and
+/// lmnt-com/wavegrad for what the paper leaves unstated.</para>
+/// <para>
+/// Training (Algorithm 1, §2.2): a segment s uniform over 1..S, a level √ᾱ uniform between l_{s−1} and l_s
+/// (<c>l_0 = 1</c>, <c>l_s = √Π_{i≤s}(1 − β_i)</c>), <c>y = √ᾱ y₀ + √(1 − ᾱ) ε</c> and the L1 loss
+/// <c>‖ε − ε_θ(y, x, √ᾱ)‖₁</c>. Synthesis (Algorithm 2) runs the reverse process over any β schedule, conditioning each
+/// step on that schedule's √ᾱ_n, so one model serves the 1000-step and the six-step schedules alike.
+/// </para>
+/// <para><b>For Beginners:</b> WaveGrad starts from noise and repeatedly nudges it toward speech, each step following
+/// the network's estimate of which direction makes the audio more like real speech for this spectrogram.</para>
+/// </remarks>
 /// <example>
 /// <code>
-/// // Create a WaveGrad vocoder for gradient-based waveform generation
-/// // with continuous noise level conditioning for iterative refinement
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///     inputSize: 128, outputSize: 300);
 ///
-/// // ONNX inference mode with pre-trained model
-/// var model = new WaveGrad&lt;double&gt;(architecture, "wavegrad.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new WaveGrad&lt;double&gt;(architecture, new WaveGradOptions());
+/// // The paper's WaveGrad Base, sampled with a short six-step schedule.
+/// var model = new WaveGrad&lt;double&gt;(architecture,
+///     new WaveGradOptions { InferenceNoiseSchedule = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1] });
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
@@ -41,216 +49,123 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2021,
     Authors = "Chen et al."
 )]
-public partial class WaveGrad<T> : VocoderBase<T>
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4, ReferenceBatchSize = 256,
+                Source = "Chen et al. 2021, Sec. 4: batch 256, about 1M steps; the paper states no optimizer, so Adam at 2e-4 with the gradient norm clipped to 1 follows lmnt-com/wavegrad params.py.")]
+public partial class WaveGrad<T> : DiffusionVocoderBase<T>
 {
-    private readonly WaveGradOptions _options;
+    private WaveGradNetwork<T>? _network;
+    private CenteredLogMel<T>? _features;
+    private double[]? _levels;
 
-    public override ModelOptions GetOptions() => _options;
-
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-
-    public WaveGrad(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        WaveGradOptions? options = null
-    )
-        : base(architecture, new MeanAbsoluteErrorLoss<T>())
+    /// <summary>Creates a WaveGrad that runs an exported ONNX graph.</summary>
+    public WaveGrad(NeuralNetworkArchitecture<T> architecture, string modelPath, WaveGradOptions? options = null)
+        : base(architecture, modelPath, options ?? new WaveGradOptions(), options?.SamplingSeed ?? 0)
     {
-        _options = options ?? new WaveGradOptions();
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
     }
 
-    public WaveGrad(
-        NeuralNetworkArchitecture<T> architecture,
-        WaveGradOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture, new MeanAbsoluteErrorLoss<T>())
+    /// <summary>Creates a trainable WaveGrad.</summary>
+    public WaveGrad(NeuralNetworkArchitecture<T> architecture, WaveGradOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture, options ?? new WaveGradOptions(), optimizer, options?.SamplingSeed ?? 0)
     {
-        _options = options ?? new WaveGradOptions();
-        _useNativeMode = true;
-        // WaveGrad (Chen et al., 2021, S3.2) trains with Adam; WaveGradOptions.LearningRate carries
-        // the paper's 2e-4 as its default and lets callers override it. Constructing the optimizer
-        // bare left it on AdamW's own default rate, which -- combined with Train() never passing it
-        // through (see below) -- meant the configured value did nothing at all.
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-                UseAdaptiveLearningRate = false,
-            });
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        InitializeLayers();
     }
 
-    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase - see BigVGAN for why
-    // these three restated what the base already derives from the same _options fields.
+    private WaveGradOptions PaperOptions => (WaveGradOptions)VocoderSettings;
 
-    /// <summary>
-    /// Converts mel to waveform using WaveGrad's continuous noise-level score estimation.
-    /// Per the paper (Chen et al., 2021):
-    /// (1) Continuous noise level: sqrt(alpha_bar) as conditioning signal (not discrete timestep),
-    /// (2) U-Net architecture with downsample-bottleneck-upsample and FiLM conditioning,
-    /// (3) Noise schedule: linear or custom, searched via grid search for few-step generation,
-    /// (4) Key: continuous noise level enables flexible iteration count at inference.
-    /// </summary>
-    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    /// <inheritdoc />
+    public override int UpsampleFactor => PaperOptions.UpsampleFactors.Aggregate(1, (a, b) => a * b);
+
+    /// <inheritdoc />
+    protected override int SegmentSize => PaperOptions.CropFrames * UpsampleFactor;
+
+    /// <inheritdoc />
+    protected override double[] TrainingBetas => PaperOptions.NoiseSchedule;
+
+    /// <inheritdoc />
+    protected override double[]? InferenceBetas => PaperOptions.InferenceNoiseSchedule;
+
+    /// <inheritdoc />
+    protected override bool ClampEachStep => true;
+
+    /// <inheritdoc />
+    protected override double GradientClipNorm => PaperOptions.GradientClipNorm;
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<LayerBase<T>> CreateNetwork()
     {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(melSpectrogram);
-        // Run mel through learned vocoder layers for feature extraction
-        var features = melSpectrogram;
-        foreach (var l in Layers)
-            features = l.Forward(features);
-        int melLen = features.Length;
-        int waveLen = melLen * _options.HopSize;
-        double[] x = new double[waveLen];
-        for (int i = 0; i < waveLen; i++)
-            x[i] = Math.Cos(i * 0.21 + 0.3) * 0.7;
-        int steps = _options.NumDiffusionSteps;
-        for (int t = steps; t > 0; t--)
-        {
-            double noiseLevel = Math.Sqrt((double)t / steps); // continuous noise level
-            for (int s = 0; s < waveLen; s++)
-            {
-                int melIdx = Math.Min(s / _options.HopSize, melLen - 1);
-                double melCond = NumOps.ToDouble(features[melIdx]);
-                double grad = -(x[s] - melCond * 0.8) * noiseLevel;
-                x[s] = x[s] + grad * (1.0 / steps) + noiseLevel * Math.Sin(s * 0.001 + t) * 0.01;
-            }
-        }
-        var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-            waveform[i] = NumOps.FromDouble(Math.Tanh(x[i]));
-        return waveform;
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        var t = new Tensor<T>([1]);
-        t[0] = NumOps.FromDouble(0.0);
-        return t;
-    }
-
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultDiffusionVocoderLayers(
-                    _options.MelChannels,
-                    128,
-                    _options.NumDownsampleBlocks * 2,
-                    2,
-                    _options.DropoutRate
-                )
-            );
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            // WaveGrad (Chen et al., 2021, S3.2 and Algorithm 1) trains against an L1 objective, not
-            // the L2 the framework defaults to. The paper is explicit that L1 was chosen for training
-            // STABILITY -- precisely the failure seen here: under MSE the memorization loss climbed
-            // from 0.6358 to 4.9003 rather than falling.
-            //
-            // The two-argument TrainWithTape overload also left _optimizer assigned but never read,
-            // so training ran on the framework default optimizer entirely.
-            TrainWithCustomLoss(input, predicted => MeanAbsoluteDifference(predicted, expected), _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <summary>
-    /// Mean absolute error, built from <c>Engine</c> primitives so the autodiff tape records every
-    /// step. This is WaveGrad's L1 training objective (Chen et al., 2021, S3.2).
-    /// </summary>
-    private Tensor<T> MeanAbsoluteDifference(Tensor<T> predicted, Tensor<T> target)
-    {
-        var diff = Engine.TensorSubtract(predicted, target);
-        var magnitude = Engine.TensorAbs(diff);
-        var allAxes = System.Linq.Enumerable.Range(0, magnitude.Shape.Length).ToArray();
-        return Engine.ReduceMean(magnitude, allAxes, keepDims: false);
+        var o = PaperOptions;
+        if (UpsampleFactor != o.HopSize)
+            throw new ArgumentException($"The UBlocks' factors ({string.Join("x", o.UpsampleFactors)}) must multiply to the hop ({o.HopSize}).");
+        _network = new WaveGradNetwork<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7),
+            o.MelChannels, o.MelProjectionChannels, o.WaveformChannels, o.UpsampleFactors, o.UpsampleChannels, o.UpsampleDilations,
+            o.RepeatBlocks, o.LeakySlope, o.NoiseLevelScale);
+        _features = new CenteredLogMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, o.MelMinFrequency,
+            o.MelMaxFrequency, 1e-5, htkScale: true, normalizedWindow: true);
+        return _network.Layers;
     }
 
     /// <inheritdoc />
-    /// <remarks>The weights belong to the loaded graph in this mode. The base refuses
-    /// the write on every parameter surface, so the guard is stated once, here.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
+    protected override Tensor<T> Denoise(Tensor<T> noisy, double level, Tensor<T> mel) => _network!.Forward(noisy, level, mel);
+
+    /// <inheritdoc />
+    /// <remarks>Hierarchical sampling (§2.2, Eq. 12): a segment s uniform over 1..S, then √ᾱ uniform over
+    /// (l_{s−1}, l_s); the network is conditioned on that √ᾱ itself.</remarks>
+    protected override (double Level, double SqrtAlphaBar) DrawTrainingLevel(Random random)
+    {
+        if (_levels is null)
+        {
+            var cumulative = Cumulative(TrainingBetas);
+            _levels = new double[cumulative.Length + 1];
+            _levels[0] = 1;
+            for (int s = 0; s < cumulative.Length; s++) _levels[s + 1] = Math.Sqrt(cumulative[s]);
+        }
+        int segment = random.Next(1, _levels.Length);
+        double level = _levels[segment - 1] + random.NextDouble() * (_levels[segment] - _levels[segment - 1]);
+        return (level, level);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Each step is conditioned on its own schedule's noise level √ᾱ_n (Algorithm 2).</remarks>
+    protected override double InferenceLevel(int n, double alphaBar) => Math.Sqrt(alphaBar);
+
+    /// <inheritdoc />
+    /// <remarks>The L1 distance (§2.1: "substituting the original L2 distance metric with L1 offers better training
+    /// stability").</remarks>
+    protected override Tensor<T> NoiseLoss(Tensor<T> noise, Tensor<T> predicted, Tensor<T> mel)
+        => Mean(Engine.TensorAbs(Engine.TensorSubtract(noise, predicted)));
+
+    /// <inheritdoc />
+    protected override Tensor<T> ComputeInputMel(Tensor<T> audio) => DecibelUnitRange(_features!.Forward(audio));
+
+    /// <inheritdoc />
+    protected override void OnMutableConstructorConfigurationRestored()
+    {
+        base.OnMutableConstructorConfigurationRestored();
+        _levels = null;
+    }
+
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
+        => PaperOptimizerFactory.VerifyHandBuilt(this, new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = PaperOptions.LearningRate,
+                UseAdaptiveBetas = false,
+            }));
+
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var o = PaperOptions;
+        var m = new ModelMetadata<T>
         {
-            Name = _useNativeMode ? "WaveGrad-Native" : "WaveGrad-ONNX",
-            Description =
-                "WaveGrad: Estimating Gradients for Waveform Generation (Chen et al., 2021)",
-            FeatureCount = _options.MelChannels,
-            Complexity = _options.NumDiffusionSteps,
-            AdditionalInfo = new Dictionary<string, object>
-            {
-                ["MelChannels"] = _options.MelChannels,
-                ["Mode"] = _useNativeMode ? "Native" : "ONNX",
-            },
+            Name = IsOnnxMode ? "WaveGrad-ONNX" : "WaveGrad-Native",
+            Description = "WaveGrad: Estimating Gradients for Waveform Generation (Chen et al., 2021)",
+            FeatureCount = o.MelChannels,
+            Complexity = o.UpsampleFactors.Length,
         };
-    }
-
-
-
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(WaveGrad<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
+        m.AdditionalInfo["Architecture"] = o.RepeatBlocks ? "WaveGrad-Large" : "WaveGrad-Base";
+        m.AdditionalInfo["SampleRate"] = o.SampleRate.ToString();
+        return m;
     }
 }

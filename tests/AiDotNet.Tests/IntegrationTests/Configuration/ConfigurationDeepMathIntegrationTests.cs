@@ -343,7 +343,7 @@ public class ConfigurationDeepMathIntegrationTests
         var config = new ResNetConfiguration(ResNetVariant.ResNet50, 10);
 
         Assert.True(config.IncludeClassifier);
-        Assert.True(config.ZeroInitResidual);
+        Assert.False(config.ZeroInitResidual); // off in the paper and torchvision
         Assert.False(config.UseAutodiff);
     }
 

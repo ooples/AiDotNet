@@ -1,15 +1,10 @@
-using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
-using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
-using AiDotNet.Tokenization;
-using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
 
 namespace AiDotNet.VisionLanguage.Grounding;
@@ -20,32 +15,36 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// Grounding DINO (Liu et al., 2024) combines the DINO detector with grounded pre-training
-/// for open-set object detection. It uses a dual-encoder architecture with a Swin/ViT image
-/// backbone and BERT-like text encoder, fused through cross-modal feature enhancement layers.
-/// Learned object queries attend to both modalities via a cross-modal decoder, producing
-/// text-conditioned bounding box detections with alignment scores.
+/// Grounding DINO (Liu et al. 2023) finds the regions of an image that a caption's phrases name. A Swin image backbone
+/// and a BERT text backbone feed a feature enhancer that fuses the two (vision-text bi-attention, text self-attention,
+/// deformable image self-attention); language-guided query selection keeps the 900 encoder tokens most similar to the
+/// text; a cross-modality decoder refines them into boxes; and each box is scored against every caption token. The
+/// network is the official one (checked against Hugging Face's port of IDEA-Research/GroundingDINO to 1e-8).
+/// </para>
+/// <para>
+/// A caption lists what to find as period-separated phrases ("cat . remote control ."). <see cref="Ground"/> returns
+/// every query whose best token probability exceeds the box threshold (0.35), with the words whose tokens exceed the
+/// text threshold (0.25), as the official <c>predict</c> does. Images are read at the size given, in 0..1, and
+/// normalized with the ImageNet mean and deviation; the official demo resizes the shorter side to 800 first.
+/// </para>
+/// <para>
+/// Training takes grounded phrases (<see cref="TrainGrounding"/>): the paper's loss of Hungarian matching, a
+/// contrastive focal loss over the caption's tokens, and L1 and GIoU box losses, on every decoder layer and the
+/// encoder's selected queries. A tensor target cannot carry phrases, so <see cref="Train"/> refuses one.
 /// </para>
 /// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "Grounding DINO: Marrying DINO with Grounded Pre-Training for Open-Set Object Detection" (IDEA, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Grounding DINO is a vision-language model that detects objects
-/// in images based on text descriptions, enabling open-vocabulary detection without fixed
-/// category lists. Default values follow the original paper settings.</para>
+/// <list type="bullet"><item>Paper: "Grounding DINO: Marrying DINO with Grounded Pre-Training for Open-Set Object Detection" (Liu et al., 2023)</item></list></para>
+/// <para><b>For Beginners:</b> Grounding DINO detects objects that you describe in words, so it is not limited to a
+/// fixed list of categories. Default values follow the released model.</para>
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Grounding DINO model for open-set object detection
-/// // with cross-modal text-image feature fusion
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.ImageClassification,
-///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new GroundingDINO&lt;double&gt;(architecture, "groundingdino.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new GroundingDINO&lt;double&gt;(architecture, new GroundingDINOOptions());
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.ObjectDetection,
+///     inputHeight: 800, inputWidth: 800, inputDepth: 3, outputSize: 256);
+/// var model = new GroundingDINO&lt;double&gt;(architecture, new GroundingDINOOptions());
+/// var detections = model.Ground(image, "cat . remote control .");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -66,39 +65,19 @@ namespace AiDotNet.VisionLanguage.Grounding;
                         + "weight decay of 0.0001 and a clip max norm of 0.1. The 1e-5 rates the table "
                         + "also lists apply to the image and text backbones separately, which one "
                         + "optimizer over all parameters cannot express.")]
-public partial class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
+public partial class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>, IGroundingTrainable<T>
 {
     private readonly GroundingDINOOptions _options;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _disposed;
+    private GroundingDinoDetector<T>? _detector;
 
     public override ModelOptions GetOptions() => _options;
 
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-    private int _encoderLayerEnd;
+    private GroundingDinoDetector<T> Detector => _detector ?? throw new InvalidOperationException("The network is not initialized.");
 
-    public GroundingDINO(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        GroundingDINOOptions? options = null
-    )
-        : base(architecture)
-    {
-        _options = options ?? new GroundingDINOOptions();
-        _useNativeMode = false;
-        base.ImageSize = _options.ImageSize;
-        base.ImageChannels = 3;
-        base.EmbeddingDim = _options.DecoderDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
-        InitializeLayers();
-    }
+    /// <summary>The network.</summary>
+    internal GroundingDinoNetwork<T> Network => Detector.Network;
 
     public GroundingDINO(
         NeuralNetworkArchitecture<T> architecture,
@@ -108,289 +87,134 @@ public partial class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroun
         : base(architecture)
     {
         _options = options ?? new GroundingDINOOptions();
-        _useNativeMode = true;
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? throw new InvalidOperationException("Grounding DINO declares its paper recipe.");
         base.ImageSize = _options.ImageSize;
         base.ImageChannels = 3;
         base.EmbeddingDim = _options.DecoderDim;
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
         InitializeLayers();
     }
 
+    /// <summary>The width of the image tokens <see cref="EncodeImage"/> returns.</summary>
     public int EmbeddingDimension => _options.DecoderDim;
     int IVisualEncoder<T>.ImageSize => _options.ImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
+
+    /// <summary>The most detections <see cref="GroundText"/> returns (the highest scoring ones).</summary>
     public int MaxDetections => _options.MaxDetections;
-
-    public Tensor<T> EncodeImage(Tensor<T> image)
-    {
-        ThrowIfDisposed();
-        var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null)
-            return L2Normalize(OnnxModel.Run(p));
-        var c = p;
-        for (int i = 0; i < _encoderLayerEnd; i++)
-            c = Layers[i].Forward(c);
-        return L2Normalize(c);
-    }
-
-    /// <summary>
-    /// Grounds a text query using Grounding DINO's cross-modal DETR architecture.
-    /// Per the paper (IDEA 2024), the model uses a feature enhancer that fuses
-    /// image features from a Swin/ViT backbone with text features from a BERT-like
-    /// encoder via cross-attention. Then, NumQueryPositions learned object queries
-    /// attend to both modalities via a cross-modal decoder. Each query produces
-    /// a bounding box via MLP prediction head and a text-alignment score via
-    /// dot-product with text features. Boxes are filtered by ConfidenceThreshold
-    /// and NMS. Output format: [x1, y1, x2, y2, confidence] per detection.
-    /// </summary>
-    public Tensor<T> GroundText(Tensor<T> image, string textQuery)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(PreprocessImage(image));
-
-        var p = PreprocessImage(image);
-        int numQueries = _options.NumQueryPositions;
-        double confThreshold = _options.ConfidenceThreshold;
-        double nmsThreshold = _options.NmsThreshold;
-
-        // Step 1: Extract visual features through encoder
-        var visualFeatures = p;
-        for (int i = 0; i < _encoderLayerEnd; i++)
-            visualFeatures = Layers[i].Forward(visualFeatures);
-
-        // Step 2: Cross-modal feature enhancement via ConcatenateTensors
-        var textTokens = TokenizeText(textQuery);
-        var fusedInput = visualFeatures.ConcatenateTensors(textTokens);
-
-        // Step 3: Process through decoder layers
-        var decoderOut = fusedInput;
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-            decoderOut = Layers[i].Forward(decoderOut);
-
-        int outDim = decoderOut.Length;
-
-        // Step 5: Object query decoding → bounding box predictions
-        int maxDet = Math.Min(numQueries, _options.MaxDetections);
-        int fieldsPerDet = 5; // x1, y1, x2, y2, confidence
-        var rawDetections = new double[maxDet, fieldsPerDet];
-        int validCount = 0;
-
-        for (int q = 0; q < maxDet; q++)
-        {
-            int blockSize = Math.Max(1, outDim / maxDet);
-            int start = q * blockSize;
-            int end = Math.Min(start + blockSize, outDim);
-
-            // Box prediction from query features (sigmoid-bounded coordinates)
-            double cx = 0,
-                cy = 0,
-                w = 0,
-                h = 0,
-                conf = 0;
-            int span = end - start;
-            for (int d = start; d < end; d++)
-            {
-                double val = NumOps.ToDouble(decoderOut[d]);
-                int localIdx = d - start;
-                if (localIdx < span / 4)
-                    cx += val;
-                else if (localIdx < span / 2)
-                    cy += val;
-                else if (localIdx < 3 * span / 4)
-                    w += val;
-                else
-                    h += val;
-                conf += val * val;
-            }
-
-            // Normalize to [0, 1] range using sigmoid
-            cx = 1.0 / (1.0 + Math.Exp(-cx / Math.Max(1, span / 4)));
-            cy = 1.0 / (1.0 + Math.Exp(-cy / Math.Max(1, span / 4)));
-            w = 1.0 / (1.0 + Math.Exp(-w / Math.Max(1, span / 4)));
-            h = 1.0 / (1.0 + Math.Exp(-h / Math.Max(1, span / 4)));
-            conf = 1.0 / (1.0 + Math.Exp(-Math.Sqrt(conf / Math.Max(1, span)) + 1.0));
-
-            // Convert center+size to corner format
-            double x1 = Math.Max(0, cx - w / 2);
-            double y1 = Math.Max(0, cy - h / 2);
-            double x2 = Math.Min(1, cx + w / 2);
-            double y2 = Math.Min(1, cy + h / 2);
-
-            if (conf >= confThreshold && x2 > x1 && y2 > y1)
-            {
-                rawDetections[validCount, 0] = x1;
-                rawDetections[validCount, 1] = y1;
-                rawDetections[validCount, 2] = x2;
-                rawDetections[validCount, 3] = y2;
-                rawDetections[validCount, 4] = conf;
-                validCount++;
-            }
-        }
-
-        // Step 6: Non-maximum suppression
-        var kept = new bool[validCount];
-        for (int i = 0; i < validCount; i++)
-            kept[i] = true;
-
-        for (int i = 0; i < validCount; i++)
-        {
-            if (!kept[i])
-                continue;
-            for (int j = i + 1; j < validCount; j++)
-            {
-                if (!kept[j])
-                    continue;
-                double iou = ComputeIoU(
-                    rawDetections[i, 0],
-                    rawDetections[i, 1],
-                    rawDetections[i, 2],
-                    rawDetections[i, 3],
-                    rawDetections[j, 0],
-                    rawDetections[j, 1],
-                    rawDetections[j, 2],
-                    rawDetections[j, 3]
-                );
-                if (iou > nmsThreshold)
-                    kept[j] = false; // Suppress lower-confidence detection
-            }
-        }
-
-        // Step 7: Package results
-        int finalCount = 0;
-        for (int i = 0; i < validCount; i++)
-            if (kept[i])
-                finalCount++;
-
-        if (finalCount == 0)
-            return new Tensor<T>([fieldsPerDet]); // Empty detection
-
-        var result = new Tensor<T>([finalCount * fieldsPerDet]);
-        int idx = 0;
-        for (int i = 0; i < validCount; i++)
-        {
-            if (!kept[i])
-                continue;
-            for (int f = 0; f < fieldsPerDet; f++)
-                result[idx * fieldsPerDet + f] = NumOps.FromDouble(rawDetections[i, f]);
-            idx++;
-        }
-
-        return result;
-    }
-
-    public Tensor<T> DetectObjects(Tensor<T> image, IReadOnlyList<string> categories)
-    {
-        ThrowIfDisposed();
-        // Grounding DINO concatenates category names with period separators
-        // as the text prompt, per the paper's open-set detection protocol
-        string combined = string.Join(". ", categories) + ".";
-        return GroundText(image, combined);
-    }
-
-    private static double ComputeIoU(
-        double x1a,
-        double y1a,
-        double x2a,
-        double y2a,
-        double x1b,
-        double y1b,
-        double x2b,
-        double y2b
-    )
-    {
-        double ix1 = Math.Max(x1a, x1b),
-            iy1 = Math.Max(y1a, y1b);
-        double ix2 = Math.Min(x2a, x2b),
-            iy2 = Math.Min(y2a, y2b);
-        double iw = Math.Max(0, ix2 - ix1),
-            ih = Math.Max(0, iy2 - iy1);
-        double inter = iw * ih;
-        double areaA = (x2a - x1a) * (y2a - y1a);
-        double areaB = (x2b - x1b) * (y2b - y1b);
-        double union = areaA + areaB - inter;
-        return union > 1e-8 ? inter / union : 0;
-    }
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            _encoderLayerEnd = Layers.Count / 2;
-        }
-        else
-        {
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultGroundingDetectionLayers(
-                    _options.VisionDim,
-                    768,
-                    _options.VisionDim,
-                    256,
-                    _options.NumVisionLayers,
-                    6,
-                    6,
-                    _options.NumHeads,
-                    _options.DropoutRate
-                )
-            );
-            ComputeEncoderDecoderBoundary();
-        }
+        if (_options is null || _detector is not null) return;
+        if (Architecture.Layers is { Count: > 0 })
+            throw new NotSupportedException("Grounding DINO builds the paper's network; custom layers are not supported.");
+        var layers = new List<LayerBase<T>>();
+        _detector = new GroundingDinoDetector<T>(Engine, layers, _options, _options.Seed ?? 42);
+        Layers.AddRange(layers);
     }
 
-    private void ComputeEncoderDecoderBoundary()
+    /// <summary>Loads an official checkpoint's state dict (Hugging Face names).</summary>
+    internal void LoadTorchWeights(Func<string, int[], double[]> read) => Network.LoadTorchWeights(read);
+
+    /// <inheritdoc />
+    public override void SetTrainingMode(bool isTraining)
     {
-        // Each vision block is one residual TransformerEncoderLayer (+ an optional DropoutLayer);
-        // the encoder prefix is the linear input projection (patch-embedding stand-in) and the
-        // trailing prefix is the final encoder LayerNorm — 2 non-block layers total.
-        int lpb = _options.DropoutRate > 0 ? 2 : 1;
-        _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb;
+        base.SetTrainingMode(isTraining);
+        if (_detector is not null) _detector.Network.Training = isTraining;
     }
 
-    private Tensor<T> TokenizeText(string text)
-    {
-        if (_tokenizer is null)
-            throw new InvalidOperationException("Tokenizer not initialized.");
-        var encoding = _tokenizer.Encode(text);
-        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
+    /// <summary>
+    /// The image tokens before they meet the text: every feature level (the backbone's and the extra stride-2 level),
+    /// projected to the model width and group-normalized, flattened and concatenated, <c>[tokens, DecoderDim]</c> (or
+    /// <c>[B, tokens, DecoderDim]</c>), from images in 0..1.
+    /// </summary>
+    public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+        var tokens = Detector.ImageTokens(GroundingDinoDetector<T>.Batched(Engine, image));
+        return image.Rank == 3 ? Engine.Reshape(tokens, new[] { tokens.Shape[1], tokens.Shape[2] }) : tokens;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
+    protected override Tensor<T> PredictCore(Tensor<T> input) => EncodeImage(input);
+
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => EncodeImage(input);
+
+    /// <summary>
+    /// The regions the caption's phrases name (the official <c>predict</c>): each query whose best token probability
+    /// exceeds the box threshold (<see cref="GroundingVLMOptions.ConfidenceThreshold"/>), with that probability, its box
+    /// as fractions of the image, and the words whose tokens exceed <see cref="GroundingDINOOptions.TextThreshold"/>.
+    /// </summary>
+    /// <param name="image">One RGB image <c>[3, H, W]</c> with values in 0..1.</param>
+    /// <param name="caption">Period-separated phrases, such as "cat . remote control .".</param>
+    public IReadOnlyList<GroundingDetection> Ground(Tensor<T> image, string caption)
     {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
+        ThrowIfDisposed();
+        return Detector.Ground(GroundingDinoDetector<T>.Batched(Engine, image), caption);
+    }
+
+    /// <summary>
+    /// <see cref="Ground"/> as a tensor <c>[n, 5]</c> of (x1, y1, x2, y2, score) rows, the highest-scoring
+    /// <see cref="MaxDetections"/> in query order.
+    /// </summary>
+    public Tensor<T> GroundText(Tensor<T> image, string textQuery)
+        => GroundingRows<T>.Boxes(Detector.Strongest(Ground(image, textQuery)));
+
+    /// <summary>
+    /// The official <c>predict_with_classes</c>: the categories joined as "a. b" into one caption, and each detection's
+    /// class the first category its phrase contains (-1 when none does). Rows <c>[n, 6]</c> of (x1, y1, x2, y2, class,
+    /// score).
+    /// </summary>
+    public Tensor<T> DetectObjects(Tensor<T> image, IReadOnlyList<string> categories)
+    {
+        if (categories is null || categories.Count == 0) throw new ArgumentException("Name at least one category.", nameof(categories));
+        return GroundingRows<T>.Classified(Detector.Strongest(Ground(image, string.Join(". ", categories))), categories);
+    }
+
+    /// <summary>
+    /// One training step on an image, its caption and the boxes its phrases name, with the paper's loss (Hungarian
+    /// matching; contrastive focal, L1 and GIoU losses on every decoder layer and the encoder's selected queries).
+    /// </summary>
+    /// <param name="image">One RGB image <c>[3, H, W]</c> with values in 0..1.</param>
+    /// <param name="caption">Period-separated phrases, such as "cat . remote control .".</param>
+    /// <param name="boxes">The boxes, each naming one of the caption's phrases.</param>
+    public void TrainGrounding(Tensor<T> image, string caption, IReadOnlyList<GroundingBox> boxes)
+    {
+        ThrowIfDisposed();
+        var batch = GroundingDinoDetector<T>.Batched(Engine, image);
+        var (prompt, target) = GroundingDinoDetector<T>.Supervision(caption, boxes);
+        TrainWithCustomObjective(batch, batch, (x, _) => Detector.Loss(x, prompt, target), _optimizer);
+    }
+
+    /// <summary>The paper's loss on an image, its caption and boxes, without training (dropout off).</summary>
+    public T EvaluateGroundingLoss(Tensor<T> image, string caption, IReadOnlyList<GroundingBox> boxes)
+    {
+        ThrowIfDisposed();
+        var batch = GroundingDinoDetector<T>.Batched(Engine, image);
+        var (prompt, target) = GroundingDinoDetector<T>.Supervision(caption, boxes);
+        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
+        return Detector.Loss(batch, prompt, target)[0];
+    }
+
+    /// <summary>Grounding DINO trains on grounded phrases, which a tensor target cannot carry.</summary>
+    /// <exception cref="NotSupportedException">Always: use <see cref="TrainGrounding"/>.</exception>
+    public override void Train(Tensor<T> input, Tensor<T> expected)
+        => throw new NotSupportedException(
+            "Grounding DINO trains on an image, a caption and the boxes its phrases name: use TrainGrounding(image, caption, boxes).");
+
+    /// <inheritdoc />
+    /// <remarks>Every layer is sized at construction and <see cref="NeuralNetworkBase{T}.Layers"/> is not a chain.</remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
-        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input) => ObservedLayerActivations(input);
+
+    protected override bool SupportsParameterMutation => true;
+
+    /// <summary>Normalizes images in 0..1 with the options' mean and deviation (ImageNet's).</summary>
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) => Detector.Normalize(GroundingDinoDetector<T>.Batched(Engine, image));
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
@@ -398,9 +222,8 @@ public partial class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroun
     {
         var m = new ModelMetadata<T>
         {
-            Name = _useNativeMode ? "GroundingDINO-Native" : "GroundingDINO-ONNX",
-            Description =
-                "Grounding DINO: open-set detection combining DINO with grounded pre-training.",
+            Name = "GroundingDINO",
+            Description = "Grounding DINO (Liu et al., 2023): open-set detection of the regions a caption names.",
             FeatureCount = _options.DecoderDim,
             Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
         };
@@ -408,10 +231,6 @@ public partial class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroun
         m.AdditionalInfo["NumQueryPositions"] = _options.NumQueryPositions.ToString();
         return m;
     }
-
-
-
-
 
     private void ThrowIfDisposed()
     {

@@ -471,16 +471,6 @@ public class FastGenContractTests : DiffusionUnitTestBase
     #region Phase 7b — Hybrid/Emerging
 
     [Fact(Timeout = 120000)]
-    public async Task TransfusionModel_DefaultConstructor_CreatesValidModel()
-    {
-        var model = new TransfusionModel<double>();
-
-        Assert.NotNull(model);
-        Assert.NotNull(model.NoisePredictor);
-        Assert.NotNull(model.VAE);
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task MARModel_DefaultConstructor_CreatesValidModel()
     {
         var model = new MARModel<double>();

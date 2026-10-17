@@ -1,256 +1,202 @@
-using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
-using AiDotNet.TextToSpeech.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
 
-/// <summary>FreGrad: lightweight diffusion vocoder that operates in the frequency domain via DWT (discrete wavelet transform) for faster synthesis.</summary>
+/// <summary>
+/// FreGrad: a lightweight and fast frequency-aware diffusion vocoder that denoises the waveform's two Haar wavelet
+/// sub-bands with frequency-aware dilated convolutions.
+/// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "FreGrad: Lightweight and Fast Frequency-aware Diffusion Vocoder" (Shin et al., 2022)</item></list></para><para><b>For Beginners:</b> FreGrad: lightweight diffusion vocoder that operates in the frequency domain via DWT (discrete wavelet transform) for faster synthesis.. This model converts text input into speech audio output.</para></remarks>
-/// <example>
-/// <code>
-/// // Create a FreGrad vocoder for frequency-domain diffusion synthesis
-/// // using discrete wavelet transform (DWT) for faster generation
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new FreGrad&lt;double&gt;(architecture, "fregrad.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new FreGrad&lt;double&gt;(architecture, new FreGradOptions());
-/// </code>
-/// </example>
+/// <remarks>
+/// <para><b>References:</b> "FreGrad: Lightweight and Fast Frequency-aware Diffusion Vocoder" (Nguyen et al., ICASSP
+/// 2024) and kaistmm/fregrad for what the paper leaves unstated.</para>
+/// <para>
+/// The waveform is split by the Haar DWT into low and high sub-bands of half its length (§3.1); each band is diffused
+/// with noise from its own PriorGrad-style energy prior, from the lower or the upper half of the mel bands (§3.3); a
+/// DiffWave network whose dilated convolutions are Freq-DConvs (§3.2), taking and predicting both bands, estimates the
+/// noise; the loss is Σ_{l,h} (‖ε − ε̂‖²_{Σ⁻¹} + λ L_mag(ε, ε̂)) with L_mag the multi-resolution STFT log-magnitude
+/// loss (Eq. 9–10); the β schedule is shifted to zero terminal SNR (Eq. 8). Sampling denoises both bands from their
+/// priors and returns their inverse DWT.
+/// </para>
+/// <para><b>For Beginners:</b> FreGrad splits audio into a low-pitched and a high-pitched half-length signal, which are
+/// simpler to clean up than the full waveform, removes noise from both, and recombines them losslessly.</para>
+/// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.ConvolutionalNetwork)]
 [ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
     "FreGrad: Lightweight and Fast Frequency-aware Diffusion Vocoder",
     "https://arxiv.org/abs/2401.10032",
-    Year = 2022,
-    Authors = "Shin et al."
+    Year = 2024,
+    Authors = "Nguyen et al."
 )]
-[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.0002, Beta1 = 0.9, Beta2 = 0.999,
-                ReferenceBatchSize = 16,
-                Source = "Nguyen et al. 2024, Sec. 4: the Adam optimizer with beta1 0.9, beta2 0.999, a "
-                        + "fixed learning rate of 0.0002 and a batch size of 16.")]
-public partial class FreGrad<T> : VocoderBase<T>
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4, Beta1 = 0.9, Beta2 = 0.999, ReferenceBatchSize = 16,
+                Source = "Nguyen et al. 2024, Sec. 4.1: Adam with beta1 = 0.9, beta2 = 0.999, a fixed learning rate of 0.0002 and a batch size of 16.")]
+public partial class FreGrad<T> : DiffusionVocoderBase<T>
 {
-    private readonly FreGradOptions _options;
+    private DiffWaveNetwork<T>? _network;
+    private DifferentiableMel<T>? _features;
+    private MultiResolutionStftLoss<T>? _stftLoss;
 
-    public override ModelOptions GetOptions() => _options;
-
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-
-    public FreGrad(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        FreGradOptions? options = null
-    )
-        : base(architecture)
+    /// <summary>Creates a FreGrad that runs an exported ONNX graph.</summary>
+    public FreGrad(NeuralNetworkArchitecture<T> architecture, string modelPath, FreGradOptions? options = null)
+        : base(architecture, modelPath, options ?? new FreGradOptions(), options?.SamplingSeed ?? 0)
     {
-        _options = options ?? new FreGradOptions();
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
     }
 
-    public FreGrad(
-        NeuralNetworkArchitecture<T> architecture,
-        FreGradOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture)
+    /// <summary>Creates a trainable FreGrad.</summary>
+    public FreGrad(NeuralNetworkArchitecture<T> architecture, FreGradOptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture, options ?? new FreGradOptions(), optimizer, options?.SamplingSeed ?? 0)
     {
-        _options = options ?? new FreGradOptions();
-        _useNativeMode = true;
-        _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        InitializeLayers();
     }
 
-    // SampleRate, MelChannels and UpsampleFactor now come from VocoderBase - see BigVGAN for why
-    // these three restated what the base already derives from the same _options fields.
+    private FreGradOptions PaperOptions => (FreGradOptions)VocoderSettings;
 
-    /// <summary>
-    /// Converts mel to waveform using FreGrad's frequency-domain diffusion with DWT.
-    /// Per the paper (Shin et al., 2022): Decomposes waveform into frequency sub-bands via DWT, applies diffusion in each sub-band conditioned on mel, then reconstructs via inverse DWT. Frequency-aware denoising enables 3x speedup over DiffWave with comparable quality.
-    /// </summary>
-    public override Tensor<T> MelToWaveform(Tensor<T> melSpectrogram)
+    /// <inheritdoc />
+    /// <remarks>Twice the mel upsampler's factor: the network runs on half-length sub-bands.</remarks>
+    public override int UpsampleFactor => 2 * PaperOptions.UpsampleStrides.Aggregate(1, (a, b) => a * b);
+
+    /// <inheritdoc />
+    protected override int SegmentSize => PaperOptions.CropFrames * UpsampleFactor;
+
+    /// <inheritdoc />
+    protected override double[] TrainingBetas => PaperOptions.NoiseSchedule;
+
+    /// <inheritdoc />
+    protected override double[]? InferenceBetas => PaperOptions.UseFastSampling ? PaperOptions.InferenceNoiseSchedule : null;
+
+    /// <inheritdoc />
+    protected override bool ClampEachStep => true;
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<LayerBase<T>> CreateNetwork()
     {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(melSpectrogram);
-        // Run mel through learned vocoder layers for feature extraction
-        var features = melSpectrogram;
-        foreach (var l in Layers)
-            features = l.Forward(features);
-        int melLen = features.Length;
-        int waveLen = melLen * _options.HopSize;
-        // DWT decomposition: split into low-freq and high-freq sub-bands
-        int numBands = _options.NumWaveletLevels;
-        int bandLen = waveLen / (1 << numBands);
-        double[][] subBands = new double[numBands + 1][];
-        for (int b = 0; b <= numBands; b++)
-            subBands[b] = new double[bandLen];
-        // Initialize sub-bands from mel-conditioned noise
-        for (int b = 0; b <= numBands; b++)
-        {
-            double freqScale = (b + 1.0) / (numBands + 1);
-            for (int i = 0; i < bandLen; i++)
-            {
-                int melIdx = Math.Min(i * melLen / bandLen, melLen - 1);
-                double melVal = NumOps.ToDouble(features[melIdx]);
-                subBands[b][i] = Math.Sin(i * freqScale * 0.5 + melVal) * 0.3;
-            }
-        }
-        // Frequency-aware denoising per sub-band
-        int steps = _options.NumDiffusionSteps;
-        for (int t = steps; t > 0; t--)
-        {
-            double alpha = 1.0 - (double)t / steps;
-            for (int b = 0; b <= numBands; b++)
-            {
-                for (int s = 0; s < bandLen; s++)
-                {
-                    int melIdx = Math.Min(s * melLen / bandLen, melLen - 1);
-                    double melCond = NumOps.ToDouble(features[melIdx]);
-                    double score = -(subBands[b][s] - melCond * 0.6) * (1 - alpha);
-                    subBands[b][s] += score * (1.0 / steps);
-                }
-            }
-        }
-        // Inverse DWT: reconstruct waveform from sub-bands via overlap-add
-        var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            double sample = 0;
-            for (int b = 0; b <= numBands; b++)
-            {
-                int subIdx = Math.Min(i * bandLen / waveLen, bandLen - 1);
-                double weight = 1.0 / (numBands + 1);
-                sample += subBands[b][subIdx] * weight;
-            }
-            waveform[i] = NumOps.FromDouble(Math.Tanh(sample));
-        }
-        return waveform;
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        var t = new Tensor<T>([1]);
-        t[0] = NumOps.FromDouble(0.0);
-        return t;
-    }
-
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultDiffusionVocoderLayers(
-                    _options.MelChannels,
-                    64,
-                    _options.NumResBlocks,
-                    2,
-                    _options.DropoutRate
-                )
-            );
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        var o = PaperOptions;
+        if (UpsampleFactor != o.HopSize)
+            throw new ArgumentException($"The upsampler's strides ({string.Join("x", o.UpsampleStrides)}) must multiply to half the hop ({o.HopSize}).");
+        if (o.MelChannels < 2)
+            throw new ArgumentException("The two priors need at least two mel bands.");
+        _network = new DiffWaveNetwork<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7),
+            o.MelChannels, o.ResChannels, o.NumResLayers, o.DilationCycle, o.NoiseSchedule.Length, o.UpsampleStrides,
+            audioChannels: 2, frequencyAware: true);
+        _features = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels,
+            o.MelMinFrequency, o.MelMaxFrequency);
+        _stftLoss = new MultiResolutionStftLoss<T>(Engine, o.StftFftSizes, o.StftHopSizes, o.StftWindowSizes);
+        return _network.Layers;
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
+    protected override Tensor<T> Denoise(Tensor<T> noisy, double level, Tensor<T> mel) => _network!.Forward(noisy, level, mel);
+
+    /// <inheritdoc />
+    /// <remarks>The natural-log mel spectrogram <c>ln(max(mel, 1e-5))</c> of the HiFi-GAN pipeline.</remarks>
+    protected override Tensor<T> ComputeInputMel(Tensor<T> audio)
+    {
+        var rows = _features!.Forward(audio);
+        return Engine.Reshape(Engine.TensorTranspose(rows), new[] { 1, PaperOptions.MelChannels, rows.Shape[0] });
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The low and high Haar sub-bands as two channels <c>[1, 2, samples / 2]</c>.</remarks>
+    protected override Tensor<T> ToDiffusionSpace(Tensor<T> waveform)
+    {
+        var (low, high) = HaarWavelet.Forward(Engine, waveform);
+        return Engine.TensorConcatenate(new[] { low, high }, 1);
+    }
+
+    /// <inheritdoc />
+    protected override Tensor<T> FromDiffusionSpace(Tensor<T> sample)
+    {
+        int n = sample.Shape[2];
+        return HaarWavelet.Inverse(Engine, Engine.TensorSlice(sample, new[] { 0, 0, 0 }, new[] { 1, 1, n }),
+            Engine.TensorSlice(sample, new[] { 0, 1, 0 }, new[] { 1, 1, n }));
+    }
+
+    /// <summary>The priors' standard deviations <c>[1, 2, frames · hop / 2]</c> for a mel spectrogram
+    /// <c>[1, mel, frames]</c>: the low band's from the lower half of the mel bands, the high band's from the upper half,
+    /// each normalized as PriorGrad's and repeated over the frame's half-hop.</summary>
+    public Tensor<T> PriorStd(Tensor<T> mel)
+    {
+        var o = PaperOptions;
+        mel = MelInput(mel);
+        int half = o.MelChannels / 2, repeat = UpsampleFactor / 2;
+        var low = EnergyPrior.Std<T>(EnergyPrior.FrameEnergies(mel, 0, half), o, repeat);
+        var high = EnergyPrior.Std<T>(EnergyPrior.FrameEnergies(mel, half, o.MelChannels), o, repeat);
+        return Engine.TensorConcatenate(new[] { low, high }, 1);
+    }
+
+    /// <summary>Sets the energy statistics of the priors from training recordings (see
+    /// <see cref="PriorGrad{T}.FitEnergyStatistics"/>).</summary>
+    public void FitEnergyStatistics(IEnumerable<Tensor<T>> recordings, bool useDataMaximum = false)
+    {
+        if (recordings is null) throw new ArgumentNullException(nameof(recordings));
+        EnergyPrior.Fit(recordings.Select(ComputeMel), PaperOptions, useDataMaximum);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>ε ~ N(0, diag(σ_l², σ_h²)) over the two sub-bands.</remarks>
+    protected override Tensor<T> PriorNoise(Tensor<T> mel, int samples, Random random)
+        => Engine.TensorMultiply(Gaussian(new[] { 1, 2, samples / 2 }, random), PriorStd(mel));
+
+    /// <inheritdoc />
+    /// <remarks>Σ over the two bands of the Mahalanobis noise loss plus λ times the STFT log-magnitude loss between
+    /// the band's true and predicted noise (Eq. 10).</remarks>
+    protected override Tensor<T> NoiseLoss(Tensor<T> noise, Tensor<T> predicted, Tensor<T> mel)
+    {
+        Tensor<T> inverse;
+        using (new NoGradScope<T>())
+            inverse = Engine.TensorReciprocal(PriorStd(mel));
+        int n = noise.Shape[2];
+        Tensor<T>? total = null;
+        for (int band = 0; band < 2; band++)
+        {
+            var start = new[] { 0, band, 0 };
+            var length = new[] { 1, 1, n };
+            var e = Engine.TensorSlice(noise, start, length);
+            var p = Engine.TensorSlice(predicted, start, length);
+            var d = Engine.TensorMultiply(Engine.TensorSubtract(e, p), Engine.TensorSlice(inverse, start, length));
+            var diffusion = Mean(Engine.TensorMultiply(d, d));
+            var magnitude = _stftLoss!.Forward(new[] { Engine.Reshape(p, new[] { n }) }, new[] { Engine.Reshape(e, new[] { n }) }).LogMagnitude;
+            var term = Engine.TensorAdd(diffusion, Engine.TensorMultiplyScalar(magnitude, NumOps.FromDouble(PaperOptions.MagnitudeLossWeight)));
+            total = total is null ? term : Engine.TensorAdd(total, term);
+        }
+        return total!;
+    }
+
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
+        => PaperOptimizerFactory.VerifyHandBuilt(this, new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = PaperOptions.LearningRate,
+                Beta1 = 0.9,
+                Beta2 = 0.999,
+                UseAdaptiveBetas = false,
+            }));
+
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
-        return new ModelMetadata<T>
+        var o = PaperOptions;
+        var m = new ModelMetadata<T>
         {
-            Name = _useNativeMode ? "FreGrad-Native" : "FreGrad-ONNX",
-            Description = "FreGrad: Frequency-aware Diffusion Vocoder (Shin et al., 2022)",
-            FeatureCount = _options.MelChannels,
-            AdditionalInfo = new Dictionary<string, object>
-            {
-                ["MelChannels"] = _options.MelChannels,
-                ["Mode"] = _useNativeMode ? "Native" : "ONNX",
-            },
+            Name = IsOnnxMode ? "FreGrad-ONNX" : "FreGrad-Native",
+            Description = "FreGrad: Lightweight and Fast Frequency-aware Diffusion Vocoder (Nguyen et al., 2024)",
+            FeatureCount = o.MelChannels,
+            Complexity = o.NumResLayers,
         };
-    }
-
-
-
-
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(FreGrad<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
+        m.AdditionalInfo["Architecture"] = "FreGrad";
+        m.AdditionalInfo["SampleRate"] = o.SampleRate.ToString();
+        return m;
     }
 }

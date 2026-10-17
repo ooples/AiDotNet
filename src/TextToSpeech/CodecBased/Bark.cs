@@ -26,6 +26,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Bark: Text-Prompted Generative Audio Model", "https://github.com/suno-ai/bark")]
+[TaskVariantOf(typeof(AiDotNet.TextToSpeech.CodecBased.BarkModel<>), "text-to-speech facade")]
 public partial class Bark<T> : BarkModel<T>, ICodecTts<T>
 {
     private readonly ITokenizer? _configuredTokenizer;
@@ -69,7 +70,7 @@ public partial class Bark<T> : BarkModel<T>, ICodecTts<T>
     int ICodecTts<T>.CodecFrameRate => CodecFrameRate;
 
     /// <summary>Synthesizes a 24 kHz waveform from text using all four Bark stages.</summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
         => SynthesizeDetailed(text).Audio;
 
     /// <summary>Synthesizes text and returns semantic, coarse, fine, audio, and timing outputs.</summary>

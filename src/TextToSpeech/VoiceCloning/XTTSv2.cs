@@ -95,7 +95,7 @@ public partial class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
     /// Architecture: Text → GPT-2 (AR) → VQ-VAE audio tokens → HiFi-GAN decoder → waveform.
     /// Supports 17 languages and zero-shot voice cloning from 6s reference.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);

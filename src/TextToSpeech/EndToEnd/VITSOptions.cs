@@ -1,31 +1,36 @@
 namespace AiDotNet.TextToSpeech.EndToEnd;
 
-/// <summary>Options for VITS (end-to-end TTS with conditional VAE, normalizing flows, and adversarial training).</summary>
+/// <summary>Options for VITS (Kim et al. 2021): a conditional VAE with a normalizing-flow prior, a stochastic duration
+/// predictor and a HiFi-GAN decoder trained adversarially end to end.</summary>
 /// <remarks>
+/// <para>
+/// The shared settings are in <see cref="VitsModelOptions"/>. VITS adds its stochastic duration predictor (kernel 3,
+/// dropout 0.5, 4 spline flows; the reference's <c>StochasticDurationPredictor(hidden, 192, 3, 0.5, 4)</c>) sampled with
+/// noise scale 0.8 at synthesis, and places blank tokens between the characters.
+/// </para>
 /// <para><b>For Beginners:</b> These options configure the VITS model. Default values follow the original paper settings.</para>
 /// </remarks>
-public class VITSOptions : EndToEndTtsOptions
+public class VITSOptions : VitsModelOptions
 {
-    public VITSOptions()
+    /// <summary>Initializes a new instance by copying from another instance.</summary>
+    /// <param name="other">The options instance to copy from.</param>
+    /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
+    public VITSOptions(VITSOptions other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
     {
-        SampleRate = 22050;
-        MelChannels = 80;
-        HopSize = 256;
-        HiddenDim = 192;
-        NumFlowSteps = 4;
-        // Kim et al. 2021 section 4.1: AdamW, beta = (0.8, 0.99), weight decay 0.01,
-        // initial learning rate 2e-4. The generic TTS defaults are Adam's usual
-        // (0.9, 0.999) at 1e-4, which trains this stack unstably.
-        LearningRate = 2e-4;
-        WeightDecay = 0.01;
+        DurationPredictorFlows = other.DurationPredictorFlows;
+        DurationNoiseScale = other.DurationNoiseScale;
     }
 
-    /// <summary>First AdamW moment coefficient used by the released VITS recipe.</summary>
-    public double Beta1 { get; set; } = 0.8;
+    /// <summary>Creates the paper's configuration.</summary>
+    public VITSOptions()
+    {
+        AddBlank = true;
+    }
 
-    /// <summary>Second AdamW moment coefficient used by the released VITS recipe.</summary>
-    public double Beta2 { get; set; } = 0.99;
+    /// <summary>Gets or sets the stochastic duration predictor's spline flows (4).</summary>
+    public int DurationPredictorFlows { get; set; } = 4;
 
-    /// <summary>AdamW numerical-stability epsilon used by the released VITS recipe.</summary>
-    public double Epsilon { get; set; } = 1e-9;
+    /// <summary>Gets or sets the duration-predictor noise scale at synthesis (0.8).</summary>
+    public double DurationNoiseScale { get; set; } = 0.8;
 }

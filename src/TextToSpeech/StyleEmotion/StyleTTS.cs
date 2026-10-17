@@ -110,7 +110,7 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// (2) Text encoder: processes input phonemes,
     /// (3) Acoustic decoder: style-conditioned mel generation,
     /// (4) HiFi-GAN decoder: mel → waveform.
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
         var input = PreprocessText(text);
@@ -118,15 +118,6 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
             return OnnxModel.Run(input);
         var output = Predict(input);
         return PostprocessAudio(output);
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
     }
 
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;

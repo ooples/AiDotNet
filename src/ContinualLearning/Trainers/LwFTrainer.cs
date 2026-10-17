@@ -280,6 +280,16 @@ public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                             distillLoss = NumOps.Multiply(distillLoss, NumOps.FromDouble(currentDistillWeight));
                             batchDistillLoss = NumOps.Add(batchDistillLoss, distillLoss);
                         }
+
+                        // λ_o ∇L_old (Li and Hoiem 2017, Eq. 1): the gradient of the distillation loss joins the task
+                        // gradient, so the update preserves the recorded outputs rather than only reporting them.
+                        if (includeDistillGrads)
+                        {
+                            var distillGradients = GradModel.ComputeGradients(input, teacherOutput, _lwfStrategy.DistillationLoss);
+                            var scale = NumOps.FromDouble(currentDistillWeight);
+                            for (int g = 0; g < batchGradients.Length && g < distillGradients.Length; g++)
+                                batchGradients[g] = NumOps.Add(batchGradients[g], NumOps.Multiply(scale, distillGradients[g]));
+                        }
                     }
                 }
 
@@ -296,7 +306,7 @@ public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                 }
 
                 // Adjust gradients using strategy
-                var adjustedGradients = Strategy.AdjustGradients(batchGradients);
+                var adjustedGradients = Strategy.AdjustGradients(Model, batchGradients);
 
                 // Apply gradients to update model
                 GradModel.ApplyGradients(adjustedGradients, learningRate);
@@ -324,7 +334,7 @@ public class LwFTrainer<T, TInput, TOutput> : ContinualLearnerBase<T, TInput, TO
                         var replayLr = NumOps.Multiply(
                             learningRate,
                             NumOps.FromDouble(replayLrFactor));
-                        var adjustedReplayGradients = Strategy.AdjustGradients(replayGradients);
+                        var adjustedReplayGradients = Strategy.AdjustGradients(Model, replayGradients);
                         GradModel.ApplyGradients(adjustedReplayGradients, replayLr);
                         totalGradientUpdates++;
                     }
