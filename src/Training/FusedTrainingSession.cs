@@ -684,8 +684,9 @@ internal sealed class FusedTrainingSession<T>
             total = total is null ? squares : engine.TensorAdd(total, squares);
         }
         double changed = total is null ? 0.0 : NumOps.ToDouble(total[0]);
-        // NaN means the update reached the tensor (as non-finite values, which the plan's own guard handles).
-        return changed != 0.0;
+        // A sum of squares: positive when anything moved, NaN when the update reached the tensor as non-finite values (the
+        // plan's own guard handles those), never negative.
+        return changed > 0.0 || double.IsNaN(changed);
     }
 
     private static Tensor<T> Head(IEngine engine, Tensor<T> tensor, int count)
