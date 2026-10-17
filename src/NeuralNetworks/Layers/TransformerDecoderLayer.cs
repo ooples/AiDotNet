@@ -739,9 +739,10 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         if (inputs == null) throw new ArgumentNullException(nameof(inputs));
         if (!inputs.TryGetValue("decoder_input", out var decoderInput) || decoderInput == null)
             throw new ArgumentException("TransformerDecoderLayer requires 'decoder_input'.", nameof(inputs));
-        // encoder_output optional — falls back to decoder-only mode
+        // Without encoder_output there is nothing to cross-attend to: the block runs without its cross-attention
+        // sublayer (see ForwardTraced).
         if (!inputs.TryGetValue("encoder_output", out var encoderOutput) || encoderOutput == null)
-            return Forward(decoderInput, decoderInput);
+            return ForwardWithoutCrossAttention(decoderInput);
         return Forward(decoderInput, encoderOutput);
     }
 
@@ -768,10 +769,11 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        // Decoder-only mode (GPT-style): use self-attention only, skip cross-attention
-        // Per Vaswani et al. 2017, the decoder can operate without encoder output
-        // for autoregressive language models
-        return Forward(input, input);
+        // Decoder-only mode: self-attention and the feed-forward network, without the cross-attention sublayer (a
+        // GPT-style block, Radford et al. 2018/2019). This used to run Forward(input, input), which added a second,
+        // unmasked attention of the input over itself: not part of any paper's block, and in an autoregressive stack
+        // it let a position read the tokens after it even when the self-attention was causal (#2325).
+        return ForwardWithoutCrossAttention(input);
     }
 
     /// <summary>
