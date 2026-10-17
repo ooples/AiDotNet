@@ -101,6 +101,12 @@ internal sealed class DeepARNetwork<T>
 
     private static int ParameterCount(DeepARLikelihood likelihood) => likelihood == DeepARLikelihood.StudentT ? 3 : 2;
 
+    /// <summary>
+    /// The generator forecasts sample their paths from: fixed, not the training seed, so a model's forecasts are a
+    /// function of its weights and input alone (a clone or a checkpoint forecasts exactly as the model it came from).
+    /// </summary>
+    public static Random ForecastRandom() => RandomHelper.CreateSeededRandom(0x5EED);
+
     // ------------------------------------------------------------------ scale
 
     /// <summary>The scale ν of each series from its conditioning range <c>[B, t₀]</c> (§3.3).</summary>
@@ -127,15 +133,54 @@ internal sealed class DeepARNetwork<T>
         return scale;
     }
 
+    /// <summary>The scale ν <c>[B, 1]</c> of each series from its conditioning range <c>[B, t₀]</c> (§3.3), in engine
+    /// ops, so a compiled training plan computes it from each step's window.</summary>
+    public Tensor<T> Scale(Tensor<T> conditioning)
+    {
+        int batch = conditioning.Shape[0];
+        Tensor<T> scale;
+        switch (Configuration.Scaling)
+        {
+            case DeepARScaleHandling.PaperMean:
+                scale = _engine.TensorAddScalar(_engine.ReduceMean(conditioning, new[] { 1 }, keepDims: true), NumOps.One);
+                break;
+            case DeepARScaleHandling.MeanAbsolute:
+                return _engine.TensorMax(_engine.ReduceMean(_engine.TensorAbs(conditioning), new[] { 1 }, keepDims: true), NumOps.FromDouble(1e-10));
+            default:
+                var ones = new Tensor<T>(new[] { batch, 1 });
+                ones.Fill(NumOps.One);
+                return ones;
+        }
+        // The paper's 1 + mean(z) assumes non-negative data. The check reads values, so it runs on the eager tape
+        // only; a compiled plan replays windows its first (checked) step already validated in shape and kind.
+        if (!AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+        {
+            var values = scale.GetCpuData();
+            for (int b = 0; b < batch; b++)
+            {
+                double s = NumOps.ToDouble(values[b]);
+                if (s <= 0)
+                    throw new ArgumentException(
+                        $"The paper's scale 1 + mean(z) is {s} for a series with mean {s - 1}: it assumes non-negative data. Use DeepARScaleHandling.MeanAbsolute for signed series.");
+            }
+        }
+        return scale;
+    }
+
     // ------------------------------------------------------------------ the LSTM
 
+    // Inverted dropout between layers; the mask is a per-step draw, so a compiled training plan redraws it on every
+    // replay.
     private Tensor<T> Drop(Tensor<T> x, bool training, Random random)
     {
         double rate = Configuration.Dropout;
         if (!training || rate <= 0) return x;
-        var mask = new Tensor<T>(x._shape);
         var keep = NumOps.FromDouble(1.0 / (1.0 - rate));
-        for (int i = 0; i < mask.Length; i++) mask[i] = random.NextDouble() < rate ? NumOps.Zero : keep;
+        var mask = AiDotNet.Training.CompiledStepRandom<T>.Draw(x._shape, m =>
+        {
+            var span = m.AsWritableSpan();
+            for (int i = 0; i < span.Length; i++) span[i] = random.NextDouble() < rate ? NumOps.Zero : keep;
+        });
         return _engine.TensorMultiply(x, mask);
     }
 
@@ -213,16 +258,19 @@ internal sealed class DeepARNetwork<T>
 
     /// <summary>The likelihood parameters of one step, scale-adjusted (each <c>[B, 1]</c>).</summary>
     public (Tensor<T> A, Tensor<T> B, Tensor<T>? C) Parameters(Tensor<T> top, double[] scale)
+        => Parameters(top, ScaleColumn(scale, s => s));
+
+    /// <summary>The likelihood parameters of one step, scale-adjusted by ν <c>[B, 1]</c> (each <c>[B, 1]</c>).</summary>
+    public (Tensor<T> A, Tensor<T> B, Tensor<T>? C) Parameters(Tensor<T> top, Tensor<T> nu)
     {
         var raw = Head.Forward(top);
-        var nu = ScaleColumn(scale, s => s);
         switch (Configuration.Likelihood)
         {
             case DeepARLikelihood.Gaussian:
                 return (_engine.TensorMultiply(Column(raw, 0), nu), _engine.TensorMultiply(_engine.Softplus(Column(raw, 1)), nu), null);
             case DeepARLikelihood.NegativeBinomial:
                 return (_engine.TensorMultiply(_engine.Softplus(Column(raw, 0)), nu),
-                    _engine.TensorMultiply(_engine.Softplus(Column(raw, 1)), ScaleColumn(scale, s => 1.0 / Math.Sqrt(s))), null);
+                    _engine.TensorMultiply(_engine.Softplus(Column(raw, 1)), _engine.TensorReciprocal(_engine.TensorSqrt(nu))), null);
             default:
                 var df = _engine.TensorAddScalar(_engine.Softplus(Column(raw, 0)), NumOps.FromDouble(2.0));
                 return (df, _engine.TensorMultiply(Column(raw, 1), nu), _engine.TensorMultiply(_engine.Softplus(Column(raw, 2)), nu));
@@ -279,24 +327,49 @@ internal sealed class DeepARNetwork<T>
     public Tensor<T> Loss(double[,] window, double[,,]? covariates, int conditioning, bool training, Random random, int[]? items = null)
     {
         int batch = window.GetLength(0), steps = window.GetLength(1) - 1;
+        var tensor = new Tensor<T>(new[] { batch, steps + 1 });
+        for (int b = 0; b < batch; b++)
+            for (int t = 0; t <= steps; t++) tensor[b, t] = NumOps.FromDouble(window[b, t]);
+        Tensor<T>? covariateTensor = null;
+        if (covariates is not null)
+        {
+            int c = covariates.GetLength(2);
+            covariateTensor = new Tensor<T>(new[] { batch, steps, c });
+            for (int b = 0; b < batch; b++)
+                for (int t = 0; t < steps; t++)
+                    for (int k = 0; k < c; k++) covariateTensor[b, t, k] = NumOps.FromDouble(covariates[b, t, k]);
+        }
+        return Loss(tensor, covariateTensor, conditioning, training, random, items);
+    }
+
+    /// <summary>
+    /// <see cref="Loss(double[,], double[,,], int, bool, Random, int[])"/> of a window tensor <c>[B, T + 1]</c> and
+    /// covariates <c>[B, T, C]</c>, in engine ops only: a compiled training plan that rebinds the window computes the
+    /// loss of every step's window, not the first one's.
+    /// </summary>
+    public Tensor<T> Loss(Tensor<T> window, Tensor<T>? covariates, int conditioning, bool training, Random random, int[]? items = null)
+    {
+        if (window.Rank != 2) throw new ArgumentException("The window is [series, T + 1].", nameof(window));
+        int batch = window.Shape[0], steps = window.Shape[1] - 1;
         if (steps <= 0) throw new ArgumentException("A training window needs at least one observation after z₀.");
         if (conditioning <= 0 || conditioning > steps) throw new ArgumentException("The conditioning range must be within the window.");
-        var conditioningValues = new double[batch, conditioning];
-        for (int b = 0; b < batch; b++)
-            for (int t = 0; t < conditioning; t++) conditioningValues[b, t] = window[b, 1 + t];
-        var scale = Scale(conditioningValues);
+        int c = Configuration.Covariates;
+        if (c > 0 && (covariates is null || covariates.Rank != 3 || covariates.Shape[0] != batch || covariates.Shape[1] != steps || covariates.Shape[2] != c))
+            throw new ArgumentException($"This network has covariates: supply them as [{batch}, {steps}, {c}].", nameof(covariates));
+        Tensor<T> Columns(int from, int count) => _engine.TensorSlice(window, new[] { 0, from }, new[] { batch, count });
+        var nu = Scale(Columns(1, conditioning));
         var embedding = Embed(items, batch);
         var state = Initial(batch);
         Tensor<T>? total = null;
-        var previous = new double[batch];
-        var observed = new Tensor<T>(new[] { batch, 1 });
         for (int t = 0; t < steps; t++)
         {
-            for (int b = 0; b < batch; b++) previous[b] = window[b, t];
-            var top = Step(Input(previous, scale, covariates, t, embedding), state, training, random);
-            var z = new Tensor<T>(new[] { batch, 1 });
-            for (int b = 0; b < batch; b++) z[b, 0] = NumOps.FromDouble(window[b, t + 1]);
-            var nll = NegativeLogLikelihood(Parameters(top, scale), z);
+            // [z_{t−1}/ν, x_t, item embedding]
+            var parts = new List<Tensor<T>> { _engine.TensorDivide(Columns(t, 1), nu) };
+            if (c > 0) parts.Add(_engine.Reshape(_engine.TensorSlice(covariates!, new[] { 0, t, 0 }, new[] { batch, 1, c }), new[] { batch, c }));
+            if (embedding is not null) parts.Add(embedding);
+            var input = parts.Count == 1 ? parts[0] : _engine.TensorConcatenate(parts.ToArray(), 1);
+            var top = Step(input, state, training, random);
+            var nll = NegativeLogLikelihood(Parameters(top, nu), Columns(t + 1, 1));
             total = total is null ? nll : _engine.TensorAdd(total, nll);
         }
         return _engine.TensorMultiplyScalar(_engine.ReduceSum(total!, new[] { 0, 1 }, keepDims: false), NumOps.FromDouble(1.0 / ((double)batch * steps)));
@@ -346,10 +419,15 @@ internal sealed class DeepARNetwork<T>
     /// each of <paramref name="horizon"/> steps draws ẑ from the likelihood and feeds it back.
     /// <paramref name="historyCovariates"/> <c>[B, t₀, C]</c> and <paramref name="futureCovariates"/> <c>[B, H, C]</c>
     /// are required when the network has covariates, and <paramref name="items"/> when it has items.
+    /// With <paramref name="rowRandoms"/> each history row draws its paths from its own generator (one per row), so a
+    /// batch of rows samples exactly what each row would sample alone; otherwise every row shares
+    /// <paramref name="random"/>.
     /// </summary>
     public double[][][] Sample(double[,] history, double[,,]? historyCovariates, double[,,]? futureCovariates, int horizon, int samples,
-        Random random, int[]? items = null)
+        Random random, int[]? items = null, Random[]? rowRandoms = null)
     {
+        if (rowRandoms is not null && rowRandoms.Length != history.GetLength(0))
+            throw new ArgumentException($"Supply one generator per history row ({history.GetLength(0)}).", nameof(rowRandoms));
         int batch = history.GetLength(0), length = history.GetLength(1) - 1;
         if (length <= 0) throw new ArgumentException("Forecasting needs at least one observation.");
         var conditioningValues = new double[batch, length];
@@ -410,7 +488,8 @@ internal sealed class DeepARNetwork<T>
             var p = Parameters(output, rowScale);
             for (int r = 0; r < rows; r++)
             {
-                double draw = Draw(NumOps.ToDouble(p.A[r, 0]), NumOps.ToDouble(p.B[r, 0]), p.C is null ? 0 : NumOps.ToDouble(p.C[r, 0]), random);
+                double draw = Draw(NumOps.ToDouble(p.A[r, 0]), NumOps.ToDouble(p.B[r, 0]), p.C is null ? 0 : NumOps.ToDouble(p.C[r, 0]),
+                    rowRandoms is null ? random : rowRandoms[r / samples]);
                 result[r / samples][r % samples][h] = draw;
                 last[r] = draw;
             }

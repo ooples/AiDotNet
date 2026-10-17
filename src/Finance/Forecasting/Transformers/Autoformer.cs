@@ -218,11 +218,6 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
     public override bool SupportsTraining => _useNativeMode;
 
     /// <inheritdoc />
-    /// <remarks>Auto-Correlation chooses its lags from the current values, so a traced graph replayed on later steps
-    /// would keep the first step's lags; training runs the true forward every step.</remarks>
-    protected override bool SupportsFusedCompiledTraining => false;
-
-    /// <inheritdoc />
     /// <remarks>The forward is not a fold of <c>Layers</c> (decomposition, attention and the decoder branch off the
     /// list), so the activations are those the forecast actually computes.</remarks>
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
@@ -230,11 +225,11 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
 
     protected override Tensor<T> PredictCore(Tensor<T> input) => Forecast(input);
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode)
             throw new InvalidOperationException("Training is only supported in native mode.");
-        base.Train(input, expectedOutput);
+        return false;   // the base class's standard step
     }
 
     public override ModelMetadata<T> GetModelMetadata()

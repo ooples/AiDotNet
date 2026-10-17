@@ -121,7 +121,7 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
             RegisterParameterComponent($"deepar.layer{i}", _layers[i]);
     }
 
-    private Random InferenceRandom() => RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
+    private static Random InferenceRandom() => DeepARNetwork<T>.ForecastRandom();
 
     // The network covariates of series index `index` (the age, then the caller's row, standardized).
     private void FillCovariates(double[,,] target, int row, int step, int index, Func<int, double>? userCovariate)
@@ -192,30 +192,30 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
                 if (timeBounded && TrainingCancellationToken.IsCancellationRequested) break;
                 TrainingCancellationToken.ThrowIfCancellationRequested();
                 int batch = Math.Min(_options.BatchSize, windows - start);
-                var window = new double[batch, steps + 1];
-                var covariates = Covariates > 0 ? new double[batch, steps, Covariates] : null;
+                // One step's data [B, T + 1, 1 + C]: channel 0 is the window z₀ … z_T, the others the covariates of
+                // z₁ … z_T (row 0 unused). Packed so the shared step rebinds all of it on every compiled replay.
+                var covariates = Covariates > 0 ? new double[1, steps, Covariates] : null;
+                var data = new Tensor<T>(new[] { batch, steps + 1, 1 + Covariates });
                 for (int b = 0; b < batch; b++)
                 {
                     int s = order[start + b];
-                    window[b, 0] = s > 0 ? values[s - 1] : 0.0;
+                    data[b, 0, 0] = NumOps.FromDouble(s > 0 ? values[s - 1] : 0.0);
                     for (int t = 0; t < steps; t++)
                     {
-                        window[b, t + 1] = values[s + t];
+                        data[b, t + 1, 0] = NumOps.FromDouble(values[s + t]);
                         if (covariates is not null)
                         {
                             int index = s + t;
-                            FillCovariates(covariates, b, t, index, c => NumOps.ToDouble(x![index, c]));
+                            FillCovariates(covariates, 0, t, index, c => NumOps.ToDouble(x![index, c]));
+                            for (int k = 0; k < Covariates; k++) data[b, t + 1, 1 + k] = NumOps.FromDouble(covariates[0, t, k]);
                         }
                     }
                 }
-                using var tape = new GradientTape<T>();
-                var loss = _network.Loss(window, covariates, conditioning, training: true, _random);
-                var all = tape.ComputeGradients(loss, sources: null);
-                var grads = new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-                foreach (var p in parameters)
-                    if (all.TryGetValue(p, out var g)) grads[p] = g;
-                optimizer.Step(new TapeStepContext<T>(parameters, grads, loss[0]));
-                lossSum += NumOps.ToDouble(loss[0]);
+                // The window's likelihood, the backward and the Adam update: one fused compiled plan when it applies
+                // (CPU or GPU), the eager tape otherwise.
+                T loss = TrainTapeBatch(Array.Empty<ITrainableLayer<T>>(), data, data,
+                    step => WindowLoss(step, conditioning), static (value, _) => value, optimizer, extraParameters: parameters);
+                lossSum += NumOps.ToDouble(loss);
                 batches++;
             }
             if (batches == 0) continue;
@@ -223,6 +223,15 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
             _epochLosses.Add(epochLoss);
             if (!ReportEpoch(epoch, timeBounded ? 0 : _options.Epochs, NumOps.FromDouble(epochLoss))) break;
         }
+    }
+
+    // The mean negative log-likelihood of packed windows [B, T + 1, 1 + C] (see TrainCore).
+    private Tensor<T> WindowLoss(Tensor<T> data, int conditioning)
+    {
+        int batch = data.Shape[0], length = data.Shape[1];
+        var window = Engine.Reshape(Engine.TensorSlice(data, new[] { 0, 0, 0 }, new[] { batch, length, 1 }), new[] { batch, length });
+        var covariates = Covariates > 0 ? Engine.TensorSlice(data, new[] { 0, 1, 1 }, new[] { batch, length - 1, Covariates }) : null;
+        return _network.Loss(window, covariates, conditioning, training: true, _random);
     }
 
     // ------------------------------------------------------------------ forecasting
@@ -301,11 +310,14 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
 
     /// <summary>
     /// Predicts the series: with as many rows as the training series, the median one-step forecast of each observation
-    /// from the values before it; otherwise the medians of the next input.Rows steps after the training series, from
-    /// NumSamples ancestral sample paths (the input values are not used).
+    /// from the values before it; with one column (time steps), the medians of the next input.Rows steps after the
+    /// training series, from NumSamples ancestral sample paths; otherwise each row is a history window and its
+    /// prediction is <see cref="PredictSingle"/> of that row, all rows sampled in one batched pass.
     /// </summary>
     /// <remarks>The first observation has no history; its in-sample prediction is the median one-step forecast from an
-    /// empty conditioning range (z₀ = 0, ν = 1).</remarks>
+    /// empty conditioning range (z₀ = 0, ν = 1). Out of sample, each row draws its NumSamples paths from its own
+    /// generator, seeded as <see cref="PredictSingle"/> seeds one, so the batch returns exactly the per-row
+    /// medians.</remarks>
     public override Vector<T> Predict(Matrix<T> input)
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
@@ -324,9 +336,44 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
                     : NextMedian(new ArraySegment<double>(series, 0, i), i, null, null);
             return predictions;
         }
-        var paths = Paths(series, series.Length, null, null, n);
-        for (int h = 0; h < n; h++)
-            predictions[h] = GuardPrediction(NumOps.FromDouble(Quantile(paths.Select(p => p[h]).OrderBy(v => v).ToArray(), 0.5)));
+        if (input.Columns == 1)
+        {
+            var paths = Paths(series, series.Length, null, null, n);
+            for (int h = 0; h < n; h++)
+                predictions[h] = GuardPrediction(NumOps.FromDouble(Quantile(paths.Select(p => p[h]).OrderBy(v => v).ToArray(), 0.5)));
+            return predictions;
+        }
+        return NextMedians(input);
+    }
+
+    // The median next value after each row of `rows` (a history window per row), sampled for all rows at once: the
+    // batched form of PredictSingle.
+    private Vector<T> NextMedians(Matrix<T> rows)
+    {
+        int count = rows.Rows, width = rows.Columns;
+        var predictions = new Vector<T>(count);
+        if (count == 0) return predictions;
+        int length = Math.Min(_options.LookbackWindow, width);
+        if (length == 0) throw new ArgumentException("DeepAR needs at least one observed value to forecast from.");
+        int first = width - length, end = Math.Max(_trainingSeries.Length, width);
+        var history = new double[count, length + 1];
+        var covariates = Covariates > 0 ? new double[count, length, Covariates] : null;
+        var future = Covariates > 0 ? new double[count, 1, Covariates] : null;
+        var randoms = new Random[count];
+        for (int r = 0; r < count; r++)
+        {
+            history[r, 0] = first > 0 ? NumOps.ToDouble(rows[r, first - 1]) : 0.0;
+            for (int t = 0; t < length; t++)
+            {
+                history[r, t + 1] = NumOps.ToDouble(rows[r, first + t]);
+                if (covariates is not null) FillCovariates(covariates, r, t, end - width + first + t, null);
+            }
+            if (future is not null) FillCovariates(future, r, 0, end, null);
+            randoms[r] = InferenceRandom();
+        }
+        var paths = _network.Sample(history, covariates, future, 1, _options.NumSamples, InferenceRandom(), rowRandoms: randoms);
+        for (int r = 0; r < count; r++)
+            predictions[r] = GuardPrediction(NumOps.FromDouble(Quantile(paths[r].Select(p => p[0]).OrderBy(v => v).ToArray(), 0.5)));
         return predictions;
     }
 

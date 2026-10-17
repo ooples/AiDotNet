@@ -171,7 +171,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         }
     };
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) =>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput) =>
         throw new NotSupportedException(
             $"{GetType().Name}: detection backbones train as part of a parent detector " +
             "(FasterRCNN, YOLOv8, DETR, …) which orchestrates the joint forward/backward pass. " +

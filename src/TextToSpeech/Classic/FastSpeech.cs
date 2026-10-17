@@ -122,9 +122,6 @@ public partial class FastSpeech<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMo
     /// reference implementations (FastSpeech 2 is where mean absolute error is specified).</remarks>
     protected override bool UsesL1MelLoss => false;
 
-    /// <inheritdoc />
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
-
     /// <summary>
     /// Builds the paper's layer stack (Ren et al. 2019, §3, §4.2): phoneme embedding and positions, 6 FFT blocks, the
     /// duration predictor with the length regulator, positions, 6 FFT blocks, and the linear projection to mel.

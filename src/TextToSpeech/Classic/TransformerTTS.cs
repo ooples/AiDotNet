@@ -259,7 +259,7 @@ public partial class TransformerTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITr
     }
 
     /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         ThrowIfDisposed();
         if (IsOnnxMode)
@@ -267,11 +267,12 @@ public partial class TransformerTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITr
         if (!HasPaperLayers)
         {
             TrainWithTape(input, expectedOutput, _optimizer);
-            return;
+            return true;
         }
         var mel = expectedOutput.Rank == 3 ? Engine.Reshape(expectedOutput, new[] { expectedOutput.Shape[1], expectedOutput.Shape[2] }) : expectedOutput;
         var tokens = input.Rank == 2 && input.Shape[0] == 1 ? Engine.Reshape(input, new[] { input.Shape[1] }) : input;
         TrainWithCustomObjective(tokens, mel, Objective, _optimizer);
+        return true;
     }
 
     /// <inheritdoc />

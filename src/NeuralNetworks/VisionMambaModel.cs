@@ -143,7 +143,7 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
 
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         SetTrainingMode(true);
         try
@@ -154,6 +154,7 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
         {
             SetTrainingMode(false);
         }
+        return true;
     }
 
     /// <inheritdoc />

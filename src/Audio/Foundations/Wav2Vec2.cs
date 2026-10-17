@@ -256,7 +256,7 @@ public partial class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMo
     /// </summary>
     /// <param name="input">The waveforms.</param>
     /// <param name="expected">Unused: the objective is self-supervised.</param>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
         if (_network is null || _pretraining is null) throw new InvalidOperationException("The native network is not initialized.");
@@ -272,6 +272,7 @@ public partial class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMo
             return losses.Total;
         }, _optimizer);
         pretraining.AfterUpdate();
+        return true;
     }
 
     TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.SelfSupervised;

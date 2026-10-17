@@ -316,12 +316,13 @@ public partial class W2vBert<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMod
     /// </summary>
     /// <param name="input">The waveforms.</param>
     /// <param name="expected">Unused: the objective is self-supervised.</param>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
         var pretraining = RequirePretraining();
         TrainWithCustomLoss(input, _ => PretrainingLoss(input, training: true, _random), Optimizer());
         pretraining.AfterUpdate();
+        return true;
     }
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> Optimizer()

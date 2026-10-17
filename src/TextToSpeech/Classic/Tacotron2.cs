@@ -367,7 +367,7 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
     /// <inheritdoc />
     /// <remarks>Characters <paramref name="input"/> and their mel spectrogram <paramref name="expectedOutput"/>
     /// <c>[1, frames, mel]</c>: the attention aligns them, so the pair is the whole supervision.</remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         ThrowIfDisposed();
         if (IsOnnxMode)
@@ -376,12 +376,13 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
         if (!HasPaperLayers)
         {
             TrainWithTape(input, expectedOutput, _optimizer);
-            return;
+            return true;
         }
         var target = MelRows(expectedOutput);
         if (target.Shape[0] == 0)
             throw new ArgumentException("expectedOutput has no mel frames.", nameof(expectedOutput));
         TrainWithCustomObjective(input, target, Objective, _optimizer);
+        return true;
     }
 
     /// <inheritdoc />
