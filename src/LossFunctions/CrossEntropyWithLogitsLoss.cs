@@ -110,7 +110,6 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         // layout is channel-first ([B, C, H, W] + [B, H, W]), so infer the
         // class axis from the compact class-index target shape when present.
         int classAxis = ResolveClassAxis(predicted, target);
-        var logSoftmax = ComputeLogSoftmax(predicted, classAxis);
 
         // PyTorch's nn.CrossEntropyLoss accepts BOTH target formats and the
         // PR #1404 blanket CE→CEWithLogits swap brought models that pass
@@ -143,7 +142,8 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
             int classes = predicted.Shape[classAxis];
             int rows = predicted.Length / Math.Max(1, classes);
             var flatTarget = Engine.Reshape(target, [rows]);
-            var picked = Engine.TensorGatherClassValues(Engine.Reshape(logSoftmax, [rows, classes]), flatTarget);
+            var picked = Engine.TensorGatherClassValues(
+                Engine.Reshape(ComputeLogSoftmax(predicted, classAxis), [rows, classes]), flatTarget);
             var pickedTotal = Engine.ReduceSum(picked, new[] { 0 }, keepDims: false);
             var inRange = Engine.TensorMultiply(
                 Engine.TensorGreaterThan(flatTarget, NumOps.FromDouble(-0.5)),
@@ -173,7 +173,9 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         // classes. Averaging over the class axis here would silently divide gradients by the
         // class count, making tape training disagree with the CPU code path (that's the
         // exact bug noted in PR review).
-        var product = Engine.TensorMultiply(target, logSoftmax);
+        // The log-softmax is built only on the paths that read it: the dense path above is one engine op, and a
+        // log-softmax recorded ahead of it ran (and was differentiated) every step for nothing.
+        var product = Engine.TensorMultiply(target, ComputeLogSoftmax(predicted, classAxis));
         var perSample = Engine.ReduceSum(product, new[] { classAxis }, keepDims: false);
 
         // Mean over remaining (batch/sample) axes if any. For 1D inputs (logits was a single
