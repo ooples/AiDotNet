@@ -124,3 +124,36 @@ public sealed class FlattenLayerInvariantTests : LayerTestBase<double>
     protected override bool ExpectsNonZeroGradients => false;
     protected override ILayer<double> CreateLayer() => new FlattenLayer<double>();
 }
+
+// Layers whose forward takes a second tensor: the harness feeds a fixed companion of the given shape and perturbs only
+// the primary input.
+public sealed class ConditionalLayerNormalizationInvariantTests : LayerTestBase<double>
+{
+    // Two sequences of three steps; the conditioning vector is one per sequence.
+    protected override int[] InputShape => [2, 3, 4];
+    protected override int[][] CompanionInputShapes(int[] primaryShape) => [[primaryShape[0], 3]];
+    protected override ILayer<double> CreateLayer() => new ConditionalLayerNormalizationLayer<double>(4, 3);
+}
+
+public sealed class GRUCellInvariantTests : LayerTestBase<double>
+{
+    protected override int[] InputShape => [2, 4];
+    protected override int[][] CompanionInputShapes(int[] primaryShape) => [[primaryShape[0], 3]];
+    protected override ILayer<double> CreateLayer() => new GRUCellLayer<double>(4, 3);
+}
+
+public sealed class LSTMCellInvariantTests : LayerTestBase<double>
+{
+    protected override int[] InputShape => [2, 4];
+    // The state is the hidden and cell state side by side, [B, 2·hidden].
+    protected override int[][] CompanionInputShapes(int[] primaryShape) => [[primaryShape[0], 6]];
+    protected override ILayer<double> CreateLayer() => new LSTMCellLayer<double>(4, 3);
+}
+
+public sealed class PostNormTransformerDecoderBlockInvariantTests : LayerTestBase<double>
+{
+    protected override int[] InputShape => [1, 3, 8];
+    // The encoder memory: five steps of the same width.
+    protected override int[][] CompanionInputShapes(int[] primaryShape) => [[primaryShape[0], 5, 8]];
+    protected override ILayer<double> CreateLayer() => new PostNormTransformerDecoderBlock<double>(8, 2, 16, 0.0);
+}
