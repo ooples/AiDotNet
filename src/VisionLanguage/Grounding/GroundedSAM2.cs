@@ -1,49 +1,50 @@
+using AiDotNet.ComputerVision.Segmentation.Foundation;
+using AiDotNet.Enums;
 using AiDotNet.Attributes;
-using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
-using AiDotNet.Tokenization;
-using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.VisionLanguage.Interfaces;
 
 namespace AiDotNet.VisionLanguage.Grounding;
 
+/// <summary>One region a caption names, with its SAM 2 mask.</summary>
+/// <param name="Detection">Grounding DINO's box, score and phrase.</param>
+/// <param name="Mask">The mask <c>[H, W]</c> at the image's size: 1 inside, 0 outside.</param>
+/// <param name="MaskScore">SAM 2's predicted IoU for the mask.</param>
+public sealed record GroundedSegment<T>(GroundingDetection Detection, Tensor<T> Mask, double MaskScore);
+
 /// <summary>
-/// Grounded-SAM 2: combines Grounding DINO with SAM 2 for grounded segmentation and tracking.
+/// Grounded SAM 2: Grounding DINO finds the boxes a caption names, and SAM 2 segments each box.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// Grounded-SAM 2 (Ren et al., 2024) combines Grounding DINO for text-conditioned object
-/// detection with SAM 2 for high-quality mask generation and video object tracking. The two-stage
-/// pipeline uses Grounding DINO's cross-modal DETR for bounding box detection, then SAM 2's
-/// memory-augmented mask decoder for segmentation. SAM 2 also enables video object tracking
-/// via memory attention across frames, supporting grounded tracking in videos.
+/// Grounded SAM (Ren et al., 2024) assembles open-world models rather than training a new one: an open-set detector turns
+/// text into boxes, and a promptable segmenter turns each box into a mask. Grounded SAM 2 (IDEA-Research/Grounded-SAM-2)
+/// pairs Grounding DINO with SAM 2. As the official demo runs them: Grounding DINO predicts with box and text thresholds
+/// 0.35 and 0.25; its boxes, scaled to pixels, prompt SAM 2's image predictor (the image resized to 1024, single-mask
+/// output); and the masks are SAM 2's logits resized to the image and thresholded at 0.
+/// </para>
+/// <para>
+/// Both networks are the official ones (each checked against Hugging Face's port). The paper trains neither; the
+/// detector's own objective trains it here (<see cref="TrainGrounding"/>), and SAM 2 is used as loaded.
 /// </para>
 /// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "Grounded SAM: Assembling Open-World Models for Diverse Visual Tasks" (IDEA, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Grounded-SAM 2 is a vision-language model that combines text-based
-/// object detection with high-quality segmentation and video tracking. Default values follow
-/// the original paper settings.</para>
+/// <list type="bullet"><item>Paper: "Grounded SAM: Assembling Open-World Models for Diverse Visual Tasks" (Ren et al., 2024)</item></list></para>
+/// <para><b>For Beginners:</b> Describe what you want ("cat . remote control .") and Grounded SAM 2 returns a box and a
+/// pixel mask for each match.</para>
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Grounded-SAM 2 model for grounded segmentation and tracking
-/// // combining Grounding DINO detection with SAM 2 mask generation
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.TwoDimensional,
-///     taskType: NeuralNetworkTaskType.ImageClassification,
-///     inputHeight: 224, inputWidth: 224, inputDepth: 3, outputSize: 512);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new GroundedSAM2&lt;double&gt;(architecture, "groundedsam2.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new GroundedSAM2&lt;double&gt;(architecture, new GroundedSAM2Options());
+///     inputType: InputType.ThreeDimensional,
+///     taskType: NeuralNetworkTaskType.ImageSegmentation,
+///     inputHeight: 1024, inputWidth: 1024, inputDepth: 3, outputSize: 256);
+/// var model = new GroundedSAM2&lt;double&gt;(architecture, new GroundedSAM2Options());
+/// var segments = model.Segment(image, "cat . remote control .");
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Vision)]
@@ -52,7 +53,6 @@ namespace AiDotNet.VisionLanguage.Grounding;
 [ModelCategory(ModelCategory.FoundationModel)]
 [ModelTask(ModelTask.Detection)]
 [ModelTask(ModelTask.Segmentation)]
-[ModelTask(ModelTask.Tracking)]
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
@@ -61,39 +61,28 @@ namespace AiDotNet.VisionLanguage.Grounding;
     Year = 2024,
     Authors = "Ren et al."
 )]
-public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 1e-4, WeightDecay = 1e-4,
+                MaxGradientNorm = 0.1,
+                Source = "Grounded SAM assembles pretrained models and trains neither. The detector trains with "
+                        + "Grounding DINO's recipe (Liu et al. 2023, hyperparameter table): AdamW with a learning rate "
+                        + "of 1e-4, a weight decay of 0.0001 and a clip max norm of 0.1.")]
+public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGroundingModel<T>, IGroundingTrainable<T>
 {
     private readonly GroundedSAM2Options _options;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _disposed;
+    private GroundingDinoDetector<T>? _detector;
+    private Sam2Network<T>? _segmenter;
 
     public override ModelOptions GetOptions() => _options;
 
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private readonly ITokenizer? _tokenizer;
-    private bool _useNativeMode;
-    private bool _disposed;
-    private int _encoderLayerEnd;
+    private GroundingDinoDetector<T> Detector => _detector ?? throw new InvalidOperationException("The networks are not initialized.");
 
-    public GroundedSAM2(
-        NeuralNetworkArchitecture<T> architecture,
-        string modelPath,
-        GroundedSAM2Options? options = null
-    )
-        : base(architecture)
-    {
-        _options = options ?? new GroundedSAM2Options();
-        _useNativeMode = false;
-        base.ImageSize = _options.ImageSize;
-        base.ImageChannels = 3;
-        base.EmbeddingDim = _options.DecoderDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
-        InitializeLayers();
-    }
+    /// <summary>The SAM 2 network.</summary>
+    internal Sam2Network<T> Segmenter => _segmenter ?? throw new InvalidOperationException("The networks are not initialized.");
+
+    /// <summary>The Grounding DINO network.</summary>
+    internal GroundingDinoNetwork<T> DetectorNetwork => Detector.Network;
 
     public GroundedSAM2(
         NeuralNetworkArchitecture<T> architecture,
@@ -103,351 +92,243 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
         : base(architecture)
     {
         _options = options ?? new GroundedSAM2Options();
-        _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        base.ImageSize = _options.ImageSize;
+        _optimizer = optimizer
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? throw new InvalidOperationException("Grounded SAM 2 declares its detector's recipe.");
+        base.ImageSize = _options.SamImageSize;
         base.ImageChannels = 3;
-        base.EmbeddingDim = _options.DecoderDim;
-        _tokenizer = ClipTokenizerFactory.CreateSimple(vocabSize: _options.VocabSize);
+        base.EmbeddingDim = _options.SamDim;
         InitializeLayers();
     }
 
-    public int EmbeddingDimension => _options.DecoderDim;
-    int IVisualEncoder<T>.ImageSize => _options.ImageSize;
+    /// <summary>The channels of SAM 2's image embedding, which <see cref="EncodeImage"/> returns.</summary>
+    public int EmbeddingDimension => _options.SamDim;
+    int IVisualEncoder<T>.ImageSize => _options.SamImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
-    public int MaxDetections => _options.MaxDetections;
 
-    public Tensor<T> EncodeImage(Tensor<T> image)
+    /// <summary>The most detections <see cref="GroundText"/> returns (the highest scoring ones).</summary>
+    public int MaxDetections => _options.Detector.MaxDetections;
+
+    /// <summary>The SAM 2 configuration the options describe.</summary>
+    private Sam2Configuration SegmenterConfiguration() => new()
     {
-        ThrowIfDisposed();
-        var p = PreprocessImage(image);
-        if (IsOnnxMode && OnnxModel is not null)
-            return L2Normalize(OnnxModel.Run(p));
-        var c = p;
-        for (int i = 0; i < _encoderLayerEnd; i++)
-            c = Layers[i].Forward(c);
-        return L2Normalize(c);
-    }
-
-    /// <summary>
-    /// Grounds text using a two-stage pipeline: Grounding DINO for detection + SAM2 for masks.
-    /// Per the paper (Ren et al., IDEA 2024), Grounded-SAM 2 is a modular pipeline:
-    /// Stage 1: Grounding DINO produces text-conditioned bounding box detections with
-    /// cross-modal DETR. Stage 2: SAM 2's image encoder + prompt encoder take each
-    /// detected box as a prompt, and the mask decoder generates high-quality segmentation
-    /// masks. SAM 2 also enables video object tracking via memory attention across frames.
-    /// The output includes refined bounding boxes derived from tight mask boundaries.
-    /// Output format: [x1, y1, x2, y2, confidence] per detection.
-    /// </summary>
-    public Tensor<T> GroundText(Tensor<T> image, string textQuery)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(PreprocessImage(image));
-
-        var p = PreprocessImage(image);
-        int dim = _options.DecoderDim;
-        double confThreshold = _options.ConfidenceThreshold;
-        double nmsThreshold = _options.NmsThreshold;
-
-        // ===== Stage 1: Grounding DINO detection =====
-        var visualFeatures = p;
-        for (int i = 0; i < _encoderLayerEnd; i++)
-            visualFeatures = Layers[i].Forward(visualFeatures);
-
-        int visDim = visualFeatures.Length;
-
-        // Text-conditioned feature fusion via ConcatenateTensors
-        var textTokens = TokenizeText(textQuery);
-        var fusedInput = visualFeatures.ConcatenateTensors(textTokens);
-
-        // Decoder for box proposals
-        var decoderOut = fusedInput;
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++)
-            decoderOut = Layers[i].Forward(decoderOut);
-
-        int outDim = decoderOut.Length;
-        int maxDet = _options.MaxDetections;
-        int fieldsPerDet = 5;
-        var stage1Boxes = new double[maxDet, fieldsPerDet];
-        int stage1Count = 0;
-
-        int numQueries = Math.Min(maxDet, outDim);
-        for (int q = 0; q < numQueries; q++)
-        {
-            int blockSize = Math.Max(1, outDim / numQueries);
-            int start = q * blockSize;
-            int end = Math.Min(start + blockSize, outDim);
-            int span = end - start;
-
-            double cx = 0,
-                cy = 0,
-                w = 0,
-                h = 0,
-                conf = 0;
-            for (int d = start; d < end; d++)
-            {
-                double val = NumOps.ToDouble(decoderOut[d]);
-                int localIdx = d - start;
-                if (localIdx < span / 4)
-                    cx += val;
-                else if (localIdx < span / 2)
-                    cy += val;
-                else if (localIdx < 3 * span / 4)
-                    w += val;
-                else
-                    h += val;
-                conf += val * val;
-            }
-
-            cx = 1.0 / (1.0 + Math.Exp(-cx / Math.Max(1, span / 4)));
-            cy = 1.0 / (1.0 + Math.Exp(-cy / Math.Max(1, span / 4)));
-            w = 1.0 / (1.0 + Math.Exp(-w / Math.Max(1, span / 4)));
-            h = 1.0 / (1.0 + Math.Exp(-h / Math.Max(1, span / 4)));
-            conf = 1.0 / (1.0 + Math.Exp(-Math.Sqrt(conf / Math.Max(1, span)) + 1.0));
-
-            double x1 = Math.Max(0, cx - w / 2);
-            double y1 = Math.Max(0, cy - h / 2);
-            double x2 = Math.Min(1, cx + w / 2);
-            double y2 = Math.Min(1, cy + h / 2);
-
-            if (conf >= confThreshold * 0.5 && x2 > x1 && y2 > y1)
-            {
-                stage1Boxes[stage1Count, 0] = x1;
-                stage1Boxes[stage1Count, 1] = y1;
-                stage1Boxes[stage1Count, 2] = x2;
-                stage1Boxes[stage1Count, 3] = y2;
-                stage1Boxes[stage1Count, 4] = conf;
-                stage1Count++;
-                if (stage1Count >= maxDet)
-                    break;
-            }
-        }
-
-        // ===== Stage 2: SAM2 mask refinement =====
-        // For each Stage 1 box, SAM2 refines the mask and tightens the bbox
-        var refinedDetections = new double[stage1Count, fieldsPerDet];
-        int refinedCount = 0;
-
-        for (int b = 0; b < stage1Count; b++)
-        {
-            double bx1 = stage1Boxes[b, 0],
-                by1 = stage1Boxes[b, 1];
-            double bx2 = stage1Boxes[b, 2],
-                by2 = stage1Boxes[b, 3];
-            double bConf = stage1Boxes[b, 4];
-
-            // SAM2 prompt encoder: encode box prompt as spatial embeddings
-            double boxCenterX = (bx1 + bx2) / 2.0;
-            double boxCenterY = (by1 + by2) / 2.0;
-            double boxWidth = bx2 - bx1;
-            double boxHeight = by2 - by1;
-
-            // SAM2 mask decoder: generate mask logits within the box region
-            // Simulate mask refinement by adjusting box boundaries based on feature density
-            double refinedX1 = bx1,
-                refinedY1 = by1,
-                refinedX2 = bx2,
-                refinedY2 = by2;
-            double maskQuality = 0;
-            int maskSamples = 0;
-
-            // Sample visual features within the box to estimate mask coverage
-            int sampleGrid = 4;
-            for (int sy = 0; sy < sampleGrid; sy++)
-            {
-                for (int sx = 0; sx < sampleGrid; sx++)
-                {
-                    double sampX = bx1 + (sx + 0.5) / sampleGrid * boxWidth;
-                    double sampY = by1 + (sy + 0.5) / sampleGrid * boxHeight;
-                    int featIdx = (int)((sampY * visDim * 0.5 + sampX * visDim * 0.5)) % visDim;
-                    double featVal = NumOps.ToDouble(visualFeatures[Math.Abs(featIdx)]);
-
-                    // Distance from box center: SAM2 uses point features
-                    double distFromCenter = Math.Sqrt(
-                        Math.Pow(sampX - boxCenterX, 2) + Math.Pow(sampY - boxCenterY, 2)
-                    );
-                    double maskProb = 1.0 / (1.0 + Math.Exp(-(featVal - distFromCenter * 2)));
-
-                    if (maskProb > 0.5)
-                    {
-                        maskQuality += maskProb;
-                        maskSamples++;
-                    }
-                }
-            }
-
-            // Refine box based on mask (tighten to mask extent)
-            double shrinkFactor = maskSamples > 0 ? 0.95 : 1.0;
-            refinedX1 = boxCenterX - boxWidth / 2.0 * shrinkFactor;
-            refinedY1 = boxCenterY - boxHeight / 2.0 * shrinkFactor;
-            refinedX2 = boxCenterX + boxWidth / 2.0 * shrinkFactor;
-            refinedY2 = boxCenterY + boxHeight / 2.0 * shrinkFactor;
-
-            double refinedConf =
-                maskSamples > 0 ? bConf * (maskQuality / maskSamples) : bConf * 0.5;
-
-            refinedX1 = Math.Max(0, refinedX1);
-            refinedY1 = Math.Max(0, refinedY1);
-            refinedX2 = Math.Min(1, refinedX2);
-            refinedY2 = Math.Min(1, refinedY2);
-
-            if (refinedConf >= confThreshold && refinedX2 > refinedX1 && refinedY2 > refinedY1)
-            {
-                refinedDetections[refinedCount, 0] = refinedX1;
-                refinedDetections[refinedCount, 1] = refinedY1;
-                refinedDetections[refinedCount, 2] = refinedX2;
-                refinedDetections[refinedCount, 3] = refinedY2;
-                refinedDetections[refinedCount, 4] = refinedConf;
-                refinedCount++;
-            }
-        }
-
-        // NMS on refined detections
-        var kept = new bool[refinedCount];
-        for (int i = 0; i < refinedCount; i++)
-            kept[i] = true;
-        for (int i = 0; i < refinedCount; i++)
-        {
-            if (!kept[i])
-                continue;
-            for (int j = i + 1; j < refinedCount; j++)
-            {
-                if (!kept[j])
-                    continue;
-                double iou = ComputeIoU(
-                    refinedDetections[i, 0],
-                    refinedDetections[i, 1],
-                    refinedDetections[i, 2],
-                    refinedDetections[i, 3],
-                    refinedDetections[j, 0],
-                    refinedDetections[j, 1],
-                    refinedDetections[j, 2],
-                    refinedDetections[j, 3]
-                );
-                if (iou > nmsThreshold)
-                    kept[j] = false;
-            }
-        }
-
-        int finalCount = 0;
-        for (int i = 0; i < refinedCount; i++)
-            if (kept[i])
-                finalCount++;
-        if (finalCount == 0)
-            return new Tensor<T>([fieldsPerDet]);
-
-        var result = new Tensor<T>([finalCount * fieldsPerDet]);
-        int idx = 0;
-        for (int i = 0; i < refinedCount; i++)
-        {
-            if (!kept[i])
-                continue;
-            for (int f = 0; f < fieldsPerDet; f++)
-                result[idx * fieldsPerDet + f] = NumOps.FromDouble(refinedDetections[i, f]);
-            idx++;
-        }
-        return result;
-    }
-
-    public Tensor<T> DetectObjects(Tensor<T> image, IReadOnlyList<string> categories)
-    {
-        ThrowIfDisposed();
-        string combined = string.Join(". ", categories) + ".";
-        return GroundText(image, combined);
-    }
-
-    private static double ComputeIoU(
-        double x1a,
-        double y1a,
-        double x2a,
-        double y2a,
-        double x1b,
-        double y1b,
-        double x2b,
-        double y2b
-    )
-    {
-        double ix1 = Math.Max(x1a, x1b),
-            iy1 = Math.Max(y1a, y1b);
-        double ix2 = Math.Min(x2a, x2b),
-            iy2 = Math.Min(y2a, y2b);
-        double iw = Math.Max(0, ix2 - ix1),
-            ih = Math.Max(0, iy2 - iy1);
-        double inter = iw * ih;
-        double areaA = (x2a - x1a) * (y2a - y1a);
-        double areaB = (x2b - x1b) * (y2b - y1b);
-        double union = areaA + areaB - inter;
-        return union > 1e-8 ? inter / union : 0;
-    }
+        ImageSize = _options.SamImageSize, BlocksPerStage = (int[])_options.SamBlocksPerStage.Clone(),
+        EmbedDims = (int[])_options.SamEmbedDims.Clone(), HeadsPerStage = (int[])_options.SamHeadsPerStage.Clone(),
+        WindowSizes = (int[])_options.SamWindowSizes.Clone(), GlobalAttentionBlocks = (int[])_options.SamGlobalAttentionBlocks.Clone(),
+        Dim = _options.SamDim, MaskInChannels = _options.SamMaskInChannels, DecoderHeads = _options.SamDecoderHeads,
+        DecoderMlp = _options.SamDecoderMlpDim, IouHidden = _options.SamIouHiddenDim,
+    };
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            _encoderLayerEnd = Layers.Count / 2;
-        }
-        else
-        {
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultGroundingDetectionLayers(
-                    _options.VisionDim,
-                    768,
-                    _options.VisionDim,
-                    256,
-                    _options.NumVisionLayers,
-                    6,
-                    6,
-                    _options.NumHeads,
-                    _options.DropoutRate
-                )
-            );
-            ComputeEncoderDecoderBoundary();
-        }
+        if (_options is null || _detector is not null) return;
+        if (Architecture.Layers is { Count: > 0 })
+            throw new NotSupportedException("Grounded SAM 2 builds Grounding DINO and SAM 2; custom layers are not supported.");
+        int seed = _options.Seed ?? 42;
+        var layers = new List<LayerBase<T>>();
+        _detector = new GroundingDinoDetector<T>(Engine, layers, _options.Detector, _options.Detector.Seed ?? seed);
+        _segmenter = new Sam2Network<T>(Engine, layers, SegmenterConfiguration());
+        _segmenter.InitializeLikeReference(Tensors.Helpers.RandomHelper.CreateSeededRandom(seed + 2));
+        Layers.AddRange(layers);
     }
 
-    private void ComputeEncoderDecoderBoundary()
+    /// <summary>Loads an official Grounding DINO checkpoint's state dict (Hugging Face names).</summary>
+    internal void LoadDetectorWeights(Func<string, int[], double[]> read) => Detector.Network.LoadTorchWeights(read);
+
+    /// <summary>Loads an official SAM 2 checkpoint's state dict (Hugging Face names).</summary>
+    internal void LoadSegmenterWeights(Func<string, int[], double[]> read) => Segmenter.LoadTorchWeights(read);
+
+    /// <inheritdoc />
+    public override void SetTrainingMode(bool isTraining)
     {
-        // Each vision block is one residual TransformerEncoderLayer (+ an optional DropoutLayer);
-        // the encoder prefix is the linear input projection (patch-embedding stand-in) and the
-        // trailing prefix is the final encoder LayerNorm — 2 non-block layers total.
-        int lpb = _options.DropoutRate > 0 ? 2 : 1;
-        _encoderLayerEnd = 2 + _options.NumVisionLayers * lpb;
+        base.SetTrainingMode(isTraining);
+        if (_detector is not null) _detector.Network.Training = isTraining;
     }
 
-    private Tensor<T> TokenizeText(string text)
+    /// <summary>Images in 0..1 resized to SAM 2's input side (bilinear with antialiasing, as torchvision's Resize) and
+    /// normalized by the ImageNet mean and deviation.</summary>
+    private Tensor<T> SegmenterInput(Tensor<T> images)
     {
-        if (_tokenizer is null)
-            throw new InvalidOperationException("Tokenizer not initialized.");
-        var encoding = _tokenizer.Encode(text);
-        int seqLen = Math.Min(encoding.TokenIds.Count, _options.MaxSequenceLength);
-        var tokens = new Tensor<T>([seqLen]);
-        for (int i = 0; i < seqLen; i++)
-            tokens[i] = NumOps.FromDouble(encoding.TokenIds[i]);
-        return tokens;
+        int side = _options.SamImageSize;
+        if (images.Shape[2] != side || images.Shape[3] != side)
+            images = ComputerVision.Segmentation.SpatialResampling.ResizeAntialias(Engine, images, side, side);
+        return Segmenter.Normalize(images);
     }
 
-    protected override Tensor<T> PredictCore(Tensor<T> input)
+    /// <summary>
+    /// SAM 2's image embedding <c>[SamDim, g, g]</c> (or <c>[B, SamDim, g, g]</c>), g = SamImageSize / 16, of images in
+    /// 0..1 resized to SamImageSize.
+    /// </summary>
+    public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+        var (embedding, _, _) = Segmenter.EncodeImage(SegmenterInput(GroundingDinoDetector<T>.Batched(Engine, image)));
+        return image.Rank == 3 ? Engine.Reshape(embedding, embedding.Shape.ToArray().Skip(1).ToArray()) : embedding;
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input) => EncodeImage(input);
+
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => EncodeImage(input);
+
+    /// <summary>Grounding DINO's detections of the caption's phrases (the official <c>predict</c>).</summary>
+    /// <param name="image">One RGB image <c>[3, H, W]</c> with values in 0..1.</param>
+    /// <param name="caption">Period-separated phrases, such as "cat . remote control .".</param>
+    public IReadOnlyList<GroundingDetection> Ground(Tensor<T> image, string caption)
+    {
+        ThrowIfDisposed();
+        return Detector.Ground(GroundingDinoDetector<T>.Batched(Engine, image), caption);
+    }
+
+    /// <summary>
+    /// The official demo: Grounding DINO's detections of the caption's phrases, each box (in pixels) prompting SAM 2
+    /// for a single mask, resized to the image and thresholded at <see cref="GroundedSAM2Options.MaskThreshold"/>.
+    /// </summary>
+    /// <param name="image">One RGB image <c>[3, H, W]</c> with values in 0..1.</param>
+    /// <param name="caption">Period-separated phrases, such as "cat . remote control .".</param>
+    public IReadOnlyList<GroundedSegment<T>> Segment(Tensor<T> image, string caption)
+    {
+        ThrowIfDisposed();
+        var batch = GroundingDinoDetector<T>.Batched(Engine, image);
+        var detections = Detector.Strongest(Detector.Ground(batch, caption));
+        var segments = new List<GroundedSegment<T>>();
+        if (detections.Count == 0) return segments;
+        int height = batch.Shape[2], width = batch.Shape[3], side = _options.SamImageSize;
+        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
+        var (embedding, s0, s1) = Segmenter.EncodeImage(SegmenterInput(batch));
+        var positional = Segmenter.DensePositional();
+        foreach (var d in detections)
+        {
+            // The predictor's transform_boxes: pixel corners scaled to the resized image.
+            var box = new Tensor<T>(new[] { 1, 4 }, new Vector<T>(new[]
+            {
+                NumOps.FromDouble(d.X1 * side), NumOps.FromDouble(d.Y1 * side), NumOps.FromDouble(d.X2 * side), NumOps.FromDouble(d.Y2 * side),
+            }));
+            var (sparse, dense) = Segmenter.EncodePrompts(null, null, box, null);
+            var (logits, iou, _) = Segmenter.DecodeMasks(embedding, s0, s1, positional, sparse, dense, false);
+            var full = Segmenter.Postprocess(logits, height, width);
+            var mask = new Tensor<T>(new[] { height, width });
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                    mask[y, x] = NumOps.ToDouble(full[0, 0, y, x]) > _options.MaskThreshold ? NumOps.One : NumOps.Zero;
+            segments.Add(new GroundedSegment<T>(d, mask, NumOps.ToDouble(iou[0, 0])));
+        }
+        return segments;
+    }
+
+    /// <summary>
+    /// Segments the named classes: the class names joined into one caption ("a. b", as <c>predict_with_classes</c>), each
+    /// detection's class the first name its phrase contains, and per class the union of its detections' masks
+    /// <c>[classes, H, W]</c> and its best detection score (0 when none). The semantic map holds, per pixel, the class of
+    /// the highest-scoring mask covering it, or -1.
+    /// </summary>
+    public OpenVocabSegmentationResult<T> SegmentWithText(Tensor<T> image, IReadOnlyList<string> classNames)
+    {
+        if (classNames is null || classNames.Count == 0) throw new ArgumentException("Name at least one class.", nameof(classNames));
+        var segments = Segment(image, string.Join(". ", classNames));
+        return Combine(image, segments, classNames.ToArray(), s => GroundingDinoPrompt.ClassOf(s.Detection.Phrase, classNames));
+    }
+
+    /// <summary>Segments what one prompt describes: the union of every detection's mask, as one class.</summary>
+    public OpenVocabSegmentationResult<T> SegmentWithPrompt(Tensor<T> image, string prompt)
+        => Combine(image, Segment(image, prompt), new[] { prompt }, _ => 0);
+
+    private OpenVocabSegmentationResult<T> Combine(Tensor<T> image, IReadOnlyList<GroundedSegment<T>> segments, string[] classes,
+        Func<GroundedSegment<T>, int> classOf)
+    {
+        var batch = GroundingDinoDetector<T>.Batched(Engine, image);
+        int height = batch.Shape[2], width = batch.Shape[3];
+        var masks = new Tensor<T>(new[] { classes.Length, height, width });
+        var scores = new double[classes.Length];
+        var semantic = new Tensor<T>(new[] { height, width });
+        var best = new double[height, width];
+        for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
+            {
+                semantic[y, x] = NumOps.FromDouble(-1);
+                best[y, x] = double.NegativeInfinity;
+            }
+        foreach (var s in segments)
+        {
+            int c = classOf(s);
+            if (c < 0) continue;
+            scores[c] = Math.Max(scores[c], s.Detection.Score);
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                {
+                    if (NumOps.ToDouble(s.Mask[y, x]) == 0) continue;
+                    masks[c, y, x] = NumOps.One;
+                    if (s.Detection.Score > best[y, x])
+                    {
+                        best[y, x] = s.Detection.Score;
+                        semantic[y, x] = NumOps.FromDouble(c);
+                    }
+                }
+        }
+        return new OpenVocabSegmentationResult<T> { Masks = masks, ClassNames = classes, Scores = scores, SemanticMap = semantic };
+    }
+
+    /// <summary>
+    /// <see cref="Ground"/> as a tensor <c>[n, 5]</c> of (x1, y1, x2, y2, score) rows, the highest-scoring
+    /// <see cref="MaxDetections"/> in query order.
+    /// </summary>
+    public Tensor<T> GroundText(Tensor<T> image, string textQuery)
+        => GroundingRows<T>.Boxes(Detector.Strongest(Ground(image, textQuery)));
+
+    /// <summary>
+    /// The official <c>predict_with_classes</c>: the categories joined as "a. b" into one caption, and each detection's
+    /// class the first category its phrase contains (-1 when none does). Rows <c>[n, 6]</c> of (x1, y1, x2, y2, class,
+    /// score).
+    /// </summary>
+    public Tensor<T> DetectObjects(Tensor<T> image, IReadOnlyList<string> categories)
+    {
+        if (categories is null || categories.Count == 0) throw new ArgumentException("Name at least one category.", nameof(categories));
+        return GroundingRows<T>.Classified(Detector.Strongest(Ground(image, string.Join(". ", categories))), categories);
+    }
+
+    /// <summary>
+    /// One training step of the detector on an image, its caption and the boxes its phrases name, with Grounding DINO's
+    /// loss. SAM 2 is not trained: Grounded SAM uses it as released.
+    /// </summary>
+    /// <param name="image">One RGB image <c>[3, H, W]</c> with values in 0..1.</param>
+    /// <param name="caption">Period-separated phrases, such as "cat . remote control .".</param>
+    /// <param name="boxes">The boxes, each naming one of the caption's phrases.</param>
+    public void TrainGrounding(Tensor<T> image, string caption, IReadOnlyList<GroundingBox> boxes)
+    {
+        ThrowIfDisposed();
+        var batch = GroundingDinoDetector<T>.Batched(Engine, image);
+        var (prompt, target) = GroundingDinoDetector<T>.Supervision(caption, boxes);
+        TrainWithCustomObjective(batch, batch, (x, _) => Detector.Loss(x, prompt, target), _optimizer);
+    }
+
+    /// <summary>The detector's loss on an image, its caption and boxes, without training (dropout off).</summary>
+    public T EvaluateGroundingLoss(Tensor<T> image, string caption, IReadOnlyList<GroundingBox> boxes)
+    {
+        ThrowIfDisposed();
+        var batch = GroundingDinoDetector<T>.Batched(Engine, image);
+        var (prompt, target) = GroundingDinoDetector<T>.Supervision(caption, boxes);
+        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
+        return Detector.Loss(batch, prompt, target)[0];
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
-    protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
-        NormalizeImage(image, _options.ImageMean, _options.ImageStd);
+    /// <remarks>Grounded SAM 2's detector trains on grounded phrases, which a tensor target cannot carry, so
+    /// <c>Train(input, target)</c> throws <see cref="NotSupportedException"/>: use <see cref="TrainGrounding"/>.</remarks>
+    protected override string? TrainingUnavailableReason =>
+        "Grounded SAM 2 trains its detector on an image, a caption and the boxes its phrases name: use TrainGrounding(image, caption, boxes).";
+
+    /// <inheritdoc />
+    /// <remarks>Every layer is sized at construction and <see cref="NeuralNetworkBase{T}.Layers"/> is not a chain.</remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+    }
+
+    /// <inheritdoc />
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input) => ObservedLayerActivations(input);
+
+    protected override bool SupportsParameterMutation => true;
+
+    /// <summary>SAM 2's preprocessing: images in 0..1 resized to SamImageSize and normalized.</summary>
+    protected override Tensor<T> PreprocessImage(Tensor<T> image) => SegmenterInput(GroundingDinoDetector<T>.Batched(Engine, image));
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
@@ -455,21 +336,15 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
     {
         var m = new ModelMetadata<T>
         {
-            Name = _useNativeMode ? "GroundedSAM2-Native" : "GroundedSAM2-ONNX",
-            Description =
-                "Grounded-SAM 2: combines Grounding DINO with SAM 2 for grounded segmentation and tracking.",
-            FeatureCount = _options.DecoderDim,
-            Complexity = _options.NumVisionLayers + _options.NumDecoderLayers,
+            Name = "GroundedSAM2",
+            Description = "Grounded SAM 2 (Ren et al., 2024): Grounding DINO boxes segmented by SAM 2.",
+            FeatureCount = _options.SamDim,
+            Complexity = _options.Detector.NumVisionLayers + _options.Detector.NumDecoderLayers + _options.SamBlocksPerStage.Sum(),
         };
         m.AdditionalInfo["Architecture"] = "GroundedSAM2";
-        m.AdditionalInfo["Segmentation"] = _options.EnableSegmentation.ToString();
-        m.AdditionalInfo["Tracking"] = _options.EnableTracking.ToString();
+        m.AdditionalInfo["SamImageSize"] = _options.SamImageSize.ToString();
         return m;
     }
-
-
-
-
 
     private void ThrowIfDisposed()
     {

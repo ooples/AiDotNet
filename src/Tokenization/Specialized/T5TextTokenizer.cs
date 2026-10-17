@@ -14,15 +14,15 @@ namespace AiDotNet.Tokenization.Specialized;
 /// </remarks>
 public sealed class T5TextTokenizer
 {
-    private static readonly Lazy<SentencePieceUnigramModel> T5Base = new(() =>
+    private static readonly Lazy<SentencePieceModel> T5Base = new(() =>
     {
         const string name = "AiDotNet.Tokenization.t5_spiece.model.gz";
         using var stream = typeof(T5TextTokenizer).Assembly.GetManifestResourceStream(name)
             ?? throw new InvalidDataException($"The embedded resource {name} is missing.");
-        return SentencePieceUnigramModel.FromGzip(stream);
+        return SentencePieceModel.FromGzip(stream);
     });
 
-    private readonly SentencePieceUnigramModel _model;
+    private readonly SentencePieceModel _model;
 
     /// <summary>The tokenizer of t5-base (shared by t5-small, t5-large and the T5 v1.0 checkpoints).</summary>
     public T5TextTokenizer()
@@ -31,7 +31,7 @@ public sealed class T5TextTokenizer
     }
 
     /// <summary>A T5 tokenizer over another SentencePiece model with T5's special ids.</summary>
-    public T5TextTokenizer(SentencePieceUnigramModel model)
+    public T5TextTokenizer(SentencePieceModel model)
     {
         _model = model ?? throw new ArgumentNullException(nameof(model));
     }

@@ -235,6 +235,33 @@ internal sealed partial class Sam2Network<T>
         return _engine.TensorMultiply(_engine.TensorSubtract(images, _engine.TensorBroadcastTo(mean, shape)), _engine.TensorBroadcastTo(inverse, shape));
     }
 
+    /// <summary>
+    /// The reference initialization (Hugging Face <c>Sam2PreTrainedModel._init_weights</c>): linear and convolution
+    /// weights and embeddings N(0, 0.02²) with zero biases, layer norms unit, the Hiera position embeddings zero, and the
+    /// prompt encoder's random Fourier matrix N(0, 1) (scale 1), shared with the image positional encoding.
+    /// </summary>
+    public void InitializeLikeReference(Random random)
+    {
+        double Normal() => Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble());
+        double[]? fourier = null;
+        LoadTorchWeights((name, shape) =>
+        {
+            int count = shape.Aggregate(1, (a, s) => a * s);
+            var values = new double[count];
+            if (name.EndsWith("positional_embedding", StringComparison.Ordinal))
+                return (double[])(fourier ??= Enumerable.Range(0, count).Select(_ => Normal()).ToArray()).Clone();
+            if (name.Contains("pos_embed") || name == "no_memory_embedding") return values;
+            bool weight = name.EndsWith(".weight", StringComparison.Ordinal);
+            if (name.Contains("layer_norm"))
+            {
+                if (weight) for (int i = 0; i < count; i++) values[i] = 1.0;
+                return values;
+            }
+            if (weight) for (int i = 0; i < count; i++) values[i] = 0.02 * Normal();
+            return values;
+        });
+    }
+
     /// <summary>Loads a Hugging Face <c>Sam2Model</c> state dict (as converted from the official checkpoints).</summary>
     public void LoadTorchWeights(Func<string, int[], double[]> read)
     {
