@@ -837,20 +837,6 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     }
 
     [Fact(Timeout = 120000)]
-    public async Task GroundedSAM2_MultiStepTrain_DoesNotThrow()
-    {
-        var model = new GroundedSAM2<float>(Arch(), options: new GroundedSAM2Options { NumClasses = 5 });
-        var input = Rand(42, 1, 3, 32, 32);
-        var predicted = model.Predict(input);
-
-        for (int step = 0; step < 3; step++)
-        {
-            var expected = Rand(step + 100, predicted.Shape.ToArray());
-            Assert.Null(Record.Exception(() => model.Train(input, expected)));
-        }
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task MaskAdapter_MultiStepTrain_DoesNotThrow()
     {
         var model = new MaskAdapter<float>(Arch(), options: new MaskAdapterOptions { NumClasses = 5 });

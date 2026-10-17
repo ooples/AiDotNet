@@ -4,9 +4,10 @@ using System.Text;
 namespace AiDotNet.Tokenization.Algorithms;
 
 /// <summary>
-/// A pretrained SentencePiece unigram model read from its <c>.model</c> file (Kudo and Richardson 2018; Kudo 2018):
-/// the normalizer of the model's precompiled character map and the Viterbi segmentation over its pieces' scores, as the
-/// reference library computes them, so a pretrained model sees exactly the ids it was trained on.
+/// A pretrained SentencePiece model read from its <c>.model</c> file (Kudo and Richardson 2018): the normalizer of the
+/// model's precompiled character map, then the unigram model's Viterbi segmentation (Kudo 2018) or the BPE model's
+/// score-ordered merges (Sennrich et al. 2016) with byte fallback, as the reference library computes them, so a
+/// pretrained model sees exactly the ids it was trained on.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -16,10 +17,16 @@ namespace AiDotNet.Tokenization.Algorithms;
 /// candidate replacing an earlier one only when strictly better, an unknown node of one character (score: lowest piece
 /// score − 10) wherever no single-character piece matches, and runs of unknown pieces merged into one.
 /// </para>
-/// <para>Models with user-defined symbols or byte fallback are refused rather than segmented differently from the
-/// reference.</para>
+/// <para>
+/// BPE follows <c>bpe_model.cc</c> <c>Encode</c>: the text split into characters, adjacent pairs whose concatenation is a
+/// piece merged highest score first (the leftmost on ties), unused pieces split back into the pair that formed them, and,
+/// with byte fallback, every unknown character emitted as its UTF-8 bytes' <c>&lt;0xXX&gt;</c> pieces
+/// (<c>sentencepiece_processor.cc</c>).
+/// </para>
+/// <para>Models with user-defined symbols, and unigram models with byte fallback, are refused rather than segmented
+/// differently from the reference.</para>
 /// </remarks>
-public sealed class SentencePieceUnigramModel
+public sealed class SentencePieceModel
 {
     private const string Space = "▁";
     private const double UnknownPenalty = 10.0;
@@ -28,6 +35,7 @@ public sealed class SentencePieceUnigramModel
     private readonly float[] _scores;
     private readonly int[] _types;
     private readonly Dictionary<string, int> _ids = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, int> _bpePieces = new(StringComparer.Ordinal);
     private readonly PieceTrie _trie = new();
     private readonly uint[] _charsmapTrie;
     private readonly byte[] _charsmapStrings;
@@ -35,11 +43,13 @@ public sealed class SentencePieceUnigramModel
     private readonly bool _removeExtraWhitespaces;
     private readonly bool _escapeWhitespaces;
     private readonly double _unknownScore;
+    private readonly bool _bpe;
+    private readonly bool _byteFallback;
 
     private const int Normal = 1, Unknown = 2, Control = 3, UserDefined = 4, Unused = 5, ByteType = 6;
 
     /// <summary>Reads a SentencePiece <c>.model</c> (a serialized <c>ModelProto</c>).</summary>
-    public SentencePieceUnigramModel(byte[] model)
+    public SentencePieceModel(byte[] model)
     {
         Guard.NotNull(model);
         var pieces = new List<(string Piece, float Score, int Type)>();
@@ -94,10 +104,14 @@ public sealed class SentencePieceUnigramModel
             }
             else reader.Skip(wire);
         }
-        if (modelType != 1)
-            throw new NotSupportedException($"Only unigram SentencePiece models are supported (model_type {modelType}).");
-        if (byteFallback || pieces.Any(p => p.Type is UserDefined or ByteType))
-            throw new NotSupportedException("SentencePiece models with user-defined symbols or byte fallback are not supported.");
+        if (modelType is not (1 or 2))
+            throw new NotSupportedException($"Only unigram and BPE SentencePiece models are supported (model_type {modelType}).");
+        if (pieces.Any(p => p.Type == UserDefined))
+            throw new NotSupportedException("SentencePiece models with user-defined symbols are not supported.");
+        if (modelType == 1 && (byteFallback || pieces.Any(p => p.Type == ByteType)))
+            throw new NotSupportedException("Unigram SentencePiece models with byte fallback are not supported.");
+        _bpe = modelType == 2;
+        _byteFallback = byteFallback;
 
         _pieces = pieces.Select(p => p.Piece).ToArray();
         _scores = pieces.Select(p => p.Score).ToArray();
@@ -111,6 +125,8 @@ public sealed class SentencePieceUnigramModel
             if (_types[i] is Normal or Unused) _trie.Add(_pieces[i], i);
         }
         _unknownScore = minScore - UnknownPenalty;
+        for (int i = 0; i < _pieces.Length; i++)
+            if (_types[i] is Normal or UserDefined or Unused && !_bpePieces.ContainsKey(_pieces[i])) _bpePieces[_pieces[i]] = i;
         _addDummyPrefix = addDummyPrefix;
         _removeExtraWhitespaces = removeExtraWhitespaces;
         _escapeWhitespaces = escapeWhitespaces;
@@ -129,12 +145,12 @@ public sealed class SentencePieceUnigramModel
     }
 
     /// <summary>Reads a gzip-compressed <c>.model</c>.</summary>
-    public static SentencePieceUnigramModel FromGzip(Stream compressed)
+    public static SentencePieceModel FromGzip(Stream compressed)
     {
         using var gzip = new GZipStream(compressed, CompressionMode.Decompress);
         using var buffer = new MemoryStream();
         gzip.CopyTo(buffer);
-        return new SentencePieceUnigramModel(buffer.ToArray());
+        return new SentencePieceModel(buffer.ToArray());
     }
 
     /// <summary>The number of pieces.</summary>
@@ -161,11 +177,15 @@ public sealed class SentencePieceUnigramModel
     /// <summary>The piece ids of <paramref name="text"/> (no beginning- or end-of-sentence ids).</summary>
     public int[] Encode(string text) => EncodePieces(text).Select(p => p.Id).ToArray();
 
+    /// <summary>Whether this is a BPE model (otherwise unigram).</summary>
+    public bool IsBpe => _bpe;
+
     /// <summary>The pieces and ids of <paramref name="text"/>.</summary>
     public List<(string Piece, int Id)> EncodePieces(string text)
     {
         Guard.NotNull(text);
         var normalized = Normalize(text);
+        if (_bpe) return EncodeBpe(normalized);
         // Positions are UTF-16 indices of Unicode scalar starts (a surrogate pair is one character).
         var starts = new List<int>();
         for (int i = 0; i < normalized.Length; i++)
@@ -221,15 +241,133 @@ public sealed class SentencePieceUnigramModel
         return merged;
     }
 
-    /// <summary>The text of piece ids (control pieces dropped, "▁" read as a space, the dummy prefix removed).</summary>
+    /// <summary>The BPE segmentation of normalized text (<c>bpe_model.cc</c>), with byte fallback for unknown characters.</summary>
+    private List<(string Piece, int Id)> EncodeBpe(string normalized)
+    {
+        // Symbols are the Unicode characters, linked so merged ones drop out.
+        var symbols = new List<string>();
+        for (int i = 0; i < normalized.Length; i++)
+        {
+            int length = char.IsHighSurrogate(normalized[i]) && i + 1 < normalized.Length ? 2 : 1;
+            symbols.Add(normalized.Substring(i, length));
+            i += length - 1;
+        }
+        int n = symbols.Count;
+        var prev = new int[n];
+        var next = new int[n];
+        for (int i = 0; i < n; i++)
+        {
+            prev[i] = i - 1;
+            next[i] = i + 1 < n ? i + 1 : -1;
+        }
+        var reverseMerges = new Dictionary<string, (string Left, string Right)>(StringComparer.Ordinal);
+        var agenda = new List<(int Left, int Right, float Score, int Size)>();
+        void Push((int Left, int Right, float Score, int Size) entry)
+        {
+            agenda.Add(entry);
+            int i = agenda.Count - 1;
+            while (i > 0)
+            {
+                int parent = (i - 1) / 2;
+                if (!Before(agenda[i], agenda[parent])) break;
+                (agenda[i], agenda[parent]) = (agenda[parent], agenda[i]);
+                i = parent;
+            }
+        }
+        (int Left, int Right, float Score, int Size) Pop()
+        {
+            var top = agenda[0];
+            agenda[0] = agenda[^1];
+            agenda.RemoveAt(agenda.Count - 1);
+            int i = 0;
+            while (true)
+            {
+                int left = 2 * i + 1, right = left + 1, best = i;
+                if (left < agenda.Count && Before(agenda[left], agenda[best])) best = left;
+                if (right < agenda.Count && Before(agenda[right], agenda[best])) best = right;
+                if (best == i) break;
+                (agenda[i], agenda[best]) = (agenda[best], agenda[i]);
+                i = best;
+            }
+            return top;
+        }
+        // The reference's comparator: the higher score first, then the leftmost pair.
+        static bool Before((int Left, int Right, float Score, int Size) a, (int Left, int Right, float Score, int Size) b)
+            => a.Score > b.Score || (a.Score == b.Score && a.Left < b.Left);
+        void MaybeAdd(int left, int right)
+        {
+            if (left < 0 || right < 0) return;
+            string piece = symbols[left] + symbols[right];
+            if (!_bpePieces.TryGetValue(piece, out int id)) return;
+            Push((left, right, _scores[id], piece.Length));
+            if (_types[id] == Unused) reverseMerges[piece] = (symbols[left], symbols[right]);
+        }
+        for (int i = 0; i + 1 < n; i++) MaybeAdd(i, i + 1);
+        while (agenda.Count > 0)
+        {
+            var top = Pop();
+            if (symbols[top.Left].Length == 0 || symbols[top.Right].Length == 0 || symbols[top.Left].Length + symbols[top.Right].Length != top.Size)
+                continue;
+            symbols[top.Left] += symbols[top.Right];
+            symbols[top.Right] = "";
+            next[top.Left] = next[top.Right];
+            if (next[top.Right] >= 0) prev[next[top.Right]] = top.Left;
+            MaybeAdd(prev[top.Left], top.Left);
+            MaybeAdd(top.Left, next[top.Left]);
+        }
+        var result = new List<(string Piece, int Id)>();
+        void Resegment(string w)
+        {
+            int id = PieceToId(w);
+            if (id == UnknownId || _types[id] != Unused || !reverseMerges.TryGetValue(w, out var pair))
+            {
+                Emit(w, id);
+                return;
+            }
+            Resegment(pair.Left);
+            Resegment(pair.Right);
+        }
+        void Emit(string w, int id)
+        {
+            if (id != UnknownId || !_byteFallback)
+            {
+                result.Add((w, id));
+                return;
+            }
+            foreach (byte b in Encoding.UTF8.GetBytes(w))
+            {
+                string bytePiece = $"<0x{b:X2}>";
+                result.Add((bytePiece, PieceToId(bytePiece)));
+            }
+        }
+        for (int i = n > 0 ? 0 : -1; i >= 0; i = next[i]) Resegment(symbols[i]);
+        return result;
+    }
+
+    /// <summary>The text of piece ids (control pieces dropped, byte pieces joined into their UTF-8 text, "▁" read as a
+    /// space, the dummy prefix removed).</summary>
     public string Decode(IEnumerable<int> ids)
     {
         var sb = new StringBuilder();
+        var bytes = new List<byte>();
+        void Flush()
+        {
+            if (bytes.Count == 0) return;
+            sb.Append(Encoding.UTF8.GetString(bytes.ToArray()));
+            bytes.Clear();
+        }
         foreach (int id in ids)
         {
             if (id < 0 || id >= _pieces.Length || _types[id] == Control) continue;
+            if (_types[id] == ByteType)
+            {
+                bytes.Add(Convert.ToByte(_pieces[id].Substring(3, 2), 16));
+                continue;
+            }
+            Flush();
             sb.Append(id == UnknownId && _types[id] == Unknown ? " ⁇ " : _pieces[id]);
         }
+        Flush();
         var text = sb.ToString().Replace(Space, " ");
         return _addDummyPrefix && text.StartsWith(" ", StringComparison.Ordinal) ? text.Substring(1) : text;
     }

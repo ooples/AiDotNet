@@ -609,6 +609,65 @@ internal static class CvTensorOps<T>
     }
 
     /// <summary>
+    /// RoIAlign exactly as torchvision's <c>roi_align</c> (and mmcv's <c>RoIAlign</c>) computes it, on the tape over the
+    /// features: with <paramref name="aligned"/> the box is shifted by half a pixel and its size is not clamped to 1; each
+    /// bin averages <c>samplingRatio²</c> bilinear samples over ALL samples (a sample beyond [-1, size] contributes zero but
+    /// still counts); and a sample in [-1, 0] reads the edge, as does one at or past size - 1.
+    /// </summary>
+    /// <param name="features">Feature map <c>[N, C, H, W]</c>.</param>
+    /// <param name="boxes">Per-RoI <c>(x1, y1, x2, y2)</c> in image coordinates, length <c>4 * R</c>.</param>
+    /// <param name="batchIndices">Per-RoI image index into <paramref name="features"/>, length <c>R</c>.</param>
+    /// <param name="spatialScale">Image-to-feature-map scale.</param>
+    /// <param name="outputSize">Pooled grid side.</param>
+    /// <param name="samplingRatio">Samples per bin side (positive).</param>
+    /// <param name="aligned">Whether to shift the box by half a pixel (torchvision's <c>aligned=True</c>).</param>
+    /// <returns>Pooled features <c>[R, C, outputSize, outputSize]</c>.</returns>
+    public static Tensor<T> RoIAlignExact(
+        Tensor<T> features, double[] boxes, int[] batchIndices, double spatialScale, int outputSize, int samplingRatio, bool aligned)
+    {
+        if (samplingRatio <= 0) throw new ArgumentOutOfRangeException(nameof(samplingRatio));
+        int c = features.Shape[1], h = features.Shape[2], w = features.Shape[3];
+        int rois = batchIndices.Length, side = outputSize * samplingRatio, perBin = samplingRatio * samplingRatio;
+        if (rois == 0) return new Tensor<T>(new[] { 0, c, outputSize, outputSize });
+        double offset = aligned ? 0.5 : 0.0;
+        var gridValues = new T[rois * side * side * 2];
+        var weightValues = new T[rois * side * side];
+        var share = NumOps.FromDouble(1.0 / perBin);
+        for (int r = 0; r < rois; r++)
+        {
+            double x1 = boxes[4 * r] * spatialScale - offset, y1 = boxes[4 * r + 1] * spatialScale - offset;
+            double roiW = boxes[4 * r + 2] * spatialScale - offset - x1, roiH = boxes[4 * r + 3] * spatialScale - offset - y1;
+            if (!aligned)
+            {
+                roiW = Math.Max(roiW, 1.0);
+                roiH = Math.Max(roiH, 1.0);
+            }
+            double binW = roiW / outputSize, binH = roiH / outputSize;
+            for (int ph = 0; ph < outputSize; ph++)
+                for (int pw = 0; pw < outputSize; pw++)
+                    for (int iy = 0; iy < samplingRatio; iy++)
+                        for (int ix = 0; ix < samplingRatio; ix++)
+                        {
+                            double y = y1 + ph * binH + (iy + 0.5) * binH / samplingRatio;
+                            double x = x1 + pw * binW + (ix + 0.5) * binW / samplingRatio;
+                            int point = (((((r * outputSize) + ph) * outputSize + pw) * samplingRatio) + iy) * samplingRatio + ix;
+                            bool valid = !(y < -1.0 || y > h || x < -1.0 || x > w);
+                            double sy = Math.Min(Math.Max(y, 0.0), h - 1), sx = Math.Min(Math.Max(x, 0.0), w - 1);
+                            if (!valid) sy = sx = 0;
+                            gridValues[2 * point] = NumOps.FromDouble(((2 * sx) + 1) / w - 1);
+                            gridValues[2 * point + 1] = NumOps.FromDouble(((2 * sy) + 1) / h - 1);
+                            weightValues[point] = valid ? share : NumOps.Zero;
+                        }
+        }
+        var grid = new Tensor<T>(new[] { rois * side, side, 2 }, new Vector<T>(gridValues));
+        var sampled = SampleByBatch(features, grid, batchIndices, side);                     // [rois * side, side, C]
+        int bins = rois * outputSize * outputSize;
+        var weights = new Tensor<T>(new[] { bins, 1, perBin }, new Vector<T>(weightValues));
+        var pooled = Engine.BatchMatMul(weights, Engine.Reshape(sampled, new[] { bins, perBin, c }));   // [bins, 1, C]
+        return Engine.TensorPermute(Engine.Reshape(pooled, new[] { rois, outputSize, outputSize, c }), new[] { 0, 3, 1, 2 });
+    }
+
+    /// <summary>
     /// Bilinearly samples one image <c>[1, C, H, W]</c> at a grid <c>[1, rows, cols, 2]</c>, returning
     /// <c>[rows, cols, C]</c>.
     /// </summary>

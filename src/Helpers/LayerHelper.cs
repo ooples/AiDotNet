@@ -25175,7 +25175,7 @@ public static partial class LayerHelper<T>
     /// <summary>
     /// Creates layers for grounding/detection VLMs with cross-modal feature fusion.
     /// Architecture: ViT + text encoder -> feature fusion -> detection decoder.
-    /// Used by GroundingDINO, GroundingDINO-1.5, DINO-X, OWL-ViT, OWLv2, GLaMM, GroundedSAM2.
+    /// Used by GroundingDINO-1.5, DINO-X, OWL-ViT, OWLv2 and GLaMM.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultGroundingDetectionLayers(
         int visionDim = 1024,
@@ -28698,119 +28698,6 @@ public static partial class LayerHelper<T>
         yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
         yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
         yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
-    }
-
-    #endregion
-    #region GroundedSAM2 Layers
-
-    /// <summary>
-    /// Creates encoder layers for the GroundedSAM2 model.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateGroundedSAM2EncoderLayers(
-        int visionDim, int numLayers, int numHeads, double dropRate)
-    {
-        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-        int ffnDim = visionDim * 4;
-        // Grounded SAM (Ren et al. 2024) = Grounding DINO + SAM, both TRANSFORMER models. SAM's image
-        // encoder (Kirillov et al. 2023) is a plain ViT (Dosovitskiy et al. 2021): a linear patch-
-        // embedding projection followed by N residual transformer blocks (multi-head self-attention +
-        // MLP, with LayerNorm and skip connections). Grounding DINO's image branch is likewise a
-        // transformer. We reproduce that transformer stack here — LayerNorm, NOT the previous
-        // Conv+BatchNorm CNN backbone (the paper uses no batch-statistics normalization, and the CNN
-        // both diverged from the paper architecture and was batch/scale-unstable). The leading Dense is
-        // the patch-embedding projection: it is REQUIRED so a per-token-constant input does not collapse
-        // to an identical vector under the first LayerNorm (the DifferentInputs collapse mode).
-        yield return new DenseLayer<T>(visionDim, identity);
-        for (int i = 0; i < numLayers; i++)
-        {
-            yield return new TransformerEncoderLayer<T>(numHeads, ffnDim);
-            if (dropRate > 0) yield return new DropoutLayer<T>(dropRate);
-        }
-        yield return new LayerNormalizationLayer<T>();
-    }
-
-    /// <summary>
-    /// Creates decoder layers for the GroundedSAM2 model.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateGroundedSAM2DecoderLayers(
-        int decoderDim, int numLayers, int numHeads)
-    {
-        int ffnDim = decoderDim * 4;
-        // Grounding DINO's cross-modality decoder and SAM's two-way mask decoder are TRANSFORMER
-        // decoders that refine the token/query features before the box/mask heads. We reproduce a
-        // residual transformer decoder stack (LayerNorm) that preserves the per-token feature
-        // dimension so the token-level output matches the encoder; the pixel-space mask head is
-        // abstracted at the model-family test scale (token -> token). LayerNorm, no BatchNorm.
-        for (int i = 0; i < numLayers; i++)
-        {
-            yield return new TransformerEncoderLayer<T>(numHeads, ffnDim);
-        }
-        yield return new LayerNormalizationLayer<T>();
-    }
-
-    /// <summary>
-    /// Creates the full native image-to-mask layer stack for GroundedSAM2.
-    /// </summary>
-    /// <param name="visionDim">Token/embedding dimension of the vision transformer.</param>
-    /// <param name="numHeads">Number of attention heads per transformer block.</param>
-    /// <param name="numEncoderLayers">Number of image-encoder transformer blocks.</param>
-    /// <param name="numDecoderLayers">Number of mask-decoder transformer blocks.</param>
-    /// <param name="patchSize">Patch size for the image tokenizer (and the mask upsample factor).</param>
-    /// <param name="numClasses">Number of segmentation classes emitted by the mask head.</param>
-    /// <param name="imageHeight">Input image height (used to size the positional encoding).</param>
-    /// <param name="imageWidth">Input image width (used to size the positional encoding).</param>
-    /// <param name="dropRate">Dropout rate applied after each transformer block (0 disables dropout).</param>
-    /// <returns>A collection of layers forming the GroundedSAM2 image-to-mask pipeline.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Grounded SAM (Ren et al. 2024) combines Grounding DINO and SAM — both are
-    /// transformer models. This builds the picture-to-mask pipeline: first a small "patch embedding"
-    /// convolution chops the image into a grid of patches and turns each into a vector (a token); a fixed
-    /// positional code tells the model where each patch sits; a stack of transformer blocks (the encoder,
-    /// then the mask decoder) lets every patch look at every other patch; finally a 1×1 convolution turns
-    /// each patch into per-class scores and an upsampling layer blows that small grid back up to the full
-    /// image size, giving a per-pixel segmentation map. The last two layers are always the mask head
-    /// (mask conv + upsample), which is what the model relies on to find the head after the token stack.
-    /// </para>
-    /// </remarks>
-    public static IEnumerable<ILayer<T>> CreateGroundedSAM2Layers(
-        int visionDim, int numHeads, int numEncoderLayers, int numDecoderLayers,
-        int patchSize, int numClasses, int imageHeight, int imageWidth, double dropRate)
-    {
-        // Guard patchSize before the gridH/gridW divisions below (and its use as the patch-embed conv
-        // kernel/stride and the final UpsamplingLayer factor). patchSize == 0 is reachable via
-        // GroundedSAM2Options.PatchSize and would otherwise throw a bare DivideByZeroException instead of
-        // the clear ArgumentOutOfRangeException this helper raises — same guard the sibling
-        // CreateDefaultEfficientTAMLayers uses.
-        ValidatePatchSize(patchSize);
-        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-        int ffnDim = visionDim * 4;
-        int gridH = Math.Max(1, imageHeight / patchSize);
-        int gridW = Math.Max(1, imageWidth / patchSize);
-        int numTokens = gridH * gridW;
-
-        // Patch embedding: a non-overlapping patchSize×patchSize strided conv projects the RGB image to a
-        // [visionDim, gridH, gridW] token grid (linear projection — LayerNorm/attention follow inside the
-        // transformer blocks), matching SAM's ViT patch-embed.
-        yield return new ConvolutionalLayer<T>(visionDim, patchSize, patchSize, 0, identity);
-        // Sinusoidal positional encoding over the token sequence (parameter-free).
-        yield return new PositionalEncodingLayer<T>(numTokens, visionDim);
-        // Image encoder transformer blocks (SAM ViT image encoder / Grounding DINO image branch).
-        for (int i = 0; i < numEncoderLayers; i++)
-        {
-            yield return new TransformerEncoderLayer<T>(numHeads, ffnDim, visionDim);
-            if (dropRate > 0) yield return new DropoutLayer<T>(dropRate);
-        }
-        // Cross-modality / SAM mask-decoder transformer blocks.
-        for (int i = 0; i < numDecoderLayers; i++)
-        {
-            yield return new TransformerEncoderLayer<T>(numHeads, ffnDim, visionDim);
-            if (dropRate > 0) yield return new DropoutLayer<T>(dropRate);
-        }
-        // Mask head (ALWAYS the last two layers): 1×1 conv -> numClasses logits at token-grid resolution,
-        // then upsample by patchSize back to the full input resolution.
-        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
-        yield return new UpsamplingLayer<T>(patchSize);
     }
 
     #endregion

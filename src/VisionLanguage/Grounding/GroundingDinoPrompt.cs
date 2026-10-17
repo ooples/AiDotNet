@@ -118,10 +118,7 @@ internal sealed class GroundingDinoPrompt
     internal static string Decode(IEnumerable<int> ids)
     {
         var text = string.Join(" ", ids.Select(id => Tokenizer.Value.Vocabulary.GetToken(id) ?? "[UNK]")).Replace(" ##", "");
-        foreach (var (from, to) in new[] { (" .", "."), (" ?", "?"), (" !", "!"), (" ,", ","), (" ' ", "'"), (" n't", "n't"),
-                     (" 'm", "'m"), (" 's", "'s"), (" 've", "'ve"), (" 're", "'re") })
-            text = text.Replace(from, to);
-        return text;
+        return Tokenization.TokenizationCleanup.CleanUpSpaces(text);
     }
 
     /// <summary>
@@ -159,5 +156,44 @@ internal sealed class GroundingDinoPrompt
         for (int c = 0; c < classes.Count; c++)
             if (phrase.Contains(classes[c])) return c;
         return -1;
+    }
+}
+
+/// <summary>Detections as the tensors <see cref="Interfaces.IVisualGroundingModel{T}"/> returns.</summary>
+internal static class GroundingRows<T>
+{
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
+
+    /// <summary>Rows <c>[n, 5]</c> of (x1, y1, x2, y2, score).</summary>
+    public static Tensor<T> Boxes(IReadOnlyList<GroundingDetection> detections)
+    {
+        var result = new Tensor<T>(new[] { detections.Count, 5 });
+        for (int i = 0; i < detections.Count; i++)
+        {
+            var d = detections[i];
+            result[i, 0] = NumOps.FromDouble(d.X1);
+            result[i, 1] = NumOps.FromDouble(d.Y1);
+            result[i, 2] = NumOps.FromDouble(d.X2);
+            result[i, 3] = NumOps.FromDouble(d.Y2);
+            result[i, 4] = NumOps.FromDouble(d.Score);
+        }
+        return result;
+    }
+
+    /// <summary>Rows <c>[n, 6]</c> of (x1, y1, x2, y2, class, score), the class by the official <c>phrases2classes</c>.</summary>
+    public static Tensor<T> Classified(IReadOnlyList<GroundingDetection> detections, IReadOnlyList<string> categories)
+    {
+        var result = new Tensor<T>(new[] { detections.Count, 6 });
+        for (int i = 0; i < detections.Count; i++)
+        {
+            var d = detections[i];
+            result[i, 0] = NumOps.FromDouble(d.X1);
+            result[i, 1] = NumOps.FromDouble(d.Y1);
+            result[i, 2] = NumOps.FromDouble(d.X2);
+            result[i, 3] = NumOps.FromDouble(d.Y2);
+            result[i, 4] = NumOps.FromDouble(GroundingDinoPrompt.ClassOf(d.Phrase, categories));
+            result[i, 5] = NumOps.FromDouble(d.Score);
+        }
+        return result;
     }
 }

@@ -448,15 +448,6 @@ public class SegmentationInterfaceContractTests : IDisposable
         Assert.NotNull(result);
     }
 
-    [Fact(Timeout = 120000)]
-    public async Task GroundedSAM2_OpenVocabInterface_SegmentWithText()
-    {
-        var model = new GroundedSAM2<float>(Arch(), options: new GroundedSAM2Options { NumClasses = 5 });
-        var ov = (IOpenVocabSegmentation<float>)model;
-        var result = ov.SegmentWithText(Rand(1, 3, 32, 32), new[] { "car" });
-        Assert.NotNull(result);
-    }
-
     #endregion
 
     #region IReferringSegmentation Contract

@@ -10,12 +10,10 @@ internal static class ModelDefectBaselines
     internal static readonly System.Collections.Generic.HashSet<string> DuplicatePapers =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
-            "AiDotNet.ComputerVision.Segmentation.OpenVocabulary.GroundedSAM2<T>",
             "AiDotNet.ComputerVision.Segmentation.Referring.GLaMM<T>",
             "AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>",
             "AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T>",
             "AiDotNet.VisionLanguage.Grounding.GLaMM<T>",
-            "AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>",
         };
 
     /// <summary>ADNDEF002: LayerHelper factories yielding a bare MultiHeadAttentionLayer, 102 entries; an overloaded factory is keyed by its signature.</summary>
@@ -392,7 +390,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.VisionLanguage.Grounding.FerretV2<T>",
             "AiDotNet.VisionLanguage.Grounding.GLaMM<T>",
             "AiDotNet.VisionLanguage.Grounding.Groma<T>",
-            "AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T>",
             "AiDotNet.VisionLanguage.Grounding.GroundingDINO15<T>",
             "AiDotNet.VisionLanguage.Grounding.OWLv2<T>",
             "AiDotNet.VisionLanguage.Grounding.OWLViT<T>",
