@@ -761,8 +761,45 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             && (!inputs.TryGetValue("input", out decoderInput) || decoderInput == null))
             throw new ArgumentException("TransformerDecoderLayer requires 'decoder_input' (or 'input').", nameof(inputs));
         if (!inputs.TryGetValue("encoder_output", out var encoderOutput) || encoderOutput == null)
-            return ForwardWithoutCrossAttention(decoderInput);
+            return ForwardWithoutCrossAttentionGpu(decoderInput);
         return ForwardGpu(decoderInput, encoderOutput);
+    }
+
+    /// <summary>
+    /// GPU-resident decoder-only block: self-attention, the first residual and normalization, then the feed-forward
+    /// network and the final residual and normalization. The GPU twin of <see cref="ForwardWithoutCrossAttention"/>;
+    /// the cross-attention sublayer and its normalization are skipped, so nothing of them is cached.
+    /// </summary>
+    private Tensor<T> ForwardWithoutCrossAttentionGpu(Tensor<T> decoderInput)
+    {
+        EnsureInitializedFromInput(decoderInput);
+
+        if (Engine is not DirectGpuTensorEngine gpuEngine)
+            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
+
+        var selfAttentionOutput = _selfAttention.ForwardGpu(decoderInput);
+        var residual1 = gpuEngine.AddGpu(decoderInput, selfAttentionOutput);
+        var (normalized1, _, _) = gpuEngine.LayerNormGpu(residual1, _norm1.GetGammaTensor(), _norm1.GetBetaTensor(), Convert.ToDouble(_norm1.GetEpsilon()));
+
+        var ffHidden = _feedForward.ForwardGpu(normalized1);
+        var ffProjected = _feedForwardProjection.ForwardGpu(ffHidden);
+        var residual = gpuEngine.AddGpu(normalized1, ffProjected);
+        var (output, _, _) = gpuEngine.LayerNormGpu(residual, _norm3.GetGammaTensor(), _norm3.GetBetaTensor(), Convert.ToDouble(_norm3.GetEpsilon()));
+
+        if (IsTrainingMode)
+        {
+            _gpuNormalized1 = normalized1;
+            _gpuNormalized2 = null;
+            _lastInput = decoderInput;
+            _lastEncoderOutput = null;
+            _lastSelfAttentionOutput = selfAttentionOutput;
+            _lastNormalized1 = normalized1;
+            _lastCrossAttentionOutput = null;
+            _lastNormalized2 = null;
+            _lastFeedForwardOutput = ffProjected;
+        }
+
+        return output;
     }
 
     /// <summary>
