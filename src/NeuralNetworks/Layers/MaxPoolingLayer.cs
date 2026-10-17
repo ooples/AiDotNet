@@ -286,8 +286,15 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
         var poolSizeArr = new[] { PoolSize, PoolSize };
         var strideArr = new[] { Stride, Stride };
 
-        // Use Engine operation (expects 4D); final output shape will match the original input rank
-        var output4D = Engine.MaxPool2DWithIndices(input4D, poolSizeArr, strideArr, out _maxIndices);
+        // Use Engine operation (expects 4D); final output shape will match the original input rank.
+        // Inference needs no argmax indices: the indexed form built them on the host (a GPU engine
+        // downloaded the activation to do it), which was 84% of VGG-16's GPU Predict. Training keeps it:
+        // that is the op the tape records for the backward pass.
+        bool backwardMayRun = IsTrainingMode
+            || AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null;
+        var output4D = backwardMayRun
+            ? Engine.MaxPool2DWithIndices(input4D, poolSizeArr, strideArr, out _maxIndices)
+            : Engine.MaxPool2D(input4D, PoolSize, Stride);
 
         // Return with matching dimensions to preserve original tensor rank
         if (_originalInputShape.Length > 4)
