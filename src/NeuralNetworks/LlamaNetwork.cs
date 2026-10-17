@@ -23,6 +23,15 @@ internal sealed record LlamaConfiguration
     public double RmsEpsilon { get; init; } = 1e-5;
 
     public double RopeTheta { get; init; } = 10000;
+
+    /// <summary>LoRA rank on the query and value projections (Hu et al. 2022); 0 for none.</summary>
+    public int LoraRank { get; init; }
+
+    /// <summary>LoRA alpha; the update is scaled by alpha / rank.</summary>
+    public double LoraAlpha { get; init; } = 16;
+
+    /// <summary>Dropout on the LoRA branch's input.</summary>
+    public double LoraDropout { get; init; } = 0.05;
 }
 
 /// <summary>
@@ -39,7 +48,10 @@ internal sealed class LlamaNetwork<T>
 
     internal sealed record Layer(BiasFreeLinearLayer<T> InputNorm, BiasFreeLinearLayer<T> Query, BiasFreeLinearLayer<T> Key,
         BiasFreeLinearLayer<T> Value, BiasFreeLinearLayer<T> Output, BiasFreeLinearLayer<T> PostNorm, BiasFreeLinearLayer<T> Gate,
-        BiasFreeLinearLayer<T> Up, BiasFreeLinearLayer<T> Down);
+        BiasFreeLinearLayer<T> Up, BiasFreeLinearLayer<T> Down, Lora? QueryLora, Lora? ValueLora);
+
+    /// <summary>A LoRA branch: down projection A, up projection B, and dropout on its input.</summary>
+    internal sealed record Lora(BiasFreeLinearLayer<T> A, BiasFreeLinearLayer<T> B, DropoutLayer<T>? Dropout);
 
     public LlamaNetwork(IEngine engine, List<LayerBase<T>> layers, LlamaConfiguration configuration)
     {
@@ -57,16 +69,50 @@ internal sealed class LlamaNetwork<T>
         BiasFreeLinearLayer<T> Linear(int inputs, int outputs) => Add(new BiasFreeLinearLayer<T>(inputs, outputs));
         BiasFreeLinearLayer<T> Values(int count) => Add(new BiasFreeLinearLayer<T>(1, count));
         int hd = c.Hidden / c.Heads, kv = c.KeyValueHeads * hd;
+        Lora? Adapter(int outputs)
+        {
+            if (c.LoraRank <= 0) return null;
+            DropoutLayer<T>? dropout = null;
+            if (c.LoraDropout > 0)
+            {
+                dropout = Add(new DropoutLayer<T>(c.LoraDropout));
+                dropout.SetTrainingMode(false);
+                _dropouts.Add(dropout);
+            }
+            return new Lora(Linear(c.Hidden, c.LoraRank), Linear(c.LoraRank, outputs), dropout);
+        }
         Embeddings = Values(c.VocabSize * c.Hidden);
         for (int i = 0; i < c.Layers; i++)
-            Layers.Add(new Layer(Values(c.Hidden), Linear(c.Hidden, c.Hidden), Linear(c.Hidden, kv), Linear(c.Hidden, kv),
-                Linear(c.Hidden, c.Hidden), Values(c.Hidden), Linear(c.Hidden, c.Intermediate), Linear(c.Hidden, c.Intermediate),
-                Linear(c.Intermediate, c.Hidden)));
+        {
+            var input = Values(c.Hidden);
+            var query = Linear(c.Hidden, c.Hidden);
+            var queryLora = Adapter(c.Hidden);
+            var key = Linear(c.Hidden, kv);
+            var value = Linear(c.Hidden, kv);
+            var valueLora = Adapter(kv);
+            Layers.Add(new Layer(input, query, key, value, Linear(c.Hidden, c.Hidden), Values(c.Hidden), Linear(c.Hidden, c.Intermediate),
+                Linear(c.Hidden, c.Intermediate), Linear(c.Intermediate, c.Hidden), queryLora, valueLora));
+        }
         FinalNorm = Values(c.Hidden);
         LmHead = Linear(c.Hidden, c.VocabSize);
     }
 
     public LlamaConfiguration Configuration { get; }
+
+    private readonly List<DropoutLayer<T>> _dropouts = new();
+
+    /// <summary>Whether the LoRA dropout is active. A new network starts in inference mode.</summary>
+    public bool Training
+    {
+        get => _training;
+        set
+        {
+            _training = value;
+            foreach (var dropout in _dropouts) dropout.SetTrainingMode(value);
+        }
+    }
+
+    private bool _training;
 
     public BiasFreeLinearLayer<T> Embeddings { get; }
 
@@ -175,11 +221,19 @@ internal sealed class LlamaNetwork<T>
         var c = Configuration;
         int b = x.Shape[0], l = x.Shape[1], hd = c.Hidden / c.Heads, groups = c.Heads / c.KeyValueHeads;
         var normed = RmsNorm(layer.InputNorm, x);
-        Tensor<T> Heads(BiasFreeLinearLayer<T> projection, int heads)
-            => _engine.TensorPermute(_engine.Reshape(Rows(projection, normed), new[] { b, l, heads, hd }), new[] { 0, 2, 1, 3 });
-        var q = Rotate(Heads(layer.Query, c.Heads), cos, sin);
-        var k = Rotate(Heads(layer.Key, c.KeyValueHeads), cos, sin);
-        var v = Heads(layer.Value, c.KeyValueHeads);
+        Tensor<T> Project(BiasFreeLinearLayer<T> projection, Lora? lora)
+        {
+            var y = Rows(projection, normed);
+            if (lora is null) return y;
+            // peft's LoRA: W x + (alpha / r) B A dropout(x).
+            var x = lora.Dropout is null ? normed : lora.Dropout.Forward(normed);
+            return _engine.TensorAdd(y, _engine.TensorMultiplyScalar(Rows(lora.B, Rows(lora.A, x)), NumOps.FromDouble(c.LoraAlpha / c.LoraRank)));
+        }
+        Tensor<T> Heads(Tensor<T> projected, int heads)
+            => _engine.TensorPermute(_engine.Reshape(projected, new[] { b, l, heads, hd }), new[] { 0, 2, 1, 3 });
+        var q = Rotate(Heads(Project(layer.Query, layer.QueryLora), c.Heads), cos, sin);
+        var k = Rotate(Heads(Project(layer.Key, null), c.KeyValueHeads), cos, sin);
+        var v = Heads(Project(layer.Value, layer.ValueLora), c.KeyValueHeads);
         if (groups > 1)
         {
             // repeat_kv: each key-value head serves `groups` consecutive query heads.
@@ -252,13 +306,24 @@ internal sealed class LlamaNetwork<T>
             Linear(layer.Gate, $"{n}.mlp.gate_proj.weight", h, c.Intermediate);
             Linear(layer.Up, $"{n}.mlp.up_proj.weight", h, c.Intermediate);
             Linear(layer.Down, $"{n}.mlp.down_proj.weight", c.Intermediate, h);
+            if (layer.QueryLora is not null)
+            {
+                Linear(layer.QueryLora.A, $"{n}.self_attn.q_proj.lora_A.weight", h, c.LoraRank);
+                Linear(layer.QueryLora.B, $"{n}.self_attn.q_proj.lora_B.weight", c.LoraRank, h);
+            }
+            if (layer.ValueLora is not null)
+            {
+                Linear(layer.ValueLora.A, $"{n}.self_attn.v_proj.lora_A.weight", h, c.LoraRank);
+                Linear(layer.ValueLora.B, $"{n}.self_attn.v_proj.lora_B.weight", c.LoraRank, kv);
+            }
         }
         Vector(FinalNorm, $"{prefix}norm.weight", new[] { h });
         Linear(LmHead, headName, h, c.VocabSize);
     }
 
     /// <summary>The reference initialization (Hugging Face <c>LlamaPreTrainedModel._init_weights</c>): linear weights and
-    /// embeddings N(0, 0.02²), RMSNorm weights 1.</summary>
+    /// embeddings N(0, 0.02²), RMSNorm weights 1; and peft's for LoRA: A uniform in ±1/√Hidden (Kaiming with a = √5), B
+    /// zero, so a new adapter leaves the model unchanged.</summary>
     public void InitializeLikeReference(Random random)
     {
         double Normal() => Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble());
@@ -266,6 +331,13 @@ internal sealed class LlamaNetwork<T>
         {
             int count = shape.Aggregate(1, (a, s) => a * s);
             var values = new double[count];
+            if (name.EndsWith("lora_B.weight", StringComparison.Ordinal)) return values;
+            if (name.EndsWith("lora_A.weight", StringComparison.Ordinal))
+            {
+                double bound = 1.0 / Math.Sqrt(shape[1]);
+                for (int i = 0; i < count; i++) values[i] = bound * (2 * random.NextDouble() - 1);
+                return values;
+            }
             bool norm = name.EndsWith("layernorm.weight", StringComparison.Ordinal) || name.EndsWith("norm.weight", StringComparison.Ordinal);
             for (int i = 0; i < count; i++) values[i] = norm ? 1.0 : 0.02 * Normal();
             return values;

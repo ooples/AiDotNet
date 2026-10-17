@@ -9,7 +9,9 @@ cross-entropy) is computed in float64, as the C# side computes them, so the comp
 
 For two sequences of seven tokens (the second right-padded by two), the fixture records the final normalized hidden
 states (the last hidden_states entry), the logits, and the causal language-model loss on labels equal to the ids with
-padding ignored (-100), and that loss after one plain SGD step (lr 0.01) on every parameter.
+padding ignored (-100), and that loss after one plain SGD step (lr 0.01) on every parameter. A second case adds peft
+LoRA (rank 4, alpha 8, on q_proj and v_proj, as GLaMM fine-tunes Vicuna) with random up projections (peft starts them at
+zero, which would hide the branch), and records the same quantities with the adapters' names mapped to the base names.
 Default: verify; --write: regenerate tests/AiDotNet.Tests/NeuralNetworks/ReferenceData/llama_reference.json.
 """
 import argparse
@@ -59,11 +61,9 @@ def causal_lm_loss(logits, labels):
     return torch.nn.functional.cross_entropy(logits[:, :-1].reshape(-1, logits.shape[-1]), shifted, ignore_index=-100)
 
 
-def compute():
+def build():
     import torch
     from transformers import LlamaConfig, LlamaForCausalLM
-    torch.set_default_dtype(torch.float64)
-    patch_float64()
     torch.manual_seed(11)
     config = LlamaConfig(vocab_size=128, hidden_size=32, intermediate_size=64, num_hidden_layers=2, num_attention_heads=4,
                          num_key_value_heads=2, rms_norm_eps=1e-5, rope_theta=10000.0, max_position_embeddings=64,
@@ -73,7 +73,38 @@ def compute():
         for name, p in model.named_parameters():
             if name.endswith("norm.weight"):
                 p.copy_(1 + 0.1 * torch.randn_like(p))
-    state = {k: v.detach().flatten().tolist() for k, v in model.state_dict().items()}
+    return model
+
+
+def lora(model):
+    import torch
+    from peft import LoraConfig, get_peft_model
+    model = get_peft_model(model, LoraConfig(r=4, lora_alpha=8, lora_dropout=0.0, target_modules=["q_proj", "v_proj"]))
+    torch.manual_seed(19)
+    with torch.no_grad():
+        for name, p in model.named_parameters():
+            if "lora_B" in name:
+                p.copy_(0.1 * torch.randn_like(p))
+            p.requires_grad_(True)  # train every parameter, so the comparison covers the base weights too
+    return model
+
+
+def mapped(name):
+    return name.replace("base_model.model.", "").replace(".base_layer", "").replace(".default", "")
+
+
+def compute():
+    import torch
+    torch.set_default_dtype(torch.float64)
+    patch_float64()
+    result = run_case(build())
+    result["lora"] = run_case(lora(build()))
+    return result
+
+
+def run_case(model):
+    import torch
+    state = {mapped(k): v.detach().flatten().tolist() for k, v in model.state_dict().items()}
     ids = torch.tensor(IDS)
     mask = torch.tensor(MASK)
     labels = ids.masked_fill(mask == 0, -100)
@@ -107,7 +138,8 @@ def main():
         return
     with open(FIXTURE, encoding="utf-8") as f:
         stored = json.load(f)
-    same = all(abs(stored[k] - result[k]) < 1e-12 for k in ("loss", "loss_after_sgd"))
+    same = all(abs(stored[k] - result[k]) < 1e-12 and abs(stored["lora"][k] - result["lora"][k]) < 1e-12
+               for k in ("loss", "loss_after_sgd"))
     print("fixture matches" if same else "fixture differs")
     sys.exit(0 if same else 1)
 

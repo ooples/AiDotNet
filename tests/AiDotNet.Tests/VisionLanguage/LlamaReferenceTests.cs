@@ -40,12 +40,26 @@ public class LlamaReferenceTests
     public async Task Decoder_MatchesTheReference_AndAfterOneSgdStep()
     {
         await Task.Yield();
+        RunCase(Fixture(), 0);
+    }
+
+    /// <summary>The same with peft LoRA on the query and value projections (rank 4, alpha 8), as GLaMM fine-tunes Vicuna.</summary>
+    [Fact(Timeout = 300000)]
+    public async Task LoraDecoder_MatchesPeft_AndAfterOneSgdStep()
+    {
+        await Task.Yield();
+        RunCase(Fixture().GetProperty("lora"), 4, Fixture());
+    }
+
+    private static void RunCase(JsonElement k, int loraRank, JsonElement? inputs = null)
+    {
         var engine = AiDotNetEngine.Current;
-        var k = Fixture();
+        var source = inputs ?? k;
         var layers = new List<LayerBase<double>>();
         var net = new LlamaNetwork<double>(engine, layers, new LlamaConfiguration
         {
             VocabSize = 128, Hidden = 32, Layers = 2, Heads = 4, KeyValueHeads = 2, Intermediate = 64,
+            LoraRank = loraRank, LoraAlpha = 8, LoraDropout = 0,
         });
         var state = k.GetProperty("state");
         net.LoadTorchWeights((name, shape) =>
@@ -54,8 +68,8 @@ public class LlamaReferenceTests
             Assert.Equal(shape.Aggregate(1, (a, b) => a * b), v.Length);
             return v;
         });
-        var idRows = k.GetProperty("ids").EnumerateArray().Select(r => r.EnumerateArray().Select(v => v.GetInt32()).ToArray()).ToArray();
-        var maskRows = k.GetProperty("mask").EnumerateArray().Select(r => r.EnumerateArray().Select(v => v.GetInt32() != 0).ToArray()).ToArray();
+        var idRows = source.GetProperty("ids").EnumerateArray().Select(r => r.EnumerateArray().Select(v => v.GetInt32()).ToArray()).ToArray();
+        var maskRows = source.GetProperty("mask").EnumerateArray().Select(r => r.EnumerateArray().Select(v => v.GetInt32() != 0).ToArray()).ToArray();
         int b = idRows.Length, l = idRows[0].Length;
         var ids = new int[b, l];
         var mask = new bool[b, l];
