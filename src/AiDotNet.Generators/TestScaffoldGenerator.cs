@@ -3466,9 +3466,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
 
             // A registered owner must still name one of at least two namesakes; otherwise the entry
-            // either suppresses every candidate or guards a collision that no longer exists.
+            // either suppresses every candidate or guards a collision that no longer exists. Only a
+            // compilation that sees every model can tell: the test project references the AiDotNet
+            // assembly, while the generator's own fixture compilations declare a few models in source
+            // and hold none of the registered names.
+            bool seesEveryModel = compilation.ReferencedAssemblyNames.Any(a => a.Name == "AiDotNet");
             foreach (var owner in CollisionOwners.OrderBy(e => e.Key, System.StringComparer.Ordinal))
             {
+                if (!seesEveryModel) break;
                 var namesakes = orderedUntested
                     .Where(m => string.Equals(StripBacktick(m.ClassName), owner.Key, System.StringComparison.Ordinal))
                     .Select(m => m.FullyQualifiedName)
