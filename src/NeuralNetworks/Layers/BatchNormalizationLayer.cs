@@ -994,6 +994,43 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             _lastMean = _runningMean;
             _lastVariance = _runningVariance;
 
+            // No tape: one fused BatchNormInference over the live gamma, beta and running statistics.
+            // They are persistent tensors, so a GPU engine keeps them resident and uploads nothing per
+            // call; the scale/shift decomposition below builds fresh per-call temporaries (epsilon,
+            // sqrt, divide, multiply, subtract, broadcast reshapes) whose host->device uploads were 89% of
+            // ResNet-50's GPU inference time. The channel axis is folded into [outer, C, inner, 1]
+            // so one rank-4 kernel serves every input rank. Under a tape the decomposition stays:
+            // it carries the gradients to gamma and beta (training with batch norm in eval mode).
+            if (!tapeActive)
+            {
+                int rank = input.Shape.Length;
+                int channelAxis = Layout == BatchNormDataLayout.ChannelsFirst && rank >= 3
+                    ? 1
+                    : (rank == 1 || rank == 3 ? 0 : 1);
+                int outer = 1, inner = 1;
+                for (int d = 0; d < channelAxis; d++) outer *= input.Shape[d];
+                for (int d = channelAxis + 1; d < rank; d++) inner *= input.Shape[d];
+                // A rank-4 channels-first input (every convolutional network) is already in the kernel's
+                // layout; passing it through keeps a device-resident activation from being re-staged.
+                bool alreadyNchw = rank == 4 && channelAxis == 1;
+                var folded = alreadyNchw ? input : Engine.Reshape(input, [outer, input.Shape[channelAxis], inner, 1]);
+                var normalized = Engine.BatchNormInference(
+                    folded, _gamma, _beta, _runningMean, _runningVariance, NumOps.ToDouble(_epsilon));
+                var fusedResult = alreadyNchw ? normalized : Engine.Reshape(normalized, input.Shape.ToArray());
+
+                if (flattenedFeaturesLast && preFlattenShape is not null)
+                {
+                    fusedResult = Engine.Reshape(fusedResult, preFlattenShape);
+                }
+
+                if (_inputWas1D)
+                {
+                    fusedResult = Engine.Reshape(fusedResult, [fusedResult.Length]);
+                }
+
+                return fusedResult;
+            }
+
             // Recompute from the live affine parameters. Gamma and beta are optimizer-owned
             // persistent tensors and are commonly updated IN PLACE, so a cache keyed only by a
             // local dirty bit cannot observe their mutation. That stale cache made post-training
