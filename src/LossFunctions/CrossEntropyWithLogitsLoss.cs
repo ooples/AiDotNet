@@ -110,6 +110,18 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         // layout is channel-first ([B, C, H, W] + [B, H, W]), so infer the
         // class axis from the compact class-index target shape when present.
         int classAxis = ResolveClassAxis(predicted, target);
+
+        // Dense targets over the last axis: the engine's single softmax cross-entropy op is exactly the objective
+        // composed below (log-softmax, target-weighted sum, mean over the supervised rows), and an engine can run it as
+        // fused kernels -- on CUDA, three kernels instead of about forty per training step. Taken before the log-softmax
+        // below is computed: under a compiled trace that log-softmax would otherwise be recorded and replayed every
+        // step with nothing reading it.
+        if (classAxis == predicted.Shape.Length - 1 && predicted.Shape.Length >= 2
+            && target.Shape.ToArray().SequenceEqual(predicted.Shape.ToArray()))
+        {
+            return Engine.TensorSoftmaxCrossEntropy(predicted, target);
+        }
+
         var logSoftmax = ComputeLogSoftmax(predicted, classAxis);
 
         // PyTorch's nn.CrossEntropyLoss accepts BOTH target formats and the
@@ -156,15 +168,6 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         if (target.Shape.Length == predicted.Shape.Length - 1)
         {
             target = ClassIndicesToOneHot(target, predicted.Shape[classAxis], classAxis, predicted.Shape.ToArray());
-        }
-
-        // Dense targets over the last axis: the engine's single softmax cross-entropy op is exactly the objective
-        // composed below (log-softmax, target-weighted sum, mean over the supervised rows), and an engine can run it as
-        // fused kernels -- on CUDA, three kernels instead of about forty per training step.
-        if (classAxis == predicted.Shape.Length - 1 && predicted.Shape.Length >= 2
-            && target.Shape.ToArray().SequenceEqual(predicted.Shape.ToArray()))
-        {
-            return Engine.TensorSoftmaxCrossEntropy(predicted, target);
         }
 
         // CE per-sample = -Σ_class target_i * log_softmax_i  (sum over class axis only).
