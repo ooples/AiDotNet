@@ -119,7 +119,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// routed by VisionLanguageTestBase), so they take neither the grounding token input nor its iteration settings.
     /// </summary>
     private static readonly System.Collections.Generic.HashSet<string> GroundingNetworkModels =
-        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal) { "GroundingDINO" };
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal) { "GroundingDINO", "GroundedSAM2" };
 
     private static readonly System.Collections.Generic.HashSet<string> FoundationScaleVisionLanguageModels =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
@@ -444,7 +444,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // not a side effect of registering what already happens.
             // ---------------------------------------------------------------------------------
             { "DINO", "AiDotNet.ComputerVision.Detection.ObjectDetection.DETR." },
-            { "GroundedSAM2", "AiDotNet.ComputerVision.Segmentation.OpenVocabulary." },
             { "WaveNet", "AiDotNet.Finance.Forecasting.Neural." },
         };
 
@@ -4609,7 +4608,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
          // Florence-2: DaViT has a total stride of 32; 64 px is the smallest image with a 2x2 grid.
          : className == "Florence2" ? 64
          // Grounding DINO's fixture: a 64 px image gives the Swin levels 8x8, 4x4 and 2x2 and the extra level 1x1.
-         : className == "GroundingDINO" ? 64
+         : className is "GroundingDINO" or "GroundedSAM2" ? 64
          // SAM, SAM21, SlimSAM, MaskAdapter and Mask2Former are deliberately NOT in this list.
          // Their constructor overrides pin 112 (SAM, SAM21) and 128 (the other three), and this arm
          // shadows the IsPatchVisionModel branch below, so listing them here fed a 32px fixture to a
@@ -5552,7 +5551,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         {
             // Liu 2023 — DETR-style transformer decoder dim.
             "GroundingDINO15" or "DINOX" => 256,
-            "GroundedSAM2" => 32, // Generated public-options fixture; production default remains 256.
             "OWLViT" => 32, // Generated public-options fixture; production default remains 768.
             "OWLv2" => 32, // Generated public-options fixture; production default remains 1024.
             "GLaMM" => 32, // Generated public-options fixture; production default remains 1024.
@@ -6253,32 +6251,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName == "GroundedSAM2" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.VisionLanguage.Grounding.", System.StringComparison.Ordinal))
             {
-                // Grounded-SAM 2 keeps its residual vision/fusion/detection path while the generated
-                // fixture uses the same public width/depth controls as its grounding siblings.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 32, outputSize: 4), " +
-                    "new AiDotNet.VisionLanguage.Grounding.GroundedSAM2Options { ImageSize = 32, " +
-                    "VisionDim = 32, DecoderDim = 32, NumVisionLayers = 1, NumDecoderLayers = 1, " +
-                    "NumHeads = 4, VocabSize = 64, MaxSequenceLength = 16, MaxGenerationLength = 8, " +
-                    "MaxDetections = 4, DropoutRate = 0.0 }, " +
-                    $"{conservativeSmokeAdamWOptimizer})";
-            }
-            else if (model.ClassName == "GroundedSAM2" && model.TypeParameterCount == 1
-                     && typeName.StartsWith("AiDotNet.ComputerVision.Segmentation.OpenVocabulary.", System.StringComparison.Ordinal))
-            {
-                // The generated type is the image-segmentation GroundedSAM2 implementation, not
-                // the same-named grounding VLM above. Preserve its patch encoder, transformer and
-                // mask decoder while using that model's own public options at fixture scale.
+                // Grounded SAM 2's two networks at fixture scale through its public options: the Grounding DINO
+                // fixture above, and SAM 2 at 64 px with Hiera blocks 1-1-2-1 (widths 16 to 128, windows 4-4-4-2,
+                // global attention in block 3) and a 32-wide neck and decoder. Production keeps Grounding DINO-T and
+                // SAM 2.1 Hiera-L at 1024 px.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ImageSegmentation, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 1), " +
-                    $"optimizer: {conservativeSmokeAdamWOptimizer}, " +
-                    "lossFunction: new AiDotNet.LossFunctions.MeanSquaredErrorLoss<double>(), " +
-                    "options: new AiDotNet.ComputerVision.Segmentation.OpenVocabulary.GroundedSAM2Options { " +
-                    "NumClasses = 1, VisionDim = 32, DecoderDim = 32, NumVisionLayers = 1, NumDecoderLayers = 1, " +
-                    "NumHeads = 4, PatchSize = 8 })";
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 32), " +
+                    "new AiDotNet.VisionLanguage.Grounding.GroundedSAM2Options { Detector = " +
+                    "new AiDotNet.VisionLanguage.Grounding.GroundingDINOOptions { ImageSize = 64, VisionDim = 16, " +
+                    "SwinDepths = new[] { 1, 1, 2, 1 }, SwinHeads = new[] { 1, 2, 2, 4 }, SwinWindowSize = 4, SwinDropPathRate = 0.0, " +
+                    "TextHiddenSize = 32, TextLayers = 2, TextHeads = 2, TextIntermediateSize = 64, DecoderDim = 32, " +
+                    "NumVisionLayers = 1, NumDecoderLayers = 1, NumHeads = 4, FeedForwardDim = 64, NumSamplingPoints = 2, " +
+                    "NumQueryPositions = 10, MaxSequenceLength = 16, MaxDetections = 10, FusionDropPathRate = 0.0 }, " +
+                    "SamImageSize = 64, SamBlocksPerStage = new[] { 1, 1, 2, 1 }, SamEmbedDims = new[] { 16, 32, 64, 128 }, " +
+                    "SamHeadsPerStage = new[] { 1, 2, 4, 8 }, SamWindowSizes = new[] { 4, 4, 4, 2 }, SamGlobalAttentionBlocks = new[] { 3 }, " +
+                    "SamDim = 32, SamMaskInChannels = 8, SamDecoderHeads = 2, SamDecoderMlpDim = 64, SamIouHiddenDim = 16 })";
             }
             else if (model.ClassName == "DannaSep" && model.TypeParameterCount == 1)
             {
@@ -14536,14 +14525,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] InputShape => new[] { 4, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
         }
-        else if (isVisionModel && model.ClassName == "GroundingDINO")
+        else if (isVisionModel && GroundingNetworkModels.Contains(model.ClassName))
         {
-            // Grounding DINO reads a 64 px RGB image; Predict returns its image tokens before they meet the text: the
-            // Swin levels 8x8, 4x4 and 2x2 and the extra 1x1 level, 85 tokens of the fixture's width 32. Every
-            // invariant trains through TrainGrounding with synthetic grounded phrases (VisionLanguageTestBase). A step
-            // runs the whole network, so the repeated-training probes take a few steps each.
+            // These read a 64 px RGB image and train every invariant's step through TrainGrounding with synthetic
+            // grounded phrases (VisionLanguageTestBase). Grounding DINO's Predict returns its image tokens before they
+            // meet the text: the Swin levels 8x8, 4x4 and 2x2 and the extra 1x1 level, 85 tokens of the fixture's width
+            // 32. Grounded SAM 2's returns SAM 2's image embedding, 32 channels on a 4x4 grid. A step runs the whole
+            // detector, so the repeated-training probes take a few steps each.
             sb.AppendLine("    protected override int[] InputShape => new[] { 1, 3, 64, 64 };");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 85, 32 };");
+            sb.AppendLine(model.ClassName == "GroundedSAM2"
+                ? "    protected override int[] OutputShape => new[] { 1, 32, 4, 4 };"
+                : "    protected override int[] OutputShape => new[] { 1, 85, 32 };");
             sb.AppendLine("    protected override int TrainingIterations => 3;");
             sb.AppendLine("    protected override int MoreDataShortIterations => 2;");
             sb.AppendLine("    protected override int MoreDataLongIterations => 6;");
@@ -14597,13 +14589,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
             sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
             sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
-            // GroundedSAM2 and GLaMM show a transient Adam first-step warm-up rise at step 2 even
-            // though their longer trajectories descend. Use the first proven post-hump point for each:
-            // GLaMM passes at step 3 (61 s on the 4 CPU / 16 GB runner profile), while GroundedSAM2
-            // needs 15 inexpensive steps. Both remain inside the 180 s per-test budget.
+            // GLaMM shows a transient Adam first-step warm-up rise at step 2 even though its longer
+            // trajectory descends; it passes at step 3 (61 s on the 4 CPU / 16 GB runner profile), inside
+            // the 180 s per-test budget.
             int groundingMemorizationIterations = model.ClassName switch
             {
-                "GroundedSAM2" => 15,
                 "GLaMM" => 3,
                 _ => 2
             };
