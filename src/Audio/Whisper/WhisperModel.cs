@@ -899,62 +899,38 @@ public partial class WhisperModel<T> : AudioNeuralNetworkBase<T>, ISpeechRecogni
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
-    /// <summary>
-    /// Trains the model on a single batch of audio and expected transcription tokens.
-    /// </summary>
-    /// <param name="input">Audio waveform tensor [batch, samples] or [samples].</param>
-    /// <param name="expectedOutput">Expected token sequence tensor [batch, sequence_length].</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Training teaches the model to transcribe audio correctly.
-    ///
-    /// The training process:
-    /// 1. Forward pass: Audio goes through encoder-decoder to predict tokens
-    /// 2. Loss calculation: Compare predicted tokens to expected tokens
-    /// 3. Backward pass: Calculate gradients showing how to improve
-    /// 4. Update: Adjust model parameters to reduce error
-    ///
-    /// Call this method repeatedly with different audio/transcript pairs.
-    /// After many iterations, the model learns to transcribe correctly.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Cannot train in ONNX inference mode. Use the native constructor for training.");
-        }
+    /// <inheritdoc/>
+    /// <remarks>Audio is converted to log-mel features, as for transcription.</remarks>
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
+        => (EnsureMelFeatures(input), target);
 
-        // Under _trainingGate: _teacherForcingTokens is per-instance, so two concurrent Train calls
-        // would overwrite each other's prefix and each would train against the other's transcript.
-        // TrainWithTape runs ForwardForTraining synchronously on this thread, so holding the gate for
-        // the whole call is what makes that field safe to read there.
-        lock (_trainingGate)
-        {
-        SetTrainingMode(true);
+    /// <inheritdoc/>
+    /// <remarks>
+    /// A training step holds the training gate, and the decoder is teacher-forced with the target transcript's tokens
+    /// (Radford et al. 2022).
+    /// </remarks>
+    protected override void OnTrainingStepStarting(Tensor<T> input, Tensor<T> target)
+    {
+        base.OnTrainingStepStarting(input, target);
+        System.Threading.Monitor.Enter(_trainingGate);
         try
         {
-            // Featurize exactly as PredictCore does. Whisper (Radford et al., 2022, S2.2) defines the
-            // model over an 80-channel log-mel spectrogram, not the raw waveform: featurization is
-            // part of the input pipeline for BOTH training and inference. Forwarding the raw waveform
-            // straight into Layers here meant Train and Predict ran two different pipelines off the
-            // same input, so the training forward emitted [1, 64, 51865] while the target -- sized
-            // from a warm-up Predict -- was [3001, 51865], and every training test in the class died
-            // on "Tensor shapes must match" before a single gradient was computed.
-            //
-            // Passing _optimizer through matters too: it is built in the constructor (honouring the
-            // configured learning rate) but the two-argument TrainWithTape overload never reads it,
-            // so training silently ran on the framework default.
-            // Teacher forcing (Radford et al., 2022, S2.3): the decoder is conditioned on the
-            // ground-truth token prefix during training rather than its own predictions.
-            _teacherForcingTokens = CreateTeacherForcingTokens(expectedOutput);
-            TrainWithTape(EnsureMelFeatures(input), expectedOutput, _optimizer);
+            _teacherForcingTokens = CreateTeacherForcingTokens(target);
         }
-        finally
+        catch
         {
-            _teacherForcingTokens = null;
-            SetTrainingMode(false);
+            // OnTrainingStepEnded runs only once this hook returns.
+            System.Threading.Monitor.Exit(_trainingGate);
+            throw;
         }
-        }
+    }
+
+    /// <inheritdoc/>
+    protected override void OnTrainingStepEnded(bool succeeded)
+    {
+        _teacherForcingTokens = null;
+        System.Threading.Monitor.Exit(_trainingGate);
+        base.OnTrainingStepEnded(succeeded);
     }
 
     /// <summary>

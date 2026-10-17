@@ -56,6 +56,19 @@ internal static class ImageTrainingHelpers
     }
 
     /// <summary>
+    /// The photometric training objective as a tensor: the mean squared error between rendered and target colors,
+    /// recorded so it differentiates through the volume-rendering integral.
+    /// </summary>
+    public static Tensor<T> PhotometricLoss<T>(Tensor<T> rendered, Tensor<T> target)
+    {
+        var engine = AiDotNetEngine.Current;
+        var diff = engine.TensorSubtract(rendered, target);
+        var squared = engine.TensorMultiply(diff, diff);
+        var allAxes = new int[squared.Shape.Length];
+        for (int axis = 0; axis < allAxes.Length; axis++) allAxes[axis] = axis;
+        return engine.ReduceMean(squared, allAxes, keepDims: false);
+    }
+    /// <summary>
     /// If the view carries a <see cref="LearnedPrior{T}"/>, blends the prior's hallucinated
     /// per-pixel color into the ray target so ray-mode training (NeRF, InstantNGP) picks
     /// up single-image reconstruction signal from angles the caller didn't photograph.
@@ -102,7 +115,7 @@ internal static class ImageTrainingHelpers
             meanG += numOps.ToDouble(hallucination[y, x, 1]);
             meanB += numOps.ToDouble(hallucination[y, x, 2]);
         }
-        double count = H * W;
+        double count = (double)H * W;
         meanR /= count; meanG /= count; meanB /= count;
 
         // Weighted blend: target = (1 - c) * photo_sample + c * prior_mean_color.

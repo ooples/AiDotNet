@@ -787,28 +787,20 @@ public partial class UDOP<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
     }
 
-    /// <summary>
-    /// One training step. A <c>[1, vocab]</c> target is a distribution over the first generated token. Any other
-    /// target is a token-id sequence, trained with teacher forcing.
-    /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// With its unified transformer, the model trains the sequence loss of the routed, preprocessed document; without
+    /// one, the standard step trains the network.
+    /// </remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        if (input is null) throw new ArgumentNullException(nameof(input));
-        if (expectedOutput is null) throw new ArgumentNullException(nameof(expectedOutput));
-
-        if (_transformer is null)
+        if (_transformer is null) return null;
+        return new[]
         {
-            SetTrainingMode(true);
-            try { TrainWithTape(PreprocessDocument(input), expectedOutput, _optimizer); }
-            finally { SetTrainingMode(false); }
-            return;
-        }
-
-        // PredictCore evaluates ImageNet-normalised pages, so train on that same representation.
-        TrainWithCustomObjective(PreprocessDocument(input), expectedOutput,
-            (routed, target) => SequenceLoss(EncodeRouted(routed), target), _optimizer);
+            new Training.TrainingObjective<T>(
+                new[] { PreprocessDocument(input), expectedOutput },
+                data => SequenceLoss(EncodeRouted(data[0]), data[1])),
+        };
     }
 
     /// <inheritdoc/>

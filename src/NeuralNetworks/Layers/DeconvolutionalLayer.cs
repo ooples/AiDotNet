@@ -840,37 +840,6 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
         Engine.InvalidatePersistentTensor(_biases);
     }
 
-    /// <summary>
-    /// Sets all trainable parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets all trainable parameters (kernel weights and biases) of the layer from a single
-    /// vector. The vector must have the exact length required for all parameters of the layer.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the layer's learned values at once.
-    /// 
-    /// When setting parameters:
-    /// - The vector must have exactly the right number of values
-    /// - The values are assigned to the kernels and biases in a specific order
-    /// 
-    /// This is useful for:
-    /// - Loading a previously saved model
-    /// - Copying parameters from another model
-    /// - Setting parameters that were optimized externally
-    /// 
-    /// It's like replacing all the "knowledge" in the layer with new information.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        var kGrad = _kernelsGradient != null ? new Vector<T>(_kernelsGradient.ToArray()) : new Vector<T>(_kernels.Length);
-        var bGrad = _biasesGradient != null ? new Vector<T>(_biasesGradient.ToArray()) : new Vector<T>(_biases.Length);
-        return Vector<T>.Concatenate(kGrad, bGrad);
-    }
-
     public override void ClearGradients()
     {
         _kernelsGradient = null;

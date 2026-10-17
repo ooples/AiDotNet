@@ -359,20 +359,6 @@ public partial class ProPainter<T> : VideoInpaintingBase<T>
     private Tensor<T> Gelu(Tensor<T> x)
         => Engine.TensorMultiply(x, Engine.TensorSigmoid(Engine.TensorMultiplyScalar(x, NumOps.FromDouble(1.702))));
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     #endregion
 
     #region Private Methods

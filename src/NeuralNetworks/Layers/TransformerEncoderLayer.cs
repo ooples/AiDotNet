@@ -326,16 +326,6 @@ public partial class TransformerEncoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         parameters.AddRange(_norm2.GetTrainableParameters());
         return parameters;
     }
-    public override Vector<T> GetParameterGradients()
-    {
-        if (!_isInitialized) return new Vector<T>(0);
-        return Vector<T>.Concatenate(
-            _selfAttention.GetParameterGradients(),
-            _norm1.GetParameterGradients(),
-            _feedForward1.GetParameterGradients(),
-            _feedForward2.GetParameterGradients(),
-            _norm2.GetParameterGradients());
-    }
 
     public override void ClearGradients()
     {

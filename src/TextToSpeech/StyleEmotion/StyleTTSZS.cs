@@ -154,21 +154,6 @@ public partial class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
         return c;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being

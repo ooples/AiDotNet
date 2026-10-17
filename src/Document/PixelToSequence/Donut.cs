@@ -1001,26 +1001,6 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
         }
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Training is not supported in ONNX inference mode. Use native mode for training.");
-        }
-
-        EnsureNativeInitialized();
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
 

@@ -1556,12 +1556,6 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
     }
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        TrainWithTape(input, expectedOutput, _optimizer);
-    }
-
-    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         if (!_useNativeMode)

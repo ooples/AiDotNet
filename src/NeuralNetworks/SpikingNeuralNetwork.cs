@@ -538,7 +538,7 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
     /// which is a key difference from traditional neural networks.
     /// </para>
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // The DEFAULT topology (LayerHelper.CreateDefaultSpikingLayers) is a
         // single composite SpikingNetworkCore + ActivationLayer. The core is a
@@ -574,7 +574,7 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
                 SetTrainingMode(false);
             }
 
-            return;
+            return true;
         }
 
         // Reset network state
@@ -739,6 +739,8 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
         // surrogate-gradient Adam with the recorded membrane history;
         // hidden layers retain classic STDP).
         ApplySTDPLearning(layerSpikeHistory, layerMembraneHistory, outputError, readoutBoundary);
+
+        return true;
     }
 
     /// <summary>

@@ -547,37 +547,6 @@ public partial class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         return Forward(input);
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-
-        EnsureNativeInitialized();
-        SetTrainingMode(true);
-        try
-        {
-            // TrainWithTape already performs the optimizer step. The previous
-            // implementation followed it with UpdateParameters(CollectGradients),
-            // applying a second, fixed-rate update and causing longer training
-            // runs to drift upward. Use the caller-supplied optimizer as the
-            // single source of truth and fail loudly if it cannot drive tape
-            // gradients instead of silently substituting the base optimizer.
-            var gradientOptimizer = _optimizer
-                ?? throw new InvalidOperationException(
-                    "Dessurt training requires an optimizer implementing " +
-                    "IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>.");
-            // PredictCore evaluates the ImageNet-normalized document, and TrainWithTape now applies
-            // that same preparation through DocumentNeuralNetworkBase.PrepareInputForTraining, so the
-            // raw page goes in here; preprocessing it first as well would normalize it twice.
-            TrainWithTape(input, expectedOutput, gradientOptimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
 

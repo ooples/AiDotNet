@@ -669,6 +669,54 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
         // Every shape op must go through Engine so the gradient tape records it —
         // direct Tensor<T>.Reshape calls bypass the tape and snap the gradient
         // chain between the UNet backbone and the diffusion training loss.
+        var sample = ToPredictorInput(noisySample);
+        return FromPredictorOutput(NoisePredictor.PredictNoise(sample, timestep, null), noisySample);
+    }
+
+    /// <summary>
+    /// Whether training can feed timesteps as a tensor: the predictor takes one embedding row per element, and
+    /// this model predicts noise through the base path rather than an override of its own.
+    /// </summary>
+    protected override bool CanPredictFromTimestepTensor =>
+        NoisePredictor is NoisePredictors.NoisePredictorBase<T> { SupportsBatchedTimeEmbedding: true }
+        && UsesBaseNoisePrediction(GetType());
+
+    /// <inheritdoc />
+    protected override Tensor<T> PredictTrainingNoise(
+        Tensor<T> noisySample, Tensor<T> timesteps, Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (NoisePredictor is not NoisePredictors.NoisePredictorBase<T> predictor)
+            throw new NotSupportedException($"{GetType().Name}'s noise predictor cannot take a timestep tensor.");
+        var sample = ToPredictorInput(noisySample);
+        var prediction = predictor.PredictNoiseWithEmbedding(sample, predictor.GetTimestepEmbedding(timesteps), null);
+        return FromPredictorOutput(prediction, noisySample);
+    }
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, bool> BaseNoisePredictionByType = new();
+
+    // True when none of the int-timestep prediction hooks is overridden below LatentDiffusionModelBase: an
+    // override can change what the model predicts, and the tensor path would silently bypass it.
+    private static bool UsesBaseNoisePrediction(Type type) => BaseNoisePredictionByType.GetOrAdd(type, t =>
+    {
+        const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance
+            | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+        var hooks = new[]
+        {
+            t.GetMethod(nameof(PredictNoise), flags, null, new[] { typeof(Tensor<T>), typeof(int) }, null),
+            t.GetMethod(nameof(PredictNoiseBatched), flags, null, new[] { typeof(Tensor<T>), typeof(int[]) }, null),
+            t.GetMethod(nameof(PredictTrainingNoise), flags, null,
+                new[] { typeof(Tensor<T>), typeof(int[]), typeof(bool), typeof(Tensor<T>), typeof(Tensor<T>) }, null),
+        };
+        return hooks
+            .Select(hook => hook?.DeclaringType)
+            .Select(declaring => declaring is not null && declaring.IsGenericType ? declaring.GetGenericTypeDefinition() : declaring)
+            .All(open => open == typeof(LatentDiffusionModelBase<>) || open == typeof(DiffusionModelBase<>));
+    });
+
+    // Shapes a noisy latent for the predictor: [B, C, H, W], with zero channels appended when the predictor
+    // takes more (see PredictNoise).
+    private Tensor<T> ToPredictorInput(Tensor<T> noisySample)
+    {
         var sample = EnsureLatentShape(noisySample);
 
         // Pad sample channel count to match the UNet's
@@ -692,9 +740,12 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
             var padding = new Tensor<T>(new[] { sample.Shape[0], extraChannels, sample.Shape[2], sample.Shape[3] });
             sample = Engine.TensorConcatenate(new[] { sample, padding }, axis: 1);
         }
+        return sample;
+    }
 
-        var result = NoisePredictor.PredictNoise(sample, timestep, null);
-
+    // Strips any extra predicted channels and restores the caller's shape (see PredictNoise).
+    private Tensor<T> FromPredictorOutput(Tensor<T> result, Tensor<T> noisySample)
+    {
         // If the UNet returned a channel-augmented prediction (e.g. it mirrored
         // the 9-channel input), strip back to LatentChannels so the denoising
         // math downstream sees the expected latent shape.
@@ -713,7 +764,6 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
 
         return result;
     }
-
     /// <summary>
     /// Ensures a tensor has proper 4D latent shape [B, C, H, W] for UNet processing.
     /// Flat or 2D tensors are reshaped to [1, C, H, W] where H*W*C matches the total elements.

@@ -539,24 +539,6 @@ public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T
         return base.GetNamedLayerActivations(input);
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-
-        EnsureNativeInitialized();
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <summary>
     /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
     /// belong to that graph, not to this instance.

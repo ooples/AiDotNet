@@ -809,6 +809,16 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                     continue;
             }
 
+            // Host fast path: one fused pass per parameter (m, v and the decayed parameter updated in place),
+            // chunked across the pool. The tensor-op path below runs ~15 full-size engine ops per parameter, each
+            // allocating its result: ~400 ms of a Track B LM step (31M parameters) vs a few ms here.
+            if (configuredMask is null && !_options.UseAMSGrad
+                && TryFusedHostAdamWStep(param, grad, m, v, NumOps.ToDouble(CurrentLearningRate),
+                    1.0 - Math.Pow(_options.Beta1, _tapeStep), 1.0 - Math.Pow(_options.Beta2, _tapeStep)))
+            {
+                continue;
+            }
+
             // m = beta1 * m + (1 - beta1) * grad
             var mNew = Engine.TensorAdd(Engine.TensorMultiplyScalar(m, beta1), Engine.TensorMultiplyScalar(grad, oneMinusBeta1));
             Engine.TensorCopy(mNew, m);
@@ -866,6 +876,50 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             Engine.TensorSubtractInPlace(param, adamUpdate);
             Engine.TensorSubtractInPlace(param, decayTerm);
         }
+    }
+
+    /// <summary>
+    /// One AdamW step on a host parameter with the single-pass SIMD kernel the compiled plan uses
+    /// (FusedOptimizer.AdamWUpdateSimd: m, v and the decayed parameter in one pass), split into fixed chunks across the
+    /// pool. Same arithmetic as the tensor-op path: m and v moments, bias corrections, update
+    /// lr * mHat / (sqrt(vHat) + eps), decoupled decay of the pre-update parameter. False (nothing done) for a GPU
+    /// engine, a non-float element type, or a layout without zero-copy host arrays.
+    /// </summary>
+    private bool TryFusedHostAdamWStep(Tensor<T> param, Tensor<T> grad, Tensor<T> m, Tensor<T> v, double lr, double bc1, double bc2)
+    {
+        if (Engine.SupportsGpu || param.Length != grad.Length || param.Length != m.Length || param.Length != v.Length
+            || !param.IsContiguous || !grad.IsContiguous || !m.IsContiguous || !v.IsContiguous)
+            return false;
+        int length = param.Length;
+        if (typeof(T) == typeof(float))
+        {
+            var pA = ((Tensor<float>)(object)param).GetCpuBackingForContiguousWrite(out int pO);
+            var mA = ((Tensor<float>)(object)m).GetCpuBackingForContiguousWrite(out int mO);
+            var vA = ((Tensor<float>)(object)v).GetCpuBackingForContiguousWrite(out int vO);
+            var gA = ((Tensor<float>)(object)grad).GetCpuBackingForStridedRead(out int gO);
+            if (pA is null || mA is null || vA is null || gA is null) return false;
+            AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.AdamWStepHost(pA, pO, gA, gO, mA, mO, vA, vO, length,
+                (float)lr, (float)_options.Beta1, (float)_options.Beta2, (float)_options.Epsilon,
+                (float)_options.WeightDecay, (float)bc1, (float)bc2);
+        }
+        else if (typeof(T) == typeof(double))
+        {
+            var pA = ((Tensor<double>)(object)param).GetCpuBackingForContiguousWrite(out int pO);
+            var mA = ((Tensor<double>)(object)m).GetCpuBackingForContiguousWrite(out int mO);
+            var vA = ((Tensor<double>)(object)v).GetCpuBackingForContiguousWrite(out int vO);
+            var gA = ((Tensor<double>)(object)grad).GetCpuBackingForStridedRead(out int gO);
+            if (pA is null || mA is null || vA is null || gA is null) return false;
+            AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.AdamWStepHost(pA, pO, gA, gO, mA, mO, vA, vO, length,
+                lr, _options.Beta1, _options.Beta2, _options.Epsilon, _options.WeightDecay, bc1, bc2);
+        }
+        else
+        {
+            return false;
+        }
+        param.IncrementVersion();
+        m.IncrementVersion();
+        v.IncrementVersion();
+        return true;
     }
 
     /// <summary>

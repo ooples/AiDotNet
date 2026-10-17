@@ -921,27 +921,6 @@ public partial class MegalodonLayer<T> : LayerBase<T>, IShapeContract
         _outputProjectionWeights, _outputProjectionBias
     ];
 
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_emaAlphaRealGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        return Vector<T>.Concatenate(
-            new Vector<T>(_emaAlphaRealGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_emaAlphaImagGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_emaInputWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_emaInputBiasGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_emaOutputWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_emaOutputBiasGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_tsNormGammaGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_tsNormBetaGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_queryWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_keyWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_valueWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_gateWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_gateBiasGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? Array.Empty<T>()));
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

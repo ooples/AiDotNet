@@ -1594,19 +1594,6 @@ public partial class VideoCLIPNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
         }
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {

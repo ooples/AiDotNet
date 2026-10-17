@@ -217,21 +217,6 @@ public partial class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
     // Train routes through the explicit _optimizer field so paper-faithful
     // EmotiVoiceOptions hyperparameters (LearningRate, Beta1/2, Epsilon)
     // are honoured. The try/finally restores eval mode on exception.
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being

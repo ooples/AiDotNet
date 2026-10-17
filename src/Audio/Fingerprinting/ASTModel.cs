@@ -278,16 +278,22 @@ public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinte
         };
     }
 
+    /// <inheritdoc />
+    protected override string? TrainingUnavailableReason => _useNativeMode ? null : OnnxTrainingUnavailableReason;
+
     /// <summary>
     /// One training step on waveforms <c>[batch, samples]</c> and multi-hot labels <c>[batch, labels]</c>, as the
     /// paper trains on AudioSet: mixup, SpecAugment and binary cross-entropy.
     /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
+    /// <remarks>The mixup and SpecAugment draws happen on the host, before the objective; the objective reads the
+    /// prepared features and labels as its data, which a compiled plan rebinds on every step.</remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> target)
     {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot train in ONNX inference mode.");
-        var (features, targets) = Pipeline.TrainingBatch(input, expected, _trainingRandom);
-        TrainWithCustomObjective(features, targets, (x, y) => Pipeline.Loss(Network.Forward(x), y), _optimizer);
+        var (features, targets) = Pipeline.TrainingBatch(input, target, _trainingRandom);
+        return new[]
+        {
+            new Training.TrainingObjective<T>(new[] { features, targets }, data => Pipeline.Loss(Network.Forward(data[0]), data[1])),
+        };
     }
 
     /// <inheritdoc />

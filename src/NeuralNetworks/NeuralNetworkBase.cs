@@ -427,9 +427,18 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     protected T? LastLoss
     {
-        get => _lastLoss;
+        get
+        {
+            if (_pendingLossTensor is { } pending)
+            {
+                _pendingLossTensor = null;
+                _lastLoss = pending.Length > 0 ? pending[0] : NumOps.Zero;
+            }
+            return _lastLoss;
+        }
         set
         {
+            _pendingLossTensor = null;
             _lastLoss = value;
             _lastLossRecorded = true;
         }
@@ -437,6 +446,18 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
     private T? _lastLoss;
     private bool _lastLossRecorded;
+
+    // A compiled step's loss tensor, read into _lastLoss only when something asks for the loss. Reading it waits for
+    // the device to finish that step; a training loop that never looks at the loss lets the host prepare the next
+    // step while the device runs this one. The plan reuses the tensor every step and the next step replaces this
+    // reference, so a read always sees the most recent step's loss.
+    private Tensor<T>? _pendingLossTensor;
+
+    private void SetLastLossDeferred(Tensor<T> lossTensor)
+    {
+        _pendingLossTensor = lossTensor;
+        _lastLossRecorded = true;
+    }
 
     /// <summary>
     /// Indicates whether the network is currently in training mode.
@@ -2950,9 +2971,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Also drop compiled fused training plans and reset sticky-disable
         // so the next training run gets a fresh chance at the fused path.
         Training.CompiledTapeTrainingStep<T>.Invalidate(this);
-        _fusedTrainingDisabled = FusedTrainingDisabledByConfiguration;
-        _fusedTrainingCommitted = false;
-        _fusedPersistenceVerified = false;
+        FusedSession.Restart(disabled: FusedTrainingDisabledByConfiguration);
     }
 
     /// <summary>
@@ -5041,66 +5060,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// Receives the fused kernel's gradients and publishes them to the layer surface.
     /// </summary>
     /// <remarks>
-    /// No copy is taken here on purpose. The plan hands over its pre-allocated buffers by reference
-    /// and overwrites them on the next step, but the scatter READS the scalars into each layer's own
-    /// vector rather than retaining the tensors, so the published surface is already independent of
-    /// the plan's buffers by the time this returns.
+    /// No copy is taken here on purpose. The plan hands over its pre-allocated buffers by reference and overwrites
+    /// them only on its next step, which publishes again; it lands them on the host before it is retired. Layers
+    /// therefore keep device-resident gradients by reference and read them only if something asks.
     /// </remarks>
-    /// <summary>
-    /// Whether a fused step could have moved any parameter, so that finding every parameter unchanged afterwards is
-    /// evidence of a plan that has come loose from the live tensors (ooples/AiDotNet#1822) rather than of a step that
-    /// legitimately did nothing.
-    /// </summary>
-    /// <remarks>
-    /// A step legitimately changes nothing when its learning rate is exactly zero (a warmup that starts at 0, a cosine
-    /// schedule that decays to 0), when every gradient is exactly zero, or when the optimizer's update can itself be
-    /// exactly zero (an L1 proximal step holding weights at zero). Treating those as a decoupled plan disabled fused
-    /// training for the rest of the run and discarded the optimizer's fused state. Anything this cannot establish
-    /// (gradients not observed, the plan's step unknown) counts as "could have moved", so the guard keeps catching a
-    /// genuinely decoupled plan.
-    /// <para>
-    /// An optimizer that CAN produce an exactly-zero update says nothing about whether this step did: a nonzero
-    /// gradient at a nonzero rate usually moves an FTRL or L1-proximal weight. So the capability alone never excuses an
-    /// unchanged step; it does only when the plan's own introspection confirms it updates this model's live
-    /// parameters, which rules out the decoupled plan the guard exists to catch. Without that confirmation the step
-    /// stays eligible to fail the guard, whose worst case is a fallback to the eager tape, not a silent no-op.
-    /// </para>
-    /// </remarks>
-    private static bool FusedStepCouldHaveMovedParameters(
-        AiDotNet.Optimizers.Fused.FusedOptimizerConfig config,
-        double learningRate,
-        AiDotNet.Tensors.Engines.Compilation.LrSchedule? schedule,
-        bool gradientsObserved,
-        bool anyGradientNonZero,
-        bool planConfirmedAttached)
+    private protected void ScatterFusedGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
     {
-        if (config.UpdateCanBeExactlyZero && planConfirmedAttached) return false;
-        if (gradientsObserved && !anyGradientNonZero) return false;
-
-        if (schedule is null)
-            return learningRate != 0f;
-
-        // The plan evaluates its schedule at its own 1-based step; when that step is known, so is this step's rate.
-        return !Training.CompiledTapeTrainingStep<T>.TryGetPlanOptimizerStep(out int step)
-            || schedule.GetLr(step) != 0.0;
-    }
-
-    private bool AnyGradientNonZero(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
-    {
-        foreach (var gradient in grads.Values)
-        {
-            if (gradient is null) continue;
-            var span = gradient.AsSpan();
-            for (int i = 0; i < span.Length; i++)
-            {
-                if (!NumOps.Equals(span[i], NumOps.Zero)) return true;
-            }
-        }
-        return false;
-    }
-    private void ScatterFusedGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
-    {
-        PublishParameterGradients(grads);
+        // A step that ran on the fused session (or its eager twin) never reaches ComputeAndPublishParameterGradients,
+        // so the reachability probe is told here. A tensor the step's loss does not reach gets an all-zero
+        // gradient from the plan, which the probe counts as unreached.
+        TapeReachabilityProbe<T>.Current?.Record(this, grads);
+        PublishParameterGradients(grads, sourcesOutliveStep: true);
     }
 
     private void ClearPublishedLayerGradientSlices()
@@ -5116,6 +5086,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     protected int ScatterParameterGradientsToLayers(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+        => ScatterParameterGradientsToLayers(grads, sourcesOutliveStep: false);
+
+    private int ScatterParameterGradientsToLayers(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads, bool sourcesOutliveStep)
     {
         if (grads is null || grads.Count == 0) return 0;
 
@@ -5124,13 +5097,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             if (Layers[i] is LayerBase<T> layer)
             {
-                matched += layer.ScatterParameterGradients(grads);
+                matched += layer.ScatterParameterGradients(grads, sourcesOutliveStep);
             }
         }
 
         foreach (var layer in GetExtraTrainableLayers())
         {
-            if (layer is not null) matched += layer.ScatterParameterGradients(grads);
+            if (layer is not null) matched += layer.ScatterParameterGradients(grads, sourcesOutliveStep);
         }
 
         return matched;
@@ -5138,6 +5111,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
     /// <summary>Publishes one backward pass to the public model and layer gradient surfaces.</summary>
     protected int PublishParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
+        => PublishParameterGradients(grads, sourcesOutliveStep: false);
+
+    /// <summary>
+    /// <see cref="PublishParameterGradients(IReadOnlyDictionary{Tensor{T}, Tensor{T}})"/> for gradients that stay
+    /// valid until the next publish, which layers may then keep by reference.
+    /// </summary>
+    private int PublishParameterGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads, bool sourcesOutliveStep)
     {
         _gradientSurfaceUnavailable = false;
         _publishedExtraTensorGradients = null;
@@ -5147,7 +5127,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         if (grads is null || grads.Count == 0) return 0;
 
-        int matched = ScatterParameterGradientsToLayers(grads);
+        int matched = ScatterParameterGradientsToLayers(grads, sourcesOutliveStep);
         Dictionary<Tensor<T>, Vector<T>>? extras = null;
         foreach (var tensor in GetExtraTrainableTensors())
         {
@@ -5241,7 +5221,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>Collects every trainable tensor owned by this model in canonical order.</summary>
-    protected IReadOnlyList<Tensor<T>> CollectModelTrainableTensors()
+    protected internal IReadOnlyList<Tensor<T>> CollectModelTrainableTensors()
     {
         var allParameters = new List<Tensor<T>>();
         var seen = new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
@@ -7517,6 +7497,34 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     internal int GetExpectedUnbatchedInputRankInternal() => GetExpectedUnbatchedInputRank();
 
+    private Type? _sequenceProbeLayerType;
+    private bool _sequenceProbeResult;
+
+    /// <summary>
+    /// Whether the first layer declares a <c>[Time, Features]</c> unbatched input layout (LSTM, GRU and the
+    /// other recurrent/sequence layers). Cached per first-layer type: this runs on every training step.
+    /// </summary>
+    private bool FirstLayerTakesUnbatchedSequence()
+    {
+        if (Layers.Count == 0) return false;
+        var type = Layers[0].GetType();
+        if (type == _sequenceProbeLayerType) return _sequenceProbeResult;
+
+        bool result = false;
+        foreach (var layout in ShapeInference.InputLayouts(type))
+        {
+            if (layout.Axes is [TensorAxis.Time, TensorAxis.Features])
+            {
+                result = true;
+                break;
+            }
+        }
+
+        _sequenceProbeResult = result;
+        _sequenceProbeLayerType = type;
+        return result;
+    }
+
     private int GetExpectedUnbatchedInputRank()
     {
         if (Architecture is null) return 0;
@@ -7531,6 +7539,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 && Architecture.InputHeight > 0
                 && Architecture.InputWidth > 0)
                 return 4;
+            // Sequence layers on a [seq, F] architecture: a TwoDimensional architecture fills InputHeight
+            // and InputWidth too, which the vision rule below reads as [C, H, W] -- so a batched
+            // [B, seq, F] training input looked unbatched and was promoted to [1, B, seq, F]. A first
+            // layer that declares a [Time, Features] unbatched input layout settles it: rank 2.
+            if (FirstLayerTakesUnbatchedSequence())
+                return 2;
             // Vision / spatial: InputHeight > 0 means [C, H, W] is the
             // unbatched layout (rank 3). InputDepth defaults to 1 when not
             // explicitly set on a TwoDimensional arch — paper-faithful CNN
@@ -8078,6 +8092,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
             return false;
 
+        // Trace in inference mode, as PredictCompiled replays it: the plan cached here is the one PredictCompiled
+        // runs, so tracing it in training mode captured training-only work (Dropout sampling, BatchNorm batch stats,
+        // the pooling argmax) into an inference plan.
+        using var _ = new NoGradScope<T>();
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
         try
         {
             // _compileHost.Predict handles trace-and-compile-on-miss / replay-on-hit
@@ -8105,6 +8125,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 $"CompileForward failed for shape [{string.Join(",", sampleInput._shape)}]: " +
                 $"{ex.GetType().Name}: {ex.Message}");
             return false;
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
         }
     }
 
@@ -10354,7 +10378,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // The flag says a value was assigned; this second check is the reference-type case, where a
         // nullable T could legitimately have been assigned null. Written as a real check rather than
         // a null-forgiving operator.
-        var recorded = _lastLoss;
+        var recorded = LastLoss;
         return recorded is null ? NumOps.Zero : recorded;
     }
 
@@ -10505,13 +10529,226 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return s2 / n;
     }
 
+    /// <summary>
+    /// The optimizer this model trains with by default: the one it built in its constructor (usually its paper recipe,
+    /// or the one passed in). Null keeps the network default. An optimizer configured on the network
+    /// (<c>SetBaseTrainOptimizer</c>, the builder) still wins.
+    /// </summary>
+    /// <remarks>
+    /// The source generator supplies this from a model's <c>_optimizer</c> field, so no model overrides
+    /// <see cref="Train(Tensor{T}, Tensor{T})"/> just to hand its optimizer to the tape step. About 640 models did,
+    /// and those overrides skipped every preparation the base step applies (batch-dim promotion, micro-batching, the
+    /// OOM and device-fault retries).
+    /// </remarks>
+    protected internal virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => null;
+
+    /// <summary>
+    /// Why this instance cannot train, or null when it can: for example, it wraps an ONNX inference session instead of
+    /// native layers. Training then throws <see cref="NotSupportedException"/> with this reason.
+    /// </summary>
+    /// <remarks>
+    /// The model-family bases answer from their ONNX state, and the source generator answers from a model's
+    /// <c>_useNativeMode</c> field, so no model overrides <see cref="Train(Tensor{T}, Tensor{T})"/> to guard it.
+    /// </remarks>
+    protected virtual string? TrainingUnavailableReason => null;
+
+    /// <summary>The reason an ONNX-backed instance cannot train, shared by the model-family bases.</summary>
+    protected string OnnxTrainingUnavailableReason =>
+        $"{GetType().Name} is running an ONNX inference session and cannot be trained. Construct it with the native " +
+        "(layer-based) constructor to train.";
+
+    /// <summary>
+    /// Throws when this instance cannot take a training step: <see cref="TrainingUnavailableReason"/> is set, or (in the
+    /// override the source generator emits for a model with its own <c>ThrowIfDisposed</c>) it was disposed.
+    /// </summary>
+    protected virtual void ThrowIfCannotTrain()
+    {
+        if (TrainingUnavailableReason is { } reason)
+            throw new NotSupportedException(reason);
+    }
+
+    /// <summary>
+    /// The optimizer steps one training call takes, when this model's objective is not the prediction-versus-target
+    /// loss: a diffusion model's noise-prediction loss, a graph model's step over its adjacency, a GAN's critic and
+    /// generator steps. Null (the default) trains the prediction against the target.
+    /// </summary>
+    /// <param name="input">The training input.</param>
+    /// <param name="target">The training target.</param>
+    /// <returns>The steps to take, in order, or null for the standard step.</returns>
+    /// <remarks>
+    /// The base class runs each objective on the shared fused session, in training mode, and records the last loss.
+    /// A model declares what its step computes; it does not write the training loop. See
+    /// <see cref="Training.TrainingObjective{T}"/>.
+    /// </remarks>
+    protected virtual IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> target)
+        => null;
+
+    private bool _applyingLearningRule;
+
+    /// <summary>
+    /// A model's own training step, when it is not a gradient objective the base class can run: contrastive divergence,
+    /// a Hebbian or spike-timing rule, a closed-form solve, a step that orchestrates several networks with their own
+    /// optimizers. Returns true when it took the step; false (the default) for the standard step.
+    /// </summary>
+    /// <param name="input">The training input.</param>
+    /// <param name="target">The training target.</param>
+    /// <remarks>
+    /// The base class still owns <see cref="Train(Tensor{T}, Tensor{T})"/>: the guards, the step hooks and the loss lock
+    /// run around this rule, and a rule that wants the standard gradient step as part of it calls
+    /// <see cref="TrainStandardStep"/>. Declared objectives take precedence.
+    /// </remarks>
+    protected virtual bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target) => false;
+
+    /// <summary>The standard gradient step on (input, target), for a learning rule that includes it.</summary>
+    protected void TrainStandardStep(Tensor<T> input, Tensor<T> target)
+        => RunTrainStep(input, target, optimizerOverride: null);
+
+    /// <summary>
+    /// Runs the objectives <see cref="DefineTrainingObjectives"/> declares, in training mode; returns false when the model
+    /// declares none. A family base that overrides <see cref="Train(Tensor{T}, Tensor{T})"/> calls this first, so its
+    /// models' declared objectives run.
+    /// </summary>
+    protected bool TryTrainDeclaredObjectives(Tensor<T> input, Tensor<T> target)
+    {
+        bool wasTraining = IsTrainingMode;
+        SetTrainingMode(true);
+        try
+        {
+            var objectives = DefineTrainingObjectives(input, target);
+            if (objectives is null)
+            {
+                if (_applyingLearningRule) return false;
+                _applyingLearningRule = true;
+                try
+                {
+                    return TryApplyLearningRule(input, target);
+                }
+                finally
+                {
+                    _applyingLearningRule = false;
+                }
+            }
+            foreach (var objective in objectives)
+            {
+                Guard.NotNull(objective);
+                T loss;
+                try
+                {
+                    loss = (objective.Network ?? this).TrainDeclaredObjective(objective);
+                }
+                finally
+                {
+                    objective.AfterStep?.Invoke();
+                }
+
+                objective.OnLoss?.Invoke(loss);
+            }
+
+            return true;
+        }
+        finally
+        {
+            SetTrainingMode(wasTraining);
+        }
+    }
+
+    /// <summary>
+    /// Takes one optimizer step on <paramref name="objective"/> through the shared fused session and returns its loss:
+    /// for a model's training entry points other than <see cref="Train(Tensor{T}, Tensor{T})"/> (image-space NeRF
+    /// training, masked-autoencoder pretraining). The caller sets the training mode.
+    /// </summary>
+    protected internal T TrainDeclaredObjective(Training.TrainingObjective<T> objective)
+    {
+        Guard.NotNull(objective);
+        var data = objective.Data;
+        var shapes = new int[data.Count][];
+        var offsets = new int[data.Count];
+        int offset = 0;
+        for (int i = 0; i < data.Count; i++)
+        {
+            Guard.NotNull(data[i]);
+            shapes[i] = data[i]._shape;
+            offsets[i] = offset;
+            offset += data[i].Length;
+        }
+
+        var packed = Training.StepInputPacking<T>.Pack(data as Tensor<T>[] ?? data.ToArray());
+        return TrainCustomTapeStep(
+            packed,
+            packed,
+            step =>
+            {
+                var views = new Tensor<T>[shapes.Length];
+                for (int i = 0; i < views.Length; i++)
+                    views[i] = Training.StepInputPacking<T>.Slice(step, offsets[i], shapes[i]);
+                return objective.Loss(views);
+            },
+            static (loss, _) => loss,
+            objective.Optimizer,
+            objective.Parameters);
+    }
+
+    /// <summary>
+    /// Runs before each <see cref="Train(Tensor{T}, Tensor{T})"/> step, after the guards: state the step reads, such as
+    /// a teacher-forcing target or posterior returns the forward consumes.
+    /// </summary>
+    /// <param name="input">The training input.</param>
+    /// <param name="target">The training target.</param>
+    protected virtual void OnTrainingStepStarting(Tensor<T> input, Tensor<T> target)
+    {
+    }
+
+    /// <summary>
+    /// Runs after each <see cref="Train(Tensor{T}, Tensor{T})"/> step, whether it succeeded or not: clears what
+    /// <see cref="OnTrainingStepStarting"/> set, and applies updates that follow a successful step (for example an
+    /// adaptive graph refreshed from the new weights).
+    /// </summary>
+    /// <param name="succeeded">Whether the step completed.</param>
+    protected virtual void OnTrainingStepEnded(bool succeeded)
+    {
+    }
+
+    /// <summary>Runs <paramref name="step"/> between <see cref="OnTrainingStepStarting"/> and <see cref="OnTrainingStepEnded"/>.</summary>
+    protected void RunWithTrainingStepHooks(Tensor<T> input, Tensor<T> target, Action step)
+    {
+        Guard.NotNull(step);
+        OnTrainingStepStarting(input, target);
+        bool succeeded = false;
+        try
+        {
+            step();
+            succeeded = true;
+        }
+        finally
+        {
+            OnTrainingStepEnded(succeeded);
+        }
+    }
+
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        Guard.NotNull(input);
+        Guard.NotNull(expectedOutput);
+        ThrowIfCannotTrain();
         // Once training has begun, the loss is locked (see SetLossFunction) so the loss reported in metrics
         // matches the loss actually optimized.
         _hasBeenTrained = true;
-        RunTrainStep(input, expectedOutput, optimizerOverride: null);
+        for (int step = 0; step < Math.Max(1, OptimizerStepsPerTrainCall); step++)
+        {
+            RunWithTrainingStepHooks(input, expectedOutput, () =>
+            {
+                if (!TryTrainDeclaredObjectives(input, expectedOutput))
+                    RunTrainStep(input, expectedOutput, optimizerOverride: null);
+            });
+        }
     }
+
+    /// <summary>
+    /// How many optimizer steps one <see cref="Train(Tensor{T}, Tensor{T})"/> call takes on its batch. One for almost
+    /// every model; a model whose documented contract is several passes per call (an autoencoder configured with
+    /// epochs) returns that count.
+    /// </summary>
+    protected virtual int OptimizerStepsPerTrainCall => 1;
 
     /// <summary>
     /// One training step with every preparation <see cref="Train(Tensor{T}, Tensor{T})"/> applies: batch-dim
@@ -10576,7 +10813,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // same input-shape contract: pass either single-sample
         // <c>[C,H,W]</c> / <c>[seq,F]</c> / <c>[F]</c> or batched
         // <c>[B,C,H,W]</c> / <c>[B,seq,F]</c> / <c>[B,F]</c> — both work.
-        (input, expectedOutput) = NormalizeBatchDim(input, expectedOutput);
+        // A model with its own PredictCore owns its public-input convention (its own batching, time-major audio,
+        // token sequences), and prediction leaves its input alone (PrepareInputForTraining); training follows the
+        // same rule. Promoting it guessed from the architecture's rank and turned a batched [B, T, F] into rank 4.
+        if (!PredictCoreOwnsPublicInputPreparation())
+            (input, expectedOutput) = NormalizeBatchDim(input, expectedOutput);
 
         // Data-dependent LSUV init (Mishkin & Matas 2015): on the FIRST training step, rescale
         // each trainable layer's weights so its output has ~unit variance across this batch. This
@@ -10618,7 +10859,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 hasExtraTensors = enumerator.MoveNext();
             }
 
-            if (trainableParams.Count > 0 || hasExtraTensors)
+            // Lazy layers hold zero-length placeholders until their first forward, so before the first step a
+            // network made only of them collects no materialized tensors. That is not a network without trainable
+            // layers: TrainWithTape runs a forward first to materialize them (AnyLayerHasUnmaterializedParameters),
+            // while the legacy path below would ask an untrained DenseLayer to UpdateParameters and throw
+            // "Backward pass must be called before updating parameters".
+            if (trainableParams.Count > 0 || hasExtraTensors
+                || AnyLayerNeedsShapeResolution() || AnyLayerHasUnmaterializedParameters())
             {
                 // Tape-based training: delegates forward/backward/update to TrainWithTape
                 // which uses the configured optimizer via Step(TapeStepContext)
@@ -11438,6 +11685,122 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         StepSchedulerIfSupported(resolvedOptimizer);
     }
 
+    /// <summary>Custom-objective training steps this network has run on the fused compiled plan.</summary>
+    internal int CustomFusedStepCount { get; private set; }
+
+    /// <summary>Custom-objective training steps this network has run on the eager tape.</summary>
+    internal int CustomEagerStepCount { get; private set; }
+
+    // The custom-objective forwards that have already resolved their lazily shaped layers.
+    private readonly HashSet<System.Reflection.MethodInfo> _warmedCustomForwards = new();
+
+    /// <summary>
+    /// One training step with the caller's own forward and objective: the fused compiled plan when it applies (CPU or
+    /// GPU), the eager tape with the optimizer otherwise.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For a model whose objective is not <see cref="TrainWithTape(Tensor{T}, Tensor{T}, IGradientBasedOptimizer{T, Tensor{T}, Tensor{T}}?)"/>'s
+    /// prediction-versus-target loss: masked reconstruction, a physics residual, a multi-input forward. Everything
+    /// that changes per step must reach <paramref name="forward"/> and <paramref name="loss"/> through
+    /// <paramref name="input"/> and <paramref name="target"/>: a compiled plan bakes any other host value the
+    /// closures read at trace time and replays it for every later step.
+    /// </para>
+    /// <para>
+    /// It runs on this network's shared fused session, so the plan, its optimizer moments and the committed-failure
+    /// policy are the ones <see cref="TrainWithTape(Tensor{T}, Tensor{T}, IGradientBasedOptimizer{T, Tensor{T}, Tensor{T}}?)"/> uses.
+    /// </para>
+    /// </remarks>
+    /// <param name="parameterProvider">The tensors to train, when not the network's own trainable set; read again after
+    /// the first forward resolves lazily shaped layers.</param>
+    /// <returns>The step's loss.</returns>
+    protected internal T TrainCustomTapeStep(
+        Tensor<T> input,
+        Tensor<T> target,
+        Func<Tensor<T>, Tensor<T>> forward,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> loss,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        Func<IReadOnlyList<Tensor<T>>>? parameterProvider = null)
+    {
+        Guard.NotNull(input);
+        Guard.NotNull(target);
+        Guard.NotNull(forward);
+        Guard.NotNull(loss);
+        ThrowIfCannotTrain();
+        using var reentrancyGuard = AcquireTrainSentinel();
+
+        var configuredOptimizer = _baseTrainOptimizerExplicitlyConfigured && _baseTrainOptimizer is not null
+            ? _baseTrainOptimizer
+            : optimizer ?? TrainingOptimizer ?? _baseTrainOptimizer;
+        var resolvedOptimizer = configuredOptimizer ?? GetOrCreateBaseOptimizer();
+
+        // Lazily shaped layers own no parameters until their first forward, and a plan holds only the tensors that
+        // exist when it is built. A custom objective can reach layers the network's own forward never does (a
+        // pretraining decoder), so each distinct objective runs one forward outside the tape before its first step;
+        // otherwise those layers are created during the trace and never trained.
+        // The warm-up runs in inference mode: it resolves shapes, and must not count as a training forward
+        // (a BatchNorm would update its running statistics, a Dropout would consume its random stream).
+        if (_warmedCustomForwards.Add(forward.Method))
+        {
+            bool wasTraining = IsTrainingMode;
+            SetTrainingMode(false);
+            try
+            {
+                using (new NoGradScope<T>())
+                    forward(input);
+            }
+            finally
+            {
+                SetTrainingMode(wasTraining);
+            }
+        }
+
+        var parameters = parameterProvider is not null ? parameterProvider() : CollectModelTrainableTensors();
+
+        // The network's layers ride along so the compiled step's own lazy-init forward runs them in inference mode
+        // (with none, that forward ran in training mode and a BatchNorm updated its running statistics an extra
+        // time). Selection keeps the trained set exactly the one collected above.
+        var request = new Training.FusedTrainingStepRequest<T>
+        {
+            Layers = Layers.OfType<ITrainableLayer<T>>().ToList(),
+            Input = input,
+            Target = target,
+            Forward = forward,
+            ComputeLoss = loss,
+            Optimizer = resolvedOptimizer,
+            ExtraParameters = parameters,
+            Selection = parameters,
+            ModelGradientClip = MaxGradNormValue,
+            OnGradients = ScatterFusedGradients,
+        };
+
+        // Both the plan and the eager step write the weights in place; an OOM from here on must not be retried.
+        MarkTrainMutationStarted();
+        T lossValue = NumOps.Zero;
+        var outcome = parameters.Count == 0
+            ? Training.FusedStepOutcome.Declined
+            : FusedSession.TryStep(request, out lossValue);
+        if (outcome == Training.FusedStepOutcome.Stepped)
+        {
+            CustomFusedStepCount++;
+            InvalidateWeightCachesAfterSuccessfulWeightUpdate(updatedOnDevice: true);
+        }
+        else
+        {
+            // A committed plan's optimizer moments cannot move to the eager optimizer; the session's shared policy
+            // drops the plan after a device fault and throws for anything else.
+            if (outcome == Training.FusedStepOutcome.CommittedFailure)
+                FusedSession.DropAfterCommittedFailure();
+            CustomEagerStepCount++;
+            lossValue = Training.TapeTrainingStepper<T>.EagerStep(request);
+            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+        }
+
+        // The per-batch scheduler advance every other training entry point makes, on the optimizer that stepped.
+        StepSchedulerIfSupported(resolvedOptimizer);
+        LastLoss = lossValue;
+        return lossValue;
+    }
     protected void TrainWithTape(Tensor<T> input, Tensor<T> expected,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
     {
@@ -11446,6 +11809,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // using-declaration generates the try/finally that releases the
         // sentinel on every return path — early returns, exceptions, normal
         // exit. See AcquireTrainSentinel for the contract.
+        ThrowIfCannotTrain();
         using var __reentrancyGuard = AcquireTrainSentinel();
 
         // Every Train override passes its PUBLIC input straight in here, so apply the same public-input
@@ -11459,7 +11823,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             $"{GetType().Name}.{nameof(PrepareTrainingPair)} returned no target for a training step.");
         input = ForwardForTrainingOwnsPublicInputPreparation() ? input : PrepareInputForTraining(input);
 
-        var configuredOptimizer = optimizer ?? _baseTrainOptimizer;
+        // An explicit SetBaseTrainOptimizer call wins over the optimizer a model's Train override passes in, which is
+        // its constructor default: the contract AdoptConfiguredOptimizer documents. ~616 models call
+        // TrainWithTape(input, expected, _optimizer), so before this an explicitly configured optimizer was silently
+        // ignored on all of them; the PyTorch parity MLP asked for AdamW and trained FeedForwardNeuralNetwork's
+        // AMSGrad-Adam default instead (a step-1 check cannot tell them apart).
+        var configuredOptimizer = _baseTrainOptimizerExplicitlyConfigured && _baseTrainOptimizer is not null
+            ? _baseTrainOptimizer
+            : optimizer ?? TrainingOptimizer ?? _baseTrainOptimizer;
         bool useStreamingDefaults = configuredOptimizer is null;
         var resolvedOptimizer = configuredOptimizer ?? GetOrCreateBaseOptimizer();
 
@@ -11948,8 +12319,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
             LastLoss = lossValue;
 
-            // Resolve optimizer
-            var opt = optimizer ?? GetOrCreateBaseOptimizer();
+            // The optimizer resolved at the top of this method (an explicit SetBaseTrainOptimizer wins over the model's
+            // default), so the eager step runs the same optimizer as the fused and streaming paths. Re-resolving from
+            // the raw argument here trained the model's constructor default on the eager path only.
+            var opt = resolvedOptimizer;
 
             // Re-evaluation callback applies the SAME alignment policy the
             // initial forward used: reshape the target (a leaf tensor not on
@@ -12406,10 +12779,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // Detect non-finite values before mutating any tensor. This preserves
             // the existing diagnostic contract: a poisoned step is left intact
             // so the originating layer can still be identified.
+            bool hostFast = !Engine.SupportsGpu;
             for (int p = 0; p < iterationOrder.Count; p++)
             {
                 if (!grads.TryGetValue(iterationOrder[p], out var g)) continue;
                 if (g is null || g.Length == 0) continue;
+                // A double sum of squares is non-finite exactly when an element is NaN/Inf: one parallel SIMD pass.
+                if (hostFast && AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.TrySumOfSquaresHost(g, out double sq))
+                {
+                    if (double.IsNaN(sq) || double.IsInfinity(sq)) { LastStepHadNonFiniteGradients = true; return; }
+                    continue;
+                }
                 var span = g.Data.Span;
                 for (int i = 0; i < g.Length; i++)
                 {
@@ -12439,11 +12819,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Step 1: total L2 norm across all gradient tensors, iterating in
         // the caller-supplied deterministic order (NOT dict bucket order —
         // that's process-randomized for reference-keyed dicts).
+        //
+        // On a host engine each tensor's contribution is one parallel SIMD pass (FusedOptimizer.TrySumOfSquaresHost,
+        // double accumulation, fixed chunk order); the per-element INumericOperations loop below remains for
+        // other layouts. Per-tensor partials are still added in iterationOrder, so the sum stays deterministic.
+        bool hostNorm = !Engine.SupportsGpu;
         double totalNormSq = 0.0;
         for (int p = 0; p < iterationOrder.Count; p++)
         {
             if (!grads.TryGetValue(iterationOrder[p], out var g)) continue;
             if (g is null || g.Length == 0) continue;
+            if (hostNorm && AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.TrySumOfSquaresHost(g, out double tensorSq))
+            {
+                totalNormSq += tensorSq;
+                continue;
+            }
             var span = g.Data.Span;
             int len = g.Length;
             for (int i = 0; i < len; i++)
@@ -12475,11 +12865,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Step 2: scale every gradient down so the new global norm == maxNorm.
         // The +1e-6 in the denominator matches PyTorch's clip_grad_norm_ to
         // avoid div-by-zero when the gradient magnitudes are vanishingly small.
-        T scale = NumOps.FromDouble(maxNorm / (totalNorm + 1e-6));
+        double scaleValue = maxNorm / (totalNorm + 1e-6);
+        T scale = NumOps.FromDouble(scaleValue);
         for (int p = 0; p < iterationOrder.Count; p++)
         {
             if (!grads.TryGetValue(iterationOrder[p], out var g)) continue;
             if (g is null || g.Length == 0) continue;
+            if (hostNorm && AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.TryScaleHost(g, scaleValue)) continue;
             var span = g.Data.Span;
             int len = g.Length;
             for (int i = 0; i < len; i++)
@@ -12566,7 +12958,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// which would also disable those orthogonal compile-mode
     /// optimizations and tank training-step performance.
     /// </remarks>
-    protected bool _fusedTrainingDisabled;
+    protected bool IsFusedTrainingDisabled
+    {
+        get => FusedSession.IsDisabled;
+        set => FusedSession.IsDisabled = value;
+    }
 
     /// <summary>
     /// Whether the model's own configuration turns the fused optimizer step off, as opposed to a failure having
@@ -12585,7 +12981,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Unlike <see cref="_fusedTrainingDisabled"/> (a per-instance RUNTIME latch
+    /// Unlike <see cref="IsFusedTrainingDisabled"/> (a per-instance RUNTIME latch
     /// that the structure-change reset clears so a re-traced plan can retry the
     /// fast path), this is a permanent ARCHITECTURAL property: a model that
     /// returns <c>false</c> here never traces a compiled plan, so nothing about
@@ -12611,61 +13007,28 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <summary>
     /// Permanently opts this network instance out of standalone fused-optimizer
     /// compilation when a parent model owns a larger stateful training graph.
-    /// Unlike <see cref="_fusedTrainingDisabled"/>, this architectural graph-break
+    /// Unlike <see cref="IsFusedTrainingDisabled"/>, this architectural graph-break
     /// is not cleared by parameter-buffer or structure invalidation.
     /// </summary>
     private bool _parentOwnedTrainingGraph;
 
     internal void DisableStandaloneFusedTraining()
         => _parentOwnedTrainingGraph = true;
-
     /// <summary>
-    /// Tracks whether the fused compiled training path has EVER successfully
-    /// run on this model. Once true, Adam/AdamW/SGD moment buffers live
-    /// exclusively inside the compiled plan — falling back to eager would
-    /// silently lose that state (<c>resolvedOptimizer</c> has empty m/v).
-    /// So once committed, any condition that would force a fallback
-    /// (optimizer-config drift, input-shape change producing a new plan)
-    /// throws an explicit exception instead of silently diverging from the
-    /// reference Adam trajectory. Cleared in <see cref="ResetState"/> and
-    /// <see cref="InvalidateParameterCountCache"/> — both are explicit
-    /// reset points where the caller has acknowledged state changes and
-    /// both fused and eager optimizer states start fresh.
+    /// This model's fused compiled-training lifecycle: committed state, the #1822 persistence check, and the
+    /// sticky disable. Shared with every other base class that trains on the tape (see
+    /// <see cref="Training.FusedTrainingSession{T}"/>). A committed-plan reset also drops this model's caches and
+    /// reclaims GPU transients before the eager or streaming fallback allocates.
     /// </summary>
-    private bool _fusedTrainingCommitted;
+    internal Training.FusedTrainingSession<T> FusedSession => _fusedSession ??= new Training.FusedTrainingSession<T>(
+        this,
+        onReset: () =>
+        {
+            InvalidateParameterCountCache();
+            ReclaimGpuTransientsAfterFusedFailure();
+        });
 
-    /// <summary>
-    /// #1822 silent-no-op guard. The fused compiled-training fast path is
-    /// contracted to mutate the LIVE parameter tensors in place (exactly like
-    /// the eager <c>opt.Step</c>). For some model graphs — notably
-    /// token/embedding <see cref="Transformer{T}"/>s whose specialized
-    /// compiled forward captures parameter DATA by copy rather than aliasing
-    /// the live backing array — <c>plan.Step()</c> trains an internal buffer
-    /// and reports a decreasing loss, yet NEVER writes the update back to the
-    /// network's parameters. That is a SILENT no-op: <see cref="GetParameters"/>,
-    /// serialization, and the eager Predict path all see an untrained model
-    /// even though <c>Train()</c> "ran". No kernel throws, so the
-    /// exception-based fallbacks never fire. We therefore verify persistence
-    /// directly on the FIRST fused step (snapshot a parameter checksum before
-    /// and after); once a model is proven to persist, this latch is set and the
-    /// O(params) check is never repeated. See <see cref="TryTrainWithFusedOptimizer"/>.
-    /// Reset alongside <see cref="_fusedTrainingCommitted"/> at every explicit
-    /// training-state reset point.
-    /// </summary>
-    private bool _fusedPersistenceVerified;
-
-    /// <summary>Steps taken since the fused plan's parameter-persistence probe last ran.</summary>
-    private int _fusedStepsSincePersistenceCheck;
-
-    /// <summary>
-    /// How often the fused plan is re-checked for actually persisting parameter updates.
-    /// </summary>
-    /// <remarks>
-    /// A silent no-op costs the entire remainder of the run, so this is cheap insurance: the probe
-    /// is a strided checksum bounded to ~<see cref="FusedChecksumTargetSamples"/> samples however
-    /// large the model, and at this interval it adds well under 1% to a training step.
-    /// </remarks>
-    private const int FusedPersistenceRecheckInterval = 16;
+    private Training.FusedTrainingSession<T>? _fusedSession;
 
     /// <summary>
     /// Reason string set by <see cref="EmitFusedMissAndFallback"/> when
@@ -12828,107 +13191,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     // Number of parameter elements the #1822 fused-persistence probe samples. The
     // probe only needs to detect whether the fused step moved ANY live parameter, not
     // an exact norm — so it samples a deterministic stride instead of every element.
-    private const int FusedChecksumTargetSamples = 1 << 16; // 65536
-
-    private double FusedTrainableParamChecksum(IReadOnlyList<Tensor<T>> parameters)
-    {
-        // Bounded persistence probe (#1822). Summing ALL parameters is O(N) scalar
-        // generic ToDouble; at foundation scale (e.g. 385M params) that alone is
-        // several seconds on the CRITICAL first fused step — the exact cost that
-        // pushed GLaMM's GradientFlow invariant past its per-test timeout. We only
-        // need to know whether the fused kernel PERSISTED its update, so sample a
-        // deterministic stride: element 0 of EVERY trainable tensor (so every tensor
-        // is covered — Adam moves every trained param, flipping the checksum) plus a
-        // strided sweep of large tensors, capping total work at ~TargetSamples
-        // regardless of model size. Small tensors are fully covered (stride 1). The
-        // same indices are read before and after the step, so the != comparison
-        // remains valid. Bit-for-bit identical to the full sum for models below the
-        // cap; for larger models it's a faithful subset that still catches the
-        // silent-no-op the guard exists for.
-        long total = 0;
-        for (int i = 0; i < parameters.Count; i++)
-            total += parameters[i].AsSpan().Length;
-        if (total == 0) return 0.0;
-
-        int stride = (int)System.Math.Max(1, total / FusedChecksumTargetSamples);
-        double acc = 0.0;
-        for (int pi = 0; pi < parameters.Count; pi++)
-        {
-            var span = parameters[pi].AsSpan();
-            for (int i = 0; i < span.Length; i += stride)
-            {
-                double v = NumOps.ToDouble(span[i]);
-                acc += v * v;
-            }
-        }
-        return acc;
-    }
-
-    private static IEnumerable<Tensor<T>> EnumerateFusedLiveParameters(
-        IReadOnlyList<ITrainableLayer<T>> layers,
-        IReadOnlyList<Tensor<T>>? extraParameters)
-    {
-        for (int layerIndex = 0; layerIndex < layers.Count; layerIndex++)
-        {
-            foreach (var parameter in layers[layerIndex].GetTrainableParameters())
-            {
-                if (parameter is not null) yield return parameter;
-            }
-        }
-        if (extraParameters is null) yield break;
-        for (int i = 0; i < extraParameters.Count; i++) yield return extraParameters[i];
-    }
-
-    private double FusedTrainableParamChecksum(
-        IReadOnlyList<ITrainableLayer<T>> layers,
-        IReadOnlyList<Tensor<T>>? extraParameters)
-    {
-        long total = 0;
-        for (int layerIndex = 0; layerIndex < layers.Count; layerIndex++)
-        {
-            foreach (var parameter in layers[layerIndex].GetTrainableParameters())
-            {
-                if (parameter is not null)
-                    total += parameter.AsSpan().Length;
-            }
-        }
-        if (extraParameters is not null)
-        {
-            for (int i = 0; i < extraParameters.Count; i++)
-                total += extraParameters[i].AsSpan().Length;
-        }
-        if (total == 0) return 0.0;
-
-        int stride = (int)System.Math.Max(1, total / FusedChecksumTargetSamples);
-        double acc = 0.0;
-        for (int layerIndex = 0; layerIndex < layers.Count; layerIndex++)
-        {
-            foreach (var parameter in layers[layerIndex].GetTrainableParameters())
-            {
-                if (parameter is null) continue;
-                var span = parameter.AsSpan();
-                for (int i = 0; i < span.Length; i += stride)
-                {
-                    double value = NumOps.ToDouble(span[i]);
-                    acc += value * value;
-                }
-            }
-        }
-        if (extraParameters is not null)
-        {
-            for (int parameterIndex = 0; parameterIndex < extraParameters.Count; parameterIndex++)
-            {
-                var span = extraParameters[parameterIndex].AsSpan();
-                for (int i = 0; i < span.Length; i += stride)
-                {
-                    double value = NumOps.ToDouble(span[i]);
-                    acc += value * value;
-                }
-            }
-        }
-
-        return acc;
-    }
 
     /// <summary>Whether any layer, at any depth, declares its own learning rate.</summary>
     private bool HasLayerLearningRatePolicy()
@@ -12962,7 +13224,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (!SupportsFusedCompiledTraining || _parentOwnedTrainingGraph)
             return EmitFusedMissAndFallback(
                 "model opts out of fused compiled training (dynamic/stateful forward)");
-        if (_fusedTrainingDisabled)
+        if (FusedSession.IsDisabled)
             return EmitFusedMissAndFallback("fused path sticky-disabled from prior fallback");
         if (!AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
             return EmitFusedMissAndFallback("TensorCodecOptions.EnableCompilation = false");
@@ -12986,17 +13248,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (typeof(T) != typeof(float) && typeof(T) != typeof(double))
             return EmitFusedMissAndFallback($"numeric type {typeof(T).Name} not supported by fused kernel");
 
-        if (!TryMapToFusedOptimizerConfig(resolvedOptimizer, out var fusedCfg))
-            return EmitFusedMissAndFallback($"optimizer {resolvedOptimizer.GetType().Name} not compatible with fused kernel");
-
-        var fusedType = fusedCfg.Type;
-        double lr = fusedCfg.LearningRate;
-        double b1 = fusedCfg.Beta1;
-        double b2 = fusedCfg.Beta2;
-        double eps = fusedCfg.Epsilon;
-        double wd = fusedCfg.WeightDecay;
-        var lrSched = fusedCfg.Schedule;
-        bool useBf16Moments = fusedCfg.UseBf16Moments;
 
         // Use the existing recursive trainable-layer collector instead of the
         // top-level-only scan — composite layers with trainable children (e.g.,
@@ -13065,286 +13316,41 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (loss is null)
             return EmitFusedMissAndFallback("loss function not derived from LossFunctionBase<T>");
 
-        // Match eager TrainWithTape: reshape the leaf target to the prediction whenever element
-        // counts agree, and never reshape the tape-tracked prediction merely to satisfy a leaf.
-        // The optimizer's regularization, applied the way its flat path applies it: to the gradient, BEFORE clipping.
-        // L2 has a fused form (the plan adds strength * theta ahead of its clip); any other regularizer runs on the
-        // eager tape, which applies it (ApplyOptimizerRegularization). Decided BEFORE the per-step arena below is
-        // created: TensorArena.Create is thread-static and stacks on the enclosing arena, so a miss returned after
-        // it would leave the arena current on this thread for the eager fallback and every later step.
-        double fusedL2 = 0.0;
-        if (OptimizerRegularizationOf(resolvedOptimizer) is { } fusedRegularization)
+        // Everything below is the shared fused lifecycle (optimizer mapping, regularization and clip rules, the
+        // per-step transient arena, the #1822 persistence check, the committed state): FusedTrainingSession owns it
+        // for every base class. What stays here is what only a NeuralNetworkBase knows: its gates above, its
+        // target alignment and composite objective, its gradient publication, and its post-step bookkeeping.
+        var request = new Training.FusedTrainingStepRequest<T>
         {
-            if (fusedRegularization is AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>> fusedL2Regularization)
-                fusedL2 = fusedL2Regularization.GetOptions().Strength;
+            Layers = trainableLayers,
+            Input = input,
+            Target = expected,
+            Forward = ForwardForTraining,
+            ComputeLoss = (pred, tgt) =>
+            {
+                tgt = AlignTargetToOutputShape(pred, tgt);
+                return ApplyCompositeObjective(loss.ComputeTapeLoss(pred, tgt), pred);
+            },
+            Optimizer = resolvedOptimizer,
+            ExtraParameters = fusedExtraParameters,
+            Selection = selectedParameters,
+            ModelGradientClip = MaxGradNormValue,
+            OnGradients = ScatterFusedGradients,
+        };
+
+        var outcome = FusedSession.TryStep(request, out T lossValue, out var lossTensor);
+        if (outcome == Training.FusedStepOutcome.Stepped)
+        {
+            if (lossTensor is not null)
+                SetLastLossDeferred(lossTensor);
             else
-            {
-                string reason = "regularization " + fusedRegularization.GetType().Name
-                    + " has no fused form; the eager tape applies it";
-                if (_fusedTrainingCommitted)
-                {
-                    // A committed plan owns the Adam/SGD moments; the eager optimizer cannot inherit them. Drop the
-                    // plan explicitly (the same graceful reset the persistence-stop path uses) instead of leaving it
-                    // alive but unused while the eager tape silently restarts from zero moments.
-                    if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_QUIET")))
-                    {
-                        System.Diagnostics.Trace.TraceWarning(
-                            "[AiDotNet] committed fused plan dropped: " + reason + " (model: " + GetType().Name + ").");
-                    }
-                    ResetCompiledFusedStateAfterCommittedFailure(stickyDisableFused: true);
-                }
+                LastLoss = lossValue;
 
-                return EmitFusedMissAndFallback(reason);
-            }
-        }
-
-        // The eager tape clips twice: the network by MaxGradNorm, then Adam/AdamW's own step by the optimizer's
-        // MaxGradientNorm. The plan clips once, so give it the threshold the two compose to. Without this a model
-        // whose network clip is 0 (GraFPrint) trained unclipped when fused and clipped to 1.0 when eager.
-        double fusedGradientClip = MaxGradNormValue;
-        double optimizerTapeClip = resolvedOptimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> clippingOptimizer
-            ? clippingOptimizer.TapeStepGradientClipNorm
-            : 0.0;
-        if (double.IsNaN(optimizerTapeClip))
-        {
-            const string clipReason = "optimizer clips gradients by value; the fused plan clips only by global norm";
-            if (_fusedTrainingCommitted)
-                ResetCompiledFusedStateAfterCommittedFailure(stickyDisableFused: true);
-            return EmitFusedMissAndFallback(clipReason);
-        }
-        if (optimizerTapeClip > 0.0)
-            fusedGradientClip = fusedGradientClip > 0.0 ? Math.Min(fusedGradientClip, optimizerTapeClip) : optimizerTapeClip;
-
-        // #1624 / #1640: reclaim this training step's transient activations instead of
-        // letting them accumulate across steps. This is how PyTorch bounds training
-        // memory: its caching allocator returns each iteration's freed blocks to a reuse
-        // pool, so the process reaches a steady state and never grows with the step
-        // count, while the optimizer's state (Adam m/v) lives in optimizer.state, outside
-        // the per-iteration churn. The per-step TensorArena here is that per-iteration
-        // scope — on Dispose it returns this step's buffers to the cross-arena persistent
-        // pool for the next step to reuse (the arena's _persistent pool IS that block
-        // cache). Without it, the fused-optimizer path — unlike the eager tape and
-        // streaming paths, which already scope per step — ran every step under whatever
-        // arena the caller had open; when a caller wraps the whole loop in ONE un-Reset
-        // outer arena (the shared ModelFamilyTests base, or any cross-step buffer
-        // pooling), each step's working set piled into that outer ring → linear growth →
-        // OOM (#1640's 100 GB was this exact accumulation on ViT-Base, ~+403 MB/step).
-        //
-        // Unconditional and safe on every step (including the first/configuring one): the
-        // compiled plan's persistent state — Adam m/v moments + the persistent
-        // input/target — is held by the plan's own managed references on the GC heap, NOT
-        // arena-ring allocated, so this scope never recycles it. It persists across steps
-        // exactly like PyTorch's optimizer.state. (Verified: fused Adam step-for-step
-        // parity holds with this scope active.)
-        var stepArena = TensorArena.Create();
-
-        // Dispose the per-step transient arena the instant the fused step returns —
-        // BEFORE the result handling and especially before the OOM → streaming fallback
-        // in the `else if` below. That fallback degrades to the memory-bounded streaming
-        // path precisely because the fused plan ran out of memory; holding this step's
-        // transient ring alive across the switch would waste memory under pressure and
-        // nest the streaming path inside a transient scope. try/finally also releases the
-        // arena if the fused call throws.
-        // #1822: on the first fused step for this model, snapshot a checksum of
-        // the live trainable parameters so we can verify AFTER the step that the
-        // fused kernel actually persisted its update (see _fusedPersistenceVerified).
-        // Persistence probe. Runs on every step until the plan has proven itself once, and then
-        // PERIODICALLY forever after.
-        //
-        // It used to be strictly one-shot ("proven to persist for this model — never re-run the
-        // check"), which assumed persistence is a property of the model. It is not: it is a
-        // property of the CURRENT PLAN, and a plan can persist on its first step and then silently
-        // stop. That is a total training freeze with no error — Train() returns, the loss is
-        // recorded, and not a single parameter moves. It was found on a model whose objective
-        // slices and concatenates the prediction, where the loss stayed bit-identical over 100
-        // steps while GradientFlow and Training_ShouldChangeParameters still passed.
-        //
-        // Re-checking costs one strided checksum, already bounded to ~FusedChecksumTargetSamples
-        // regardless of model size, amortized over FusedPersistenceRecheckInterval steps.
-
-        bool verifyFusedPersistence =
-            (!_fusedPersistenceVerified && !_fusedTrainingCommitted)
-            || (++_fusedStepsSincePersistenceCheck >= FusedPersistenceRecheckInterval);
-        double fusedParamChecksumBefore = 0.0;
-        if (verifyFusedPersistence)
-        {
-            fusedParamChecksumBefore = selectedParameters is not null
-                ? FusedTrainableParamChecksum(selectedParameters)
-                : FusedTrainableParamChecksum(trainableLayers, fusedExtraParameters);
-        }
-
-        // Whether this step's gradients were seen, and whether any was non-zero: a step whose gradients are all exactly
-        // zero cannot move a parameter, so leaving them unchanged is not evidence of a decoupled plan. Only recorded on
-        // probe steps, where it is needed.
-        bool fusedGradientsObserved = false;
-        bool fusedGradientNonZero = false;
-        void OnFusedGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> grads)
-        {
-            if (verifyFusedPersistence)
-            {
-                fusedGradientsObserved = true;
-                fusedGradientNonZero = AnyGradientNonZero(grads);
-            }
-            ScatterFusedGradients(grads);
-        }
-
-        bool ran;
-        T lossValue;
-        try
-        {
-            ran = Training.CompiledTapeTrainingStep<T>.TryStepWithFusedOptimizer(
-                trainableLayers,
-                input,
-                expected,
-                forward: ForwardForTraining,
-                computeLoss: (pred, tgt) =>
-                {
-                    tgt = AlignTargetToOutputShape(pred, tgt);
-                    return ApplyCompositeObjective(loss.ComputeTapeLoss(pred, tgt), pred);
-                },
-                optimizerType: fusedType,
-                learningRate: lr,
-                beta1: b1,
-                beta2: b2,
-                epsilon: eps,
-                weightDecay: wd,
-                out lossValue,
-                maxGradNorm: fusedGradientClip,
-                lrSchedule: lrSched,
-                useBf16Moments: useBf16Moments,
-                // Lets the compiled FP16-activation path (AIDOTNET_FP16_ACTIVATIONS=1) cover
-                // fused optimizers beyond the inline Adam/SGD fast paths by applying this
-                // optimizer's own master update to the FP16-computed FP32 gradients.
-                eagerOptimizer: resolvedOptimizer,
-                // Carry selected or ordinary model-owned extras that are not discoverable
-                // from the primary layer list.
-                extraTensors: fusedExtraParameters,
-                fusedExtras: fusedCfg.Extras,
-                // Publish the fused kernel's gradients onto the layer surface. The fused path
-                // updates parameters in-replay and returns without ever passing through the eager
-                // gradient code below, which is why the surface stayed empty for every model that
-                // engages fusion -- the largest single cause of the all-zero gradient reports.
-                onGradients: OnFusedGradients,
-                trainableSelection: selectedParameters,
-                owner: this,
-                l2Regularization: fusedL2);
-        }
-        finally
-        {
-            stepArena.Dispose();
-        }
-
-        if (ran)
-        {
-            // #1822 silent-no-op guard: confirm the fused step actually moved the
-            // live parameters before we COMMIT to the fused path. If the compiled
-            // plan reported a real (finite) loss but left every trainable parameter
-            // byte-for-byte unchanged, its optimizer step is decoupled from the
-            // network's live tensors — a silent no-op. Sticky-disable fused and let
-            // this step (and all subsequent ones) run on the eager tape, which
-            // mutates the live tensors correctly. Not yet committed here, so this
-            // is a clean fall-through (no plan-embedded moment state to lose).
-            if (verifyFusedPersistence)
-            {
-                double fusedParamChecksumAfter = selectedParameters is not null
-                    ? FusedTrainableParamChecksum(selectedParameters)
-                    : FusedTrainableParamChecksum(trainableLayers, fusedExtraParameters);
-                bool persisted = fusedParamChecksumAfter != fusedParamChecksumBefore;
-                // The plan reports which tensors its update writes. Any that is not a live parameter of this model
-                // proves the plan has come loose, even on a step that could legitimately have moved nothing, where
-                // the checksum alone is inconclusive.
-                bool? planTrainsLiveParameters = Training.CompiledTapeTrainingStep<T>.ConfiguredPlanTrainsLiveParameters(
-                    selectedParameters ?? EnumerateFusedLiveParameters(trainableLayers, fusedExtraParameters));
-                bool planDetached = planTrainsLiveParameters == false;
-                // Do NOT gate on fusedParamChecksumBefore != 0.0: the checksum is a sum of
-                // squares, so 0.0 means every trainable parameter starts exactly at zero. A
-                // non-persisting fused step then leaves it at 0.0 too (persisted == false),
-                // which is exactly the silent no-op we must catch — skipping it for all-zero
-                // init would commit the decoupled path unverified (ooples/AiDotNet#1822 review).
-                // A NaN loss does not make a non-persisting compiled step safe. The old
-                // `&& !IsNaN(lossValue)` gate skipped the fallback, marked the plan verified,
-                // and committed a byte-for-byte no-op plan. Valid data that exposed a
-                // compiled-kernel numerical failure (RecurrentGemma's seeded 128-token
-                // regression fixture) therefore made Train() return successfully without
-                // changing a single parameter. Treat every non-persisting first step as an
-                // unsafe plan and retry it through the eager tape in this same Train() call.
-                if (!persisted && !planDetached
-                    && !FusedStepCouldHaveMovedParameters(fusedCfg, lr, lrSched, fusedGradientsObserved, fusedGradientNonZero,
-                        planTrainsLiveParameters == true))
-                {
-                    // Inconclusive, not a failure: this step could not have moved anything (zero learning rate, all-zero
-                    // gradients, or an optimizer whose update is legitimately exactly zero). Leave the plan unverified and
-                    // re-probe on the next step, so a truly decoupled plan is still caught the first time it should move.
-                    _fusedStepsSincePersistenceCheck = FusedPersistenceRecheckInterval;
-                }
-                else if (!persisted || planDetached)
-                {
-                    if (_fusedTrainingCommitted)
-                    {
-                        // The plan persisted earlier and has now stopped. Its Adam/AdamW moments
-                        // cannot be handed to the eager optimizer, so the committed-failure reset is
-                        // the only way back — the same graceful degradation the OOM and GPU-transient
-                        // paths already use, and for the same reason: a one-time trajectory
-                        // perturbation is enormously better than a model that silently never learns
-                        // again.
-                        _pendingFusedMissReason =
-                            "fused compiled plan STOPPED persisting parameter updates after " +
-                            "previously succeeding (loss " + NumOps.ToDouble(lossValue).ToString("G6") +
-                            "); reset to the eager tape so Train() keeps learning";
-                        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_QUIET")))
-                        {
-                            System.Diagnostics.Trace.TraceWarning(
-                                "[AiDotNet] " + _pendingFusedMissReason + " (model: " + GetType().Name + ").");
-                        }
-                        ResetCompiledFusedStateAfterCommittedFailure(stickyDisableFused: true);
-                        return false; // fall through to the eager tape path in TrainWithTape
-                    }
-
-                    _fusedTrainingDisabled = true;
-                    _pendingFusedMissReason =
-                        "fused compiled step ran (loss " + NumOps.ToDouble(lossValue).ToString("G6") +
-                        ") but did not persist ANY parameter update — the compiled plan is decoupled " +
-                        "from the model's live parameter tensors; routing to the eager tape so Train() " +
-                        "actually learns (ooples/AiDotNet#1822)";
-                    if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AIDOTNET_QUIET")))
-                    {
-                        System.Diagnostics.Trace.TraceWarning(
-                            "[AiDotNet] " + _pendingFusedMissReason + " (model: " + GetType().Name + ").");
-                    }
-                    return false; // fall through to the eager tape path in TrainWithTape
-                }
-                else
-                {
-                    // Proven to persist for THIS PLAN, for now. Re-armed rather than latched off, so a
-                    // plan that later decouples from the live parameter tensors is still caught.
-                    _fusedPersistenceVerified = true;
-                    _fusedStepsSincePersistenceCheck = 0;
-                }
-            }
-
-            LastLoss = lossValue;
-            // First successful fused step commits this model to the fused
-            // path for the rest of the session — Adam m/v are now
-            // inside the compiled plan and transferring them to the eager
-            // optimizer isn't possible without API we don't have.
-            _fusedTrainingCommitted = true;
-
-            // Weight-cache coherence (CodeRabbit, PR #1488): the fused optimizer
-            // kernel mutates the weight tensors IN PLACE exactly like the eager
-            // path's opt.Step, so the GPU weight uploads AND the CPU engine's
-            // identity-keyed derived caches (pre-packed B panels, transposed conv
-            // kernels) are equally stale here. Every other in-place update path
-            // flushes via this helper; without it, fused-compatible training reuses
-            // frozen pre-step weights on the next forward and never learns.
-            // GPU-resident parameters were updated ON the device by the plan's optimizer, which is exactly
-            // the case the host-authoritative invalidation must skip.
+            // The plan updated the weights in place; GPU-resident parameters were updated ON the device, which is
+            // exactly the case the host-authoritative invalidation must skip. Without this flush, fused-compatible
+            // training reuses frozen pre-step weights on the next forward and never learns.
             InvalidateWeightCachesAfterSuccessfulWeightUpdate(updatedOnDevice: true);
 
-            // Emit diagnostic events for the fused-path hit. This is the
-            // ONLY place we can observe that the fused path ran without
-            // running through TrainWithTape's tape-walk hook, so consumers
-            // tracing #1328-class regressions can correlate "fused hit"
-            // with model misbehaviour.
             if (Configuration.TrainingDiagnosticsConfig.Level
                 > Configuration.TrainingDiagnosticLevel.Silent)
             {
@@ -13362,125 +13368,34 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     Configuration.TrainingDiagnosticsConfig.Emit(
                         new Configuration.TrainingLossEvent(
                             StepIndex: stepIdx,
-                            LossValue: NumOps.ToDouble(lossValue),
+                            LossValue: NumOps.ToDouble(GetLastLoss()),
                             OutputRank: -1,    // fused path doesn't materialize output here
                             OutputLength: -1));
                 }
             }
+            return true;
         }
-        else if (_fusedTrainingCommitted)
+
+        if (outcome == Training.FusedStepOutcome.Declined)
+            return EmitFusedMissAndFallback(FusedSession.LastMissReason ?? "fused path declined the step");
+
+        // Committed plan, failed step. The session's shared policy drops the plan after a device failure (which
+        // says nothing about the model) and throws for anything else, since the plan's optimizer moments cannot
+        // move to the eager optimizer. What stays here is the one recovery only a network has: streaming on OOM.
+        var fallbackEx = FusedSession.LastFallbackException;
+        if (FusedSession.DropAfterCommittedFailure() == Training.CommittedFailureKind.DeviceOutOfMemory)
         {
-            // We've previously run fused successfully, so Adam/SGD moments
-            // live inside the compiled plan. Falling back to eager now would
-            // silently reset optimizer state and produce a trajectory that
-            // diverges from the previous fused steps. Surface the problem
-            // explicitly rather than corrupt training. Common causes:
-            //   - variable {input, target} shape produced a new compiled
-            //     plan (strict single-plan policy refused to configure it)
-            //   - mutated optimizer hyperparameters between steps
-            //     (attached LR scheduler, changed betas, etc.)
-            //   - a kernel-level exception caught and swallowed
-            //     (CompiledTrainingPlan.Step / ConfigureOptimizer threw)
-            // Resolution: call ResetState() or InvalidateParameterCountCache()
-            // to fully reset training state, then retrain with stable
-            // shapes + fixed hyperparameters. Or disable compilation via
-            // AllowNondeterminism / Configure(JitCompilationConfig.Disabled)
-            // so training runs entirely on the eager path from the start.
-            //
-            // AiDotNet#1395: quote the swallowed exception (if any) inline so
-            // failing tests don't have to chase Trace output to learn the
-            // root cause (Parameter N non-contiguous CPU layout, shape mismatch
-            // in a backward kernel, NaN guard trip, etc.). The inner exception
-            // is also attached for catch (InvalidOperationException ex) callers
-            // that introspect ex.InnerException.
-            var fallbackEx = Training.CompiledTapeTrainingStep<T>.GetLastFallbackException();
-
-            // Transient GPU/CUDA fault in the committed fused plan (e.g. CUDA error 700 from the
-            // activation-cache deferred-materializer race, or a device fault): the compiled plan
-            // can't continue on the GPU. Rather than abort the whole training run, reset the
-            // fused/compiled state and fall back to the eager path — the optimizer moments reset
-            // (a one-time trajectory perturbation), which is far better than crashing. Non-GPU
-            // causes (shape drift, hyperparameter changes) still surface loudly below.
-            // Out-of-memory in the committed compiled plan: the model is too large
-            // (or the host too pressured) to keep the fused plan's buffers + Adam
-            // moments resident. This is precisely what the memory-bounded streaming
-            // training path exists for — degrade to it rather than aborting the run.
-            // TrainWithTapeStreaming drives optimizer-in-backward with topological-min
-            // gradient release (tape.ComputeGradientsStreaming) and an 8-bit
-            // streaming optimizer that maintains its OWN moment state, so the
-            // "the compiled plan's moments can't be transferred" obstruction
-            // that forces the throw below does NOT apply here — streaming simply
-            // continues training under its own optimizer. Pin StreamingTraining =
-            // ForceOn so every subsequent step in this run also takes the streaming
-            // path (a single moment-state reset at the switchover, then stable),
-            // and disable the OOMing fused plan so it is never re-engaged. This
-            // mirrors the IsGpuTransientFailure graceful-degradation policy above:
-            // a one-time trajectory perturbation is far better than crashing.
-            if (IsGpuOutOfMemoryFailure(fallbackEx))
-            {
-                StreamingTraining = StreamingTrainingMode.ForceOn;
-                ResetCompiledFusedStateAfterCommittedFailure(stickyDisableFused: true);
-                ForceSinglePassStreamingClipAfterFusedOom();
-                TrainWithTapeStreaming(input, expected, resolvedOptimizer, useStreamingDefaults);
-                EmitFusedPathEventIfEnabled(
-                    hit: false,
-                    reason: $"committed fused plan OOM; switched to streaming training ({DescribeException(fallbackEx)})");
-                return true; // step handled via the streaming path
-            }
-
-            if (IsGpuTransientFailure(fallbackEx))
-            {
-                _pendingFusedMissReason = $"committed fused plan GPU transient; reset to eager ({DescribeException(fallbackEx)})";
-                ResetCompiledFusedStateAfterCommittedFailure(stickyDisableFused: true);
-                return false;
-            }
-
-            var rootCauseSuffix = fallbackEx is not null
-                ? $" Root-cause exception (caught in CompiledTapeTrainingStep): " +
-                  $"{fallbackEx.GetType().FullName}: {fallbackEx.Message}"
-                : " (No exception was caught — fused path returned false from one of the explicit " +
-                  "refuse paths: plan reference changed, optimizer hyperparameters drifted, " +
-                  "TensorCodecOptions.EnableCompilation=false, or numeric/optimizer type unsupported.)";
-            throw new InvalidOperationException(
-                "Fused compiled training has already run successfully, but the current step cannot " +
-                "engage the fused path. The plan-embedded Adam/AdamW/SGD state cannot be transferred " +
-                "to the eager optimizer, so falling back silently would produce a trajectory that " +
-                "diverges from the previous fused steps. Common causes: variable input/target shape " +
-                "(new compiled plan), LR scheduler or adaptive-rate changes, attached AMSGrad, or a " +
-                "kernel-level exception in plan.Step/ConfigureOptimizer that was caught and swallowed. " +
-                "Resolution: keep shapes and optimizer hyperparameters stable across steps, OR call " +
-                "ResetState() / InvalidateParameterCountCache() to explicitly reset training state, " +
-                "OR disable compilation (AiModelBuilder.ConfigureJitCompilation(JitCompilationConfig.Disabled))." +
-                rootCauseSuffix,
-                innerException: fallbackEx);
+            StreamingTraining = StreamingTrainingMode.ForceOn;
+            ForceSinglePassStreamingClipAfterFusedOom();
+            TrainWithTapeStreaming(input, expected, resolvedOptimizer, useStreamingDefaults);
+            EmitFusedPathEventIfEnabled(
+                hit: false,
+                reason: $"committed fused plan OOM; switched to streaming training ({DescribeException(fallbackEx)})");
+            return true; // step handled via the streaming path
         }
-        else
-        {
-            // Sticky disable: subsequent training steps in this run stay on the
-            // eager path so we don't reset Adam moments by re-engaging fused
-            // mid-run. Cleared on next ResetState/InvalidateParameterCountCache.
-            _fusedTrainingDisabled = true;
-        }
-        // A fused step ran the schedule inside the plan; the optimizer's own step and learning rate (what
-        // GetCurrentLearningRate, checkpoints and callers read) advance here, as the eager and streaming paths do.
-        // The streaming fallback above has already stepped them and returns before reaching this.
-        if (ran) StepSchedulerIfSupported(resolvedOptimizer);
-        return ran;
-    }
 
-    private void ResetCompiledFusedStateAfterCommittedFailure(bool stickyDisableFused)
-    {
-        InvalidateParameterCountCache();
-
-        // InvalidateParameterCountCache intentionally re-enables fused training
-        // for normal explicit resets. A committed-plan failure is different:
-        // the current plan already proved unsafe for this run, so preserve the
-        // sticky-disable after the reset and reclaim dead GPU transients before
-        // the eager/streaming fallback allocates its first backward buffers.
-        _fusedTrainingDisabled = stickyDisableFused;
-        _fusedTrainingCommitted = false;
-        _fusedPersistenceVerified = false;
-        ReclaimGpuTransientsAfterFusedFailure();
+        _pendingFusedMissReason = $"committed fused plan GPU transient; reset to eager ({DescribeException(fallbackEx)})";
+        return false;
     }
 
     private static void ReclaimGpuTransientsAfterFusedFailure()
@@ -13527,24 +13442,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// fused step can reset-and-recover on the eager path instead of aborting.
     /// </summary>
     protected static bool IsGpuTransientFailure(Exception? exception)
-    {
-        for (var e = exception; e is not null; e = e.InnerException)
-        {
-            var message = e.Message;
-            if (message.Contains("CUDA error", StringComparison.OrdinalIgnoreCase)
-                || message.Contains("cuMem", StringComparison.Ordinal)
-                || message.Contains("cuStream", StringComparison.Ordinal)
-                || message.Contains("cuLaunch", StringComparison.Ordinal)
-                || message.Contains("OpenCL", StringComparison.OrdinalIgnoreCase)
-                || message.Contains("released before materialization", StringComparison.OrdinalIgnoreCase)
-                || message.Contains("buffer was released", StringComparison.OrdinalIgnoreCase))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+        => Training.TapeTrainingStepper<T>.IsGpuTransientFailure(exception);
 
     /// <summary>
     /// True when an exception chain represents a GPU allocation OOM even if the
@@ -13552,25 +13450,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// rather than a managed <see cref="OutOfMemoryException"/>.
     /// </summary>
     protected static bool IsGpuOutOfMemoryFailure(Exception? exception)
-    {
-        for (var e = exception; e is not null; e = e.InnerException)
-        {
-            if (e is OutOfMemoryException)
-                return true;
-
-            var message = e.Message;
-            if (message.Contains("Out of memory", StringComparison.OrdinalIgnoreCase)
-                && (message.Contains("cuMem", StringComparison.Ordinal)
-                    || message.Contains("CUDA", StringComparison.OrdinalIgnoreCase)
-                    || message.Contains("GPU", StringComparison.OrdinalIgnoreCase)
-                    || message.Contains("CL_OUT_OF", StringComparison.OrdinalIgnoreCase)))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+        => Training.TapeTrainingStepper<T>.IsGpuOutOfMemoryFailure(exception);
 
     private static string DescribeException(Exception? exception)
         => exception is null
@@ -13618,11 +13498,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     internal static bool TryMapToFusedOptimizerConfig(
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
         out Optimizers.Fused.FusedOptimizerConfig config)
-    {
-        config = default;
-        return optimizer is Optimizers.Fused.IFusedOptimizerSpec spec
-            && spec.TryGetFusedOptimizerConfig(out config);
-    }
+        => Training.FusedTrainingSession<T>.TryMapToFusedOptimizerConfig(optimizer, out config);
 
     /// <summary>
     /// Performs tape-based training with a caller-provided loss function.
@@ -13636,53 +13512,184 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </param>
     /// <param name="optimizer">Optional optimizer override. Uses default Adam if null.</param>
     /// <returns>The scalar loss value for monitoring.</returns>
+    /// <summary>
+    /// One training step on this network's output under a caller-defined loss, on the shared fused session.
+    /// </summary>
+    /// <remarks>
+    /// The loss receives the step's input as well as the network's output, and must read per-step data only through
+    /// them: a compiled plan rebinds the input on every replay and bakes any other host value the loss captures.
+    /// Other networks' live weights (a frozen discriminator) are read as they stand at each step. For a loss that
+    /// captures per-step tensors (advantages, actions), use
+    /// <see cref="TrainWithCustomLoss(Tensor{T}, Func{Tensor{T}, Tensor{T}}, IGradientBasedOptimizer{T, Tensor{T}, Tensor{T}}?)"/>.
+    /// </remarks>
+    internal T TrainWithCustomLossFused(
+        Tensor<T> input,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> computeLoss,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (computeLoss is null) throw new ArgumentNullException(nameof(computeLoss));
+
+        SetTrainingMode(true);
+        try
+        {
+            // The forward returns the loss itself, so the objective sees the rebound input; the target is unused.
+            return TrainCustomTapeStep(input, input,
+                stepInput => computeLoss(stepInput, ForwardForTraining(stepInput)),
+                (loss, _) => loss,
+                optimizer);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <summary>
+    /// One step that trains this network on an objective computed from a step's packed data, on its fused session.
+    /// </summary>
+    /// <remarks>
+    /// For an adversarial or multi-term step whose objective reads several per-step tensors (real and generated
+    /// samples, labels): pack them into <paramref name="data"/> with <c>StepInputPacking</c> and slice them back inside
+    /// <paramref name="objective"/>, which a compiled plan rebinds on every replay. Other networks the objective
+    /// runs (a frozen discriminator) are read as they stand at each step; only this network's parameters are trained.
+    /// The caller sets the training modes.
+    /// </remarks>
+    /// <param name="parameterProvider">The tensors to train when not this network's own: a step that trains several
+    /// networks under one optimizer passes all of theirs.</param>
+    internal T TrainObjectiveFused(
+        Tensor<T> data,
+        Func<Tensor<T>, Tensor<T>> objective,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
+        Func<IReadOnlyList<Tensor<T>>>? parameterProvider = null)
+    {
+        if (data is null) throw new ArgumentNullException(nameof(data));
+        if (objective is null) throw new ArgumentNullException(nameof(objective));
+        return TrainCustomTapeStep(data, data, objective, (loss, _) => loss, optimizer, parameterProvider);
+    }
+
     public T TrainWithCustomLoss(
         Tensor<T> input,
         Func<Tensor<T>, Tensor<T>> computeLoss,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
     {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (computeLoss is null) throw new ArgumentNullException(nameof(computeLoss));
+
         SetTrainingMode(true);
         try
         {
-            var trainableParams = CollectModelTrainableTensors();
-            var opt = optimizer ?? GetOrCreateBaseOptimizer();
-
-            using var tape = new GradientTape<T>();
-            var output = ForwardForTraining(input);
-            var lossTensor = computeLoss(output);
-
-            var grads = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParams);
-
-            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-            LastLoss = lossValue;
-
-            Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => ForwardForTraining(inp);
-            Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> _) => computeLoss(pred);
-
-            var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
-                trainableParams, grads, lossValue,
-                input, input, ComputeForward, RecomputeLoss);
-
-            // Tape optimizer step writes weights in place (#1624 OOM-retry gate).
-            MarkTrainMutationStarted();
-            ApplyOptimizerRegularization(opt, context);
-            opt.Step(context);
-            // GPU weight-cache coherence after the custom-loss step.
-            // See InvalidateWeightCachesAfterSuccessfulWeightUpdate.
-            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
-
-            // Mirror the OnBatchEnd advance from TrainWithTape via the
-            // shared helper so a custom-loss caller and a regular Train
-            // caller see identical scheduler behaviour. Closes #1269.zFt3
-            // (route via shared StepSchedulerIfSupported helper to keep
-            // every training entry point consistent — #1270.zKjB).
-            StepSchedulerIfSupported(opt);
-
-            return lossValue;
+            // The loss closure usually captures per-call host data (advantages, actions, a generator's samples), which
+            // a compiled plan would freeze at its first trace, so this step runs on the shared eager tape step.
+            return StepOnSharedTape(
+                () => computeLoss(ForwardForTraining(input)),
+                optimizer ?? GetOrCreateBaseOptimizer(),
+                input,
+                input,
+                (inp, _) => ForwardForTraining(inp),
+                (pred, _) => computeLoss(pred));
         }
         finally
         {
             SetTrainingMode(false);
+        }
+    }
+
+    /// <summary>
+    /// One update of this network through the shared eager tape step
+    /// (<see cref="Training.TapeTrainingStepper{T}.EagerTapeStep"/>), with the network's own bookkeeping layered on:
+    /// the reachability probe and gradient publication of <see cref="ComputeAndPublishParameterGradients"/>, the
+    /// optimizer's regularization, the in-place mutation mark (#1624 OOM-retry gate), GPU weight-cache coherence and
+    /// the scheduler's batch advance (#1269 / #1270: every training entry point advances it the same way).
+    /// </summary>
+    /// <remarks>The trained set is read after the objective runs, so parameters a lazy layer materializes on its
+    /// first forward are updated on that same step.</remarks>
+    private T StepOnSharedTape(
+        Func<Tensor<T>> objective,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> opt,
+        Tensor<T> input,
+        Tensor<T> target,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> recomputeForward,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> recomputeLoss)
+    {
+        var probe = TapeReachabilityProbe<T>.Current;
+        var hooks = new Training.TapeTrainingStepper<T>.EagerStepHooks
+        {
+            // An armed probe only ever ADDS questions: its tensors are differentiated, never updated.
+            GradientSources = probe is not null && probe.Requested.Count > 0
+                ? parameters =>
+                {
+                    var widened = new List<Tensor<T>>(parameters.Count + probe.Requested.Count);
+                    widened.AddRange(parameters);
+                    widened.AddRange(probe.Requested);
+                    return widened;
+                }
+                : null,
+            OnTapeGradients = gradients =>
+            {
+                probe?.Record(this, gradients);
+                PublishParameterGradients(gradients);
+            },
+            // Global gradient-norm clipping at MaxGradNorm (per group where the model declares groups) and the
+            // value clip, over the same layer-owned set and order as the standard step. Custom objectives used to
+            // skip it, so a model trained through its own objective (FastSpeech 2, AlignTTS, AdaSpeech, Grad-TTS,
+            // Deep Voice 3) took unclipped steps that every other entry point would have clipped.
+            OnGradients = ClipObjectiveGradients,
+        };
+
+        T lossValue = Training.TapeTrainingStepper<T>.EagerTapeStep(
+            objective,
+            CollectModelTrainableTensors,
+            context =>
+            {
+                MarkTrainMutationStarted();
+                ApplyOptimizerRegularization(opt, context);
+                opt.Step(context);
+                InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+                StepSchedulerIfSupported(opt);
+            },
+            input,
+            target,
+            recomputeForward,
+            recomputeLoss,
+            hooks);
+        LastLoss = lossValue;
+        return lossValue;
+    }
+
+    // MaxGradNorm (per declared group) and GradientValueClip on a custom objective's gradients, in place.
+    private void ClipObjectiveGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> gradients)
+    {
+        if (gradients.Count == 0 || gradients is not Dictionary<Tensor<T>, Tensor<T>> grads) return;
+        double maxGradNorm = MaxGradNormValue;
+        if (maxGradNorm > 0.0)
+        {
+            var trainableParams = CollectModelTrainableTensors();
+            var groups = GradientClippingGroups(trainableParams);
+            if (groups is null)
+            {
+                ApplyGradientClipping(grads, maxGradNorm, CollectLayerOwnedTrainableTensorsForClipping(trainableParams));
+            }
+            else
+            {
+                foreach (var group in groups)
+                    ApplyGradientClipping(grads, maxGradNorm, group);
+            }
+        }
+        double clipValue = GradientValueClip;
+        if (clipValue > 0.0)
+        {
+            T lower = NumOps.FromDouble(-clipValue), upper = NumOps.FromDouble(clipValue);
+            foreach (var g in grads.Values)
+            {
+                if (g is null || g.Length == 0) continue;
+                var span = g.Data.Span;
+                for (int i = 0; i < span.Length; i++)
+                {
+                    if (NumOps.LessThan(span[i], lower)) span[i] = lower;
+                    else if (NumOps.GreaterThan(span[i], upper)) span[i] = upper;
+                }
+            }
         }
     }
 
@@ -13711,56 +13718,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         SetTrainingMode(true);
         try
         {
-            var opt = optimizer ?? GetOrCreateBaseOptimizer();
-            // The step's own arena, as TrainWithTape has: the top-level tape's Dispose Resets the CURRENT arena
-            // (Tensors #1804), and without a step arena that was the caller's. A model that runs several steps on the
-            // same inputs in one Train call (a GAN's discriminator then generator step, VITS's discriminator, generator
-            // and duration steps) then had those inputs recycled between steps: the arena's tensor ring re-issued the
-            // same Tensor objects and reshaped them in place. Tensors escaping a nested arena are never re-issued.
-            using var stepArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
-            using var tape = new GradientTape<T>();
-            var lossTensor = RecomputeObjective(input, expected);
-            var trainableParams = CollectModelTrainableTensors();
-            var grads = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParams);
-            T lossValue = lossTensor[0];
-            LastLoss = lossValue;
-
-            // Global gradient-norm clipping at MaxGradNorm, over the same layer-owned set and in the same order as
-            // TrainWithTape and the gradient-accumulation step. This path used to skip it, so a model trained through
-            // its own objective (FastSpeech 2, AlignTTS, AdaSpeech) took unclipped steps that every other entry point
-            // would have clipped.
-            double maxGradNorm = MaxGradNormValue;
-            if (maxGradNorm > 0.0 && grads.Count > 0)
-            {
-                var groups = GradientClippingGroups(trainableParams);
-                if (groups is null)
-                {
-                    ApplyGradientClipping(grads, maxGradNorm, CollectLayerOwnedTrainableTensorsForClipping(trainableParams));
-                }
-                else
-                {
-                    foreach (var group in groups)
-                        ApplyGradientClipping(grads, maxGradNorm, group);
-                }
-                PublishParameterGradients(grads);
-            }
-            double clipValue = GradientValueClip;
-            if (clipValue > 0.0 && grads.Count > 0)
-            {
-                T lower = NumOps.FromDouble(-clipValue), upper = NumOps.FromDouble(clipValue);
-                foreach (var g in grads.Values)
-                {
-                    if (g is null || g.Length == 0) continue;
-                    var span = g.Data.Span;
-                    for (int i = 0; i < span.Length; i++)
-                    {
-                        if (NumOps.LessThan(span[i], lower)) span[i] = lower;
-                        else if (NumOps.GreaterThan(span[i], upper)) span[i] = upper;
-                    }
-                }
-                PublishParameterGradients(grads);
-            }
-
             Tensor<T> RecomputeObjective(Tensor<T> currentInput, Tensor<T> currentExpected)
             {
                 EnsureLayerRandomSeedsWired();
@@ -13773,16 +13730,19 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 return result;
             }
 
-            Tensor<T> ReadObjective(Tensor<T> objective, Tensor<T> _) => objective;
-            var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
-                trainableParams, grads, lossValue, input, expected, RecomputeObjective, ReadObjective);
-
-            MarkTrainMutationStarted();
-            ApplyOptimizerRegularization(opt, context);
-            opt.Step(context);
-            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
-            StepSchedulerIfSupported(opt);
-            return lossValue;
+            // The step's own arena: the top-level tape's Dispose Resets the CURRENT arena (Tensors #1804), and without a
+            // step arena that was the caller's. A model that runs several steps on the same inputs in one Train call (a
+            // GAN's discriminator then generator step, VITS's discriminator, generator and duration steps) then had those
+            // inputs recycled between steps: the arena's tensor ring re-issued the same Tensor objects and reshaped them
+            // in place. Tensors escaping a nested arena are never re-issued.
+            using var stepArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
+            return StepOnSharedTape(
+                () => RecomputeObjective(input, expected),
+                optimizer ?? GetOrCreateBaseOptimizer(),
+                input,
+                expected,
+                RecomputeObjective,
+                (objective, _) => objective);
         }
         finally
         {
@@ -13869,6 +13829,43 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return lossValue;
     }
 
+    /// <summary>
+    /// A training-mode forward that records nothing and leaves every layer's registered state (BatchNorm running
+    /// statistics and the like) as it found it; the output is a detached copy.
+    /// </summary>
+    /// <remarks>
+    /// For a step that needs a network's training-mode output as data before the step that trains it runs the same
+    /// forward again: an adversarial iteration's generated samples for the discriminator, ahead of the generator's
+    /// own step. The values are the ones that step's forward computes (same weights, same batch statistics), and the
+    /// running statistics still advance once per iteration, in the step.
+    /// </remarks>
+    internal Tensor<T> ForwardForTrainingDetached(Tensor<T> input)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+
+        var saved = new List<(Tensor<T> Buffer, T[] Values)>();
+        foreach (var layer in Layers) SnapshotBuffers(layer, saved);
+        try
+        {
+            using (new NoGradScope<T>())
+                return ForwardForTraining(input).Clone();
+        }
+        finally
+        {
+            foreach (var (buffer, values) in saved)
+                values.AsSpan().CopyTo(buffer.AsWritableSpan());
+        }
+    }
+
+    private static void SnapshotBuffers(ILayer<T> layer, List<(Tensor<T> Buffer, T[] Values)> saved)
+    {
+        if (layer is LayerBase<T> concrete)
+        {
+            foreach (var (_, buffer) in concrete.GetRegisteredBuffers())
+                saved.Add((buffer, buffer.ToArray()));
+        }
+        foreach (var sub in layer.GetSubLayers()) SnapshotBuffers(sub, saved);
+    }
     /// <summary>
     /// Runs this network's forward on the caller's active gradient tape with the network frozen:
     /// in evaluation mode, and stepped by nobody unless the caller hands its parameters to
@@ -14117,8 +14114,18 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 network.PublishParameterGradients(gradients);
                 network.LastLoss = lossValue;
 
+                // Each optimizer sees only its own network's gradients. An optimizer's global-norm clip measures and
+                // scales every gradient in its context, so handing every member the whole dictionary clipped each
+                // network by the joint norm, rescaled the other members' gradients in place, and clipped the next
+                // member again on those already-scaled values. PyTorch's per-optimizer clip_grad_norm_ is per network.
+                var ownGradients = new Dictionary<Tensor<T>, Tensor<T>>(
+                    AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+                foreach (var parameter in memberParameters[i])
+                {
+                    if (gradients.TryGetValue(parameter, out var gradient)) ownGradients[parameter] = gradient;
+                }
                 var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
-                    memberParameters[i], gradients, lossValue);
+                    memberParameters[i], ownGradients, lossValue);
                 network.MarkTrainMutationStarted();
                 optimizer.Step(context);
                 network.InvalidateWeightCachesAfterSuccessfulWeightUpdate();
@@ -14324,6 +14331,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
     protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
     {
+        if (_baseTrainOptimizerExplicitlyConfigured && _baseTrainOptimizer is not null) return _baseTrainOptimizer;
+        if (TrainingOptimizer is { } own) return own;
         if (_baseTrainOptimizer is not null) return _baseTrainOptimizer;
 
         // G2 (#1624) — optimizer-state memory ladder. Standard fp32 Adam keeps two moment buffers (m, v),
@@ -14555,18 +14564,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <summary>The optimizer's configured regularization, or null when it has none.</summary>
     private static IRegularization<T, Tensor<T>, Tensor<T>>? OptimizerRegularizationOf(
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
-    {
-        if (optimizer is not Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> gradientBased) return null;
-        // Only a regularization the caller chose. The options default to L2(0.01); applying that implicit term here
-        // changed what every network's Train does (measured: frozen SeACo backbone parameters drifted, CUPS/Kairos/
-        // Word2Vec/VideoMAE losses stopped falling) - master never applied it on this path, nor does PyTorch by default.
-        if (!gradientBased.RegularizationExplicitlyConfigured) return null;
-        // A proximal optimizer applies its regularizer inside its own step (and its fused kernel); adding the term to
-        // the gradient here as well applied an L1 penalty twice.
-        if (gradientBased.AppliesRegularizationInStep) return null;
-        var regularization = gradientBased.ActiveRegularization;
-        return regularization is null or AiDotNet.Regularization.NoRegularization<T, Tensor<T>, Tensor<T>> ? null : regularization;
-    }
+        => Training.FusedTrainingSession<T>.OptimizerRegularizationOf(optimizer);
 
     /// <summary>
     /// Applies the optimizer's regularization to the tape gradients before <c>Step</c> - which clips - so the eager
@@ -14631,7 +14629,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             foreach (var wtensor in Training.TapeTrainingStep<T>.CollectParameters(Layers, _layerStructureVersion))
             {
-                if (updatedOnDevice && wtensor.IsGpuResident && wtensor.TryGetGpuBuffer() is not null)
+                // HasPendingGpuData, not IsGpuResident: IsGpuResident reads only the device tag, which an ordinary
+                // parameter whose device copy the plan just updated (and re-armed for a lazy host download) does not
+                // carry. Testing it invalidated every such parameter, dropping the device update: GPU training lost its
+                // first two updates whenever the weights were already resident at step 1 (one Predict was enough).
+                if (updatedOnDevice && wtensor.HasPendingGpuData && wtensor.TryGetGpuBuffer() is not null)
                     continue;
                 gpuForInvalidate.InvalidateResidentWeightBuffer(wtensor);
             }
@@ -14692,11 +14694,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // own (fresh) state, as it would eagerly, so this model's compiled optimizer state is dropped rather than
             // treated as hyperparameter drift on a committed plan, which refuses the next step.
             Training.CompiledTapeTrainingStep<T>.Invalidate(this);
-            _fusedTrainingCommitted = false;
-            _fusedPersistenceVerified = false;
             // A sticky disable protected the previous optimizer's moments from a fused re-engagement mid-run. The new
             // optimizer has no such moments, so it gets the configured default rather than inheriting the disable.
-            _fusedTrainingDisabled = FusedTrainingDisabledByConfiguration;
+            FusedSession.Restart(disabled: FusedTrainingDisabledByConfiguration);
         }
         _baseTrainOptimizer = optimizer;
         _baseTrainOptimizerExplicitlyConfigured = optimizer is not null;
@@ -14732,8 +14732,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // gradient and held the update's sign. Six unrelated families reported that same cosine of
         // exactly 1.000000 in CI for this reason.
         Training.CompiledTapeTrainingStep<T>.Invalidate(this);
-        _fusedTrainingCommitted = false;
-        _fusedPersistenceVerified = false;
+        FusedSession.Restart(disabled: FusedSession.IsDisabled);
 
         ResetOwnedOptimizerState();
     }
@@ -14788,15 +14787,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Clear the FUSED flags for every model the walk reaches, not just the root. Resetting an
         // optimizer while its model still believes its compiled plan is committed leaves exactly the
         // divergence ResetBaseTrainOptimizerState documents above: Adam/AdamW/SGD moments live INSIDE
-        // the compiled plan, so a nested model that keeps _fusedTrainingCommitted set carries the
+        // the compiled plan, so a nested model whose fused session stays committed carries the
         // previous trajectory's moments into the next run even though its optimizer object was Reset.
         // Idempotent, so re-clearing the root's flags here costs nothing.
         //
         // Compiled training state is kept per model, so each model the walk reaches drops its own plan
         // (and the moments inside it); invalidating only the root would leave nested models' plans alive.
         Training.CompiledTapeTrainingStep<T>.Invalidate(this);
-        _fusedTrainingCommitted = false;
-        _fusedPersistenceVerified = false;
+        FusedSession.Restart(disabled: FusedSession.IsDisabled);
 
         var plan = GetOwnedOptimizerPlan(GetType());
 
@@ -15110,12 +15108,18 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (_parameterBuffer is not null && _parameterBuffer.Count == trainableParams.Count)
             return _parameterBuffer;
 
-        // Build buffer from current parameter shapes
-        var shapes = new int[trainableParams.Count][];
+        // One layout per parameter: a sparse parameter keeps its pattern and stores only its non-zeros, so its
+        // buffer view is again a SparseTensor (a dense shape-only layout handed sparse layers a dense view they
+        // reject - SparseLinearLayer's generated SetTrainableParameters requires its SparseTensor leaf back).
+        var layouts = new ParameterLayout[trainableParams.Count];
         for (int i = 0; i < trainableParams.Count; i++)
-            shapes[i] = trainableParams[i]._shape;
+        {
+            layouts[i] = trainableParams[i] is SparseTensor<T> sparse
+                ? new ParameterLayout(sparse._shape, SparsityLayout.FromSparseTensor(sparse))
+                : new ParameterLayout(trainableParams[i]._shape);
+        }
 
-        var buffer = new ParameterBuffer<T>(shapes);
+        var buffer = new ParameterBuffer<T>(layouts);
 
         // Copy current weights into the buffer
         buffer.CopyFrom(trainableParams);
@@ -15304,7 +15308,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // correct only when the buffer is being invalidated.
             for (int i = 0; i < originals.Count; i++)
             {
-                Engine.TensorCopy(currentViews[i], originals[i]);
+                // A sparse leaf's buffer view shares the original's pattern and holds only its non-zeros (the
+                // ParameterLayout the buffer was built with), so the values copy across directly; dense TensorCopy
+                // would densify it and throws on a sparse tensor.
+                if (currentViews[i] is SparseTensor<T> sparseView && originals[i] is SparseTensor<T> sparseOriginal
+                    && sparseView.NonZeroCount == sparseOriginal.NonZeroCount)
+                    sparseView.DataVector.AsSpan().CopyTo(sparseOriginal.DataVector.AsWritableSpan());
+                else
+                    Engine.TensorCopy(currentViews[i], originals[i]);
             }
             stableRestoreCandidates.Add((trainable, originals));
         }
@@ -15384,9 +15395,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Also clear the fused-commitment: ResetState is an explicit
         // "start training over" signal, so any plan-embedded Adam/SGD state
         // is no longer needed, and the next run can engage fused fresh.
-        _fusedTrainingDisabled = FusedTrainingDisabledByConfiguration;
-        _fusedTrainingCommitted = false;
-        _fusedPersistenceVerified = false;
+        FusedSession.Restart(disabled: FusedTrainingDisabledByConfiguration);
     }
 
     /// <summary>

@@ -728,25 +728,19 @@ public partial class SAM2<T> : NeuralNetworkBase<T>
     }
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <remarks>
+    /// With its native pipeline, the model trains its composite segmentation objective; without one, the standard step
+    /// trains the network.
+    /// </remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (!_useNativeMode)
+        if (NativePipeline is null) return null;
+        return new[]
         {
-            throw new InvalidOperationException(
-                "Training is not supported in ONNX mode. Use native mode constructor for training.");
-        }
-
-        if (NativePipeline is null)
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-            return;
-        }
-
-        _ = TrainWithCustomLoss(
-            input,
-            output => ApplyCompositeObjective(
-                ComputeNativeTrainingLoss(output, expectedOutput), input),
-            _optimizer);
+            new Training.TrainingObjective<T>(
+                new[] { input, expectedOutput },
+                data => ApplyCompositeObjective(ComputeNativeTrainingLoss(ForwardForTraining(data[0]), data[1]), data[0])),
+        };
     }
 
     private Tensor<T> ComputeNativeTrainingLoss(

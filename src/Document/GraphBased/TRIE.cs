@@ -805,29 +805,6 @@ public partial class TRIE<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
         return activations;
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-
-        // TrainWithTape runs the full forward (ForwardForTraining -> RunModalityForward), backprops,
-        // and applies the optimizer update itself. The earlier UpdateParameters(CollectGradients())
-        // was a redundant SECOND update whose hand-collected gradient vector did not line up with
-        // GetParameters(), corrupting the step. TrainWithTape alone is the correct single update.
-        // Restore eval mode in a finally: if TrainWithTape throws, the instance must not be stranded in
-        // training mode (dropout active, BN in train stats) so subsequent Predict calls stay correct.
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
 

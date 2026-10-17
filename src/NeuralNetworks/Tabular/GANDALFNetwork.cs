@@ -227,52 +227,6 @@ public partial class GANDALFNetwork<T> : TabularNeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Trains the GANDALF network using the provided input and expected output.
-    /// </summary>
-    /// <param name="input">The input tensor for training.</param>
-    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
-    /// <remarks>
-    /// <para>
-    /// This method performs one training iteration, including forward pass, loss calculation,
-    /// backward pass, and parameter update.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This is how the network learns from examples.
-    ///
-    /// The training process:
-    /// 1. Takes input data and their correct answers (expected outputs)
-    /// 2. Makes predictions using the current network state
-    /// 3. Compares predictions to correct answers to calculate the error
-    /// 4. Uses this error to adjust the network's internal settings (backpropagation)
-    ///
-    /// This process is repeated many times with different examples to train the network.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // Tape-based training. Same cascade pattern as TabTransformerNetwork /
-        // SAINTNetwork / TabFlowGenerator — the previous body computed `error`
-        // but never backpropagated, then called the layer-style
-        // _optimizer.UpdateParameters(Layers) which throws "Backward pass must
-        // be called before updating parameters" when no gradients exist.
-        // Honor the base Train contract: auto-promote an unbatched single sample
-        // ([features] / [seq, features]) to a leading unit batch dim before the tape
-        // forward, exactly as NeuralNetworkBase.Train does. Without this, callers
-        // passing single-sample tensors would bypass the canonical [B, …] promotion.
-        (input, expectedOutput) = NormalizeBatchDim(input, expectedOutput);
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <summary>
     /// Updates the parameters of all layers in the network based on computed gradients.
     /// </summary>
     /// <remarks>

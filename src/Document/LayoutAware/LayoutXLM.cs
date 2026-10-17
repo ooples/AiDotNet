@@ -846,31 +846,6 @@ public partial class LayoutXLM<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
         return activations;
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Per Xu et al. ACL 2022 §3.3 (and the LayoutLMv2 training recipe it inherits),
-    /// LayoutXLM is trained end-to-end with AdamW (β1=0.9, β2=0.999, weight-decay=0.01,
-    /// learning rate 2e-5 with linear warmup over 10 % of steps then linear decay).
-    /// <see cref="NeuralNetworkBase{T}.TrainWithTape"/> already applies that optimizer
-    /// step through <see cref="_optimizer"/> (defaulted to <see cref="AdamOptimizer{T, TInput, TOutput}"/>
-    /// in the constructor) — the previous implementation also called
-    /// <c>UpdateParameters(CollectGradients())</c> AFTER TrainWithTape, applying a
-    /// second naive SGD update at fixed lr=5e-5 on top of the AdamW update. That
-    /// double-step counted every gradient twice, broke the AdamW first/second-moment
-    /// invariants, and is the root cause of monotonic-loss-decrease test failures
-    /// (<c>Training_ShouldReduceLoss</c>, <c>TrainingError_ShouldNotExceedTestError</c>).
-    /// Drop the manual second step so training follows the paper exactly.
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-
-        SetTrainingMode(true);
-        TrainWithTape(input, expectedOutput, _optimizer);
-        SetTrainingMode(false);
-    }
-
     // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
 

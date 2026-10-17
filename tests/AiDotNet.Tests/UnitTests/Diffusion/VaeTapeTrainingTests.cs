@@ -16,6 +16,7 @@ namespace AiDotNet.Tests.UnitTests.Diffusion;
 /// so all eleven VAEs trained on a three-sample SPSA estimate over every weight at once. The tape-based
 /// ComputeGradientsWithTape existed and nothing called it.
 /// </remarks>
+[Collection("FusedOptimizerGlobalState")]
 public class VaeTapeTrainingTests
 {
     private static StandardVAE<double> SmallVae(int seed) => new StandardVAE<double>(
@@ -128,5 +129,49 @@ public class VaeTapeTrainingTests
         double small = StepSize(1e-4);
         double large = StepSize(1e-2);
         Assert.InRange(large / small, 50.0, 200.0);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Train_RunsFused_AndTakesTheEagerStep()
+    {
+        // VAEModelBase.Train runs on the shared fused session (#1804): with compilation on, every step runs fused,
+        // over steps on different images, and lands on the eager run's weights.
+        await Task.Yield();
+        (double[] Weights, int Fused, int Eager) Run(bool compile)
+        {
+            var original = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
+            try
+            {
+                AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(
+                    new AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions { EnableCompilation = compile });
+                AiDotNet.Training.CompiledTapeTrainingStep<double>.Invalidate();
+                var vae = SmallVae(seed: 7);
+                vae.TrainingLearningRate = 1e-3;
+                for (int step = 0; step < 3; step++)
+                {
+                    var image = Image(10 + step);
+                    vae.Train(image, image);
+                }
+                return (vae.GetParameters().ToArray(), vae.FusedTrainingStepCount, vae.EagerTrainingStepCount);
+            }
+            finally
+            {
+                AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(original);
+                AiDotNet.Training.CompiledTapeTrainingStep<double>.Invalidate();
+            }
+        }
+
+        var eager = Run(compile: false);
+        var eagerAgain = Run(compile: false);
+        var fused = Run(compile: true);
+
+        // A seeded VAE must fit deterministically, or the comparison below means nothing.
+        Assert.Equal(eager.Weights, eagerAgain.Weights);
+        Assert.Equal(3, eager.Eager);
+        Assert.Equal(3, fused.Fused);
+        Assert.Equal(0, fused.Eager);
+        for (int i = 0; i < eager.Weights.Length; i++)
+            Assert.True(Math.Abs(eager.Weights[i] - fused.Weights[i]) <= 1e-6,
+                $"weight {i}: eager {eager.Weights[i]}, fused {fused.Weights[i]}");
     }
 }
