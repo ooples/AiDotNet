@@ -260,7 +260,7 @@ public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
     }
 
     /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         ThrowIfDisposed();
         if (IsOnnxMode)
@@ -268,10 +268,11 @@ public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
         if (!HasPaperLayers)
         {
             TrainWithTape(input, expectedOutput, _optimizer);
-            return;
+            return true;
         }
         var (tokens, mel) = Prepare(input, expectedOutput);
         TrainWithCustomObjective(tokens, mel, Objective, _optimizer);
+        return true;
     }
 
     /// <inheritdoc />

@@ -208,7 +208,7 @@ public partial class VGG16Backbone<T> : NeuralNetworkBase<T>, IDetectionBackbone
     };
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) =>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput) =>
         throw new NotSupportedException($"{GetType().Name}: detection backbones train as part of a parent detector.");
 
     /// <inheritdoc/>

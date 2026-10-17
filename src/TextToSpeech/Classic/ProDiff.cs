@@ -222,9 +222,6 @@ public partial class ProDiff<T> : VarianceAdaptorTtsModelBase<T>, IAcousticModel
     protected override bool UsesL1MelLoss => false;
 
     /// <inheritdoc />
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
-
-    /// <inheritdoc />
     protected override double VarianceLossWeight => _options.VarianceLossWeight;
 
     // ---------------------------------------------------------------- noise schedule

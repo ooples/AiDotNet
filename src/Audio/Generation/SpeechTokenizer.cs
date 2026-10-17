@@ -149,7 +149,7 @@ public partial class SpeechTokenizer<T> : NeuralAudioCodecBase<T>
     /// <paramref name="input"/>, one per 20 ms frame (HuBERT base at 16 kHz); a matching segment of both is drawn per step.
     /// SpeechTokenizer cannot train without them: the first codebook's role comes from the distillation (§3.2).
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         ThrowIfDisposed();
         if (expectedOutput.Rank != 2 || expectedOutput.Shape[1] != PaperOptions.SemanticDimension)
@@ -170,6 +170,7 @@ public partial class SpeechTokenizer<T> : NeuralAudioCodecBase<T>
         {
             _teacher = null;
         }
+        return true;
     }
 
     // ---------------------------------------------------------------- losses

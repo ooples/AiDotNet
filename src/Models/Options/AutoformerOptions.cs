@@ -49,7 +49,7 @@ public class AutoformerOptions<T> : TimeSeriesRegressionOptions<T>
         // changes deterministic initialization.
         Seed = other.Seed;
         LookbackWindow = other.LookbackWindow;
-        LabelLength = other.LabelLength;
+        _labelLength = other._labelLength;
         ForecastHorizon = other.ForecastHorizon;
         EmbeddingDim = other.EmbeddingDim;
         FeedForwardDim = other.FeedForwardDim;
@@ -77,9 +77,16 @@ public class AutoformerOptions<T> : TimeSeriesRegressionOptions<T>
 
     /// <summary>
     /// Gets or sets the start-token length: the last steps of the input's seasonal and trend parts that open the
-    /// decoder (label_len, 48).
+    /// decoder (label_len). Unless set, half of <see cref="LookbackWindow"/>: the reference's 48 for its 96-step
+    /// window, and a valid start for any shorter window.
     /// </summary>
-    public int LabelLength { get; set; } = 48;
+    public int LabelLength
+    {
+        get => _labelLength ?? LookbackWindow / 2;
+        set => _labelLength = value;
+    }
+
+    private int? _labelLength;
 
     /// <summary>
     /// Gets or sets the forecast horizon (pred_len, 96).

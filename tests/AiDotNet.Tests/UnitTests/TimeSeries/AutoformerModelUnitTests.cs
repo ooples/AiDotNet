@@ -41,19 +41,27 @@ public class AutoformerModelUnitTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task Predict_AfterTheSeries_ContinuesTheDirectForecast()
+    public async Task Predict_OutOfSample_ForecastsAheadOrPerWindow()
     {
         await Task.Yield();
         var y = Seasonal(96);
         var model = new AutoformerModel<double>(Small());
         model.Train(new Matrix<double>(y.Length, 1), y);
-        var future = model.Predict(new Matrix<double>(9, 1));
+        // One column is time steps after the series: the direct forecast, then continued from it.
+        var ahead = model.Predict(new Matrix<double>(9, 1));
         var direct = model.PredictMultiple(y);
-        for (int h = 0; h < 6; h++) Assert.Equal(direct[h], future[h], 12);
+        for (int h = 0; h < 6; h++) Assert.Equal(direct[h], ahead[h], 12);
         var extended = y.ToList();
-        extended.AddRange(future.Take(6));
+        extended.AddRange(ahead.Take(6));
         var next = model.PredictMultiple(new Vector<double>(extended.ToArray()));
-        for (int h = 0; h < 3; h++) Assert.Equal(next[h], future[6 + h], 12);
+        for (int h = 0; h < 3; h++) Assert.Equal(next[h], ahead[6 + h], 12);
+
+        // Wider rows are history windows: each prediction is the first step of that window's direct forecast.
+        var windows = new Matrix<double>(9, 40);
+        for (int r = 0; r < windows.Rows; r++)
+            for (int c = 0; c < windows.Columns; c++) windows[r, c] = y[r + c];
+        var future = model.Predict(windows);
+        for (int r = 0; r < windows.Rows; r++) Assert.Equal(model.PredictMultiple(windows.GetRow(r))[0], future[r], 12);
     }
 
     [Fact(Timeout = 120000)]

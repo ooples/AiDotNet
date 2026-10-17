@@ -46,7 +46,6 @@ public sealed class FusedCompiledTrainingOptOutInventoryTests
     /// </summary>
     private static readonly string[] KnownOptOuts =
     {
-        "Autoformer",
         "DifferentiableNeuralComputer",
         "DistilBERTNER",
         "GLALanguageModel",

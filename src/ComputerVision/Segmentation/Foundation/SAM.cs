@@ -411,7 +411,7 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
     /// One step of SAM's training (Kirillov et al. 2023, Appendix A) on an image <c>[C,H,W]</c> (or <c>[1,C,H,W]</c>,
     /// at most the encoder size) and its ground-truth mask (<c>H·W</c> values): see <see cref="SamTraining{T}"/>.
     /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
         var image = Batched(input);
@@ -419,6 +419,7 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
         var objective = training.Objective(image, expectedOutput, _trainingRandom);
         // The objective runs the whole network itself; TrainWithCustomLoss would also run (and discard) a forward pass.
         TrainWithCustomObjective(image, expectedOutput, (_, _) => objective(), Optimizer);
+        return true;
     }
 
     /// <inheritdoc />

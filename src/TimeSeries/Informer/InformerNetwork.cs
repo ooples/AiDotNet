@@ -174,13 +174,17 @@ internal sealed class InformerNetwork<T>
         return _engine.Reshape(y, new[] { batch, length, y.Shape[1] });
     }
 
+    // Inverted dropout; the mask is a per-step draw, so a compiled training plan redraws it on every replay.
     private Tensor<T> Drop(Tensor<T> x, bool training, Random random)
     {
         double rate = Configuration.Dropout;
         if (!training || rate <= 0) return x;
-        var mask = new Tensor<T>(x._shape);
         var keep = NumOps.FromDouble(1.0 / (1.0 - rate));
-        for (int i = 0; i < mask.Length; i++) mask[i] = random.NextDouble() < rate ? NumOps.Zero : keep;
+        var mask = AiDotNet.Training.CompiledStepRandom<T>.Draw(x._shape, m =>
+        {
+            var span = m.AsWritableSpan();
+            for (int i = 0; i < span.Length; i++) span[i] = random.NextDouble() < rate ? NumOps.Zero : keep;
+        });
         return _engine.TensorMultiply(x, mask);
     }
 
@@ -278,33 +282,14 @@ internal sealed class InformerNetwork<T>
         int top = Math.Min(factor * (int)Math.Ceiling(Math.Log(lq)), lq);
         if (masked && lq != lk) throw new InvalidOperationException("Masked ProbSparse attention is self-attention: L_Q must equal L_K.");
 
-        // The sampled keys per query, shared by every batch row and head (torch.randint(L_K, (L_Q, U))).
-        var sampled = KeySampler?.Invoke(lq, samples, lk) ?? RandomKeys(lq, samples, lk, random);
+        // The sampled keys per query, shared by every batch row and head (torch.randint(L_K, (L_Q, U))): a per-step
+        // draw, so a compiled training plan samples new keys on every replay.
+        var sampled = SampledKeys(lq, samples, lk, random);
 
-        // The sparsity measurement on the host (selection is not differentiated), and the top-u queries per row.
-        var qd = q.GetCpuData();
-        var kd = k.GetCpuData();
-        var select = new Tensor<T>(new[] { bh, top, lq });
-        var measure = new double[lq];
-        for (int r = 0; r < bh; r++)
-        {
-            for (int i = 0; i < lq; i++)
-            {
-                double max = double.NegativeInfinity, sum = 0;
-                for (int s = 0; s < samples; s++)
-                {
-                    int j = sampled[i, s];
-                    double dot = 0;
-                    for (int t = 0; t < e; t++)
-                        dot += NumOps.ToDouble(qd[(r * lq + i) * e + t]) * NumOps.ToDouble(kd[(r * lk + j) * e + t]);
-                    max = Math.Max(max, dot);
-                    sum += dot;
-                }
-                measure[i] = max - sum / lk;
-            }
-            var chosen = Enumerable.Range(0, lq).OrderByDescending(i => measure[i]).Take(top).ToArray();
-            for (int u = 0; u < top; u++) select[r, u, chosen[u]] = NumOps.One;
-        }
+        // The sparsity measurement and the top-u queries per row, chosen from the step's own queries and keys (the
+        // selection is not differentiated); a compiled plan chooses again on every replay.
+        var select = AiDotNet.Training.CompiledStepHostValue<T>.Compute("InformerProbSparseQueries", new[] { q, k, sampled },
+            new[] { bh, top, lq }, (inputs, result) => SelectActiveQueries(inputs[0], inputs[1], inputs[2], top, result));
 
         // The chosen queries attend to every key (masked: to keys at or before their own position).
         var reduced = _engine.BatchMatMul(select, q);                                                          // [BH, u, E]
@@ -312,16 +297,9 @@ internal sealed class InformerNetwork<T>
             NumOps.FromDouble(1.0 / Math.Sqrt(e)));
         if (masked)
         {
-            var mask = new Tensor<T>(new[] { bh, top, lk });
-            var blocked = NumOps.FromDouble(double.NegativeInfinity);
-            var sd = select.GetCpuData();
-            for (int r = 0; r < bh; r++)
-                for (int u = 0; u < top; u++)
-                {
-                    int position = 0;
-                    while (NumOps.ToDouble(sd[(r * top + u) * lq + position]) == 0) position++;
-                    for (int j = position + 1; j < lk; j++) mask[r, u, j] = blocked;
-                }
+            // Each chosen query sees the keys at or before its own position.
+            var mask = AiDotNet.Training.CompiledStepHostValue<T>.Compute("InformerProbSparseCausalMask", new[] { select },
+                new[] { bh, top, lk }, (inputs, result) => CausalMaskOfChosen(inputs[0], lk, result));
             scores = _engine.TensorAdd(scores, mask);
         }
         var updated = _engine.BatchMatMul(_engine.Softmax(scores, axis: 2), v);                                // [BH, u, E]
@@ -336,12 +314,76 @@ internal sealed class InformerNetwork<T>
         return _engine.TensorAdd(initial, _engine.BatchMatMul(selectT, _engine.TensorSubtract(updated, _engine.BatchMatMul(select, initial))));
     }
 
-    private static int[,] RandomKeys(int queries, int samples, int keys, Random random)
+    // The sampled key of every (query, sample) as a [L_Q, U] tensor of indices: KeySampler's when set, otherwise a
+    // per-step draw in the reference's order.
+    private Tensor<T> SampledKeys(int queries, int samples, int keys, Random random)
     {
-        var sampled = new int[queries, samples];
-        for (int i = 0; i < queries; i++)
-            for (int s = 0; s < samples; s++) sampled[i, s] = random.Next(keys);
-        return sampled;
+        if (KeySampler is not null)
+        {
+            var fixedKeys = KeySampler(queries, samples, keys);
+            var tensor = new Tensor<T>(new[] { queries, samples });
+            for (int i = 0; i < queries; i++)
+                for (int s = 0; s < samples; s++) tensor[i, s] = NumOps.FromDouble(fixedKeys[i, s]);
+            return tensor;
+        }
+        return AiDotNet.Training.CompiledStepRandom<T>.Draw(new[] { queries, samples }, t =>
+        {
+            var span = t.AsWritableSpan();
+            for (int i = 0; i < span.Length; i++) span[i] = NumOps.FromDouble(random.Next(keys));
+        });
+    }
+
+    // The one-hot rows [BH, u, L_Q] of the u queries with the largest sparsity measurement
+    // M(q_i) = max_s q_i·k_{j_s} − Σ_s q_i·k_{j_s} / L_K over the sampled keys j_s (ties keep the earlier query).
+    private static void SelectActiveQueries(Tensor<T> q, Tensor<T> k, Tensor<T> sampledKeys, int top, Tensor<T> result)
+    {
+        int bh = q.Shape[0], lq = q.Shape[1], e = q.Shape[2], lk = k.Shape[1], samples = sampledKeys.Shape[1];
+        var qd = q.GetCpuData();
+        var kd = k.GetCpuData();
+        var sd = sampledKeys.GetCpuData();
+        var keys = new int[lq * samples];
+        for (int i = 0; i < keys.Length; i++) keys[i] = (int)Math.Round(NumOps.ToDouble(sd[i]));
+        var span = result.AsWritableSpan();
+        span.Clear();
+        var measure = new double[lq];
+        for (int r = 0; r < bh; r++)
+        {
+            for (int i = 0; i < lq; i++)
+            {
+                double max = double.NegativeInfinity, sum = 0;
+                for (int s = 0; s < samples; s++)
+                {
+                    int j = keys[i * samples + s];
+                    double dot = 0;
+                    for (int t = 0; t < e; t++)
+                        dot += NumOps.ToDouble(qd[(r * lq + i) * e + t]) * NumOps.ToDouble(kd[(r * lk + j) * e + t]);
+                    max = Math.Max(max, dot);
+                    sum += dot;
+                }
+                measure[i] = max - sum / lk;
+            }
+            var chosen = Enumerable.Range(0, lq).OrderByDescending(i => measure[i]).Take(top).ToArray();
+            for (int u = 0; u < top; u++) span[(r * top + u) * lq + chosen[u]] = NumOps.One;
+        }
+        result.IncrementVersion();
+    }
+
+    // −∞ on the keys after each chosen query's position, from the one-hot choice [BH, u, L_Q].
+    private static void CausalMaskOfChosen(Tensor<T> select, int keys, Tensor<T> result)
+    {
+        int bh = select.Shape[0], top = select.Shape[1], lq = select.Shape[2];
+        var sd = select.GetCpuData();
+        var span = result.AsWritableSpan();
+        span.Clear();
+        var blocked = NumOps.FromDouble(double.NegativeInfinity);
+        for (int r = 0; r < bh; r++)
+            for (int u = 0; u < top; u++)
+            {
+                int position = 0;
+                while (position < lq - 1 && NumOps.ToDouble(sd[(r * top + u) * lq + position]) == 0) position++;
+                for (int j = position + 1; j < keys; j++) span[(r * top + u) * keys + j] = blocked;
+            }
+        result.IncrementVersion();
     }
 
     private Tensor<T> FeedForward(DenseLayer<T> conv1, DenseLayer<T> conv2, Tensor<T> x, bool training, Random random)

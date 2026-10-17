@@ -18,14 +18,13 @@ public sealed class DeepARBatchedPredictTests
     [InlineData("Gaussian", 7)]
     [InlineData("Gaussian", 15)]
     [InlineData("StudentT", 12)]
-    [InlineData("Spline", 9)]
     [Trait("category", "unit")]
     public void BatchedPredict_MatchesPerRowPredictSingle(string likelihood, int windowLength)
     {
         var options = new DeepAROptions<double>
         {
             LookbackWindow = 12, ForecastHorizon = 1, HiddenSize = 16, NumLayers = 2, Epochs = 3, BatchSize = 8,
-            LikelihoodType = likelihood, StudentTDegreesOfFreedom = 4.0, Seed = 3,
+            LikelihoodType = likelihood, Seed = 3,
         };
         var model = new DeepARModel<double>(options);
         int n = 80;

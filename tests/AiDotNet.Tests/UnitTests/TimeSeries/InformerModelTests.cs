@@ -78,14 +78,22 @@ public class InformerModelTests
         Assert.Equal(y.Length, inSample.Length);
         Assert.All(inSample, v => Assert.False(double.IsNaN(v) || double.IsInfinity(v)));
 
-        // Ten steps after the series: the first four are one generative forecast, the rest continue from it.
-        var future = model.Predict(new Matrix<double>(10, 1));
+        // One column is time steps after the series: the first four are one generative forecast, the rest continue
+        // from it.
+        var ahead = model.Predict(new Matrix<double>(10, 1));
         var direct = model.ForecastHorizon(y);
-        for (int h = 0; h < 4; h++) Assert.Equal(direct[h], future[h], 12);
+        for (int h = 0; h < 4; h++) Assert.Equal(direct[h], ahead[h], 12);
         var extended = y.ToList();
-        extended.AddRange(future.Take(4));
+        extended.AddRange(ahead.Take(4));
         var next = model.ForecastHorizon(new Vector<double>(extended.ToArray()));
-        for (int h = 0; h < 4; h++) Assert.Equal(next[h], future[4 + h], 12);
+        for (int h = 0; h < 4; h++) Assert.Equal(next[h], ahead[4 + h], 12);
+
+        // Wider rows are history windows: each prediction is the first step of that window's forecast.
+        var windows = new Matrix<double>(10, 30);
+        for (int r = 0; r < windows.Rows; r++)
+            for (int c = 0; c < windows.Columns; c++) windows[r, c] = y[r + c];
+        var future = model.Predict(windows);
+        for (int r = 0; r < windows.Rows; r++) Assert.Equal(model.ForecastHorizon(windows.GetRow(r))[0], future[r], 12);
     }
 
     [Fact(Timeout = 120000)]
