@@ -221,10 +221,6 @@ public partial class RecurrentNeuralNetwork<T> : SequenceModelLayoutBase<T>
             layer.ResetState();
         }
 
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
-
         // Forward pass through each layer in the network
         return Accelerate(input, () =>
         {

@@ -879,9 +879,6 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // For a GAN, prediction means generating data using the generator.
         // Use the GENERATOR's input type (not the GAN-level Architecture.InputType)

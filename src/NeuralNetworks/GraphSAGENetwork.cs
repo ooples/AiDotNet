@@ -806,9 +806,6 @@ public partial class GraphSAGENetwork<T> : GraphModelLayoutBase<T>
     /// </summary>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Ensure 2D input [numNodes, features]
         if (input.Rank == 1)

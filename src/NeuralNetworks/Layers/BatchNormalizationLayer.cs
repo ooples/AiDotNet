@@ -169,10 +169,6 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     [Scratch]
     private Tensor<T>? _betaGradient;
 
-    // GPU-resident cached tensors for GPU training pipeline
-    [Scratch]
-    private Tensor<T>? _lastInputGpu;
-
     /// <summary>
     /// Gets a value indicating whether this layer supports training mode.
     /// </summary>
@@ -1085,72 +1081,6 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         return Engine.TensorAdd(scaled, shiftReshaped);
     }
 
-    /// <summary>
-    /// Gets whether this layer has a GPU implementation.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
-    /// Performs GPU-resident batch normalization forward pass.
-    /// </summary>
-    /// <param name="input">GPU-resident input tensor with shape [batch, features] or [batch, channels, H, W].</param>
-    /// <returns>GPU-resident output tensor with same shape as input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when GPU engine is not available.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method performs batch normalization entirely on GPU, avoiding CPU round-trips.
-    /// The input and output tensors remain GPU-resident for chained GPU operations.
-    /// </para>
-    /// <para>
-    /// During training mode, running statistics (mean and variance) are updated on GPU
-    /// and then downloaded back to CPU for persistence.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-        {
-            throw new InvalidOperationException(
-                "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
-        }
-
-        var input = inputs[0];
-
-        // Store input shape for backward pass
-        _lastInput = null; // GPU path doesn't store CPU tensor
-
-        double epsilonDouble = NumOps.ToDouble(_epsilon);
-        double momentumDouble = NumOps.ToDouble(_momentum);
-
-        // Call GPU-resident batch norm
-        var (output, saveMean, saveVar) = gpuEngine.FusedBatchNormGpu(
-            input,
-            _gamma,
-            _beta,
-            ref _runningMean,
-            ref _runningVariance,
-            epsilonDouble,
-            momentumDouble,
-            IsTrainingMode);
-
-        // GPU backends may replace the ref buffers when materializing device
-        // state. Refresh the name-based registration if their identity changed.
-        RegisterRunningStatisticBuffers();
-
-        // Store saved values for backward pass (if training)
-        if (IsTrainingMode && saveMean is not null && saveVar is not null)
-        {
-            _lastInputGpu = input;
-            _lastMean = saveMean;
-            _lastVariance = saveVar;
-        }
-
-        return output;
-    }
-
     private static int ComputeTotalElements(int[] shape)
     {
         int total = 1;
@@ -1366,9 +1296,6 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         _lastVariance = null;
         _gammaGradient = null;
         _betaGradient = null;
-
-        // Clear GPU cached tensors
-        _lastInputGpu = null;
     }
 
     #region ONNX Export

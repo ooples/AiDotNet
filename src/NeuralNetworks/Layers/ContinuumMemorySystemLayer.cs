@@ -48,12 +48,6 @@ public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>, IShapeContrac
     public override bool SupportsTraining => true;
 
     /// <summary>
-    /// Indicates whether this layer supports GPU execution.
-    /// CMS supports GPU because it chains DenseLayer blocks which all support GPU.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
     /// Creates a CMS layer as a chain of MLP blocks.
     /// </summary>
     /// <param name="inputShape">Input shape</param>
@@ -254,59 +248,6 @@ public partial class ContinuumMemorySystemLayer<T> : LayerBase<T>, IShapeContrac
         LastOutput = current;
         _globalStep++;
         return current;
-    }
-
-    /// <summary>
-    /// GPU-accelerated forward pass chaining through all MLP blocks.
-    /// Each DenseLayer block handles its own GPU operations (GEMM, bias, activation).
-    /// yt = MLP^(fk)(MLP^(fk-1)(...MLP^(f1)(xt)))
-    /// </summary>
-    /// <param name="inputs">GPU-resident input tensors (uses first input).</param>
-    /// <returns>GPU-resident output tensor after chaining through all MLP blocks.</returns>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-        {
-            throw new InvalidOperationException(
-                "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
-        }
-
-        var currentGpu = inputs[0];
-
-        // Store CPU tensor for potential backward pass
-        if (IsTrainingMode)
-        {
-            LastInput = currentGpu;
-        }
-
-        // Sequential chain through all MLP blocks on GPU
-        // yt = MLP^(fk)(MLP^(fk-1)(...MLP^(f1)(xt)))
-        for (int level = 0; level < _mlpBlocks.Length; level++)
-        {
-            if (_mlpBlocks[level] == null)
-                throw new InvalidOperationException($"MLP block at level {level} is null");
-
-            // Store input for Modified GD optimizer during training
-            if (IsTrainingMode)
-            {
-                _storedInputs[level] = currentGpu;
-            }
-
-            // Each DenseLayer handles its own GPU operations (GEMM + bias + activation)
-            currentGpu = _mlpBlocks[level].ForwardGpu(currentGpu);
-        }
-
-        // Store output for potential backward pass
-        if (IsTrainingMode)
-        {
-            LastOutput = currentGpu;
-        }
-
-        _globalStep++;
-        return currentGpu;
     }
 
     private void UpdateLevelParameters(int level)

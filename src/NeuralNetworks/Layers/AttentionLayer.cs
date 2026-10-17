@@ -237,10 +237,6 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     private Tensor<T>? _gpuK;
     [ExternalState]
     private Tensor<T>? _gpuV;
-    [ExternalState]
-    private Tensor<T>? _gpuAttnOutput;
-    [ExternalState]
-    private Tensor<T>? _gpuAttnWeights;
     private int[]? _gpuInputShape;
     private int _gpuBatchSize;
     private int _gpuSeqLen;
@@ -263,11 +259,6 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the AttentionLayer class with scalar activation.
@@ -638,161 +629,6 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             outputShape[_originalInputShape.Length - 2] = seqLen;
             outputShape[_originalInputShape.Length - 1] = _inputSize;
             output = Engine.Reshape(output, outputShape);
-        }
-
-        return output;
-    }
-
-    /// <summary>
-    /// Performs GPU-accelerated forward pass for the attention mechanism.
-    /// All computations stay on GPU - no CPU roundtrips.
-    /// </summary>
-    /// <param name="inputs">The input GPU tensors. Expects one tensor with shape [batch, seqLen, inputSize].</param>
-    /// <returns>The output GPU tensor after applying the attention mechanism.</returns>
-    /// <exception cref="ArgumentException">Thrown when no inputs provided.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when engine is not a DirectGpuTensorEngine.</exception>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend is null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        var input = inputs[0];
-        var shape = input._shape;
-
-        // Handle 2D [Batch, InputSize] or 3D [Batch, Seq, InputSize] input
-        int batchSize;
-        int seqLen;
-        Tensor<T> input3D;
-
-        if (shape.Length == 2)
-        {
-            _inputWas2D = true;
-            batchSize = shape[0];
-            seqLen = 1;
-            input3D = gpuEngine.ReshapeGpu(input, [batchSize, 1, _inputSize]);
-        }
-        else if (shape.Length == 3)
-        {
-            _inputWas2D = false;
-            batchSize = shape[0];
-            seqLen = shape[1];
-            input3D = input;
-        }
-        else
-        {
-            throw new ArgumentException(
-                $"AttentionLayer expects 2D [B,I] or 3D [B,S,I] input, got {shape.Length}D.", nameof(inputs));
-        }
-
-        // Store for backward pass (download only if needed)
-        _lastWasCrossAttention = false;
-        _lastUsedMask = false;
-        _lastMask = null;
-
-        int flatBatchSeq = batchSize * seqLen;
-
-        // Compute Q, K, V projections entirely on GPU using FusedLinearGpu
-        // FusedLinearGpu: input @ weights.T + bias with optional activation
-        // Reshape to 2D for matmul: [B*S, InputSize]
-        var inputFlat = gpuEngine.ReshapeGpu(input3D, [flatBatchSeq, _inputSize]);
-
-        // Q projection: [B*S, InputSize] @ [InputSize, AttentionSize] -> [B*S, AttentionSize]
-        var qFlat = gpuEngine.FusedLinearGpu(inputFlat, Engine.TensorTranspose(_Wq), null, FusedActivationType.None);
-
-        // K projection
-        var kFlat = gpuEngine.FusedLinearGpu(inputFlat, Engine.TensorTranspose(_Wk), null, FusedActivationType.None);
-
-        // V projection
-        var vFlat = gpuEngine.FusedLinearGpu(inputFlat, Engine.TensorTranspose(_Wv), null, FusedActivationType.None);
-
-        // Reshape to 4D for attention: [B, 1, S, AttentionSize] (single head)
-        var Q4D = gpuEngine.ReshapeGpu(qFlat, [batchSize, 1, seqLen, _attentionSize]);
-        var K4D = gpuEngine.ReshapeGpu(kFlat, [batchSize, 1, seqLen, _attentionSize]);
-        var V4D = gpuEngine.ReshapeGpu(vFlat, [batchSize, 1, seqLen, _attentionSize]);
-
-        // Compute scaled dot-product attention on GPU
-        double scale = 1.0 / Math.Sqrt(_attentionSize);
-        var attnOutput4D = gpuEngine.ScaledDotProductAttentionGpu(Q4D, K4D, V4D, scale, out var attnWeights4D);
-
-        // Store attention weights for backward pass (lazy download)
-        // We'll download only when needed in Backward()
-        _lastAttentionWeights = null; // Will be computed from attnWeights4D if needed
-
-        // Reshape attention output: [B, 1, S, AttentionSize] -> [B*S, AttentionSize]
-        var attnFlat = gpuEngine.ReshapeGpu(attnOutput4D, [flatBatchSeq, _attentionSize]);
-
-        // Output projection: [B*S, AttentionSize] @ [AttentionSize, InputSize] -> [B*S, InputSize]
-        var outputFlat = gpuEngine.FusedLinearGpu(attnFlat, Engine.TensorTranspose(_Wo), null, FusedActivationType.None);
-
-        // Cache GPU tensors for backward pass only when an eager Backward will read them
-        // (#1668: ShouldCacheForBackward is false under tape / inference scope / eval).
-        if (ShouldCacheForBackward)
-        {
-            // Cache the 3D input (don't dispose)
-            _gpuInput = input3D;
-            _gpuBatchSize = batchSize;
-            _gpuSeqLen = seqLen;
-            _gpuInputShape = input._shape;
-
-            // Reshape Q, K, V back to 3D [B, S, A] for backward
-            _gpuQ = gpuEngine.ReshapeGpu(qFlat, [batchSize, seqLen, _attentionSize]);
-            _gpuK = gpuEngine.ReshapeGpu(kFlat, [batchSize, seqLen, _attentionSize]);
-            _gpuV = gpuEngine.ReshapeGpu(vFlat, [batchSize, seqLen, _attentionSize]);
-
-            // Reshape attention output and weights to 3D
-            _gpuAttnOutput = gpuEngine.ReshapeGpu(attnOutput4D, [batchSize, seqLen, _attentionSize]);
-            _gpuAttnWeights = gpuEngine.ReshapeGpu(attnWeights4D, [batchSize, seqLen, seqLen]);
-
-            // Also cache CPU versions for CPU backward compatibility
-            _lastInput = input;
-            _lastQueryInput = input3D;
-            _lastKeyInput = input3D;
-            _lastValueInput = input3D;
-            _lastAttentionOutput = _gpuAttnOutput;
-            _lastAttentionWeights = _gpuAttnWeights;
-
-            // Dispose tensors we don't need (but keep ones cached for backward)
-            ((IDisposable)inputFlat).Dispose();
-            ((IDisposable)Q4D).Dispose();
-            ((IDisposable)K4D).Dispose();
-            ((IDisposable)V4D).Dispose();
-            ((IDisposable)attnOutput4D).Dispose();
-            ((IDisposable)attnWeights4D).Dispose();
-            ((IDisposable)attnFlat).Dispose();
-        }
-        else
-        {
-            // Dispose intermediate tensors to free GPU memory (inference mode)
-            if (!ReferenceEquals(input3D, input)) ((IDisposable)input3D).Dispose();
-            ((IDisposable)inputFlat).Dispose();
-            ((IDisposable)qFlat).Dispose();
-            ((IDisposable)kFlat).Dispose();
-            ((IDisposable)vFlat).Dispose();
-            ((IDisposable)Q4D).Dispose();
-            ((IDisposable)K4D).Dispose();
-            ((IDisposable)V4D).Dispose();
-            ((IDisposable)attnOutput4D).Dispose();
-            ((IDisposable)attnWeights4D).Dispose();
-            ((IDisposable)attnFlat).Dispose();
-        }
-
-        // Reshape to final output shape
-        Tensor<T> output;
-        if (_inputWas2D)
-        {
-            output = gpuEngine.ReshapeGpu(outputFlat, [batchSize, _inputSize]);
-            ((IDisposable)outputFlat).Dispose();
-        }
-        else
-        {
-            output = gpuEngine.ReshapeGpu(outputFlat, [batchSize, seqLen, _inputSize]);
-            ((IDisposable)outputFlat).Dispose();
         }
 
         return output;
@@ -1352,8 +1188,6 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         _gpuQ = null;
         _gpuK = null;
         _gpuV = null;
-        _gpuAttnOutput = null;
-        _gpuAttnWeights = null;
         _gpuInputShape = null;
     }
 }

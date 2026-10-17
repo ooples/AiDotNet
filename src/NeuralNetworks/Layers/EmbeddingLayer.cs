@@ -149,9 +149,6 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     // GPU-resident cached tensors for GPU training pipeline
     [Scratch]
     private Tensor<T>? _lastInputGpu;
-    private int[]? _lastInputGpuShape;
-    [Scratch]
-    private Tensor<int>? _lastIndicesForGpu;
 
     /// <summary>
     /// The gradients for the embedding tensor, computed during backpropagation.
@@ -254,14 +251,6 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// Applies to the token-lookup output before it is combined with positional encoding.
     /// </summary>
     public bool ScaleBySqrtDimension { get; set; } = false;
-
-    /// <summary>
-    /// Gets a value indicating whether this layer can execute on GPU.
-    /// </summary>
-    /// <value>
-    /// <c>true</c> because embedding lookup has efficient GPU support.
-    /// </value>
-    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Returns layer-specific metadata for serialization.
@@ -698,86 +687,6 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     }
 
     /// <summary>
-    /// Performs the forward pass of the embedding layer on GPU.
-    /// </summary>
-    /// <param name="inputs">The GPU-resident input tensor(s) containing token indices.</param>
-    /// <returns>A GPU-resident tensor containing the embedding vectors.</returns>
-    /// <exception cref="ArgumentException">Thrown when no inputs are provided.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when GPU engine is not available.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method performs embedding lookup entirely on GPU, keeping the output on GPU
-    /// for subsequent GPU-accelerated operations. This eliminates CPU-GPU data transfers
-    /// for intermediate results in deep networks.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is the GPU-optimized version of embedding lookup.
-    /// Instead of moving data between CPU and GPU, all computation stays on the GPU,
-    /// making it much faster for large vocabularies and batch sizes.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        // Materialize lazy embedding tensor before GPU lookups.
-        EnsureEmbeddingInitialized();
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
-
-        var input = inputs[0];
-        int embeddingDim = _embeddingTensor.Shape[1];
-        int vocabularySize = _embeddingTensor.Shape[0];
-
-        // Download input to CPU to convert to integer indices
-        // (Indices are typically small, so this is acceptable)
-        var inputTensor = input;
-
-        // Store for potential backward pass (only in training mode)
-        if (IsTrainingMode)
-        {
-            _lastInput = inputTensor;
-            _originalInputShape = inputTensor._shape;
-        }
-
-        // Same invariant as the CPU path: this layer only accepts token indices.
-        ValidateIndicesOrThrow(inputTensor, vocabularySize);
-
-        // Standard embedding lookup for integer token indices
-        int totalIndices = inputTensor.Length;
-        var flatIndices = new Tensor<int>([totalIndices]);
-        for (int i = 0; i < totalIndices; i++)
-        {
-            flatIndices[i] = Convert.ToInt32(NumOps.ToDouble(inputTensor.Data.Span[i]));
-        }
-
-        // Cache indices for backward pass
-        if (IsTrainingMode)
-        {
-            _lastIndicesForGpu = flatIndices;
-            _lastInputGpuShape = inputTensor._shape;
-        }
-
-        // Perform GPU embedding lookup - keeps result on GPU
-        var gpuOutput = gpuEngine.EmbeddingLookupGpu(_embeddingTensor, flatIndices);
-
-        // Vaswani §3.4 embedding scale — apply on the GPU path too so behavior is
-        // backend-independent (the CPU Forward above applies the identical scale). Routed
-        // through TapeMultiplyScalar, which dispatches to the active engine (GPU here) and
-        // records the op on the autodiff tape, so the embedding-table gradient is scaled the
-        // same way regardless of device. Without this the token-index GPU path returned
-        // UNSCALED embeddings, making a model trained/served on GPU diverge from CPU.
-        if (ScaleBySqrtDimension)
-        {
-            T sqrtDim = NumOps.Sqrt(NumOps.FromDouble(embeddingDim));
-            gpuOutput = AiDotNet.Helpers.TensorTapeOps.TapeMultiplyScalar(Engine, gpuOutput, sqrtDim);
-        }
-
-        return ApplyOutputScale(gpuOutput);
-    }
-
-    /// <summary>
     /// Confirms the input really holds token indices, and explains the fix when it does not.
     /// </summary>
     /// <remarks>
@@ -1033,7 +942,5 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         // Clear GPU-related cached data
         _lastInputGpu?.Dispose();
         _lastInputGpu = null;
-        _lastInputGpuShape = null;
-        _lastIndicesForGpu = null;
     }
 }

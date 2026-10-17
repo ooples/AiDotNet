@@ -292,8 +292,6 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         Tensor<T> current = input;
         foreach (var layer in Layers)

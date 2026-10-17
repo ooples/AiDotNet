@@ -88,13 +88,6 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
     private Tensor<T>? _reluOut;
     private Tensor<T>? _convOut;
 
-    // GPU cached tensors for backward pass
-    [ExternalState]
-    private Tensor<T>? _gpuBnOut;
-    [ExternalState]
-    private Tensor<T>? _gpuConvOut;
-    private bool _gpuAdded3DBatch;
-
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
@@ -127,12 +120,6 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
         _bn.ClearGradients();
         _conv?.ClearGradients();
     }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// All sub-layers (BatchNorm, Conv, AvgPool) support GPU.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Lazy ctor — input depth/height/width come from the first
@@ -363,105 +350,6 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
     }
 
     /// <summary>
-    /// Performs the forward pass using GPU-resident tensors.
-    /// </summary>
-    /// <param name="inputs">The GPU-resident input tensors.</param>
-    /// <returns>A GPU-resident output tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// Chains GPU operations through sub-layers: BN → ReLU → Conv1x1 → AvgPool.
-    /// All intermediate results stay GPU-resident.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
-
-        var input = inputs[0];
-
-        // Lazy gate — _conv is null until OnFirstForward observes the input
-        // channel count. The CPU Forward path has the same gate; GPU path was
-        // missing it (PR #1259 review).
-        if (!IsShapeResolved) OnFirstForward(input);
-        var conv = _conv ?? throw new InvalidOperationException("OnFirstForward did not allocate _conv.");
-
-        var shape = input._shape;
-
-        // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
-        if (shape.Length < 3)
-            throw new ArgumentException($"TransitionLayer requires at least 3D tensor [C, H, W]. Got rank {shape.Length}.");
-
-        Tensor<T> processInput;
-        bool added3DBatch = false;
-
-        if (shape.Length == 4)
-        {
-            processInput = input;
-        }
-        else if (shape.Length == 3)
-        {
-            processInput = gpuEngine.ReshapeGpu(input, new[] { 1, shape[0], shape[1], shape[2] });
-            added3DBatch = true;
-        }
-        else
-        {
-            // Higher rank: flatten leading dimensions into batch
-            int flatBatch = 1;
-            for (int d = 0; d < shape.Length - 3; d++)
-                flatBatch *= shape[d];
-            processInput = gpuEngine.ReshapeGpu(input, new[] { flatBatch, shape[shape.Length - 3], shape[shape.Length - 2], shape[shape.Length - 1] });
-        }
-
-        // Cache for backward pass
-        if (IsTrainingMode)
-        {
-            _lastInput = processInput;
-            _originalInputShape = shape;
-        }
-
-        // Chain GPU operations: BN → ReLU → Conv1x1 → AvgPool
-        var bnOutput = _bn.ForwardGpu(processInput);
-        var reluOutput = gpuEngine.ActivationGpu(bnOutput, FusedActivationType.ReLU);
-        var convOutput = _conv.ForwardGpu(reluOutput);
-        var poolOutput = _pool.ForwardGpu(convOutput);
-
-        // Cache intermediates for backward during training
-        if (IsTrainingMode)
-        {
-            _gpuBnOut = bnOutput;
-            _gpuConvOut = convOutput;
-            _gpuAdded3DBatch = added3DBatch;
-            _bnOut = bnOutput;
-            _reluOut = reluOutput;
-            _convOut = convOutput;
-        }
-
-        // Restore original tensor rank
-        if (shape.Length > 4)
-        {
-            var outShape = poolOutput._shape;
-            var restoreShape = new int[shape.Length];
-            for (int d = 0; d < shape.Length - 3; d++)
-                restoreShape[d] = shape[d];
-            restoreShape[shape.Length - 3] = outShape[1];
-            restoreShape[shape.Length - 2] = outShape[2];
-            restoreShape[shape.Length - 1] = outShape[3];
-            return gpuEngine.ReshapeGpu(poolOutput, restoreShape);
-        }
-        if (added3DBatch)
-        {
-            var outShape = poolOutput._shape;
-            return gpuEngine.ReshapeGpu(poolOutput, new[] { outShape[1], outShape[2], outShape[3] });
-        }
-
-        return poolOutput;
-    }
-
-    /// <summary>
     /// Backward pass for 4D average pooling.
     /// </summary>
     private Tensor<T> AvgPool2DBackward(Tensor<T> outputGrad, int[] inputShape)
@@ -553,9 +441,6 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
         _bnOut = null;
         _reluOut = null;
         _convOut = null;
-        _gpuBnOut = null;
-        _gpuConvOut = null;
-        _gpuAdded3DBatch = false;
 
         _bn.ResetState();
         _conv?.ResetState();

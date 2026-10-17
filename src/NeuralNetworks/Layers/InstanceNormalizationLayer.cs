@@ -92,15 +92,8 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     [Scratch]
     private Tensor<T>? _betaGradient;
     private int[] _originalInputShape = [];
-
-    // GPU cached tensors for backward pass
-    [ExternalState]
-    private Tensor<T>? _gpuInput;
     private IGpuBuffer? _gpuMean;
     private IGpuBuffer? _gpuInvVar;
-    private int _gpuBatch;
-    private int _gpuChannels;
-    private int _gpuSpatialSize;
 
     /// <summary>
     /// Gets a value indicating whether this layer supports training.
@@ -114,11 +107,6 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     public override bool MakesUpstreamBiasRedundant => true;
 
     public override bool SupportsTraining => true;
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Gets metadata for serialization.
@@ -282,121 +270,6 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     }
 
     /// <summary>
-    /// Performs the forward pass of instance normalization on GPU tensors.
-    /// </summary>
-    /// <param name="inputs">GPU tensor inputs.</param>
-    /// <returns>GPU tensor output after normalization.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses the native GPU InstanceNorm operation for efficient
-    /// normalization where each channel is normalized independently.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
-
-        var input = inputs[0];
-        var shape = input._shape;
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        // Store original shape for reshaping output
-        _originalInputShape = shape;
-
-        // Parse input dimensions - InstanceNorm expects [batch, channels, spatial]
-        int batch, channels, spatialSize;
-
-        if (shape.Length == 2)
-        {
-            // [batch, channels] - spatial size is 1
-            batch = shape[0];
-            channels = shape[1];
-            spatialSize = 1;
-        }
-        else if (shape.Length == 3)
-        {
-            // [batch, channels, length]
-            batch = shape[0];
-            channels = shape[1];
-            spatialSize = shape[2];
-        }
-        else if (shape.Length == 4)
-        {
-            // [batch, channels, height, width]
-            batch = shape[0];
-            channels = shape[1];
-            spatialSize = shape[2] * shape[3];
-        }
-        else if (shape.Length >= 5)
-        {
-            // [batch, channels, D, H, W, ...] - flatten all spatial dims
-            batch = shape[0];
-            channels = shape[1];
-            spatialSize = 1;
-            for (int i = 2; i < shape.Length; i++)
-                spatialSize *= shape[i];
-        }
-        else
-        {
-            throw new ArgumentException($"InstanceNorm requires at least 2D input, got {shape.Length}D.");
-        }
-
-        if (channels != _numChannels)
-            throw new ArgumentException($"Input has {channels} channels but layer expects {_numChannels} channels.");
-
-        // Allocate output buffer and save buffers for mean/variance
-        int totalSize = batch * channels * spatialSize;
-        int statsSize = batch * channels; // Mean and variance per sample per channel
-        var outputBuffer = backend.AllocateBuffer(totalSize);
-        var saveMeanBuffer = backend.AllocateBuffer(statsSize);
-        var saveInvVarBuffer = backend.AllocateBuffer(statsSize);
-
-        // Upload gamma and beta parameters to GPU
-        var gammaData = DirectGpuEngine.ToFloatArray<T>(_gamma.Data.ToArray());
-        var betaData = DirectGpuEngine.ToFloatArray<T>(_beta.Data.ToArray());
-        using var gammaBuffer = backend.AllocateBuffer(gammaData);
-        using var betaBuffer = backend.AllocateBuffer(betaData);
-
-        // Use native GPU InstanceNorm operation
-        float epsilon = (float)NumOps.ToDouble(_epsilon);
-        backend.InstanceNorm(input.Buffer, outputBuffer, gammaBuffer, betaBuffer,
-            saveMeanBuffer, saveInvVarBuffer, batch, channels, spatialSize, epsilon);
-
-        // Cache mean/variance for backward pass if training
-        if (IsTrainingMode)
-        {
-            _gpuInput = input;
-            _gpuMean = saveMeanBuffer;
-            _gpuInvVar = saveInvVarBuffer;
-            _gpuBatch = batch;
-            _gpuChannels = channels;
-            _gpuSpatialSize = spatialSize;
-
-            // Also cache for CPU backward compatibility
-            _lastInput = input;
-            var meanData = new float[statsSize];
-            var varData = new float[statsSize];
-            backend.DownloadBuffer(saveMeanBuffer, meanData);
-            backend.DownloadBuffer(saveInvVarBuffer, varData);
-            _lastMean = new Tensor<T>([batch, channels], new Vector<T>(DirectGpuEngine.FromFloatArray<T>(meanData)));
-            _lastVariance = new Tensor<T>([batch, channels], new Vector<T>(DirectGpuEngine.FromFloatArray<T>(varData)));
-        }
-        else
-        {
-            // Dispose temp buffers when not training
-            saveMeanBuffer.Dispose();
-            saveInvVarBuffer.Dispose();
-        }
-
-        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
-    }
-
-    /// <summary>
     /// Updates the layer's parameters using the calculated gradients.
     /// </summary>
     /// <param name="learningRate">The learning rate for parameter updates.</param>
@@ -437,15 +310,9 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>, IShapeContrac
         _lastVariance = null;
         _gammaGradient = null;
         _betaGradient = null;
-
-        // Clear GPU cached tensors
-        _gpuInput = null;
         _gpuMean?.Dispose();
         _gpuMean = null;
         _gpuInvVar?.Dispose();
         _gpuInvVar = null;
-        _gpuBatch = 0;
-        _gpuChannels = 0;
-        _gpuSpatialSize = 0;
     }
 }

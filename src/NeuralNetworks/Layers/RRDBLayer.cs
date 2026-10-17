@@ -128,12 +128,6 @@ public partial class RRDBLayer<T> : LayerBase<T>, IShapeContract
     [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _rdb3Output;
 
-    /// <summary>
-    /// GPU cached input tensor for backward pass.
-    /// </summary>
-    [ExternalState]
-    private Tensor<T>? _gpuLastInput;
-
     #endregion
 
     #region Properties
@@ -154,11 +148,6 @@ public partial class RRDBLayer<T> : LayerBase<T>, IShapeContract
     public int GrowthChannels => _growthChannels;
 
     public override bool SupportsTraining => true;
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
 
     #endregion
 
@@ -293,62 +282,6 @@ public partial class RRDBLayer<T> : LayerBase<T>, IShapeContract
         return AddResidual(x, input, _residualScale);
     }
 
-    /// <summary>
-    /// Performs the forward pass on GPU tensors.
-    /// </summary>
-    /// <param name="inputs">GPU tensor inputs.</param>
-    /// <returns>GPU tensor output after RRDB processing.</returns>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
-
-        var backend = gpuEngine.GetBackend();
-        if (backend is null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        var input = inputs[0];
-
-        // Mirror Forward()'s lazy-resolution gate. OnFirstForward
-        // resolves _rdbBlocks' inner shape and replays buffered
-        // _pendingParameters; without this guard a GPU-first execution
-        // dispatches to inner RDBs whose internal weights are still 0×0,
-        // and the GPU forward reads zero-length buffers (silent wrong
-        // output) or crashes on a kernel arg-check.
-        if (!IsShapeResolved) OnFirstForward(input);
-
-        var shape = input._shape;
-
-        // Cache input for backward pass
-        if (IsTrainingMode)
-        {
-            _gpuLastInput = input;
-        }
-
-        // Store input buffer for global residual
-        var inputBuffer = input.Buffer;
-
-        // Pass through 3 Residual Dense Blocks sequentially on GPU
-        var x = _rdbBlocks[0].ForwardGpu(input);
-        x = _rdbBlocks[1].ForwardGpu(x);
-        x = _rdbBlocks[2].ForwardGpu(x);
-
-        // Global residual: output = RDB3_output * residualScale + input
-        int outputSize = shape.Aggregate(1, (a, b) => a * b);
-
-        var scaledBuffer = backend.AllocateBuffer(outputSize);
-        backend.Scale(x.Buffer, scaledBuffer, (float)_residualScale, outputSize);
-
-        var outputBuffer = backend.AllocateBuffer(outputSize);
-        backend.Add(scaledBuffer, inputBuffer, outputBuffer, outputSize);
-
-        scaledBuffer.Dispose();
-
-        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, shape, GpuTensorRole.Activation, ownsBuffer: true);
-    }
-
     #endregion
 
     #region Backward Pass
@@ -417,7 +350,6 @@ public partial class RRDBLayer<T> : LayerBase<T>, IShapeContract
     {
         _lastInput = null;
         _rdb3Output = null;
-        _gpuLastInput = null;
         foreach (var rdb in _rdbBlocks)
         {
             rdb.ResetState();

@@ -849,15 +849,6 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
                 graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
         }
 
-        if (TryForwardGpuOptimized(input, out var gpuEncoderOutput))
-        {
-            using (gpuEncoderOutput)
-            {
-                using var gpuMean = Engine.TensorMatMul(gpuEncoderOutput, _meanWeights);
-                return Decode(gpuMean);
-            }
-        }
-
         // Encode → use mean (deterministic) → decode
         var (mean, _) = Encode(input, adjacencyMatrix);
         return Decode(mean);

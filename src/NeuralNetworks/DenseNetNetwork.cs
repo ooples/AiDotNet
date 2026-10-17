@@ -319,10 +319,6 @@ public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
             input = Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
         }
 
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
-
         // Add the batch dim if caller passed unbatched [C, H, W]. The
         // convolutional / BatchNorm stack consistently treats axis 0 as
         // the batch axis (channel index lives at axis 1), so a rank-3

@@ -745,9 +745,6 @@ public partial class GraphAttentionNetwork<T> : GraphModelLayoutBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         Tensor<T> normalizedInput = NormalizeSingleNodeInput(input, out bool wasReshaped);
         var adjacencyMatrix = EnsureAdjacencyMatrix(normalizedInput);

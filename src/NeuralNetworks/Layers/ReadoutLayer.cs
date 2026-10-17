@@ -153,23 +153,7 @@ public partial class ReadoutLayer<T> : LayerBase<T>, IShapeContract
 
     private int[] _originalInputShape = [];
 
-    // GPU cached tensors for backward pass
-    [ExternalState]
-    private Tensor<T>? _gpuInput;
-    [ExternalState]
-    private Tensor<T>? _gpuPreActivation;
-    [ExternalState]
-    private Tensor<T>? _gpuOutput;
-    private int _gpuBatchDim;
-    private int _gpuInputSize;
-    private FusedActivationType _gpuActivationType;
-
     public override bool SupportsTraining => true;
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
 
     /// <summary>Construction state: the 'inputSize' the layer was built with.</summary>
     private readonly int _inputSize;
@@ -358,117 +342,6 @@ public partial class ReadoutLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Performs the forward pass on GPU using FusedLinearGpu.
-    /// Supports both scalar and vector (softmax) activations.
-    /// </summary>
-    /// <param name="inputs">The GPU input tensors.</param>
-    /// <returns>The GPU output tensor.</returns>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
-
-        var input = inputs[0];
-        _originalInputShape = input._shape;
-
-        int inputSize = input.Shape[^1];
-        if (inputSize != InputShape[0])
-        {
-            throw new ArgumentException(
-                $"Input size {inputSize} does not match expected {InputShape[0]}.");
-        }
-
-        // Compute batch dimension
-        int batchDim = 1;
-        for (int d = 0; d < input.Shape.Length - 1; d++)
-            batchDim *= input.Shape[d];
-
-        // Reshape input to 2D [batch, inputSize] for matrix multiply
-        Tensor<T> input2D = input;
-        if (input.Shape.Length == 1)
-        {
-            input2D = input.Reshape([1, inputSize]);
-            batchDim = 1;
-        }
-        else if (input.Shape.Length > 2)
-        {
-            input2D = input.Reshape([batchDim, inputSize]);
-        }
-
-        // Transpose weights for FusedLinearGpu
-        // ReadoutLayer _weights: [outputSize, inputSize] -> [inputSize, outputSize]
-        var weightsT = Engine.TensorTranspose(_weights);
-        int outputSize = OutputShape[0];
-
-        Tensor<T> result;
-
-        if (UsingVectorActivation)
-        {
-            // For vector activations (like softmax), apply linear then activation separately
-            var preActivation = gpuEngine.FusedLinearGpu(input2D, weightsT, _bias, FusedActivationType.None);
-
-            // Check if it's softmax and apply on GPU
-            if (VectorActivation is SoftmaxActivation<T>)
-            {
-                result = gpuEngine.ActivationGpu(preActivation, FusedActivationType.Softmax);
-            }
-            else
-            {
-                // For other vector activations, fall back to CPU
-                var cpuPreActivation = preActivation;
-                var vecAct = VectorActivation ?? throw new InvalidOperationException("VectorActivation has not been initialized.");
-                var cpuActivated = vecAct.Activate(cpuPreActivation);
-                result = gpuEngine.UploadToGpu(cpuActivated, GpuTensorRole.Activation);
-            }
-        }
-        else
-        {
-            // For scalar activations, use fused linear with activation
-            var fusedActivation = GetFusedActivationType();
-            result = gpuEngine.FusedLinearGpu(input2D, weightsT, _bias, fusedActivation);
-        }
-
-        // Cache state for backward pass only during training
-        if (IsTrainingMode)
-        {
-            // Cache GPU tensors for BackwardGpu
-            _gpuInput = input2D;
-            var preActResult = gpuEngine.FusedLinearGpu(input2D, weightsT, _bias, FusedActivationType.None);
-            _gpuPreActivation = preActResult;
-            _gpuOutput = result;
-            _gpuBatchDim = batchDim;
-            _gpuInputSize = inputSize;
-            _gpuActivationType = UsingVectorActivation && VectorActivation is SoftmaxActivation<T>
-                ? FusedActivationType.Softmax
-                : (UsingVectorActivation ? FusedActivationType.None : GetFusedActivationType());
-
-            // Also cache CPU tensors for CPU backward compatibility
-            _lastInput = input;
-            _lastPreActivation = preActResult;
-            _lastOutput = result;
-        }
-
-        // Reshape output to match expected shape
-        if (input.Shape.Length == 1)
-        {
-            return result.Reshape([outputSize]);
-        }
-        else if (input.Shape.Length > 2)
-        {
-            var outputShape = new int[input.Shape.Length];
-            for (int d = 0; d < input.Shape.Length - 1; d++)
-                outputShape[d] = _originalInputShape[d];
-            outputShape[^1] = outputSize;
-            return result.Reshape(outputShape);
-        }
-
-        return result;
-    }
-
-    /// <summary>
     /// Updates the parameters of the readout layer using the calculated gradients.
     /// </summary>
     /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
@@ -578,11 +451,6 @@ public partial class ReadoutLayer<T> : LayerBase<T>, IShapeContract
         _lastOutput = null;
         _lastPreActivation = null;
         _originalInputShape = [];
-
-        // Clear cached GPU tensors
-        _gpuInput = null;
-        _gpuPreActivation = null;
-        _gpuOutput = null;
 
         // Reset gradients using Tensor<T>
         _weightGradients = new Tensor<T>([_weights.Shape[0], _weights.Shape[1]]);

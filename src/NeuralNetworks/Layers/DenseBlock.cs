@@ -125,10 +125,6 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
     private int _inputChannels;
     private List<Tensor<T>>? _layerOutputs;
 
-    // GPU cached tensors for backward pass
-    [ExternalState]
-    private List<Tensor<T>>? _gpuFeatureMaps;
-
     public override bool SupportsTraining => true;
 
     public override Vector<T> GetParameterGradients()
@@ -141,11 +137,6 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
         base.ClearGradients();
         foreach (var l in _layers) l.ClearGradients();
     }
-
-    /// <summary>
-    /// Gets a value indicating whether this layer has a GPU implementation.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Gets the number of layers in this dense block.
@@ -294,46 +285,6 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
     }
 
     /// <summary>
-    /// Performs the forward pass on GPU, keeping data GPU-resident.
-    /// </summary>
-    /// <param name="inputs">The input tensors (expects single input).</param>
-    /// <returns>The output tensor on GPU.</returns>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
-
-        var currentFeatures = inputs[0];
-
-        // Cache feature maps for backward pass during training
-        if (IsTrainingMode)
-        {
-            _gpuFeatureMaps = new List<Tensor<T>>(_numLayers + 1) { currentFeatures };
-        }
-
-        foreach (var layer in _layers)
-        {
-            // Each layer takes ALL previous features as input
-            var layerOutput = layer.ForwardGpu(currentFeatures);
-
-            // Concatenate new features with existing features along channel dimension (axis 1)
-            currentFeatures = gpuEngine.ConcatGpu(new[] { currentFeatures, layerOutput }, 1);
-
-            // Cache for backward pass
-            if (IsTrainingMode)
-            {
-                var gpuMaps = _gpuFeatureMaps ?? throw new InvalidOperationException("_gpuFeatureMaps has not been initialized.");
-                gpuMaps.Add(currentFeatures);
-            }
-        }
-
-        return currentFeatures;
-    }
-
-    /// <summary>
     /// Updates the parameters of all sub-layers.
     /// </summary>
     /// <param name="learningRate">The learning rate for parameter updates.</param>
@@ -377,7 +328,6 @@ public partial class DenseBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
     public override void ResetState()
     {
         _layerOutputs = null;
-        _gpuFeatureMaps = null;
         foreach (var layer in _layers)
         {
             layer.ResetState();

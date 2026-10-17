@@ -213,56 +213,6 @@ public partial class TimeDistributedLayer<T> : LayerBase<T>, IShapeContract
         _accumulatedGradients ?? _innerLayer.GetParameterGradients();
     public override void ClearGradients() { base.ClearGradients(); _innerLayer.ClearGradients(); _accumulatedGradients = null; }
 
-    /// <inheritdoc/>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <inheritdoc/>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0) throw new ArgumentException("TimeDistributedLayer requires an input tensor.");
-        var input = inputs[0];
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
-
-        int batch = input.Shape[0];
-        int time = input.Shape[1];
-        int[] inputShape = input._shape;
-
-        int[] flattenedShape = new int[inputShape.Length - 1];
-        flattenedShape[0] = batch * time;
-        Array.Copy(inputShape, 2, flattenedShape, 1, inputShape.Length - 2);
-
-        // Process all timesteps in parallel by flattening the time dimension into the batch dimension
-        var reshapedInput = gpuEngine.ReshapeGpu(input, flattenedShape);
-        var innerOutput = _innerLayer.ForwardGpu(reshapedInput);
-
-        int[] innerOutputShape = innerOutput._shape;
-        int[] outputShape = new int[innerOutputShape.Length + 1];
-        outputShape[0] = batch;
-        outputShape[1] = time;
-        Array.Copy(innerOutputShape, 1, outputShape, 2, innerOutputShape.Length - 1);
-
-        var output = gpuEngine.ReshapeGpu(innerOutput, outputShape);
-
-        var fusedOp = MapActivationToFused();
-        if (fusedOp != FusedActivationType.None)
-        {
-            output = gpuEngine.ActivationGpu(output, fusedOp);
-        }
-
-        // #1668: gate the backward caches on ShouldCacheForBackward (not IsTrainingMode) so a
-        // tape/inference scope doesn't retain backward-only tensors the arena could recycle.
-        if (ShouldCacheForBackward)
-        {
-            _lastInput = input;
-            _lastOutput = output;
-            _originalInputShape = input._shape;
-        }
-
-        return output;
-    }
-
     /// <summary>
     /// Initializes a new instance of the <see cref="TimeDistributedLayer{T}"/> class with scalar activation function.
     /// </summary>

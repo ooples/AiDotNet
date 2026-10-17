@@ -4489,22 +4489,10 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     }
 
     /// <summary>
-    /// GPU multi-input forward pass. Default delegates to single-input ForwardGpu.
+    /// GPU multi-input forward pass: the same computation as <see cref="Forward(IReadOnlyDictionary{string, Tensor{T}})"/>,
+    /// which runs on the device the inputs live on.
     /// </summary>
-    public virtual Tensor<T> ForwardGpu(IReadOnlyDictionary<string, Tensor<T>> inputs)
-    {
-        if (InputPorts.Count <= 1)
-        {
-            if (inputs.TryGetValue("input", out var input))
-                return ForwardGpu(input);
-
-            if (inputs.Count == 1)
-                return ForwardGpu(inputs.Values.First());
-        }
-
-        throw new NotSupportedException(
-            $"{GetType().Name} does not override ForwardGpu(IReadOnlyDictionary).");
-    }
+    public Tensor<T> ForwardGpu(IReadOnlyDictionary<string, Tensor<T>> inputs) => Forward(inputs);
 
 
     /// <summary>
@@ -5000,20 +4988,6 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     #region GPU Training Infrastructure
 
     /// <summary>
-    /// Gets whether this layer has a GPU execution implementation for inference.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Override this to return true when the layer implements <see cref="ForwardGpu"/>.
-    /// The actual <see cref="CanExecuteOnGpu"/> property combines this with engine availability.
-    /// </para>
-    /// <para><b>For Beginners:</b> This flag indicates if the layer has GPU code for the forward pass.
-    /// Set this to true in derived classes that implement ForwardGpu.
-    /// </para>
-    /// </remarks>
-    protected virtual bool SupportsGpuExecution => false;
-
-    /// <summary>
     /// Gets whether this layer has full GPU training support (forward, backward, and parameter updates).
     /// </summary>
     /// <remarks>
@@ -5044,14 +5018,13 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Returns true when both the layer supports GPU execution AND a GPU engine is currently active.
-    /// Use this to check at runtime whether GPU forward pass is available.
+    /// True whenever a GPU engine is current. A layer has no GPU-specific forward code: <see cref="Forward(Tensor{T})"/>
+    /// runs on the engine that is current, which executes each operation on the device its tensors live on.
     /// </para>
-    /// <para><b>For Beginners:</b> Check this before calling ForwardGpu.
-    /// It combines "does the layer have GPU code?" with "is the GPU engine active?"
+    /// <para><b>For Beginners:</b> Every layer runs on the GPU when the GPU engine is active; this tells you whether it is.
     /// </para>
     /// </remarks>
-    public virtual bool CanExecuteOnGpu => SupportsGpuExecution && Engine is DirectGpuTensorEngine;
+    public bool CanExecuteOnGpu => Engine is DirectGpuTensorEngine;
 
     /// <summary>
     /// Gets whether this layer can execute GPU training (forward, backward, parameter update).
@@ -5067,30 +5040,22 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     public virtual bool CanTrainOnGpu => SupportsGpuTraining && Engine is DirectGpuTensorEngine;
 
     /// <summary>
-    /// Performs the forward pass of the layer on GPU.
+    /// Performs the forward pass of the layer on GPU: the same computation as <see cref="Forward(Tensor{T}[])"/>.
     /// </summary>
-    /// <param name="inputs">The GPU-resident input tensor(s).</param>
-    /// <returns>The GPU-resident output tensor.</returns>
-    /// <exception cref="NotSupportedException">Thrown when the layer does not support GPU execution.</exception>
+    /// <param name="inputs">The input tensor(s), usually GPU-resident.</param>
+    /// <returns>The output tensor.</returns>
     /// <remarks>
     /// <para>
-    /// This method performs the layer's forward computation entirely on GPU. The input and output
-    /// tensors remain in GPU memory, avoiding expensive CPU-GPU transfers.
+    /// There is no separate GPU implementation to keep in step with the CPU one. Tensors carry their device, and
+    /// the current engine runs each operation where its operands live, so <see cref="Forward(Tensor{T}[])"/> on
+    /// GPU-resident inputs with the GPU engine current stays on the GPU. The per-layer GPU overrides this used to
+    /// dispatch to computed different outputs from <see cref="Forward(Tensor{T})"/> (ResNet-50 and VGG-16 inference
+    /// disagreed with CPU by more than their own output magnitude), so they were removed.
     /// </para>
-    /// <para><b>For Beginners:</b> This is like Forward() but runs on the graphics card.
-    /// 
-    /// The key difference:
-    /// - Forward() uses CPU tensors that may be copied to/from GPU
-    /// - ForwardGpu() keeps everything on GPU the whole time
-    /// 
-    /// Override this in derived classes that support GPU acceleration.
+    /// <para><b>For Beginners:</b> This is Forward(); with the GPU engine active it runs on the graphics card.
     /// </para>
     /// </remarks>
-    public virtual Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        throw new NotSupportedException(
-            $"GPU execution is not supported by {GetType().Name}. Use Forward() instead or check CanExecuteOnGpu first.");
-    }
+    public Tensor<T> ForwardGpu(params Tensor<T>[] inputs) => Forward(inputs);
 
     /// <summary>
     /// Updates the layer's parameters on GPU using the specified optimizer configuration.

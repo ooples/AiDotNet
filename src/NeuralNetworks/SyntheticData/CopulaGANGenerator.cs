@@ -355,9 +355,6 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // If using custom layers, do simple sequential forward
         if (_usingCustomLayers)

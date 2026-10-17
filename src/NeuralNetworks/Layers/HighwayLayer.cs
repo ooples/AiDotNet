@@ -216,19 +216,6 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
     [Scratch]
     private Tensor<T>? _gateBiasGradient;
 
-    // GPU cached tensors for backward pass
-    [ExternalState]
-    private Tensor<T>? _gpuInput;
-    [ExternalState]
-    private Tensor<T>? _gpuTransformOutput;
-    [ExternalState]
-    private Tensor<T>? _gpuGateOutput;
-    [ExternalState]
-    private Tensor<T>? _gpuTransformPreActivation;
-    [ExternalState]
-    private Tensor<T>? _gpuGatePreActivation;
-    private int[]? _gpuInputShape;
-
     /// <summary>
     /// The element-wise activation function applied to the transform output.
     /// </summary>
@@ -332,11 +319,6 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
 
     /// <summary>Construction state: the 'inputDimension' the layer was built with.</summary>
     private readonly int _inputDimension;
@@ -564,131 +546,6 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
     }
 
     /// <summary>
-    /// Performs the forward pass on GPU using FusedLinearGpu for efficient computation.
-    /// </summary>
-    /// <param name="inputs">The GPU input tensors.</param>
-    /// <returns>The GPU output tensor.</returns>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
-
-        var input = inputs[0];
-        int inputDim = _transformWeights.Shape[0];
-
-        // Get fused activation types
-        var transformActivationType = _transformActivation switch
-        {
-            TanhActivation<T> => FusedActivationType.Tanh,
-            ReLUActivation<T> => FusedActivationType.ReLU,
-            SigmoidActivation<T> => FusedActivationType.Sigmoid,
-            GELUActivation<T> => FusedActivationType.GELU,
-            _ => FusedActivationType.None
-        };
-
-        var gateActivationType = _gateActivation switch
-        {
-            SigmoidActivation<T> => FusedActivationType.Sigmoid,
-            TanhActivation<T> => FusedActivationType.Tanh,
-            _ => FusedActivationType.Sigmoid // Default to sigmoid for gates
-        };
-
-        var backend = gpuEngine.GetBackend();
-        if (backend == null)
-            throw new InvalidOperationException("GPU backend unavailable.");
-
-        int size = input.Length;
-
-        // Transform path: transformLinear = input @ transformWeights + transformBias
-        var transformPreActivation = gpuEngine.FusedLinearGpu(input, _transformWeights, _transformBias, FusedActivationType.None);
-
-        // Apply transform activation
-        Tensor<T> transformOutput;
-        if (transformActivationType != FusedActivationType.None)
-        {
-            // Re-run with activation for output (we need pre-activation separately for backward)
-            transformOutput = gpuEngine.FusedLinearGpu(input, _transformWeights, _transformBias, transformActivationType);
-        }
-        else if (_vectorTransformActivation != null)
-        {
-            var cpuTransform = transformPreActivation;
-            var cpuActivated = _vectorTransformActivation.Activate(cpuTransform);
-            transformOutput = gpuEngine.UploadToGpu(cpuActivated, GpuTensorRole.Activation);
-        }
-        else
-        {
-            // Apply default tanh
-            var tanhBuffer = backend.AllocateBuffer(size);
-            backend.Tanh(transformPreActivation.Buffer, tanhBuffer, size);
-            transformOutput = GpuTensorHelper.UploadToGpu<T>(backend, tanhBuffer, input._shape, GpuTensorRole.Activation, ownsBuffer: true);
-        }
-
-        // Gate path: gateLinear = input @ gateWeights + gateBias
-        var gatePreActivation = gpuEngine.FusedLinearGpu(input, _gateWeights, _gateBias, FusedActivationType.None);
-
-        // Apply gate activation (sigmoid)
-        Tensor<T> gateOutput;
-        if (gateActivationType != FusedActivationType.None)
-        {
-            gateOutput = gpuEngine.FusedLinearGpu(input, _gateWeights, _gateBias, gateActivationType);
-        }
-        else if (_vectorGateActivation != null)
-        {
-            var cpuGate = gatePreActivation;
-            var cpuGateActivated = _vectorGateActivation.Activate(cpuGate);
-            gateOutput = gpuEngine.UploadToGpu(cpuGateActivated, GpuTensorRole.Activation);
-        }
-        else
-        {
-            // Apply default sigmoid
-            var sigmoidBuffer = backend.AllocateBuffer(size);
-            backend.Sigmoid(gatePreActivation.Buffer, sigmoidBuffer, size);
-            gateOutput = GpuTensorHelper.UploadToGpu<T>(backend, sigmoidBuffer, input._shape, GpuTensorRole.Activation, ownsBuffer: true);
-        }
-
-        // Highway output: output = gate * (transform - input) + input
-        var diffBuffer = backend.AllocateBuffer(size);
-        var gatedDiffBuffer = backend.AllocateBuffer(size);
-        var outputBuffer = backend.AllocateBuffer(size);
-
-        // diff = transform - input
-        backend.Subtract(transformOutput.Buffer, input.Buffer, diffBuffer, size);
-
-        // gatedDiff = gate * diff
-        backend.Multiply(gateOutput.Buffer, diffBuffer, gatedDiffBuffer, size);
-
-        // output = gatedDiff + input
-        backend.Add(gatedDiffBuffer, input.Buffer, outputBuffer, size);
-
-        // Clean up intermediate buffers
-        diffBuffer.Dispose();
-        gatedDiffBuffer.Dispose();
-
-        // Cache GPU tensors for backward pass during training
-        if (IsTrainingMode)
-        {
-            _gpuInput = input;
-            _gpuTransformOutput = transformOutput;
-            _gpuGateOutput = gateOutput;
-            _gpuTransformPreActivation = transformPreActivation;
-            _gpuGatePreActivation = gatePreActivation;
-            _gpuInputShape = input._shape;
-
-            // Also cache CPU tensors for CPU backward compatibility
-            _lastInput = input;
-            _lastTransformOutput = transformOutput;
-            _lastGateOutput = gateOutput;
-            _lastTransformPreActivation = transformPreActivation;
-            _lastGatePreActivation = gatePreActivation;
-        }
-
-        return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, input._shape, GpuTensorRole.Activation, ownsBuffer: true);
-    }
-
-    /// <summary>
     /// Applies the appropriate activation function to the input tensor.
     /// </summary>
     /// <param name="input">The input tensor to activate.</param>
@@ -876,14 +733,6 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
         _transformBiasGradient = null;
         _gateWeightsGradient = null;
         _gateBiasGradient = null;
-
-        // Clear GPU cached tensors
-        _gpuInput = null;
-        _gpuTransformOutput = null;
-        _gpuGateOutput = null;
-        _gpuTransformPreActivation = null;
-        _gpuGatePreActivation = null;
-        _gpuInputShape = null;
     }
 
     /// <summary>

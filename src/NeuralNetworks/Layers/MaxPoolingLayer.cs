@@ -137,11 +137,6 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
     private IGpuBuffer? _gpuIndices;
 
     /// <summary>
-    /// Stores the input shape from the GPU forward pass for backward pass.
-    /// </summary>
-    private int[]? _gpuInputShape;
-
-    /// <summary>
     /// Stores the last input tensor from the forward pass for use in autodiff backward pass.
     /// </summary>
     [Scratch]
@@ -195,83 +190,6 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
         int outH = (h - PoolSize) / Stride + 1;
         int outW = (w - PoolSize) / Stride + 1;
         ResolveShapes(new[] { c, h, w }, new[] { c, outH, outW });
-    }
-
-    /// <summary>
-    /// Indicates that this layer supports GPU-accelerated execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
-    /// Performs GPU-resident forward pass of max pooling, keeping all data on GPU.
-    /// </summary>
-    /// <param name="input">The input tensor on GPU.</param>
-    /// <returns>The pooled output as a GPU-resident tensor.</returns>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine");
-
-        var input = inputs[0];
-
-        // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
-        if (input.Shape.Length < 3)
-            throw new ArgumentException($"MaxPooling layer requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
-
-        Tensor<T> input4D;
-        bool addedBatch = false;
-        _originalInputShape = input._shape;
-        int rank = input.Shape.Length;
-
-        if (rank == 3)
-        {
-            addedBatch = true;
-            input4D = input.Reshape(new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
-        }
-        else if (rank == 4)
-        {
-            input4D = input;
-        }
-        else
-        {
-            // Higher rank: flatten leading dimensions into batch
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 3; d++)
-                flatBatch *= input.Shape[d];
-            input4D = input.Reshape(new[] { flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
-        }
-
-        _gpuInputShape = input4D._shape;
-        _addedBatchDimension = addedBatch;
-
-        var poolSizeArr = new[] { PoolSize, PoolSize };
-        var strideArr = new[] { Stride, Stride };
-
-        // Dispose previous GPU indices if any
-        _gpuIndices?.Dispose();
-
-        var output = gpuEngine.MaxPool2DGpu<T>(input4D, poolSizeArr, strideArr, out var indices);
-        _gpuIndices = indices;
-
-        // Return with matching dimensions to preserve original tensor rank
-        if (_originalInputShape.Length > 4)
-        {
-            var outputShape = new int[_originalInputShape.Length];
-            for (int d = 0; d < _originalInputShape.Length - 3; d++)
-                outputShape[d] = _originalInputShape[d];
-            outputShape[_originalInputShape.Length - 3] = output.Shape[1];
-            outputShape[_originalInputShape.Length - 2] = output.Shape[2];
-            outputShape[_originalInputShape.Length - 1] = output.Shape[3];
-            return output.Reshape(outputShape);
-        }
-        if (addedBatch)
-        {
-            return output.Reshape(new[] { output.Shape[1], output.Shape[2], output.Shape[3] });
-        }
-        return output;
     }
 
     /// <summary>
@@ -438,7 +356,6 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
         // Dispose GPU resources
         _gpuIndices?.Dispose();
         _gpuIndices = null;
-        _gpuInputShape = null;
     }
 
     internal override Dictionary<string, string> GetMetadata()

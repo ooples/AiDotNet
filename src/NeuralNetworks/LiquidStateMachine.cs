@@ -346,10 +346,6 @@ public partial class LiquidStateMachine<T> : SequenceModelLayoutBase<T>
         // Clear any stored state from previous predictions (must be done before GPU path too)
         ResetState();
 
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
-
         Tensor<T> current = input;
 
         // Process the input through each layer sequentially

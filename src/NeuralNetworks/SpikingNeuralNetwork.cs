@@ -423,9 +423,6 @@ public partial class SpikingNeuralNetwork<T> : SequenceModelLayoutBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Reset network state (clears SpikingLayer internal states)
         ResetState();

@@ -301,12 +301,6 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     [Scratch]
     private Tensor<T>? _biasesGradient;
-
-    // GPU cached tensors for backward pass
-    [ExternalState]
-    private Tensor<T>? _gpuInput;
-    [ExternalState]
-    private Tensor<T>? _gpuOutput;
     private int[] _gpuInputShape = [];
 
     /// <summary>
@@ -336,11 +330,6 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
     /// </para>
     /// </remarks>
     public override bool SupportsTraining => true;
-
-    /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Gets the total number of trainable parameters in this layer.
@@ -801,70 +790,6 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Performs the forward pass using GPU-resident tensors.
-    /// </summary>
-    /// <param name="input">The GPU-resident input tensor.</param>
-    /// <returns>A GPU-resident output tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method performs the feed-forward computation (matmul + bias + activation) entirely on GPU
-    /// without downloading intermediate results to CPU.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
-
-        var input = inputs[0];
-
-        // Lazy-shape resolution must happen BEFORE EnsureInitialized:
-        // a lazily-constructed FeedForwardLayer holds the -1 sentinel
-        // for input feature size and EnsureInitialized() would overflow
-        // on TensorAllocator.Rent. EnsureInitializedFromInput resolves
-        // shapes via OnFirstForward (no-op once resolved) then defers
-        // to EnsureInitialized for actual weight allocation.
-        EnsureInitializedFromInput(input);
-
-        // MatMul: input @ _weights
-        var matmul = gpuEngine.BatchedMatMulGpu(input, _weights);
-
-        // Add biases
-        var biased = gpuEngine.AddBiasGpu(matmul, _biases);
-
-        // Apply activation
-        Tensor<T> output;
-        if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
-        {
-            var fusedType = MapActivationToFused();
-            output = gpuEngine.ActivationGpu<T>(biased, fusedType);
-        }
-        else
-        {
-            output = biased;
-        }
-
-        // Cache state for backward pass only during training
-        // Skip this expensive download during inference (50% overhead reduction)
-        if (IsTrainingMode)
-        {
-            // Cache GPU tensors for GPU-resident backward pass
-            _gpuInput = input;
-            _gpuOutput = output;
-            _gpuInputShape = input._shape;
-
-            // Also cache CPU tensors for fallback backward pass
-            Input = input;
-            Output = output;
-        }
-
-        return output;
-    }
-
-    /// <summary>
     /// Updates the weights and biases using the calculated gradients and the specified learning rate.
     /// </summary>
     /// <param name="learningRate">The learning rate to use for the parameter updates.</param>
@@ -955,10 +880,6 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
         Output = Tensor<T>.Empty();
         _weightsGradient = Tensor<T>.Empty();
         _biasesGradient = Tensor<T>.Empty();
-
-        // Clear GPU cached tensors
-        _gpuInput = null;
-        _gpuOutput = null;
         _gpuInputShape = [];
     }
 }
