@@ -193,7 +193,6 @@ public sealed class WeightStreamingEndToEndTests : IDisposable
         public override void UpdateParameters(float learningRate) { }
         public override Vector<float> GetParameters() => new(0);
         public override void SetParameters(Vector<float> parameters) { }
-        public override Vector<float> GetParameterGradients() => new(0);
         public override void ResetState() { }
         public override LayerBase<float> Clone() => new ThrowingForwardLayer();
     }

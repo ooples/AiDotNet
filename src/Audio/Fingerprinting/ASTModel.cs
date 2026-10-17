@@ -373,22 +373,9 @@ public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinte
     }
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Cannot train in ONNX inference mode.");
-        SetTrainingMode(true);
-        try
-        {
-            // Training accepts the same raw-waveform contract as Predict and
-            // Fingerprint. The patch embedder consumes a rank-4 log-mel image,
-            // so bypassing the STFT frontend here fed [batch, samples]
-            // directly into a [batch, channels, height, width] layer.
-            var mel = PreprocessAudio(input);
-            TrainWithTape(mel, expected);
-        }
-        finally { SetTrainingMode(false); }
-    }
+    /// <remarks>The model trains on the mel spectrogram of the waveform, as it predicts.</remarks>
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
+        => (PreprocessAudio(input), target);
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the

@@ -420,20 +420,6 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
         return Forecast(input);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the Autoformer model, Train performs a training step. This updates the Autoformer architecture so it learns from data.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        base.Train(input, expectedOutput);
-    }
-
     /// <summary>
     /// Training-mode forward: calls <see cref="Forward"/> so attention
     /// dropout and series-decomp noise (both gated on training mode)
@@ -456,7 +442,7 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
     protected override bool SupportsFusedCompiledTraining => false;
 
     /// <inheritdoc/>
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.

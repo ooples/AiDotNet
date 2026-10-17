@@ -644,23 +644,6 @@ public partial class LinearRecurrentUnitLayer<T> : LayerBase<T>, IShapeContract
         _outputProjectionWeights, _outputProjectionBias
     ];
 
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_nuGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        return Vector<T>.Concatenate(
-            new Vector<T>(_nuGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_thetaGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_bRealGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_bImagGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_cRealGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_cImagGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_dParamGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_inputProjectionWeightsGradient?.ToArray() ?? new T[_inputProjectionWeights.Length]),
-            new Vector<T>(_inputProjectionBiasGradient?.ToArray() ?? new T[_inputProjectionBias.Length]),
-            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
-            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

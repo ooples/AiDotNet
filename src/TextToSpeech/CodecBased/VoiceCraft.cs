@@ -138,7 +138,7 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
             int fr = Math.Min(i * _options.CodecFrameRate / SampleRate, cF - 1);
             double s = 0;
             for (int q = 0; q < nQ; q++)
-                s += tok[q, fr + q] * Math.Sin(i * (q + 1) * 0.005) / nQ;
+                s += tok[q, fr + q] * Math.Sin((double)i * (q + 1) * 0.005) / nQ;
             waveform[i] = NumOps.FromDouble(Math.Tanh(s));
         }
         return waveform;
@@ -232,15 +232,6 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
     }
 
     /// <inheritdoc />

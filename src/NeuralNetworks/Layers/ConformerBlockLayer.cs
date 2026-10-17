@@ -299,18 +299,6 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
     };
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        var parts = new List<T>((int)ParameterCount);
-        foreach (var layer in OrderedSubLayers)
-        {
-            var g = layer.GetParameterGradients();
-            for (int i = 0; i < g.Length; i++) parts.Add(g[i]);
-        }
-        return new Vector<T>(parts.ToArray());
-    }
-
-    /// <inheritdoc/>
     public override void ClearGradients()
     {
         base.ClearGradients();

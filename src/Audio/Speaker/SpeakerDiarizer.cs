@@ -622,36 +622,6 @@ public partial class SpeakerDiarizer<T> : SpeakerRecognitionBase<T>, ISpeakerDia
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
-    /// <summary>
-    /// Trains the model on a single example.
-    /// </summary>
-    /// <param name="input">Input features.</param>
-    /// <param name="expected">Expected output.</param>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-        {
-            throw new NotSupportedException(
-                "Training is not supported in ONNX mode. Create a new SpeakerDiarizer " +
-                "without modelPath parameter to train natively.");
-        }
-
-        // TRY/FINALLY, NOT TWO STATEMENTS. TrainWithTape can throw -- a shape mismatch, a diverged
-        // loss, an OOM part-way through the tape -- and the bare call left the model stuck in
-        // training mode when it did. The next Predict then runs with dropout live and stochastic
-        // batch-norm statistics, so it silently returns a different answer for the same input, and
-        // nothing about that failure points back at the exception that caused it.
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     #endregion
 
     #region Private Methods - Audio Processing

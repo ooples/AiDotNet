@@ -155,6 +155,10 @@ public abstract partial class NERNeuralNetworkBase<T> : NeuralNetworkBase<T>, IS
     /// </remarks>
     public int MaxSequenceLength { get; protected set; } = 256;
 
+    /// <inheritdoc/>
+    protected override string? TrainingUnavailableReason =>
+        IsOnnxMode ? OnnxTrainingUnavailableReason : base.TrainingUnavailableReason;
+
     /// <summary>
     /// Gets whether this model is running in ONNX inference mode.
     /// </summary>

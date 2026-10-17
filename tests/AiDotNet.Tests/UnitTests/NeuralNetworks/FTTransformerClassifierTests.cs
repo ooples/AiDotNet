@@ -17,6 +17,7 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 /// separate, still-open item, so coupling this invariant to it would mask the
 /// serialization fix this test targets.
 /// </remarks>
+[Collection("FusedOptimizerGlobalState")]
 public class FTTransformerClassifierTests
 {
     private const int NumNumerical = 4;
@@ -176,5 +177,53 @@ public class FTTransformerClassifierTests
 
         Assert.True(lastLoss < firstLoss - 1e-3,
             $"Cross-entropy did not decrease from a negative-logit start (first={firstLoss:F6}, last={lastLoss:F6}).");
+    }
+
+    [Fact]
+    public void TrainStep_RunsFused_AndTakesTheEagerStep()
+    {
+        // TrainStep runs on the shared fused session (#1804): with compilation on every numeric-only step must run
+        // fused, on batches that change, and land where the eager steps do.
+        (double[] Weights, int Fused, int Eager) Run(bool compile, double[]? start)
+        {
+            var original = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
+            try
+            {
+                AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(
+                    new AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions { EnableCompilation = compile });
+                AiDotNet.Training.CompiledTapeTrainingStep<double>.Invalidate();
+                var model = NewModel();
+                var (x0, _) = MakeSeparable(9, seed: 2);
+                _ = model.PredictProbabilities(x0);
+                if (start is not null) model.SetParameters(new Vector<double>(start));
+                for (int step = 0; step < 3; step++)
+                {
+                    var (x, y) = MakeSeparable(9, seed: 2 + step);
+                    model.TrainStep(x, y, learningRate: 0.05);
+                }
+                return (model.GetParameters().ToArray(), model.FusedTrainingStepCount, model.EagerTrainingStepCount);
+            }
+            finally
+            {
+                AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(original);
+                AiDotNet.Training.CompiledTapeTrainingStep<double>.Invalidate();
+            }
+        }
+
+        var reference = NewModel();
+        var (xr, _) = MakeSeparable(9, seed: 2);
+        _ = reference.PredictProbabilities(xr);
+        var start = reference.GetParameters().ToArray();
+
+        var eager = Run(compile: false, start);
+        var fused = Run(compile: true, start);
+
+        Assert.Equal(3, eager.Eager);
+        Assert.Equal(0, eager.Fused);
+        Assert.Equal(3, fused.Fused);
+        Assert.Equal(0, fused.Eager);
+        for (int i = 0; i < eager.Weights.Length; i++)
+            Assert.True(Math.Abs(eager.Weights[i] - fused.Weights[i]) <= 1e-6,
+                $"parameter {i}: eager {eager.Weights[i]}, fused {fused.Weights[i]}");
     }
 }

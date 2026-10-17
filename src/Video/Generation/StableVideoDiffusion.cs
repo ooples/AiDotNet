@@ -523,20 +523,6 @@ public partial class StableVideoDiffusion<T> : NeuralNetworkBase<T>
         return frames.Count > 0 ? frames[0] : input;
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     #endregion
 
     #region Private Methods

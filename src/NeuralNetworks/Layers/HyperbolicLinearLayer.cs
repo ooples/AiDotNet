@@ -616,34 +616,6 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        var gradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        // Weights gradients: [OutputFeatures, InputFeatures]
-        if (_weightsGradient != null)
-        {
-            for (int o = 0; o < OutputFeatures; o++)
-                for (int i = 0; i < InputFeatures; i++)
-                    gradients[idx++] = _weightsGradient[o, i];
-        }
-        else
-        {
-            idx += OutputFeatures * InputFeatures;
-        }
-
-        // Biases gradients: [OutputFeatures] — scalar bias per output
-        if (_biasesGradient != null)
-        {
-            for (int o = 0; o < OutputFeatures; o++)
-                    gradients[idx++] = _biasesGradient[o];
-        }
-
-        return gradients;
-    }
-
-    /// <inheritdoc/>
     internal override Dictionary<string, string> GetMetadata()
     {
         var metadata = base.GetMetadata();

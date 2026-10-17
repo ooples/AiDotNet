@@ -479,20 +479,6 @@ public partial class TCN<T> : ForecastingModelBase<T>
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the TCN model, Train performs a training step. This updates the TCN architecture so it learns from data.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        base.Train(input, target);
-    }
-
     /// <summary>
     /// Training-mode forward: routes through <see cref="Forward"/>
     /// directly so dropout between dilated conv blocks stays active

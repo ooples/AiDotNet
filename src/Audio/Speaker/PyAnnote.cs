@@ -315,24 +315,19 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
         }
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
+    /// <inheritdoc/>
+    /// <remarks>A training step holds the execution gate, so it never interleaves with an inference on another thread.</remarks>
+    protected override void OnTrainingStepStarting(Tensor<T> input, Tensor<T> target)
     {
-        if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
+        base.OnTrainingStepStarting(input, target);
+        System.Threading.Monitor.Enter(_executionGate);
+    }
 
-        // Same gate as PredictCore. These two are the only writers of IsTrainingMode on this type,
-        // and they must not interleave.
-        lock (_executionGate)
-        {
-            SetTrainingMode(true);
-            try
-            {
-                TrainWithTape(input, expected, _optimizer);
-            }
-            finally
-            {
-                SetTrainingMode(false);
-            }
-        }
+    /// <inheritdoc/>
+    protected override void OnTrainingStepEnded(bool succeeded)
+    {
+        System.Threading.Monitor.Exit(_executionGate);
+        base.OnTrainingStepEnded(succeeded);
     }
 
     /// <inheritdoc />

@@ -345,83 +345,122 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         Tensor<T> conditions,
         Tensor<T> noise)
     {
-        Guard.NotNull(realImages);
         Guard.NotNull(conditions);
-        Guard.NotNull(noise);
+        _pendingConditions = conditions;
+        try
+        {
+            Train(noise, realImages);
+        }
+        finally
+        {
+            _pendingConditions = null;
+        }
 
+        return (_lastDiscriminatorLoss, _lastGeneratorLoss);
+    }
+
+    private Tensor<T>? _pendingConditions;
+    private (bool Generator, bool Discriminator)? _savedModes;
+
+    /// <inheritdoc/>
+    /// <remarks>Records both networks' training modes before the step switches them on.</remarks>
+    protected override void OnTrainingStepStarting(Tensor<T> input, Tensor<T> target)
+    {
+        base.OnTrainingStepStarting(input, target);
+        _savedModes = (Generator.IsTrainingMode, Discriminator.IsTrainingMode);
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>Both networks get back the training modes they had before the step, whether it succeeded or threw.</remarks>
+    protected override void OnTrainingStepEnded(bool succeeded)
+    {
+        if (_savedModes is { } modes)
+        {
+            Generator.SetTrainingMode(modes.Generator);
+            Discriminator.SetTrainingMode(modes.Discriminator);
+            _savedModes = null;
+        }
+
+        base.OnTrainingStepEnded(succeeded);
+    }
+    private T _lastDiscriminatorLoss = MathHelper.GetNumericOperations<T>().Zero;
+    private T _lastGeneratorLoss = MathHelper.GetNumericOperations<T>().Zero;
+
+    /// <summary>
+    /// One-hot class conditions for a batch with no labels: each sample's class is read from its first value. The
+    /// supervised <see cref="NeuralNetworkBase{T}.Train(Tensor{T}, Tensor{T})"/> contract carries no labels;
+    /// <see cref="TrainStep"/> takes real ones.
+    /// </summary>
+    private Tensor<T> DeriveConditions(Tensor<T> realImages)
+    {
+        int batchSize = realImages.Shape[0];
+        var conditions = new Tensor<T>(new int[] { batchSize, _numConditionClasses });
+        for (int b = 0; b < batchSize; b++)
+        {
+            double sampleVal = NumOps.ToDouble(realImages.GetFlatIndexValue(b * (realImages.Length / batchSize)));
+            int classIdx = ((int)(Math.Abs(sampleVal) * 1000)) % _numConditionClasses;
+            for (int c = 0; c < _numConditionClasses; c++)
+                conditions[b, c] = c == classIdx ? NumOps.One : NumOps.Zero;
+        }
+
+        return conditions;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The conditional GAN step (Mirza and Osindero 2014): the discriminator on real and generated samples, each paired
+    /// with its condition, then the generator against the frozen discriminator. The input is the noise, the target the
+    /// real batch. Each network steps on its own fused session, and both get their training modes back after.
+    /// </remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> noise, Tensor<T> realImages)
+    {
+        var conditions = _pendingConditions ?? DeriveConditions(realImages);
         if (realImages.Shape[0] != conditions.Shape[0] || realImages.Shape[0] != noise.Shape[0])
             throw new ArgumentException(
                 $"Batch sizes must match: realImages={realImages.Shape[0]}, conditions={conditions.Shape[0]}, noise={noise.Shape[0]}.");
 
-        // Restore both networks' modes even if a step throws: a failed step used to leave the
-        // discriminator in training mode for every later scoring call.
-        bool generatorWasTraining = Generator.IsTrainingMode;
-        bool discriminatorWasTraining = Discriminator.IsTrainingMode;
         Generator.SetTrainingMode(true);
         Discriminator.SetTrainingMode(true);
-        try
+        Tensor<T> generatorInput = ConcatenateTensors(noise, conditions);
+        Tensor<T> fakeImages = PredictBatched(Generator, generatorInput);
+        return new[]
         {
-            // ----- Train Discriminator -----
-            // Mirza and Osindero 2014, eq. 2: D ascends log D(x|y) + log(1 - D(G(z|y)|y)), in one step on
-            // one tape. It used to take two separate Discriminator.Train calls, real then fake, each
-            // regressing onto 0/1 labels with the discriminator network's own configured loss and optimizer.
-            Tensor<T> generatorInput = ConcatenateTensors(noise, conditions);
-            Tensor<T> fakeImages = PredictBatched(Generator, generatorInput);
-
-            T discriminatorLoss;
-            using (var discriminatorTape = new GradientTape<T>())
+            new Training.TrainingObjective<T>(
+                new[] { realImages, fakeImages, conditions },
+                data => Engine.TensorAdd(
+                    Discriminator.BinaryCrossEntropyOnTape(
+                        Discriminator.ForwardForTraining(ConcatenateImageAndCondition(data[0], data[2])), targetIsReal: true),
+                    Discriminator.BinaryCrossEntropyOnTape(
+                        Discriminator.ForwardForTraining(ConcatenateImageAndCondition(data[1], data[2])), targetIsReal: false)))
             {
-                var realScores = Discriminator.ForwardForTraining(ConcatenateImageAndCondition(realImages, conditions));
-                var fakeScores = Discriminator.ForwardForTraining(ConcatenateImageAndCondition(fakeImages, conditions));
-                var discriminatorObjective = Engine.TensorAdd(
-                    Discriminator.BinaryCrossEntropyOnTape(realScores, targetIsReal: true),
-                    Discriminator.BinaryCrossEntropyOnTape(fakeScores, targetIsReal: false));
-                discriminatorLoss = StepOnTape(discriminatorTape, discriminatorObjective, Discriminator, DiscriminatorOptimizer);
-            }
-
-            // ----- Train Generator -----
-            T generatorLoss = TrainGeneratorOnBatch(generatorInput);
-
-            // Track losses
-            _generatorLosses.Add(generatorLoss);
-            if (_generatorLosses.Count > 100)
+                Network = Discriminator,
+                Optimizer = DiscriminatorOptimizer,
+                OnLoss = loss => _lastDiscriminatorLoss = loss,
+            },
+            new Training.TrainingObjective<T>(
+                () => { Generator.SetTrainingMode(true); return new[] { generatorInput }; },
+                data =>
+                {
+                    var stepConditions = Engine.TensorSlice(data[0],
+                        new[] { 0, Generator.Architecture.InputSize - _numConditionClasses },
+                        new[] { data[0].Shape[0], _numConditionClasses });
+                    var withConditions = ConcatenateImageAndCondition(Generator.ForwardForTraining(data[0]), stepConditions);
+                    return Discriminator.BinaryCrossEntropyOnTape(Discriminator.ForwardFrozenOnTape(withConditions), targetIsReal: true);
+                })
             {
-                _generatorLosses.RemoveAt(0);
-            }
-
-            return (discriminatorLoss, generatorLoss);
-        }
-        finally
-        {
-            Generator.SetTrainingMode(generatorWasTraining);
-            Discriminator.SetTrainingMode(discriminatorWasTraining);
-        }
+                Network = (NeuralNetworkBase<T>)Generator,
+                Optimizer = GeneratorOptimizer,
+                OnLoss = loss =>
+                {
+                    _lastGeneratorLoss = loss;
+                    LastLoss = loss;
+                    _generatorLosses.Add(loss);
+                    if (_generatorLosses.Count > 100)
+                        _generatorLosses.RemoveAt(0);
+                },
+            },
+        };
     }
-
-    /// <summary>
-    /// Trains the generator on a batch.
-    /// </summary>
-    private T TrainGeneratorOnBatch(Tensor<T> generatorInput)
-    {
-        // Train generator to fool discriminator (adversarial objective)
-        Generator.SetTrainingMode(true);
-        var trainableGen = (NeuralNetworkBase<T>)Generator;
-        return trainableGen.TrainWithCustomLoss(generatorInput, genOutput =>
-        {
-            // Concatenate generator output with conditions for discriminator
-            var conditions = Engine.TensorSlice(generatorInput,
-                new[] { 0, Generator.Architecture.InputSize - _numConditionClasses },
-                new[] { generatorInput.Shape[0], _numConditionClasses });
-            var withConditions = ConcatenateImageAndCondition(genOutput, conditions);
-
-            // On the tape, with the discriminator frozen. Discriminator.Predict opened a NoGradScope and
-            // detached the score from the generator entirely. The loss is the non-saturating
-            // -log D(G(z|y)) (Mirza and Osindero 2014, eq. 2), replacing a squared distance to 1.
-            var discScore = Discriminator.ForwardFrozenOnTape(withConditions);
-            return Discriminator.BinaryCrossEntropyOnTape(discScore, targetIsReal: true);
-        }, GeneratorOptimizer);  // the configured generator optimizer; omitting it silently used the generator network's own default
-    }
-
     /// <summary>
     /// Concatenates noise and condition vectors.
     /// </summary>
@@ -609,59 +648,6 @@ public partial class ConditionalGAN<T> : GenerativeAdversarialNetwork<T>
         }
 
         return conditions;
-    }
-
-    /// <summary>
-    /// Trains the conditional GAN on a batch of data.
-    /// </summary>
-    /// <param name="input">The input noise tensor for the generator.</param>
-    /// <param name="expectedOutput">The tensor containing real images.</param>
-    /// <remarks>
-    /// <para>
-    /// This method implements the standard Train interface by:
-    /// 1. Generating random conditions for training
-    /// 2. Using the input as noise for the generator
-    /// 3. Using expectedOutput as the real images for the discriminator
-    /// 4. Delegating to TrainStep for the actual training
-    /// </para>
-    /// <para><b>For Beginners:</b> This is the main training method that follows the base class contract.
-    ///
-    /// How it works:
-    /// - The 'input' tensor is used as random noise for the generator
-    /// - The 'expectedOutput' tensor contains real images to train the discriminator
-    /// - Random class conditions are generated for conditional training
-    /// - Both generator and discriminator are updated in each call
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        int batchSize = expectedOutput.Shape[0];
-
-        // Per Mirza & Osindero 2014, the discriminator must see real images with
-        // consistent class labels. Since Train(input, expectedOutput) doesn't provide
-        // separate labels, derive a deterministic class from each sample's content
-        // (hash of first element). This ensures the same input always maps to the
-        // same class, providing a consistent signal to the discriminator.
-        var conditions = new Tensor<T>(new int[] { batchSize, _numConditionClasses });
-        for (int b = 0; b < batchSize; b++)
-        {
-            double sampleVal = NumOps.ToDouble(expectedOutput.GetFlatIndexValue(b * (expectedOutput.Length / batchSize)));
-            int classIdx = ((int)(Math.Abs(sampleVal) * 1000)) % _numConditionClasses;
-            for (int c = 0; c < _numConditionClasses; c++)
-            {
-                conditions[b, c] = c == classIdx ? NumOps.One : NumOps.Zero;
-            }
-        }
-
-        // Use input as noise and call TrainStep. Surface the generator
-        // loss as LastLoss so the LossStrictlyDecreasesOnMemorizationTask
-        // invariant has a real per-step value to compare (the previous
-        // implementation discarded the TrainStep return tuple, leaving
-        // LastLoss at NumOps.Zero across every Train call and producing
-        // the misleading "step 1=0.000000, step N=0.000000" failure
-        // signature on #1224 Cluster F).
-        var (_, generatorLoss) = TrainStep(expectedOutput, conditions, input);
-        LastLoss = generatorLoss;
     }
 
     /// <inheritdoc/>

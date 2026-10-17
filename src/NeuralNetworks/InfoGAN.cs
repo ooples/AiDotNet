@@ -400,26 +400,40 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
         Tensor<T> noise,
         Tensor<T> latentCodes)
     {
-        // Validate inputs are non-null and have consistent batch sizes
-        if (realImages is null)
+        if (latentCodes is null) throw new ArgumentNullException(nameof(latentCodes));
+        _pendingLatentCodes = latentCodes;
+        try
         {
-            throw new ArgumentNullException(nameof(realImages));
+            Train(noise, realImages);
         }
-        if (noise is null)
+        finally
         {
-            throw new ArgumentNullException(nameof(noise));
-        }
-        if (latentCodes is null)
-        {
-            throw new ArgumentNullException(nameof(latentCodes));
+            _pendingLatentCodes = null;
         }
 
-        if (realImages.Shape.Length == 0 || noise.Shape.Length == 0 || latentCodes.Shape.Length == 0)
-        {
+        return (_lastDiscriminatorLoss, _lastGeneratorLoss, _lastMutualInfoLoss);
+    }
+
+    private Tensor<T>? _pendingLatentCodes;
+    private T _lastDiscriminatorLoss = MathHelper.GetNumericOperations<T>().Zero;
+    private T _lastGeneratorLoss = MathHelper.GetNumericOperations<T>().Zero;
+    private T _lastMutualInfoLoss = MathHelper.GetNumericOperations<T>().Zero;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The InfoGAN step (Chen et al. 2016): the discriminator on real against generated samples, the generator on the
+    /// adversarial loss plus <c>lambda</c> times the latent-code reconstruction error, and the Q network on that error.
+    /// The input is the noise, the target the real batch; the latent codes are drawn per step (or given to
+    /// <see cref="TrainStep"/>). Each network steps on its own fused session.
+    /// </remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> noise, Tensor<T> realImages)
+    {
+        if (realImages.Shape.Length == 0 || noise.Shape.Length == 0)
             throw new ArgumentException("Input tensors must have at least one dimension.");
-        }
-
         int batchSize = realImages.Shape[0];
+        var latentCodes = _pendingLatentCodes ?? GenerateRandomLatentCodes(batchSize);
+        if (latentCodes.Shape.Length == 0)
+            throw new ArgumentException("Input tensors must have at least one dimension.");
         if (noise.Shape[0] != batchSize || latentCodes.Shape[0] != batchSize)
         {
             throw new ArgumentException(
@@ -431,54 +445,58 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
         Generator.SetTrainingMode(true);
         Discriminator.SetTrainingMode(true);
         QNetwork.SetTrainingMode(true);
-
-        // ONE generator forward, recorded on the generator's tape (#1390); D trains on a detached copy.
         var generatorInput = ConcatenateTensors(noise, latentCodes);
-        using var generatorTape = new GradientTape<T>();
-        var fakeTracked = Generator.ForwardForTraining(generatorInput);
-        var fakeImages = new Tensor<T>(fakeTracked.Shape.ToArray());
-        fakeTracked.AsSpan().CopyTo(fakeImages.AsWritableSpan());
-
-        // ----- Discriminator: maximise V(D, G) -----
-        // Its two updates used to step on GetParameterGradients() after no backward pass at all.
-        T discriminatorLoss;
-        using (var discriminatorTape = new GradientTape<T>())
+        var fakeImages = Generator.ForwardForTrainingDetached(generatorInput);
+        int batch = noise.Shape[0];
+        int noiseWidth = noise.Shape[1];
+        return new[]
         {
-            var realScores = Discriminator.ForwardForTraining(realImages);
-            var fakeScores = Discriminator.ForwardForTraining(fakeImages);
-            var discriminatorObjective = Engine.TensorAdd(
-                Discriminator.BinaryCrossEntropyOnTape(realScores, targetIsReal: true),
-                Discriminator.BinaryCrossEntropyOnTape(fakeScores, targetIsReal: false));
-            discriminatorLoss = StepOnTape(discriminatorTape, discriminatorObjective, Discriminator,
-                _discriminatorOptimizer);
-        }
-
-        // ----- Generator and Q: minimise V(D, G) - lambda * L_I(G, Q) (Chen et al. 2016, eq. 6) -----
-        // One loss, two networks: the generator AND the Q network are stepped, each by its own
-        // optimizer. The old closure trained the generator alone, so Q -- whose loss was in it -- never
-        // moved. The adversarial term is the non-saturating -log D(G(z, c)). For the continuous codes
-        // this model draws, Q(c|x) is a unit-variance factored Gaussian, whose negative log-likelihood is
-        // the squared error up to a constant -- the form the paper uses for continuous codes.
-        var generatorScores = Discriminator.ForwardFrozenOnTape(fakeTracked);
-        var adversarialLoss = Discriminator.BinaryCrossEntropyOnTape(generatorScores, targetIsReal: true);
-        var predictedCodes = QNetwork.ForwardForTraining(fakeTracked);
-        var codeError = Engine.TensorSubtract(predictedCodes, latentCodes);
-        var mutualInfoTensor = Engine.ReduceMean(
+            new Training.TrainingObjective<T>(
+                new[] { realImages, fakeImages },
+                data => Engine.TensorAdd(
+                    Discriminator.BinaryCrossEntropyOnTape(Discriminator.ForwardForTraining(data[0]), targetIsReal: true),
+                    Discriminator.BinaryCrossEntropyOnTape(Discriminator.ForwardForTraining(data[1]), targetIsReal: false)))
+            {
+                Network = Discriminator,
+                Optimizer = _discriminatorOptimizer,
+                OnLoss = loss => _lastDiscriminatorLoss = loss,
+            },
+            new Training.TrainingObjective<T>(
+                new[] { generatorInput },
+                data =>
+                {
+                    var codes = Engine.TensorSlice(data[0], new[] { 0, noiseWidth }, new[] { batch, _latentCodeSize });
+                    var generated = Generator.ForwardForTraining(data[0]);
+                    var adversarialLoss = Discriminator.BinaryCrossEntropyOnTape(
+                        Discriminator.ForwardFrozenOnTape(generated), targetIsReal: true);
+                    return Engine.TensorAdd(
+                        adversarialLoss,
+                        Engine.TensorMultiplyScalar(CodeSquaredError(QNetwork.ForwardForTraining(generated), codes), _mutualInfoCoefficient));
+                })
+            {
+                Network = Generator,
+                Optimizer = _generatorOptimizer,
+                OnLoss = loss => _lastGeneratorLoss = loss,
+            },
+            new Training.TrainingObjective<T>(
+                new[] { fakeImages, latentCodes },
+                data => CodeSquaredError(QNetwork.ForwardForTraining(data[0]), data[1]))
+            {
+                Network = QNetwork,
+                Optimizer = _qNetworkOptimizer,
+                OnLoss = loss => _lastMutualInfoLoss = loss,
+            },
+        };
+    }
+    /// <summary>The mean squared error between predicted and true latent codes, recorded for the step.</summary>
+    private Tensor<T> CodeSquaredError(Tensor<T> predictedCodes, Tensor<T> codes)
+    {
+        var codeError = Engine.TensorSubtract(predictedCodes, codes);
+        return Engine.ReduceMean(
             Engine.TensorMultiply(codeError, codeError),
             Enumerable.Range(0, codeError.Shape.Length).ToArray(),
             keepDims: false);
-        var generatorObjective = Engine.TensorAdd(
-            adversarialLoss, Engine.TensorMultiplyScalar(mutualInfoTensor, _mutualInfoCoefficient));
-        T generatorLoss = StepOnTape(generatorTape, generatorObjective, new[]
-        {
-            ((NeuralNetworkBase<T>)Generator, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)_generatorOptimizer),
-            ((NeuralNetworkBase<T>)QNetwork, (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>?)_qNetworkOptimizer),
-        });
-        T mutualInfoLoss = mutualInfoTensor.Length > 0 ? mutualInfoTensor[0] : NumOps.Zero;
-
-        return (discriminatorLoss, generatorLoss, mutualInfoLoss);
     }
-
     /// <summary>
     /// Calculates mutual information loss (MSE between predicted and true codes).
     /// </summary>
@@ -783,13 +801,6 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
             // Latent-code slots are already zero from Tensor's default ctor.
         }
         return output;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        int batchSize = expectedOutput.Shape[0];
-        var codes = GenerateRandomLatentCodes(batchSize);
-        TrainStep(expectedOutput, input, codes);
     }
 
     public override ModelMetadata<T> GetModelMetadata()

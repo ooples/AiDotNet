@@ -806,24 +806,8 @@ public partial class SpeechEmotionRecognizer<T> : AudioClassifierBase<T>, IEmoti
     #region Training
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (_isOnnxMode)
-        {
-            throw new InvalidOperationException(
-                "Cannot train in ONNX mode. Create a new model with the native mode constructor for training.");
-        }
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
+    protected override string? TrainingUnavailableReason =>
+        _isOnnxMode ? OnnxTrainingUnavailableReason : base.TrainingUnavailableReason;
 
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     #endregion

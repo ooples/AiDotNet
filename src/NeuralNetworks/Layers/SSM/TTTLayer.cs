@@ -732,22 +732,6 @@ public partial class TTTLayer<T> : LayerBase<T>, IShapeContract
         _lnGamma, _lnBeta
     ];
 
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_queryWeightsGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        return Vector<T>.Concatenate(
-            new Vector<T>(_queryWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_queryBiasGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_keyWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_keyBiasGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_valueWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_valueBiasGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_innerWeightsInitGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_etaScaleGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_lnGammaGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_lnBetaGradient?.ToArray() ?? Array.Empty<T>()));
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

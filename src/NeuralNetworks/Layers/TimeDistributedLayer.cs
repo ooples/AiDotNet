@@ -209,9 +209,7 @@ public partial class TimeDistributedLayer<T> : LayerBase<T>, IShapeContract
 
     public override bool SupportsTraining => _innerLayer.SupportsTraining;
 
-    public override Vector<T> GetParameterGradients() =>
-        _accumulatedGradients ?? _innerLayer.GetParameterGradients();
-    public override void ClearGradients() { base.ClearGradients(); _innerLayer.ClearGradients(); _accumulatedGradients = null; }
+    public override void ClearGradients() { base.ClearGradients(); _innerLayer.ClearGradients(); }
 
     /// <inheritdoc/>
     protected override bool SupportsGpuExecution => true;
@@ -486,21 +484,6 @@ public partial class TimeDistributedLayer<T> : LayerBase<T>, IShapeContract
         _lastOutput = activated;
         return _lastOutput;
     }
-
-    /// <summary>
-    /// Performs the backward pass using manual gradient computation.
-    /// </summary>
-    /// <param name="outputGradient">The gradient of the loss with respect to the layer's output.</param>
-    /// <returns>The gradient of the loss with respect to the layer's input.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when trying to perform a backward pass before a forward pass.</exception>
-    /// <remarks>
-    /// <para>
-    /// This is the original optimized manual implementation that directly computes gradients by iterating
-    /// through each time step and delegating to the inner layer's backward pass.
-    /// </para>
-    /// </remarks>
-    [AiDotNet.Attributes.TrainableParameter]
-    private Vector<T>? _accumulatedGradients;
 
     private static Tensor<T> SqueezeAxis(Tensor<T> tensor, int axis)
     {

@@ -166,7 +166,7 @@ public partial class Piper<T> : TtsModelBase<T>, IEndToEndTts<T>
             for (int d = 0; d < Math.Min(hiddenDim, 16); d++)
             {
                 double latent = z[melFrame * hiddenDim + d];
-                sample += Math.Tanh(latent) * Math.Sin(i * (d + 1) * 0.01 + latent) / 16.0;
+                sample += Math.Tanh(latent) * Math.Sin((double)i * (d + 1) * 0.01 + latent) / 16.0;
             }
             waveform[i] = NumOps.FromDouble(Math.Tanh(sample));
         }
@@ -216,21 +216,6 @@ public partial class Piper<T> : TtsModelBase<T>, IEndToEndTts<T>
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
     }
 
     /// <inheritdoc />

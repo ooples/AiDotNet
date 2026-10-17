@@ -181,27 +181,15 @@ public partial class WaveGrad<T> : VocoderBase<T>
         return c;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
+    /// <inheritdoc/>
+    /// <remarks>The L1 distance between the predicted and target waveforms (Chen et al. 2021).</remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> expected)
+        => new[]
         {
-            // WaveGrad (Chen et al., 2021, S3.2 and Algorithm 1) trains against an L1 objective, not
-            // the L2 the framework defaults to. The paper is explicit that L1 was chosen for training
-            // STABILITY -- precisely the failure seen here: under MSE the memorization loss climbed
-            // from 0.6358 to 4.9003 rather than falling.
-            //
-            // The two-argument TrainWithTape overload also left _optimizer assigned but never read,
-            // so training ran on the framework default optimizer entirely.
-            TrainWithCustomLoss(input, predicted => MeanAbsoluteDifference(predicted, expected), _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
+            new Training.TrainingObjective<T>(
+                new[] { input, expected },
+                data => MeanAbsoluteDifference(ForwardForTraining(data[0]), data[1])),
+        };
 
     /// <summary>
     /// Mean absolute error, built from <c>Engine</c> primitives so the autodiff tape records every

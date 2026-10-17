@@ -83,6 +83,7 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
     private Vector<T> _trainingSeries = Vector<T>.Empty();
 
     // Input embedding and positional encoding (Tensor-based)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _inputProjection;      // [embeddingDim, 1]
     [Buffer]
     private Tensor<T> _positionalEncoding;   // [maxLen, embeddingDim]
@@ -97,10 +98,13 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
 
     // Decoder components (Tensor-based)
     private readonly List<InformerDecoderLayerTensor<T>> _decoderLayers;
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _decoderStartToken;    // [embeddingDim]
 
     // Output projection (Tensor-based)
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputProjection;     // [forecastHorizon, embeddingDim]
+    [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T> _outputBias;           // [forecastHorizon]
 
     // Normalization statistics computed during training (zero-mean / unit-variance of the
@@ -108,18 +112,6 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
     // denormalized at inference so gradient flow stays well-scaled (mirrors NBEATS / NHiTS).
     private T _normMean = MathHelper.GetNumericOperations<T>().Zero;
     private T _normStd = MathHelper.GetNumericOperations<T>().One;
-
-    /// <summary>
-    /// True when the most recent <c>TrainCore</c> completed via the GPU-resident
-    /// fused compiled plan (weights / activations / Adam moments resident on the
-    /// device across the whole loop). Mirrors <c>NBEATSModel.LastRunUsedGpuResidentPath</c>.
-    /// </summary>
-    /// <remarks>
-    /// Internal diagnostic: the public surface stays limited to the facade
-    /// (<c>AiModelBuilder</c>/<c>AiModelResult</c>). Visible to the test and
-    /// serving assemblies via <c>InternalsVisibleTo</c>.
-    /// </remarks>
-    internal bool LastRunUsedGpuResidentPath { get; private set; }
 
     // Sparsity factor for ProbSparse attention (c in the paper, typically 5)
     private const int SparsityFactor = 5;
@@ -169,8 +161,8 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         double stddev = Math.Sqrt(2.0 / _options.EmbeddingDim);
         var random = RandomHelper.CreateSeededRandom(SeedOr(42));
 
-        // Idempotent: TryTrainGpuResident re-invokes this on a rejected resident run
-        // to reset to a clean init, so clear any existing layers before rebuilding —
+        // Idempotent: a re-initialization (deserialization, an explicit reset) re-invokes this,
+        // so clear any existing layers before rebuilding —
         // otherwise the rebuild APPENDS a second full set (doubling encoder/decoder/
         // distilling layers, corrupting ParameterCount, ForwardBatch and the forecast).
         // Safe on the constructor path too, where the lists are already empty.
@@ -300,19 +292,6 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         for (int i = 0; i < y.Length; i++)
             yNorm[i] = _numOps.Divide(_numOps.Subtract(y[i], yMean), yStd);
 
-        // GPU-RESIDENT fast path (float + DirectGpuTensorEngine + compilation).
-        // Informer's forward is SDPA + LayerNorm + FFN + distilling — a very different op
-        // graph from NBEATS's Permute+BroadcastAdd chain — so the compiled fused plan should
-        // engage cleanly here even if NBEATS's fused path still trips the divergence guard.
-        // Only in epoch-bounded mode (see NBEATSModel for the wall-clock hazard rationale).
-        LastRunUsedGpuResidentPath = false;
-        if (CanTrainOnGpu && _options.MaxTrainingTimeSeconds <= 0
-            && TryTrainGpuResident(yNorm))
-        {
-            LastRunUsedGpuResidentPath = true;
-            return;
-        }
-
         // Valid sample = index with a complete lookback AND horizon window (idx in [L, N-H]).
         var validIndices = new List<int>();
         for (int i = lookback; i + horizon <= y.Length; i++) validIndices.Add(i);
@@ -365,23 +344,14 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
                 var batchInput = new Tensor<T>(new[] { b, lookback }, new Vector<T>(inputData));
                 var batchTarget = new Tensor<T>(new[] { b, horizon }, new Vector<T>(targetData));
 
-                using var tape = new Tensors.Engines.Autodiff.GradientTape<T>();
-                var forecast = ForwardBatch(batchInput, b, lookback); // [b, horizon]
-                var lossTensor = mseLoss.ComputeTapeLoss(forecast, batchTarget);
-                var allGrads = tape.ComputeGradients(lossTensor, sources: null);
-
-                var grads = new Dictionary<Tensor<T>, Tensor<T>>(
-                    AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-                foreach (var param in allParams)
-                    if (allGrads.TryGetValue(param, out var g)) grads[param] = g;
-
-                T lossValue = lossTensor.Length > 0 ? lossTensor[0] : _numOps.Zero;
-                Tensor<T> ComputeForward(Tensor<T> a, Tensor<T> t) => forecast;
-                Tensor<T> ComputeLoss(Tensor<T> p, Tensor<T> t) => mseLoss.ComputeTapeLoss(p, t);
-                var context = new Tensors.Engines.Autodiff.TapeStepContext<T>(
-                    allParams, grads, lossValue, batchInput, batchTarget, ComputeForward, ComputeLoss, null);
-                optimizer.Step(context);
-
+                // Encoder (ProbSparse attention + distilling), decoder, projection, the loss, the backward and the
+                // Adam update: one fused compiled plan when it applies (CPU or GPU), the eager tape otherwise
+                // (TrainTapeBatch). The trained set is every tensor CollectTrainableParameters returns, model-level
+                // projections included.
+                T lossValue = TrainTapeBatch(
+                    Array.Empty<ITrainableLayer<T>>(), batchInput, batchTarget,
+                    input => ForwardBatch(input, input.Shape[0], input.Shape[1]),
+                    mseLoss.ComputeTapeLoss, optimizer, extraParameters: allParams);
                 epochLossSum += Convert.ToDouble(lossValue) * b;
                 epochCount += b;
             }
@@ -416,152 +386,6 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         }
     }
 
-    /// <summary>
-    /// Collects every layer that carries trainable parameters in a single flat list —
-    /// encoder + distilling + decoder + the output projection wrapped as a trivial
-    /// layer. Used by the GPU-resident fused-step path which needs <c>ITrainableLayer</c>
-    /// handles (not raw tensors) so it can call <c>ZeroGrad</c> per step.
-    /// </summary>
-    private List<ITrainableLayer<T>> CollectTrainableLayers()
-    {
-        var layers = new List<ITrainableLayer<T>>();
-        foreach (var l in _encoderLayers) layers.Add(l);
-        foreach (var l in _distillingLayers) layers.Add(l);
-        foreach (var l in _decoderLayers) layers.Add(l);
-        return layers;
-    }
-
-    /// <summary>
-    /// Validation MSE across up to 256 windows for the GPU-resident accept/reject gate.
-    /// Uses the current model weights, so callers can compare pre- and post-resident MSE.
-    /// </summary>
-    private double ValidationMseGpu(List<int> valid, Vector<T> yNorm, int L, int H)
-    {
-        int m = Math.Min(valid.Count, 256);
-        if (m == 0) return double.NaN;
-        var inputData = new T[m * L];
-        var targetData = new T[m * H];
-        for (int bi = 0; bi < m; bi++)
-        {
-            int idx = valid[bi];
-            for (int j = 0; j < L; j++) inputData[bi * L + j] = yNorm[idx - L + j];
-            for (int h = 0; h < H; h++) targetData[bi * H + h] = yNorm[idx + h];
-        }
-        var input = new Tensor<T>(new[] { m, L }, new Vector<T>(inputData));
-        var pred = ForwardBatch(input, m, L);
-        double sum = 0.0;
-        int n = pred.Length;
-        for (int i = 0; i < n; i++)
-        {
-            double d = Convert.ToDouble(pred[i]) - Convert.ToDouble(targetData[i]);
-            sum += d * d;
-        }
-        return sum / n;
-    }
-
-    /// <summary>
-    /// GPU-resident training via the fused compiled-plan capture path — mirrors
-    /// NBEATSModel.TryTrainGpuResident. Informer's forward is SDPA + LayerNorm + FFN
-    /// (very different from NBEATS's Permute+BroadcastAdd chain), so the compiled plan
-    /// should engage cleanly. Falls back to eager when the plan can't compile or the
-    /// resident run doesn't improve the validation baseline.
-    /// </summary>
-    private bool TryTrainGpuResident(Vector<T> yNorm)
-    {
-        int L = _options.LookbackWindow;
-        int H = _options.ForecastHorizon;
-        int batchSize = Math.Max(1, _options.BatchSize);
-
-        var valid = new List<int>();
-        for (int idx = L; idx + H <= yNorm.Length; idx++) valid.Add(idx);
-        if (valid.Count < batchSize) return false;
-
-        var layers = CollectTrainableLayers();
-        var mseLoss = TrainingLoss;
-
-        Tensor<T> ForwardEnc(Tensor<T> input)
-        {
-            // input.Shape = [batchSize, L] — constant across every fused step
-            int b = input.Shape[0];
-            int encLen0 = input.Shape[1];
-            return ForwardBatch(input, b, encLen0);
-        }
-        Tensor<T> ComputeLoss(Tensor<T> pred, Tensor<T> target) =>
-            mseLoss.ComputeTapeLoss(pred, target);
-
-        double preMse = ValidationMseGpu(valid, yNorm, L, H);
-
-        float lr = (float)_options.LearningRate;
-        const float beta1 = 0.9f, beta2 = 0.999f, epsilon = 1e-8f, weightDecay = 0f;
-
-        AiDotNet.Training.CompiledTapeTrainingStep<T>.Invalidate(this);
-        AiDotNet.Training.CompiledTapeTrainingStep<T>.ResetFusedStepCount(this);
-
-        var random = RandomHelper.CreateSeededRandom(SeedOr(42));
-        int maxEpochs = _options.Epochs;
-        bool fusedEngaged = false;
-        bool diverged = false;
-        double firstStepLoss = double.NaN;
-
-        for (int epoch = 0; epoch < maxEpochs && !diverged; epoch++)
-        {
-            TrainingCancellationToken.ThrowIfCancellationRequested();
-            var order = valid.OrderBy(_ => random.Next()).ToList();
-            int fullBatches = order.Count / batchSize;
-            for (int b = 0; b < fullBatches; b++)
-            {
-                TrainingCancellationToken.ThrowIfCancellationRequested();
-                int baseIdx = b * batchSize;
-                var inputData = new T[batchSize * L];
-                var targetData = new T[batchSize * H];
-                for (int bi = 0; bi < batchSize; bi++)
-                {
-                    int idx = order[baseIdx + bi];
-                    for (int j = 0; j < L; j++) inputData[bi * L + j] = yNorm[idx - L + j];
-                    for (int h = 0; h < H; h++) targetData[bi * H + h] = yNorm[idx + h];
-                }
-                var batchInput = new Tensor<T>(new[] { batchSize, L }, new Vector<T>(inputData));
-                var batchTarget = new Tensor<T>(new[] { batchSize, H }, new Vector<T>(targetData));
-
-                bool ran = TryFusedResidentStep(
-                    layers, batchInput, batchTarget, ForwardEnc, ComputeLoss,
-                    lr, beta1, beta2, epsilon, weightDecay, out T stepLoss);
-                if (!ran)
-                {
-                    if (!fusedEngaged) return false;
-                    continue;
-                }
-                fusedEngaged = true;
-                double stepLossD = Convert.ToDouble(stepLoss);
-                if (double.IsNaN(stepLossD) || double.IsInfinity(stepLossD))
-                {
-                    diverged = true;
-                    break;
-                }
-                if (double.IsNaN(firstStepLoss)) firstStepLoss = stepLossD;
-                else if (stepLossD > 1e3 && stepLossD > firstStepLoss * 1e3)
-                {
-                    diverged = true;
-                    break;
-                }
-            }
-        }
-
-        if (fusedEngaged)
-        {
-            double postMse = ValidationMseGpu(valid, yNorm, L, H);
-            bool improved = !double.IsNaN(postMse) && !double.IsInfinity(postMse)
-                            && postMse < preMse * 0.98;
-            if (diverged || !improved)
-            {
-                // Reinit encoder/decoder/distilling so eager fallback starts clean.
-                InitializeModel();
-                return false;
-            }
-        }
-        return fusedEngaged;
-    }
-
     public override Vector<T> Predict(Matrix<T> input)
     {
         if (TryPredictFromTimeIndexCalibration(input, _trainingSeries, out var calibratedPredictions))
@@ -581,24 +405,60 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         // forecast from real history, NOT the removed shortcut that returned the
         // memorized target value.
         bool inSample = _trainingSeries.Length == n && n > 0;
+        var windows = new Vector<T>[n];
         for (int i = 0; i < n; i++)
         {
-            if (inSample)
+            int w = inSample ? Math.Min(lookback, i) : 0;
+            if (w > 0)
             {
-                int w = Math.Min(lookback, i);
-                if (w > 0)
-                {
-                    var window = new Vector<T>(w);
-                    for (int t = 0; t < w; t++) window[t] = _trainingSeries[i - w + t];
-                    var fc = ForwardEngine(window);
-                    predictions[i] = fc.Length > 0 ? fc[0] : _numOps.Zero;
-                    continue;
-                }
+                var window = new Vector<T>(w);
+                for (int t = 0; t < w; t++) window[t] = _trainingSeries[i - w + t];
+                windows[i] = window;
             }
-            predictions[i] = PredictSingle(input.GetRow(i));
+            else
+            {
+                windows[i] = input.GetRow(i);
+            }
         }
+
+        // One batched forward per (effective window length, chunk) instead of one ForwardEngine call per row:
+        // AiModelBuilder predicts the whole dataset after fitting, which made per-row inference a large share of a
+        // production fit. ForwardEngine reads the first min(length, LookbackWindow) values of a window, and every op of
+        // ForwardBatch acts on each batch row independently, so the values match PredictSingle row by row
+        // (InformerBatchedPredictTests). Empty windows keep the per-row path.
+        foreach (var group in Enumerable.Range(0, n)
+                     .Where(i => windows[i].Length > 0)
+                     .GroupBy(i => Math.Min(windows[i].Length, lookback)))
+        {
+            int len = group.Key;
+            var all = group.ToArray();
+            for (int c0 = 0; c0 < all.Length; c0 += PredictChunkRows)
+            {
+                int rows = Math.Min(PredictChunkRows, all.Length - c0);
+                // A nested arena per chunk: its scratch is recycled when the chunk ends without touching any arena
+                // the caller has open (whose tensors may still be live).
+                using var chunkArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
+                var data = new T[rows * len];
+                for (int r = 0; r < rows; r++)
+                {
+                    var window = windows[all[c0 + r]];
+                    for (int t = 0; t < len; t++)
+                        data[r * len + t] = _numOps.Divide(_numOps.Subtract(window[t], _normMean), _normStd);
+                }
+                var outBH = ForwardBatch(new Tensor<T>(new[] { rows, len }, new Vector<T>(data)), rows, len); // [rows, H]
+                var outSpan = outBH.IsContiguous ? outBH.AsSpan() : outBH.Contiguous().AsSpan();
+                int horizon = _options.ForecastHorizon;
+                for (int r = 0; r < rows; r++)
+                    predictions[all[c0 + r]] = _numOps.Add(_numOps.Multiply(outSpan[r * horizon], _normStd), _normMean);
+            }
+        }
+        for (int i = 0; i < n; i++)
+            if (windows[i].Length == 0) predictions[i] = PredictSingle(windows[i]);
         return predictions;
     }
+
+    // Rows per batched predict forward; bounds activation memory (rows x length x 4·EmbeddingDim in the FFN).
+    private const int PredictChunkRows = 256;
     // ── Batched IEngine forward (automatic GradientTape) ────────────────────────────
     // Standard multi-head scaled-dot-product transformer expressed entirely with batched
     // Engine.* tensor ops, so a GradientTape differentiates it automatically (no hand-rolled
@@ -1501,6 +1361,7 @@ internal partial class InformerDecoderLayerTensor<T> : NeuralNetworks.Layers.Lay
     private  Tensor<T> _crossOutputProj;
 
     // FFN
+    [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _ffn1;
     [AiDotNet.Attributes.TrainableParameter]
     private  Tensor<T> _ffn1Bias;

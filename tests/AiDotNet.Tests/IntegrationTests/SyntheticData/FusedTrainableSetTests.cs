@@ -131,9 +131,9 @@ public class FusedTrainableSetTests
     private static long FusedOptimizerStepCount(TabDDPMGenerator<float> generator)
     {
         var flags = BindingFlags.NonPublic | BindingFlags.Instance;
-        var step = typeof(TabDDPMGenerator<float>).GetField("_fusedMultiSlotStep", flags)?.GetValue(generator);
-        var plan = step?.GetType().GetField("_plan", flags)?.GetValue(step);
-        var counter = plan?.GetType().GetField("_optimizerStep", flags)?.GetValue(plan);
-        return counter is null ? -1 : Convert.ToInt64(counter);
+        // The steps the generator's retained multi-slot step has run on the fused plan (-1 before it exists).
+        var step = typeof(TabDDPMGenerator<float>).GetField("_fusedMultiSlotStep", flags)?.GetValue(generator)
+            as AiDotNet.Training.MultiSlotFusedStep<float>;
+        return step is null ? -1 : step.FusedStepCount;
     }
 }

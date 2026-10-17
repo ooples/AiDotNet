@@ -343,30 +343,6 @@ public partial class BiomedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVis
         return base.PredictCore(current);
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            // PatchEmbeddingLayer is now Layers[0]; the tape-based training
-            // loop walks the full vision graph (NCHW image → patch-embed →
-            // transformer → projection) end-to-end so gradients flow back
-            // through the patch-embed conv too. Pass our paper-faithful
-            // AdamW optimizer (β₂=0.98, weight_decay=0.2, lr=5e-4) instead
-            // of the base class's default Adam (lr=1e-3) — see ctor for why.
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            // try/finally so a TrainWithTape throw doesn't leave the model
-            // stuck in training mode.
-            SetTrainingMode(false);
-        }
-    }
-
     // _textEncoderLayers is discovered as a layer collection and surfaced automatically.
     // Removed under AIDN082.
 

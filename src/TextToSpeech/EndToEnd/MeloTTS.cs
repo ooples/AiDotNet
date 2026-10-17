@@ -200,23 +200,6 @@ public partial class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <inheritdoc />
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
         => _optimizer ?? base.GetOrCreateBaseOptimizer();
 

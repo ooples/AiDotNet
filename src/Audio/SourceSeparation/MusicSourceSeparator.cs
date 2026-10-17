@@ -739,29 +739,6 @@ public partial class MusicSourceSeparator<T> : AudioNeuralNetworkBase<T>, IMusic
         return HasBoundDemucsTopology ? DemucsForward(input) : base.ForwardForTraining(input);
     }
 
-    /// <summary>
-    /// Trains the model on mixed audio and ground truth stems.
-    /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (!_useNativeMode)
-        {
-            throw new InvalidOperationException(
-                "Training is not supported in ONNX inference mode. " +
-                "Create the model with NeuralNetworkArchitecture for training.");
-        }
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being

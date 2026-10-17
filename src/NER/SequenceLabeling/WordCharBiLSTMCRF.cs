@@ -316,13 +316,7 @@ public partial class WordCharBiLSTMCRF<T> : SequenceLabelingNERBase<T>
     }
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (_optimizer is null)
-            throw new InvalidOperationException("Optimizer is not initialized. Cannot train without an optimizer.");
-        RunCrfAwareTrainStep(input, expected, _options.UseCRF, _optimizer);
-    }
-
+    protected override bool? CrfTraining => _options.UseCRF;
     /// <inheritdoc/>
     /// <remarks>
     /// Pads or truncates the packed index input along the token axis to <c>MaxSequenceLength</c>, the

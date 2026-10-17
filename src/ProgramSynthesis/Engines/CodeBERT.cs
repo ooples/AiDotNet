@@ -65,7 +65,7 @@ namespace AiDotNet.ProgramSynthesis.Engines;
                         + "list is the author Adam Roberts. This model defaults to AdamW; declaring the "
                         + "paper's Adam is not a downgrade here, because with no weight decay stated the "
                         + "two are numerically identical.")]
-public class CodeBERT<T> : CodeModelBase<T>
+public partial class CodeBERT<T> : CodeModelBase<T>
 {
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
@@ -174,34 +174,6 @@ public class CodeBERT<T> : CodeModelBase<T>
         CodeTransformerLayerFactory.AddEmbeddingAndPosition(Layers, CodeArchitecture);
         CodeTransformerLayerFactory.AddEncoderBlocks(Layers, CodeArchitecture);
         CodeTransformerLayerFactory.AddOutputProjection(Layers, CodeArchitecture);
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // Empty body was a stub from the initial-scaffolding commit and is the
-        // direct cause of the Training_ShouldChangeParameters /
-        // GradientFlow_ShouldBeNonZeroAndFinite failures — Train returning
-        // without computing gradients or stepping the optimizer means
-        // parameters never move, gradient probes read all zeros, and the
-        // generated training-invariant suite tears down with "No parameters
-        // changed after training — gradients may all be zero." Route through
-        // TrainWithTape exactly like every other transformer-stack model in
-        // this project (CodeBERT is a BERT-class encoder per Feng et al. 2020
-        // "CodeBERT: A Pre-Trained Model for Programming and Natural
-        // Languages", arXiv:2002.08155; the trainable parameters are the
-        // embedding / position / transformer-encoder / output-projection
-        // weights the LayerFactory just stacked into Layers, and backprop
-        // via the tape is the same path BERT / Transformer / RoBERTa models
-        // use elsewhere in the codebase).
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
     }
 
     public override ModelMetadata<T> GetModelMetadata()

@@ -279,60 +279,75 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
         Tensor<T> targetImages)
     {
         if (inputImages is null)
-        {
             throw new ArgumentNullException(nameof(inputImages), "Input images tensor cannot be null.");
-        }
-
         if (targetImages is null)
-        {
             throw new ArgumentNullException(nameof(targetImages), "Target images tensor cannot be null.");
-        }
-
-        Generator.SetTrainingMode(true);
-        Discriminator.SetTrainingMode(true);
-
-        // ONE generator forward, recorded on the generator's tape: the pattern the base GAN uses (#1390).
-        // The discriminator trains on a detached copy, so its step cannot reach the generator. The
-        // generator step then scores the tracked original through the frozen discriminator.
-        using var generatorTape = new GradientTape<T>();
-        var fakeTracked = Generator.ForwardForTraining(inputImages);
-        var fakeImages = new Tensor<T>(fakeTracked.Shape.ToArray());
-        fakeTracked.AsSpan().CopyTo(fakeImages.AsWritableSpan());
-
-        // ----- Discriminator: maximise L_cGAN(G, D) (Isola et al. 2017, eq. 1) -----
-        // "We divide the objective by 2 while optimizing D, which slows down the rate at which D learns
-        // relative to G" (section 3.3). The loss is averaged over every output, which is the PatchGAN
-        // average over patches when the discriminator emits a map.
-        T discriminatorLoss;
-        using (var discriminatorTape = new GradientTape<T>())
-        {
-            var realScores = Discriminator.ForwardForTraining(ConcatenateImages(inputImages, targetImages));
-            var fakeScores = Discriminator.ForwardForTraining(ConcatenateImages(inputImages, fakeImages));
-            var discriminatorObjective = Engine.TensorMultiplyScalar(
-                Engine.TensorAdd(
-                    Discriminator.BinaryCrossEntropyOnTape(realScores, targetIsReal: true),
-                    Discriminator.BinaryCrossEntropyOnTape(fakeScores, targetIsReal: false)),
-                NumOps.FromDouble(0.5));
-            discriminatorLoss = StepOnTape(discriminatorTape, discriminatorObjective, Discriminator,
-                _discriminatorOptimizer);
-        }
-
-        // ----- Generator: L_cGAN + lambda * L_L1 (eq. 4) -----
-        // The adversarial term is the one the paper trains: maximise log D(x, G(x)) rather than minimise
-        // log(1 - D(x, G(x))). The L1 term is the mean absolute error to the target.
-        var generatorScores = Discriminator.ForwardFrozenOnTape(ConcatenateImages(inputImages, fakeTracked));
-        var adversarialLoss = Discriminator.BinaryCrossEntropyOnTape(generatorScores, targetIsReal: true);
-        var l1Tensor = Engine.ReduceMean(
-            Engine.TensorAbs(Engine.TensorSubtract(fakeTracked, targetImages)),
-            Enumerable.Range(0, fakeTracked.Shape.Length).ToArray(),
-            keepDims: false);
-        var generatorObjective = Engine.TensorAdd(adversarialLoss, Engine.TensorMultiplyScalar(l1Tensor, NumOps.FromDouble(_l1Lambda)));
-        T generatorLoss = StepOnTape(generatorTape, generatorObjective, Generator, _generatorOptimizer);
-        T l1Loss = l1Tensor.Length > 0 ? l1Tensor[0] : NumOps.Zero;
-
-        return (discriminatorLoss, generatorLoss, l1Loss);
+        Train(inputImages, targetImages);
+        return (_lastDiscriminatorLoss, _lastGeneratorLoss, _lastL1Loss);
     }
 
+    private T _lastDiscriminatorLoss = MathHelper.GetNumericOperations<T>().Zero;
+    private T _lastGeneratorLoss = MathHelper.GetNumericOperations<T>().Zero;
+    private T _lastL1Loss = MathHelper.GetNumericOperations<T>().Zero;
+
+    /// <inheritdoc/>
+    /// <remarks>Source and target images get a batch axis when they have none.</remarks>
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
+        => (WithBatchAxis(input, Generator.Architecture.InputType),
+            target is null ? null : WithBatchAxis(target, Generator.Architecture.InputType));
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The pix2pix step (Isola et al. 2017): the PatchGAN discriminator on (source, target) against (source, generated),
+    /// halved, then the generator on the adversarial loss plus <c>lambda</c> times the L1 distance to the target, with the
+    /// discriminator frozen. Each network steps on its own fused session.
+    /// </remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> target)
+    {
+        var (inputImages, preparedTarget) = PrepareTrainingPair(input, target, 0);
+        var targetImages = preparedTarget ?? target;
+        Generator.SetTrainingMode(true);
+        Discriminator.SetTrainingMode(true);
+        var fakeImages = Generator.ForwardForTrainingDetached(inputImages);
+        var l1Tensor = MeanAbsoluteError(fakeImages, targetImages);
+        _lastL1Loss = l1Tensor.Length > 0 ? l1Tensor[0] : NumOps.Zero;
+        return new[]
+        {
+            new Training.TrainingObjective<T>(
+                new[] { inputImages, targetImages, fakeImages },
+                data =>
+                {
+                    var realScores = Discriminator.ForwardForTraining(ConcatenateImages(data[0], data[1]));
+                    var fakeScores = Discriminator.ForwardForTraining(ConcatenateImages(data[0], data[2]));
+                    return Engine.TensorMultiplyScalar(
+                        Engine.TensorAdd(
+                            Discriminator.BinaryCrossEntropyOnTape(realScores, targetIsReal: true),
+                            Discriminator.BinaryCrossEntropyOnTape(fakeScores, targetIsReal: false)),
+                        NumOps.FromDouble(0.5));
+                })
+            {
+                Network = Discriminator,
+                Optimizer = _discriminatorOptimizer,
+                OnLoss = loss => _lastDiscriminatorLoss = loss,
+            },
+            new Training.TrainingObjective<T>(
+                new[] { inputImages, targetImages },
+                data =>
+                {
+                    var generated = Generator.ForwardForTraining(data[0]);
+                    var adversarialLoss = Discriminator.BinaryCrossEntropyOnTape(
+                        Discriminator.ForwardFrozenOnTape(ConcatenateImages(data[0], generated)), targetIsReal: true);
+                    return Engine.TensorAdd(
+                        adversarialLoss,
+                        Engine.TensorMultiplyScalar(MeanAbsoluteError(generated, data[1]), NumOps.FromDouble(_l1Lambda)));
+                })
+            {
+                Network = Generator,
+                Optimizer = _generatorOptimizer,
+                OnLoss = loss => { _lastGeneratorLoss = loss; LastLoss = loss; },
+            },
+        };
+    }
     /// <summary>
     /// Translates input images to output images.
     /// </summary>
@@ -344,6 +359,12 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
         return Generator.Predict(inputImages);
     }
 
+    /// <summary>The mean absolute error between two images, recorded for the step.</summary>
+    private Tensor<T> MeanAbsoluteError(Tensor<T> images, Tensor<T> targets)
+        => Engine.ReduceMean(
+            Engine.TensorAbs(Engine.TensorSubtract(images, targets)),
+            Enumerable.Range(0, images.Shape.Length).ToArray(),
+            keepDims: false);
     /// <summary>
     /// Pairs each input image with the image being judged, along the channel axis for spatial tensors
     /// and the feature axis otherwise: the conditional discriminator's input (Isola et al. 2017).
@@ -432,15 +453,6 @@ public partial class Pix2Pix<T> : ImageTranslationModelLayoutBase<T>
             return gpuResult;
 
         return Generator.Predict(input);
-    }
-
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // Source and target share the generator's image layout.
-        TrainStep(
-            WithBatchAxis(input, Generator.Architecture.InputType),
-            WithBatchAxis(expectedOutput, Generator.Architecture.InputType));
     }
 
     /// <inheritdoc/>

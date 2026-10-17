@@ -491,17 +491,17 @@ internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private Tensor<T> _logVarBias;    // [latentDim]
 
     // Gradient accumulators
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T> _weightsGrad;
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T> _biasGrad;
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T> _meanWeightsGrad;
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T> _meanBiasGrad;
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T> _logVarWeightsGrad;
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T> _logVarBiasGrad;
 
     public override bool SupportsTraining => true;
@@ -615,6 +615,7 @@ internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         _meanBiasGrad = new Tensor<T>(_meanBiasGrad._shape);
         _logVarWeightsGrad = new Tensor<T>(_logVarWeightsGrad._shape);
         _logVarBiasGrad = new Tensor<T>(_logVarBiasGrad._shape);
+        ClearScatteredParameterGradients();
     }
 
     public void ApplyGradients(T learningRate, int batchSize)
@@ -677,6 +678,31 @@ internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         _weightsGrad = Engine.TensorAdd(
             _weightsGrad, Engine.TensorMatMul(dPre.Reshape(new[] { _hiddenSize, 1 }), inputRow));
         _biasGrad = Engine.TensorAdd(_biasGrad, dPre);
+
+        PublishGradients(_weightsGrad, _biasGrad, _meanWeightsGrad, _meanBiasGrad, _logVarWeightsGrad, _logVarBiasGrad);
+    }
+
+    /// <summary>
+    /// Publishes the accumulated gradients on the layer's gradient surface, so
+    /// <see cref="NeuralNetworks.Layers.LayerBase{T}.GetParameterGradients"/> reports what this
+    /// hand-written backward computed instead of an empty "never computed" vector.
+    /// </summary>
+    /// <remarks>
+    /// This layer trains outside the autodiff tape, so no <c>ScatterParameterGradients</c> call
+    /// ever reaches it. The order matches the parameter order of the trainable tensors.
+    /// </remarks>
+    private void PublishGradients(params Tensor<T>[] gradients)
+    {
+        int total = 0;
+        foreach (var gradient in gradients) total += gradient.Length;
+        var flat = new T[total];
+        int offset = 0;
+        foreach (var gradient in gradients)
+        {
+            gradient.Data.Span.CopyTo(flat.AsSpan(offset, gradient.Length));
+            offset += gradient.Length;
+        }
+        ParameterGradients = new Vector<T>(flat);
     }
 
     private void ApplyGradientToTensor(Tensor<T> tensor, Tensor<T> grad, T learningRate, T batchSize)
@@ -700,14 +726,6 @@ internal partial class LSTMEncoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         writer.Write(tensor.Length);
         for (int i = 0; i < tensor.Length; i++)
             writer.Write(NumOps.ToDouble(tensor[i]));
-    }
-
-    public override Vector<T> GetParameterGradients()
-    {
-        var g = new List<T>();
-        foreach (var t in new[] { _weightsGrad, _biasGrad, _meanWeightsGrad, _meanBiasGrad, _logVarWeightsGrad, _logVarBiasGrad })
-            for (int i = 0; i < t.Length; i++) g.Add(t[i]);
-        return new Vector<T>(g.ToArray());
     }
 
     private Tensor<T> ReadTensor(BinaryReader reader)
@@ -774,12 +792,13 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     private Tensor<T> _outputBias;    // [outputSize]
 
     // Gradient accumulators
+    [Scratch]
     private Tensor<T> _weightsGrad;
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T> _biasGrad;
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T> _outputWeightsGrad;
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T> _outputBiasGrad;
 
     [Scratch]
@@ -878,6 +897,7 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         _biasGrad = new Tensor<T>(_biasGrad._shape);
         _outputWeightsGrad = new Tensor<T>(_outputWeightsGrad._shape);
         _outputBiasGrad = new Tensor<T>(_outputBiasGrad._shape);
+        ClearScatteredParameterGradients();
     }
 
     public void ApplyGradients(T learningRate, int batchSize)
@@ -931,8 +951,33 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         _weightsGrad = Engine.TensorAdd(_weightsGrad, Engine.TensorMatMul(dPreCol, latentRow));
         _biasGrad = Engine.TensorAdd(_biasGrad, dPre);
 
+        PublishGradients(_weightsGrad, _biasGrad, _outputWeightsGrad, _outputBiasGrad);
+
         return Engine.TensorMatMul(Engine.TensorTranspose(_weights), dPreCol)
             .Reshape(new[] { _latentDim });                                            // dL/dz, [L]
+    }
+
+    /// <summary>
+    /// Publishes the accumulated gradients on the layer's gradient surface, so
+    /// <see cref="NeuralNetworks.Layers.LayerBase{T}.GetParameterGradients"/> reports what this
+    /// hand-written backward computed instead of an empty "never computed" vector.
+    /// </summary>
+    /// <remarks>
+    /// This layer trains outside the autodiff tape, so no <c>ScatterParameterGradients</c> call
+    /// ever reaches it. The order matches the parameter order of the trainable tensors.
+    /// </remarks>
+    private void PublishGradients(params Tensor<T>[] gradients)
+    {
+        int total = 0;
+        foreach (var gradient in gradients) total += gradient.Length;
+        var flat = new T[total];
+        int offset = 0;
+        foreach (var gradient in gradients)
+        {
+            gradient.Data.Span.CopyTo(flat.AsSpan(offset, gradient.Length));
+            offset += gradient.Length;
+        }
+        ParameterGradients = new Vector<T>(flat);
     }
 
     private void ApplyGradientToTensor(Tensor<T> tensor, Tensor<T> grad, T learningRate, T batchSize)
@@ -975,11 +1020,4 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
         return tensor;
     }
 
-    public override Vector<T> GetParameterGradients()
-    {
-        var g = new List<T>();
-        foreach (var t in new[] { _weightsGrad, _biasGrad, _outputWeightsGrad, _outputBiasGrad })
-            for (int i = 0; i < t.Length; i++) g.Add(t[i]);
-        return new Vector<T>(g.ToArray());
-    }
 }

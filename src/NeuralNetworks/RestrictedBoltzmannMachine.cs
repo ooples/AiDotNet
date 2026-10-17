@@ -820,7 +820,7 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
     /// learn the structure of the input data on their own.
     /// </para>
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // For RBMs, we ignore expectedOutput as they are unsupervised models
 
@@ -976,6 +976,8 @@ public partial class RestrictedBoltzmannMachine<T> : VectorModelLayoutBase<T>, I
 
         // Calculate and set the reconstruction error as the loss
         LastLoss = ComputeReconstructionError(batchInput);
+
+        return true;
     }
 
     /// <summary>

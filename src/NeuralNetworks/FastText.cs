@@ -251,22 +251,6 @@ namespace AiDotNet.NeuralNetworks
         /// </summary>
         protected override Tensor<T> PredictEager(Tensor<T> input) => Forward(input);
 
-        /// <summary>
-        /// Trains the model on a single step of data using standard backpropagation.
-        /// </summary>
-        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-        {
-            SetTrainingMode(true);
-            try
-            {
-                TrainWithTape(input, expectedOutput, _optimizer);
-            }
-            finally
-            {
-                SetTrainingMode(false);
-            }
-        }
-
         private void UpdateParameters(List<Tensor<T>> gradients)
         {
             ClipGradients(gradients);

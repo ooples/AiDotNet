@@ -327,26 +327,6 @@ public partial class ParallelStreamsLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Collects parameter gradients from all layers in both streams.
-    /// </summary>
-    /// <returns>A vector of gradients ordered the same as <see cref="GetParameters"/>:
-    /// Stream A gradients first, then Stream B gradients.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> After the backward pass computes how much each parameter contributed
-    /// to the loss, this method collects those gradient values. The optimizer uses these to
-    /// decide how to adjust each parameter.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        var parts = new List<Vector<T>>();
-        foreach (var layer in _streamA) parts.Add(layer.GetParameterGradients());
-        foreach (var layer in _streamB) parts.Add(layer.GetParameterGradients());
-        return Vector<T>.Concatenate(parts.ToArray());
-    }
-
-    /// <summary>
     /// Updates parameters in both streams using the given learning rate.
     /// </summary>
     /// <param name="learningRate">The step size for parameter updates. Smaller values mean

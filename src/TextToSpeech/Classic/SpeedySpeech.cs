@@ -236,28 +236,6 @@ public partial class SpeedySpeech<T> : TtsModelBase<T>, IAcousticModel<T>
         return c;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            // Pass the model's configured optimizer. The 2-arg TrainWithTape resolves
-            // optimizer: null and falls back to NeuralNetworkBase's lazily-created DEFAULT Adam at
-            // its global 1e-3 rate, so _optimizer — including any instance the CALLER supplied to
-            // the constructor — was never used for a single step. Measured effect on the generated
-            // Q-S shard: LossStrictlyDecreasesOnMemorizationTask went step 1 = 10.548724 ->
-            // step 2 = 27.990997, a 2.65x overshoot on the first update, because the model was
-            // running at 10x its own configured rate.
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being

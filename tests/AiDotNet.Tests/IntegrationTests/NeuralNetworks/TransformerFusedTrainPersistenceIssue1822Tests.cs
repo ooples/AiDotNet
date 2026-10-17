@@ -168,4 +168,61 @@ public class TransformerFusedTrainPersistenceIssue1822Tests
         Assert.True(nllAfter < nllBefore - 0.25,
             $"Predict loss did not improve over the untrained baseline ({nllBefore:F4} -> {nllAfter:F4}) (#1822).");
     }
+
+    /// <summary>
+    /// After the fused plan has been verified, the session re-checks it every
+    /// FusedTrainingSession.PersistenceRecheckInterval steps. Replacing the model's parameters mid-run
+    /// (<see cref="NeuralNetworkBase{T}.SetParameters"/>) must not leave training updating a plan the model no
+    /// longer reads: across several re-check intervals the parameters set must keep moving and the model must
+    /// learn from them.
+    /// </summary>
+    [Fact]
+    public void Transformer_ParametersReplacedMidRun_KeepTraining()
+    {
+        var model = new Transformer<float>(
+            MakeArch(),
+            lossFunction: new CategoricalCrossEntropyLoss<float>(),
+            optimizer: new AdamOptimizer<float, Tensor<float>, Tensor<float>>(
+                null,
+                new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+                {
+                    InitialLearningRate = 3e-3,
+                    LearningRateScheduler = new AiDotNet.LearningRateSchedulers.ConstantLRScheduler(3e-3),
+                    UseAdaptiveLearningRate = false,
+                }));
+        var (x, y) = MakeData();
+        model.SetTrainingMode(false);
+        _ = model.Predict(x);
+        model.SetTrainingMode(true);
+
+        // Long enough for the plan to be committed, verified and re-checked at least once.
+        for (int step = 0; step < 40; step++)
+            model.Train(x, y);
+
+        // Back to the initial-scale weights: a fresh copy of the trained values, scaled so the model has to relearn.
+        var replaced = model.GetParameters();
+        var reset = new Vector<float>(replaced.Length);
+        for (int i = 0; i < replaced.Length; i++) reset[i] = replaced[i] * 0.5f;
+        model.SetParameters(reset);
+        model.SetTrainingMode(false);
+        double nllAtReset = PredictNll(model, x, y);
+        model.SetTrainingMode(true);
+
+        for (int step = 0; step < 80; step++)
+            model.Train(x, y);
+
+        model.SetTrainingMode(false);
+        var after = model.GetParameters();
+        double maxAbsDelta = 0;
+        for (int i = 0; i < reset.Length; i++)
+            maxAbsDelta = Math.Max(maxAbsDelta, Math.Abs((double)after[i] - (double)reset[i]));
+        double nllAfter = PredictNll(model, x, y);
+        _output.WriteLine($"after reset: maxAbsDelta={maxAbsDelta:E3}  PredictNll {nllAtReset:F4} -> {nllAfter:F4}");
+
+        Assert.True(maxAbsDelta > 1e-4,
+            $"training after SetParameters did not move the parameters (maxAbsDelta={maxAbsDelta:E3}): the fused plan "
+            + "kept training tensors the model no longer reads (#1822).");
+        Assert.True(nllAfter < nllAtReset - 0.1,
+            $"Predict loss did not improve after SetParameters ({nllAtReset:F4} -> {nllAfter:F4}) (#1822).");
+    }
 }

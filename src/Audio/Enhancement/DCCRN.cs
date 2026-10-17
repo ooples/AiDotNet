@@ -563,26 +563,13 @@ public partial class DCCRN<T> : AudioNeuralNetworkBase<T>, IAudioEnhancer<T>
     }
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <remarks>The model trains on STFTs: the noisy and clean waveforms are transformed, and the clean one is cropped to the noisy one's frames.</remarks>
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
     {
-        if (!SupportsTraining)
-            throw new InvalidOperationException("Cannot train in ONNX mode.");
-
-        // Tape-transparent training. The loss lives in the STFT domain (enhanced STFT vs clean STFT), so
-        // the STFT front-end only produces the constant input/target tensors — it needs no gradient — and
-        // the whole ENHANCEMENT graph (ForwardNative = encoder/LSTM/decoder/mask/apply, all Engine ops)
-        // is what the tape records. TrainWithTape runs ForwardForTraining(noisyStft), compares to
-        // cleanStft, backpropagates, and steps the optimizer over every layer. This replaces the old body
-        // that computed a gradient it never applied (it only called _optimizer.UpdateParameters(Layers)
-        // with no backward pass), so DCCRN previously never actually trained.
         var noisyStft = PreprocessAudio(input);
-        var cleanStft = PreprocessAudio(expectedOutput);
-        // The enhanced STFT (prediction) has the noisy input's frame count; align the clean target to the
-        // same [F, T] so the STFT-domain loss compares matching representations. input and expectedOutput
-        // can differ slightly in length (the generated harness does not guarantee equal-length pairs), and
-        // MeanSquaredErrorLoss.ComputeTapeLoss requires an exact shape match.
-        cleanStft = MatchSpatial(cleanStft, noisyStft.Shape[2], noisyStft.Shape[3]);
-        TrainWithTape(noisyStft, cleanStft, _optimizer);
+        if (target is null) return (noisyStft, null);
+        var cleanStft = PreprocessAudio(target);
+        return (noisyStft, MatchSpatial(cleanStft, noisyStft.Shape[2], noisyStft.Shape[3]));
     }
 
     /// <summary>

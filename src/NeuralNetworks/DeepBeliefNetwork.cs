@@ -467,47 +467,6 @@ public partial class DeepBeliefNetwork<T> : VectorModelLayoutBase<T>
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
-    /// Performs supervised fine-tuning of the Deep Belief Network after pre-training.
-    /// </summary>
-    /// <param name="input">The input training data.</param>
-    /// <param name="expectedOutput">The expected output for the given input data.</param>
-    /// <remarks>
-    /// <para>
-    /// This method implements the supervised fine-tuning phase of training a Deep Belief Network.
-    /// After the unsupervised pre-training of individual RBM layers, this method uses backpropagation
-    /// and gradient descent to fine-tune the entire network for a specific task. This phase helps the
-    /// network adapt its pre-trained features to perform well on the specific supervised learning task.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method fine-tunes the entire network for a specific task.
-    /// 
-    /// After pre-training each layer individually:
-    /// - We now train the entire network end-to-end
-    /// - We use labeled data (inputs with known correct outputs)
-    /// - The network compares its predictions with the expected outputs
-    /// - It adjusts its parameters to make its predictions more accurate
-    /// 
-    /// Think of it like:
-    /// - Pre-training: Teaching general pattern recognition (like learning to see)
-    /// - Fine-tuning: Teaching a specific task using those patterns (like identifying specific objects)
-    /// 
-    /// This two-phase approach often works better than training from scratch, especially
-    /// when you don't have a lot of labeled examples.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        foreach (var layer in Layers)
-            layer.SetTrainingMode(true);
-
-        TrainWithTape(input, expectedOutput, _optimizer);
-
-        foreach (var layer in Layers)
-            layer.SetTrainingMode(false);
-        SetTrainingMode(false);
-    }
-
-    /// <summary>
     /// Greedy layer-wise pre-training of the stacked RBMs via Contrastive
     /// Divergence per Hinton 2006 ("A fast learning algorithm for deep
     /// belief nets") and Hinton &amp; Salakhutdinov 2006 ("Reducing the

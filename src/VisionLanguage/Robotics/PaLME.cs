@@ -405,24 +405,6 @@ public partial class PaLME<T> : VisionLanguageModelBase<T>, IVisionLanguageActio
         return pooled;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            // Use the optimizer selected by the public constructor. Falling back to
-            // the two-argument overload silently ignored both a caller-supplied
-            // optimizer and PaLMEOptions' training hyperparameters.
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <summary>
     /// Override the tape-driven training-mode forward to inject the same patch
     /// embedding + NCHW→BSC reshape Predict applies. TrainWithTape iterates the

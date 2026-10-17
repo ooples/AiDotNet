@@ -317,22 +317,8 @@ public partial class LSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         }
     }
 
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
-        if (_optimizer is null) throw new InvalidOperationException("Optimizer is not initialized.");
-        // Delegate to the shared CRF-aware training step on SequenceLabelingNERBase
-        // (the same path BiLSTMCRF / CNNBiLSTMCRF use). With a CRF in the stack this
-        // trains against the CRF negative log-likelihood (log-partition − gold-path
-        // score) — the objective from Lample et al. 2016 — instead of per-token
-        // cross-entropy on the raw emissions. It also preprocesses the tokens AND the
-        // gold labels to a consistent length, so the emission/label shapes always match.
-        // The previous direct TrainWithTape call optimized the wrong objective (which
-        // could increase loss with more steps) and skipped label preprocessing.
-        RunCrfAwareTrainStep(input, expected, _options.UseCRF, _optimizer);
-    }
-
+    /// <inheritdoc/>
+    protected override bool? CrfTraining => _options.UseCRF;
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being
