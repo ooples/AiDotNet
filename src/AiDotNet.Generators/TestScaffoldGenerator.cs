@@ -9763,11 +9763,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumCodebooks = 3, CoarseCodebooks = 1, CodebookSize = 16, ModelDim = 16, NumLayers = 1, NumHeads = 2, " +
                     "KeyValueDim = 8, FeedForwardDim = 32, DropoutRate = 0.0, FineCropSeconds = 0.2, LearningRate = 3e-3, Seed = 42, " +
                     "SoundStream = new AiDotNet.Audio.Generation.SoundStreamOptions { SampleRate = 16000, Filters = 4, " +
-                    // KMeansIterations = 0: AudioLM's codec is a pretrained SoundStream, whose codebooks are fitted; an
-                    // untrained one's are zero until k-means runs on a training batch, so every recording would encode to
-                    // code 0 and two targets would carry the same codes. Random codebooks stand in for fitted ones.
-                    "Dimension = 8, Ratios = [8, 5, 5, 2], NumQuantizers = 3, CodebookSize = 16, TargetBandwidthKbps = 0.48, " +
-                    "KMeansIterations = 0 } })";
+                    // The untrained smoke codec's codebooks are fitted by k-means from the first recording AudioLM encodes
+                    // (AudioLM.CodesOf), as SoundStream's first training batch would fit them, so recordings carry codes
+                    // that differ with their content.
+                    "Dimension = 8, Ratios = [8, 5, 5, 2], NumQuantizers = 3, CodebookSize = 16, TargetBandwidthKbps = 0.48 } })";
             }
             else if (model.ClassName == "StepAudio" && model.TypeParameterCount == 1)
             {

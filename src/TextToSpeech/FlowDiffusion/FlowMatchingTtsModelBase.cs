@@ -108,6 +108,8 @@ public abstract class FlowMatchingTtsModelBase<T> : TtsModelBase<T>, ITrainingOb
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // A model of this family that declares its own objective or learning rule takes its step through it.
+        if (TryTrainDeclaredObjectives(input, expectedOutput)) return;
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         if (!HasPaperBackbone)

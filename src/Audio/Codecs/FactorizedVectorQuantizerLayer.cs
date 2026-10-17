@@ -26,6 +26,14 @@ public interface IResidualVectorQuantizer<T>
 
     /// <summary>The commitment loss of the last training forward (a tape-connected scalar), or null.</summary>
     Tensor<T>? CommitmentLoss { get; }
+
+    /// <summary>Whether every codebook has been fitted (by its data-dependent initialization or a load); a quantizer
+    /// without one is always fitted.</summary>
+    bool CodebooksInitialized { get; }
+
+    /// <summary>Fits every codebook that has never been fitted from a latent <c>[1, dim, T]</c>, as the first training
+    /// batch does, without updating fitted ones.</summary>
+    void InitializeCodebooks(Tensor<T> latent);
 }
 
 /// <summary>
@@ -47,6 +55,15 @@ public interface IResidualVectorQuantizer<T>
 [ElementWiseShape(Note = "Quantizes each time step's vector; the shape is carried through.")]
 public sealed partial class FactorizedVectorQuantizerLayer<T> : LayerBase<T>, IResidualVectorQuantizer<T>
 {
+    /// <inheritdoc />
+    /// <remarks>DAC learns its codebooks by gradient from their initialization; none waits for data.</remarks>
+    public bool CodebooksInitialized => true;
+
+    /// <inheritdoc />
+    public void InitializeCodebooks(Tensor<T> latent)
+    {
+    }
+
     private readonly int _dim, _quantizers, _bins, _codeDim;
     private readonly bool _rawLosses;
     private readonly NormedConv1DLayer<T>[] _inProjection, _outProjection;
