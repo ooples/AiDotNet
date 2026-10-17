@@ -853,9 +853,6 @@ public partial class Autoencoder<T> : VectorModelLayoutBase<T>, IAuxiliaryLossLa
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         // Process input as a tensor through the network (wrapped in the #1622 verify-then-trust
         // compiled gate; no-op unless acceleration is engaged).

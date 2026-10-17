@@ -162,20 +162,7 @@ public partial class BottleneckBlock<T> : LayerBase<T>, ILayerSerializationExtra
     [Scratch]
     private Tensor<T>? _lastPreActivation;
 
-    // GPU cached tensors for backward pass
-    [ExternalState]
-    private Tensor<T>? _gpuBn1Out;
-    [ExternalState]
-    private Tensor<T>? _gpuBn2Out;
-    [ExternalState]
-    private Tensor<T>? _gpuPreActivation;
-
     public override bool SupportsTraining => true;
-
-    /// <summary>
-    /// Gets a value indicating whether this layer has a GPU implementation.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="BottleneckBlock{T}"/> class.
@@ -423,70 +410,6 @@ public partial class BottleneckBlock<T> : LayerBase<T>, ILayerSerializationExtra
 
         // Final ReLU
         return ApplyReLU(_lastPreActivation);
-    }
-
-    /// <summary>
-    /// Performs the forward pass on GPU, keeping data GPU-resident.
-    /// </summary>
-    /// <param name="inputs">The input tensors (expects single input).</param>
-    /// <returns>The output tensor on GPU.</returns>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
-
-        var input = inputs[0];
-
-        // Mirror the lazy-init guard from Forward(): if this block's
-        // first ever execution lands on the GPU path, _hasDownsample
-        // stays at its construction default (only true when stride!=1
-        // since #7) and _downsampleConv stays null even when the
-        // channel-mismatch path was needed — silently dropping the skip
-        // branch and producing a residual add against the wrong shape.
-        // OnFirstForward resolves shapes and allocates _downsampleConv.
-        if (!IsShapeResolved) OnFirstForward(input);
-
-        // Main branch: conv1 -> bn1 -> relu -> conv2 -> bn2 -> relu -> conv3 -> bn3
-        var conv1Out = _conv1.ForwardGpu(input);
-        var bn1Out = _bn1.ForwardGpu(conv1Out);
-
-        // Cache bn1Out for backward pass (ReLU1 backward needs it)
-        _gpuBn1Out = bn1Out;
-
-        var relu1Out = gpuEngine.ReluGpu(bn1Out);
-        var conv2Out = _conv2.ForwardGpu(relu1Out);
-        var bn2Out = _bn2.ForwardGpu(conv2Out);
-
-        // Cache bn2Out for backward pass (ReLU2 backward needs it)
-        _gpuBn2Out = bn2Out;
-
-        var relu2Out = gpuEngine.ReluGpu(bn2Out);
-        var conv3Out = _conv3.ForwardGpu(relu2Out);
-        var bn3Out = _bn3.ForwardGpu(conv3Out);
-
-        // Identity/skip branch
-        Tensor<T> identity;
-        if (_hasDownsample && _downsampleConv is not null && _downsampleBn is not null)
-        {
-            var dsConvOut = _downsampleConv.ForwardGpu(input);
-            identity = _downsampleBn.ForwardGpu(dsConvOut);
-        }
-        else
-        {
-            identity = input;
-        }
-
-        // Add residual connection
-        var preActivation = gpuEngine.AddGpu(bn3Out, identity);
-
-        // Cache preActivation for backward pass (final ReLU backward needs it)
-        _gpuPreActivation = preActivation;
-
-        // Final ReLU
-        return gpuEngine.ReluGpu(preActivation);
     }
 
     /// <summary>

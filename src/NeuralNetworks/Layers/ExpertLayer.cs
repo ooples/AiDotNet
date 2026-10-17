@@ -172,13 +172,6 @@ public partial class ExpertLayer<T> : LayerBase<T>, IShapeContract
     public override bool SupportsTraining => _layers.Any(l => l.SupportsTraining);
 
     /// <summary>
-    /// Gets a value indicating whether this expert supports GPU execution.
-    /// Returns true if all contained layers support GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution =>
-        _layers.All(l => l is LayerBase<T> lb && lb.CanExecuteOnGpu);
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="ExpertLayer{T}"/> class with the specified layers.
     /// </summary>
     /// <param name="layers">The sequence of layers that make up this expert.</param>
@@ -400,92 +393,6 @@ public partial class ExpertLayer<T> : LayerBase<T>, IShapeContract
             for (int i = 0; i < outerInput.Length; i++) outerInput[i] = input._shape[i];
         }
         ResolveShapes(outerInput, runningShape);
-    }
-
-    /// <summary>
-    /// Performs the forward pass on GPU tensors by chaining through all layers.
-    /// </summary>
-    /// <param name="inputs">GPU tensor inputs.</param>
-    /// <returns>GPU tensor output after processing through all layers.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method executes the GPU forward pass by sequentially passing the input through each layer's
-    /// ForwardGpu method. If any layer doesn't support GPU execution, falls back to CPU.
-    /// </para>
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-            throw new InvalidOperationException("ForwardGpu requires a DirectGpuTensorEngine.");
-
-        // Mirror the CPU Forward's lazy-init dispatch — without this, an
-        // ExpertLayer constructed with [-1] inputShape that takes the GPU
-        // path on first use would chain into unresolved child layers and
-        // either throw or silently produce wrong output. OnFirstForward
-        // chain-resolves inner sub-layers from input.Shape; subsequent
-        // calls short-circuit via IsShapeResolved.
-        if (!IsShapeResolved) OnFirstForward(inputs[0]);
-
-        var output = inputs[0];
-
-        // Chain through each layer's ForwardGpu
-        foreach (var layer in _layers)
-        {
-            if (layer is LayerBase<T> layerBase && layerBase.CanExecuteOnGpu)
-            {
-                output = layerBase.ForwardGpu(output);
-            }
-            else
-            {
-                // Fall back to CPU for this layer
-                var cpuInput = output;
-                var cpuOutput = layer.Forward(cpuInput);
-                output = gpuEngine.UploadToGpu(cpuOutput, GpuTensorRole.Activation);
-            }
-        }
-
-        // Store pre-activation output for backpropagation
-        _lastPreActivationOutput = output;
-
-        // Apply the expert's activation function if specified
-        if (ScalarActivation != null && ScalarActivation is not IdentityActivation<T>)
-        {
-            // Apply activation on GPU if possible
-            var activationType = GetActivationType();
-            if (activationType != FusedActivationType.None)
-            {
-                output = gpuEngine.ActivationGpu(output, activationType);
-            }
-            else
-            {
-                // CPU fallback for unsupported activations
-                var cpuOutput = output;
-                var activated = ApplyActivation(cpuOutput);
-                output = gpuEngine.UploadToGpu(activated, GpuTensorRole.Activation);
-            }
-        }
-
-        return output;
-    }
-
-    /// <summary>
-    /// Gets the FusedActivationType for the expert's activation function.
-    /// </summary>
-    private FusedActivationType GetActivationType()
-    {
-        if (ScalarActivation is ReLUActivation<T>)
-            return FusedActivationType.ReLU;
-        if (ScalarActivation is TanhActivation<T>)
-            return FusedActivationType.Tanh;
-        if (ScalarActivation is SigmoidActivation<T>)
-            return FusedActivationType.Sigmoid;
-        if (ScalarActivation is GELUActivation<T>)
-            return FusedActivationType.GELU;
-        if (ScalarActivation is IdentityActivation<T>)
-            return FusedActivationType.None;
-        return FusedActivationType.None;
     }
 
 

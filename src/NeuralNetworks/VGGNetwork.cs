@@ -255,9 +255,6 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        // GPU-resident optimization: use TryForwardGpuOptimized for 10-50x speedup
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
 
         var expectedShape = Architecture.GetInputShape();

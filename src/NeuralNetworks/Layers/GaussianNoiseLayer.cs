@@ -143,41 +143,7 @@ public partial class GaussianNoiseLayer<T> : LayerBase<T>, IShapeContract
     public override bool SupportsTraining => false;
 
     /// <inheritdoc/>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <inheritdoc/>
     public override bool SupportsGpuTraining => true;
-
-    /// <inheritdoc/>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0) throw new ArgumentException("GaussianNoiseLayer requires an input tensor.");
-        var input = inputs[0];
-
-        if (IsTrainingMode)
-        {
-            if (Engine is not DirectGpuTensorEngine gpuEngine)
-                throw new InvalidOperationException("ForwardGpu requires DirectGpuTensorEngine.");
-
-            ulong seed = (ulong)DateTime.UtcNow.Ticks;
-            float meanF = Convert.ToSingle(_mean);
-            float stdDevF = Convert.ToSingle(_standardDeviation);
-
-            // Generate Gaussian noise N(mean, stdDev) directly on GPU
-            var noise = gpuEngine.RandomNormalGpu<T>(input._shape, meanF, stdDevF, seed);
-
-            var result = gpuEngine.AddGpu(input, noise);
-
-            _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-            _lastNoise = noise;
-
-            noise.Dispose();
-
-            return result;
-        }
-
-        return input;
-    }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GaussianNoiseLayer{T}"/> class.

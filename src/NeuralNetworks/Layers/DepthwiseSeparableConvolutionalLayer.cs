@@ -480,11 +480,6 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
     }
 
     /// <summary>
-    /// Gets a value indicating whether this layer supports GPU execution.
-    /// </summary>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <summary>
     /// Initializes a new instance of the <see cref="DepthwiseSeparableConvolutionalLayer{T}"/> class with the specified
     /// parameters and a scalar activation function.
     /// </summary>
@@ -991,125 +986,6 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
         }
 
         return activated;
-    }
-
-    /// <summary>
-    /// Performs a GPU-resident forward pass using fused DepthwiseConv2D + pointwise Conv2D + Bias + Activation.
-    /// </summary>
-    /// <param name="inputs">GPU-resident input tensor.</param>
-    /// <returns>GPU-resident output tensor.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This is the GPU-optimized version of the Forward method.
-    /// All data stays on the GPU throughout the computation, avoiding expensive CPU-GPU transfers.</para>
-    /// </remarks>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        if (inputs.Length == 0)
-            throw new ArgumentException("At least one input tensor is required.", nameof(inputs));
-
-        if (Engine is not DirectGpuTensorEngine gpuEngine)
-        {
-            throw new InvalidOperationException(
-                "ForwardGpu requires a DirectGpuTensorEngine. Use Forward() for CPU execution.");
-        }
-
-        var input = inputs[0];
-
-        // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
-        if (input.Shape.Length < 3)
-        {
-            throw new ArgumentException(
-                $"DepthwiseSeparableConv2D input requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
-        }
-
-        var originalInputShape = input._shape;
-        int rank = input.Shape.Length;
-        bool addedBatchDimension = false;
-
-        // Reshape input to 4D [B, C, H, W] for convolution
-        Tensor<T> input4D;
-        if (rank == 3)
-        {
-            // 3D [C, H, W] -> 4D [1, C, H, W]
-            addedBatchDimension = true;
-            input4D = input.Reshape([1, input.Shape[0], input.Shape[1], input.Shape[2]]);
-        }
-        else if (rank == 4)
-        {
-            // 4D [B, C, H, W] - no reshaping needed
-            input4D = input;
-        }
-        else
-        {
-            // Higher rank: flatten leading dimensions into batch
-            int flatBatch = 1;
-            for (int d = 0; d < rank - 3; d++)
-            {
-                flatBatch *= input.Shape[d];
-            }
-            input4D = input.Reshape([flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1]]);
-        }
-
-        // Validate input channels
-        int actualInputChannels = input4D.Shape[1];
-        if (actualInputChannels != _inputDepth)
-        {
-            throw new ArgumentException(
-                $"Expected input depth {_inputDepth}, but got {actualInputChannels}.");
-        }
-
-        // Step 1: GPU-fused depthwise convolution (no bias, no activation)
-        var depthwiseOutput = gpuEngine.DepthwiseConv2DGpu(
-            input4D,
-            _depthwiseKernels,
-            null,                    // no bias for depthwise step
-            _stride, _stride,        // strideH, strideW
-            _padding, _padding,      // padH, padW
-            FusedActivationType.None); // no activation for depthwise step
-
-        // Step 2: GPU-fused pointwise (1x1) convolution + bias + activation
-        var fusedActivation = GetFusedActivationType();
-        var result = gpuEngine.FusedConv2DGpu(
-            depthwiseOutput,
-            _pointwiseKernels,
-            _biases,
-            1, 1,                    // stride 1x1
-            0, 0,                    // no padding for 1x1 conv
-            1, 1,                    // dilation 1x1
-            fusedActivation);
-
-        // Dispose intermediate depthwise output (no longer needed)
-        depthwiseOutput.Dispose();
-
-        // Restore original shape if needed
-        if (originalInputShape.Length > 4)
-        {
-            // Restore original batch dimensions for higher-rank input
-            var outputShape = new int[originalInputShape.Length];
-            for (int d = 0; d < originalInputShape.Length - 3; d++)
-            {
-                outputShape[d] = originalInputShape[d];
-            }
-            outputShape[originalInputShape.Length - 3] = _outputDepth;
-            outputShape[originalInputShape.Length - 2] = result.Shape[2];
-            outputShape[originalInputShape.Length - 1] = result.Shape[3];
-            return result.Reshape(outputShape);
-        }
-
-        // Cache for GPU-resident training
-        if (IsTrainingMode)
-        {
-            _gpuLastInput = input;
-            _gpuLastOutput = result;
-        }
-
-        if (addedBatchDimension)
-        {
-            // Input was 3D [C, H, W], output should also be 3D [OutC, OutH, OutW]
-            return result.Reshape([_outputDepth, result.Shape[2], result.Shape[3]]);
-        }
-
-        return result;
     }
 
     /// <summary>

@@ -323,8 +323,6 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         if (_usingCustomLayers)
         {

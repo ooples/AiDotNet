@@ -159,8 +159,6 @@ public partial class TabPFNNetwork<T> : TabularNeuralNetworkBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
-        if (TryForwardGpuOptimized(input, out var gpuResult))
-            return gpuResult;
 
         return Accelerate(input, () =>
         {

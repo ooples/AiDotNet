@@ -64,15 +64,6 @@ public partial class InputLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override bool SupportsTraining => false;
 
-    /// <inheritdoc/>
-    protected override bool SupportsGpuExecution => true;
-
-    /// <inheritdoc/>
-    public override Tensor<T> ForwardGpu(params Tensor<T>[] inputs)
-    {
-        return inputs[0];
-    }
-
     /// <summary>
     /// Initializes a new instance of the <see cref="InputLayer{T}"/> class with the specified input size.
     /// </summary>
