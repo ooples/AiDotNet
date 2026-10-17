@@ -302,8 +302,12 @@ internal sealed class T5Seq2Seq<T>
     /// <paramref name="topK"/> largest, stopping at the end token or after <paramref name="maxNewTokens"/>.
     /// Returns the prefix followed by the sampled tokens (without the end token).
     /// </summary>
+    /// <param name="allowed">Restricts each step's choices to the tokens it accepts (the end token included when it
+    /// may end); null allows every token.</param>
+    /// <param name="minNewTokens">The end token is not sampled before this many new tokens (Hugging Face's
+    /// <c>min_new_tokens</c>).</param>
     public List<int> Generate(Tensor<T> inputIds, IReadOnlyList<int> decoderPrefix, double temperature, int topK,
-        int maxNewTokens, Random random)
+        int maxNewTokens, Random random, Func<int, bool>? allowed = null, int minNewTokens = 0)
     {
         var memory = Encode(inputIds, training: false, random);
         var sequence = new List<int> { Configuration.DecoderStartTokenId };
@@ -315,7 +319,12 @@ internal sealed class T5Seq2Seq<T>
             var logits = Decode(ids, memory, training: false, random);
             int vocabulary = logits.Shape[1], last = sequence.Count - 1;
             var row = new double[vocabulary];
-            for (int v = 0; v < vocabulary; v++) row[v] = NumOps.ToDouble(logits[last, v]) / temperature;
+            for (int v = 0; v < vocabulary; v++)
+            {
+                bool permitted = (allowed is null || allowed(v))
+                    && (v != Configuration.EndTokenId || step >= minNewTokens);
+                row[v] = permitted ? NumOps.ToDouble(logits[last, v]) / temperature : double.NegativeInfinity;
+            }
             int next = SampleTopK(row, topK, random);
             if (next == Configuration.EndTokenId) break;
             sequence.Add(next);
@@ -326,7 +335,11 @@ internal sealed class T5Seq2Seq<T>
 
     private static int SampleTopK(double[] scores, int topK, Random random)
     {
-        int k = topK <= 0 ? scores.Length : Math.Min(topK, scores.Length);
+        // Masked tokens score -infinity: never among the k drawn from.
+        int finite = 0;
+        foreach (double score in scores) if (!double.IsNegativeInfinity(score)) finite++;
+        if (finite == 0) throw new InvalidOperationException("No token is allowed at this step.");
+        int k = topK <= 0 ? finite : Math.Min(topK, finite);
         var order = new int[scores.Length];
         for (int i = 0; i < order.Length; i++) order[i] = i;
         Array.Sort(order, (a, b) => scores[b].CompareTo(scores[a]));

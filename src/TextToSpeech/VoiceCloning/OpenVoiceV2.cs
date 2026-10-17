@@ -106,33 +106,10 @@ public partial class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
         var input = PreprocessText(text);
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        // Run preprocessed text through learned layers for feature extraction
-        var features = input;
-        foreach (var l in Layers)
-            features = l.Forward(features);
-        int textLen = Math.Min(text.Length, _options.MaxTextLength);
-        int mF = textLen * 4;
-        double[] baseMel = new double[mF];
-        double p = 0;
-        for (int f = 0; f < mF; f++)
-        {
-            int t = Math.Min(f * textLen / mF, textLen - 1);
-            baseMel[f] = Math.Tanh(
-                (text[t] % 128) / 128.0 * 0.55 + p * 0.3 + Math.Sin(f * 0.09) * 0.1
-            );
-            p = baseMel[f];
-        }
-        double[] conv = new double[mF];
-        for (int f = 0; f < mF; f++)
-            conv[f] = baseMel[f] * 0.9 + Math.Sin(f * 0.02) * 0.08;
-        int waveLen = mF * _options.HopSize;
-        var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            int fr = Math.Min(i / Math.Max(1, _options.HopSize), mF - 1);
-            waveform[i] = NumOps.FromDouble(conv[fr] * Math.Sin(i * 0.007) * 0.87);
-        }
-        return waveform;
+        // The network is the synthesizer: token ids -> embedding -> encoder, flow and decoder -> the waveform
+        // [1, 1, samples]. (This used to run the layers, discard their output and return a hand-made sinusoid.)
+        var waveform = Predict(input);
+        return PostprocessAudio(waveform.Reshape(new[] { waveform.Length }));
     }
 
     public double MinReferenceDuration => 3.0;
@@ -203,7 +180,8 @@ public partial class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
                 LayerHelper<T>.CreateDefaultOpenVoiceV2Layers(
                     specChannels: base.MelChannels,
                     hiddenDim: _options.DecoderDim,
-                    numFlowBlocks: _options.NumEncoderLayers
+                    numFlowBlocks: _options.NumEncoderLayers,
+                    vocabSize: _options.VocabSize
                 )
             );
     }
@@ -214,7 +192,8 @@ public partial class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
         SetTrainingMode(false);
-        var c = input;
+        // One unbatched sequence of ids [T] (what Synthesize passes) is batch one: the convolutions read [B, C, T].
+        var c = input.Rank == 1 ? Engine.Reshape(input, new[] { 1, input.Shape[0] }) : input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;

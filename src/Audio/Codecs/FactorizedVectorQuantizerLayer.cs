@@ -43,7 +43,7 @@ public interface IResidualVectorQuantizer<T>
 /// </remarks>
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, TestInputShape = "1, 4, 6", TestConstructorArgs = "4, 2, 8, 2")]
+[LayerProperty(IsTrainable = true, UsesSurrogateGradient = true, TestInputShape = "1, 4, 6", TestConstructorArgs = "4, 2, 8, 2")]
 [ElementWiseShape(Note = "Quantizes each time step's vector; the shape is carried through.")]
 public sealed partial class FactorizedVectorQuantizerLayer<T> : LayerBase<T>, IResidualVectorQuantizer<T>
 {

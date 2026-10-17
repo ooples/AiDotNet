@@ -462,7 +462,10 @@ public partial class SoundStorm<T> : TtsModelBase<T>, ICodecTts<T>
 
             // Text to semantic: continue the prompt's semantic tokens.
             var prefix = promptSemantic.Select(code => ByteVocabulary + code).ToList();
-            var generated = TextToSemantic.Generate(input, prefix, o.Temperature, o.TopK, o.MaxNewSemanticTokens, random)
+            // The decoder shares one vocabulary of bytes and semantic codes but emits only semantic codes (and the end
+            // token), and at least one: sampling a byte or ending at once left nothing to vocode.
+            var generated = TextToSemantic.Generate(input, prefix, o.Temperature, o.TopK, o.MaxNewSemanticTokens, random,
+                    allowed: id => id >= ByteVocabulary || id == EndToken, minNewTokens: 1)
                 .Skip(prefix.Count).Where(id => id >= ByteVocabulary).Select(id => id - ByteVocabulary).ToArray();
             if (generated.Length == 0)
                 throw new InvalidOperationException("The text-to-semantic model generated no semantic tokens.");

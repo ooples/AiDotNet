@@ -277,6 +277,19 @@ public class BarkOptions : CodecTtsOptions
         return options;
     }
 
+    /// <summary>
+    /// A character tokenizer whose ids fit <see cref="TinyForTests"/>: [UNK] is 0 and a-z are 1-26, lowercased, with
+    /// whitespace skipped. The tiny semantic stage reads text ids below its pad token (TextPadTokenId minus the
+    /// offset, 27 for the default 32), so BERT's multilingual ids cannot reach it; this also keeps tests offline.
+    /// </summary>
+    internal static AiDotNet.Tokenization.Interfaces.ITokenizer TinyTokenizerForTests()
+    {
+        var vocabulary = new AiDotNet.Tokenization.Vocabulary.Vocabulary("[UNK]");
+        for (char c = 'a'; c <= 'z'; c++) vocabulary.AddToken(c.ToString());
+        return new AiDotNet.Tokenization.Algorithms.CharacterTokenizer(
+            vocabulary, new AiDotNet.Tokenization.Models.SpecialTokens(), lowercase: true, includeWhitespace: false);
+    }
+
     private static BarkStageOptions TinyStage(int inputVocabulary, int outputVocabulary, bool causal) => new()
     {
         InputVocabularySize = inputVocabulary,

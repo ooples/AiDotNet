@@ -7417,6 +7417,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // fatchord's Adam at 1e-4; the probes measure learning at a constant Adam rate of 1e-3.
                     ", optimizer: new AiDotNet.Optimizers.AdamOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null))";
             }
+            else if (model.ClassName == "WaveNet" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.TextToSpeech.Vocoders.", System.StringComparison.Ordinal))
+            {
+                // The WaveNet vocoder is 30 dilated layers (3 cycles of 10) of 128 channels over 10240-sample segments,
+                // sampled one mu-law step at a time; keep the gated residual stack, the skips, the mu-law softmax and the
+                // 4x4x4x4 = 256 mel upsampler with 4 layers (2 cycles of 2), 8/8/4 channels and 256-sample segments.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 80, outputSize: 256), " +
+                    "new AiDotNet.TextToSpeech.Vocoders.WaveNetOptions { NumDilatedLayers = 4, DilationCycle = 2, " +
+                    "ResidualChannels = 8, GateChannels = 8, SkipChannels = 4, SegmentSamples = 256 }" +
+                    // r9y9's Adam at 1e-3, the probes' constant rate.
+                    ", optimizer: new AiDotNet.Optimizers.AdamOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null))";
+            }
             else if (model.ClassName == "WaveGlow" && model.TypeParameterCount == 1)
             {
                 // WaveGlow is 12 flows of 8-layer WN couplings with 512 residual / 256 skip channels; keep the 1024/256
@@ -9756,7 +9771,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumCodebooks = 3, CoarseCodebooks = 1, CodebookSize = 16, ModelDim = 16, NumLayers = 1, NumHeads = 2, " +
                     "KeyValueDim = 8, FeedForwardDim = 32, DropoutRate = 0.0, FineCropSeconds = 0.2, LearningRate = 3e-3, Seed = 42, " +
                     "SoundStream = new AiDotNet.Audio.Generation.SoundStreamOptions { SampleRate = 16000, Filters = 4, " +
-                    "Dimension = 8, Ratios = [8, 5, 5, 2], NumQuantizers = 3, CodebookSize = 16, TargetBandwidthKbps = 0.48 } })";
+                    // KMeansIterations = 0: AudioLM's codec is a pretrained SoundStream, whose codebooks are fitted; an
+                    // untrained one's are zero until k-means runs on a training batch, so every recording would encode to
+                    // code 0 and two targets would carry the same codes. Random codebooks stand in for fitted ones.
+                    "Dimension = 8, Ratios = [8, 5, 5, 2], NumQuantizers = 3, CodebookSize = 16, TargetBandwidthKbps = 0.48, " +
+                    "KMeansIterations = 0 } })";
             }
             else if (model.ClassName == "StepAudio" && model.TypeParameterCount == 1)
             {
@@ -10484,7 +10503,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
                     "inputSize: 4, outputSize: 32), " +
-                    "AiDotNet.TextToSpeech.CodecBased.BarkOptions.TinyForTests(32))";
+                    "AiDotNet.TextToSpeech.CodecBased.BarkOptions.TinyForTests(32)" +
+                    // Bark's text path uses BERT's multilingual tokenizer (ids to ~120k, a download); the tiny
+                    // semantic stage reads 27 text ids, so the facade gets a character tokenizer that fits it.
+                    (model.ClassName == "Bark" ? ", tokenizer: AiDotNet.TextToSpeech.CodecBased.BarkOptions.TinyTokenizerForTests())" : ")");
             }
             else if (model.ClassName == "CosyVoice" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -15417,12 +15439,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "OpenVoiceV2")
             {
-                // OpenVoice V2 is VITS-based (Qin et al. 2023): a 1-D conv encoder + invertible
-                // normalizing flow + HiFi-GAN transposed-conv decoder (CreateDefaultOpenVoiceV2Layers),
-                // operating on channels-first rank-3 [B, specChannels=80, T] spectra. The decoder
-                // upsamples T by 2 (16 -> 32) and projects to a single waveform channel, so a
-                // [1, 80, 16] spectrum -> [1, 1, 32] waveform.
-                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 80, 16 };");
+                // OpenVoice V2 is VITS-based (Qin et al. 2023): a token embedding, a 1-D conv encoder + invertible
+                // normalizing flow + HiFi-GAN transposed-conv decoder (CreateDefaultOpenVoiceV2Layers), channels-first
+                // [B, hidden, T] after the embedding. The decoder upsamples T by 2 (16 -> 32) and projects to a single
+                // waveform channel, so 16 ids [1, 16] -> [1, 1, 32] waveform.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 16 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 32 };");
                 // The VITS/flow stack converges before the generic 50/200 comparison and then
                 // exhibits small finite optimizer drift. Compare its early learning trajectory.
@@ -21127,6 +21148,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "ParallelWaveGAN" => true,
             "WaveGlow" => true,
             "WaveRNN" => true,
+            // The vocoder WaveNet (van den Oord et al. 2016; callers also require ImplementsVocoder, so the finance
+            // WaveNet of the same name never matches): local conditioning on the hop-upsampled mel, [B, 80, T] -> [B, 1, hop T].
+            "WaveNet" => true,
             _ => false,
         };
     }

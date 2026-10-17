@@ -150,7 +150,9 @@ public partial class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>,
         Layers.AddRange(_semanticLayers);
         Layers.AddRange(_coarseLayers);
         Layers.AddRange(_fineLayers);
-        Layers.Add(_codec);
+        // The codec stays out of the sequential layers, as Bark's does: a whole model cannot be rebuilt from a layer's
+        // type name, so a serialized AudioLM restores it through its own construction while the base still finds the
+        // codec's layers as an extra component of this model.
     }
 
     /// <inheritdoc />

@@ -139,7 +139,7 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
                     _options.NumDecoderLayers,
                     _options.NumHeads,
                     _options.DropoutRate,
-                    inputFeatureDim: _options.MelChannels
+                    vocabSize: _options.VocabSize
                 )
             );
     }
