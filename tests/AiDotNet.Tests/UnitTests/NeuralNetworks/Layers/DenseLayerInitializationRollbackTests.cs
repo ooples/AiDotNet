@@ -14,6 +14,16 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers;
 /// </summary>
 public class DenseLayerInitializationRollbackTests
 {
+    /// <summary>
+    /// Every fill must start from a freshly allocated, all-zero tensor. A tensor left over from the failed attempt
+    /// (filled weights, sentinel biases) fails here, before the fill would overwrite the evidence.
+    /// </summary>
+    private static void AssertFresh(Tensor<double> tensor, string name)
+    {
+        for (int i = 0; i < tensor.Length; i++)
+            Assert.True(tensor.GetFlat(i) == 0.0, $"{name}[{i}] = {tensor.GetFlat(i)} survived the failed initialization");
+    }
+
     /// <summary>Throws on its first weight fill, then fills every weight with <see cref="Fill"/>.</summary>
     private sealed class FailsOnceStrategy : IInitializationStrategy<double>
     {
@@ -30,11 +40,13 @@ public class DenseLayerInitializationRollbackTests
                 _failed = true;
                 throw new InvalidOperationException("initializer failed");
             }
+            AssertFresh(weights, "weights");
             for (int i = 0; i < weights.Length; i++) weights.SetFlat(i, Fill);
         }
 
         public void InitializeBiases(Tensor<double> biases)
         {
+            AssertFresh(biases, "biases");
             for (int i = 0; i < biases.Length; i++) biases.SetFlat(i, 0.0);
         }
     }
@@ -67,6 +79,7 @@ public class DenseLayerInitializationRollbackTests
 
         public void InitializeWeights(Tensor<double> weights, int inputSize, int outputSize)
         {
+            AssertFresh(weights, "weights");
             for (int i = 0; i < weights.Length; i++) weights.SetFlat(i, FailsOnceStrategy.Fill);
         }
 
@@ -78,6 +91,7 @@ public class DenseLayerInitializationRollbackTests
                 for (int i = 0; i < biases.Length; i++) biases.SetFlat(i, Sentinel);
                 throw new InvalidOperationException("bias initializer failed");
             }
+            AssertFresh(biases, "biases");
             for (int i = 0; i < biases.Length; i++) biases.SetFlat(i, 0.0);
         }
     }
