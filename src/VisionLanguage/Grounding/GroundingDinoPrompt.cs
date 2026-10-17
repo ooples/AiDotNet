@@ -118,10 +118,7 @@ internal sealed class GroundingDinoPrompt
     internal static string Decode(IEnumerable<int> ids)
     {
         var text = string.Join(" ", ids.Select(id => Tokenizer.Value.Vocabulary.GetToken(id) ?? "[UNK]")).Replace(" ##", "");
-        foreach (var (from, to) in new[] { (" .", "."), (" ?", "?"), (" !", "!"), (" ,", ","), (" ' ", "'"), (" n't", "n't"),
-                     (" 'm", "'m"), (" 's", "'s"), (" 've", "'ve"), (" 're", "'re") })
-            text = text.Replace(from, to);
-        return text;
+        return Tokenization.TokenizationCleanup.CleanUpSpaces(text);
     }
 
     /// <summary>
