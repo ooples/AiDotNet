@@ -50,6 +50,13 @@ internal static class CreditAssignmentGradientComputer<T>
                 "CategoricalCrossEntropyLoss or MeanSquaredErrorLoss).");
         }
 
+        // OUTSIDE THE STEP ARENA. This computation spans two tapes in one step: the capture pass's detached layer
+        // inputs/outputs and the rule's teaching signals are read by the second tape. Since AiDotNet.Tensors 0.135.0 an
+        // arena may reissue a step's tensors at a tape boundary, so the second forward was handed wrappers the first
+        // pass still held, reshaped: DFA training failed with "Tensor shapes must match. Got [48, 48] and [8, 6, 48]"
+        // in AddBackward. Same rule as AdamOptimizer's norm temporaries: what outlives a tape allocates outside it.
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+
         var layers = network.Layers;
         bool prevTrainingMode = network.IsTrainingMode;
         network.SetTrainingMode(true);

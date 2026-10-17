@@ -339,12 +339,6 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>, IShapeContract
 
     public override bool SupportsTraining => true;
 
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_kernelGradients == null || _biasGradients == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        return Vector<T>.Concatenate(new Vector<T>(_kernelGradients.ToArray()), new Vector<T>(_biasGradients.ToArray()));
-    }
-
     public override void ClearGradients() { base.ClearGradients(); _kernelGradients = null; _biasGradients = null; }
 
     /// <summary>

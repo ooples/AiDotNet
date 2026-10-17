@@ -555,15 +555,6 @@ public partial class JanusPro<T> : VisionLanguageModelBase<T>, IUnifiedVisionMod
         return hidden;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
-    }
-
     /// <summary>
     /// The learned generation modules in their FIXED flat-parameter/serialization order.
     /// They live outside <see cref="NeuralNetworkBase{T}.Layers"/> because they serve the

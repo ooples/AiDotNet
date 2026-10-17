@@ -44,7 +44,17 @@ internal static class VolumeRenderer<T>
         double[] rayNear, double[] rayFar, double[]? sampleTs)
     {
         if (numRays <= 0 || numSamples <= 0) return new Tensor<T>(new[] { Math.Max(numRays, 0), 3 });
+        return Render(engine, rgb, density, Spacings(numRays, numSamples, rayNear, rayFar, sampleTs));
+    }
 
+    /// <summary>The sample spacings δ, <c>[rays, samples]</c>: constants of the sampling, built on the host.</summary>
+    /// <param name="numRays">The number of rays.</param>
+    /// <param name="numSamples">The samples per ray.</param>
+    /// <param name="rayNear">Each ray's near bound.</param>
+    /// <param name="rayFar">Each ray's far bound.</param>
+    /// <param name="sampleTs">Each sample's distance along its ray, or null for uniform spacing.</param>
+    public static Tensor<T> Spacings(int numRays, int numSamples, double[] rayNear, double[] rayFar, double[]? sampleTs)
+    {
         var deltas = new Tensor<T>(new[] { numRays, numSamples });
         for (int r = 0; r < numRays; r++)
         {
@@ -65,6 +75,22 @@ internal static class VolumeRenderer<T>
             }
         }
 
+        return deltas;
+    }
+
+    /// <summary>
+    /// Composites per-sample colors and densities into one color per ray, with the spacings given as a tensor so a
+    /// training step can carry them in its input.
+    /// </summary>
+    /// <param name="engine">The engine.</param>
+    /// <param name="rgb">Sample colors, <c>[rays·samples, 3]</c>, ray-major.</param>
+    /// <param name="density">Sample densities, <c>[rays·samples]</c> or <c>[rays·samples, 1]</c>.</param>
+    /// <param name="deltas">The sample spacings, <c>[rays, samples]</c>.</param>
+    /// <returns>The rendered colors, <c>[rays, 3]</c>.</returns>
+    public static Tensor<T> Render(IEngine engine, Tensor<T> rgb, Tensor<T> density, Tensor<T> deltas)
+    {
+        int numRays = deltas.Shape[0];
+        int numSamples = deltas.Shape[1];
         var sigma = engine.Reshape(density, new[] { numRays, numSamples });
         var opticalDepth = engine.TensorMultiply(sigma, deltas);
         var alpha = engine.TensorAddScalar(engine.TensorNegate(engine.TensorExp(engine.TensorNegate(opticalDepth))), Ops.One);

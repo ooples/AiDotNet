@@ -148,13 +148,15 @@ public partial class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                 queryStates = ClassifierOutputs<T>.AsRows(MetaModel.Predict(task.QueryInput));
             }
 
-            using (var tape = new GradientTape<T>(new GradientTapeOptions { Persistent = true }))
-            {
-                var leaves = Leaves(adapted);
-                var objective = HeadLoss(queryStates, queryLabels, leaves);
-                totalLoss = NumOps.Add(totalLoss, objective[0]);
-                taskGradient = Accumulate(taskGradient, Flatten(tape.ComputeGradients(objective, leaves), leaves));
-            }
+            var leaves = Leaves(adapted);
+            Vector<T>? queryGradient = null;
+            T queryLoss = AiDotNet.Training.TapeGradients<T>.Of(
+                () => HeadLoss(queryStates, queryLabels, leaves),
+                leaves,
+                gradients => queryGradient = Flatten(gradients, leaves),
+                persistent: true);
+            totalLoss = NumOps.Add(totalLoss, queryLoss);
+            taskGradient = Accumulate(taskGradient, queryGradient ?? new Vector<T>(_taskParameters.Length));
         }
 
         T batchSize = NumOps.FromDouble(taskBatch.BatchSize);
@@ -255,10 +257,13 @@ public partial class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         var adapted = CloneVector(_taskParameters);
         for (int step = 0; step < _algoOptions.AdaptationSteps; step++)
         {
-            using var tape = new GradientTape<T>(new GradientTapeOptions { Persistent = true });
             var leaves = Leaves(adapted);
-            var objective = HeadLoss(states, labels, leaves);
-            var gradient = Flatten(tape.ComputeGradients(objective, leaves), leaves);
+            var gradient = new Vector<T>(adapted.Length);
+            AiDotNet.Training.TapeGradients<T>.Of(
+                () => HeadLoss(states, labels, leaves),
+                leaves,
+                gradients => gradient = Flatten(gradients, leaves),
+                persistent: true);
 
             for (int i = 0; i < adapted.Length; i++)
             {

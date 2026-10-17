@@ -226,21 +226,6 @@ public partial class AudioMAE<T> : AudioClassifierBase<T>, IAudioEventDetector<T
     /// <summary>Training forward — the same encoder → average-pool → linear path as inference.</summary>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => EncodePoolClassify(input);
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
-        if (_optimizer is null) throw new InvalidOperationException("Optimizer is not initialized. Cannot train without an optimizer.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being

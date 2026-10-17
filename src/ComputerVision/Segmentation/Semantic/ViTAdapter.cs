@@ -186,35 +186,6 @@ public partial class ViTAdapter<T> : Common.SemanticSegmentationBase<T>
         return !_useNativeMode ? PredictOnnx(input) : Forward(input);
     }
 
-    /// <summary>
-    /// Performs one training step.
-    /// </summary>
-    /// <param name="input">Input image tensor.</param>
-    /// <param name="expectedOutput">Ground-truth segmentation map.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Training updates the adapter modules and decoder while optionally
-    /// fine-tuning the ViT backbone. Uses AdamW with layer-wise learning rate decay as specified
-    /// in the paper.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown in ONNX mode.</exception>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is not supported in ONNX mode.");
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, Optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     #endregion
 
     #region Private Methods

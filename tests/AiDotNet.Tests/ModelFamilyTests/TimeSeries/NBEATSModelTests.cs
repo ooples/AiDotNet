@@ -29,4 +29,18 @@ public class NBEATSModelTests : TimeSeriesModelTestBase
             NumHiddenLayers = 1,
             MaxTrainingTimeSeconds = 5
         });
+
+    [Fact]
+    public void Train_SeriesShorterThanOneWindow_Throws()
+    {
+        // LookbackWindow 10 + ForecastHorizon 5 needs 15 values; 12 give no training window, which used to
+        // return after zero steps and mark the random-weight model trained.
+        var model = CreateModel();
+        var x = new Matrix<double>(12, 1);
+        var y = new Vector<double>(12);
+        for (int i = 0; i < 12; i++) { x[i, 0] = i; y[i] = System.Math.Sin(i * 0.5); }
+
+        var error = Assert.Throws<System.ArgumentException>(() => model.Train(x, y));
+        Assert.Contains("at least 15 values", error.Message);
+    }
 }

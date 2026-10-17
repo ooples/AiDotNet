@@ -191,34 +191,19 @@ public partial class SwinUNETR<T> : Common.MedicalSegmentationBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
-    /// <summary>
-    /// Performs one training step.
-    /// </summary>
-    /// <param name="input">The input tensor.</param>
-    /// <param name="expectedOutput">Ground-truth segmentation tensor.</param>
+    /// <inheritdoc/>
     /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Trains the model. Only available in native mode.
-    /// </para>
+    /// 2D <c>[C, H, W]</c> / <c>[B, C, H, W]</c> and 3D <c>[C, D, H, W]</c> / <c>[B, C, D, H, W]</c> inputs; a single
+    /// sample is batched and its target normalized with it.
     /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown when called on an ONNX-mode model.</exception>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
     {
-        if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
         bool inputWasUnbatched = input.Shape.Length == 3;
         if (inputWasUnbatched) input = AddLeadingBatchDimension(input);
-        else if (input.Shape.Length != 4 && input.Shape.Length != 5) throw new ArgumentException($"SwinUNETR supports 2D [C,H,W]/[B,C,H,W] and 3D [C,D,H,W]/[B,C,D,H,W]. Got rank {input.Shape.Length}.", nameof(input));
-
-        expectedOutput = NormalizeTrainingTarget(expectedOutput, inputWasUnbatched);
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, Optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        else if (input.Shape.Length != 4 && input.Shape.Length != 5)
+            throw new ArgumentException(
+                $"SwinUNETR supports 2D [C,H,W]/[B,C,H,W] and 3D [C,D,H,W]/[B,C,D,H,W]. Got rank {input.Shape.Length}.", nameof(input));
+        return (input, target is null ? null : NormalizeTrainingTarget(target, inputWasUnbatched));
     }
     #endregion
 

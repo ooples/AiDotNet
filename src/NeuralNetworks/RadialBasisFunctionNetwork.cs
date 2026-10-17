@@ -342,56 +342,6 @@ public partial class RadialBasisFunctionNetwork<T> : VectorModelLayoutBase<T>
         });
     }
 
-    /// <summary>
-    /// Trains the Radial Basis Function Network using the provided input and expected output.
-    /// </summary>
-    /// <param name="input">The input tensor used for training.</param>
-    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
-    /// <exception cref="ArgumentNullException">Thrown when either input or expectedOutput is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the training process for the RBFN. It performs a forward pass, calculates the error
-    /// between the network's prediction and the expected output, and then backpropagates this error to adjust
-    /// the network's parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is how the network learns from examples.
-    /// 
-    /// The training process:
-    /// 1. Takes an input and its correct answer (expected output)
-    /// 2. Makes a prediction using the current network state
-    /// 3. Compares the prediction to the correct answer to calculate the error
-    /// 4. Uses this error to adjust the network's internal settings (backpropagation)
-    /// 
-    /// It's like a student solving math problems:
-    /// - The student (network) tries to solve a problem (make a prediction)
-    /// - They check their answer against the correct one
-    /// - If they're wrong, they figure out why and adjust their approach
-    /// - Over time, they get better at solving similar problems
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (input == null)
-        {
-            throw new ArgumentNullException(nameof(input), "Input tensor cannot be null.");
-        }
-
-        if (expectedOutput == null)
-        {
-            throw new ArgumentNullException(nameof(expectedOutput), "Expected output tensor cannot be null.");
-        }
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     #pragma warning disable CS0169
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
 #pragma warning restore CS0169

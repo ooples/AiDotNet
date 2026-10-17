@@ -228,7 +228,6 @@ public partial class CopyOnWriteCloneDefectRegressionTests
 
         public override void SetParameters(Vector<float> parameters) { }
 
-        public override Vector<float> GetParameterGradients() => new Vector<float>(0);
 
         public override void ResetState() { }
     }

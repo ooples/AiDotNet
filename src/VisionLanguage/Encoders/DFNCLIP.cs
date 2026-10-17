@@ -315,33 +315,6 @@ public partial class DFNCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         return current;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        // Forward-path entrypoint matches Predict (PreprocessImage → Layers).
-        // TrainWithTape walks Layers, so the vision-only graph is what gets
-        // gradients + parameter updates here. The contrastive paired-data
-        // training path that updates both encoders is a separate API
-        // (TrainContrastive(images, texts) — to be added) and is not what
-        // generic-NN consumers expect from Train(input, target). Pass our
-        // paper-faithful AdamW optimizer (β₂=0.98, weight_decay=0.2,
-        // lr=5e-4) instead of the base class's default Adam (lr=1e-3) —
-        // see ctor for why.
-        // try/finally so a TrainWithTape throw doesn't leave the model
-        // stuck in training mode (matches the BiomedCLIP / BridgeTower /
-        // METER / BLIP3 Train pattern).
-        try
-        {
-            TrainWithTape(PreprocessImage(input), expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     // _textEncoderLayers is discovered as a layer collection and surfaced automatically. The
     // generated hook also deduplicates against Layers by reference, which the hand-written one did
     // not -- so the double-counting its remark worried about is now impossible rather than avoided

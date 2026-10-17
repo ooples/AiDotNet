@@ -528,35 +528,6 @@ public partial class LagLlama<T> : ForecastingModelBase<T>
         return DenormalizeForecast(mu);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Training Lag-Llama by default uses MSE loss on point predictions
-    /// extracted from distribution parameters. For true probabilistic training with
-    /// negative log-likelihood, provide a custom NLL loss function in the constructor.
-    /// The model learns to predict distribution parameters (mu, sigma, nu for Student-t)
-    /// that best fit the observed values.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses. The override of
-        // ForwardNativeForTraining below keeps training mode on and
-        // slices out mu with a tape-aware op so gradients reach the
-        // distribution head.
-        base.Train(input, target);
-    }
-
     /// <summary>
     /// Training-mode forward pass. Calls <c>Forward</c> directly (keeping
     /// training mode on for dropout / attention-mask randomness) and

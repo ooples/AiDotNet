@@ -316,28 +316,6 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>, IShapeContract
         Engine.TensorSubtractInPlace(_biases, scaledBiasGrad);
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        var gradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int weightSize = OutputFeatures * InputFeatures * 8;
-
-        if (_weightsGradient is not null)
-        {
-            for (int i = 0; i < weightSize; i++)
-                gradients[i] = _weightsGradient.GetFlat(i);
-        }
-
-        if (_biasesGradient is not null)
-        {
-            int biasSize = OutputFeatures * 8;
-            for (int i = 0; i < biasSize; i++)
-                gradients[weightSize + i] = _biasesGradient.GetFlat(i);
-        }
-
-        return gradients;
-    }
-
     /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>

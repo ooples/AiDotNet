@@ -776,19 +776,6 @@ public partial class SVTR<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T>,
             : base.ForwardForTraining(input);
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-
-        // Delegate to the base tape-training loop: forward via our ForwardForTraining, autodiff
-        // backward, then the configured optimizer's in-place step (Adam). The previous override
-        // ran a manual SGD (params - grads*1e-4) on top of TrainWithTape, which fought the optimizer
-        // and, at lr 1e-4 over the smoke iterations, barely changed the weights or the loss.
-        base.Train(input, expectedOutput);
-    }
-
     /// <inheritdoc />
     /// <remarks>The weights belong to the loaded graph in this mode. The base refuses
     /// the write on every parameter surface, so the guard is stated once, here.</remarks>

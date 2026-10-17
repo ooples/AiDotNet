@@ -449,28 +449,6 @@ public partial class NBEATSFinance<T> : ForecastingModelBase<T>
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the NBEATSFinance model, Train performs a training step. This updates the NBEATSFinance architecture so it learns from data.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, target, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <summary>
     /// Training-mode forward that keeps the residual subtraction and forecast
     /// accumulation connected to the autodiff tape. The inference path uses

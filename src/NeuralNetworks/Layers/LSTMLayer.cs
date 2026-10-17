@@ -1312,17 +1312,24 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         //   - typeof(T) == float. The primitive's competitive perf comes from
         //     its float-specialized SimdGemm + AVX sigmoid/tanh path.
         //   - Engine is CpuEngine. The primitive lives there.
-        //   - GraphMode.IsActive == false. The primitive explicitly throws
-        //     under an active autograd tape (no fused backward yet).
+        //   - GraphMode.IsActive == false, EXCEPT compiled training on a host
+        //     engine: there LstmSequenceForward records ONE fused training node
+        //     (fused forward + fused BPTT backward) into the plan instead of the
+        //     per-timestep loop's ~30 primitives per step (AiDotNet.Tensors
+        //     RecordLstmSequenceTrainFloat). A GPU engine that records its own fused
+        //     node (persistent-RNN forward + BPTT kernels) takes it too; one that cannot
+        //     keeps the per-step trace, whose CUDA graph replays ~2,000 kernels a step.
         // If any condition fails the existing per-step loop below runs unchanged.
         // timeSteps > 0 guards the empty-sequence boundary: the per-step loop
-        // returns an empty output with zeroed final states, but the fused path's
-        // CopyLastTimestepHidden would slice at (seq - 1) = -1.
+        // returns an empty output with zeroed final states, and the fused training
+        // primitives require a non-empty sequence.
         if (timeSteps > 0
             && !_stateStepping
             && typeof(T) == typeof(float)
             && Engine is AiDotNet.Tensors.Engines.CpuEngine cpuEngForFused
-            && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+            && (!AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+                || (IsTrainingMode && (Engine is not DirectGpuTensorEngine gpuForFused
+                                       || gpuForFused.RecordsFusedLstmSequenceTraining))))
         {
             // Inference takes the cached manual stack (allocation-free, detached).
             // Training builds the stacked wIh/wHh/bias via TAPE-CONNECTED Concat so
@@ -1349,13 +1356,14 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
             }
             if (fusedOutput is not null)
             {
-                // Stash the last hidden state so the public LastHiddenState
-                // property keeps returning a sensible value after this call.
-                // Cell state stays zero — its only consumers require training
-                // mode anyway.
-                _lastHiddenState = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
-                _lastCellState = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
-                CopyLastTimestepHidden(fusedOutput, _lastHiddenState, batchSize, timeSteps, _hiddenSize);
+                // The fused primitive returns no final (h, c), so record none rather than a
+                // fabricated one: a zero cell state, or (under a compiled trace, where the
+                // output is lazy and holds no values yet) a zero hidden state, would be a
+                // silently wrong answer. The only reader, ForwardFromState, sets
+                // _stateStepping, which keeps every such call on the per-step loop below;
+                // anything else reading these now fails loudly instead of reading zeros.
+                _lastHiddenState = null;
+                _lastCellState = null;
 
                 // Mirror the existing post-loop shape-restoration block.
                 var fusedShaped = fusedOutput;
@@ -1409,55 +1417,34 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
             currentH = _initialHidden;
             currentC = _initialCell;
         }
-        // Pre-transpose weights for efficiency
-        var WfiT = Engine.TensorTranspose(_weightsFi);
-        var WiiT = Engine.TensorTranspose(_weightsIi);
-        var WciT = Engine.TensorTranspose(_weightsCi);
-        var WoiT = Engine.TensorTranspose(_weightsOi);
+        // Input projections hoisted out of the recurrence: for each gate, x * W_gi + b_g over ALL timesteps in one GEMM
+        // (as cuDNN's LSTM does), so each step does one hidden GEMM per gate instead of an input GEMM, a hidden GEMM,
+        // an add and a bias add. Kept per gate rather than packed [B, 4H]: splitting a packed gate tensor costs four
+        // last-axis slices (and their scatters in backward) per step, which the CPU engine pays heavily.
+        int inputFeatures = input3D.Shape[2];
+        var flatInput = Engine.Reshape(input3D, [batchSize * timeSteps, inputFeatures]);
+        Tensor<T> Project(Tensor<T> weights, Tensor<T> bias)
+            => Engine.Reshape(
+                Engine.TensorAdd(Engine.TensorMatMul(flatInput, Engine.TensorTranspose(weights)),
+                    Engine.Reshape(bias, [1, _hiddenSize])),
+                [batchSize, timeSteps, _hiddenSize]);
+        var projF = Project(_weightsFi, _biasF);
+        var projI = Project(_weightsIi, _biasI);
+        var projC = Project(_weightsCi, _biasC);
+        var projO = Project(_weightsOi, _biasO);
         var WfhT = Engine.TensorTranspose(_weightsFh);
         var WihT = Engine.TensorTranspose(_weightsIh);
         var WchT = Engine.TensorTranspose(_weightsCh);
         var WohT = Engine.TensorTranspose(_weightsOh);
-        var biasF2D = Engine.Reshape(_biasF, [1, _hiddenSize]);
-        var biasI2D = Engine.Reshape(_biasI, [1, _hiddenSize]);
-        var biasC2D = Engine.Reshape(_biasC, [1, _hiddenSize]);
-        var biasO2D = Engine.Reshape(_biasO, [1, _hiddenSize]);
 
         for (int t = 0; t < timeSteps; t++)
         {
-            // Slice along the time dimension (dim 1), keeping batch dimension.
-            // For input [batchSize, timeSteps, inputSize], this returns [batchSize, inputSize].
-            // Use the tape-tracked Engine.TensorSliceAxis (NOT the raw Tensor.GetSliceAlongDimension):
-            // the raw slice is not an autodiff node, so gradient never flowed from xt back into
-            // input3D — severing every trainable layer UPSTREAM of the LSTM (embeddings, char
-            // encoder, stacked lower BiLSTMs). Routing the per-timestep slice through the tape lets
-            // the LSTM propagate gradient to its input, so upstream layers train end-to-end.
-            var xt = Engine.TensorSliceAxis(input3D, axis: 1, index: t);
-
-            // Forget Gate - using TensorAdd for bias (supports [batch, hidden] + [hidden] broadcasting)
-            var f = Engine.TensorMatMul(xt, WfiT);
-            f = Engine.TensorAdd(f, Engine.TensorMatMul(currentH, WfhT));
-            f = Engine.TensorAdd(f, biasF2D);
-            f = Engine.Sigmoid(f);
-
-            // Input Gate
-            var i = Engine.TensorMatMul(xt, WiiT);
-            i = Engine.TensorAdd(i, Engine.TensorMatMul(currentH, WihT));
-            i = Engine.TensorAdd(i, biasI2D);
-            i = Engine.Sigmoid(i);
-
-            // Cell Candidate
-            var c_tilde = Engine.TensorMatMul(xt, WciT);
-            c_tilde = Engine.TensorAdd(c_tilde, Engine.TensorMatMul(currentH, WchT));
-            c_tilde = Engine.TensorAdd(c_tilde, biasC2D);
-            c_tilde = Engine.Tanh(c_tilde);
-
-            // Output Gate
-            var o = Engine.TensorMatMul(xt, WoiT);
-            o = Engine.TensorAdd(o, Engine.TensorMatMul(currentH, WohT));
-            o = Engine.TensorAdd(o, biasO2D);
-            o = Engine.Sigmoid(o);
-
+            // Tape-tracked slices: gradient flows back into input3D through the projections, so layers upstream of
+            // the LSTM (embeddings, stacked LSTMs) still train end-to-end.
+            var f = Engine.Sigmoid(Engine.TensorAdd(Engine.TensorSliceAxis(projF, axis: 1, index: t), Engine.TensorMatMul(currentH, WfhT)));
+            var i = Engine.Sigmoid(Engine.TensorAdd(Engine.TensorSliceAxis(projI, axis: 1, index: t), Engine.TensorMatMul(currentH, WihT)));
+            var c_tilde = Engine.Tanh(Engine.TensorAdd(Engine.TensorSliceAxis(projC, axis: 1, index: t), Engine.TensorMatMul(currentH, WchT)));
+            var o = Engine.Sigmoid(Engine.TensorAdd(Engine.TensorSliceAxis(projO, axis: 1, index: t), Engine.TensorMatMul(currentH, WohT)));
             // Update Cell State
             var f_prevC = Engine.TensorMultiply(f, currentC);
             var i_cTilde = Engine.TensorMultiply(i, c_tilde);
@@ -1466,7 +1453,6 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
             // Update Hidden State
             var tanhC = Engine.Tanh(currentC);
             currentH = Engine.TensorMultiply(o, tanhC);
-
             // Collect the hidden state for the tape-connected output concat below.
             hiddenStatesList.Add(Engine.Reshape(currentH, new[] { batchSize, 1, _hiddenSize }));
             // Caches for the manual backward path (not on the tape).
@@ -1627,36 +1613,15 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         // weight gradients. Detect that and fall back to the per-timestep loop, which
         // records correctly. (On #587+ the output carries the fused BPTT node.)
         var result = (Tensor<T>)(object)resultF;
+        // Under a compiled trace the output is a lazy plan node whose backward the plan owns,
+        // so GradFn is null there by design; the check applies to the eager tape only.
         if (AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
+            && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
             && result.GradFn is null)
         {
             return null;
         }
         return result;
-    }
-
-    /// <summary>
-    /// Copies the final timestep's hidden state from a <c>[B, seq, hidden]</c>
-    /// tensor into a <c>[B, hidden]</c> destination so consumers reading
-    /// <see cref="LastHiddenState"/> after the fused fast path see the same
-    /// value the per-step loop would have stored.
-    /// </summary>
-    private static void CopyLastTimestepHidden(Tensor<T> source, Tensor<T> dest, int batch, int seq, int hidden)
-    {
-        // No last timestep to copy for an empty sequence — leave dest zeroed
-        // (the caller already gates on timeSteps > 0, this is defence in depth
-        // against a (seq - 1) = -1 slice).
-        if (seq <= 0)
-            return;
-
-        var src = source.AsSpan();
-        var dst = dest.AsWritableSpan();
-        for (int b = 0; b < batch; b++)
-        {
-            int srcOff = (b * seq + (seq - 1)) * hidden;
-            int dstOff = b * hidden;
-            src.Slice(srcOff, hidden).CopyTo(dst.Slice(dstOff, hidden));
-        }
     }
 
     /// <summary>
@@ -2450,29 +2415,6 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         InvalidateCpuStackedWeights();
     }
 
-    public override Vector<T> GetParameterGradients()
-    {
-        if (Gradients == null || Gradients.Count == 0)
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-
-        Tensor<T> Get(string key) => Gradients.TryGetValue(key, out var t) ? t : new Tensor<T>([0]);
-
-        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
-        return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(Get("weightsFi").Data),
-            Vector<T>.FromMemory(Get("weightsIi").Data),
-            Vector<T>.FromMemory(Get("weightsCi").Data),
-            Vector<T>.FromMemory(Get("weightsOi").Data),
-            Vector<T>.FromMemory(Get("weightsFh").Data),
-            Vector<T>.FromMemory(Get("weightsIh").Data),
-            Vector<T>.FromMemory(Get("weightsCh").Data),
-            Vector<T>.FromMemory(Get("weightsOh").Data),
-            Vector<T>.FromMemory(Get("biasF").Data),
-            Vector<T>.FromMemory(Get("biasI").Data),
-            Vector<T>.FromMemory(Get("biasC").Data),
-            Vector<T>.FromMemory(Get("biasO").Data)
-        );
-    }
 
     /// <inheritdoc />
     /// <remarks>

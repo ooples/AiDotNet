@@ -104,9 +104,6 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
     #region Native Mode Fields
     private DenseLayer<T>? _inputProjection;
     private DenseLayer<T>? _nodeEmbeddingLayer;
-    private List<DenseLayer<T>>? _mixHopLayers;
-    private List<DenseLayer<T>>? _temporalLayers;
-    private List<DenseLayer<T>>? _gateLayers;
     private List<LayerNormalizationLayer<T>>? _layerNorms;
     private List<DropoutLayer<T>>? _dropoutLayers;
     private DenseLayer<T>? _outputLayer;
@@ -509,26 +506,7 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
             _inputProjection = allDense[0];
             _nodeEmbeddingLayer = allDense[1];
 
-            // Mix-hop layers, temporal layers, and gate layers are interleaved
-            _mixHopLayers = new List<DenseLayer<T>>();
-            _temporalLayers = new List<DenseLayer<T>>();
-            _gateLayers = new List<DenseLayer<T>>();
-
-            int idx = 2;
-            for (int layer = 0; layer < _numLayers; layer++)
-            {
-                // Mix-hop layers
-                for (int hop = 0; hop < _mixHopDepth && idx < allDense.Count - 2; hop++)
-                {
-                    _mixHopLayers.Add(allDense[idx++]);
-                }
-
-                // Temporal and gate layers
-                if (idx < allDense.Count - 2)
-                    _temporalLayers.Add(allDense[idx++]);
-                if (idx < allDense.Count - 2)
-                    _gateLayers.Add(allDense[idx++]);
-            }
+            // The interleaved mix-hop, temporal and gate layers run through Layers; no separate list reads them.
 
             _outputLayer = allDense[allDense.Count - 1];
         }
@@ -573,40 +551,15 @@ public partial class MTGNN<T> : ForecastingModelBase<T>
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }
 
-    /// <summary>
-    /// Trains the MTGNN model on a batch of input-target pairs.
-    /// </summary>
-    /// <param name="input">Input tensor with historical data for all nodes.</param>
-    /// <param name="target">Target tensor with future values for all nodes.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Training jointly optimizes:
-    /// 1. Node embeddings (for graph structure discovery)
-    /// 2. Mix-hop propagation weights (for spatial aggregation)
-    /// 3. Temporal convolution weights (for time pattern learning)
-    ///
-    /// The graph structure evolves during training as embeddings are updated.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
+    /// <inheritdoc/>
+    /// <remarks>After a step, the learned graph is refreshed from the node embeddings.</remarks>
+    protected override void OnTrainingStepEnded(bool succeeded)
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        base.Train(input, target);
-
-        // Node embeddings + the learned adjacency live outside Layers
-        // (double[,] fields, not Tensor<T>), so the tape-based base
-        // trainer can't compute their gradients. Preserve the pre-
-        // refactor training trajectory for that state: step the
-        // gradient-scaled random-perturbation update on the embeddings
-        // using the most recent loss as the gradient magnitude, then
-        // rebuild the adaptive adjacency so downstream inference uses
-        // the updated values.
+        if (!succeeded) return;
         var lossVec = new Vector<T>(new[] { LastLoss is not null ? LastLoss : NumOps.FromDouble(1e-3) });
         UpdateNodeEmbeddingsFromGradient(lossVec);
         UpdateAdaptiveAdjacency();
     }
-
     /// <summary>
     /// Training-mode forward: mirrors <see cref="Forward"/> but swaps
     /// <see cref="ApplyMixHopPropagation"/> for

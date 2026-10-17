@@ -533,22 +533,6 @@ public partial class SlowFast<T> : NeuralNetworkBase<T>
         _ = PredictCore(new Tensor<T>([4, c, 32, 32]));
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is not supported in ONNX mode.");
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <summary>
     /// Splits the gradient tensor for slow and fast pathways.
     /// </summary>

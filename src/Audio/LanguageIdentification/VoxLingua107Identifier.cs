@@ -331,7 +331,7 @@ public partial class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILan
     public IReadOnlyList<LanguageSegment<T>> IdentifyLanguageSegments(Tensor<T> audio, int windowSizeMs = 2000)
     {
         var segments = new List<LanguageSegment<T>>();
-        int samplesPerWindow = (int)(SampleRate * windowSizeMs / 1000.0);
+        int samplesPerWindow = (int)((double)SampleRate * windowSizeMs / 1000.0);
         int hopSamples = samplesPerWindow / 2;
 
         int totalSamples = audio.Length;
@@ -439,27 +439,6 @@ public partial class VoxLingua107Identifier<T> : AudioNeuralNetworkBase<T>, ILan
             ? OnnxModel.Run(preprocessed)
             : ForwardNative(preprocessed);
         return PostprocessOutput(logits);
-    }
-
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!SupportsTraining)
-            throw new InvalidOperationException("Cannot train in ONNX mode.");
-
-        SetTrainingMode(true);
-        try
-        {
-            // TrainWithTape performs the complete forward, loss, backward, and
-            // configured-optimizer step.  The previous implementation calculated
-            // a loss derivative and discarded it, then asked the optimizer to
-            // update layers that had never received gradients.
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
     }
 
     /// <inheritdoc/>

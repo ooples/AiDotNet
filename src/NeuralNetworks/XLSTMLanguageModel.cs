@@ -111,20 +111,6 @@ public partial class XLSTMLanguageModel<T> : TokenLanguageModelLayoutBase<T>
         InitializeLayers();
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     #endregion
 
     #region Initialization

@@ -390,28 +390,6 @@ public partial class DepthAnythingV2<T> : NeuralNetworkBase<T>
         return EstimateDepth(input);
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-        {
-            throw new InvalidOperationException("Training is not supported in ONNX mode. Use native mode constructor for training.");
-        }
-
-        SetTrainingMode(true);
-        try
-        {
-            if (_optimizer is null)
-                TrainWithTape(input, expectedOutput);
-            else
-                TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     #endregion
 
     #region Private Methods

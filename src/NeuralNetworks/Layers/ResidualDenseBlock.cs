@@ -816,14 +816,6 @@ public partial class ResidualDenseBlock<T> : LayerBase<T>, IShapeContract
         }
     }
 
-    public override Vector<T> GetParameterGradients()
-    {
-        var gradVectors = _convLayers
-            .Select(c => c.GetParameterGradients())
-            .ToArray();
-        return Vector<T>.Concatenate(gradVectors);
-    }
-
     public override void ClearGradients()
     {
         foreach (var conv in _convLayers)

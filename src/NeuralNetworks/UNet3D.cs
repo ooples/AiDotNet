@@ -361,35 +361,6 @@ public partial class UNet3D<T> : VolumetricModelLayoutBase<T>
     /// </summary>
     protected override Tensor<T> PredictEager(Tensor<T> input) => Forward(input);
 
-    /// <summary>
-    /// Trains the network on a single batch of input-output pairs.
-    /// </summary>
-    /// <param name="input">The input voxel grid tensor.</param>
-    /// <param name="expectedOutput">The expected segmentation map (ground truth labels).</param>
-    /// <remarks>
-    /// <para>
-    /// Training involves:
-    /// 1. Forward pass to compute predictions
-    /// 2. Loss calculation between predictions and expected output
-    /// 3. Backward pass to compute gradients
-    /// 4. Gradient clipping to prevent exploding gradients
-    /// 5. Parameter update using the optimizer
-    /// </para>
-    /// </remarks>
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>

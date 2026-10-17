@@ -151,14 +151,14 @@ public sealed class WganGpFusedStep<T> : IDisposable
             if (_persistentSlots is null || _cachedParameters is null) return false;
 
             // Copy fresh real/fake into persistent slots BEFORE running the plan.
-            realBatch.AsSpan().CopyTo(_persistentSlots[0].AsWritableSpan());
-            fakeBatch.AsSpan().CopyTo(_persistentSlots[1].AsWritableSpan());
+            realBatch.Contiguous().AsSpan().CopyTo(_persistentSlots[0].AsWritableSpan());
+            fakeBatch.Contiguous().AsSpan().CopyTo(_persistentSlots[1].AsWritableSpan());
             var eps01 = epsilonSampler(batchSize);
             if (_persistentSlots.Length < 3)
             {
                 _persistentSlots = ExtendSlots(_persistentSlots, eps01._shape);
             }
-            eps01.AsSpan().CopyTo(_persistentSlots[2].AsWritableSpan());
+            eps01.Contiguous().AsSpan().CopyTo(_persistentSlots[2].AsWritableSpan());
 
             // Trace + compile on first call.
             if (_plan is null)

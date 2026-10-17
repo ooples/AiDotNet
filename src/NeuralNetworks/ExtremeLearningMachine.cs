@@ -254,10 +254,12 @@ public partial class ExtremeLearningMachine<T> : VectorModelLayoutBase<T>
             $"{nameof(ExtremeLearningMachine<T>)} is trained by a Moore-Penrose pseudoinverse solve, not gradient "
             + "descent, so it has no parameter gradients to report.");
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // Use regularized training (adds λI for numerical stability with small samples)
         TrainWithRegularization(input, expectedOutput, regularizationFactor: 0.01);
+
+        return true;
     }
 
     /// <summary>

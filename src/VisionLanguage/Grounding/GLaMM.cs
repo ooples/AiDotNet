@@ -420,25 +420,6 @@ public partial class GLaMM<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         return c;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            // Pass the model's own non-AMSGrad AdamW so the fused-Adam
-            // fast path engages; otherwise GetOrCreateBaseOptimizer's
-            // AMSGrad-Adam blocks the fused kernel and per-iter cost
-            // balloons under eager-tape execution.
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being

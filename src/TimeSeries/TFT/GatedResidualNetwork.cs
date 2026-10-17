@@ -16,7 +16,7 @@ namespace AiDotNet.TimeSeries.TFT;
 /// (token-wise), matching the Temporal Fusion Transformer tape-training campaign.
 /// The final layer normalization uses learned affine parameters (γ, β).
 /// </remarks>
-internal partial class GatedResidualNetwork<T>
+internal partial class GatedResidualNetwork<T> : AiDotNet.Interfaces.IParameterSource<T>
 {
     private static IEngine Engine => AiDotNetEngine.Current;
 
@@ -113,6 +113,47 @@ internal partial class GatedResidualNetwork<T>
     }
 
     /// <summary>Collects all trainable parameter tensors for tape-based autodiff.</summary>
+    /// <summary>Total number of trainable values (every tensor of <see cref="GetTrainableParameters"/>).</summary>
+    public long ParameterCount
+    {
+        get
+        {
+            long n = 0;
+            foreach (var p in GetTrainableParameters()) n += p.Length;
+            return n;
+        }
+    }
+
+    /// <summary>The trainable values flattened in <see cref="GetTrainableParameters"/> order.</summary>
+    public Vector<T> GetParameters()
+    {
+        var data = new T[ParameterCount];
+        int offset = 0;
+        foreach (var p in GetTrainableParameters())
+        {
+            var src = p.IsContiguous ? p : p.Contiguous();
+            src.AsSpan().CopyTo(data.AsSpan(offset, p.Length));
+            offset += p.Length;
+        }
+        return new Vector<T>(data);
+    }
+
+    /// <summary>Writes <paramref name="parameters"/> back in <see cref="GetParameters"/> order.</summary>
+    public void SetParameters(Vector<T> parameters)
+    {
+        if (parameters is null) throw new ArgumentNullException(nameof(parameters));
+        if (parameters.Length != ParameterCount)
+            throw new ArgumentException(
+                $"Expected {ParameterCount} parameters, got {parameters.Length}.", nameof(parameters));
+        int offset = 0;
+        foreach (var p in GetTrainableParameters())
+        {
+            parameters.AsSpan().Slice(offset, p.Length).CopyTo(p.AsWritableSpan());
+            p.IncrementVersion();
+            offset += p.Length;
+        }
+    }
+
     public IEnumerable<Tensor<T>> GetTrainableParameters()
     {
         yield return _w2;

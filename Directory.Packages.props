@@ -366,14 +366,39 @@ Bumped 0.134.0 to 0.134.3 for AiDotNet.Tensors #1085 and #1087: MathHelper.Tanh 
          float, ~5.5 in Half). CQL and IQL squashed an untrained policy mean through it and emitted
          NaN actions from the first step (#2216).
 
-Bumped 0.136.0 to 0.138.1 for #2326: AiDotNet.Tensors ships lib/net462 and lib/netstandard2.0 since 0.137.1
+Bumped 0.134.4 to 0.135.0 for AiDotNet.Tensors #1095: TapeStepContext.ValidateBufferAlignment counts a
+         sparse leaf's buffer slot as its NonZeroCount. 0.134.4 counted the dense size, so every sparse model's
+         tape step threw "ParameterBuffer total size (110) does not match parameter total (210)" once sparse
+         parameters kept their pattern in the contiguous buffer (SparseNeuralNetwork, #1804).
+
+Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv input gradient was served a stale
+         transposed kernel on Linux (a recycled flipped-kernel buffer hit the im2col conv's identity-keyed transpose
+         cache), so DiffCut, DiffSeg, SegNeXt and RAFT trained on wrong input gradients in CI only.
+
+         Bumped 0.136.0 to 0.137.1 for AiDotNet.Tensors #1275: a backward that returned an arena-backed tensor to
+         TensorPool had it re-rented on the next step while the arena had reissued the same buffer, so NarrowBackward
+         gradients were overwritten from step 2 under the base-class training arena. TFT's quantile loss narrows its
+         forecast per quantile: its eager step diverged from the fused plan by 2e-2 after 14 steps; Chronos drifted from
+         a hand replay of its SGD steps by up to 6e-4 in 4 steps.
+
+         Bumped 0.137.1 to 0.138.0 for AiDotNet.Tensors #1278 and #1287: TensorGatherClassValues' backward is
+         differentiable under createGraph (LEO's meta-gradient through a class-index cross-entropy), and the graph
+         backward seeds a rank-0 loss with its own shape instead of [1] (DBNet: "Tensor shapes must match. Got [] and
+         [1]").
+
+         Bumped 0.138.0 to 0.138.1 for AiDotNet.Tensors #1301: the arena's tensor ring reissued a tensor after a reset
+         with its previous owner's GradFn, so a later graph backward walked into an earlier step's node whose tensors
+         had been reissued under other shapes (StyleGAN after its R1 penalty: "Multiples length (1) must match tensor
+         dimensions (3)").
+
+         For #2326: AiDotNet.Tensors ships lib/net462 and lib/netstandard2.0 since 0.137.1
          (AiDotNet.Tensors #679), which the new AiDotNet targets need. 0.138.1 depends on AiDotNet.Evolution
          0.3.0, so Evolution moves with it. -->
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.138.1" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.138.1" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.138.1" />
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.139.0" />
+    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.139.0" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.139.0" />
     <PackageVersion Include="AiDotNet.Evolution" Version="0.3.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.138.1" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.139.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.12" />

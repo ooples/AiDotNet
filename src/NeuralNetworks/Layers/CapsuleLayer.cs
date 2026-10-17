@@ -785,43 +785,6 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
     }
 
     /// <summary>
-    /// Sets the trainable parameters for the layer.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets the trainable parameters for the layer from a single vector. It extracts the appropriate
-    /// portions of the input vector for the transformation matrix and bias. This is useful for loading saved model
-    /// weights or for implementing optimization algorithms that operate on all parameters at once.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the learnable values in the layer.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with the correct length
-    /// - The first part of the vector is used for the transformation matrix
-    /// - The second part of the vector is used for the bias
-    /// 
-    /// This is useful for:
-    /// - Loading a previously saved model
-    /// - Transferring parameters from another model
-    /// - Testing different parameter values
-    /// 
-    /// An error is thrown if the input vector doesn't have the expected number of parameters.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        var matGrad = _transformationMatrixGradient != null
-            ? new Vector<T>(_transformationMatrixGradient.ToArray())
-            : new Vector<T>(_transformationMatrix.Length);
-        var biasGrad = _biasGradient != null
-            ? new Vector<T>(_biasGradient.ToArray())
-            : new Vector<T>(_bias.Length);
-        return Vector<T>.Concatenate(matGrad, biasGrad);
-    }
-
-    /// <summary>
     /// Resets the internal state of the capsule layer.
     /// </summary>
     /// <remarks>

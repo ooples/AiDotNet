@@ -701,31 +701,6 @@ public partial class DocFormer<T> : DocumentNeuralNetworkBase<T>, ILayoutDetecto
         activations["output"] = RouteDocFormer(input, activations);
         return activations;
     }
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-
-        // TrainWithTape runs the full forward (ForwardForTraining -> RunModalityForward), backprops, and
-        // applies the optimizer update itself. The earlier UpdateParameters(CollectGradients()) was a
-        // redundant SECOND update whose hand-collected gradient vector did not line up with
-        // GetParameters(). TrainWithTape alone is the correct single update.
-        // Pass DocFormer's configured optimizer explicitly: the no-optimizer overload falls back to the
-        // base default Adam at lr 1e-3, which overshoots this 12-layer transformer's training and
-        // degrades with more iterations (MoreData_ShouldNotDegrade / collapsed post-training outputs).
-        // DocFormer's own optimizer is a lower-lr (1e-4) Adam matching the paper's fine-tuning recipe.
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
 

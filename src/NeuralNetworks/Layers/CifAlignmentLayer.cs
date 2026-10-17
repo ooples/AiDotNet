@@ -406,10 +406,6 @@ public partial class CifAlignmentLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-        => _alphaPredictor.GetParameterGradients();
-
-    /// <inheritdoc/>
     public override void ClearGradients()
     {
         base.ClearGradients();

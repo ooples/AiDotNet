@@ -960,58 +960,22 @@ public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliary
         return adj;
     }
 
-    /// <summary>
-    /// Trains the Graph Neural Network on a single input-output pair.
-    /// </summary>
-    /// <param name="input">The input tensor containing node features and adjacency information.</param>
-    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
-    /// <remarks>
-    /// <para>
-    /// This method trains the network on a single batch of data. For graph neural networks,
-    /// the input tensor needs to contain both node features and adjacency information in a
-    /// structured format. This implementation assumes the input tensor contains node features
-    /// in the first half and adjacency matrix in the second half.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method teaches the neural network using example data.
-    /// 
-    /// For a graph neural network, the training process:
-    /// 1. Extracts node features and connection information from the input
-    /// 2. Makes a prediction using this graph data
-    /// 3. Compares the prediction to the expected output to calculate error
-    /// 4. Updates the network's internal values to reduce the error
-    /// 
-    /// Over time, with many examples, the network learns to make accurate predictions
-    /// by understanding how nodes in a graph influence each other.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc/>
+    /// <remarks>A single feature vector is read as a one-node graph.</remarks>
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
+        => (input.Rank == 1 ? input.Reshape([1, input.Shape[0]]) : input, target);
+
+    /// <inheritdoc/>
+    /// <remarks>The graph layers propagate over the adjacency of the step's node count.</remarks>
+    protected override void OnTrainingStepStarting(Tensor<T> input, Tensor<T> target)
     {
-        if (!IsTrainingMode)
-        {
-            SetTrainingMode(true);
-        }
-
-        // Ensure 2D input [numNodes, features]
-        if (input.Rank == 1)
-            input = input.Reshape([1, input.Shape[0]]);
-
-        int numNodes = input.Shape[0];
-        var adjacencyMatrix = EnsureAdjacencyMatrix(numNodes);
-
-        // Set adjacency for graph layers before training.
+        base.OnTrainingStepStarting(input, target);
+        var adjacencyMatrix = EnsureAdjacencyMatrix(input.Rank == 1 ? 1 : input.Shape[0]);
         foreach (var layer in Layers)
         {
-            layer.SetTrainingMode(true);
             if (layer is IGraphConvolutionLayer<T> graphLayer)
                 graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
         }
-
-        // Keep the paper's persistent Adam optimizer and train directly through
-        // the tape. NeuralNetworkBase.Train performs LSUV conditioning, which is
-        // not part of Kipf and Welling's reference GCN training procedure.
-        TrainWithTape(input, expectedOutput, _optimizer);
-
-        SetTrainingMode(false);
     }
 
     public override Tensor<T> ForwardForTraining(Tensor<T> input)

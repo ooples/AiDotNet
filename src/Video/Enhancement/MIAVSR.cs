@@ -339,30 +339,21 @@ public partial class MIAVSR<T> : VideoSuperResolutionBase<T>
         if (_flowTrainingSteps == stepsBefore) _flowTrainingSteps++;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
+    /// <inheritdoc/>
+    /// <remarks>The outermost step opens a training step for the flow estimator; nested steps share it.</remarks>
+    protected override void OnTrainingStepStarting(Tensor<T> input, Tensor<T> target)
     {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        base.OnTrainingStepStarting(input, target);
         if (_stepDepth == 0) BeginTrainingStep();
         _stepDepth++;
-        try
-        {
-            // Inside the outer try: entering training mode runs the lazy-shape probe, and a probe that
-            // throws must not leave _stepDepth raised, or every later step would skip BeginTrainingStep.
-            SetTrainingMode(true);
-            try
-            {
-                TrainWithTape(input, expected, _optimizer);
-                _flowTrainingSteps++;
-            }
-            finally
-            {
-                SetTrainingMode(false);
-            }
-        }
-        finally
-        {
-            _stepDepth--;
-        }
+    }
+
+    /// <inheritdoc/>
+    protected override void OnTrainingStepEnded(bool succeeded)
+    {
+        _stepDepth--;
+        if (succeeded) _flowTrainingSteps++;
+        base.OnTrainingStepEnded(succeeded);
     }
 
     // How many step entry points (Train, TrainWithGradientAccumulation) are on the stack; a training forward

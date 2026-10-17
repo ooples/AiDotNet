@@ -256,48 +256,6 @@ public partial class NeuralNetwork<T> : SequentialVectorModelLayoutBase<T>
         }
     }
 
-    /// <summary>
-    /// Trains the neural network on input-output pairs.
-    /// </summary>
-    /// <param name="input">The input tensor for training.</param>
-    /// <param name="expectedOutput">The expected output tensor.</param>
-    /// <remarks>
-    /// <para>
-    /// This method performs one step of training on a single input-output pair or batch.
-    /// It computes the forward pass, calculates the error, and backpropagates to update the network's parameters.
-    /// For full training, this method should be called repeatedly with different inputs from the training dataset.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method teaches the network to make better predictions.
-    /// 
-    /// The training process works like this:
-    /// 1. Input data is fed into the network
-    /// 2. The network makes a prediction (forward pass)
-    /// 3. The prediction is compared to the expected output to calculate error
-    /// 4. The error is propagated backward through the network (backpropagation)
-    /// 5. The network's parameters are adjusted to reduce the error
-    /// 
-    /// Think of it like learning from mistakes:
-    /// - The network makes a guess
-    /// - It sees how far off it was
-    /// - It adjusts its approach to do better next time
-    /// 
-    /// This method performs one iteration of this process. To fully train a network,
-    /// you'd typically call this method many times with different examples from your training data.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
 
     /// <summary>
     /// Gets metadata about the neural network.

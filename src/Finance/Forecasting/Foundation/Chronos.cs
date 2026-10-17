@@ -533,30 +533,19 @@ public partial class Chronos<T> : TimeSeriesFoundationModelBase<T>
 
     /// <inheritdoc/>
     /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Training Chronos uses cross-entropy loss on token predictions.
-    /// The model learns to predict which token (bin) each future value belongs to.
-    /// </para>
+    /// Chronos trains on token targets: the horizon is quantized with the scale captured from the context window
+    /// (Ansari et al. 2024).
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
+        if (target is null) return (input, null);
         if (target.Length != _forecastHorizon)
             throw new ArgumentException(
                 $"Chronos training targets must contain exactly {_forecastHorizon} future values, got {target.Length}.",
                 nameof(target));
-
-        // Chronos is trained as a token language model, not by differentiating through
-        // argmax detokenization. Quantize the future values on the context's scale and
-        // supervise the raw vocabulary logits with cross-entropy (Ansari et al., 2024).
         CaptureTokenScale(input);
-        var tokenTargets = QuantizeUsingCapturedScale(target)
-            .Reshape(new[] { 1, _forecastHorizon });
-        base.Train(input, tokenTargets);
+        return (input, QuantizeUsingCapturedScale(target).Reshape(new[] { 1, _forecastHorizon }));
     }
-
     /// <summary>
     /// Tape-connected Chronos training forward: context tokens to the final horizon's
     /// vocabulary logits. Inference still uses sampling/argmax detokenization.

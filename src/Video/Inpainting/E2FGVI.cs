@@ -356,16 +356,6 @@ public partial class E2FGVI<T> : VideoInpaintingBase<T>
         return Engine.TensorAdd(Engine.TensorMultiply(mask, prediction), Engine.TensorMultiply(inverse, frame));
     }
 
-    /// <summary>
-    /// Trains the model on a masked frame and its ground truth.
-    /// </summary>
-    /// <param name="input">Input tensor containing masked frame [B, C, H, W].</param>
-    /// <param name="expectedOutput">Ground truth unmasked frame [B, C, H, W].</param>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        TrainWithTape(input, expectedOutput);
-    }
-
     /// <summary>Runs the mask-conditioned E2FGVI graph on the autodiff tape.</summary>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
     {

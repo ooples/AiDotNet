@@ -707,24 +707,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
             return Forward(input);
         }
 
-        /// <inheritdoc/>
-        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-        {
-            if (input == null)
-            {
-                throw new ArgumentNullException(nameof(input));
-            }
-
-            if (expectedOutput == null)
-            {
-                throw new ArgumentNullException(nameof(expectedOutput));
-            }
-
-            SetTrainingMode(true);
-            try { TrainWithTape(input, expectedOutput, _optimizer); }
-            finally { SetTrainingMode(false); }
-        }
-
     // UpdateParameters restated a fold the base now derives from generated component registration.
     // Removed under AIDN082.
         // ParameterCount and GetParameters were overridden here to fold the scale sub-networks

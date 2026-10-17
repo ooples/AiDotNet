@@ -231,7 +231,7 @@ public partial class LLaVACoT<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
             {
                 double visVal = NumOps.ToDouble(visualFeatures[t % visDim]);
                 // Uniform broad attention with slight position encoding
-                double posWeight = 1.0 + Math.Sin((d + 1) * t * 0.001) * 0.1;
+                double posWeight = 1.0 + Math.Sin((d + 1.0) * t * 0.001) * 0.1;
                 broadAttn += visVal * posWeight;
                 wSum += posWeight;
             }
@@ -280,7 +280,7 @@ public partial class LLaVACoT<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
                     double qVal =
                         NumOps.ToDouble(questionTokens[(t + iter * 7) % qLen]) / _options.VocabSize;
                     // Iteration-dependent focus (later iterations are more targeted)
-                    double iterFocus = Math.Sin((iter + 1) * (t + 1) * 0.01) * 0.2;
+                    double iterFocus = Math.Sin((iter + 1.0) * (t + 1) * 0.01) * 0.2;
                     double w = Math.Exp((visVal + qVal * 0.4 + iterFocus) * 0.35);
                     reasonAttn += w * visVal;
                     wSum += w;
@@ -371,15 +371,6 @@ public partial class LLaVACoT<T> : VisionLanguageModelBase<T>, IReasoningVLM<T>
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
     }
 
     /// <inheritdoc />

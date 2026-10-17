@@ -45,4 +45,13 @@ public enum AttentionKernelPath
     /// The additive-bias path used when a layer injects an ALiBi positional bias.
     /// </summary>
     AdditiveBias,
+
+    /// <summary>
+    /// The head-interleaved fused kernel (<c>IEngine.MultiHeadAttentionCore</c>), which reads the
+    /// projected Q/K/V in their <c>[batch, seq, heads*headDim]</c> layout and returns the merged-head
+    /// context, so the head-split and head-merge permutes are part of the kernel. Like
+    /// <see cref="FusedFlashAttention"/> it never materializes the score matrix. It is fused on the
+    /// host for <c>float</c> only, so other element types take <see cref="FusedFlashAttention"/>.
+    /// </summary>
+    FusedMultiHeadCore,
 }

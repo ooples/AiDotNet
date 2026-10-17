@@ -958,66 +958,6 @@ public partial class Transformer<T> : TokenLanguageModelLayoutBase<T>, IAuxiliar
     }
 
     /// <summary>
-    /// Trains the Transformer on a single sample <i>or</i> a batched tensor of samples.
-    /// </summary>
-    /// <param name="input">
-    /// Either a single-sample input (e.g. <c>[ctxLen]</c> / <c>[ctxLen, F]</c>) or an
-    /// explicitly batched tensor (e.g. <c>[B, ctxLen]</c> / <c>[B, ctxLen, F]</c>).
-    /// Single-sample inputs are auto-promoted to <c>[1, …]</c>; batched inputs are
-    /// passed through unchanged.
-    /// </param>
-    /// <param name="expectedOutput">Per-sample target with matching batch arity.</param>
-    /// <remarks>
-    /// <para>
-    /// One forward pass + tape-backward + optimizer step. The configured optimizer is
-    /// Adam by default (LR = 1e-3) — see the constructor docs for why and how to override.
-    /// </para>
-    /// <para>
-    /// <b>Important — per-sample vs. batched training:</b> calling this method per-sample
-    /// in a Python-style for-loop converges very slowly on language-model-style tasks
-    /// (V ≥ 32 vocabularies). Each step's gradient must compete against <c>V − 1</c>
-    /// negative classes; the cumulative noise stalls the model at the unigram-prior
-    /// accuracy in any practical step budget. For byte-LM, character-LM, token
-    /// classification, or any task with a vocabulary head, **batch your training**:
-    /// either pass a <c>[B, ctxLen, …]</c> tensor directly, or use the
-    /// <see cref="NeuralNetworkBase{T}.TrainBatched"/> convenience overload that stacks
-    /// an array of single-sample tensors for you. Practical batch sizes for Transformers:
-    /// 16–64. The gradient averaging across a batch reduces noise by <c>√B</c>.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method teaches the Transformer using example data.
-    /// The process works like this:
-    /// 1. The Transformer makes a prediction based on the input
-    /// 2. We compare this prediction to the expected output
-    /// 3. We calculate how wrong the prediction was (the "loss")
-    /// 4. We adjust the Transformer's internal values to make it a little more accurate next time
-    ///
-    /// This process is repeated many times with different examples. For language models
-    /// (which is most Transformer use cases), give the Transformer a BATCH of examples
-    /// at once rather than one example at a time — TrainBatched does this for you, or
-    /// pass a tensor whose first dimension is the batch size.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            // Resolve via GetOrCreateBaseOptimizer so a builder-side
-            // SetBaseTrainOptimizer override (e.g. AiModelBuilder.ConfigureOptimizer
-            // → AdamW with a learning-rate scheduler) actually drives this
-            // training step. The ctor seeded the base optimizer with our
-            // _optimizer instance, so when no override is in effect this
-            // resolves to the same Vaswani Adam we'd have used pre-refactor.
-            TrainWithTape(input, expectedOutput, GetOrCreateBaseOptimizer());
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <summary>
     /// Sets the attention mask for the Transformer.
     /// </summary>
     /// <param name="mask">The attention mask to be used in self-attention layers.</param>

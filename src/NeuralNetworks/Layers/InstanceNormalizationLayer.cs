@@ -419,15 +419,6 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>, IShapeContrac
         Engine.InvalidatePersistentTensor(_beta);
     }
 
-    /// <summary>
-    /// Resets the internal state of the layer.
-    /// </summary>
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_gammaGradient == null || _betaGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        return Vector<T>.Concatenate(_gammaGradient.ToVector(), _betaGradient.ToVector());
-    }
-
     public override void ClearGradients() { base.ClearGradients(); _gammaGradient = null; _betaGradient = null; }
 
     public override void ResetState()

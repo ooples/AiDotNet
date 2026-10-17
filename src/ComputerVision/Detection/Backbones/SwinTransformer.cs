@@ -270,10 +270,6 @@ public partial class SwinTransformer<T> : NeuralNetworkBase<T>, IDetectionBackbo
         }
     };
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) =>
-        throw new NotSupportedException(
-            $"{GetType().Name}: detection backbones train as part of a parent detector.");
-
 
 
 

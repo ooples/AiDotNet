@@ -362,24 +362,21 @@ namespace AiDotNet.NeuralNetworks
             Tensor<T> input, Tensor<T> target, IReadOnlyList<Tensor<T>> sources, double weightDecay,
             IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
         {
-            Dictionary<Tensor<T>, Tensor<T>> gradients;
-            Tensor<T> loss;
-            using (var tape = new GradientTape<T>())
+            // The task loss plus the weight-decay term, on the shared eager tape step (the update runs inside the
+            // tape's scope, while the gradients' arena storage is still live).
+            Tensor<T> RegularizedLoss()
             {
-                loss = Engine.Reshape(TaskLoss(input, target, _defaultLossFunction), new[] { 1 });
+                var loss = Engine.Reshape(TaskLoss(input, target, _defaultLossFunction), new[] { 1 });
                 foreach (var parameter in sources)
                 {
                     var squares = Engine.ReduceSum(Engine.TensorMultiply(parameter, parameter), null, keepDims: false);
                     loss = Engine.TensorAdd(loss, Engine.TensorMultiplyScalar(
                         Engine.Reshape(squares, new[] { 1 }), NumOps.FromDouble(weightDecay / 2.0)));
                 }
-
-                gradients = tape.ComputeGradients(loss, sources, false);
+                return loss;
             }
 
-            T lossValue = ScalarValue(loss);
-            optimizer.Step(new TapeStepContext<T>(sources, gradients, lossValue));
-            return lossValue;
+            return AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(sources, RegularizedLoss, optimizer);
         }
 
         private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> ArchitectureOptimizer

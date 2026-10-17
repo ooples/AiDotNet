@@ -436,29 +436,6 @@ public partial class Hippo<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Trains the HiPPO model on a batch of input-target pairs.
-    /// </summary>
-    /// <param name="input">Input tensor of shape [batch, context, features].</param>
-    /// <param name="target">Target tensor of shape [batch, forecast_horizon].</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method trains HiPPO using standard
-    /// backpropagation. The HiPPO layers learn to:
-    /// 1. Project input into optimal polynomial state space
-    /// 2. Evolve the state using HiPPO-like dynamics
-    /// 3. Produce accurate forecasts from the polynomial approximation
-    ///
-    /// Only available in native mode (not ONNX).
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        base.Train(input, target);
-    }
-
-    /// <summary>
     /// Training-mode forward: calls <see cref="Forward"/> directly so
     /// the tape sees the Hippo SSM layers in training mode. The default
     /// path uses <c>ForecastNative</c>, which sets inference mode.

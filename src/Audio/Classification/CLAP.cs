@@ -413,21 +413,9 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         => _optimizer ?? base.GetOrCreateBaseOptimizer();
 
     /// <inheritdoc />
-    /// <remarks>Fine-tunes the audio tower and the head on multi-hot targets with binary cross-entropy on the
-    /// logits.</remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
+    /// <remarks>The base class's step fine-tunes the audio tower and the head on multi-hot targets with binary
+    /// cross-entropy on the logits, with this model's optimizer.</remarks>
+    protected override string? TrainingUnavailableReason => IsOnnxMode ? OnnxTrainingUnavailableReason : null;
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the

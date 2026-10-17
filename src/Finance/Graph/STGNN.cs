@@ -465,37 +465,6 @@ public partial class STGNN<T> : ForecastingModelBase<T>
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }
 
-    /// <summary>
-    /// Trains the STGNN model on a batch of input-target pairs.
-    /// </summary>
-    /// <param name="input">Input tensor with historical data for all nodes.</param>
-    /// <param name="target">Target tensor with future values for all nodes.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Training minimizes prediction error across all nodes:
-    /// 1. Forward pass through ST-Conv blocks with graph convolution
-    /// 2. Compute loss between predicted and actual future values
-    /// 3. Backpropagate through both spatial and temporal paths
-    /// 4. Update network parameters
-    ///
-    /// The graph structure (adjacency matrix) guides how information flows between nodes.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
-        base.Train(input, target);
-    }
-
     // UpdateParameters was an empty override, silently dropping every restore. The base
     // distributes the vector over the declared enumeration.
     /// <summary>

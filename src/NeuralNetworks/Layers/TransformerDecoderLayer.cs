@@ -521,16 +521,6 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </remarks>
     public override bool SupportsTraining => true;
 
-    public override Vector<T> GetParameterGradients()
-    {
-        if (!_isInitialized) return new Vector<T>(0);
-        return Vector<T>.Concatenate(
-            _selfAttention.GetParameterGradients(), _norm1.GetParameterGradients(),
-            _crossAttention.GetParameterGradients(), _norm2.GetParameterGradients(),
-            _feedForward.GetParameterGradients(), _feedForwardProjection.GetParameterGradients(),
-            _norm3.GetParameterGradients());
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

@@ -1252,12 +1252,6 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         return activations;
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        TrainWithTape(input, expectedOutput, _optimizer);
-    }
-
     // UpdateParameters restated a fold the base now derives from generated component registration.
     // Removed under AIDN082.
     /// <inheritdoc/>

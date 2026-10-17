@@ -5,6 +5,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.MetaLearning.Algorithms;
 using AiDotNet.MetaLearning.Models;
 using AiDotNet.MetaLearning.Options;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -377,6 +378,21 @@ public class LEOExactGradientTests
         Assert.True(Evaluate() < before, $"Meta-training left the query loss at {Evaluate()} from {before}.");
     }
 
+    /// <summary>
+    /// The inner-loop tape is left undisposed on purpose, but it must not stay this thread's recording tape: an
+    /// undisposed current tape captured every later operation on the thread, and with the tape-owned arena it made
+    /// unrelated tests on a reused thread-pool thread walk recycled tensors.
+    /// </summary>
+    [Fact]
+    public void MetaTrain_LeavesNoTapeRecordingOnTheThread()
+    {
+        GradientTape<double>.ResetCurrentForTests();
+        var learner = CreateLearner();
+
+        learner.MetaTrain(Batch(8, 9));
+
+        Assert.Null(GradientTape<double>.Current);
+    }
     [Fact]
     public void LearnedStepSizes_AreTrained()
     {

@@ -134,7 +134,7 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     public override ModelOptions GetOptions() => _options;
 
     /// <summary>Uses the configured DCRNN Adam recipe in the shared tape trainer.</summary>
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
     private int _sequenceLength;
     private int _forecastHorizon;
@@ -677,36 +677,20 @@ public partial class DCRNN<T> : ForecastingModelBase<T>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
 
 
-    /// <summary>
-    /// Trains the DCRNN model on provided data.
-    /// </summary>
-    /// <param name="input">Training input tensor.</param>
-    /// <param name="target">Target output tensor.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Training adjusts the model's parameters.
-    /// DCRNN uses scheduled sampling during training.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
+    /// <inheritdoc/>
+    /// <remarks>The step's target is the decoder's teacher-forcing input (Li et al. 2018, scheduled sampling).</remarks>
+    protected override void OnTrainingStepStarting(Tensor<T> input, Tensor<T> target)
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
         ValidateTeacherForcingTarget(target);
         _teacherForcingTarget = target;
-        try
-        {
-            // FinancialModelBase routes through TrainWithTape and now receives this model's
-            // configured paper Adam optimizer through TrainingOptimizer.
-            base.Train(input, target);
-            _trainingStep++;
-        }
-        finally
-        {
-            _teacherForcingTarget = null;
-        }
     }
-    /// <summary>
+
+    /// <inheritdoc/>
+    protected override void OnTrainingStepEnded(bool succeeded)
+    {
+        _teacherForcingTarget = null;
+        if (succeeded) _trainingStep++;
+    }    /// <summary>
     /// Gets metadata about the DCRNN model.
     /// </summary>
     /// <returns>ModelMetadata containing model information.</returns>

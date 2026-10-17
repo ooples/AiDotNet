@@ -1042,35 +1042,6 @@ public partial class TableTransformer<T> : DocumentNeuralNetworkBase<T>, ITableE
         return _useNativeMode ? Forward(preprocessed) : RunDetectionOnnx(preprocessed);
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Training is not supported in ONNX inference mode.");
-        }
-
-        SetTrainingMode(true);
-        try
-        {
-            // TrainWithTape runs forward + backward + the optimizer update (the same
-            // tape path the base Train uses). The previous code followed it with a
-            // manual CollectParameterGradients()/UpdateParameters() — a SECOND,
-            // redundant update whose flat per-parameter gradient vector length did
-            // not match GetParameters() (a layer's gradient count differs from its
-            // ParameterCount), throwing in Engine.Subtract once the forward stopped
-            // crashing. TrainWithTape owns the whole step.
-            // Pass the configured optimizer through. The two-argument overload left _optimizer
-            // assigned but never read, so training ran on the framework default instead of DETR's
-            // 1e-4 (Smock et al., 2022) and the memorization loss went from 0.0000 to 12.3652.
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
 

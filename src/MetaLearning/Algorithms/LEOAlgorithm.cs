@@ -325,13 +325,11 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         var decoder = new Vector<T>(_decoderWeights.Length);
         var latentRates = new Vector<T>(_latentRates.Length);
         var fineTuningRates = new Vector<T>(_fineTuningRates.Length);
-        using (var tape = new GradientTape<T>(new GradientTapeOptions { Persistent = true }))
-        {
-            var objective = Run(support, query, episode, weights, noise).Objective;
-            loss = objective[0];
-            var gradients = tape.ComputeGradients(objective, weights.Leaves);
-            weights.CopyGradients(gradients, encoder, relation, decoder, latentRates, fineTuningRates);
-        }
+        loss = AiDotNet.Training.TapeGradients<T>.Of(
+            () => Run(support, query, episode, weights, noise).Objective,
+            weights.Leaves,
+            gradients => weights.CopyGradients(gradients, encoder, relation, decoder, latentRates, fineTuningRates),
+            persistent: true);
 
         return new Gradient(loss, bodyGradient, encoder, relation, decoder, latentRates, fineTuningRates);
     }
@@ -477,16 +475,7 @@ public partial class LEOAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
     /// createGraph the backward is recorded on the enclosing tape, so outer differentiation reaches through it.
     /// </summary>
     private Tensor<T> InnerGradient(Tensor<T> source, Func<Tensor<T>> innerLoss)
-    {
-        // The tape is deliberately not disposed: inside a TensorArena, disposing it returns tensors the enclosing
-        // computation still holds - the next step then reads a recycled buffer and fails on its shape. Left to the
-        // collector, the step's graph stays valid for the outer backward that differentiates through it.
-        var inner = new GradientTape<T>(new GradientTapeOptions { Persistent = true });
-        var loss = innerLoss();
-        var gradients = inner.ComputeGradients(loss, new[] { source }, createGraph: !_leoOptions.UseFirstOrder);
-        var gradient = gradients.TryGetValue(source, out var g) ? g : new Tensor<T>(source._shape);
-        return _leoOptions.UseFirstOrder ? AiDotNetEngine.Current.StopGradient(gradient) : gradient;
-    }
+        => AiDotNet.Training.TapeGradients<T>.Nested(source, innerLoss, createGraph: !_leoOptions.UseFirstOrder);
 
     private Tensor<T> SupportLoss(Tensor<T> support, Tensor<T> classifier, Tensor<T> target, Tensor<T>? mask)
     {

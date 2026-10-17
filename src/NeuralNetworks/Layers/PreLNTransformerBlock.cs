@@ -338,8 +338,9 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>, IShapeContract
         metadata["HiddenSize"] = _hiddenSize.ToString(ci);
         metadata["FfnDim"] = _ffnDim.ToString(ci);
         metadata["Gated"] = _gated.ToString();
-        metadata["FfnActivationType"] = _ffnActivation.GetType().AssemblyQualifiedName
-            ?? _ffnActivation.GetType().FullName ?? string.Empty;
+        var ffnActivationType = _ffnActivation.GetType();
+        string? qualifiedName = ffnActivationType.AssemblyQualifiedName;
+        metadata["FfnActivationType"] = qualifiedName ?? ffnActivationType.FullName ?? string.Empty;
 
         // Persist the injected (polymorphic T5 / MHA / GQA) attention sublayer as a self-contained sub-blob
         // under an "Attn." prefix: its concrete type, its own metadata, and its shapes. The block's ctor
@@ -353,15 +354,6 @@ public partial class PreLNTransformerBlock<T> : LayerBase<T>, IShapeContract
         metadata["Attn.InputShape"] = string.Join(",", _attention.GetInputShape());
         metadata["Attn.OutputShape"] = string.Join(",", _attention.GetOutputShape());
         return metadata;
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        Vector<T> acc = new Vector<T>(0);
-        foreach (var layer in OrderedSubLayers())
-            acc = Vector<T>.Concatenate(acc, layer.GetParameterGradients());
-        return acc;
     }
 
     /// <inheritdoc/>

@@ -820,42 +820,6 @@ public partial class HighwayLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
         Engine.InvalidatePersistentTensor(_gateBias);
     }
 
-    /// <summary>
-    /// Resets the internal state of the layer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method resets the internal state of the layer, clearing cached values from forward and backward passes.
-    /// This includes the last input, output, transform output, gate output, and all gradients.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
-    /// 
-    /// When resetting the state:
-    /// - All stored information about previous inputs and outputs is removed
-    /// - All calculated gradients are cleared
-    /// - The layer is ready for new data without being influenced by previous data
-    /// 
-    /// This is important for:
-    /// - Processing a new, unrelated batch of data
-    /// - Preventing information from one batch affecting another
-    /// - Starting a new training episode
-    /// 
-    /// For example, if you've processed one batch of images and want to start with a new batch,
-    /// you should reset the state to prevent the new processing from being influenced by the previous batch.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_transformWeightsGradient == null || _transformBiasGradient == null ||
-            _gateWeightsGradient == null || _gateBiasGradient == null)
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        return Vector<T>.Concatenate(
-            new Vector<T>(_transformWeightsGradient.ToArray()),
-            new Vector<T>(_transformBiasGradient.ToArray()),
-            new Vector<T>(_gateWeightsGradient.ToArray()),
-            new Vector<T>(_gateBiasGradient.ToArray()));
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

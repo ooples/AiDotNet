@@ -704,8 +704,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
             // and consumed before the next call to this same layer. ND input keeps the
             // original allocating path (FusedLinearInto's fast path is rank-2 only; routing ND
             // through it would allocate AND copy).
-            bool ffTapeActive = AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
-                && !AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed;
+            bool ffTapeActive = AiDotNet.Autodiff.GradientRecording.IsRecording<T>();
             if (ForwardScratchGate.FusedLinear && !ffTapeActive && input.Rank == 2)
             {
                 int batchDim = input.Shape[0];
@@ -904,41 +903,6 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
         // Notify engine that parameters have changed (for GPU cache invalidation)
         Engine.InvalidatePersistentTensor(_weights);
         Engine.InvalidatePersistentTensor(_biases);
-    }
-
-    /// <summary>
-    /// Resets the internal state of the layer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method resets the internal state of the layer by clearing all cached values from forward
-    /// and backward passes. This is useful when starting to process a new batch of data.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
-    /// 
-    /// When resetting the state:
-    /// - The saved input and output are cleared
-    /// - The calculated gradients are cleared
-    /// - The layer forgets previous calculations it performed
-    /// 
-    /// This is typically called:
-    /// - Between training batches to free up memory
-    /// - When switching from training to evaluation mode
-    /// - When starting to process completely new data
-    /// 
-    /// It's like wiping a whiteboard clean before starting a new calculation.
-    /// Note that this doesn't affect the learned weights and biases, just the
-    /// temporary working data.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_weightsGradient == null || _biasesGradient == null || _weightsGradient.Length == 0 || _biasesGradient.Length == 0)
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        // Bulk copy from contiguous tensor storage — replaces per-element scalar loops
-        return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_weightsGradient.Data),
-            Vector<T>.FromMemory(_biasesGradient.Data));
     }
 
     public override void ClearGradients()

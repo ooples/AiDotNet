@@ -514,23 +514,6 @@ public partial class Cutie<T> : NeuralNetworkBase<T>
         return activations;
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is not supported in ONNX mode. Use native mode for training.");
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <summary>
     /// Training forward. Cutie's layers are used in GROUPS (image encoder 0-4, object encoder 5-6,
     /// memory attention 10-13, mask decoder 14+), so the base sequential walk over ALL <c>Layers</c>

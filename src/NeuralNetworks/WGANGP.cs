@@ -437,7 +437,7 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
         // Train generator: minimize -mean(Critic(fake)) (Wasserstein objective with GP)
         Tensor<T> newNoise = GenerateRandomNoiseTensor(noise.Shape[0], Generator.Architecture.InputSize);
         var trainableGen = (NeuralNetworkBase<T>)Generator;
-        T generatorLoss = trainableGen.TrainWithCustomLoss(ShapeAsGeneratorInput(newNoise), genOutput =>
+        T generatorLoss = trainableGen.TrainWithCustomLossFused(ShapeAsGeneratorInput(newNoise), (_, genOutput) =>
         {
             // Keep the critic forward on the generator's active tape. Predict() is an
             // inference API and deliberately suppresses gradient recording; using it here
@@ -590,6 +590,9 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
             // input-gradient norm back into the critic weights, just as PyTorch's autograd.grad
             // and the paper's official TensorFlow implementation do.
             Tensor<T> inputGradients;
+            // Outside the step arena: the input gradients this inner tape builds outlive it, and an arena may reissue a
+            // step's tensors at a tape boundary (AiDotNet.Tensors 0.135.0+), corrupting the penalty's backward.
+            using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
             using (var innerTape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>())
             {
                 var interpolatedScores = Critic.ForwardForTraining(interpolated);
@@ -711,50 +714,6 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
         // during the training step. Return the penalty scalar only.
         var emptyGradients = new Vector<T>(Critic.GetParameters().Length);
         return (totalPenalty, emptyGradients);
-    }
-
-    /// <summary>
-    /// Updates critic parameters using the configured optimizer with pre-computed gradients.
-    /// </summary>
-    /// <param name="gradients">The pre-computed combined gradients.</param>
-    private void UpdateCriticWithOptimizer(Vector<T> gradients)
-    {
-        var parameters = Critic.GetParameters();
-
-        // Gradient clipping using vectorized operations
-        var gradientNorm = gradients.L2Norm();
-        var clipThreshold = NumOps.FromDouble(5.0);
-
-        if (NumOps.GreaterThan(gradientNorm, clipThreshold))
-        {
-            var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            gradients = Engine.Multiply(gradients, scaleFactor);
-        }
-
-        var updatedParameters = _criticOptimizer.UpdateParameters(parameters, gradients);
-        Critic.UpdateParameters(updatedParameters);
-    }
-
-    /// <summary>
-    /// Updates generator parameters using the configured optimizer.
-    /// </summary>
-    private void UpdateGeneratorWithOptimizer()
-    {
-        var parameters = Generator.GetParameters();
-        var gradients = Generator.GetParameterGradients();
-
-        // Gradient clipping using vectorized operations
-        var gradientNorm = gradients.L2Norm();
-        var clipThreshold = NumOps.FromDouble(5.0);
-
-        if (NumOps.GreaterThan(gradientNorm, clipThreshold))
-        {
-            var scaleFactor = NumOps.Divide(clipThreshold, gradientNorm);
-            gradients = Engine.Multiply(gradients, scaleFactor);
-        }
-
-        var updatedParameters = _generatorOptimizer.UpdateParameters(parameters, gradients);
-        Generator.UpdateParameters(updatedParameters);
     }
 
     /// <summary>
@@ -1037,9 +996,11 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
     }
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         TrainStep(expectedOutput, input);
+
+        return true;
     }
 
     /// <inheritdoc/>
