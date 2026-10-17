@@ -111,19 +111,6 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         // class axis from the compact class-index target shape when present.
         int classAxis = ResolveClassAxis(predicted, target);
 
-        // Dense targets over the last axis: the engine's single softmax cross-entropy op is exactly the objective
-        // composed below (log-softmax, target-weighted sum, mean over the supervised rows), and an engine can run it as
-        // fused kernels -- on CUDA, three kernels instead of about forty per training step. Taken before the log-softmax
-        // below is computed: under a compiled trace that log-softmax would otherwise be recorded and replayed every
-        // step with nothing reading it.
-        if (classAxis == predicted.Shape.Length - 1 && predicted.Shape.Length >= 2
-            && target.Shape.ToArray().SequenceEqual(predicted.Shape.ToArray()))
-        {
-            return Engine.TensorSoftmaxCrossEntropy(predicted, target);
-        }
-
-        var logSoftmax = ComputeLogSoftmax(predicted, classAxis);
-
         // PyTorch's nn.CrossEntropyLoss accepts BOTH target formats and the
         // PR #1404 blanket CE→CEWithLogits swap brought models that pass
         // EITHER form into this code path:
@@ -155,7 +142,8 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
             int classes = predicted.Shape[classAxis];
             int rows = predicted.Length / Math.Max(1, classes);
             var flatTarget = Engine.Reshape(target, [rows]);
-            var picked = Engine.TensorGatherClassValues(Engine.Reshape(logSoftmax, [rows, classes]), flatTarget);
+            var picked = Engine.TensorGatherClassValues(
+                Engine.Reshape(ComputeLogSoftmax(predicted, classAxis), [rows, classes]), flatTarget);
             var pickedTotal = Engine.ReduceSum(picked, new[] { 0 }, keepDims: false);
             var inRange = Engine.TensorMultiply(
                 Engine.TensorGreaterThan(flatTarget, NumOps.FromDouble(-0.5)),
@@ -170,13 +158,24 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
             target = ClassIndicesToOneHot(target, predicted.Shape[classAxis], classAxis, predicted.Shape.ToArray());
         }
 
+        // Dense targets over the last axis: the engine's single softmax cross-entropy op is exactly the objective
+        // composed below (log-softmax, target-weighted sum, mean over the supervised rows), and an engine can run it as
+        // fused kernels -- on CUDA, three kernels instead of about forty per training step.
+        if (classAxis == predicted.Shape.Length - 1 && predicted.Shape.Length >= 2
+            && target.Shape.ToArray().SequenceEqual(predicted.Shape.ToArray()))
+        {
+            return Engine.TensorSoftmaxCrossEntropy(predicted, target);
+        }
+
         // CE per-sample = -Σ_class target_i * log_softmax_i  (sum over class axis only).
         // Match PyTorch's nn.CrossEntropyLoss(reduction='mean') and the scalar CalculateLoss
         // path above — those return the per-sample sum across classes, NOT a mean across
         // classes. Averaging over the class axis here would silently divide gradients by the
         // class count, making tape training disagree with the CPU code path (that's the
         // exact bug noted in PR review).
-        var product = Engine.TensorMultiply(target, logSoftmax);
+        // The log-softmax is built only on the paths that read it: the dense path above is one engine op, and a
+        // log-softmax recorded ahead of it ran (and was differentiated) every step for nothing.
+        var product = Engine.TensorMultiply(target, ComputeLogSoftmax(predicted, classAxis));
         var perSample = Engine.ReduceSum(product, new[] { classAxis }, keepDims: false);
 
         // Mean over remaining (batch/sample) axes if any. For 1D inputs (logits was a single
