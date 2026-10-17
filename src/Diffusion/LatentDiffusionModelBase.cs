@@ -49,20 +49,12 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
     /// </summary>
     public override IEnumerable<Tensor<T>> GetParameterChunks()
     {
-#if NETFRAMEWORK
-        // GetParameterChunks is part of IParameterizable's chunked-API
-        // contract, which IParameterizable.cs gates behind
-        // `#if !NETFRAMEWORK` because default interface methods need
-        // .NET-Standard-2.1+ runtime dispatch that net471 doesn't
-        // provide. The interface cast on net471 therefore can't reach
-        // a chunked enumeration through the IParameterizable surface.
-        // Until the chunked API is widened on net471 (would require
-        // declaring it as a regular interface member with concrete
-        // overrides on every implementer), foundation-scale parameter
-        // counting on net471 is unsupported — return empty so the
-        // ParameterCount property's flat-vector path stays the only
-        // way to enumerate.
-        yield break;
+#if AIDN_LEGACY_TFM
+        // On net462, net471 and netstandard2.0 IParameterizable has no chunked members (default interface
+        // methods need .NET Standard 2.1 runtime support), so the registry-driven chunking below is unavailable.
+        // Yield the base's single flat chunk rather than nothing: SaveState and Clone walk these chunks, and an
+        // empty enumeration wrote and copied a model with no parameters.
+        foreach (var chunk in base.GetParameterChunks()) yield return chunk;
 #else
         // DRIVEN BY THE COMPONENT REGISTRY, not by a hand-written list of the three sub-models
         // this base happens to know about.
@@ -109,7 +101,7 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
         // layers (this override bypasses the base flat SetParameters path), so a sibling clone isn't
         // corrupted. Per-element null tensors are rejected by each sub-model's own SetParameterChunks.
         EnsureOwnWeights();
-#if NETFRAMEWORK
+#if AIDN_LEGACY_TFM
         // Chunked API is unavailable through the interface on net471 (see GetParameterChunks above);
         // fall back to the base flat buffer-and-SetParameters path.
         base.SetParameterChunks(chunks);
@@ -147,7 +139,7 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
 #endif
     }
 
-#if !NETFRAMEWORK
+#if !AIDN_LEGACY_TFM
     private static void PullInto(
         IParameterizable<T, Tensor<T>, Tensor<T>>? sub,
         IEnumerator<Tensor<T>> source,

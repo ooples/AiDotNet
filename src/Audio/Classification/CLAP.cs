@@ -82,7 +82,10 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private readonly bool _useNativeMode;
     private bool _disposed;
-    private Tensor<T>? _hannWindow;
+    // CLAPModel's waveform -> log-mel pipeline (clip fitting, fusion views, filterbank), built on first use.
+    private AiDotNet.Audio.Fingerprinting.ClapAudioFrontEnd<T>? _frontEnd;
+    // Random crops of long clips while fine-tuning; inference reseeds per call, as CLAPModel does.
+    private Random? _trainingRandom;
     private string[] _textPrompts = Array.Empty<string>();
     private int[][] _promptTokens = Array.Empty<int[]>();
     private string[] _headLabels;
@@ -354,7 +357,7 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     public Tensor<T> ExtractAudioEmbedding(Tensor<T> audio)
     {
         ThrowIfDisposed();
-        return CLAPModel<T>.L2Normalize(Engine, AudioProjection(audio));
+        return InEvaluationMode(() => CLAPModel<T>.L2Normalize(Engine, AudioProjection(audio)));
     }
 
     #endregion
@@ -391,8 +394,8 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         if (wasTraining) SetTrainingMode(false);
         try
         {
-            var c = PreprocessAudio(input);
-            foreach (var l in Layers) c = l.Forward(c);
+            var (features, longer) = PrepareAudio(input);
+            var c = CLAPModel<T>.RunAudioTower(Layers, Layers.Count, features, longer);
             return PostprocessOutput(Unbatch(input, c));
         }
         finally
@@ -434,9 +437,19 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
     /// <inheritdoc />
     /// <remarks>CLAPModel's log-mel image, <c>[batch, 1, frames, mels]</c>.</remarks>
-    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
-        => CLAPModel<T>.LogMel(Engine, rawAudio, _options.Network,
-            _hannWindow ??= CLAPModel<T>.BuildHannWindow(_options.Network.StftWindowSize));
+    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => PrepareAudio(rawAudio).Features;
+
+    // CLAPModel's audio input: the features [batch, views, frames, mels] and LAION-CLAP's fusion mask.
+    private (Tensor<T> Features, Tensor<T> Longer) PrepareAudio(Tensor<T> rawAudio)
+    {
+        Guard.NotNull(rawAudio);
+        _frontEnd ??= new AiDotNet.Audio.Fingerprinting.ClapAudioFrontEnd<T>(_options.Network);
+        var random = IsTrainingMode
+            ? _trainingRandom ??= RandomHelper.CreateSeededRandom(_options.Network.Seed ?? 0)
+            : RandomHelper.CreateSeededRandom(_options.Network.Seed ?? 0);
+        using (new NoGradScope<T>())
+            return _frontEnd.Prepare(Engine, rawAudio, random);
+    }
 
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => Engine.Sigmoid(o);
@@ -449,11 +462,11 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
             Name = _useNativeMode ? "CLAP-Native" : "CLAP-ONNX",
             Description = "CLAP Contrastive Language-Audio Pre-training (Wu et al., ICASSP 2023)",
             FeatureCount = ClassLabels.Count,
-            Complexity = _options.Network.AudioEncoderLayers
+            Complexity = _options.Network.AudioStageDepths.Sum()
         };
         m.AdditionalInfo["Architecture"] = "CLAP";
         m.AdditionalInfo["ProjectionDim"] = _options.Network.ProjectionDim.ToString();
-        m.AdditionalInfo["AudioHiddenDim"] = _options.Network.AudioHiddenDim.ToString();
+        m.AdditionalInfo["AudioEmbedDim"] = _options.Network.AudioEmbedDim.ToString();
         m.AdditionalInfo["NumClasses"] = ClassLabels.Count.ToString();
         m.AdditionalInfo["ZeroShotMode"] = (_textPrompts.Length > 0).ToString();
         return m;
@@ -462,6 +475,25 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     #endregion
 
     #region Private Helpers
+
+    /// <summary>
+    /// Runs <paramref name="inference"/> with the towers in evaluation mode and restores the previous mode, as PredictCore
+    /// does. Networks and layers start in training mode, so an embedding taken without this ran the text tower's dropout
+    /// and the same caption encoded differently on every call.
+    /// </summary>
+    private TResult InEvaluationMode<TResult>(Func<TResult> inference)
+    {
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            return inference();
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
+    }
 
     // A single waveform [samples] gives [labels]; a batch [batch, samples] keeps its batch axis.
     private Tensor<T> Unbatch(Tensor<T> input, Tensor<T> output)
@@ -472,16 +504,14 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     // The audio tower's projection into the joint space, before normalization (what the linear head reads).
     private Tensor<T> AudioProjection(Tensor<T> audio)
     {
-        var mel = PreprocessAudio(audio);
+        var (features, longer) = PrepareAudio(audio);
         if (IsOnnxMode && OnnxEncoder is not null)
-            return OnnxEncoder.Run(mel);
+            return OnnxEncoder.Run(features);
         if (!_useNativeMode)
             throw new InvalidOperationException(
                 "No model available for audio embedding. Provide an ONNX model path or use native training mode.");
         using var _ = new NoGradScope<T>();
-        var c = mel;
-        for (int i = 0; i < Layers.Count - 1; i++) c = Layers[i].Forward(c);
-        return c;
+        return CLAPModel<T>.RunAudioTower(Layers, Layers.Count - 1, features, longer);
     }
 
     private Tensor<T> TextEmbedding(int[] ids)
@@ -509,7 +539,9 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
 
     // Zero-shot (Wu et al. 2023, §4.2; LAION-CLAP's evaluation): the softmax over the prompts of the cosine
     // similarities scaled by 1/τ.
-    private T[] ZeroShotScores(Tensor<T> window)
+    private T[] ZeroShotScores(Tensor<T> window) => InEvaluationMode(() => ZeroShotScoresCore(window));
+
+    private T[] ZeroShotScoresCore(Tensor<T> window)
     {
         var audio = ExtractAudioEmbedding(window).ToVector();
         var logits = new double[_textPrompts.Length];

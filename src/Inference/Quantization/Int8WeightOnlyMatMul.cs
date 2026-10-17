@@ -130,7 +130,7 @@ internal static class Int8WeightOnlyMatMul
                 "that fall-through must now either guard the call themselves or pre-fill the " +
                 "output span with the bias values before invocation (review #1363 C8QXn).");
 
-#if !NETFRAMEWORK
+#if !AIDN_LEGACY_TFM
         // net10.0 fast path: single tiled INT8 GEMM call — weights stay int8
         // inside the cache and the macro-kernel's per-tile dequant, never
         // materializing the full FP32 weight matrix. ChooseTileSize / per-call

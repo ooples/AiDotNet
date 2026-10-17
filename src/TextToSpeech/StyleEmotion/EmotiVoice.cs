@@ -164,15 +164,6 @@ public partial class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
         return waveform;
     }
 
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
-    }
-
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     // inputFeatureDim wired to MelChannels so the helper emits a leading

@@ -36,7 +36,7 @@ internal sealed class LicenseValidator
     private LicenseValidationResult? _cached;
     private readonly object _cacheLock = new();
 
-#if !NET471
+#if !AIDN_LEGACY_TFM
     private static readonly System.Net.Http.HttpClient SharedHttpClient = new()
     {
         Timeout = TimeSpan.FromSeconds(15)
@@ -506,7 +506,7 @@ internal sealed class LicenseValidator
         var requestBody = BuildRequestBody();
         string json = JsonConvert.SerializeObject(requestBody);
 
-#if NET471
+#if AIDN_LEGACY_TFM
         return ValidateOnlineNet471(url, json);
 #else
         return ValidateOnlineModern(url, json);
@@ -564,7 +564,7 @@ internal sealed class LicenseValidator
         string rawId = MachineFingerprint.GetMachineId();
         byte[] bytes = Encoding.UTF8.GetBytes("license-validation:" + rawId);
 
-#if NET471
+#if AIDN_LEGACY_TFM
         using var sha = SHA256.Create();
         byte[] hash = sha.ComputeHash(bytes);
 #else
@@ -580,7 +580,7 @@ internal sealed class LicenseValidator
         return sb.ToString();
     }
 
-#if !NET471
+#if !AIDN_LEGACY_TFM
     private async System.Threading.Tasks.Task<LicenseValidationResult> ValidateOnlineAsync(
         System.Threading.CancellationToken cancellationToken = default)
     {
@@ -695,10 +695,10 @@ internal sealed class LicenseValidator
     }
 #endif
 
-#if NET471
+#if AIDN_LEGACY_TFM
     private LicenseValidationResult ValidateOnlineNet471(string url, string json)
     {
-        using var client = new System.Net.WebClient();
+        using var client = new TimedWebClient(TimeSpan.FromSeconds(15));   // as SharedHttpClient
         client.Headers[System.Net.HttpRequestHeader.ContentType] = "application/json";
         try
         {

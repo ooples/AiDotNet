@@ -168,16 +168,6 @@ public partial class CosyVoice3<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     /// <inheritdoc />
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
-    }
-
-    /// <inheritdoc />
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     /// <inheritdoc />
