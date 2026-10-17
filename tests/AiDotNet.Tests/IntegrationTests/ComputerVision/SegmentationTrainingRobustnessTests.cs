@@ -879,20 +879,6 @@ public class SegmentationTrainingRobustnessTests : IDisposable
     }
 
     [Fact(Timeout = 120000)]
-    public async Task GLaMM_MultiStepTrain_DoesNotThrow()
-    {
-        var model = new GLaMM<float>(Arch(), options: new GLaMMOptions { NumClasses = 5 });
-        var input = Rand(42, 1, 3, 32, 32);
-        var predicted = model.Predict(input);
-
-        for (int step = 0; step < 3; step++)
-        {
-            var expected = Rand(step + 100, predicted.Shape.ToArray());
-            Assert.Null(Record.Exception(() => model.Train(input, expected)));
-        }
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task OMGLLaVA_MultiStepTrain_DoesNotThrow()
     {
         var model = new OMGLLaVA<float>(Arch(), options: new OMGLLaVAOptions { NumClasses = 5 });

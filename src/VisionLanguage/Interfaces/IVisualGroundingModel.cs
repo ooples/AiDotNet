@@ -11,7 +11,6 @@ namespace AiDotNet.VisionLanguage.Interfaces;
 /// Architectures include:
 /// <list type="bullet">
 /// <item>Grounding DINO: DINO detector + grounded pre-training for open-set detection</item>
-/// <item>GLaMM: Pixel grounding with LMM generating text + segmentation masks</item>
 /// <item>Ferret: Spatial-aware visual sampler for free-form region inputs</item>
 /// <item>OWL-ViT/OWLv2: Open-vocabulary detection via CLIP-aligned ViT</item>
 /// </list>

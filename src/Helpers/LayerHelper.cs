@@ -25175,7 +25175,7 @@ public static partial class LayerHelper<T>
     /// <summary>
     /// Creates layers for grounding/detection VLMs with cross-modal feature fusion.
     /// Architecture: ViT + text encoder -> feature fusion -> detection decoder.
-    /// Used by GroundingDINO-1.5, DINO-X, OWL-ViT, OWLv2 and GLaMM.
+    /// Used by GroundingDINO-1.5, DINO-X, OWL-ViT and OWLv2.
     /// </summary>
     public static IEnumerable<ILayer<T>> CreateDefaultGroundingDetectionLayers(
         int visionDim = 1024,
@@ -29249,55 +29249,6 @@ public static partial class LayerHelper<T>
         }
 
         return 1;
-    }
-
-    #endregion
-    #region GLaMM Layers
-
-    /// <summary>
-    /// Creates encoder layers for the GLaMM model.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateGLaMMEncoderLayers(
-        int inputChannels, int inputHeight, int inputWidth,
-        int[] channelDims, int[] depths, double dropRate)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        int h = inputHeight, w = inputWidth, inC = inputChannels;
-
-        for (int stage = 0; stage < channelDims.Length; stage++)
-        {
-            int outC = channelDims[stage];
-            int stride = stage == 0 ? 4 : 2;
-            int kernel = stage == 0 ? 7 : 3;
-            int pad = stage == 0 ? 3 : 1;
-
-            yield return new ConvolutionalLayer<T>(outC, kernel, stride, pad, relu);
-            h /= stride; w /= stride;
-            yield return new BatchNormalizationLayer<T>();
-
-            for (int d = 1; d < depths[stage]; d++)
-            {
-                yield return new ConvolutionalLayer<T>(outC, 3, 1, 1, relu);
-                yield return new BatchNormalizationLayer<T>();
-            }
-
-            inC = outC;
-        }
-    }
-
-    /// <summary>
-    /// Creates decoder layers for the GLaMM model.
-    /// </summary>
-    public static IEnumerable<ILayer<T>> CreateGLaMMDecoderLayers(
-        int encoderOutputChannels, int decoderDim, int numClasses,
-        int featureHeight, int featureWidth)
-    {
-        var relu = new ReLUActivation<T>() as IActivationFunction<T>;
-        var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-
-        yield return new ConvolutionalLayer<T>(decoderDim, 1, 1, 0, relu);
-        yield return new ConvolutionalLayer<T>(decoderDim, 3, 1, 1, relu);
-        yield return new ConvolutionalLayer<T>(numClasses, 1, 1, 0, identity);
     }
 
     #endregion

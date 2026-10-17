@@ -119,7 +119,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     /// routed by VisionLanguageTestBase), so they take neither the grounding token input nor its iteration settings.
     /// </summary>
     private static readonly System.Collections.Generic.HashSet<string> GroundingNetworkModels =
-        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal) { "GroundingDINO", "GroundedSAM2" };
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal) { "GroundingDINO", "GroundedSAM2", "GLaMM" };
 
     private static readonly System.Collections.Generic.HashSet<string> FoundationScaleVisionLanguageModels =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
@@ -422,8 +422,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     private static readonly System.Collections.Generic.Dictionary<string, string> CollisionOwners =
         new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.Ordinal)
         {
-            // The grounding VLM every GLaMM entry in this file was written for.
-            { "GLaMM", "AiDotNet.VisionLanguage.Grounding." },
             // The pin's own comment named this one explicitly, then relied on ordering to get it.
             { "AudioPaLM", "AiDotNet.TextToSpeech.MultiModal." },
             // Three-way: also VisionLanguage.Encoders.SAM, and a Bioinformatics SAM (Significance
@@ -1574,13 +1572,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // doubles throughput; paired with the HeavyTrainingTimeoutClassNames smoke cap (below) this
         // brings the deep dual-stream train path inside the gate while keeping the model paper-scale.
         "ViLBERT",
-        // GLaMM (Rasheed et al. 2024): grounding VLM at paper scale — VisionDim=1024 with 24 vision
-        // layers + cross-modal fusion + detection decoder (~200M+ params), the same 1024-wide class as
-        // ViLBERT/LLaVA. Once the token-consistent architecture fix lets it construct (was throwing the
-        // 128-vs-1024 gamma mismatch), its multi-iteration training invariants overrun the 120 s gate at
-        // <double>. <float> halves the per-step footprint; paired with the HeavyTrainingTimeoutClassNames
-        // smoke cap (below) this brings the deep grounding train path inside the gate at paper scale.
-        "GLaMM",
         // NOTE: EmotiVoice, TinyBERTNER, UNet3D from the #1624 inventory have MANUAL
         // scaffolds (ModelFamilyTests/NeuralNetworks/*Tests.cs), so they are not
         // auto-generated and the float-list does not apply — UNet3DTests is already
@@ -4612,6 +4603,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
          : className == "Florence2" ? 64
          // Grounding DINO's fixture: a 64 px image gives the Swin levels 8x8, 4x4 and 2x2 and the extra level 1x1.
          : className is "GroundingDINO" or "GroundedSAM2" ? 64
+         // GLaMM's fixture: CLIP reads 28 px (a 4x4 grid of 7 px patches).
+         : className == "GLaMM" ? 28
          // SAM, SAM21, SlimSAM, MaskAdapter and Mask2Former are deliberately NOT in this list.
          // Their constructor overrides pin 112 (SAM, SAM21) and 128 (the other three), and this arm
          // shadows the IsPatchVisionModel branch below, so listing them here fed a 32px fixture to a
@@ -5556,7 +5549,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "GroundingDINO15" or "DINOX" => 256,
             "OWLViT" => 32, // Generated public-options fixture; production default remains 768.
             "OWLv2" => 32, // Generated public-options fixture; production default remains 1024.
-            "GLaMM" => 32, // Generated public-options fixture; production default remains 1024.
             // OWLv2 / Ferret / FerretV2 / GLaMM / Groma / Shikra — ViT-L/14 hidden dim.
             _ => 1024,
         };
@@ -6135,21 +6127,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                      model.FullyQualifiedName.IndexOf(
                          "AiDotNet.VisionLanguage.Grounding.", System.StringComparison.Ordinal) >= 0)
             {
-                // GLaMM's production options retain the paper-scale 1024-wide, 24-layer vision
-                // encoder. MoreData clones that graph and needs two AdamW state sets, which cannot
-                // fit after the preceding G-I classes on a 16 GB runner. Exercise the same residual
-                // vision/fusion/detection topology through public options at generated-test scale;
-                // production retains the reference-paper defaults. The fixture's stable optimizer
-                // values are explicit public customization rather than production-default changes.
-                // GetGroundingVisionDim emits the matching [1,4,32] token input and GLaMM uses
-                // MaskDim for the detection decoder width.
+                // GLaMM's four networks at fixture scale through its public options: CLIP of 28 px in 7 px patches
+                // (width 64, ten layers, so the region encoder has its four levels), a LLaMA of width 32 with LoRA
+                // rank 4, a region width of 32, and SAM of 64 px (width 32, two layers, a 16-wide prompt). Vicuna's
+                // tokenizer is not shipped; the fixture reads the small BPE model of the tokenizer reference test.
+                // Production keeps CLIP ViT-L/14-336, Vicuna-7B and SAM ViT-H.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 32, outputSize: 4), " +
-                    "new AiDotNet.VisionLanguage.Grounding.GLaMMOptions { ImageSize = 32, VisionDim = 32, " +
-                    "DecoderDim = 32, FusionDim = 32, NumVisionLayers = 1, NumDecoderLayers = 1, NumHeads = 4, " +
-                    "VocabSize = 64, MaxSequenceLength = 16, MaxGenerationLength = 8, MaxDetections = 4, " +
-                    "MaskDim = 32, DropoutRate = 0.0, LearningRate = 5e-5, WeightDecay = 0.01 })";
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.ImageSegmentation, " +
+                    "inputHeight: 28, inputWidth: 28, inputDepth: 3, outputSize: 32), " +
+                    "new AiDotNet.VisionLanguage.Grounding.GLaMMOptions { " +
+                    "TokenizerModel = AiDotNet.Tests.VisionLanguage.GlammTokenizerReferenceTests.TestModel(), " +
+                    "ClipImageSize = 28, ClipPatchSize = 7, ClipHidden = 64, ClipLayers = 10, ClipHeads = 4, ClipIntermediate = 128, " +
+                    "LlmHidden = 32, LlmLayers = 2, LlmHeads = 4, LlmKeyValueHeads = 4, LlmIntermediate = 64, " +
+                    "LoraRank = 4, LoraAlpha = 8, LoraDropout = 0.0, RegionWidth = 32, " +
+                    "SamImageSize = 64, SamPatchSize = 16, SamEncoderDim = 32, SamEncoderDepth = 2, SamEncoderHeads = 2, " +
+                    "SamWindowSize = 2, SamGlobalAttention = new[] { 1 }, SamPromptDim = 16, SamMaskInChannels = 8, " +
+                    "SamDecoderHeads = 2, SamDecoderMlpDim = 32, SamIouHiddenDim = 16, ModelMaxLength = 256 })";
             }
             else if (model.ClassName == "GraFPrint" && model.TypeParameterCount == 1)
             {
@@ -14550,10 +14544,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // meet the text: the Swin levels 8x8, 4x4 and 2x2 and the extra 1x1 level, 85 tokens of the fixture's width
             // 32. Grounded SAM 2's returns SAM 2's image embedding, 32 channels on a 4x4 grid. A step runs the whole
             // detector, so the repeated-training probes take a few steps each.
-            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 3, 64, 64 };");
-            sb.AppendLine(model.ClassName == "GroundedSAM2"
-                ? "    protected override int[] OutputShape => new[] { 1, 32, 4, 4 };"
-                : "    protected override int[] OutputShape => new[] { 1, 85, 32 };");
+            // GLaMM reads 28 px images and trains through TrainConversation; its Predict returns LLaVA's visual
+            // tokens, 16 patches of the fixture's language-model width 32.
+            sb.AppendLine(model.ClassName == "GLaMM"
+                ? "    protected override int[] InputShape => new[] { 1, 3, 28, 28 };"
+                : "    protected override int[] InputShape => new[] { 1, 3, 64, 64 };");
+            sb.AppendLine(model.ClassName switch
+            {
+                "GroundedSAM2" => "    protected override int[] OutputShape => new[] { 1, 32, 4, 4 };",
+                "GLaMM" => "    protected override int[] OutputShape => new[] { 1, 16, 32 };",
+                _ => "    protected override int[] OutputShape => new[] { 1, 85, 32 };",
+            });
             sb.AppendLine("    protected override int TrainingIterations => 3;");
             sb.AppendLine("    protected override int MoreDataShortIterations => 2;");
             sb.AppendLine("    protected override int MoreDataLongIterations => 6;");
@@ -14607,48 +14608,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
             sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
             sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
-            // GLaMM shows a transient Adam first-step warm-up rise at step 2 even though its longer
-            // trajectory descends; it passes at step 3 (61 s on the 4 CPU / 16 GB runner profile), inside
-            // the 180 s per-test budget.
-            int groundingMemorizationIterations = model.ClassName switch
-            {
-                "GLaMM" => 3,
-                _ => 2
-            };
-            sb.AppendLine($"    protected override int MemorizationTaskIterations => {groundingMemorizationIterations};");
+            sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
             sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
-
-            // GLaMM alone (VisionDim 1024 x 24 vision layers — the largest grounding backbone here)
-            // cannot fit MoreData_ShouldNotDegrade in the 120 s gate even at the smoke iteration counts
-            // above. That invariant deep-CLONES the network (network2 = network1.Clone()) and trains
-            // BOTH, so GLaMM's paper-scale 385M graph is fused-compiled TWICE; the clone + double compile
-            // alone exceeds 120 s on CPU (verified: times out at 120 s run in ISOLATION, with the
-            // TransformerEncoderLayer init-seed fix and the GradientFlow eager-string fix already applied,
-            // so it is not a correctness regression). Genuine foundation-scale INFRASTRUCTURE cost, NOT a
-            // training defect — the "more-training-must-not-degrade" property is still asserted by the
-            // non-cloning sibling invariants (Training_ShouldReduceLoss,
-            // LossStrictlyDecreasesOnMemorizationTask, TrainingError_ShouldNotExceedTestError), all of
-            // which pass. Tag ONLY this one test [Trait Category=HeavyTimeout] so the default PR shard
-            // excludes it (the CI filter appends &Category!=HeavyTimeout) and the nightly heavy lane runs
-            // it, while GLaMM's other 25 invariants stay in the PR shard at full paper scale. The smaller
-            // grounding siblings (OWLViT 768-dim, GroundingDINO 256-dim) fit MoreData at 1+2 iters and
-            // are intentionally NOT tagged.
-            if (model.ClassName == "GLaMM")
-            {
-                sb.AppendLine();
-                // The HeavyTimeout trait moves this out of the PR shard into the nightly heavy lane, but
-                // the trait alone does not change the per-test xUnit cap — a 120 s Timeout still fires in
-                // the heavy lane. GLaMM's MoreData_ShouldNotDegrade deep-clones a paper-scale ~385M graph
-                // and fuse-compiles it twice, which exceeds 120 s on CPU even at smoke iteration counts,
-                // so give it a heavy-lane-appropriate 600 s cap (the nightly job budgets 350 min overall
-                // and runs serially, so 600 s per test is safe).
-                sb.AppendLine("    [Xunit.Fact(Timeout = 600000)]");
-                sb.AppendLine("    [Xunit.Trait(\"Category\", \"HeavyTimeout\")]");
-                sb.AppendLine("    public override async System.Threading.Tasks.Task MoreData_ShouldNotDegrade()");
-                sb.AppendLine("    {");
-                sb.AppendLine("        await base.MoreData_ShouldNotDegrade();");
-                sb.AppendLine("    }");
-            }
         }
         else if (isVisionModel &&
                  model.FullyQualifiedName.Contains("NeuralRadianceFields"))
