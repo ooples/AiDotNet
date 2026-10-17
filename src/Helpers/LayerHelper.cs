@@ -1007,21 +1007,25 @@ public static partial class LayerHelper<T>
                 // kernel tensor allocation to first Forward() — VGG16BN at 224×224×3
                 // production defaults is ~1.1 GB of weights, and eager allocation at
                 // ctor time OOMs CI before tests even run.
+                // With batch normalization the block is conv -> BN -> ReLU, as torchvision's vgg*_bn builds it
+                // (make_layers: Conv2d, BatchNorm2d, ReLU); without it, conv -> ReLU.
                 yield return new ConvolutionalLayer<T>(
                     outputDepth: outputChannels,
                     kernelSize: 3,
                     stride: 1,
                     padding: 1,  // Same padding to preserve spatial dimensions
-                    activationFunction: new ReLUActivation<T>(),
+                    activationFunction: configuration.UseBatchNormalization
+                        ? (IActivationFunction<T>)new IdentityActivation<T>()
+                        : new ReLUActivation<T>(),
                     initializationStrategy: InitializationStrategies<T>.Lazy
                 );
 
-                // Optional batch normalization (per-channel normalization)
                 // BatchNormalizationLayer only needs the number of channels - spatial dimensions
                 // are handled dynamically in the forward pass via Engine.BatchNorm
                 if (configuration.UseBatchNormalization)
                 {
                     yield return new BatchNormalizationLayer<T>();
+                    yield return new ActivationLayer<T>((IActivationFunction<T>)new ReLUActivation<T>());
                 }
 
                 currentChannels = outputChannels;
