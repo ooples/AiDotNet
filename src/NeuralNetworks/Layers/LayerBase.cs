@@ -6786,10 +6786,14 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                     nameof(source));
             }
 
+            // Span and data-vector writes do not bump a tensor's version, and the engine's derived caches (packed
+            // GEMM weights, resident device copies) and compiled plans compare versions: without the bump a clone
+            // or checkpoint load kept computing with whatever weights were packed before it.
             if (_lowPrecisionTensor is not null)
             {
                 MathHelper.GetNumericOperations<T>().ToHalfSpan(
                     source.AsSpan(), _lowPrecisionTensor.AsWritableSpan());
+                _lowPrecisionTensor.IncrementVersion();
                 return;
             }
 
@@ -6799,9 +6803,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             {
                 for (int i = 0; i < sparse.NonZeroCount; i++)
                     sparse.DataVector[i] = source.GetFlat(i);
+                sparse.IncrementVersion();
                 return;
             }
             source.AsSpan().CopyTo(_tensor.AsWritableSpan());
+            _tensor.IncrementVersion();
         }
     }
 

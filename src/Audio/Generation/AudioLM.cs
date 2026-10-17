@@ -187,7 +187,11 @@ public partial class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>,
                     codes[q, f] = Math.Max(0, Math.Min(_options.CodebookSize - 1, (int)Math.Round(NumOps.ToDouble(target[f, q]))));
             return codes;
         }
-        var encoded = Codec.Encode(target.Rank == 1 ? target : target.Reshape(new[] { target.Length }));
+        var recording = target.Rank == 1 ? target : target.Reshape(new[] { target.Length });
+        // AudioLM's codec is a trained SoundStream. One whose codebooks were never fitted sends every recording to the
+        // same codes, so the first recording fits them, as SoundStream's own first training batch does.
+        if (!Codec.CodebooksInitialized) Codec.InitializeCodebooks(recording);
+        var encoded = Codec.Encode(recording);
         if (encoded.GetLength(0) < _options.NumCodebooks)
             throw new ArgumentException($"The codec gave {encoded.GetLength(0)} levels; AudioLM models {_options.NumCodebooks}.", nameof(target));
         return encoded;
@@ -421,7 +425,10 @@ public partial class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>,
         }
     }
 
-    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
+    /// <remarks>The semantic stage models the input's own semantic tokens (§IV-B, stage one), so it reads no target;
+    /// the acoustic stages predict the target recording's codes.</remarks>
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind =>
+        CurrentStage == AudioLMStage.Semantic ? TrainingObjectiveKind.SelfSupervised : TrainingObjectiveKind.Supervised;
 
     Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
 

@@ -257,6 +257,25 @@ public abstract class NeuralAudioCodecBase<T> : AudioNeuralNetworkBase<T>, IAudi
         return Quantizer!.Encode(EncodeLatent(AsBatch(audio)), QuantizersForBandwidth(_codec.TargetBandwidthKbps));
     }
 
+    /// <summary>Whether the quantizer's codebooks have been fitted (by training or a load). An unfitted codec encodes every
+    /// recording to the same codes.</summary>
+    public bool CodebooksInitialized => Quantizer?.CodebooksInitialized ?? false;
+
+    /// <summary>
+    /// Fits the codebooks that have never been fitted from <paramref name="audio"/>'s latents, by the data-dependent
+    /// initialization the first training batch would run (k-means for SoundStream/EnCodec); fitted codebooks are left
+    /// as they are.
+    /// </summary>
+    public void InitializeCodebooks(Tensor<T> audio)
+    {
+        ThrowIfDisposed();
+        RequireNative();
+        if (Quantizer!.CodebooksInitialized) return;
+        SetTrainingMode(false);
+        using var _ = new NoGradScope<T>();
+        Quantizer.InitializeCodebooks(EncodeLatent(AsBatch(audio)));
+    }
+
     /// <inheritdoc />
     public Task<int[,]> EncodeAsync(Tensor<T> audio, CancellationToken cancellationToken = default)
         => Task.Run(() => Encode(audio), cancellationToken);
@@ -342,6 +361,8 @@ public abstract class NeuralAudioCodecBase<T> : AudioNeuralNetworkBase<T>, IAudi
     /// discriminator (with <see cref="DiscriminatorUpdateProbability"/>) and then the generator.</remarks>
     public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
+        // A model of this family that declares its own objective or learning rule takes its step through it.
+        if (TryTrainDeclaredObjectives(input, expectedOutput)) return;
         ThrowIfDisposed();
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         if (!HasPaperLayers)

@@ -294,6 +294,8 @@ public abstract partial class SpanBasedNERBase<T> : SequenceLabeling.SequenceLab
     /// <inheritdoc />
     public override void Train(Tensor<T> input, Tensor<T> expected)
     {
+        // A model of this family that declares its own objective or learning rule takes its step through it.
+        if (TryTrainDeclaredObjectives(input, expected)) return;
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         if (_optimizer is null) throw new InvalidOperationException("Optimizer is not initialized.");
         SetTrainingMode(true);

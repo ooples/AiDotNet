@@ -4695,7 +4695,11 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (target.Length > 0
             && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn
             && UsesExternalCategoricalTargets(nn)
+            // A categorical target is a distribution over the classes whichever form the loss reads (logits or
+            // probabilities): a raw multi-hot draw makes cross-entropy's optimum p ∝ t, which a softmax head
+            // approaches by collapsing onto one class.
             && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>
+                or AiDotNet.LossFunctions.CategoricalCrossEntropyLoss<T>
             && !PredictLeavesLossDomain(network))
         {
             var shape = target.Shape.ToArray();
@@ -6293,6 +6297,15 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         using var network = CreateNetwork();
         if (TrainingInvariantsNotApplicable(network)) return;
         if (!GradientCorrectnessInvariantApplicable) return;
+
+        // A self-supervised objective is defined by reading no caller target (w2v-BERT's masked prediction, AudioLM's
+        // semantic stage): an update that ignores the target is its contract, not a broken backward.
+        if (network is ITrainingObjectiveProvider<T> { TrainingObjectiveKind: TrainingObjectiveKind.SelfSupervised })
+        {
+            ReportGradientFinding(GradientReportFile, GetType().Name,
+                "SKIPPED: the model declares a self-supervised training objective, which reads no target.");
+            return;
+        }
 
         var input = CreateRandomTensor(EffectiveInputShape, rng);
         var targetA = CreateLossCompatibleTarget(network, ShapeCheckedOutputShape, rng);
