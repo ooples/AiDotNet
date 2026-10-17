@@ -3465,21 +3465,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     candidates[0], candidates[1], clash.Key));
             }
 
-            // A registered owner must still name one of at least two namesakes; otherwise the entry
-            // either suppresses every candidate or guards a collision that no longer exists. Only a
-            // compilation that sees every model can tell: the test project references the AiDotNet
-            // assembly, while the generator's own fixture compilations declare a few models in source
-            // and hold none of the registered names.
-            bool seesEveryModel = compilation.ReferencedAssemblyNames.Any(a => a.Name == "AiDotNet");
+            // A registered owner must still name one of at least two namesakes when the name is present at
+            // all: an owner whose namespace holds none of them suppresses every candidate (the survivor of a
+            // deleted owning copy silently loses its generated test), and a lone namesake has no collision
+            // left to guard. A name no compilation model carries is not reported: the generator's own
+            // fixture compilations declare a few models and hold none of the registered names.
             foreach (var owner in CollisionOwners.OrderBy(e => e.Key, System.StringComparer.Ordinal))
             {
-                if (!seesEveryModel) break;
                 var namesakes = orderedUntested
                     .Where(m => string.Equals(StripBacktick(m.ClassName), owner.Key, System.StringComparison.Ordinal))
                     .Select(m => m.FullyQualifiedName)
                     .ToList();
                 string? problem = namesakes.Count == 0
-                    ? "no discovered model has that name"
+                    ? null
                     : !namesakes.Any(n => n.IndexOf(owner.Value, System.StringComparison.Ordinal) >= 0)
                         ? "none of its models (" + string.Join(", ", namesakes) + ") is in that namespace, so none gets a generated test"
                         : namesakes.Count == 1
