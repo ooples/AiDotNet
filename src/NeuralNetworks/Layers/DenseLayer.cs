@@ -739,6 +739,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             // Flux predictors in the heavy nightly, #2087), and a full but unfilled set was adopted as
             // trained weights. Roll back to the constructor's placeholders so the retry starts fresh.
             bool allocated = false;
+            bool weightsRegistered = false;
             try
             {
                 // Streaming-aware allocation: when the parent network has
@@ -772,14 +773,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
                 // after this forward downcasts them to _weightsHalf, dropping the fp32 reference actually
                 // lets the GC reclaim it (AllocateLazyWeight would still GC-allocate when streaming is off,
                 // but bypass it here so the fp32 master is never registered with the streaming pool).
-                if (LowPrecisionResident)
-                {
-                    _weights = new Tensor<T>(wShape);
-                }
-                else
-                {
-                    _weights = AllocateLazyWeight(wShape);
-                }
+                _weights = LowPrecisionResident ? new Tensor<T>(wShape) : AllocateLazyWeight(wShape);
                 _biases = UseBias ? AllocateLazyWeight(bShape) : new Tensor<T>([0]);
 
                 // Initialize using strategy or default. Skip strategies that only
@@ -802,6 +796,7 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
 
                 // Register trainable parameters with the engine for GPU persistence
                 RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+                weightsRegistered = true;
                 if (UseBias) RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
                 allocated = true;
             }
@@ -809,6 +804,9 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             {
                 if (!allocated)
                 {
+                    // The bias registration failed after the weights were registered: the engine must not keep a
+                    // persistent registration for a tensor the rollback is about to discard.
+                    if (weightsRegistered) UnregisterTrainableParameter(_weights);
                     _weights = new Tensor<T>([0, 0]);
                     _biases = new Tensor<T>([0]);
                 }

@@ -201,7 +201,7 @@ public partial class UNet3D<T> : VolumetricModelLayoutBase<T>
     /// </remarks>
     protected override void InitializeLayers()
     {
-        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        if (UsesCallerLayers)
         {
             Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
@@ -235,8 +235,10 @@ public partial class UNet3D<T> : VolumetricModelLayoutBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        // A caller-supplied layer list has no encoder/decoder split to tap, so run it as given.
-        if (Layers.Count != ExpectedGeneratedLayerCount(NumEncoderBlocks))
+        // A caller-supplied layer list has no encoder/decoder split to tap, so run it as given -- whatever its length:
+        // one that happens to have the generated layer count is still not the generated topology. The count check
+        // only guards the generated path against a layer list that no longer has the generated shape.
+        if (UsesCallerLayers || Layers.Count != ExpectedGeneratedLayerCount(NumEncoderBlocks))
         {
             Tensor<T> sequential = input;
             foreach (var layer in Layers)
@@ -326,6 +328,11 @@ public partial class UNet3D<T> : VolumetricModelLayoutBase<T>
     /// sequential pass instead of indexing into a layout it does not have.
     /// </para>
     /// </remarks>
+    /// <summary>True when the architecture supplied the layers; false when <see cref="InitializeLayers"/> generated the
+    /// encoder/decoder topology. Read from the architecture, the same test InitializeLayers makes, so it holds however the
+    /// network was built (constructor, clone or deserialization).</summary>
+    private bool UsesCallerLayers => Architecture.Layers != null && Architecture.Layers.Count > 0;
+
     private static int ExpectedGeneratedLayerCount(int numEncoderBlocks)
         => (3 * 2 * numEncoderBlocks) + (numEncoderBlocks - 1) + 3 + (7 * (numEncoderBlocks - 1)) + 1;
 

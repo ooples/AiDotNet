@@ -60,4 +60,16 @@ public class TransformerDecoderLayerDecoderOnlyTests
         var withoutCross = layer.ForwardWithoutCrossAttention(tokens);
         Assert.Equal(withoutCross.ToArray(), single.ToArray());
     }
+
+    /// <summary>The named-port forward with only "decoder_input" is the same decoder-only block: no cross-attention is
+    /// brought back when "encoder_output" is absent.</summary>
+    [Fact]
+    public void NamedForward_WithOnlyDecoderInput_IsTheBlockWithoutCrossAttention()
+    {
+        var layer = Layer();
+        var tokens = Tokens(5);
+        var named = layer.Forward(new System.Collections.Generic.Dictionary<string, Tensor<double>> { ["decoder_input"] = tokens });
+        var withoutCross = layer.ForwardWithoutCrossAttention(tokens);
+        Assert.Equal(withoutCross.ToArray(), named.ToArray());
+    }
 }

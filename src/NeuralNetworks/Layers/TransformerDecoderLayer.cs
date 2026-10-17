@@ -747,6 +747,25 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     }
 
     /// <summary>
+    /// Named multi-input GPU forward pass. The base wrapper rejects any layer with more than one port, so this layer
+    /// routes its own: the primary tensor under "decoder_input" (or "input"), and the optional "encoder_output".
+    /// </summary>
+    /// <remarks>
+    /// With an encoder output this is the two-input <see cref="ForwardGpu(Tensor{T}[])"/>. Without one there is nothing
+    /// to cross-attend to, so the block runs decoder-only, exactly as <see cref="ForwardTracedPorts"/> does.
+    /// </remarks>
+    public override Tensor<T> ForwardGpu(IReadOnlyDictionary<string, Tensor<T>> inputs)
+    {
+        if (inputs == null) throw new ArgumentNullException(nameof(inputs));
+        if ((!inputs.TryGetValue("decoder_input", out var decoderInput) || decoderInput == null)
+            && (!inputs.TryGetValue("input", out decoderInput) || decoderInput == null))
+            throw new ArgumentException("TransformerDecoderLayer requires 'decoder_input' (or 'input').", nameof(inputs));
+        if (!inputs.TryGetValue("encoder_output", out var encoderOutput) || encoderOutput == null)
+            return ForwardWithoutCrossAttention(decoderInput);
+        return ForwardGpu(decoderInput, encoderOutput);
+    }
+
+    /// <summary>
     /// Not supported for this layer. Use Forward(Tensor&lt;T&gt; input, Tensor&lt;T&gt; encoderOutput) instead.
     /// </summary>
     /// <param name="input">The input tensor.</param>
