@@ -64,6 +64,51 @@ internal sealed class GlammTokenizer
 
     public int BboxId => IdOf("<bbox>");
 
+    /// <summary>The llava_v1 system prompt GLaMM's conversations start with.</summary>
+    public const string SystemPrompt = "A chat between a curious human and an artificial intelligence assistant. "
+        + "The assistant gives helpful, detailed, and polite answers to the human's questions.";
+
+    /// <summary>
+    /// The llava_v1 conversation (SeparatorStyle.TWO): the system prompt, then per turn " USER: question ASSISTANT: answer"
+    /// closed by &lt;/s&gt;; a turn without an answer ends with "ASSISTANT:" for generation.
+    /// </summary>
+    public static string Conversation(IReadOnlyList<(string User, string? Assistant)> turns)
+    {
+        var sb = new System.Text.StringBuilder(SystemPrompt).Append(' ');
+        foreach (var (user, assistant) in turns)
+        {
+            sb.Append("USER: ").Append(user).Append(' ');
+            if (assistant is null) sb.Append("ASSISTANT:");
+            else sb.Append("ASSISTANT: ").Append(assistant).Append("</s>");
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// LLaVA's label masking for a llava_v1 conversation (GLaMM's <c>_process_conversation</c>): the labels are the ids with
+    /// &lt;s&gt; and every turn's instruction (through "ASSISTANT: ") set to -100, by the official token-length arithmetic.
+    /// </summary>
+    public int[] MaskInstructions(string conversation, IReadOnlyList<int> ids)
+    {
+        const string sep = " ASSISTANT: ", sep2 = "</s>";
+        bool image = conversation.Contains("<image>");
+        int Length(string text) => image ? EncodeWithImage(text).Count : Encode(text).Count;
+        var labels = ids.ToArray();
+        int cur = 1;
+        labels[0] = IgnoreIndex;
+        foreach (var round in conversation.Split(new[] { sep2 }, StringSplitOptions.None))
+        {
+            if (round.Length == 0) break;
+            var parts = round.Split(new[] { sep }, StringSplitOptions.None);
+            if (parts.Length != 2) throw new ArgumentException($"A turn must hold exactly one \"{sep.Trim()}\": {round}", nameof(conversation));
+            int roundLength = Length(round), instructionLength = Length(parts[0] + sep) - 2;
+            for (int i = cur; i < Math.Min(labels.Length, cur + instructionLength); i++) labels[i] = IgnoreIndex;
+            cur += roundLength;
+        }
+        for (int i = cur; i < labels.Length; i++) labels[i] = IgnoreIndex;
+        return labels;
+    }
+
     /// <summary>The ids of <paramref name="text"/>, with <c>&lt;s&gt;</c> first when <paramref name="addBos"/>.</summary>
     public List<int> Encode(string text, bool addBos = true)
     {

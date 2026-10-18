@@ -1,3 +1,4 @@
+using System.Linq;
 using AiDotNet.Configuration;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
@@ -12,6 +13,25 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 public class VGGNetworkTests
 {
     #region VGGConfiguration Tests
+
+    /// <summary>A batch-normalized VGG block is conv, BatchNorm, ReLU (torchvision's make_layers); the plain one conv with ReLU.</summary>
+    [Fact(Timeout = 120000)]
+    public async Task BatchNormVariant_NormalizesBeforeTheReLU()
+    {
+        await Task.Yield();
+        var architecture = new NeuralNetworkArchitecture<double>(InputType.ThreeDimensional, NeuralNetworkTaskType.MultiClassClassification,
+            inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 10);
+        var bn = AiDotNet.Helpers.LayerHelper<double>.CreateDefaultVGGLayers(architecture,
+            new VGGConfiguration(VGGVariant.VGG11_BN, numClasses: 10, inputHeight: 32, inputWidth: 32)).Take(4).ToList();
+        Assert.IsType<AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<double>>(bn[0]);
+        Assert.IsType<AiDotNet.ActivationFunctions.IdentityActivation<double>>(((AiDotNet.NeuralNetworks.Layers.LayerBase<double>)bn[0]).ScalarActivation);
+        Assert.IsType<AiDotNet.NeuralNetworks.Layers.BatchNormalizationLayer<double>>(bn[1]);
+        Assert.IsType<AiDotNet.NeuralNetworks.Layers.ActivationLayer<double>>(bn[2]);
+        var plain = AiDotNet.Helpers.LayerHelper<double>.CreateDefaultVGGLayers(architecture,
+            new VGGConfiguration(VGGVariant.VGG11, numClasses: 10, inputHeight: 32, inputWidth: 32)).Take(2).ToList();
+        Assert.IsType<AiDotNet.ActivationFunctions.ReLUActivation<double>>(((AiDotNet.NeuralNetworks.Layers.LayerBase<double>)plain[0]).ScalarActivation);
+        Assert.IsNotType<AiDotNet.NeuralNetworks.Layers.BatchNormalizationLayer<double>>(plain[1]);
+    }
 
     [Fact(Timeout = 120000)]
     public async Task VGGConfiguration_Constructor_ValidParameters_CreatesConfiguration()

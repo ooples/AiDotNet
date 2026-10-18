@@ -724,7 +724,7 @@ public static class SegmentationBuilderExtensions
         {
             throw new InvalidOperationException(
                 "No model configured. Use ConfigureModel() with a referring segmentation model " +
-                "(e.g., LISA, VideoLISA, GLaMM, OMG-LLaVA) before calling referring segmentation methods.");
+                "(e.g., LISA, VideoLISA, OMG-LLaVA) before calling referring segmentation methods.");
         }
 
         throw new InvalidOperationException(

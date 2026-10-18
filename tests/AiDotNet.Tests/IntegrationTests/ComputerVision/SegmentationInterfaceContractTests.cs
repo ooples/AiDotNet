@@ -471,15 +471,6 @@ public class SegmentationInterfaceContractTests : IDisposable
     }
 
     [Fact(Timeout = 120000)]
-    public async Task GLaMM_ReferringInterface_SegmentFromExpression()
-    {
-        var model = new GLaMM<float>(Arch(), options: new GLaMMOptions { NumClasses = 5 });
-        var referring = (IReferringSegmentation<float>)model;
-        var result = referring.SegmentFromExpression(Rand(1, 3, 32, 32), "cat");
-        Assert.NotNull(result);
-    }
-
-    [Fact(Timeout = 120000)]
     public async Task PixelLM_ReferringInterface_SegmentFromExpression()
     {
         var model = new PixelLM<float>(Arch(), options: new PixelLMOptions { NumClasses = 5 });
