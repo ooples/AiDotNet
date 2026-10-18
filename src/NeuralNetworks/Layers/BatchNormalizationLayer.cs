@@ -1050,7 +1050,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
                 _reluApplied = fuseReLU;
                 var fusedResult = alreadyNchw ? normalized : Engine.Reshape(normalized, input.Shape.ToArray());
 
-                if (flattenedFeaturesLast && preFlattenShape is not null)
+                if (restoreInputShape && preFlattenShape is not null)
                 {
                     fusedResult = Engine.Reshape(fusedResult, preFlattenShape);
                 }

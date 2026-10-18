@@ -1505,10 +1505,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
             if (layerBase.InputPorts.Count > 1)
             {
-                var namedInputs = new Dictionary<string, Tensor<T>> { ["input"] = current };
+                // The running activation feeds the layer's first (primary) port under that port's own name: a layer
+                // whose primary port is not called "input" (TransformerDecoderLayer's "decoder_input") would reject it.
+                string primaryPort = layerBase.InputPorts[0].Name;
+                var namedInputs = new Dictionary<string, Tensor<T>> { [primaryPort] = current };
                 foreach (var port in layerBase.InputPorts)
                 {
-                    if (port.Name != "input" && auxiliaryInputs.TryGetValue(port.Name, out var aux))
+                    if (port.Name != primaryPort && auxiliaryInputs.TryGetValue(port.Name, out var aux))
                         namedInputs[port.Name] = aux;
                 }
                 current = layerBase.ForwardGpu(namedInputs);
@@ -1943,10 +1946,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             var layer = Layers[i];
             if (layer is LayerBase<T> typedLayer && typedLayer.InputPorts.Count > 1)
             {
-                var namedInputs = new Dictionary<string, Tensor<T>> { ["input"] = current };
+                // The running activation feeds the layer's first (primary) port under that port's own name: a layer
+                // whose primary port is not called "input" (TransformerDecoderLayer's "decoder_input") would reject it.
+                string primaryPort = typedLayer.InputPorts[0].Name;
+                var namedInputs = new Dictionary<string, Tensor<T>> { [primaryPort] = current };
                 foreach (var port in typedLayer.InputPorts)
                 {
-                    if (port.Name != "input" && auxiliaryInputs.TryGetValue(port.Name, out var aux))
+                    if (port.Name != primaryPort && auxiliaryInputs.TryGetValue(port.Name, out var aux))
                         namedInputs[port.Name] = aux;
                 }
                 current = typedLayer.Forward(namedInputs);
