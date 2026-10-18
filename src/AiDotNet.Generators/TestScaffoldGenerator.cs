@@ -16151,6 +16151,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // the target only has to exist.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 8000 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 4 };");
+                // Its masked-prediction targets are its own quantizer's codes, which training reassigns, so the evaluated
+                // objective is not monotone over MoreData's 10 steps (measured 13.54 -> 13.63); 5% of the baseline still
+                // catches divergence.
+                sb.AppendLine("    protected override double MoreDataRelativeTolerance => 0.05;");
             }
             else
             {

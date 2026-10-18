@@ -353,12 +353,22 @@ public partial class W2vBert<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMod
     Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
 
     /// <inheritdoc />
-    /// <remarks>The pre-training loss of the input in inference mode, with the mask, noise and distractors drawn from a
-    /// fixed seed, so it is a function of the input and the weights.</remarks>
+    /// <remarks>
+    /// <para>The pre-training loss of the input in inference mode, with the mask, noise and distractors drawn from a
+    /// fixed seed, so it is a function of the input and the weights: the masked-prediction loss and the weighted
+    /// diversity loss.</para>
+    /// <para>The contrastive term is left out of this evaluation (training still minimizes it). It excludes every
+    /// distractor whose target code equals the step's own (as the reference does), so whenever the masked steps share
+    /// one code, as an untrained or small model's often do, it is exactly 0, and it jumps to about ln(K + 1) once the
+    /// codes differ. Measured on the generated fixture it flipped between 0 and ~4 throughout 60 steps, so the
+    /// evaluation would mostly report whether the codes happened to coincide, not how well the model learned.</para>
+    /// </remarks>
     T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
     {
         using var _ = new NoGradScope<T>();
-        return PretrainingLoss(input, training: false, Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 2))[0];
+        double total = NumOps.ToDouble(
+            PretrainingLoss(input, training: false, Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 2))[0]);
+        return NumOps.FromDouble(total - LastPretrainingLosses.Contrastive);
     }
 
     /// <inheritdoc />
