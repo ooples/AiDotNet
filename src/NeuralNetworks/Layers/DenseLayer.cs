@@ -731,68 +731,86 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
                 return;
             }
 
-            // Streaming-aware allocation: when the parent network has
-            // engaged streaming, route through WeightRegistry.AllocateStreaming
-            // so the pool can pre-evict competing weights to disk before this
-            // allocation hits the GC heap. Otherwise allocate on the plain GC
-            // heap (AllocateLazyWeight's default `new Tensor<T>(shape)`).
-            //
-            // These weights are long-lived model parameters, but lazy
-            // materialization can run inside an active TensorArena (the first
-            // forward of a training step OR a diffusion denoise loop). Two
-            // earlier attempts routed weights through the arena and were both
-            // incomplete: TensorAllocator.Rent handed out scratch that the
-            // per-step Reset() reissued as transient activations (#1643), then
-            // TensorAllocator.RentPinned moved them to the pinned tier that
-            // survives Reset(). But RentPinned does NOT survive the arena's
-            // DISPOSE: across two separate Predict calls, each Generate creates
-            // and disposes its OWN denoise arena, the disposed arena's pinned
-            // buffers return to the shared pool, and the next Predict's arena
-            // reissues them as scratch — aliasing these still-referenced weights
-            // and corrupting them (#1711: eval Predict was non-deterministic —
-            // first call sane, second call garbage; HiDream/SD3-class MMDiT and
-            // any lazy DenseLayer in a per-step-Reset denoise loop). GC-heap
-            // weights are owned by the layer and never recycled by any arena, so
-            // they are correct by construction and survive both Reset AND
-            // Dispose. This matches AttentionLayer's Q/K/V/O weights, which
-            // already use the plain (no-arena-factory) AllocateLazyWeight.
-            int[] wShape = [inputSize, outputSize];
-            int[] bShape = [outputSize];
-            // fp16-resident eval: allocate the fp32 weights on the plain GC heap so that, immediately
-            // after this forward downcasts them to _weightsHalf, dropping the fp32 reference actually
-            // lets the GC reclaim it (AllocateLazyWeight would still GC-allocate when streaming is off,
-            // but bypass it here so the fp32 master is never registered with the streaming pool).
-            if (LowPrecisionResident)
+            // All or nothing. The weights are assigned before the biases are allocated and both before
+            // they are filled, so a failure part-way (an OutOfMemoryException on the bias, a throwing
+            // initializer) used to leave real-looking tensors behind with _isInitialized still false. The
+            // next call then read them as restored parameters: a half set threw "parameters do not conform
+            // to the resolved shape ... biases [0]" in place of the original OutOfMemoryException (the
+            // Flux predictors in the heavy nightly, #2087), and a full but unfilled set was adopted as
+            // trained weights. Roll back to the constructor's placeholders so the retry starts fresh.
+            bool allocated = false;
+            bool weightsRegistered = false;
+            try
             {
-                _weights = new Tensor<T>(wShape);
-            }
-            else
-            {
-                _weights = AllocateLazyWeight(wShape);
-            }
-            _biases = UseBias ? AllocateLazyWeight(bShape) : new Tensor<T>([0]);
+                // Streaming-aware allocation: when the parent network has
+                // engaged streaming, route through WeightRegistry.AllocateStreaming
+                // so the pool can pre-evict competing weights to disk before this
+                // allocation hits the GC heap. Otherwise allocate on the plain GC
+                // heap (AllocateLazyWeight's default `new Tensor<T>(shape)`).
+                //
+                // These weights are long-lived model parameters, but lazy
+                // materialization can run inside an active TensorArena (the first
+                // forward of a training step OR a diffusion denoise loop). Two
+                // earlier attempts routed weights through the arena and were both
+                // incomplete: TensorAllocator.Rent handed out scratch that the
+                // per-step Reset() reissued as transient activations (#1643), then
+                // TensorAllocator.RentPinned moved them to the pinned tier that
+                // survives Reset(). But RentPinned does NOT survive the arena's
+                // DISPOSE: across two separate Predict calls, each Generate creates
+                // and disposes its OWN denoise arena, the disposed arena's pinned
+                // buffers return to the shared pool, and the next Predict's arena
+                // reissues them as scratch — aliasing these still-referenced weights
+                // and corrupting them (#1711: eval Predict was non-deterministic —
+                // first call sane, second call garbage; HiDream/SD3-class MMDiT and
+                // any lazy DenseLayer in a per-step-Reset denoise loop). GC-heap
+                // weights are owned by the layer and never recycled by any arena, so
+                // they are correct by construction and survive both Reset AND
+                // Dispose. This matches AttentionLayer's Q/K/V/O weights, which
+                // already use the plain (no-arena-factory) AllocateLazyWeight.
+                int[] wShape = [inputSize, outputSize];
+                int[] bShape = [outputSize];
+                // fp16-resident eval: allocate the fp32 weights on the plain GC heap so that, immediately
+                // after this forward downcasts them to _weightsHalf, dropping the fp32 reference actually
+                // lets the GC reclaim it (AllocateLazyWeight would still GC-allocate when streaming is off,
+                // but bypass it here so the fp32 master is never registered with the streaming pool).
+                _weights = LowPrecisionResident ? new Tensor<T>(wShape) : AllocateLazyWeight(wShape);
+                _biases = UseBias ? AllocateLazyWeight(bShape) : new Tensor<T>([0]);
 
-            // Initialize using strategy or default. Skip strategies that only
-            // advertise the LAZY deferral contract (IsLazy): their InitializeWeights
-            // does a generic, NON-seeded Xavier fill that ignores this layer's
-            // RandomSeed, so a lazy-strategy DenseLayer initialized off the shared
-            // RNG instead of the architecture seed — order-dependent weights (the
-            // VITS input-projection layer is the canonical case). Fall through to
-            // InitializeParameters, which honours RandomSeed. Mirrors
-            // MultiHeadAttentionLayer's `&& !InitializationStrategy.IsLazy` guard.
-            if (InitializationStrategy is not null && !InitializationStrategy.IsLazy)
-            {
-                InitializationStrategy.InitializeWeights(_weights, inputSize, outputSize);
-                if (UseBias) InitializationStrategy.InitializeBiases(_biases);
-            }
-            else
-            {
-                InitializeParameters();
-            }
+                // Initialize using strategy or default. Skip strategies that only
+                // advertise the LAZY deferral contract (IsLazy): their InitializeWeights
+                // does a generic, NON-seeded Xavier fill that ignores this layer's
+                // RandomSeed, so a lazy-strategy DenseLayer initialized off the shared
+                // RNG instead of the architecture seed — order-dependent weights (the
+                // VITS input-projection layer is the canonical case). Fall through to
+                // InitializeParameters, which honours RandomSeed. Mirrors
+                // MultiHeadAttentionLayer's `&& !InitializationStrategy.IsLazy` guard.
+                if (InitializationStrategy is not null && !InitializationStrategy.IsLazy)
+                {
+                    InitializationStrategy.InitializeWeights(_weights, inputSize, outputSize);
+                    if (UseBias) InitializationStrategy.InitializeBiases(_biases);
+                }
+                else
+                {
+                    InitializeParameters();
+                }
 
-            // Register trainable parameters with the engine for GPU persistence
-            RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
-            if (UseBias) RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+                // Register trainable parameters with the engine for GPU persistence
+                RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
+                weightsRegistered = true;
+                if (UseBias) RegisterTrainableParameter(_biases, PersistentTensorRole.Biases);
+                allocated = true;
+            }
+            finally
+            {
+                if (!allocated)
+                {
+                    // The bias registration failed after the weights were registered: the engine must not keep a
+                    // persistent registration for a tensor the rollback is about to discard.
+                    if (weightsRegistered) UnregisterTrainableParameter(_weights);
+                    _weights = new Tensor<T>([0, 0]);
+                    _biases = new Tensor<T>([0]);
+                }
+            }
 
             _isInitialized = true;
         }
