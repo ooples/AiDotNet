@@ -746,6 +746,32 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// distribution for each feature.
     /// </para>
     /// </remarks>
+    // Set only for the duration of one ForwardThenReLU call; _reluApplied reports whether the forward fused it.
+    private bool _fuseReLUNext;
+    private bool _reluApplied;
+
+    /// <summary>
+    /// <c>ReLU(Forward(input))</c>. In inference on a rank-4 input the normalization and the ReLU run as one engine op
+    /// (one pass over the activation instead of two); otherwise the ReLU is applied to the forward's output.
+    /// </summary>
+    internal Tensor<T> ForwardThenReLU(Tensor<T> input)
+    {
+        _fuseReLUNext = true;
+        _reluApplied = false;
+        Tensor<T> output;
+        try
+        {
+            output = Forward(input);
+        }
+        finally
+        {
+            _fuseReLUNext = false;
+        }
+        bool applied = _reluApplied;
+        _reluApplied = false;
+        return applied ? output : Engine.ReLU(output);
+    }
+
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
@@ -1014,8 +1040,14 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
                 // layout; passing it through keeps a device-resident activation from being re-staged.
                 bool alreadyNchw = rank == 4 && channelAxis == 1;
                 var folded = alreadyNchw ? input : Engine.Reshape(input, [outer, input.Shape[channelAxis], inner, 1]);
-                var normalized = Engine.BatchNormInference(
-                    folded, _gamma, _beta, _runningMean, _runningVariance, NumOps.ToDouble(_epsilon));
+                // A caller that applies ReLU next (ForwardThenReLU) gets it in the same pass, on a rank-4 input.
+                bool fuseReLU = _fuseReLUNext && alreadyNchw;
+                var normalized = fuseReLU
+                    ? Engine.BatchNormInference(folded, _gamma, _beta, _runningMean, _runningVariance,
+                        NumOps.ToDouble(_epsilon), FusedActivationType.ReLU)
+                    : Engine.BatchNormInference(
+                        folded, _gamma, _beta, _runningMean, _runningVariance, NumOps.ToDouble(_epsilon));
+                _reluApplied = fuseReLU;
                 var fusedResult = alreadyNchw ? normalized : Engine.Reshape(normalized, input.Shape.ToArray());
 
                 if (flattenedFeaturesLast && preFlattenShape is not null)
