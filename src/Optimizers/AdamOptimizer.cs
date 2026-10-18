@@ -168,7 +168,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// <remarks>The tape step clips by global norm only (see <c>StepCore</c>).</remarks>
     internal override double TapeStepGradientClipNorm =>
         GradientOptions.EnableGradientClipping
-            && GradientOptions.GradientClippingMethod == GradientClippingMethod.ByNorm
+            && GradientOptions.GradientClippingMethod == AiDotNet.Models.Options.GradientClippingMethod.ByNorm
             && GradientOptions.MaxGradientNorm > 0.0
             ? GradientOptions.MaxGradientNorm
             : 0.0;
@@ -863,7 +863,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         // virtual ToDouble per element; together they were most of a small model's step (#1804).
         bool guardActive = ShouldRunAnomalyGuard();
         bool clipActive = GradientOptions.EnableGradientClipping
-            && GradientOptions.GradientClippingMethod == GradientClippingMethod.ByNorm
+            && GradientOptions.GradientClippingMethod == AiDotNet.Models.Options.GradientClippingMethod.ByNorm
             && GradientOptions.MaxGradientNorm > 0.0;
         double globalNormSq = guardActive || clipActive ? GlobalGradientSquaredNorm(context) : 0.0;
 
@@ -943,7 +943,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         // fast path whenever either is active — the step is not graph-capturable with that read in it.
         bool hostGradientScanActive = ShouldRunAnomalyGuard()
             || (GradientOptions.EnableGradientClipping
-                && GradientOptions.GradientClippingMethod == GradientClippingMethod.ByNorm);
+                && GradientOptions.GradientClippingMethod == AiDotNet.Models.Options.GradientClippingMethod.ByNorm);
         bool gpuAdam = isFloat && !_options.UseAMSGrad
             && !hostGradientScanActive
             && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
