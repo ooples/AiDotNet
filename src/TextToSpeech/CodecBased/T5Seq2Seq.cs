@@ -302,8 +302,10 @@ internal sealed class T5Seq2Seq<T>
     /// <paramref name="topK"/> largest, stopping at the end token or after <paramref name="maxNewTokens"/>.
     /// Returns the prefix followed by the sampled tokens (without the end token).
     /// </summary>
+    /// <param name="allowed">When given, <c>allowed(token, step)</c> decides which tokens step <c>step</c> (0 for the first
+    /// new token) may sample; the others are removed before the top-k cut, as a Hugging Face logits processor does.</param>
     public List<int> Generate(Tensor<T> inputIds, IReadOnlyList<int> decoderPrefix, double temperature, int topK,
-        int maxNewTokens, Random random)
+        int maxNewTokens, Random random, Func<int, int, bool>? allowed = null)
     {
         var memory = Encode(inputIds, training: false, random);
         var sequence = new List<int> { Configuration.DecoderStartTokenId };
@@ -315,7 +317,8 @@ internal sealed class T5Seq2Seq<T>
             var logits = Decode(ids, memory, training: false, random);
             int vocabulary = logits.Shape[1], last = sequence.Count - 1;
             var row = new double[vocabulary];
-            for (int v = 0; v < vocabulary; v++) row[v] = NumOps.ToDouble(logits[last, v]) / temperature;
+            for (int v = 0; v < vocabulary; v++)
+                row[v] = allowed is null || allowed(v, step) ? NumOps.ToDouble(logits[last, v]) / temperature : double.NegativeInfinity;
             int next = SampleTopK(row, topK, random);
             if (next == Configuration.EndTokenId) break;
             sequence.Add(next);

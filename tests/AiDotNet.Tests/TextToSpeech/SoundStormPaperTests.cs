@@ -159,9 +159,16 @@ public class SoundStormPaperTests
         model.CurrentStage = stage;
         var text = Snapshot(model.TextToSemanticLayers);
         var acoustic = Snapshot(model.SemanticToAcousticLayers);
-        model.Train(Sample(model));
-        bool textMoved = !text.SequenceEqual(Snapshot(model.TextToSemanticLayers));
-        bool acousticMoved = !acoustic.SequenceEqual(Snapshot(model.SemanticToAcousticLayers));
+        // An acoustic step can legitimately mask nothing (§3.2 draws t ~ U{0, T-1} and masks only frames after it, each
+        // with the cosine-scheduled probability), and such a step has no loss to move anything. So train until the
+        // stage's own network moves, and require the other one never to.
+        bool textMoved = false, acousticMoved = false;
+        for (int step = 0; step < 8 && !(textMoved || acousticMoved); step++)
+        {
+            model.Train(Sample(model));
+            textMoved = !text.SequenceEqual(Snapshot(model.TextToSemanticLayers));
+            acousticMoved = !acoustic.SequenceEqual(Snapshot(model.SemanticToAcousticLayers));
+        }
         Assert.Equal(stage == SoundStormTrainingStage.TextToSemantic, textMoved);
         Assert.Equal(stage == SoundStormTrainingStage.SemanticToAcoustic, acousticMoved);
     }
