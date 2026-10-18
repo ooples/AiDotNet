@@ -15518,6 +15518,29 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine("    }");
                     sb.AppendLine();
                 }
+                if (model.ClassName == "Bark")
+                {
+                    // Bark samples its semantic tokens (temperature 0.7) and the tiny fixture generates at most four, so two
+                    // texts can sample the same tokens under the fixed seed and decode to the same audio: a property of
+                    // sampling, not of the text path. Bark declares no typed training objective (the objective probe of
+                    // Pheme and SoundStorm would score the target against itself), so the synthesis text probe runs the
+                    // network's deterministic forward on the tokens Synthesize itself produces for each text.
+                    string tt = useFloat ? "float" : "double";
+                    sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
+                    sb.AppendLine("    public override async System.Threading.Tasks.Task Synthesize_DifferentText_DifferentOutput()");
+                    sb.AppendLine("    {");
+                    sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
+                    sb.AppendLine("        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Create();");
+                    sb.AppendLine("        using var network = CreateNetwork();");
+                    sb.AppendLine($"        var tts = (AiDotNet.TextToSpeech.TtsModelBase<{tt}>)network;");
+                    sb.AppendLine("        var a = network.Predict(tts.TextToTokens(\"the quick brown fox\"));");
+                    sb.AppendLine("        var b = network.Predict(tts.TextToTokens(\"a completely different sentence\"));");
+                    sb.AppendLine("        bool differs = a.Length != b.Length;");
+                    sb.AppendLine("        for (int i = 0; !differs && i < a.Length; i++) differs = a[i] != b[i];");
+                    sb.AppendLine("        Xunit.Assert.True(differs, \"Bark's forward is identical for two texts' tokens: the text never reaches the network.\");");
+                    sb.AppendLine("    }");
+                    sb.AppendLine();
+                }
                 bool useCodecSmokeIterations =
                     model.ClassName is "Bark" or "BarkModel" or "FishSpeech" or "Llasa" or "MegaTTS3"
                         or "XTTSv2Clone"
