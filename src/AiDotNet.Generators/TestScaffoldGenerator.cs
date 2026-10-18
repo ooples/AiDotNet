@@ -15972,6 +15972,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
                     ("ScaledInput_ShouldChangeOutput", false, "random"),
                 }, textToTokens: "unused: AudioLM has no text probe");
+                // Targets are codes [frames, levels] (AudioLM's other target form), 16 frames of 3 levels of 16 codes. A
+                // waveform target goes through the frozen codec, and an untrained SoundStream encodes every waveform to the
+                // same code (measured: code 0 throughout, or 12 with random codebooks), so two different waveform targets
+                // trained identically and the target-dependence probe could not see a difference the model can learn.
+                string at = useFloat ? "float" : "double";
+                sb.AppendLine($"    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<{at}> CreateRandomTargetTensor(int[] shape, System.Random rng)");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        var codes = new AiDotNet.Tensors.LinearAlgebra.Tensor<{at}>(new[] {{ 16, 3 }});");
+                sb.AppendLine($"        for (int i = 0; i < codes.Length; i++) codes[i] = ({at})rng.Next(16);");
+                sb.AppendLine("        return codes;");
+                sb.AppendLine("    }");
             }
             else if (model.ClassName == "MusicGenModel")
             {
