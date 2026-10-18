@@ -123,12 +123,15 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
         (new FocalLoss<T>(gamma: options.FocalGamma, alpha: options.FocalAlpha), options.MaskFocalWeight),
         (new DiceLoss<T>(), options.MaskDiceWeight));
 
-    /// <summary>The official configuration of the selected size at the architecture's (square) image size.</summary>
+    /// <summary>The official configuration of the selected size, its square encoder canvas the architecture's longer side:
+    /// images are resized so the longer side fits and zero-padded to the square (ResizeLongestSide and preprocess), and
+    /// masks are cropped back.</summary>
     private SamConfiguration Configuration()
     {
-        if (_height != _width || _height % 16 != 0)
-            throw new ArgumentException($"SAM encodes square images of a multiple of 16 pixels; got {_height}x{_width}.");
-        return SamConfiguration.For(_options.ModelSize) with { ImageSize = _height, Channels = _channels };
+        int side = Math.Max(_height, _width);
+        if (side % 16 != 0)
+            throw new ArgumentException($"SAM's encoder canvas (the longer image side) must be a multiple of 16 pixels; got {_height}x{_width}.");
+        return SamConfiguration.For(_options.ModelSize) with { ImageSize = side, Channels = _channels };
     }
 
     protected override void InitializeLayers()

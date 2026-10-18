@@ -161,6 +161,51 @@ public class EfficientNetReferenceTests
         Assert.Equal(expected + Buffers(layers), classifier.GetParameterCount());
     }
 
+    /// <summary>
+    /// The official weight decay skips batch normalization (its L2 loss sums the variables outside "batch_normalization"):
+    /// two classifiers trained one step with very different L2 strengths move their BatchNorm parameters identically and
+    /// their convolutions differently.
+    /// </summary>
+    [Fact(Timeout = 300000)]
+    public async Task WeightDecay_SkipsBatchNormalization()
+    {
+        await Task.Yield();
+        EfficientNetNetwork<double> Make(double strength)
+        {
+            var optimizer = new AiDotNet.Optimizers.StochasticGradientDescentOptimizer<double, Tensor<double>, Tensor<double>>(null,
+                new AiDotNet.Models.Options.StochasticGradientDescentOptimizerOptions<double, Tensor<double>, Tensor<double>>
+                {
+                    InitialLearningRate = 0.1,
+                    EnableGradientClipping = false,
+                    Regularization = new AiDotNet.Regularization.L2Regularization<double, Tensor<double>, Tensor<double>>(
+                        new AiDotNet.Models.RegularizationOptions { Type = AiDotNet.Enums.RegularizationType.L2, Strength = strength, L1Ratio = 0.0 }),
+                });
+            return new Unclipped(new NeuralNetworkArchitecture<double>(inputType: InputType.ThreeDimensional,
+                taskType: NeuralNetworkTaskType.MultiClassClassification, inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 10),
+                new EfficientNetConfiguration(EfficientNetVariant.B0, 10), optimizer);
+        }
+        var weak = Make(1e-4);
+        var strong = Make(0.5);
+        var image = new Tensor<double>(new[] { 1, 3, 32, 32 });
+        var random = new Random(3);
+        for (int i = 0; i < image.Length; i++) image[i] = random.NextDouble() - 0.5;
+        var target = new Tensor<double>(new[] { 1, 10 });
+        target[0, 3] = 1;
+        weak.Train(image, target);
+        strong.Train(image, target);
+        Assert.Equal(weak.Trunk.StemNorm.GetParameters().ToArray(), strong.Trunk.StemNorm.GetParameters().ToArray());
+        Assert.NotEqual(weak.Trunk.StemConv.GetParameters().ToArray(), strong.Trunk.StemConv.GetParameters().ToArray());
+    }
+
+    /// <summary>A classifier without the network's global gradient clip, which would rescale the BatchNorm gradients by a
+    /// norm that includes the decayed ones.</summary>
+    private sealed class Unclipped : EfficientNetNetwork<double>
+    {
+        public Unclipped(NeuralNetworkArchitecture<double> architecture, EfficientNetConfiguration configuration,
+            AiDotNet.Interfaces.IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>> optimizer)
+            : base(architecture, configuration, optimizer) => MaxGradNorm = 0.0;
+    }
+
     [Fact(Timeout = 120000)]
     public async Task Backbone_RunsTheClassifierTrunk_AtStrides4To32_AndRoundTripsItsState()
     {
