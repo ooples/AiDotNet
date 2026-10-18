@@ -16,7 +16,7 @@ namespace AiDotNet.ComputerVision.Segmentation.Common;
 /// be dangerous". These models typically combine a large language model (LLM) with a segmentation
 /// backbone.
 ///
-/// Models extending this base class: LISA, VideoLISA, GLaMM, OMG-LLaVA, PixelLM.
+/// Models extending this base class: LISA, VideoLISA, OMG-LLaVA, PixelLM.
 /// </para>
 /// </remarks>
 public abstract partial class ReferringSegmentationBase<T> : SegmentationModelBase<T>, IReferringSegmentation<T>

@@ -58,6 +58,47 @@ internal static class SpatialResampling
         return m;
     }
 
+    /// <summary>
+    /// The <c>[output, input]</c> weights of PIL's bicubic resize along one axis (also
+    /// <c>F.interpolate(..., mode="bicubic", align_corners=False, antialias=True)</c>): Keys' cubic kernel with a = −0.5
+    /// on a support of 2 that widens with the downscaling factor, normalized per output.
+    /// </summary>
+    public static double[,] BicubicAntialias(int input, int output)
+    {
+        static double Cubic(double x)
+        {
+            const double a = -0.5;
+            x = Math.Abs(x);
+            if (x < 1) return ((a + 2) * x - (a + 3)) * x * x + 1;
+            if (x < 2) return ((a * x - 5 * a) * x + 8 * a) * x - 4 * a;
+            return 0;
+        }
+        var m = new double[output, input];
+        double scale = (double)input / output;
+        double factor = scale >= 1.0 ? scale : 1.0;
+        double support = 2.0 * factor;
+        for (int o = 0; o < output; o++)
+        {
+            double center = scale * (o + 0.5);
+            int start = Math.Max((int)(center - support + 0.5), 0);
+            int end = Math.Min((int)(center + support + 0.5), input);
+            double total = 0;
+            for (int j = start; j < end; j++)
+            {
+                double w = Cubic((j - center + 0.5) / factor);
+                m[o, j] = w;
+                total += w;
+            }
+            if (total != 0)
+                for (int j = start; j < end; j++) m[o, j] /= total;
+        }
+        return m;
+    }
+
+    /// <summary><c>F.interpolate(x, size, mode="bicubic", align_corners=False, antialias=True)</c>, PIL's bicubic resize.</summary>
+    public static Tensor<T> ResizeBicubicAntialias<T>(IEngine engine, Tensor<T> x, int height, int width)
+        => Apply(engine, x, BicubicAntialias(x.Shape[2], height), BicubicAntialias(x.Shape[3], width));
+
     /// <summary><c>F.interpolate(x, size, mode="bilinear", align_corners=False, antialias=True)</c>.</summary>
     public static Tensor<T> ResizeAntialias<T>(IEngine engine, Tensor<T> x, int height, int width)
         => Apply(engine, x, BilinearAntialias(x.Shape[2], height), BilinearAntialias(x.Shape[3], width));

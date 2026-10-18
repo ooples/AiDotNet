@@ -36,9 +36,32 @@ public abstract class VisionLanguageTestBase<T> : NeuralNetworkModelTestBase<T>
         return (image, new[] { Box("cat", 0), Box("remote control", 4) });
     }
 
+    /// <summary>
+    /// Synthetic grounded-conversation supervision for a model like GLaMM (<see cref="AiDotNet.VisionLanguage.Interfaces.IGroundedConversationTrainable{T}"/>):
+    /// the input image, the official referring question about a dog with the answer "Sure, it is [SEG].", and the [SEG]'s
+    /// mask set where the target's values (through tanh) exceed one half, so a different target asks for a different mask.
+    /// </summary>
+    protected static AiDotNet.VisionLanguage.Grounding.GlammSample<T> ConversationSupervision(Tensor<T> input, Tensor<T> target)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        var (image, _) = GroundingSupervision(input, target);
+        int h = image.Shape[image.Rank - 2], w = image.Shape[image.Rank - 1];
+        var mask = new Tensor<T>(new[] { h, w });
+        for (int i = 0; i < h * w; i++)
+            mask[i] = target.Length > 0 && 0.5 + 0.5 * Math.Tanh(ops.ToDouble(target[i % target.Length])) > 0.5 ? ops.One : ops.Zero;
+        return new AiDotNet.VisionLanguage.Grounding.GlammSample<T>(image,
+            new[] { new AiDotNet.VisionLanguage.Grounding.GlammTurn("Can you segment the dog in this image?", "Sure, it is [SEG].") },
+            null, new[] { mask });
+    }
+
     /// <summary>A grounding model trains on grounded phrases; every invariant's step goes through its typed entry point.</summary>
     protected override void TrainOn(INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> target)
     {
+        if (network is AiDotNet.VisionLanguage.Interfaces.IGroundedConversationTrainable<T> conversation)
+        {
+            conversation.TrainConversation(ConversationSupervision(input, target));
+            return;
+        }
         if (network is AiDotNet.VisionLanguage.Interfaces.IGroundingTrainable<T> grounding)
         {
             var (image, boxes) = GroundingSupervision(input, target);
@@ -51,6 +74,8 @@ public abstract class VisionLanguageTestBase<T> : NeuralNetworkModelTestBase<T>
     /// <summary>A grounding model is measured on the loss it trains, with the same synthetic supervision.</summary>
     protected override double MeasureLoss(INeuralNetworkModel<T> network, Tensor<T> input, Tensor<T> output, Tensor<T> target)
     {
+        if (network is AiDotNet.VisionLanguage.Interfaces.IGroundedConversationTrainable<T> conversation)
+            return ConvertToDouble(conversation.EvaluateConversationLoss(ConversationSupervision(input, target)));
         if (network is AiDotNet.VisionLanguage.Interfaces.IGroundingTrainable<T> grounding)
         {
             var (image, boxes) = GroundingSupervision(input, target);
@@ -62,6 +87,11 @@ public abstract class VisionLanguageTestBase<T> : NeuralNetworkModelTestBase<T>
     /// <inheritdoc />
     protected override void RunRecalibrationPass(AiDotNet.NeuralNetworks.NeuralNetworkBase<T> network, Tensor<T> input, Tensor<T>? target)
     {
+        if (target is not null && network is AiDotNet.VisionLanguage.Interfaces.IGroundedConversationTrainable<T> conversation)
+        {
+            conversation.EvaluateConversationLoss(ConversationSupervision(input, target));
+            return;
+        }
         if (target is not null && network is AiDotNet.VisionLanguage.Interfaces.IGroundingTrainable<T> grounding)
         {
             var (image, boxes) = GroundingSupervision(input, target);
