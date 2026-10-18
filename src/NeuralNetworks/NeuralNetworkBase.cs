@@ -11699,9 +11699,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         ThrowIfCannotTrain();
         using var reentrancyGuard = AcquireTrainSentinel();
 
-        var configuredOptimizer = _baseTrainOptimizerExplicitlyConfigured && _baseTrainOptimizer is not null
-            ? _baseTrainOptimizer
-            : optimizer ?? TrainingOptimizer ?? _baseTrainOptimizer;
+        var configuredOptimizer = _externalStepOptimizer
+            ?? (_baseTrainOptimizerExplicitlyConfigured && _baseTrainOptimizer is not null
+                ? _baseTrainOptimizer
+                : optimizer ?? TrainingOptimizer ?? _baseTrainOptimizer);
         var resolvedOptimizer = configuredOptimizer ?? GetOrCreateBaseOptimizer();
 
         // Lazily shaped layers own no parameters until their first forward, and a plan holds only the tensors that
@@ -11798,9 +11799,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // TrainWithTape(input, expected, _optimizer), so before this an explicitly configured optimizer was silently
         // ignored on all of them; the PyTorch parity MLP asked for AdamW and trained FeedForwardNeuralNetwork's
         // AMSGrad-Adam default instead (a step-1 check cannot tell them apart).
-        var configuredOptimizer = _baseTrainOptimizerExplicitlyConfigured && _baseTrainOptimizer is not null
-            ? _baseTrainOptimizer
-            : optimizer ?? TrainingOptimizer ?? _baseTrainOptimizer;
+        var configuredOptimizer = _externalStepOptimizer
+            ?? (_baseTrainOptimizerExplicitlyConfigured && _baseTrainOptimizer is not null
+                ? _baseTrainOptimizer
+                : optimizer ?? TrainingOptimizer ?? _baseTrainOptimizer);
         bool useStreamingDefaults = configuredOptimizer is null;
         var resolvedOptimizer = configuredOptimizer ?? GetOrCreateBaseOptimizer();
 
@@ -14200,9 +14202,24 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         declineReason = null;
         _hasBeenTrained = true;
-        RunTrainStep(input, expectedOutput, optimizer);
+        // The caller's optimizer takes this step, ahead of the network's own (even one installed through
+        // SetBaseTrainOptimizer, as Transformer installs its default): an optimizer driving Optimize over this network
+        // otherwise had its learning rate and moments silently replaced by the network's default (#1380).
+        var previous = _externalStepOptimizer;
+        _externalStepOptimizer = optimizer;
+        try
+        {
+            RunTrainStep(input, expectedOutput, optimizer);
+        }
+        finally
+        {
+            _externalStepOptimizer = previous;
+        }
         return true;
     }
+
+    // The optimizer of the step TryTrainStepWithOptimizer is taking, which outranks every configured one; null otherwise.
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _externalStepOptimizer;
 
     /// <summary>Cached result of the per-type reflection in <see cref="HasGenericTrain"/>; null until first asked.</summary>
     private bool? _hasGenericTrain;

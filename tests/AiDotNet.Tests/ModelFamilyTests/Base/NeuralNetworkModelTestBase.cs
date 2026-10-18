@@ -4643,7 +4643,11 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (target.Length > 0
             && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn
             && UsesExternalCategoricalTargets(nn)
+            // A categorical target is a distribution over the classes whichever form the loss reads (logits or
+            // probabilities): a raw multi-hot draw makes cross-entropy's optimum p ∝ t, which a softmax head
+            // approaches by collapsing onto one class.
             && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>
+                or AiDotNet.LossFunctions.CategoricalCrossEntropyLoss<T>
             && !PredictLeavesLossDomain(network))
         {
             var shape = target.Shape.ToArray();
