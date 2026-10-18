@@ -4695,7 +4695,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         if (target.Length > 0
             && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> nn
             && UsesExternalCategoricalTargets(nn)
+            // CategoricalCrossEntropyLoss reads its target as class probabilities just as the logits form does. MEASURED
+            // on EfficientNet: the raw random target spanned [-0.99, 1.00], so -sum(t log p) had no lower bound; its
+            // paper optimizer drove the loss to -1938 by step 20 and then into a saturated 55.8, which the memorization
+            // probe read as divergence.
             && nn.DefaultLossFunction is AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>
+                or AiDotNet.LossFunctions.CategoricalCrossEntropyLoss<T>
             && !PredictLeavesLossDomain(network))
         {
             var shape = target.Shape.ToArray();
