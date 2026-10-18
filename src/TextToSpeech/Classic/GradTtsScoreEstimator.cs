@@ -107,7 +107,7 @@ internal sealed partial class TorchConv2DLayer<T> : LayerBase<T>, IShapeContract
 /// <summary>A learned scalar gate starting at zero (ReZero, Bachlechner et al. 2020): <c>y = g · x</c>.</summary>
 [LayerCategory(LayerCategory.Residual)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "")]
+[LayerProperty(IsTrainable = true, TestInputShape = "1, 4", TestConstructorArgs = "0.5")]
 [ElementWiseShape(Note = "Scales its input; the shape is carried through.")]
 [AutoParameters]
 internal sealed partial class RezeroGateLayer<T> : LayerBase<T>
@@ -115,11 +115,17 @@ internal sealed partial class RezeroGateLayer<T> : LayerBase<T>
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _gate;
 
+    private readonly double _initialGate;
+
     public override bool SupportsTraining => true;
 
-    public RezeroGateLayer() : base(new[] { 1 }, new[] { 1 })
+    /// <param name="initialGate">The gate's starting value: 0, as the paper initializes it, so the residual branch starts
+    /// switched off. A non-zero value lets the layer's input sensitivity be checked before any training.</param>
+    public RezeroGateLayer([LayerState] double initialGate = 0.0) : base(new[] { 1 }, new[] { 1 })
     {
+        _initialGate = initialGate;
         _gate = new Tensor<T>(new[] { 1 });
+        _gate[0] = NumOps.FromDouble(initialGate);
         RegisterTrainableParameter(_gate, PersistentTensorRole.Weights);
     }
 

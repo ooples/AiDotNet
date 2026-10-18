@@ -462,8 +462,13 @@ public partial class SoundStorm<T> : TtsModelBase<T>, ICodecTts<T>
 
             // Text to semantic: continue the prompt's semantic tokens.
             var prefix = promptSemantic.Select(code => ByteVocabulary + code).ToList();
-            var generated = TextToSemantic.Generate(input, prefix, o.Temperature, o.TopK, o.MaxNewSemanticTokens, random)
-                .Skip(prefix.Count).Where(id => id >= ByteVocabulary).Select(id => id - ByteVocabulary).ToArray();
+            // The decoder is trained to emit semantic tokens and </s> only (TrainingObjective's labels), so it samples from
+            // those, and </s> only after the first token (Hugging Face's min_new_tokens = 1). A trained model gives a byte
+            // id or an immediate </s> next to no probability, so neither constraint changes its output; an untrained one
+            // sampled bytes, which carry no audio, and synthesized nothing.
+            var generated = TextToSemantic.Generate(input, prefix, o.Temperature, o.TopK, o.MaxNewSemanticTokens, random,
+                    (token, step) => token >= ByteVocabulary || (token == EndToken && step > 0))
+                .Skip(prefix.Count).Select(id => id - ByteVocabulary).ToArray();
             if (generated.Length == 0)
                 throw new InvalidOperationException("The text-to-semantic model generated no semantic tokens.");
 

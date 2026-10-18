@@ -22,7 +22,7 @@ namespace AiDotNet.Audio.Codecs;
 /// </remarks>
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = false, TestInputShape = "1, 4, 6", TestConstructorArgs = "4, 2, 8")]
+[LayerProperty(IsTrainable = false, TestInputShape = "1, 4, 6", TestConstructorArgs = "4, 2, 8, 0.99, 0")]
 [ElementWiseShape(Note = "Quantizes each time step's vector; the shape is carried through.")]
 [AutoParameters]
 public sealed partial class ResidualVectorQuantizerLayer<T> : LayerBase<T>, IResidualVectorQuantizer<T>

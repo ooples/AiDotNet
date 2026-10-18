@@ -7403,6 +7403,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // fatchord's Adam at 1e-4; the probes measure learning at a constant Adam rate of 1e-3.
                     ", optimizer: new AiDotNet.Optimizers.AdamOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null))";
             }
+            else if (model.ClassName == "WaveNet" && model.ImplementsVocoder && model.TypeParameterCount == 1)
+            {
+                // The vocoder WaveNet is 30 dilated layers (3 cycles of 10) of 128 residual / gate / skip channels; keep the
+                // mel upsampler (4x4x4x4 = 256 hop, so the generic conv1d vocoder shapes apply), the gated residual stack
+                // and the mu-law softmax with 4 layers in 2 cycles, 8 channels wide. (The forecasting WaveNet shares the
+                // name and is not a vocoder.)
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputSize: 80, outputSize: 256), " +
+                    "new AiDotNet.TextToSpeech.Vocoders.WaveNetOptions { NumDilatedLayers = 4, DilationCycle = 2, " +
+                    "ResidualChannels = 8, GateChannels = 8, SkipChannels = 8 }" +
+                    ", optimizer: new AiDotNet.Optimizers.AdamOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null))";
+            }
             else if (model.ClassName == "WaveGlow" && model.TypeParameterCount == 1)
             {
                 // WaveGlow is 12 flows of 8-layer WN couplings with 512 residual / 256 skip channels; keep the 1024/256
@@ -15459,8 +15473,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // invariants measure it.
                     sb.AppendLine("    protected override int InputSensitivityWarmUpSteps => 2;");
                 }
-                if (model.ClassName == "WaveRNN")
+                if (model.ClassName is "WaveRNN" or "WaveNet")
                 {
+                    // WaveNet likewise samples each 8-bit mu-law class from a 256-way softmax (van den Oord et al. 2016,
+                    // Sec. 2.2); the reason below applies to it unchanged.
                     // WaveRNN samples each coarse and fine 8-bit class from a 256-way softmax (Kalchbrenner et al. 2018,
                     // Sec. 3); with seeded draws an untrained model's near-uniform logits rarely move a class boundary past a
                     // draw, so constant mels can sample the same classes. Two steps sharpen the softmaxes first.
@@ -21081,6 +21097,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "ParallelWaveGAN" => true,
             "WaveGlow" => true,
             "WaveRNN" => true,
+            // The vocoder WaveNet (mel-conditioned, 256-way mu-law output, upsampling by the hop). Both callers also
+            // require IVocoder, so the forecasting WaveNet that shares the name never matches.
+            "WaveNet" => true,
             _ => false,
         };
     }
