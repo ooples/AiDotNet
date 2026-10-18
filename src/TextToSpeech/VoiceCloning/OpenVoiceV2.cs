@@ -106,33 +106,24 @@ public partial class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
         var input = PreprocessText(text);
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        // Run preprocessed text through learned layers for feature extraction
-        var features = input;
-        foreach (var l in Layers)
-            features = l.Forward(features);
-        int textLen = Math.Min(text.Length, _options.MaxTextLength);
-        int mF = textLen * 4;
-        double[] baseMel = new double[mF];
-        double p = 0;
-        for (int f = 0; f < mF; f++)
-        {
-            int t = Math.Min(f * textLen / mF, textLen - 1);
-            baseMel[f] = Math.Tanh(
-                (text[t] % 128) / 128.0 * 0.55 + p * 0.3 + Math.Sin(f * 0.09) * 0.1
-            );
-            p = baseMel[f];
-        }
-        double[] conv = new double[mF];
-        for (int f = 0; f < mF; f++)
-            conv[f] = baseMel[f] * 0.9 + Math.Sin(f * 0.02) * 0.08;
-        int waveLen = mF * _options.HopSize;
-        var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            int fr = Math.Min(i / Math.Max(1, _options.HopSize), mF - 1);
-            waveform[i] = NumOps.FromDouble(conv[fr] * Math.Sin(i * 0.007) * 0.87);
-        }
-        return waveform;
+        // The network's own output: its conv encoder, flow and HiFi-GAN decoder turn the [1, MelChannels, T] input into
+        // a waveform. This used to run the layers, discard their output and return a waveform built from sines of the
+        // character codes, so synthesis never depended on anything the model learned.
+        return PostprocessAudio(Predict(input));
+    }
+
+    // The encoder reads MelChannels channels per frame through a 1-D convolution, so text enters as one-hot characters of
+    // that width, channels first ([1, MelChannels, T]); a convolution over one-hot rows is a character embedding followed
+    // by the convolution. A rank-1 character code could not enter a convolution at all.
+    protected override Tensor<T> PreprocessText(string text)
+    {
+        var rows = OneHotCharacterFeatures(text, base.MelChannels);                                       // [T, C]
+        int frames = rows.Shape[0], channels = rows.Shape[1];
+        var features = new Tensor<T>(new[] { 1, channels, frames });
+        for (int t = 0; t < frames; t++)
+            for (int c = 0; c < channels; c++)
+                features[0, c, t] = rows[t, c];
+        return features;
     }
 
     public double MinReferenceDuration => 3.0;

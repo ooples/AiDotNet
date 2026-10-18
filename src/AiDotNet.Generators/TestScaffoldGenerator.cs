@@ -10484,7 +10484,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
                     "inputSize: 4, outputSize: 32), " +
-                    "AiDotNet.TextToSpeech.CodecBased.BarkOptions.TinyForTests(32))";
+                    "AiDotNet.TextToSpeech.CodecBased.BarkOptions.TinyForTests(32)" +
+                    // Bark's real tokenizer (bert-base-multilingual-cased) emits ids up to 119 546; the tiny semantic
+                    // vocabulary embeds text ids 0..26 (offset 32, below the text pad at 59), so synthesis gets a
+                    // 27-id character tokenizer through Bark's own tokenizer parameter. BarkModel takes no tokenizer.
+                    (model.ClassName == "Bark"
+                        ? ", tokenizer: AiDotNet.Tests.ModelFamilyTests.Base.TinyTextTokenizers.Letters())"
+                        : ")");
             }
             else if (model.ClassName == "CosyVoice" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -15512,6 +15518,29 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine("    }");
                     sb.AppendLine();
                 }
+                if (model.ClassName == "Bark")
+                {
+                    // Bark samples its semantic tokens (temperature 0.7) and the tiny fixture generates at most four, so two
+                    // texts can sample the same tokens under the fixed seed and decode to the same audio: a property of
+                    // sampling, not of the text path. Bark declares no typed training objective (the objective probe of
+                    // Pheme and SoundStorm would score the target against itself), so the synthesis text probe runs the
+                    // network's deterministic forward on the tokens Synthesize itself produces for each text.
+                    string tt = useFloat ? "float" : "double";
+                    sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
+                    sb.AppendLine("    public override async System.Threading.Tasks.Task Synthesize_DifferentText_DifferentOutput()");
+                    sb.AppendLine("    {");
+                    sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
+                    sb.AppendLine("        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Create();");
+                    sb.AppendLine("        using var network = CreateNetwork();");
+                    sb.AppendLine($"        var tts = (AiDotNet.TextToSpeech.TtsModelBase<{tt}>)network;");
+                    sb.AppendLine("        var a = network.Predict(tts.TextToTokens(\"the quick brown fox\"));");
+                    sb.AppendLine("        var b = network.Predict(tts.TextToTokens(\"a completely different sentence\"));");
+                    sb.AppendLine("        bool differs = a.Length != b.Length;");
+                    sb.AppendLine("        for (int i = 0; !differs && i < a.Length; i++) differs = a[i] != b[i];");
+                    sb.AppendLine("        Xunit.Assert.True(differs, \"Bark's forward is identical for two texts' tokens: the text never reaches the network.\");");
+                    sb.AppendLine("    }");
+                    sb.AppendLine();
+                }
                 bool useCodecSmokeIterations =
                     model.ClassName is "Bark" or "BarkModel" or "FishSpeech" or "Llasa" or "MegaTTS3"
                         or "XTTSv2Clone"
@@ -15943,6 +15972,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
                     ("ScaledInput_ShouldChangeOutput", false, "random"),
                 }, textToTokens: "unused: AudioLM has no text probe");
+                // Targets are codes [frames, levels] (AudioLM's other target form), 16 frames of 3 levels of 16 codes. A
+                // waveform target goes through the frozen codec, and an untrained SoundStream encodes every waveform to the
+                // same code (measured: code 0 throughout, or 12 with random codebooks), so two different waveform targets
+                // trained identically and the target-dependence probe could not see a difference the model can learn.
+                string at = useFloat ? "float" : "double";
+                sb.AppendLine($"    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<{at}> CreateRandomTargetTensor(int[] shape, System.Random rng)");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        var codes = new AiDotNet.Tensors.LinearAlgebra.Tensor<{at}>(new[] {{ 16, 3 }});");
+                sb.AppendLine($"        for (int i = 0; i < codes.Length; i++) codes[i] = ({at})rng.Next(16);");
+                sb.AppendLine("        return codes;");
+                sb.AppendLine("    }");
             }
             else if (model.ClassName == "MusicGenModel")
             {

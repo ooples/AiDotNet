@@ -196,10 +196,14 @@ internal sealed class AudioLmCore<T>
         var prefix = CoarsePrefix(semantic);
         AppendCoarse(prefix, prompt, 0, prompt.GetLength(1));
         int levels = Tokens.CoarseCodebooks, n = Tokens.CodebookSize;
+        // The end token may close the sequence at any frame boundary except before the first frame (Hugging Face's
+        // min_new_tokens): semantic tokens are present, so a trained model gives an immediate end next to no probability,
+        // while an untrained one could end at once and render no audio at all.
         var tokens = Coarse.Generate(prefix, temperature, frames * levels, (step, v) =>
         {
             int level = step % levels;
-            return (v >= CoarseOffset + level * n && v < CoarseOffset + (level + 1) * n) || (level == 0 && v == CoarseEnd);
+            return (v >= CoarseOffset + level * n && v < CoarseOffset + (level + 1) * n)
+                || (level == 0 && step > 0 && v == CoarseEnd);
         }, CoarseEnd, random);
         int generated = tokens.Count / levels;
         var codes = new int[levels, generated];

@@ -43,7 +43,9 @@ public interface IResidualVectorQuantizer<T>
 /// </remarks>
 [LayerCategory(LayerCategory.Structural)]
 [LayerTask(LayerTask.FeatureExtraction)]
-[LayerProperty(IsTrainable = true, TestInputShape = "1, 4, 6", TestConstructorArgs = "4, 2, 8, 2")]
+// The quantization is piecewise constant, so finite differences read 0 almost everywhere, while the straight-through
+// estimator passes the gradient through it by design (measured: numerical 0 against analytical -0.09 .. -0.61).
+[LayerProperty(IsTrainable = true, UsesSurrogateGradient = true, TestInputShape = "1, 4, 6", TestConstructorArgs = "4, 2, 8, 2")]
 [ElementWiseShape(Note = "Quantizes each time step's vector; the shape is carried through.")]
 public sealed partial class FactorizedVectorQuantizerLayer<T> : LayerBase<T>, IResidualVectorQuantizer<T>
 {
