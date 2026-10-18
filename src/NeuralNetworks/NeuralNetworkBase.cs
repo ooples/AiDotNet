@@ -11257,6 +11257,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // The optimizer's regularization joins each gradient before the clip norm and the update, as in the eager
         // path (ApplyOptimizerRegularization) - streaming used to drop it, so ForceOn trained a different objective.
         var regularization = OptimizerRegularizationOf(resolvedOptimizer);
+        // Collected on the first gradient, after the forward has materialized any lazily sized parameters.
+        HashSet<Tensor<T>>? decayExcluded = null;
 
         if (!clip)
         {
@@ -11274,7 +11276,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 {
                     if (grad is null || grad.Length == 0) return;
                     RetainStreamingGradient(source, grad);
-                    if (regularization is not null) grad = RegularizeGradient(regularization, source, grad);
+                    if (regularization is not null) grad = RegularizeGradient(regularization, source, grad, decayExcluded ??= DecayExcludedParameters());
                     ClampStreamingGradientByValue(grad, optimizerClipValue);
                     // Streaming optimizer writes this source's weights in place (#1624 OOM-retry gate).
                     MarkTrainMutationStarted();
@@ -11306,7 +11308,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     if (grad is null || grad.Length == 0) return;
                     bool inClipSet = clipSet.Contains(source);
                     if (!inClipSet && optimizerClipNorm <= 0.0) return;
-                    if (regularization is not null) grad = RegularizeGradient(regularization, source, grad);
+                    if (regularization is not null) grad = RegularizeGradient(regularization, source, grad, decayExcluded ??= DecayExcludedParameters());
                     var span = grad.Data.Span;
                     int len = grad.Length;
                     double normSq = 0.0;
@@ -11348,7 +11350,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 {
                     if (grad is null || grad.Length == 0) return;
                     RetainStreamingGradient(source, grad);
-                    if (regularization is not null) grad = RegularizeGradient(regularization, source, grad);
+                    if (regularization is not null) grad = RegularizeGradient(regularization, source, grad, decayExcluded ??= DecayExcludedParameters());
                     if (scaleDown)
                     {
                         // Extras skip the network clip, as in the eager path, but not the optimizer's.
@@ -11394,7 +11396,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 {
                     if (grad is null || grad.Length == 0) return;
                     RetainStreamingGradient(source, grad);
-                    if (regularization is not null) grad = RegularizeGradient(regularization, source, grad);
+                    if (regularization is not null) grad = RegularizeGradient(regularization, source, grad, decayExcluded ??= DecayExcludedParameters());
                     if (clipSet.Contains(source))
                     {
                         var span = grad.Data.Span;
@@ -13075,12 +13077,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         double fusedL2 = 0.0;
         if (OptimizerRegularizationOf(resolvedOptimizer) is { } fusedRegularization)
         {
-            if (fusedRegularization is AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>> fusedL2Regularization)
+            if (fusedRegularization is AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>> fusedL2Regularization
+                && DecayExcludedParameters().Count == 0)
                 fusedL2 = fusedL2Regularization.GetOptions().Strength;
             else
             {
-                string reason = "regularization " + fusedRegularization.GetType().Name
-                    + " has no fused form; the eager tape applies it";
+                // The plan adds one L2 strength to every parameter; a model that excludes some (ExcludesFromWeightDecay)
+                // trains on the eager tape, which skips them.
+                string reason = fusedRegularization is AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>>
+                    ? "L2 with parameters excluded from weight decay has no fused form; the eager tape applies it"
+                    : "regularization " + fusedRegularization.GetType().Name + " has no fused form; the eager tape applies it";
                 if (_fusedTrainingCommitted)
                 {
                     // A committed plan owns the Adam/SGD moments; the eager optimizer cannot inherit them. Drop the
@@ -14583,11 +14589,35 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Dictionary<Tensor<T>, Tensor<T>> gradients)
     {
         if (OptimizerRegularizationOf(optimizer) is not { } regularization) return;
+        var decayExcluded = DecayExcludedParameters();
         foreach (var parameter in parameters)
         {
             if (!gradients.TryGetValue(parameter, out var gradient) || gradient is null) continue;
-            gradients[parameter] = RegularizeGradient(regularization, parameter, gradient);
+            gradients[parameter] = RegularizeGradient(regularization, parameter, gradient, decayExcluded);
         }
+    }
+
+    /// <summary>
+    /// Whether <paramref name="layer"/>'s parameters are excluded from the optimizer's L2 term (coupled weight decay).
+    /// False by default: the decay reaches every parameter, as PyTorch's <c>weight_decay</c> does. A model whose paper
+    /// decays only some parameters (TF EfficientNet adds its L2 loss over every variable outside batch normalization)
+    /// overrides it.
+    /// </summary>
+    protected virtual bool ExcludesFromWeightDecay(ILayer<T> layer) => false;
+
+    /// <summary>
+    /// The parameters of the layers <see cref="ExcludesFromWeightDecay"/> names, collected for the step at hand. Not
+    /// cached: lazily sized layers replace their parameter tensors on the first forward without a structure change, so a
+    /// set kept from before it would name the discarded placeholders and exclude nothing.
+    /// </summary>
+    private HashSet<Tensor<T>> DecayExcludedParameters()
+    {
+        var excluded = new List<Tensor<T>>();
+        var seen = new HashSet<Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        foreach (var layer in Layers)
+            if (layer is not null && ExcludesFromWeightDecay(layer))
+                Training.TapeTrainingStep<T>.CollectLayerParameters(layer, excluded, seen, materializedOnly: false);
+        return seen;
     }
 
     /// <summary>One parameter's gradient with the regularization term added (L2 as device tensor ops).</summary>
@@ -14599,13 +14629,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// weight elements whose gradient had been zero, and the DNC's parameters turned NaN on its third Train call.
     /// </remarks>
     private Tensor<T> RegularizeGradient(
-        IRegularization<T, Tensor<T>, Tensor<T>> regularization, Tensor<T> parameter, Tensor<T> gradient)
+        IRegularization<T, Tensor<T>, Tensor<T>> regularization, Tensor<T> parameter, Tensor<T> gradient, HashSet<Tensor<T>>? decayExcluded)
     {
         using var noGrad = new NoGradScope<T>();
         var theta = parameter._shape.SequenceEqual(gradient._shape) ? parameter : Engine.Reshape(parameter, gradient._shape);
-        return regularization is AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>> l2
-            ? Engine.TensorAdd(gradient, Engine.TensorMultiplyScalar(theta, NumOps.FromDouble(l2.GetOptions().Strength)))
-            : regularization.Regularize(gradient, theta);
+        if (regularization is AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>> l2)
+            return decayExcluded is not null && decayExcluded.Contains(parameter)
+                ? gradient
+                : Engine.TensorAdd(gradient, Engine.TensorMultiplyScalar(theta, NumOps.FromDouble(l2.GetOptions().Strength)));
+        return regularization.Regularize(gradient, theta);
     }
 
     /// <param name="updatedOnDevice">

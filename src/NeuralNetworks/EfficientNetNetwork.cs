@@ -326,6 +326,12 @@ public partial class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         Layers.AddRange(layers);
     }
 
+    /// <summary>
+    /// The official code's weight decay skips batch normalization: its L2 loss sums every trainable variable whose name
+    /// does not contain "batch_normalization" (tpu/models/official/efficientnet/main.py).
+    /// </summary>
+    protected override bool ExcludesFromWeightDecay(ILayer<T> layer) => layer is BatchNormalizationLayer<T>;
+
     /// <summary>Loads a timm <c>tf_efficientnet</c> state dict (the trunk, then <c>classifier.weight</c> and
     /// <c>classifier.bias</c>).</summary>
     internal void LoadTorchWeights(Func<string, int[], double[]> read)
