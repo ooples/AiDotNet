@@ -10484,7 +10484,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
                     "inputSize: 4, outputSize: 32), " +
-                    "AiDotNet.TextToSpeech.CodecBased.BarkOptions.TinyForTests(32))";
+                    "AiDotNet.TextToSpeech.CodecBased.BarkOptions.TinyForTests(32)" +
+                    // Bark's real tokenizer (bert-base-multilingual-cased) emits ids up to 119 546; the tiny semantic
+                    // vocabulary embeds text ids 0..26 (offset 32, below the text pad at 59), so synthesis gets a
+                    // 27-id character tokenizer through Bark's own tokenizer parameter. BarkModel takes no tokenizer.
+                    (model.ClassName == "Bark"
+                        ? ", tokenizer: AiDotNet.Tests.ModelFamilyTests.Base.TinyTextTokenizers.Letters())"
+                        : ")");
             }
             else if (model.ClassName == "CosyVoice" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
