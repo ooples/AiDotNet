@@ -201,7 +201,7 @@ public partial class UNet3D<T> : VolumetricModelLayoutBase<T>
     /// </remarks>
     protected override void InitializeLayers()
     {
-        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
+        if (UsesCallerLayers)
         {
             Layers.AddRange(Architecture.Layers);
             ValidateCustomLayers(Layers);
@@ -235,8 +235,10 @@ public partial class UNet3D<T> : VolumetricModelLayoutBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-        // A caller-supplied layer list has no encoder/decoder split to tap, so run it as given.
-        if (Layers.Count != ExpectedGeneratedLayerCount(NumEncoderBlocks))
+        // A caller-supplied layer list has no encoder/decoder split to tap, so run it as given -- whatever its length:
+        // one that happens to have the generated layer count is still not the generated topology. The count check
+        // only guards the generated path against a layer list that no longer has the generated shape.
+        if (UsesCallerLayers || Layers.Count != ExpectedGeneratedLayerCount(NumEncoderBlocks))
         {
             Tensor<T> sequential = input;
             foreach (var layer in Layers)
@@ -247,18 +249,29 @@ public partial class UNet3D<T> : VolumetricModelLayoutBase<T>
             return sequential;
         }
 
-        // Channels sit on axis 1 when the volume carries a batch dimension and axis 0 otherwise.
-        int channelAxis = input.Rank >= 5 ? 1 : 0;
-
-        var features = input;
+        // Batch normalization reads the channel axis from rank (axis 1 at rank 4 and up), so an unbatched
+        // [C, D, H, W] grid would normalize over depth. Lift it to a batch of one and drop the axis on the way out.
+        bool unbatched = input.Rank == 4;
+        const int channelAxis = 1;
+        var features = unbatched
+            ? Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2], input.Shape[3] })
+            : input;
         int li = 0;
+
+        // One 3x3x3 convolution unit: convolution, batch normalization, ReLU (LayerHelper.UNet3DConvUnit).
+        Tensor<T> ConvUnit(Tensor<T> x)
+        {
+            x = Layers[li++].Forward(x);
+            x = Layers[li++].Forward(x);
+            return Layers[li++].Forward(x);
+        }
         var taps = new Tensor<T>[NumEncoderBlocks];
 
         // Encoder: two convolutions per block, tapped before the pool that follows it.
         for (int block = 0; block < NumEncoderBlocks; block++)
         {
-            features = Layers[li++].Forward(features);
-            features = Layers[li++].Forward(features);
+            features = ConvUnit(features);
+            features = ConvUnit(features);
             taps[block] = features;
 
             if (block < NumEncoderBlocks - 1)
@@ -268,7 +281,7 @@ public partial class UNet3D<T> : VolumetricModelLayoutBase<T>
         }
 
         // Bottleneck.
-        features = Layers[li++].Forward(features);
+        features = ConvUnit(features);
 
         // Decoder: up-convolve (2x resolution, half the channels), concatenate the encoder tap
         // now at the matching resolution, then two convolutions.
@@ -276,14 +289,16 @@ public partial class UNet3D<T> : VolumetricModelLayoutBase<T>
         {
             features = Layers[li++].Forward(features);
             features = Engine.TensorConcatenate(new[] { features, taps[block] }, axis: channelAxis);
-            features = Layers[li++].Forward(features);
-            features = Layers[li++].Forward(features);
+            features = ConvUnit(features);
+            features = ConvUnit(features);
         }
 
         // 1x1x1 output projection.
         features = Layers[li++].Forward(features);
 
-        return features;
+        return unbatched
+            ? Engine.Reshape(features, new[] { features.Shape[1], features.Shape[2], features.Shape[3], features.Shape[4] })
+            : features;
     }
 
     /// <summary>
@@ -307,14 +322,19 @@ public partial class UNet3D<T> : VolumetricModelLayoutBase<T>
     /// <returns>The expected layer count.</returns>
     /// <remarks>
     /// <para>
-    /// Two convolutions per encoder block, a pool after all but the last, one bottleneck
-    /// convolution, an up-convolution plus two convolutions per decoder block, and the output
-    /// projection. Forward compares against this so a caller-supplied architecture falls back to a
+    /// Two convolution units per encoder block, a pool after all but the last, one bottleneck
+    /// unit, an up-convolution plus two units per decoder block, and the output projection. A
+    /// unit is three layers: convolution, batch normalization and ReLU. Forward compares against this so a caller-supplied architecture falls back to a
     /// sequential pass instead of indexing into a layout it does not have.
     /// </para>
     /// </remarks>
+    /// <summary>True when the architecture supplied the layers; false when <see cref="InitializeLayers"/> generated the
+    /// encoder/decoder topology. Read from the architecture, the same test InitializeLayers makes, so it holds however the
+    /// network was built (constructor, clone or deserialization).</summary>
+    private bool UsesCallerLayers => Architecture.Layers != null && Architecture.Layers.Count > 0;
+
     private static int ExpectedGeneratedLayerCount(int numEncoderBlocks)
-        => (2 * numEncoderBlocks) + (numEncoderBlocks - 1) + 1 + (3 * (numEncoderBlocks - 1)) + 1;
+        => (3 * 2 * numEncoderBlocks) + (numEncoderBlocks - 1) + 3 + (7 * (numEncoderBlocks - 1)) + 1;
 
     /// <summary>Latches the one-time lazy shape resolution.</summary>
     private bool _lazyShapesResolved;

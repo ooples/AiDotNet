@@ -345,6 +345,9 @@ jobs:
 
           Write-Host "=== $($chunks.Count) chunk(s) run, $failed failed, $envelope exceeded the runner ==="
           if ($failed -gt 0) { exit 1 }
+          # Explicit: the runner ends a pwsh step with `exit $LASTEXITCODE`, so a last chunk that only exceeded the
+          # runner (dotnet test exited 1) failed the job even with 0 failed chunks (run 38859953869, slices 1 and 20).
+          exit 0
 
       - name: Upload results
         if: always()
