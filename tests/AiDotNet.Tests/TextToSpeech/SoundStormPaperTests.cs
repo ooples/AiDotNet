@@ -159,7 +159,14 @@ public class SoundStormPaperTests
         model.CurrentStage = stage;
         var text = Snapshot(model.TextToSemanticLayers);
         var acoustic = Snapshot(model.SemanticToAcousticLayers);
-        model.Train(Sample(model));
+        // An acoustic step whose draw masks no position has zero loss (the prompt cut can fall at the end, and the
+        // cosine ratio can mask nothing after it), so train until a step actually carries a loss.
+        var sample = Sample(model);
+        for (int step = 0; step < 10; step++)
+        {
+            model.Train(sample);
+            if (Convert.ToDouble(model.GetLastLoss()) != 0.0) break;
+        }
         bool textMoved = !text.SequenceEqual(Snapshot(model.TextToSemanticLayers));
         bool acousticMoved = !acoustic.SequenceEqual(Snapshot(model.SemanticToAcousticLayers));
         Assert.Equal(stage == SoundStormTrainingStage.TextToSemantic, textMoved);

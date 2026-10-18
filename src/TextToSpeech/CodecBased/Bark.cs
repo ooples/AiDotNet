@@ -119,6 +119,9 @@ public partial class Bark<T> : BarkModel<T>, ICodecTts<T>
     protected override Tensor<T> PreprocessText(string text)
         => ToTokenTensorForFacade(Tokenize(text));
 
+    /// <summary>The semantic stage's first-step logits for <paramref name="text"/> (see the token-id overload).</summary>
+    internal Vector<T> FirstSemanticLogits(string text) => FirstSemanticLogits(Tokenize(text));
+
     private IReadOnlyList<int> Tokenize(string text)
     {
         if (string.IsNullOrWhiteSpace(text))
