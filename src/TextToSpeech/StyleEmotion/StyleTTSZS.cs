@@ -118,6 +118,11 @@ public partial class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
         return PostprocessAudio(output);
     }
 
+    // The encoder reads MelChannels features per step through a dense projection, so text enters as one-hot
+    // characters of that width (the projection is then a character embedding); a rank-1 character code fed the
+    // attention stack a single vector and Synthesize threw.
+    protected override Tensor<T> PreprocessText(string text) => OneHotCharacterFeatures(text, _options.MelChannels);
+
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     protected override void InitializeLayers()
