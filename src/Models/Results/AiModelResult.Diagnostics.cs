@@ -18,8 +18,8 @@ public partial class AiModelResult<T, TInput, TOutput>
     /// Useful for production observability, CI assertions, and diagnosing why a model is
     /// slower than expected on a given host. Fields include CPU SIMD level
     /// (<see cref="AccelerationSnapshot.BestSimdSet"/>), GPU backends detected
-    /// (<see cref="AccelerationSnapshot.HasCuda"/>, etc.), and native BLAS availability
-    /// (<see cref="AccelerationSnapshot.HasOpenBlas"/>, etc.).
+    /// (<see cref="AccelerationSnapshot.HasCuda"/>, etc.), and GPU BLAS availability
+    /// (<see cref="AccelerationSnapshot.HasClBlast"/>).
     /// </para>
     /// </remarks>
     public AccelerationSnapshot? AccelerationSnapshot { get; internal set; }

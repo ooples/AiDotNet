@@ -43,9 +43,9 @@ public static class AccelerationDiagnostics
 
         sb.AppendLine("  GPU backends:     " +
             $"CUDA={caps.HasCudaSupport} OpenCL={caps.HasOpenCLSupport} HIP={caps.HasHipSupport}");
+        // AiDotNet.Tensors no longer loads a native CPU BLAS (OpenBLAS and MKL were removed); CPU GEMM is managed.
         sb.AppendLine("  Native BLAS:      " +
-            $"OpenBLAS={nativeStatus.HasOpenBlas} CLBlast={nativeStatus.HasClBlast} " +
-            $"MKL={nativeStatus.HasMkl} CpuBLAS={nativeStatus.HasCpuBlas}");
+            $"CLBlast={nativeStatus.HasClBlast}");
         sb.AppendLine("  Native GPU libs:  " +
             $"CUDA={nativeStatus.HasCuda} HIP={nativeStatus.HasHip} OpenCL={nativeStatus.HasOpenCl}");
 
@@ -78,9 +78,7 @@ public static class AccelerationDiagnostics
             HasCuda = caps.HasCudaSupport,
             HasOpenCl = caps.HasOpenCLSupport,
             HasHip = caps.HasHipSupport,
-            HasOpenBlas = status.HasOpenBlas,
             HasClBlast = status.HasClBlast,
-            HasMkl = status.HasMkl,
             HasGpuAcceleration = status.HasGpuAcceleration,
             ProcessorCount = caps.ProcessorCount,
             L1CacheKB = caps.L1CacheSize / 1024,
@@ -107,9 +105,7 @@ public sealed class AccelerationSnapshot
     public bool HasCuda { get; init; }
     public bool HasOpenCl { get; init; }
     public bool HasHip { get; init; }
-    public bool HasOpenBlas { get; init; }
     public bool HasClBlast { get; init; }
-    public bool HasMkl { get; init; }
     public bool HasGpuAcceleration { get; init; }
     public int ProcessorCount { get; init; }
     public int L1CacheKB { get; init; }
