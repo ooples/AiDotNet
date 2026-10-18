@@ -15516,6 +15516,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     sb.AppendLine("    }");
                     sb.AppendLine();
                 }
+                if (model.ClassName == "Bark")
+                {
+                    // Bark samples (temperature 0.7 / 0.5) from a seeded generator, so Synthesize is deterministic. At
+                    // random init its tiny semantic stage's logits are near-uniform: the same seed samples the same
+                    // tokens for any text, and greedy argmax turns on ~1e-6 differences that the engine's numerics can
+                    // flip. Whether the text reaches the model is read from the semantic stage's first-step logits,
+                    // which are continuous in the text.
+                    string element = useFloat ? "float" : "double";
+                    sb.AppendLine("    public override async System.Threading.Tasks.Task Synthesize_DifferentText_DifferentOutput()");
+                    sb.AppendLine("    {");
+                    sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
+                    sb.AppendLine($"        var bark = (AiDotNet.TextToSpeech.CodecBased.Bark<{element}>)CreateNetwork();");
+                    sb.AppendLine("        var a = bark.FirstSemanticLogits(\"the quick brown fox\");");
+                    sb.AppendLine("        var b = bark.FirstSemanticLogits(\"a completely different sentence\");");
+                    sb.AppendLine("        double largest = 0;");
+                    sb.AppendLine("        for (int i = 0; i < a.Length; i++) largest = System.Math.Max(largest, System.Math.Abs((double)a[i] - b[i]));");
+                    sb.AppendLine("        Xunit.Assert.True(largest > 1e-6, $\"The semantic stage's logits do not depend on the text (largest difference {largest:G4}): the text never reaches the model.\");");
+                    sb.AppendLine("    }");
+                    sb.AppendLine();
+                }
                 bool useCodecSmokeIterations =
                     model.ClassName is "Bark" or "BarkModel" or "FishSpeech" or "Llasa" or "MegaTTS3"
                         or "XTTSv2Clone"
