@@ -1363,6 +1363,18 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
                 result = Engine.FusedLinear(flattenedInput, _weights, BiasOrNull(), fusedActivation);
             }
         }
+        else if (fusedActivation == FusedActivationType.ReLU
+                 && (!cacheBwd || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive))
+        {
+            // Tape training keeps no pre-activation (cacheBwd is false), and a compiled-plan trace records lazy nodes no
+            // eager Backward reads (no GradientTape is active there, so cacheBwd alone reads true). Either way the ReLU
+            // goes into the one FusedLinear: the tape records a single op whose backward masks the gradient by the output, instead of a
+            // separate ReLU op and its backward (~45 us per step for the parity MLP's two hidden layers). ReLU rounds
+            // nothing, so the values equal FusedLinear followed by ApplyActivation. Other activations keep the separate
+            // op: their fused epilogues are not guaranteed to round like the layer's activation function.
+            result = Engine.FusedLinear(flattenedInput, _weights, BiasOrNull(), FusedActivationType.ReLU);
+            _lastOutput = null;
+        }
         else
         {
             // Training (or unsupported activation): single FusedLinear call without activation,
