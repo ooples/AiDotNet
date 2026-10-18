@@ -138,4 +138,65 @@ public class FacadeModelOwnStepTests
             AiDotNetEngine.Current = previousEngine;
         }
     }
+
+    [Fact(Timeout = 300000)]
+    public async Task The_model_step_trains_with_the_facade_optimizer_over_the_networks_own()
+    {
+        // A network can hold an explicitly configured optimizer of its own - Transformer installs its Noam-scheduled
+        // default through SetBaseTrainOptimizer in its constructor. Optimize on a DIFFERENT optimizer trains with that
+        // optimizer on the flat path, so the model step must too. It trained with the network's own instead: the
+        // ByteLM V=256 fixture stayed 0.06 nats off uniform where the flat path converged (#1380's test).
+        await Task.Yield();
+        var previousEngine = AiDotNetEngine.Current;
+        try
+        {
+            AiDotNetEngine.ResetToCpu();
+            var flat = Optimize(modelStep: false);
+            var model = Optimize(modelStep: true);
+            Assert.Equal(0, flat.ModelSteps);
+            Assert.True(model.ModelSteps > 0, $"the model step never ran; declined: {model.Declined}");
+
+            double diff = 0, norm = 0;
+            for (int i = 0; i < flat.Parameters.Length; i++)
+            {
+                double d = flat.Parameters[i] - model.Parameters[i];
+                diff += d * d; norm += (double)flat.Parameters[i] * flat.Parameters[i];
+            }
+            Assert.True(Math.Sqrt(diff) <= 1e-4 * Math.Sqrt(norm),
+                $"model step diverged from the flat path: |dtheta| = {Math.Sqrt(diff):G4}, |theta| = {Math.Sqrt(norm):G4}");
+        }
+        finally
+        {
+            AiDotNetEngine.Current = previousEngine;
+        }
+
+        static (float[] Parameters, int ModelSteps, string? Declined) Optimize(bool modelStep)
+        {
+            var previous = Environment.GetEnvironmentVariable("AIDOTNET_FACADE_MODEL_STEP");
+            Environment.SetEnvironmentVariable("AIDOTNET_FACADE_MODEL_STEP", modelStep ? null : "0");
+            try
+            {
+                var (x, y) = Data();
+                var network = Network(x);
+                // The network's own optimizer: a learning rate 100x below the facade's, so training with it is visible.
+                network.SetBaseTrainOptimizer(new AdamOptimizer<float, Tensor<float>, Tensor<float>>(null,
+                    new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 1e-4 }));
+                var optimizer = new AdamOptimizer<float, Tensor<float>, Tensor<float>>(network,
+                    new AdamOptimizerOptions<float, Tensor<float>, Tensor<float>>
+                    {
+                        MaxIterations = Epochs, BatchSize = Batch, UseEarlyStopping = false, InitialLearningRate = 1e-2,
+                        Regularization = new AiDotNet.Regularization.NoRegularization<float, Tensor<float>, Tensor<float>>(),
+                    });
+                optimizer.Optimize(new AiDotNet.Models.Inputs.OptimizationInputData<float, Tensor<float>, Tensor<float>>
+                {
+                    XTrain = x, YTrain = y, XValidation = x, YValidation = y, XTest = x, YTest = y,
+                });
+                return (network.GetParameters().ToArray(), optimizer.ModelOwnStepCount, optimizer.LastModelStepDeclineReason);
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("AIDOTNET_FACADE_MODEL_STEP", previous);
+            }
+        }
+    }
 }
