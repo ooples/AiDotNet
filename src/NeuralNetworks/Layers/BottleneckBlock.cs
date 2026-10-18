@@ -384,12 +384,13 @@ public partial class BottleneckBlock<T> : LayerBase<T>, ILayerSerializationExtra
 
         // Main branch: conv1 -> bn1 -> relu -> conv2 -> bn2 -> relu -> conv3 -> bn3
         _lastConv1Output = _conv1.Forward(input);
-        _lastBn1Output = _bn1.Forward(_lastConv1Output);
-        _lastRelu1Output = ApplyReLU(_lastBn1Output);
+        // Normalization and ReLU in one pass in inference (BatchNormalizationLayer.ForwardThenReLU).
+        _lastRelu1Output = _bn1.ForwardThenReLU(_lastConv1Output);
+        _lastBn1Output = _lastRelu1Output;
 
         _lastConv2Output = _conv2.Forward(_lastRelu1Output);
-        _lastBn2Output = _bn2.Forward(_lastConv2Output);
-        _lastRelu2Output = ApplyReLU(_lastBn2Output);
+        _lastRelu2Output = _bn2.ForwardThenReLU(_lastConv2Output);
+        _lastBn2Output = _lastRelu2Output;
 
         _lastConv3Output = _conv3.Forward(_lastRelu2Output);
         _lastBn3Output = _bn3.Forward(_lastConv3Output);

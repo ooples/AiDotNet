@@ -341,8 +341,9 @@ public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
 
         // Main branch: conv1 -> bn1 -> relu -> conv2 -> bn2
         _lastConv1Output = _conv1.Forward(input);
-        _lastBn1Output = _bn1.Forward(_lastConv1Output);
-        _lastRelu1Output = ApplyReLU(_lastBn1Output);
+        // Normalization and ReLU in one pass in inference (BatchNormalizationLayer.ForwardThenReLU).
+        _lastRelu1Output = _bn1.ForwardThenReLU(_lastConv1Output);
+        _lastBn1Output = _lastRelu1Output;
         _lastConv2Output = _conv2.Forward(_lastRelu1Output);
         _lastBn2Output = _bn2.Forward(_lastConv2Output);
 
