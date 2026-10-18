@@ -215,7 +215,11 @@ public class TransfusionMixedObjectiveTests
         options.EndOfImageTokenId = 7;
         double secondMarker = DiffusionTerm();
 
-        Assert.Equal(firstMarker, secondMarker, 6);
+        // Each slope is a difference of two float32 objectives over 5, and the LM term it cancels
+        // differs between the markers, so the two slopes carry a few ulps of rounding (1.9e-7 seen
+        // on CI). Compare within a tolerance: digit rounding fails when the two values straddle a
+        // rounding boundary, which 1.2950645 vs 1.2950644 did.
+        Assert.Equal(firstMarker, secondMarker, 1e-5);
         Assert.True(firstMarker > 0.0, $"The diffusion term must be positive; got {firstMarker}.");
 
         double DiffusionTerm()
