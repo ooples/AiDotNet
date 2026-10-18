@@ -1676,6 +1676,10 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.LayerInvariantCoverageTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.LayerNormalizationInvariantTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.RMSNormalizationInvariantTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.ConditionalLayerNormalizationLayerInvariantTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.GRUCellLayerInvariantTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.LSTMCellLayerInvariantTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Layers.PostNormTransformerDecoderBlockInvariantTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelLoading.GgufEndToEndTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelLoading.LlamaRopePermuteTests.|
       FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.GpuTransformerWeightParityTests.|
