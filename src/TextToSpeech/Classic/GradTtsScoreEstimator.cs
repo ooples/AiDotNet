@@ -115,18 +115,13 @@ internal sealed partial class RezeroGateLayer<T> : LayerBase<T>
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _gate;
 
-    // The gate's starting value (the construction recipe a clone rebuilds from; the trained value is the parameter).
     private readonly double _initialGate;
 
     public override bool SupportsTraining => true;
 
-    /// <summary>Creates the gate at zero, as ReZero initializes it.</summary>
-    public RezeroGateLayer() : this(0.0)
-    {
-    }
-
-    /// <summary>Creates the gate at <paramref name="initialGate"/> (ReZero's is 0).</summary>
-    public RezeroGateLayer([LayerState] double initialGate) : base(new[] { 1 }, new[] { 1 })
+    /// <param name="initialGate">The gate's starting value: 0, as the paper initializes it, so the residual branch starts
+    /// switched off. A non-zero value lets the layer's input sensitivity be checked before any training.</param>
+    public RezeroGateLayer([LayerState] double initialGate = 0.0) : base(new[] { 1 }, new[] { 1 })
     {
         _initialGate = initialGate;
         _gate = new Tensor<T>(new[] { 1 });

@@ -784,7 +784,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
         // caller is genuinely using channels-first 3D/4D layout with per-channel
         // gamma, we leave input untouched and let the engine's channel-aware
         // paths handle it.
-        bool flattenedFeaturesLast = false;
+        bool restoreInputShape = false;
         int[]? preFlattenShape = null;
         int featureSize = _gamma.Length;
 
@@ -818,7 +818,18 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             int leadingBatch = 1;
             for (int i = 0; i < input.Rank - 1; i++) leadingBatch *= input.Shape[i];
             input = Engine.Reshape(input, [leadingBatch, featureSize]);
-            flattenedFeaturesLast = true;
+            restoreInputShape = true;
+        }
+        else if (!channelsLastDeclared && input.Rank > 4 && input.Shape[1] == featureSize)
+        {
+            // Volumetric channels-first input, [N, C, D, H, W] and up. The engine's batch normalization takes at most
+            // rank 4, and the statistics are per channel over the batch and every spatial position, so merging the
+            // trailing spatial axes into one leaves them unchanged (3D U-Net, #2087).
+            preFlattenShape = input._shape;
+            int spatialTail = 1;
+            for (int i = 3; i < input.Rank; i++) spatialTail *= input.Shape[i];
+            input = Engine.Reshape(input, [input.Shape[0], featureSize, input.Shape[2], spatialTail]);
+            restoreInputShape = true;
         }
 
         // _lastInput is layer-side activation retention for a backward path
@@ -934,7 +945,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             // Restore pre-flatten rank if we collapsed leading axes for the
             // features-last transformer path above. Tape-recorded reshape so
             // backward flows through unchanged.
-            if (flattenedFeaturesLast && preFlattenShape is not null)
+            if (restoreInputShape && preFlattenShape is not null)
             {
                 output = Engine.Reshape(output, preFlattenShape);
             }
@@ -978,7 +989,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             var output = ApplyInferenceAnyRank(input, affineScale, affineShift);
 
             // Restore pre-flatten rank for the features-last path.
-            if (flattenedFeaturesLast && preFlattenShape is not null)
+            if (restoreInputShape && preFlattenShape is not null)
             {
                 output = Engine.Reshape(output, preFlattenShape);
             }
@@ -1017,7 +1028,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             var result = ApplyInferenceAnyRank(input, inferenceScale, inferenceShift);
 
             // Restore pre-flatten rank for the features-last path.
-            if (flattenedFeaturesLast && preFlattenShape is not null)
+            if (restoreInputShape && preFlattenShape is not null)
             {
                 result = Engine.Reshape(result, preFlattenShape);
             }

@@ -7403,12 +7403,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // fatchord's Adam at 1e-4; the probes measure learning at a constant Adam rate of 1e-3.
                     ", optimizer: new AiDotNet.Optimizers.AdamOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null))";
             }
-            else if (model.ClassName == "WaveNet" && model.TypeParameterCount == 1
-                     && typeName.StartsWith("AiDotNet.TextToSpeech.Vocoders.", System.StringComparison.Ordinal))
+            else if (model.ClassName == "WaveNet" && model.ImplementsVocoder && model.TypeParameterCount == 1)
             {
-                // The WaveNet vocoder is 30 dilated layers (3 cycles of 10) of 128 channels over 10240-sample segments,
-                // sampled one mu-law step at a time; keep the gated residual stack, the skips, the mu-law softmax and the
-                // 4x4x4x4 = 256 mel upsampler with 4 layers (2 cycles of 2), 8/8/4 channels and 256-sample segments.
+                // The vocoder WaveNet is 30 dilated layers (3 cycles of 10) of 128 residual / gate / skip channels; keep the
+                // mel upsampler (4x4x4x4 = 256 hop, so the generic conv1d vocoder shapes apply), the gated residual stack
+                // and the mu-law softmax with 4 layers in 2 cycles, 8 channels wide. (The forecasting WaveNet shares the
+                // name and is not a vocoder.)
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
@@ -10489,9 +10489,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
                     "inputSize: 4, outputSize: 32), " +
                     "AiDotNet.TextToSpeech.CodecBased.BarkOptions.TinyForTests(32)" +
-                    // Bark's text path uses BERT's multilingual tokenizer (ids to ~120k, a download); the tiny
-                    // semantic stage reads 27 text ids, so the facade gets a character tokenizer that fits it.
-                    (model.ClassName == "Bark" ? ", tokenizer: AiDotNet.TextToSpeech.CodecBased.BarkOptions.TinyTokenizerForTests())" : ")");
+                    // Bark's real tokenizer (bert-base-multilingual-cased) emits ids up to 119 546; the tiny semantic
+                    // vocabulary embeds text ids 0..26 (offset 32, below the text pad at 59), so synthesis gets a
+                    // 27-id character tokenizer through Bark's own tokenizer parameter. BarkModel takes no tokenizer.
+                    (model.ClassName == "Bark"
+                        ? ", tokenizer: AiDotNet.Tests.ModelFamilyTests.Base.TinyTextTokenizers.Letters())"
+                        : ")");
             }
             else if (model.ClassName == "CosyVoice" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -15479,8 +15482,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // invariants measure it.
                     sb.AppendLine("    protected override int InputSensitivityWarmUpSteps => 2;");
                 }
-                if (model.ClassName == "WaveRNN")
+                if (model.ClassName is "WaveRNN" or "WaveNet")
                 {
+                    // WaveNet likewise samples each 8-bit mu-law class from a 256-way softmax (van den Oord et al. 2016,
+                    // Sec. 2.2); the reason below applies to it unchanged.
                     // WaveRNN samples each coarse and fine 8-bit class from a 256-way softmax (Kalchbrenner et al. 2018,
                     // Sec. 3); with seeded draws an untrained model's near-uniform logits rarely move a class boundary past a
                     // draw, so constant mels can sample the same classes. Two steps sharpen the softmaxes first.
@@ -15967,6 +15972,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
                     ("ScaledInput_ShouldChangeOutput", false, "random"),
                 }, textToTokens: "unused: AudioLM has no text probe");
+                // Targets are codes [frames, levels] (AudioLM's other target form), 16 frames of 3 levels of 16 codes. A
+                // waveform target goes through the frozen codec, and an untrained SoundStream encodes every waveform to the
+                // same code (measured: code 0 throughout, or 12 with random codebooks), so two different waveform targets
+                // trained identically and the target-dependence probe could not see a difference the model can learn.
+                string at = useFloat ? "float" : "double";
+                sb.AppendLine($"    protected override AiDotNet.Tensors.LinearAlgebra.Tensor<{at}> CreateRandomTargetTensor(int[] shape, System.Random rng)");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        var codes = new AiDotNet.Tensors.LinearAlgebra.Tensor<{at}>(new[] {{ 16, 3 }});");
+                sb.AppendLine($"        for (int i = 0; i < codes.Length; i++) codes[i] = ({at})rng.Next(16);");
+                sb.AppendLine("        return codes;");
+                sb.AppendLine("    }");
             }
             else if (model.ClassName == "MusicGenModel")
             {

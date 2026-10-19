@@ -4789,20 +4789,10 @@ public static partial class LayerHelper<T>
             encoderFilters[block] = outputFilters;
 
             // First Conv3D in block
-            yield return new Conv3DLayer<T>(
-                outputChannels: outputFilters,
-                kernelSize: 3,
-                stride: 1,
-                padding: 1,
-                activationFunction: new ReLUActivation<T>());
+            foreach (var unit in UNet3DConvUnit(outputFilters)) yield return unit;
 
             // Second Conv3D in block
-            yield return new Conv3DLayer<T>(
-                outputChannels: outputFilters,
-                kernelSize: 3,
-                stride: 1,
-                padding: 1,
-                activationFunction: new ReLUActivation<T>());
+            foreach (var unit in UNet3DConvUnit(outputFilters)) yield return unit;
 
             // MaxPool3D to downsample (except last encoder block)
             if (block < numEncoderBlocks - 1)
@@ -4817,12 +4807,7 @@ public static partial class LayerHelper<T>
         // ============== BOTTLENECK ==============
         // Additional convolutions at the bottleneck
         int bottleneckFilters = baseFilters * (1 << (numEncoderBlocks - 1)) * 2;
-        yield return new Conv3DLayer<T>(
-            outputChannels: bottleneckFilters,
-            kernelSize: 3,
-            stride: 1,
-            padding: 1,
-            activationFunction: new ReLUActivation<T>());
+        foreach (var unit in UNet3DConvUnit(bottleneckFilters)) yield return unit;
 
         // ============== DECODER PATH ==============
         // Each decoder block: Upsample3D -> Conv3D -> Conv3D
@@ -4850,20 +4835,10 @@ public static partial class LayerHelper<T>
 
             // First Conv3D, fed by the concatenation of the up-convolved features
             // (inChannels / 2) with this level's encoder tap (encoderFilters[block]).
-            yield return new Conv3DLayer<T>(
-                outputChannels: outputFilters,
-                kernelSize: 3,
-                stride: 1,
-                padding: 1,
-                activationFunction: new ReLUActivation<T>());
+            foreach (var unit in UNet3DConvUnit(outputFilters)) yield return unit;
 
             // Second Conv3D in decoder block
-            yield return new Conv3DLayer<T>(
-                outputChannels: outputFilters,
-                kernelSize: 3,
-                stride: 1,
-                padding: 1,
-                activationFunction: new ReLUActivation<T>());
+            foreach (var unit in UNet3DConvUnit(outputFilters)) yield return unit;
         }
 
         // ============== OUTPUT LAYER ==============
@@ -4894,6 +4869,23 @@ public static partial class LayerHelper<T>
             activationFunction: outputActivation);
     }
 
+    /// <summary>
+    /// One 3x3x3 convolution of the 3D U-Net: the convolution, batch normalization, then ReLU. Çiçek et al. (2016),
+    /// Sec. 2: "we introduce batch normalization before each ReLU". The stack had none, so a full-resolution grid
+    /// trained through eight plain ReLU convolutions at Adam's 1e-3 and barely moved in a nightly's step budget.
+    /// The normalization is given its channel count, so it allocates at the right width up front.
+    /// </summary>
+    private static IEnumerable<ILayer<T>> UNet3DConvUnit(int outputChannels)
+    {
+        yield return new Conv3DLayer<T>(
+            outputChannels: outputChannels,
+            kernelSize: 3,
+            stride: 1,
+            padding: 1,
+            activationFunction: new IdentityActivation<T>());
+        yield return new BatchNormalizationLayer<T>(outputChannels);
+        yield return new ActivationLayer<T>(new ReLUActivation<T>() as IActivationFunction<T>);
+    }
     /// <summary>
     /// Creates default layers for a MeshCNN architecture for mesh classification/segmentation.
     /// </summary>

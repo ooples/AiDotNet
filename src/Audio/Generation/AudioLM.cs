@@ -102,7 +102,12 @@ public partial class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>,
     /// <summary>The network a training step updates.</summary>
     public AudioLMStage CurrentStage { get; set; } = AudioLMStage.CoarseAcoustic;
 
+    // A view of the codec _codec owns (an AudioCodecLayer the parameter walk reaches through that field; it is not in
+    // Layers, since the pretrained codec is frozen). Without the alias the parameter walk took this
+    // property for a second sub-network and counted the codec twice (313 500 manifest values against 162 390 walked
+    // in the generated fixture), so a clone could not copy-on-write and fell back to rebuilding the codec layer.
     /// <summary>The SoundStream codec whose codes AudioLM models.</summary>
+    [ParameterAlias(nameof(_codec))]
     public SoundStream<T> Codec => (SoundStream<T>?)_codec?.Codec ?? throw new InvalidOperationException("AudioLM's codec is not built.");
 
     /// <summary>Codec frames per second (50).</summary>
