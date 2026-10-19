@@ -868,7 +868,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
             Tensor<T> LossCLAP(Tensor<T> audioEmb, Tensor<T> textBatch)
             {
                 // Re-run the text encoder on this replay's text batch.
-                return ContrastiveLoss(audioEmb, EmbedText(textBatch));   // training mode: EncodeText would switch to evaluation
+                return ContrastiveLoss(audioEmb, EmbedText(textBatch));
             }
             // One step through the shared training step: the fused plan when it applies, otherwise the shared eager
             // tape step with the same objective. Both encoders and the temperature are trained.

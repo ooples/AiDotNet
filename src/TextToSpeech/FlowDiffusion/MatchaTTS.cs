@@ -289,8 +289,7 @@ public partial class MatchaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         if (!HasPaperLayers)
         {
-            TrainWithTape(input, expectedOutput, _optimizer);
-            return true;
+            return false;
         }
         var (tokens, mel) = Prepare(input, expectedOutput);
         var draw = DrawTrainingRandomness(mel.Shape[0], _trainingRandom);

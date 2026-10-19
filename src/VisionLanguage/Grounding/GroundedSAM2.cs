@@ -310,11 +310,11 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
         return Detector.Loss(batch, prompt, target)[0];
     }
 
-    /// <inheritdoc />
-    /// <remarks>Grounded SAM 2's detector trains on grounded phrases, which a tensor target cannot carry, so
-    /// <c>Train(input, target)</c> throws <see cref="NotSupportedException"/>: use <see cref="TrainGrounding"/>.</remarks>
-    protected override string? TrainingUnavailableReason =>
-        "Grounded SAM 2 trains its detector on an image, a caption and the boxes its phrases name: use TrainGrounding(image, caption, boxes).";
+    /// <summary>Grounded SAM 2's detector trains on grounded phrases, which a tensor target cannot carry.</summary>
+    /// <exception cref="NotSupportedException">Always: use <see cref="TrainGrounding"/>.</exception>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
+        => throw new NotSupportedException(
+            "Grounded SAM 2 trains its detector on an image, a caption and the boxes its phrases name: use TrainGrounding(image, caption, boxes).");
 
     /// <inheritdoc />
     /// <remarks>Every layer is sized at construction and <see cref="NeuralNetworkBase{T}.Layers"/> is not a chain.</remarks>

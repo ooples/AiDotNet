@@ -266,8 +266,7 @@ public partial class TransformerTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITr
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         if (!HasPaperLayers)
         {
-            TrainWithTape(input, expectedOutput, _optimizer);
-            return true;
+            return false;
         }
         var mel = expectedOutput.Rank == 3 ? Engine.Reshape(expectedOutput, new[] { expectedOutput.Shape[1], expectedOutput.Shape[2] }) : expectedOutput;
         var tokens = input.Rank == 2 && input.Shape[0] == 1 ? Engine.Reshape(input, new[] { input.Shape[1] }) : input;

@@ -225,13 +225,6 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
 
     protected override Tensor<T> PredictCore(Tensor<T> input) => Forecast(input);
 
-    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-        return false;   // the base class's standard step
-    }
-
     public override ModelMetadata<T> GetModelMetadata()
     {
         var o = _options;

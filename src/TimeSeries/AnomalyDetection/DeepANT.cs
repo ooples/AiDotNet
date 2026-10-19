@@ -1,47 +1,48 @@
 ﻿using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.LossFunctions;
+using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.TimeSeries.AnomalyDetection;
 
 /// <summary>
-/// Implements DeepANT (Deep Learning for Anomaly Detection in Time Series).
+/// Implements DeepAnT (Munir et al. 2019), unsupervised anomaly detection in time series by forecasting.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// DeepANT is a deep learning-based approach for unsupervised anomaly detection in time series.
-/// It uses a convolutional neural network to learn normal patterns and identifies anomalies
-/// as data points that deviate significantly from the learned patterns.
+/// DeepAnT has two modules. The time-series predictor, a convolutional network, reads a history window of w values
+/// and predicts the next p_w values; it is trained on the series' own overlapping windows with the mean absolute error
+/// and stochastic gradient descent, on the series normalized with statistics of the training data. The anomaly
+/// detector scores each observed value by its Euclidean distance from the prediction, and flags scores above a
+/// threshold. No labels are used, and anomalies need not be removed from the training data.
 /// </para>
 /// <para>
-/// Key features:
-/// - Time series prediction using CNN
-/// - Anomaly detection based on prediction error
-/// - Unsupervised learning (no labeled anomalies needed)
-/// - Effective for both point anomalies and contextual anomalies
+/// The paper fixes the predictor's structure (two convolution and max-pooling blocks with 32 filters and ReLU, a
+/// fully connected layer and a linear output), the loss, the optimizer and the defaults taken from its Table 1 (window
+/// 45 and threshold 0.5, the A1 benchmark). It does not state the kernel, pooling and hidden widths, the dropout, the
+/// normalization, the learning rate or the training length, and no author code was released. Those follow the PyTorch
+/// implementation at github.com/datacubeR/DeepAnt (kernel 3, pooling 2, 40 hidden units, dropout 0.25, min-max
+/// scaling, batches of 32, 30 epochs), except the optimizer, where the paper's SGD replaces that code's Adam; its
+/// learning rate, which neither source gives, is Keras' SGD default of 0.01.
 /// </para>
-/// <para><b>For Beginners:</b> DeepANT learns what "normal" looks like in your time series,
+/// <para><b>For Beginners:</b> DeepAnT learns what "normal" looks like in your time series,
 /// then flags anything unusual as an anomaly. It works by:
 /// 1. Learning to predict the next value based on past values
 /// 2. Comparing actual values to predictions
 /// 3. Marking large prediction errors as anomalies
-///
-/// Think of it like a system that learns your daily routine - if you suddenly do something
-/// very different, it notices and flags it as unusual.
 /// </para>
 /// </remarks>
 /// <example>
 /// <code>
-/// var timeSeriesLabels = new Vector&lt;double&gt;(new double[] { 1.0, 2.0, 3.0, 4.0 });
-/// var testMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
-/// var timeSeriesMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 3.0, 4.0 }, { 5.0, 6.0 }, { 7.0, 8.0 } });
-/// // Create a DeepANT model for unsupervised time series anomaly detection
-/// var options = new DeepANTOptions&lt;double&gt;();
-/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
-///     .ConfigureModel(new DeepANT&lt;double&gt;(options))
-///     .Build(timeSeriesMatrix, timeSeriesLabels);
-/// Vector&lt;double&gt; anomalyScores = result.Predict(testMatrix);
+/// var series = new Vector&lt;double&gt;(values);
+/// var timeIndex = new Matrix&lt;double&gt;(values.Length, 1);
+/// for (int i = 0; i &lt; values.Length; i++) timeIndex[i, 0] = i;
+/// var model = new DeepANT&lt;double&gt;(new DeepANTOptions&lt;double&gt; { WindowSize = 45 });
+/// model.Train(timeIndex, series);
+/// bool[] anomalies = model.DetectAnomalies(series);
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.TimeSeries)]
@@ -54,423 +55,344 @@ namespace AiDotNet.TimeSeries.AnomalyDetection;
 public partial class DeepANT<T> : TimeSeriesModelBase<T>
 {
     private readonly DeepANTOptions<T> _options;
+    private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
+    private readonly List<NeuralNetworks.Layers.LayerBase<T>> _layers = new();
+    private readonly DeepAntNetwork<T> _network;
+    private readonly Random _random;
+    [Buffer]
+    private Vector<T> _trainingSeries = Vector<T>.Empty();
+
+    // Min-max scaling fitted on the training data (the reference's MinMaxScaler): x' = (x − min) / (max − min).
+    private double _scaleMin;
+    private double _scaleRange = 1.0;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
-    private static readonly INumericOperations<T> _numOps = MathHelper.GetNumericOperations<T>();
-
-    // CNN layers (Tensor-based)
-    private readonly List<ConvLayerTensor<T>> _convLayers = new List<ConvLayerTensor<T>>();
-
-    // Fully connected layer (Tensor-based)
-    private Tensor<T> _fcWeights;      // [1, numChannels]
-    [Buffer]
-    private Vector<T> _trainingSeries = Vector<T>.Empty();
-    private Tensor<T> _fcBias;         // [1]
-
-    // Gradient accumulators for batch training
-    [Scratch]
-    private Tensor<T> _fcWeightsGrad;
-    [Scratch]
-    private Tensor<T> _fcBiasGrad;
-
-    // Anomaly detection threshold
-    private T _anomalyThreshold;
 
     /// <summary>
-    /// Initializes a new instance of the DeepANT class.
+    /// Initializes a new instance of the DeepAnT model.
     /// </summary>
     public DeepANT(DeepANTOptions<T>? options = null)
-        : this(options ?? new DeepANTOptions<T>(), initializeModel: true)
+        : base(options ?? new DeepANTOptions<T>())
     {
+        _options = (DeepANTOptions<T>)Options;
+        var o = _options;
+        if (o.Epochs <= 0 || o.BatchSize <= 0 || o.LearningRate <= 0)
+            throw new ArgumentException("Epochs, BatchSize and LearningRate must be positive.", nameof(options));
+        if (o.AnomalyThreshold < 0)
+            throw new ArgumentException("AnomalyThreshold cannot be negative.", nameof(options));
+        _random = RandomHelper.CreateSeededRandom(SeedOr(1042));
+        _network = new DeepAntNetwork<T>(Engine, _layers, new DeepAntConfiguration(o.WindowSize, o.ForecastHorizon, o.Filters,
+            o.KernelSize, o.PoolSize, o.HiddenUnits, o.DropoutRate));
+        _network.InitializeLikeReference(RandomHelper.CreateSeededRandom(SeedOr(42)));
     }
+
+    /// <inheritdoc />
+    protected override void RegisterComponents()
+    {
+        for (int i = 0; i < _layers.Count; i++)
+            RegisterParameterComponent($"deepant.layer{i}", _layers[i]);
+    }
+
+    private T Scale(T value) => _numOps.FromDouble((_numOps.ToDouble(value) - _scaleMin) / _scaleRange);
+
+    private T Unscale(double value) => _numOps.FromDouble(value * _scaleRange + _scaleMin);
 
     /// <summary>
-    /// Private constructor for proper options instance management.
+    /// Trains the predictor on windows of WindowSize values and the ForecastHorizon values after each. A one-column
+    /// input is a time index: the windows are the training series' own (§IV-A). Otherwise each row of the input is a
+    /// window and y holds the value after it (ForecastHorizon must then be 1). The data are min-max scaled with
+    /// statistics of the training data, and SGD minimizes the mean absolute error over shuffled batches.
     /// </summary>
-    private DeepANT(DeepANTOptions<T> options, bool initializeModel)
-        : base(options)
-    {
-        _options = options;
-        _convLayers = new List<ConvLayerTensor<T>>();
-        _anomalyThreshold = _numOps.FromDouble(3.0); // 3 sigma by default
-
-        // Initialize with default tensors
-        _fcWeights = new Tensor<T>(new[] { 1, 1 });
-        _fcBias = new Tensor<T>(new[] { 1 });
-        _fcWeightsGrad = new Tensor<T>(new[] { 1, 1 });
-        _fcBiasGrad = new Tensor<T>(new[] { 1 });
-
-        if (initializeModel)
-            InitializeModel();
-    }
-
-    private void InitializeModel()
-    {
-        var random = RandomHelper.CreateSeededRandom(SeedOr(42));
-        int numChannels = 32;
-
-        // Initialize convolutional layers (fixed random features)
-        _convLayers.Clear();
-        _convLayers.Add(new ConvLayerTensor<T>(numChannels, 3, seed: SeedOr(42)));
-        _convLayers.Add(new ConvLayerTensor<T>(numChannels, 3, seed: SeedOr(1042)));
-
-        // Initialize fully connected output layer with Xavier initialization
-        double stddev = Math.Sqrt(2.0 / numChannels);
-        _fcWeights = new Tensor<T>(new[] { 1, numChannels });
-        for (int j = 0; j < numChannels; j++)
-            _fcWeights[j] = _numOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
-
-        _fcBias = new Tensor<T>(new[] { 1 });
-        _fcBias[0] = _numOps.Zero;
-
-        // Initialize gradient accumulators
-        _fcWeightsGrad = new Tensor<T>(new[] { 1, numChannels });
-        _fcBiasGrad = new Tensor<T>(new[] { 1 });
-    }
-
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
-        T learningRate = _numOps.FromDouble(_options.LearningRate);
-        List<T> predictionErrors = new List<T>();
-
-        // Training loop with batch processing and proper backpropagation
-        for (int epoch = 0; epoch < _options.Epochs; epoch++)
+        var o = _options;
+        int w = o.WindowSize, horizon = o.ForecastHorizon;
+        T[][] windows;
+        T[][] targets;
+        if (x.Columns == 1 && w > 1)
         {
-            predictionErrors.Clear();
-
-            // Process in batches
-            for (int batchStart = 0; batchStart < x.Rows; batchStart += _options.BatchSize)
+            int samples = y.Length - w - horizon + 1;
+            if (samples <= 0)
+                throw new ArgumentException(
+                    $"Training series must contain at least WindowSize + ForecastHorizon ({w + horizon}) values; got {y.Length}.", nameof(y));
+            windows = new T[samples][];
+            targets = new T[samples][];
+            for (int s = 0; s < samples; s++)
             {
-                int batchEnd = Math.Min(batchStart + _options.BatchSize, x.Rows);
-                int batchSize = batchEnd - batchStart;
-
-                // Reset gradient accumulators
-                ResetGradients();
-
-                // Accumulate gradients for batch
-                for (int i = batchStart; i < batchEnd; i++)
-                {
-                    Vector<T> input = x.GetRow(i);
-                    T target = y[i];
-
-                    // Forward pass with feature caching
-                    var (prediction, features) = ForwardWithCache(input);
-
-                    // Compute prediction error for anomaly threshold
-                    T error = _numOps.Subtract(target, prediction);
-                    predictionErrors.Add(_numOps.Abs(error));
-
-                    // Compute gradients analytically and accumulate
-                    ComputeAndAccumulateGradients(features, error);
-                }
-
-                // Apply accumulated gradients
-                ApplyGradients(learningRate, batchSize);
+                windows[s] = new T[w];
+                for (int t = 0; t < w; t++) windows[s][t] = y[s + t];
+                targets[s] = new T[horizon];
+                for (int h = 0; h < horizon; h++) targets[s][h] = y[s + w + h];
+            }
+        }
+        else
+        {
+            if (x.Columns != w)
+                throw new ArgumentException($"Each input row must be a window of WindowSize ({w}) values; got {x.Columns}.", nameof(x));
+            if (horizon != 1)
+                throw new ArgumentException("Rows of windows carry one target each; train on a time index for ForecastHorizon > 1.", nameof(x));
+            windows = new T[x.Rows][];
+            targets = new T[x.Rows][];
+            for (int s = 0; s < x.Rows; s++)
+            {
+                windows[s] = new T[w];
+                for (int t = 0; t < w; t++) windows[s][t] = x[s, t];
+                targets[s] = new[] { y[s] };
             }
         }
 
-        // Compute anomaly threshold based on training errors
-        ComputeAnomalyThreshold(predictionErrors);
-
-        // Store training series for in-sample predictions
         _trainingSeries = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-            _trainingSeries[i] = y[i];
+        for (int i = 0; i < y.Length; i++) _trainingSeries[i] = y[i];
+        ModelParameters = new Vector<T>(1);
+        ModelParameters[0] = _numOps.FromDouble(y.Length);
+        FitScaler(windows, targets);
 
-        // Populate ModelParameters
-        ModelParameters = new Vector<T>(_fcWeights.Length + _fcBias.Length);
-        for (int i = 0; i < _fcWeights.Length; i++)
-            ModelParameters[i] = _fcWeights[i];
-        for (int i = 0; i < _fcBias.Length; i++)
-            ModelParameters[_fcWeights.Length + i] = _fcBias[i];
+        var optimizer = new StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(null,
+            new StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = o.LearningRate,
+                UseAdaptiveLearningRate = false,
+                EnableGradientClipping = false,
+            });
+        var loss = new MeanAbsoluteErrorLoss<T>();
+        var parameters = Training.TapeTrainingStep<T>.CollectParameters(_layers);
+        int count = windows.Length;
+        bool timeBounded = o.MaxTrainingTimeSeconds > 0;
+        int epochs = timeBounded ? int.MaxValue : o.Epochs;
+
+        for (int epoch = 0; epoch < epochs; epoch++)
+        {
+            if (timeBounded && TrainingCancellationToken.IsCancellationRequested) break;
+            TrainingCancellationToken.ThrowIfCancellationRequested();
+            var order = Enumerable.Range(0, count).OrderBy(_ => _random.Next()).ToArray();
+            double lossSum = 0;
+            int batches = 0;
+            // DataLoader(shuffle=True) keeps the last, incomplete batch.
+            for (int start = 0; start < count; start += o.BatchSize)
+            {
+                if (timeBounded && TrainingCancellationToken.IsCancellationRequested) break;
+                TrainingCancellationToken.ThrowIfCancellationRequested();
+                int size = Math.Min(o.BatchSize, count - start);
+                var (history, target) = Batch(windows, targets, order, start, size);
+                // One update on the shared eager step: the network is trained directly, outside the model's Layers chain.
+                T lossValue = Training.TapeTrainingStepper<T>.EagerObjectiveStep(parameters,
+                    () => loss.ComputeTapeLoss(_network.Forward(history, training: true, _random), target), optimizer);
+                lossSum += _numOps.ToDouble(lossValue);
+                batches++;
+            }
+            if (batches > 0 && !ReportEpoch(epoch, timeBounded ? 0 : o.Epochs, _numOps.FromDouble(lossSum / batches)))
+                break;
+        }
     }
 
-    private void ResetGradients()
+    private void FitScaler(T[][] windows, T[][] targets)
     {
-        for (int i = 0; i < _fcWeightsGrad.Length; i++)
-            _fcWeightsGrad[i] = _numOps.Zero;
-        for (int i = 0; i < _fcBiasGrad.Length; i++)
-            _fcBiasGrad[i] = _numOps.Zero;
+        double min = double.PositiveInfinity, max = double.NegativeInfinity;
+        void Observe(T[] values)
+        {
+            foreach (var v in values)
+            {
+                double d = _numOps.ToDouble(v);
+                if (d < min) min = d;
+                if (d > max) max = d;
+            }
+        }
+        foreach (var window in windows) Observe(window);
+        foreach (var target in targets) Observe(target);
+        _scaleMin = min;
+        // sklearn's MinMaxScaler leaves a constant feature unscaled (range treated as 1).
+        _scaleRange = max - min > 0 ? max - min : 1.0;
+    }
+
+    // The scaled windows [B, WindowSize, 1] and targets [B, ForecastHorizon] of the given samples.
+    private (Tensor<T> history, Tensor<T> target) Batch(T[][] windows, T[][] targets, int[] order, int start, int count)
+    {
+        int w = _options.WindowSize, horizon = _options.ForecastHorizon;
+        var history = new Tensor<T>(new[] { count, w, 1 });
+        var target = new Tensor<T>(new[] { count, horizon });
+        for (int b = 0; b < count; b++)
+        {
+            int s = order[start + b];
+            for (int t = 0; t < w; t++) history[b, t, 0] = Scale(windows[s][t]);
+            for (int h = 0; h < horizon; h++) target[b, h] = Scale(targets[s][h]);
+        }
+        return (history, target);
+    }
+
+    // The scaled prediction of the ForecastHorizon values after a window of WindowSize raw values.
+    private double[] ScaledForecast(Vector<T> window)
+    {
+        if (_trainingSeries.Length == 0) throw new InvalidOperationException("The model must be trained before predicting.");
+        int w = _options.WindowSize;
+        if (window.Length != w)
+            throw new ArgumentException($"DeepAnT predicts from a window of WindowSize ({w}) values; got {window.Length}.", nameof(window));
+        var input = new Tensor<T>(new[] { 1, w, 1 });
+        for (int t = 0; t < w; t++) input[0, t, 0] = Scale(window[t]);
+        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
+        var prediction = _network.Forward(input, training: false, _random);
+        var result = new double[_options.ForecastHorizon];
+        for (int h = 0; h < result.Length; h++) result[h] = _numOps.ToDouble(prediction[0, h]);
+        return result;
     }
 
     /// <summary>
-    /// Forward pass that returns both prediction and cached features for backpropagation.
+    /// Predicts the series. A one-column time index is answered with the predictor's forecasts: with as many rows as
+    /// the training series, the one-step forecast of each observation from the WindowSize before it; otherwise the
+    /// forecasts of the steps after the training series. Any other input is a matrix of windows, each predicted.
     /// </summary>
-    private (T prediction, Tensor<T> features) ForwardWithCache(Vector<T> input)
-    {
-        // Build the conv-input tensor via .Data.Span instead of features[i] = input[i]
-        // (the deferred-materializer monitor was acquired per element).
-        Tensor<T> features = new Tensor<T>(new[] { input.Length });
-        {
-            var span = features.Data.Span;
-            for (int i = 0; i < input.Length; i++) span[i] = input[i];
-        }
-
-        foreach (var conv in _convLayers)
-        {
-            features = conv.Forward(features);
-        }
-
-        // FC: output = dot(_fcWeights, features) + _fcBias[0]. Read both
-        // through .Data.Span so the inner loop is plain array access. The
-        // earlier code allocated two new Vector<T> buffers and copied
-        // element-by-element through tensor[i] before calling
-        // Engine.DotProduct — every step hit the materializer monitor.
-        int numFeatures = Math.Min(_fcWeights.Length, features.Length);
-        var fcSpan = _fcWeights.Data.Span;
-        var featSpan = features.Data.Span;
-        T sum = _fcBias[0];
-        for (int j = 0; j < numFeatures; j++)
-            sum = _numOps.Add(sum, _numOps.Multiply(fcSpan[j], featSpan[j]));
-
-        return (sum, features);
-    }
-
-    /// <summary>
-    /// Computes analytical gradients for the FC layer and accumulates them.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>Design Note:</b> This implementation uses proper analytical gradients for the FC layer.
-    /// The convolutional layers remain fixed (Random Features approach) as this has been shown to be
-    /// effective for time series anomaly detection while being computationally efficient.</para>
-    /// <para>
-    /// For MSE loss L = (target - prediction)^2, the gradients are:
-    /// - dL/dW_j = -2 * error * features[j]
-    /// - dL/dBias = -2 * error
-    /// </para>
-    /// </remarks>
-    private void ComputeAndAccumulateGradients(Tensor<T> features, T error)
-    {
-        // dL/d(prediction) = -2 * error for MSE loss
-        T dLoss = _numOps.Multiply(_numOps.FromDouble(-2.0), error);
-
-        // Accumulate gradients for FC weights: dL/dW_j = dLoss * features[j]
-        int numFeatures = Math.Min(_fcWeightsGrad.Length, features.Length);
-        for (int j = 0; j < numFeatures; j++)
-        {
-            T grad = _numOps.Multiply(dLoss, features[j]);
-            _fcWeightsGrad[j] = _numOps.Add(_fcWeightsGrad[j], grad);
-        }
-
-        // Accumulate gradient for FC bias: dL/dBias = dLoss
-        _fcBiasGrad[0] = _numOps.Add(_fcBiasGrad[0], dLoss);
-    }
-
-    /// <summary>
-    /// Applies accumulated gradients with SGD.
-    /// </summary>
-    private void ApplyGradients(T learningRate, int batchSize)
-    {
-        T batchSizeT = _numOps.FromDouble(batchSize);
-        double maxGradNorm = 1.0; // Gradient clipping threshold
-
-        // Compute gradient norm for clipping
-        double gradNormSq = 0;
-        for (int j = 0; j < _fcWeightsGrad.Length; j++)
-        {
-            double g = _numOps.ToDouble(_numOps.Divide(_fcWeightsGrad[j], batchSizeT));
-            gradNormSq += g * g;
-        }
-        for (int b = 0; b < _fcBiasGrad.Length; b++)
-        {
-            double g = _numOps.ToDouble(_numOps.Divide(_fcBiasGrad[b], batchSizeT));
-            gradNormSq += g * g;
-        }
-        double gradNorm = Math.Sqrt(gradNormSq);
-        double clipScale = gradNorm > maxGradNorm ? maxGradNorm / gradNorm : 1.0;
-        T clipScaleT = _numOps.FromDouble(clipScale);
-
-        // Update FC weights with clipped gradients
-        for (int j = 0; j < _fcWeights.Length; j++)
-        {
-            T avgGrad = _numOps.Multiply(_numOps.Divide(_fcWeightsGrad[j], batchSizeT), clipScaleT);
-            T update = _numOps.Multiply(learningRate, avgGrad);
-            _fcWeights[j] = _numOps.Subtract(_fcWeights[j], update);
-        }
-
-        // Update FC bias with clipped gradients
-        for (int b = 0; b < _fcBias.Length; b++)
-        {
-            T avgGrad = _numOps.Multiply(_numOps.Divide(_fcBiasGrad[b], batchSizeT), clipScaleT);
-            T update = _numOps.Multiply(learningRate, avgGrad);
-            _fcBias[b] = _numOps.Subtract(_fcBias[b], update);
-        }
-    }
-
-    /// <summary>
-    /// Computes anomaly threshold based on training prediction errors.
-    /// </summary>
-    private void ComputeAnomalyThreshold(List<T> predictionErrors)
-    {
-        if (predictionErrors.Count == 0) return;
-
-        // Calculate mean
-        T mean = _numOps.Zero;
-        foreach (var error in predictionErrors)
-            mean = _numOps.Add(mean, error);
-        mean = _numOps.Divide(mean, _numOps.FromDouble(predictionErrors.Count));
-
-        // Calculate variance and std
-        T variance = predictionErrors.Select(error =>
-        {
-            T diff = _numOps.Subtract(error, mean);
-            return _numOps.Multiply(diff, diff);
-        }).Aggregate(_numOps.Zero, (sum, val) => _numOps.Add(sum, val));
-        variance = _numOps.Divide(variance, _numOps.FromDouble(predictionErrors.Count));
-        T std = _numOps.Sqrt(variance);
-
-        // Threshold = mean + 3 * std
-        _anomalyThreshold = _numOps.Add(mean, _numOps.Multiply(_numOps.FromDouble(3.0), std));
-    }
-
     public override Vector<T> Predict(Matrix<T> input)
     {
-        if (TryPredictFromTimeIndexCalibration(input, _trainingSeries, out var calibratedPredictions))
-        {
-            return calibratedPredictions;
-        }
-
-        int n = input.Rows;
-        var predictions = new Vector<T>(n);
-
-        // Predict every row from its own input window (see DeepARModel.Predict: the prior
-        // i < _trainingSeries.Length shortcut returned memorized training values for OOS rows).
-        for (int i = 0; i < n; i++)
-        {
-            predictions[i] = PredictSingle(input.GetRow(i));
-        }
-
+        if (TryForecastTimeIndex(input, _trainingSeries, _options.WindowSize, PredictSingle, out var forecasts))
+            return forecasts;
+        var predictions = new Vector<T>(input.Rows);
+        for (int i = 0; i < input.Rows; i++) predictions[i] = PredictSingle(input.GetRow(i));
         return predictions;
     }
 
-    public override T PredictSingle(Vector<T> input)
-    {
-        // Forward pass through convolutional layers
-        Tensor<T> features = new Tensor<T>(new[] { input.Length });
-        for (int i = 0; i < input.Length; i++)
-            features[i] = input[i];
-
-        foreach (var conv in _convLayers)
-        {
-            features = conv.Forward(features);
-        }
-
-        // Fully connected output
-        T output = _fcBias[0];
-        int numFeatures = Math.Min(_fcWeights.Length, features.Length);
-        for (int j = 0; j < numFeatures; j++)
-        {
-            output = _numOps.Add(output, _numOps.Multiply(_fcWeights[j], features[j]));
-        }
-
-        return output;
-    }
+    /// <summary>The predicted value after a window of WindowSize raw values.</summary>
+    public override T PredictSingle(Vector<T> input) => Unscale(ScaledForecast(input)[0]);
 
     /// <summary>
-    /// Detects anomalies in a time series.
+    /// Forecasts the <paramref name="steps"/> values after <paramref name="history"/>: each is the one-step prediction
+    /// from the last WindowSize values, appended to the history for the next. A history shorter than the window is
+    /// extended to the left by repeating its first value.
     /// </summary>
-    /// <param name="data">Time series data.</param>
-    /// <returns>Boolean array where true indicates an anomaly.</returns>
-    public bool[] DetectAnomalies(Vector<T> data)
+    public override Vector<T> Forecast(Vector<T> history, int steps)
     {
-        if (data.Length <= _options.WindowSize)
-            throw new ArgumentException($"Data length must be greater than {_options.WindowSize}");
-
-        int numResults = data.Length - _options.WindowSize;
-        bool[] anomalies = new bool[numResults];
-
-        for (int i = 0; i < numResults; i++)
+        if (history is null) throw new ArgumentNullException(nameof(history));
+        if (history.Length == 0) throw new ArgumentException("DeepAnT needs at least one observed value to forecast from.", nameof(history));
+        if (steps <= 0) throw new ArgumentException("Number of forecast steps must be positive.", nameof(steps));
+        int w = _options.WindowSize;
+        var values = history.ToList();
+        var window = new Vector<T>(w);
+        var forecasts = new Vector<T>(steps);
+        for (int s = 0; s < steps; s++)
         {
-            Vector<T> window = new Vector<T>(_options.WindowSize);
-            for (int j = 0; j < _options.WindowSize; j++)
-                window[j] = data[i + j];
-
-            T prediction = PredictSingle(window);
-            T actual = data[i + _options.WindowSize];
-            T error = _numOps.Abs(_numOps.Subtract(actual, prediction));
-
-            anomalies[i] = _numOps.GreaterThan(error, _anomalyThreshold);
+            for (int t = 0; t < w; t++) window[t] = values[Math.Max(0, values.Count - w + t)];
+            forecasts[s] = PredictSingle(window);
+            values.Add(forecasts[s]);
         }
-
-        return anomalies;
+        return forecasts;
     }
 
     /// <summary>
-    /// Computes anomaly scores for a time series.
+    /// The anomaly score of every value after the first WindowSize: the Euclidean distance (§IV-B) between the value
+    /// and its one-step prediction from the WindowSize values before it, in the normalized units the threshold uses.
     /// </summary>
     public Vector<T> ComputeAnomalyScores(Vector<T> data)
     {
-        if (data.Length <= _options.WindowSize)
-            throw new ArgumentException($"Data length must be greater than {_options.WindowSize}");
-
-        int numResults = data.Length - _options.WindowSize;
-        var scores = new Vector<T>(numResults);
-
-        for (int i = 0; i < numResults; i++)
+        if (data is null) throw new ArgumentNullException(nameof(data));
+        int w = _options.WindowSize;
+        if (data.Length <= w)
+            throw new ArgumentException($"Data length must be greater than WindowSize ({w}).", nameof(data));
+        var scores = new Vector<T>(data.Length - w);
+        var window = new Vector<T>(w);
+        for (int i = 0; i < scores.Length; i++)
         {
-            Vector<T> window = new Vector<T>(_options.WindowSize);
-            for (int j = 0; j < _options.WindowSize; j++)
-                window[j] = data[i + j];
-
-            T prediction = PredictSingle(window);
-            T actual = data[i + _options.WindowSize];
-            T error = _numOps.Abs(_numOps.Subtract(actual, prediction));
-            scores[i] = error;
+            for (int t = 0; t < w; t++) window[t] = data[i + t];
+            double predicted = ScaledForecast(window)[0];
+            double actual = _numOps.ToDouble(Scale(data[i + w]));
+            scores[i] = _numOps.FromDouble(Math.Abs(actual - predicted));
         }
-
         return scores;
     }
 
-    // SerializeCore / DeserializeCore are DELETED, not reimplemented.
-    //
-    // TimeSeriesModelBase already round-trips declared state: Serialize ends with
-    // ModelStateEnvelope.Append(DeclaredState, ...) and Deserialize begins with the matching
-    // Extract, so _anomalyThreshold, _fcWeights, _fcBias, _options, _trainingSeries and now
-    // _convLayers all travel by name. The deleted pair wrote most of those a SECOND time by hand,
-    // and wrote _convLayers in a form that could not be restored: DeserializeCore rebuilt each
-    // convolution with the placeholder constructor, so _outputChannels and _kernelSize stayed 0,
-    // 96 kernel values collapsed to 1, and the model's prediction changed sign across a round trip.
-    //
-    // The base could not be used before because SerializeCore was ABSTRACT -- every time series
-    // model was required to hand-write both halves. It is virtual and empty now, so this model
-    // declares its state and writes no serialization at all.
+    /// <summary>
+    /// Flags every value after the first WindowSize whose anomaly score exceeds AnomalyThreshold.
+    /// </summary>
+    /// <returns>One flag per value from index WindowSize on; true marks an anomaly.</returns>
+    public bool[] DetectAnomalies(Vector<T> data)
+    {
+        var scores = ComputeAnomalyScores(data);
+        var anomalies = new bool[scores.Length];
+        for (int i = 0; i < scores.Length; i++) anomalies[i] = _numOps.ToDouble(scores[i]) > _options.AnomalyThreshold;
+        return anomalies;
+    }
 
-
+    /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
         {
             Name = "DeepANT",
-            Description = "Deep learning for anomaly detection in time series using CNN",
+            Description = "DeepAnT: a convolutional time-series predictor whose prediction error scores anomalies",
             Complexity = ParameterCount,
             FeatureCount = _options.WindowSize,
             AdditionalInfo = new Dictionary<string, object>
             {
                 { "WindowSize", _options.WindowSize },
-                { "AnomalyThreshold", _numOps.ToDouble(_anomalyThreshold) }
+                { "ForecastHorizon", _options.ForecastHorizon },
+                { "AnomalyThreshold", _options.AnomalyThreshold }
             }
         };
     }
 
+    /// <inheritdoc/>
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
+        => new DeepANT<T>(new DeepANTOptions<T>(_options));
+
+    /// <inheritdoc />
+    /// <remarks>The network's parameters are saved by the base through the registered layers; this adds the
+    /// training series and the scaler.</remarks>
+    protected override void SerializeCore(BinaryWriter writer)
     {
-        return new DeepANT<T>(new DeepANTOptions<T>(_options), initializeModel: false);
+        writer.Write(_trainingSeries.Length);
+        for (int i = 0; i < _trainingSeries.Length; i++) writer.Write(_numOps.ToDouble(_trainingSeries[i]));
+        writer.Write(_scaleMin);
+        writer.Write(_scaleRange);
     }
 
-    // ParameterCount restated a fold the base now derives from generated component registration.
-    // Removed under AIDN082.
+    /// <inheritdoc />
+    protected override void DeserializeCore(BinaryReader reader)
+    {
+        int length = reader.ReadInt32();
+        _trainingSeries = new Vector<T>(length);
+        for (int i = 0; i < length; i++) _trainingSeries[i] = _numOps.FromDouble(reader.ReadDouble());
+        _scaleMin = reader.ReadDouble();
+        _scaleRange = reader.ReadDouble();
+    }
 }
 
 /// <summary>
-/// Options for DeepANT model.
+/// Options for the DeepAnT model. Defaults follow the paper where it states a value (32 filters; window 45 and
+/// threshold 0.5, its A1 setting in Table 1) and otherwise the PyTorch implementation at github.com/datacubeR/DeepAnt;
+/// see <see cref="DeepANT{T}"/>.
 /// </summary>
 public class DeepANTOptions<T> : TimeSeriesRegressionOptions<T>
 {
-    public int WindowSize { get; set; } = 30;
-    public double LearningRate { get; set; } = 0.001;
-    public int Epochs { get; set; } = 50;
+    /// <summary>The history window w: the values the predictor reads (the paper's Table 1 uses 35 or 45).</summary>
+    public int WindowSize { get; set; } = 45;
+
+    /// <summary>The prediction window p_w: the values predicted after each window (the paper predicts 1).</summary>
+    public int ForecastHorizon { get; set; } = 1;
+
+    /// <summary>The filters of each convolution (the paper's 32).</summary>
+    public int Filters { get; set; } = 32;
+
+    /// <summary>The width of each convolution. Not stated in the paper; 3 as in the datacubeR implementation.</summary>
+    public int KernelSize { get; set; } = 3;
+
+    /// <summary>The width and stride of each max-pooling. Not stated in the paper; 2 as in the datacubeR implementation.</summary>
+    public int PoolSize { get; set; } = 2;
+
+    /// <summary>The fully connected layer's width. Not stated in the paper; 40 as in the datacubeR implementation.</summary>
+    public int HiddenUnits { get; set; } = 40;
+
+    /// <summary>The dropout after the fully connected layer. Not in the paper; 0.25 as in the datacubeR implementation.</summary>
+    public double DropoutRate { get; set; } = 0.25;
+
+    /// <summary>The SGD learning rate. Stated by neither source; Keras' SGD default.</summary>
+    public double LearningRate { get; set; } = 0.01;
+
+    /// <summary>The training epochs. Not stated in the paper; 30 as in the datacubeR implementation.</summary>
+    public int Epochs { get; set; } = 30;
+
+    /// <summary>The windows per SGD step. Not stated in the paper; 32 as in the datacubeR implementation.</summary>
     public int BatchSize { get; set; } = 32;
+
+    /// <summary>The anomaly-score threshold in normalized units (the paper's Table 1: 0.50 to 0.75; 0.5 for A1).</summary>
+    public double AnomalyThreshold { get; set; } = 0.5;
 
     public DeepANTOptions() { }
 
@@ -478,11 +400,17 @@ public class DeepANTOptions<T> : TimeSeriesRegressionOptions<T>
         : base(other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
-        // Copy DeepANT-specific properties
         WindowSize = other.WindowSize;
+        ForecastHorizon = other.ForecastHorizon;
+        Filters = other.Filters;
+        KernelSize = other.KernelSize;
+        PoolSize = other.PoolSize;
+        HiddenUnits = other.HiddenUnits;
+        DropoutRate = other.DropoutRate;
         LearningRate = other.LearningRate;
         Epochs = other.Epochs;
         BatchSize = other.BatchSize;
+        AnomalyThreshold = other.AnomalyThreshold;
 
         // Copy TimeSeriesRegressionOptions properties
         LagOrder = other.LagOrder;
@@ -495,178 +423,5 @@ public class DeepANTOptions<T> : TimeSeriesRegressionOptions<T>
         // Copy RegressionOptions properties
         DecompositionMethod = other.DecompositionMethod;
         UseIntercept = other.UseIntercept;
-    }
-}
-
-/// <summary>
-/// Tensor-based 1D convolutional layer for DeepANT.
-/// </summary>
-/// <remarks>
-/// <para>Implements a 1D convolution with ReLU activation and global average pooling.
-/// Supports training via analytical Backward pass with stored kernel/bias gradients.
-/// Weights are initialized using Xavier/Glorot initialization.</para>
-/// </remarks>
-// Rank 1 on BOTH sides, and the two axes are not the same axis - which is the whole content of this
-// declaration. The base constructor states it directly, `new[] { kernelSize }` in and
-// `new[] { outputChannels }` out, and ForwardTraced matches: it reads the input as a flat window via
-// `input.Length` / `inputSpan[pos + k]`, and allocates its result as
-// `new Tensor<T>(new[] { _outputChannels })`.
-//
-// The convolution positions never reach the output. `numPositions` is computed, ReLU'd into
-// _lastPreActivations for the backward pass, and then AVERAGED AWAY inside the same loop
-// (`outputSpan[outChannel] = channelSum * 1/numPositions`) - the global average pooling the summary
-// mentions. So there is no window relation to declare here; the window is entirely internal.
-[TensorLayout(TensorAxis.Time, Direction = TensorLayoutDirection.Input,
-    Note = "A flat time-series window; the layer reads it through input.Length.")]
-[TensorLayout(TensorAxis.Channels, Direction = TensorLayoutDirection.Output,
-    Note = "One globally-averaged value per output channel.")]
-[AutoParameters]
-internal partial class ConvLayerTensor<T> : NeuralNetworks.Layers.LayerBase<T>, IShapeContract
-{
-    /// <inheritdoc />
-    /// <remarks>
-    /// <para>
-    /// Hand-written rather than generated because the single axis CHANGES ROLE: Time goes in and
-    /// Channels comes out, so there is no <c>Same</c> to derive. <c>Fixed(_outputChannels)</c> reads
-    /// the field the forward allocates against, so a layer built with a different channel count
-    /// reports that count.
-    /// </para>
-    /// <para>
-    /// The <c>_outputChannels &lt;= 0</c> guard is not defensive padding: the internal
-    /// deserialization constructor deliberately leaves it at 0 until parameters are read back, and
-    /// <c>AxisRelation.Fixed</c> rejects a non-positive size. Declining until the layer is real beats
-    /// declaring a width of zero.
-    /// </para>
-    /// </remarks>
-    public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-    {
-        if (inputRank != 1 || _outputChannels <= 0) return null;
-
-        return new[]
-        {
-            new OutputAxisContract(TensorAxis.Channels, AxisRelation.Fixed(_outputChannels)),
-        };
-    }
-
-    private int _outputChannels;
-    private int _kernelSize;
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T> _kernels;  // [outputChannels, kernelSize]
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T> _biases;   // [outputChannels]
-
-    // Cached state for backward pass
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastPreActivations;  // [outputChannels, numPositions] before ReLU
-    private int _lastNumPositions;
-
-    // Stored gradients for UpdateParameters
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T>? _kernelGradients;
-    [AiDotNet.Attributes.TrainableParameter]
-    private Tensor<T>? _biasGradients;
-
-    public override bool SupportsTraining => true;
-
-    public ConvLayerTensor(int outputChannels, int kernelSize, int seed = 42)
-        : base(new[] { kernelSize }, new[] { outputChannels })
-    {
-        _outputChannels = outputChannels;
-        _kernelSize = kernelSize;
-
-        var random = RandomHelper.CreateSeededRandom(seed);
-        double stddev = Math.Sqrt(2.0 / kernelSize);
-
-        _kernels = new Tensor<T>(new[] { outputChannels, kernelSize });
-        for (int i = 0; i < _kernels.Length; i++)
-            _kernels[i] = NumOps.FromDouble((random.NextDouble() * 2 - 1) * stddev);
-
-        _biases = new Tensor<T>(new[] { outputChannels });
-        for (int i = 0; i < _biases.Length; i++)
-            _biases[i] = NumOps.Zero;
-    }
-
-    /// <summary>
-    /// Creates a ConvLayerTensor for deserialization.
-    /// </summary>
-    internal ConvLayerTensor()
-        : base(new[] { 1 }, new[] { 1 })
-    {
-        _outputChannels = 0;
-        _kernelSize = 0;
-        _kernels = new Tensor<T>(new[] { 1, 1 });
-        _biases = new Tensor<T>(new[] { 1 });
-    }
-
-    protected override Tensor<T> ForwardTraced(Tensor<T> input)
-    {
-        _lastInput = input;
-        var output = new Tensor<T>(new[] { _outputChannels });
-        int numPositions = Math.Max(1, input.Length - _kernelSize + 1);
-        _lastNumPositions = numPositions;
-
-        // Cache pre-activations for backward
-        _lastPreActivations = new Tensor<T>(new[] { _outputChannels, numPositions });
-
-        // Hot loop bypasses the deferred-materializer monitor by reading
-        // _kernels / _biases / input through .Data.Span and writing
-        // _lastPreActivations / output through .Data.Span. Profiling on
-        // PR #1184 showed every per-element tensor[i] access acquired the
-        // materializer's monitor — for DeepANT (50 epochs * 4 batches *
-        // 32 samples * outChannels * numPositions * kernelSize), this
-        // dominated wall-clock at ~27 s vs ~0.7 s after this change.
-        var kernelsSpan = _kernels.Data.Span;
-        var biasesSpan = _biases.Data.Span;
-        var inputSpan = input.Data.Span;
-        var preActSpan = _lastPreActivations.Data.Span;
-        var outputSpan = output.Data.Span;
-        int inputLen = input.Length;
-        double invPositions = 1.0 / numPositions;
-        T invPositionsT = NumOps.FromDouble(invPositions);
-
-        for (int outChannel = 0; outChannel < _outputChannels; outChannel++)
-        {
-            T channelSum = NumOps.Zero;
-            T bias = biasesSpan[outChannel];
-            int kernelBase = outChannel * _kernelSize;
-            int preActBase = outChannel * numPositions;
-
-            for (int pos = 0; pos < numPositions; pos++)
-            {
-                T positionSum = bias;
-                int kMax = Math.Min(_kernelSize, inputLen - pos);
-                for (int k = 0; k < kMax; k++)
-                {
-                    positionSum = NumOps.Add(positionSum, NumOps.Multiply(kernelsSpan[kernelBase + k], inputSpan[pos + k]));
-                }
-
-                preActSpan[preActBase + pos] = positionSum;
-                if (NumOps.GreaterThan(positionSum, NumOps.Zero))
-                    channelSum = NumOps.Add(channelSum, positionSum);
-            }
-
-            outputSpan[outChannel] = NumOps.Multiply(channelSum, invPositionsT);
-        }
-
-        return output;
-    }
-
-    public override void UpdateParameters(T learningRate)
-    {
-        if (_kernelGradients is null || _biasGradients is null) return;
-        Engine.TensorSubtractInPlace(_kernels, Engine.TensorMultiplyScalar<T>(_kernelGradients, learningRate));
-        Engine.TensorSubtractInPlace(_biases, Engine.TensorMultiplyScalar<T>(_biasGradients, learningRate));
-        _kernelGradients = null;
-        _biasGradients = null;
-    }
-
-    public override void ResetState()
-    {
-        _lastInput = null;
-        _lastPreActivations = null;
-        _kernelGradients = null;
-        _biasGradients = null;
     }
 }

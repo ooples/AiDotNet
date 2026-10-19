@@ -413,11 +413,6 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         => _optimizer ?? base.GetOrCreateBaseOptimizer();
 
     /// <inheritdoc />
-    /// <remarks>The base class's step fine-tunes the audio tower and the head on multi-hot targets with binary
-    /// cross-entropy on the logits, with this model's optimizer.</remarks>
-    protected override string? TrainingUnavailableReason => IsOnnxMode ? OnnxTrainingUnavailableReason : null;
-
-    /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>

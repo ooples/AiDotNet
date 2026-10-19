@@ -111,6 +111,9 @@ public partial class FastSpeech2<T> : VarianceAdaptorTtsModelBase<T>, IAcousticM
     /// <remarks>FastSpeech 2 optimizes the mel spectrogram with mean absolute error (Ren et al. 2021, §3.1).</remarks>
     protected override bool UsesL1MelLoss => true;
 
+    /// <inheritdoc />
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+
     protected override void InitializeLayers()
     {
         if (!_useNativeMode)

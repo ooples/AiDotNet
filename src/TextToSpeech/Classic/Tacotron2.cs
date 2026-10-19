@@ -375,8 +375,7 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
         Guard.NotNull(expectedOutput);
         if (!HasPaperLayers)
         {
-            TrainWithTape(input, expectedOutput, _optimizer);
-            return true;
+            return false;
         }
         var target = MelRows(expectedOutput);
         if (target.Shape[0] == 0)

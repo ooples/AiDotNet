@@ -422,10 +422,9 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
     /// <inheritdoc />
     protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        // A token/mel pair does not carry the supervision this model trains on; Train(TtsTrainingSample) does.
         ThrowIfTokenMelTrainingUnsupported();
-        return true;
+        return false;
     }
 
     /// <inheritdoc />

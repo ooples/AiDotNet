@@ -267,8 +267,7 @@ public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         if (!HasPaperLayers)
         {
-            TrainWithTape(input, expectedOutput, _optimizer);
-            return true;
+            return false;
         }
         var (tokens, mel) = Prepare(input, expectedOutput);
         TrainWithCustomObjective(tokens, mel, Objective, _optimizer);

@@ -313,7 +313,7 @@ jobs:
 
       - name: Initialize CodeQL (build-less, pull requests)
         if: github.event_name == 'pull_request'
-        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
+        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
         with:
           languages: csharp
           build-mode: none
@@ -322,7 +322,7 @@ jobs:
 
       - name: Initialize CodeQL (build-less, whole library)
         if: github.event_name != 'pull_request'
-        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
+        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
         with:
           languages: csharp
           build-mode: none
@@ -330,7 +330,7 @@ jobs:
           queries: security-and-quality
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
+        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
         with:
           category: "/language:csharp"
           upload: always
@@ -400,7 +400,7 @@ jobs:
       # files it changes; master pushes and the schedule still analyze everything, traced. A PR that
       # changes no analyzed C# extracts one fixed small file, so the ruleset still gets its result.
       - name: Initialize CodeQL (traced build)
-        uses: github/codeql-action/init@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
+        uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
         with:
           languages: csharp
           build-mode: manual
@@ -422,7 +422,7 @@ jobs:
           dotnet build src/AiDotNet.Playground.Functions/AiDotNet.Playground.Functions.csproj -c Release --no-restore
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@24c54180a607b1449ed407dd24f251e4e9147c8d # v4
+        uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4
         with:
           category: "/language:csharp-traced"
           upload: always
@@ -2234,7 +2234,7 @@ jobs:
 
       - name: Set up JDK 17
         if: ${{ fromJSON(env.SONAR_ANALYZE) }}
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v4
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v4
         with:
           java-version: 17
           distribution: 'zulu'
