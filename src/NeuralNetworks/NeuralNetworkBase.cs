@@ -11768,6 +11768,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         var parameters = parameterProvider is not null ? parameterProvider() : CollectModelTrainableTensors();
 
+        // The fused plan adds the optimizer's L2 to every gradient before clipping, so the eager fallback must as well:
+        // without it a model whose paper recipe declares weight decay trained with the decay fused and without it eager.
+        var regularization = OptimizerRegularizationOf(resolvedOptimizer);
+        HashSet<Tensor<T>>? decayExcluded = null;
+
         // The network's layers ride along so the compiled step's own lazy-init forward runs them in inference mode
         // (with none, that forward ran in training mode and a BatchNorm updated its running statistics an extra
         // time). Selection keeps the trained set exactly the one collected above.
@@ -11784,6 +11789,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             ModelGradientClip = MaxGradNormValue,
             ExcludesParametersFromWeightDecay = () => DecayExcludedParameters().Count > 0,
             OnGradients = ScatterFusedGradients,
+            RegularizeGradient = regularization is null ? null
+                : (parameter, gradient) => RegularizeGradient(regularization, parameter, gradient, decayExcluded ??= DecayExcludedParameters()),
         };
 
         // Both the plan and the eager step write the weights in place; an OOM from here on must not be retried.
