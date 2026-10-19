@@ -7082,6 +7082,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     }
 
     /// <summary>
+    /// Resets the inference recycle arena with nothing carried: for an iterative forward (an autoregressive sampler)
+    /// whose step leaves no arena tensor live, only host values such as the sampled index, and whose carried state is
+    /// GC-owned. Without it every step's scratch stays live until <see cref="Predict"/> returns. No-op outside an
+    /// authorized inference recycle arena, like <see cref="DetachAndRecycleBetweenLayers"/>.
+    /// </summary>
+    private protected static void RecycleInferenceScratch() => _inferenceRecycleArena?.Reset();
+
+    /// <summary>
     /// Copies <paramref name="output"/> out of the active <c>TensorArena</c> into a GC-owned
     /// tensor so it survives the arena's <c>Dispose</c> (which recycles Rent-backed buffers).
     /// <c>ToArray()</c> materializes any GPU/lazy result and always returns a fresh plain array
