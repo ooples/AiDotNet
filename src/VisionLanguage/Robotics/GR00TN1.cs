@@ -385,7 +385,7 @@ public partial class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAct
         double scaledT = t * 1000.0;
         for (int d = 0; d < dim; d++)
         {
-            double freq = 1.0 / Math.Pow(10000.0, 2.0 * (d / 2) / (double)dim);
+            double freq = 1.0 / Math.Pow(10000.0, (double)(d - d % 2) / dim);   // 2*(d/2): the sin/cos pair index
             double val = (d % 2 == 0) ? Math.Sin(scaledT * freq) : Math.Cos(scaledT * freq);
             embed[d] = NumOps.FromDouble(val);
         }
@@ -413,15 +413,6 @@ public partial class GR00TN1<T> : VisionLanguageModelBase<T>, IVisionLanguageAct
         foreach (var layer in Layers)
             hidden = layer.Forward(hidden);
         return hidden;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
     }
 
     // UpdateParameters restated a fold the base now derives from generated component registration.

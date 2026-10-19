@@ -78,6 +78,10 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingObje
     private readonly ILossFunction<T> _lossFunction;
     private readonly TSDiffOptions<T> _options;
 
+    // The training draws: timesteps, noise and conditioning drops. One generator for the model's lifetime, seeded from
+    // Options.Seed when set, so a seeded model trains reproducibly while every step still draws fresh values.
+    private readonly Random _trainingRandom = RandomHelper.CreateSecureRandom();
+
     public override ModelOptions GetOptions() => _options;
 
     private int _sequenceLength;
@@ -144,6 +148,7 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingObje
         : base(architecture, lossFunction ?? new MeanSquaredErrorLoss<T>(), 1.0)
     {
         options ??= new TSDiffOptions<T>(); _options = options; Options = _options;
+        if (options.Seed.HasValue) _trainingRandom = RandomHelper.CreateSeededRandom(options.Seed.Value);
         _useNativeMode = true; OnnxSession = null; OnnxModelPath = null;
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
@@ -254,102 +259,78 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingObje
     /// is applied whatever the guidance scale, because GuidanceScale is an inference knob and
     /// raising it after training must not find a branch the model has never seen.
     ///
-    /// The draw is deliberately NOT seeded from <c>Options.Seed</c>. That seed makes inference
-    /// reproducible; reusing it here would hand every call the same t and the same epsilon, so
-    /// the model would be fitted at one single noise level out of NumDiffusionSteps.
+    /// The draws come from one generator kept for the model's lifetime, seeded from <c>Options.Seed</c> when set.
+    /// Re-seeding on every call would hand each step the same t and the same epsilon, so the model would be fitted at
+    /// one single noise level out of NumDiffusionSteps; advancing one generator keeps a seeded run reproducible and
+    /// every step fresh.
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The denoising objective of Ho et al. 2020: predict the noise mixed into the target at a sampled timestep. The
+    /// draws and the denoiser's input rows are built here and travel as the step's data, so a compiled plan replays
+    /// each step's own draws. The base class trains in training mode, so the denoiser's dropout is live.
+    /// </remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
+        if (expectedOutput.Length <= 0) return Array.Empty<Training.TrainingObjective<T>>();
 
-        if (expectedOutput.Length <= 0) return;
+        var conditioned = ApplyInstanceNormalization(input);
+        var condHidden = conditioned.Rank == 2
+            ? conditioned
+            : Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
 
-        // Without this the denoiser's DropoutLayers stay in inference mode and the configured
-        // DropoutRate is silently inert for the whole of training.
-        SetTrainingMode(true);
-        try
+        // The denoiser is sized for exactly one horizon, so the target is read into a row of
+        // that width whatever the caller's framing. A shorter target leaves the tail at zero
+        // rather than changing the packed width, which the lazily-sized input projection
+        // would bake and then reject on the next call.
+        int outputLen = _forecastHorizon;
+        var rand = _trainingRandom;
+
+        // One row per (timestep, noise) draw. Ho et al. 2020 Algorithm 1 draws a single t per
+        // EXAMPLE and averages the step over a minibatch (128 in their Section 4); a caller
+        // here hands us one example, so the minibatch is taken over the noise process instead.
+        // Without it the gradient is a one-sample estimate of an expectation over
+        // NumDiffusionSteps noise levels, so consecutive steps are dominated by which t came
+        // up rather than by what the model learned - and the reported loss is too, which is
+        // what made the training probes read as noise. The conditioning drop is decided per
+        // row for the same reason: an all-or-nothing decision per step would train the two
+        // branches in alternating bursts.
+        int batch = Math.Max(1, _trainingBatchSize);
+        var timesteps = new int[batch];
+        var dropConditioning = new bool[batch];
+        var epsilonTrue = new Tensor<T>(new[] { batch, outputLen });
+        var xt = new Tensor<T>(new[] { batch, outputLen });
+        for (int b = 0; b < batch; b++)
         {
-            var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(Layers).ToArray();
-
-            var conditioned = ApplyInstanceNormalization(input);
-            var condHidden = conditioned.Rank == 2
-                ? conditioned
-                : Engine.Reshape(conditioned, new[] { 1, conditioned.Length });
-
-            // The denoiser is sized for exactly one horizon, so the target is read into a row of
-            // that width whatever the caller's framing. A shorter target leaves the tail at zero
-            // rather than changing the packed width, which the lazily-sized input projection
-            // would bake and then reject on the next call.
-            int outputLen = _forecastHorizon;
-            var rand = RandomHelper.CreateSecureRandom();
-
-            // One row per (timestep, noise) draw. Ho et al. 2020 Algorithm 1 draws a single t per
-            // EXAMPLE and averages the step over a minibatch (128 in their Section 4); a caller
-            // here hands us one example, so the minibatch is taken over the noise process instead.
-            // Without it the gradient is a one-sample estimate of an expectation over
-            // NumDiffusionSteps noise levels, so consecutive steps are dominated by which t came
-            // up rather than by what the model learned - and the reported loss is too, which is
-            // what made the training probes read as noise. The conditioning drop is decided per
-            // row for the same reason: an all-or-nothing decision per step would train the two
-            // branches in alternating bursts.
-            int batch = Math.Max(1, _trainingBatchSize);
-            var timesteps = new int[batch];
-            var dropConditioning = new bool[batch];
-            var epsilonTrue = new Tensor<T>(new[] { batch, outputLen });
-            var xt = new Tensor<T>(new[] { batch, outputLen });
-            for (int b = 0; b < batch; b++)
+            int tb = rand.Next(_numDiffusionSteps);
+            timesteps[b] = tb;
+            dropConditioning[b] = rand.NextDouble() < _unconditionalProbability;
+            T sqrtAlphaBar = _sqrtAlphasCumprod[tb];
+            T sqrtOneMinus = _sqrtOneMinusAlphasCumprod[tb];
+            for (int i = 0; i < outputLen; i++)
             {
-                int tb = rand.Next(_numDiffusionSteps);
-                timesteps[b] = tb;
-                dropConditioning[b] = rand.NextDouble() < _unconditionalProbability;
-                T sqrtAlphaBar = _sqrtAlphasCumprod[tb];
-                T sqrtOneMinus = _sqrtOneMinusAlphasCumprod[tb];
-                for (int i = 0; i < outputLen; i++)
-                {
-                    T noise = SampleStandardNormal(rand);
-                    T y = i < expectedOutput.Length ? expectedOutput[i] : NumOps.Zero;
-                    int flat = b * outputLen + i;
-                    epsilonTrue.Data.Span[flat] = noise;
-                    xt.Data.Span[flat] = NumOps.Add(
-                        NumOps.Multiply(sqrtAlphaBar, y),
-                        NumOps.Multiply(sqrtOneMinus, noise));
-                }
+                T noise = SampleStandardNormal(rand);
+                T y = i < expectedOutput.Length ? expectedOutput[i] : NumOps.Zero;
+                int flat = b * outputLen + i;
+                epsilonTrue.Data.Span[flat] = noise;
+                xt.Data.Span[flat] = NumOps.Add(
+                    NumOps.Multiply(sqrtAlphaBar, y),
+                    NumOps.Multiply(sqrtOneMinus, noise));
             }
-            using var tape = new GradientTape<T>();
-            var epsilonPred = DenoiserForward(xt, condHidden, timesteps, dropConditioning);
-            var lossTensor = _lossFunction.ComputeTapeLoss(epsilonPred, epsilonTrue);
-
-            // Publish through the base rather than calling tape.ComputeGradients directly.
-            // GetParameterGradients() answers from the published surface, and with nothing
-            // published it falls back to the per-layer accessors, which fabricate an exact zero
-            // for every parameter - indistinguishable from a severed tape.
-            var grads = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParams);
-
-            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-            LastLoss = lossValue;
-
-            // All three closures are pinned to this step's (t, epsilon, conditioning). A
-            // line-searching optimizer that re-drew them would be comparing losses from two
-            // different noise levels and reading the difference as progress.
-            Tensor<T> ComputeForward(Tensor<T> _, Tensor<T> __) =>
-                DenoiserForward(xt, condHidden, timesteps, dropConditioning);
-            Tensor<T> RecomputeLoss(Tensor<T> pred, Tensor<T> __) =>
-                _lossFunction.ComputeTapeLoss(pred, epsilonTrue);
-
-            var context = new TapeStepContext<T>(
-                trainableParams, grads, lossValue,
-                input, expectedOutput, ComputeForward, RecomputeLoss);
-
-            MarkTrainMutationStarted();
-            _optimizer.Step(context);
-            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
-            StepSchedulerIfSupported(_optimizer);
         }
-        finally
+        // The denoiser's input row carries no parameter dependency (x_t, the conditioning copy and the timestep
+        // encoding), so it is built here and handed to the shared fused session as the step's input: a compiled
+        // plan replays each step's own draws.
+        var rows = BuildDenoiserInput(xt, condHidden, timesteps, dropConditioning);
+        return new[]
         {
-            SetTrainingMode(false);
-        }
+            new Training.TrainingObjective<T>(
+                new[] { rows, epsilonTrue },
+                data => _lossFunction.ComputeTapeLoss(DenoiseRows(data[0]), data[1]))
+            {
+                Parameters = () => Training.TapeTrainingStep<T>.CollectParameters(Layers),
+            },
+        };
     }
 
     /// <summary>
@@ -400,6 +381,11 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingObje
     /// </summary>
     private Tensor<T> DenoiserForward(
         Tensor<T> xt, Tensor<T>? condHidden, IReadOnlyList<int> timesteps, IReadOnlyList<bool>? dropConditioning)
+        => DenoiseRows(BuildDenoiserInput(xt, condHidden, timesteps, dropConditioning));
+
+    /// <summary>The denoiser's packed input rows: x_t, the conditioning and the timestep encoding.</summary>
+    private Tensor<T> BuildDenoiserInput(
+        Tensor<T> xt, Tensor<T>? condHidden, IReadOnlyList<int> timesteps, IReadOnlyList<bool>? dropConditioning)
     {
         // One row per sample path. The additive composition is built by a direct span fill
         // rather than traced engine arithmetic because none of its three parts carries a
@@ -445,8 +431,13 @@ public partial class TSDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingObje
                 din.Slice(baseIdx + xtCols + condLen, DiffusionTimestepEmbeddingDim), stepR);
         }
 
-        var eps = packed;
+        return packed;
+    }
 
+    /// <summary>The denoiser's layer chain over packed input rows.</summary>
+    private Tensor<T> DenoiseRows(Tensor<T> packed)
+    {
+        var eps = packed;
         if (_inputProjection is not null) eps = _inputProjection.Forward(eps);
         foreach (var layer in _residualLayers) eps = layer.Forward(eps);
         if (_outputProjection is not null) eps = _outputProjection.Forward(eps);

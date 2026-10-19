@@ -569,25 +569,6 @@ public partial class SpiralNet<T> : GraphModelLayoutBase<T>
         }
     }
 
-    /// <summary>
-    /// Trains the network on a single batch.
-    /// </summary>
-    /// <param name="input">Vertex features tensor.</param>
-    /// <param name="expectedOutput">Ground truth labels.</param>
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>

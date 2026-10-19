@@ -113,14 +113,6 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
     /// </summary>
     public override bool SupportsTraining => true;
 
-    public override Vector<T> GetParameterGradients()
-    {
-        // _conv is null until OnFirstForward runs; return BN's gradients
-        // alone in that interim state to avoid NullReferenceException.
-        if (_conv is null) return _bn.GetParameterGradients();
-        return Vector<T>.Concatenate(_bn.GetParameterGradients(), _conv.GetParameterGradients());
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

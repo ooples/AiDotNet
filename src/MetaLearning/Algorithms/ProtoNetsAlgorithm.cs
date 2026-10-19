@@ -271,14 +271,16 @@ public partial class ProtoNetsAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
         }
         else
         {
-            using var tape = new GradientTape<T>();
-            var episodeLoss = LossFunction.ComputeTapeLoss(
-                EpisodeLogits(embeddings, episode, attention, mahalanobis, classScales), episode.QueryTarget);
-            loss = episodeLoss[0];
-            var gradients = tape.ComputeGradients(episodeLoss, sources);
-            attentionGradient = GradientOf(gradients, attention, attentionGradient.Length);
-            mahalanobisGradient = GradientOf(gradients, mahalanobis, mahalanobisGradient.Length);
-            classGradient = GradientOf(gradients, classScales, classGradient.Length);
+            loss = AiDotNet.Training.TapeGradients<T>.Of(
+                () => LossFunction.ComputeTapeLoss(
+                    EpisodeLogits(embeddings, episode, attention, mahalanobis, classScales), episode.QueryTarget),
+                sources,
+                gradients =>
+                {
+                    attentionGradient = GradientOf(gradients, attention, attentionGradient.Length);
+                    mahalanobisGradient = GradientOf(gradients, mahalanobis, mahalanobisGradient.Length);
+                    classGradient = GradientOf(gradients, classScales, classGradient.Length);
+                });
         }
 
         return (loss, bodyGradient, attentionGradient, mahalanobisGradient, classGradient);

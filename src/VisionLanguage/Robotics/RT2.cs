@@ -436,26 +436,6 @@ public partial class RT2<T> : VisionLanguageModelBase<T>, IVisionLanguageAction<
         return hidden;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            // If TrainWithTape throws (NaN gradient, optimizer state
-            // corruption, layer-side numerical issue, etc.) we still
-            // need to flip training mode back off — otherwise the next
-            // Predict() on this instance would run dropout / batchnorm
-            // in training mode and produce silently-incorrect outputs.
-            SetTrainingMode(false);
-        }
-    }
-
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being

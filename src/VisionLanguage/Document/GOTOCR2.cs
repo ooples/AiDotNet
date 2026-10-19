@@ -374,25 +374,21 @@ public partial class GOTOCR2<T> : VisionLanguageModelBase<T>, IDocumentUnderstan
         return Engine.TensorSlice(logits, new[] { ids.Count - 1, 0 }, new[] { 1, _options.VocabSize });
     }
 
-    /// <summary>
-    /// One training step under the OCR query. A <c>[1, vocab]</c> target is a distribution over the first
-    /// answer token; any other target is answer ids, trained with teacher forcing.
-    /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// With its decoder, the model trains the OCR loss of the preprocessed page for the default query; without one, the
+    /// standard step trains the network.
+    /// </remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> expected)
     {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        if (input is null) throw new ArgumentNullException(nameof(input));
-        if (expected is null) throw new ArgumentNullException(nameof(expected));
-        if (_decoder is null)
-        {
-            SetTrainingMode(true);
-            TrainWithTape(input, expected, _optimizer);
-            SetTrainingMode(false);
-            return;
-        }
+        if (_decoder is null) return null;
         string query = DefaultQuery;
-        TrainWithCustomObjective(PreprocessImage(input), expected, (pixels, target) => Loss(pixels, target, query), _optimizer);
+        return new[]
+        {
+            new Training.TrainingObjective<T>(
+                new[] { PreprocessImage(input), expected },
+                data => Loss(data[0], data[1], query)),
+        };
     }
 
     /// <inheritdoc/>

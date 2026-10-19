@@ -64,7 +64,9 @@ public class FusedOptimizerParityTests
     /// plus the number of fused steps that actually engaged.
     /// </summary>
     private (double maxAbsDiff, long fusedSteps, double trainDelta) Divergence(
-        Func<IGradientBasedOptimizer<float, Tensor<float>, Tensor<float>>> optFactory)
+        Func<IGradientBasedOptimizer<float, Tensor<float>, Tensor<float>>> optFactory,
+        List<(float[] Parameters, float[] Gradients)>? fusedTrace = null,
+        List<(float[] Parameters, float[] Gradients)>? eagerTrace = null)
     {
         // Pin the global default init seed. The model-family test base sets it to 1234 process-wide and never resets it,
         // so without this the initial weights, and every result here, depended on whether such a test had already run
@@ -92,7 +94,11 @@ public class FusedOptimizerParityTests
                 new AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions { EnableCompilation = true });
             CompiledTapeTrainingStep<float>.Invalidate();
             CompiledTapeTrainingStep<float>.ResetFusedStepCount();
-            for (int i = 0; i < Steps; i++) fused.Train(x, y);
+            for (int i = 0; i < Steps; i++)
+            {
+                fused.Train(x, y);
+                fusedTrace?.Add((fused.GetParameters().ToArray(), fused.GetParameterGradients().ToArray()));
+            }
             fusedSteps = CompiledTapeTrainingStep<float>.GetFusedStepCount();
 
             // Eager run (compilation disabled → pure tape path).
@@ -100,7 +106,11 @@ public class FusedOptimizerParityTests
                 new AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions { EnableCompilation = false });
             CompiledTapeTrainingStep<float>.Invalidate();
             CompiledTapeTrainingStep<float>.ResetFusedStepCount();
-            for (int i = 0; i < Steps; i++) eager.Train(x, y);
+            for (int i = 0; i < Steps; i++)
+            {
+                eager.Train(x, y);
+                eagerTrace?.Add((eager.GetParameters().ToArray(), eager.GetParameterGradients().ToArray()));
+            }
             eagerFusedSteps = CompiledTapeTrainingStep<float>.GetFusedStepCount();
         }
         finally
@@ -273,13 +283,92 @@ public class FusedOptimizerParityTests
         }
 
         var (adamDiff, _, _) = Divergence(Adam);
-        var (diff, fusedSteps, trainDelta) = Divergence(() => FusedKernelParityTests.Create(name));
+        var fusedTrace = new List<(float[] Parameters, float[] Gradients)>();
+        var eagerTrace = new List<(float[] Parameters, float[] Gradients)>();
+        var (diff, fusedSteps, trainDelta) = Divergence(() => FusedKernelParityTests.Create(name), fusedTrace, eagerTrace);
         _output.WriteLine($"{name}: fusedSteps={fusedSteps}, maxAbsDiff={diff:E3}, trainDelta={trainDelta:E3} (Adam control {adamDiff:E3})");
         Assert.True(fusedSteps > 0, $"{name} maps onto a fused kernel but training never engaged it (fusedSteps == 0).");
         Assert.True(trainDelta > 1e-6, $"{name}: training barely moved the parameters ({trainDelta:E3}); the comparison would be vacuous.");
+        if (FollowsTheGradientSign(name))
+        {
+            AssertBitExactUntilANoiseSignFlip(name, fusedTrace, eagerTrace);
+            return;
+        }
         Assert.True(diff <= ParityBound(name, adamDiff),
             $"{name}: fused and eager training differ by {diff:E3}, against {adamDiff:E3} for the Adam control " +
             $"(bound {ParityBound(name, adamDiff):E3}).");
+    }
+
+    /// <summary>
+    /// Optimizers whose update moves each parameter by sign(gradient) times a step size, so the parameters do not
+    /// depend on the gradient's magnitude at all.
+    /// </summary>
+    /// <remarks>
+    /// The fused plan orders its float operations differently from the eager tape, so their gradients differ by
+    /// ulps (the Adam control measures about 1e-6 in the parameters). A smooth optimizer turns that into ulp-scale
+    /// parameter noise, which the 10x-Adam bound covers. A sign-following one ignores it entirely until a gradient
+    /// element sits within that noise of zero; there the two sides can take opposite signs and move the parameter
+    /// in opposite directions by a whole step, after which the difference propagates through the network. Which
+    /// element (if any) lands there depends on the CPU's SIMD width: measured for Rprop, an AVX-512 runner stayed
+    /// bit-exact for all 40 steps while an AVX2 runner (and an AVX2 desktop) was bit-exact for 27 steps, then
+    /// parameter 180 had gradient +7.98e-11 fused and -1.98e-11 eager, ending 1.97e-4 apart. Lion is not listed:
+    /// it takes the sign of a momentum blend, which the gradients alone cannot explain.
+    /// </remarks>
+    private static bool FollowsTheGradientSign(string name) => name == "Rprop";
+
+    /// <summary>
+    /// For a sign-following optimizer: fused and eager parameters must be bit-identical until the first step at
+    /// which they differ, and every parameter that differs there must trace to an earlier (or that) step at which
+    /// its fused and eager gradients took opposite signs while both lay within that step's fused-vs-eager gradient
+    /// noise. Up to that step the parameters are identical, so the gradient differences are purely the plans'
+    /// float ordering. A wrong mapping breaks bit-exactness without such a flip and fails.
+    /// </summary>
+    private void AssertBitExactUntilANoiseSignFlip(string name,
+        List<(float[] Parameters, float[] Gradients)> fused, List<(float[] Parameters, float[] Gradients)> eager)
+    {
+        Assert.Equal(Steps, fused.Count);
+        Assert.Equal(Steps, eager.Count);
+        int first = -1;
+        for (int s = 0; s < Steps && first < 0; s++)
+        {
+            Assert.Equal(fused[s].Parameters.Length, eager[s].Parameters.Length);
+            for (int i = 0; i < fused[s].Parameters.Length; i++)
+                if (fused[s].Parameters[i] != eager[s].Parameters[i]) { first = s; break; }
+        }
+        if (first < 0)
+        {
+            _output.WriteLine($"{name}: fused and eager are bit-identical for all {Steps} steps.");
+            return;
+        }
+
+        // Each step's gradient noise: the largest fused-vs-eager gradient difference over all elements, measured
+        // while the parameters were still identical.
+        var noise = new double[first + 1];
+        for (int s = 0; s <= first; s++)
+        {
+            Assert.Equal(fused[s].Gradients.Length, eager[s].Gradients.Length);
+            for (int i = 0; i < fused[s].Gradients.Length; i++)
+                noise[s] = Math.Max(noise[s], Math.Abs((double)fused[s].Gradients[i] - eager[s].Gradients[i]));
+        }
+
+        int flipped = 0;
+        for (int i = 0; i < fused[first].Parameters.Length; i++)
+        {
+            if (fused[first].Parameters[i] == eager[first].Parameters[i]) continue;
+            bool explained = false;
+            for (int s = 0; s <= first && !explained; s++)
+            {
+                float gf = fused[s].Gradients[i], ge = eager[s].Gradients[i];
+                explained = Math.Sign(gf) != Math.Sign(ge) && Math.Abs(gf) <= noise[s] && Math.Abs(ge) <= noise[s];
+            }
+            Assert.True(explained,
+                $"{name}: parameter {i} differs at step {first + 1} (fused {fused[first].Parameters[i]:R}, eager " +
+                $"{eager[first].Parameters[i]:R}) with no earlier gradient sign flip inside the fused-vs-eager noise; " +
+                "the fused kernel does not match the eager update.");
+            flipped++;
+        }
+        _output.WriteLine($"{name}: bit-identical for {first} steps; at step {first + 1}, {flipped} parameter(s) " +
+            "diverged, each from a gradient that crossed zero within the fused-vs-eager noise.");
     }
 
     /// <summary>

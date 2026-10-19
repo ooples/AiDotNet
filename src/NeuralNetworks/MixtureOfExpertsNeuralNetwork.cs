@@ -365,41 +365,6 @@ public partial class MixtureOfExpertsNeuralNetwork<T> : VectorModelLayoutBase<T>
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
-    /// Trains the Mixture-of-Experts network using the provided input and expected output.
-    /// </summary>
-    /// <param name="input">The input tensor for training.</param>
-    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
-    /// <remarks>
-    /// <para>
-    /// This method performs one training iteration, including:
-    /// - Forward pass through the network
-    /// - Primary loss calculation (task-specific loss)
-    /// - Auxiliary loss calculation (load balancing loss)
-    /// - Backward pass (backpropagation)
-    /// - Parameter update via optimizer
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This is how the MoE network learns.
-    ///
-    /// Training process:
-    /// 1. Show the network some input data and the correct output
-    /// 2. Network makes a prediction using selected experts
-    /// 3. Calculate two types of errors:
-    ///    - Task error: How wrong the prediction was
-    ///    - Balance error: Whether experts are being used evenly
-    /// 4. Adjust the network to reduce both errors
-    /// 5. Repeat many times with different examples
-    ///
-    /// The load balancing ensures all experts contribute and don't collapse to
-    /// using just one or two experts.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        TrainWithTape(input, expectedOutput, _optimizer);
-    }
-
-    /// <summary>
     /// Retrieves metadata about the Mixture-of-Experts neural network model.
     /// </summary>
     /// <returns>A ModelMetadata object containing information about the network.</returns>

@@ -286,25 +286,6 @@ public partial class VinVL<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
 
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => RunStream(input);
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            // Passing no optimizer here silently selects NeuralNetworkBase's
-            // generic Adam at 1e-3 and ignores VinVLOptions. That rate is 20x
-            // the official VinVL/Oscar+ recipe and can make the first FP32
-            // update non-finite on the 12-layer encoder.
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being

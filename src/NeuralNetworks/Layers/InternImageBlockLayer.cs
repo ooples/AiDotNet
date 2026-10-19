@@ -130,9 +130,6 @@ public sealed partial class InternImageBlockLayer<T> : LayerBase<T>, IShapeContr
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameterGradients() => Concatenate(_parameterLayers, gradients: true);
-
-    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         foreach (var layer in _parameterLayers) layer.UpdateParameters(learningRate);

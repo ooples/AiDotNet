@@ -241,6 +241,8 @@ public partial class NodeClassificationModel<T> : GraphModelLayoutBase<T>, AiDot
     /// All graph convolutional layers in the model will use this adjacency matrix.
     /// </para>
     /// </remarks>
+    // Points every graph layer at an adjacency without changing the model's own: a training step's packed copy, then
+    // the model's again.
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
         _cachedAdjacencyMatrix = adjacencyMatrix;
@@ -297,41 +299,18 @@ public partial class NodeClassificationModel<T> : GraphModelLayoutBase<T>, AiDot
         return base.ForwardForTraining(input);
     }
 
-    /// <summary>
-    /// Runs one gradient-descent training step over the full node-feature batch
-    /// using this model's own optimizer through the GradientTape path.
-    /// </summary>
+    /// <inheritdoc/>
     /// <remarks>
-    /// <para>
-    /// This override is required because the base <see cref="NeuralNetworkBase{T}.Train"/>
-    /// default did not update this model's graph-convolutional layer parameters:
-    /// it resolved a fresh base optimizer rather than the model's configured
-    /// optimizer and did not wire the adjacency for the training forward, so
-    /// every step was a no-op (loss flat, weights unchanged). Mirroring
-    /// <c>GraphNeuralNetwork</c>, we wire the graph and drive the update with the
-    /// model's optimizer via <see cref="NeuralNetworkBase{T}.TrainWithTape"/>.
-    /// </para>
-    /// <para>
-    /// For semi-supervised node classification, pass an <paramref name="expectedOutput"/>
-    /// whose rows are one-hot for the labeled training nodes and all-zeros for the
-    /// unlabeled nodes: the log-softmax cross-entropy loss multiplies the target in,
-    /// so all-zero rows contribute zero gradient and only the labeled nodes drive
-    /// learning while every node still participates in message passing.
-    /// </para>
+    /// Trains over the input's graph (a default adjacency when none was set) with the configured tape loss. A loss that
+    /// is not tape-differentiable falls back to the standard step.
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> target)
     {
-        if (!IsTrainingMode)
-        {
-            SetTrainingMode(true);
-        }
-
         EnsureDefaultAdjacencyForInput(input);
-        TrainWithTape(input, expectedOutput, _optimizer);
-
-        SetTrainingMode(false);
+        return _lossFunction is LossFunctionBase<T> tapeLoss && _cachedAdjacencyMatrix is { } adjacency
+            ? GraphTrainingObjective(input, adjacency, target, Forward, tapeLoss)
+            : null;
     }
-
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>

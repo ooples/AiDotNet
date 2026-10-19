@@ -508,7 +508,8 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
         Tensor<T> context;
         if (!cacheBwd
             && _alibiLayer == null
-            && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null)
+            && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
+            && !AiDotNet.Autodiff.GradientRecording.IsTrainingTrace)
         {
             // â”€â”€ Inference fast path â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             // Fused interleaved RoPE + GQA-aware scaled-dot-product attention, both
@@ -649,7 +650,8 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
         // to the Engine SDPA path below, which applies an additive causal mask so the cap and mask compose.
         if (_useCausalMask
             && _attnLogitSoftcap <= 0.0
-            && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null)
+            && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
+            && !AiDotNet.Autodiff.GradientRecording.IsTrainingTrace)
         {
             var flashConfig = new FlashAttentionConfig { ReturnAttentionWeights = true, UseCausalMask = true };
             var (flashOutput, flashWeights) = FlashAttention<T>.Forward(
@@ -773,31 +775,6 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
         Engine.TensorAddInPlace(_valueWeights, Engine.TensorMultiplyScalar(_valueWeightsGradient, negLR));
         Engine.TensorAddInPlace(_outputWeights, Engine.TensorMultiplyScalar(_outputWeightsGradient, negLR));
         Engine.TensorAddInPlace(_outputBias, Engine.TensorMultiplyScalar(_outputBiasGradient, negLR));
-    }
-
-    public override Vector<T> GetParameterGradients()
-    {
-        EnsureWeightsMaterialized();
-        var gradTensors = new[] { _queryWeightsGradient, _keyWeightsGradient, _valueWeightsGradient, _outputWeightsGradient, null, null, null, _outputBiasGradient };
-        var weightTensors = new[] { _queryWeights, _keyWeights, _valueWeights, _outputWeights, _queryBias, _keyBias, _valueBias, _outputBias };
-        int totalParams = weightTensors.Sum(w => w.Length);
-        var result = new Vector<T>(totalParams);
-        int index = 0;
-        for (int g = 0; g < gradTensors.Length; g++)
-        {
-            var grad = gradTensors[g];
-            int len = weightTensors[g].Length;
-            if (grad != null)
-            {
-                for (int i = 0; i < len; i++)
-                    result[index++] = grad[i];
-            }
-            else
-            {
-                index += len;
-            }
-        }
-        return result;
     }
 
     public override void ClearGradients()

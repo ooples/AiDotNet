@@ -258,9 +258,6 @@ public partial class TiedEmbeddingHeadLayer<T> : LayerBase<T>, ILayerGraphBindin
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients() => new Vector<T>(0);
-
-    /// <inheritdoc/>
     public override void ClearGradients() { base.ClearGradients(); }
 
     /// <inheritdoc/>

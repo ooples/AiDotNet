@@ -1094,45 +1094,34 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
         var patches = _patchEmbedding.Forward(image);
         int numPatches = patches.Shape[0];
 
-        // Add CLS token
-        var withCls = Tensor<T>.CreateDefault([numPatches + 1, _visionHiddenDim], NumOps.Zero);
-        for (int j = 0; j < _visionHiddenDim; j++)
-        {
-            withCls[0, j] = _visionClsToken[0, j];
-        }
-        for (int i = 0; i < numPatches; i++)
-        {
-            for (int j = 0; j < _visionHiddenDim; j++)
-            {
-                withCls[i + 1, j] = patches[i, j];
-            }
-        }
+        // Prepend the CLS token and add the positional embeddings with engine operations, so the tape reaches the
+        // CLS token, the positional embeddings and the patch embedding. Host element copies cut them off: the
+        // previous training step could only apply stale accumulated gradients.
+        var clsRow = Engine.TensorSlice(_visionClsToken, new[] { 0, 0 }, new[] { 1, _visionHiddenDim });
+        var patchRows = Engine.Reshape(patches, new[] { numPatches, _visionHiddenDim });
+        var withCls = Engine.TensorConcatenate(new[] { clsRow, patchRows }, axis: 0);
 
-        // Add positional embeddings
         int posLen = Math.Min(withCls.Shape[0], _visionPositionalEmbeddings.Shape[0]);
-        for (int i = 0; i < posLen; i++)
+        var positional = Engine.TensorSlice(_visionPositionalEmbeddings, new[] { 0, 0 }, new[] { posLen, _visionHiddenDim });
+        if (posLen < withCls.Shape[0])
         {
-            for (int j = 0; j < _visionHiddenDim; j++)
+            positional = Engine.TensorConcatenate(new[]
             {
-                withCls[i, j] = NumOps.Add(withCls[i, j], _visionPositionalEmbeddings[i, j]);
-            }
+                positional,
+                new Tensor<T>(new[] { withCls.Shape[0] - posLen, _visionHiddenDim }),
+            }, axis: 0);
         }
 
-        var visionOutput = withCls;
+        var visionOutput = Engine.TensorAdd(withCls, positional);
 
         // Step 2: Q-Former
         if (_queryTokens is null || _queryPositionalEmbeddings is null)
             throw new InvalidOperationException("Q-Former not initialized.");
 
-        // Initialize query embeddings
-        var queryEmbeddings = Tensor<T>.CreateDefault([_numQueryTokens, _qformerHiddenDim], NumOps.Zero);
-        for (int i = 0; i < _numQueryTokens; i++)
-        {
-            for (int j = 0; j < _qformerHiddenDim; j++)
-            {
-                queryEmbeddings[i, j] = NumOps.Add(_queryTokens[i, j], _queryPositionalEmbeddings[i, j]);
-            }
-        }
+        // The learned queries plus their positional embeddings (Li et al. 2023), recorded on the tape.
+        var queryEmbeddings = Engine.TensorAdd(
+            Engine.TensorSlice(_queryTokens, new[] { 0, 0 }, new[] { _numQueryTokens, _qformerHiddenDim }),
+            Engine.TensorSlice(_queryPositionalEmbeddings, new[] { 0, 0 }, new[] { _numQueryTokens, _qformerHiddenDim }));
 
         // Process through Q-Former layers
         for (int layer = 0; layer < _numQformerLayers; layer++)
@@ -1164,21 +1153,10 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
         // Project to embedding dimension
         if (_itcProjection is not null)
         {
-            var projected = Tensor<T>.CreateDefault([_numQueryTokens, _embeddingDimension], NumOps.Zero);
-            for (int q = 0; q < _numQueryTokens; q++)
-            {
-                var queryVec = Tensor<T>.CreateDefault([_qformerHiddenDim], NumOps.Zero);
-                for (int j = 0; j < _qformerHiddenDim; j++)
-                {
-                    queryVec[j] = queryEmbeddings[q, j];
-                }
-                var projVec = _itcProjection.Forward(queryVec);
-                for (int j = 0; j < _embeddingDimension; j++)
-                {
-                    projected[q, j] = projVec[j];
-                }
-            }
-            return projected;
+            // Every query row through the projection at once: the dense layer maps the last axis.
+            return Engine.Reshape(
+                _itcProjection.Forward(Engine.Reshape(queryEmbeddings, new[] { _numQueryTokens, _qformerHiddenDim })),
+                new[] { _numQueryTokens, _embeddingDimension });
         }
 
         return queryEmbeddings;
@@ -1948,33 +1926,8 @@ public partial class Blip2NeuralNetwork<T> : MultimodalModelLayoutBase<T>, IBlip
 
     // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-
-        // For BLIP-2, training involves:
-        // 1. Image-Text Contrastive (ITC) loss
-        // 2. Image-Text Matching (ITM) loss
-        // 3. Image-grounded Text Generation (ITG) loss
-
-        // Forward pass
-        var imageOutput = Forward(input);
-
-        // Compute loss (simplified: contrastive loss)
-        LastLoss = LossFunction.CalculateLoss(imageOutput.ToVector(), expectedOutput.ToVector());
-
-        // Backward pass - compute gradients
-        var lossGradient = LossFunction.ComputeGradient(imageOutput.ToVector(), expectedOutput.ToVector());
-        var gradient = Tensor<T>.FromVector(lossGradient);
-
-        // Apply gradient descent update using the computed gradients
-        // The Backward pass accumulates gradients in layers
-        var paramGradients = GetBlip2ParameterGradients();
-        UpdateParameters(paramGradients);
-
-        SetTrainingMode(false);
-    }
-
+    /// <remarks>The training forward is the Q-Former feature path prediction uses, recorded on the tape.</remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => ExtractQFormerFeatures(input);
     /// <summary>
     /// Gets the gradients for all BLIP-2 trainable parameters.
     /// </summary>

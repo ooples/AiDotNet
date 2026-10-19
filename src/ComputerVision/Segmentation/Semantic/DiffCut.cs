@@ -173,34 +173,6 @@ public partial class DiffCut<T> : Common.SemanticSegmentationBase<T>
         return !_useNativeMode ? PredictOnnx(input) : Forward(input);
     }
 
-    /// <summary>
-    /// Performs one training step.
-    /// </summary>
-    /// <param name="input">Input image tensor.</param>
-    /// <param name="expectedOutput">Ground-truth segmentation map.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Optional fine-tuning of the diffusion feature extractor.
-    /// DiffCut is designed for zero-shot use, but training can improve domain-specific performance.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown in ONNX mode.</exception>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is not supported in ONNX mode.");
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, Optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     #endregion
 
     #region Private Methods

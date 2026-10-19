@@ -79,7 +79,7 @@ public partial class SECBERT<T> : FinancialNLPModelBase<T>, ITrainingObjectivePr
         => LossFunction.ComputeTapeLoss(ForwardForTraining(input), target).Data.Span[0];
 
     /// <inheritdoc/>
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
     #endregion
 

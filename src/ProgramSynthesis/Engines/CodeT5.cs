@@ -66,7 +66,7 @@ namespace AiDotNet.ProgramSynthesis.Engines;
                         + "epochs. The linear decay is declared as a polynomial schedule of power 1, "
                         + "which is that same shape. The optimizer is left unspecified because the paper "
                         + "names none -- its one occurrence of Adam is the author Adam Roberts.")]
-public class CodeT5<T> : CodeModelBase<T>
+public partial class CodeT5<T> : CodeModelBase<T>
 {
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
@@ -152,25 +152,6 @@ public class CodeT5<T> : CodeModelBase<T>
         CodeTransformerLayerFactory.AddEncoderBlocks(Layers, CodeArchitecture);
         CodeTransformerLayerFactory.AddDecoderBlocks(Layers, CodeArchitecture);
         CodeTransformerLayerFactory.AddOutputProjection(Layers, CodeArchitecture);
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // Route through TrainWithTape — same fix as CodeBERT.Train.
-        // CodeT5 is a T5-class encoder-decoder per Wang et al. 2021
-        // "CodeT5: Identifier-aware Unified Pre-trained Encoder-Decoder
-        // Models for Code Understanding and Generation"
-        // (arXiv:2109.00859). Backprop via the tape covers the embedding,
-        // encoder, decoder, and output-projection trainables.
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
     }
 
     public override ModelMetadata<T> GetModelMetadata()

@@ -518,27 +518,6 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
         _outputProjectionWeights, _outputProjectionBias
     ];
 
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_inputGateWeightsGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-
-        Vector<T> G(Tensor<T>? grad, Tensor<T> param) =>
-            grad != null ? new Vector<T>(grad.ToArray()) : new Vector<T>(param.Length);
-
-        return Vector<T>.Concatenate(
-            G(_inputGateWeightsGradient, _inputGateWeights),
-            G(_inputGateBiasGradient, _inputGateBias),
-            G(_forgetGateWeightsGradient, _forgetGateWeights),
-            G(_forgetGateBiasGradient, _forgetGateBias),
-            G(_outputGateWeightsGradient, _outputGateWeights),
-            G(_outputGateBiasGradient, _outputGateBias),
-            G(_queryWeightsGradient, _queryWeights),
-            G(_keyWeightsGradient, _keyWeights),
-            G(_valueWeightsGradient, _valueWeights),
-            G(_outputProjectionWeightsGradient, _outputProjectionWeights),
-            G(_outputProjectionBiasGradient, _outputProjectionBias));
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

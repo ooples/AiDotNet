@@ -2144,59 +2144,24 @@ public partial class NeuralTuringMachine<T> : SequenceModelLayoutBase<T>, IAuxil
         return current;
     }
 
-    /// <summary>
-    /// Trains the Neural Turing Machine on a single batch of input-output pairs.
-    /// </summary>
-    /// <param name="input">The input tensor for training.</param>
-    /// <param name="expectedOutput">The expected output tensor.</param>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc/>
+    /// <remarks>Single sequences are batched; input and target must have the same batch size.</remarks>
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
     {
-        // Issue #1670: force full parameter materialization before the first training
-        // step. NTM's DenseLayers initialize LAZILY (on first Forward); when training
-        // is driven from an already-warmed-but-not-fully-materialized state (e.g. an
-        // eval Predict probe materialized only part of the graph), the optimizer's
-        // parameter collection on the first step can race the remaining lazy init,
-        // making the trained trajectory non-deterministic run-to-run (~10% flake on
-        // MoreData_ShouldNotDegrade). Reading GetParameters() here forces every layer
-        // to resolve deterministically (seeds are wired at construction) BEFORE the
-        // tape trainer collects them, eliminating the timing-dependent variance.
-        _ = GetParameters();
-
-        // Handle 1D input/output: reshape to [1, features]
         if (input.Rank == 1) input = input.Reshape([1, input.Length]);
-        if (expectedOutput.Rank == 1) expectedOutput = expectedOutput.Reshape([1, expectedOutput.Length]);
-
-        if (input.Shape[0] != expectedOutput.Shape[0])
-        {
+        if (target is null) return (input, null);
+        if (target.Rank == 1) target = target.Reshape([1, target.Length]);
+        if (input.Shape[0] != target.Shape[0])
             throw new ArgumentException("Input and expected output must have the same batch size");
-        }
+        return (input, target);
+    }
 
-        // Set to training mode
-        SetTrainingMode(true);
-        try
-        {
-            // Delegate to the shared tape-walking trainer in NeuralNetworkBase.
-            // TrainWithTape runs the full forward → loss → Backward → optimizer
-            // step pipeline, which populates each layer's per-parameter
-            // gradient buffers and applies the optimizer's update rule. The
-            // prior hand-rolled implementation in this method computed
-            // outputGradients but never invoked Backward on any layer, so
-            // DenseLayer.UpdateParameters threw
-            // "Backward pass must be called before updating parameters." —
-            // see the NeuralTuringMachineTests suite (Training_*,
-            // GradientFlow_*, etc.) which all crashed at that point.
-            // optimizer = null routes through the model's resolved default
-            // optimizer (set via the architecture/builder pipeline). NTM
-            // doesn't expose a dedicated _optimizer field — passing null
-            // matches the pattern used by ConvolutionalNeuralNetwork and
-            // other models that don't carry their own optimizer reference.
-            TrainWithTape(input, expectedOutput, optimizer: null);
-        }
-        finally
-        {
-            // Reset to inference mode
-            SetTrainingMode(false);
-        }
+    /// <inheritdoc/>
+    /// <remarks>The controller and memory parameters are materialized before the step reads them.</remarks>
+    protected override void OnTrainingStepStarting(Tensor<T> input, Tensor<T> target)
+    {
+        base.OnTrainingStepStarting(input, target);
+        _ = GetParameters();
     }
 
     /// <summary>

@@ -693,44 +693,6 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
         Engine.InvalidatePersistentTensor(_gateBias);
     }
 
-    /// <summary>
-    /// Resets the internal state of the layer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method resets the internal state of the GLU layer by clearing all cached values from forward
-    /// and backward passes. This includes inputs, intermediate outputs, and gradients.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
-    /// 
-    /// When resetting the state:
-    /// - The saved input is cleared
-    /// - The saved linear and gate outputs are cleared
-    /// - All calculated gradients are cleared
-    /// - The layer forgets previous calculations it performed
-    /// 
-    /// This is typically called:
-    /// - Between training batches to free up memory
-    /// - When switching from training to evaluation mode
-    /// - When starting to process completely new data
-    /// 
-    /// It's like wiping a whiteboard clean before starting a new calculation.
-    /// Note that this doesn't affect the learned weights and biases, just the
-    /// temporary working data.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_linearWeightsGradient == null || _gateWeightsGradient == null ||
-            _linearBiasGradient == null || _gateBiasGradient == null)
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        return Vector<T>.Concatenate(
-            new Vector<T>(_linearWeightsGradient.ToArray()),
-            new Vector<T>(_gateWeightsGradient.ToArray()),
-            new Vector<T>(_linearBiasGradient.ToArray()),
-            new Vector<T>(_gateBiasGradient.ToArray()));
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

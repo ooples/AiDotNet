@@ -293,13 +293,15 @@ public partial class Transfusion<T>
     /// any other shape carries no text, which leaves the diffusion term alone with no tokens to
     /// score. See <see cref="TrainMixedModal"/> for the masks each term is read under.
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         if (input is null) throw new ArgumentNullException(nameof(input));
         if (expected is null) throw new ArgumentNullException(nameof(expected));
         TrainMixedModal(input, expected);
+
+        return true;
     }
 
     /// <inheritdoc />

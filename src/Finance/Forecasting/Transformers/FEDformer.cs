@@ -530,25 +530,6 @@ public partial class FEDformer<T> : ForecastingModelBase<T>
         return Forecast(input);
     }
 
-    /// <summary>
-    /// Trains the model on a single batch.
-    /// </summary>
-    /// <param name="input">Input tensor.</param>
-    /// <param name="expectedOutput">Target tensor.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Training adjusts the model's parameters to minimize prediction error.
-    /// FEDformer learns which frequency components are most important for forecasting.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        TrainWithTape(input, expectedOutput, _optimizer);
-    }
-
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
         => new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             this,

@@ -184,24 +184,6 @@ public partial class WhisperSpeech<T> : TtsModelBase<T>, ICodecTts<T>
         return c;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            // WhisperSpeech trains token logits with cross-entropy. Pass the configured
-            // AdamW instance explicitly; otherwise TrainWithTape silently selects the generic
-            // base optimizer and ignores the model's paper/project learning-rate settings.
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being

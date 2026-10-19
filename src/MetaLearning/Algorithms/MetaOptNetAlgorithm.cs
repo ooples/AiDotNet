@@ -265,13 +265,14 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
         var (fixedSupport, fixedQuery) = Embed(task, episode);
         T loss;
         var scaleGradient = new Vector<T>(1);
-        using (var tape = new GradientTape<T>(new GradientTapeOptions { Persistent = true }))
-        {
-            var objective = QueryLoss(fixedSupport, fixedQuery, episode, scaleTensor);
-            loss = objective[0];
-            var gradients = tape.ComputeGradients(objective, new[] { scaleTensor });
-            if (gradients.TryGetValue(scaleTensor, out var g)) scaleGradient[0] = g[0];
-        }
+        loss = AiDotNet.Training.TapeGradients<T>.Of(
+            () => QueryLoss(fixedSupport, fixedQuery, episode, scaleTensor),
+            new[] { scaleTensor },
+            gradients =>
+            {
+                if (gradients.TryGetValue(scaleTensor, out var g)) scaleGradient[0] = g[0];
+            },
+            persistent: true);
 
         return (loss, bodyGradient, scaleGradient);
     }
@@ -329,11 +330,12 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
         var labels = SupportLabels(episode, n);
         var oneHot = new double[n, classes];
         for (int i = 0; i < n; i++) oneHot[i, labels[i]] = 1.0;
+        double? regularizationStrength = _metaOptNetOptions.RegularizationStrength;
 
         if (_metaOptNetOptions.SolverType == ConvexSolverType.LogisticRegression)
         {
             var features = ToDoubles(support);
-            double logisticLambda = _metaOptNetOptions.RegularizationStrength ?? _metaOptNetOptions.LogisticLambda;
+            double logisticLambda = regularizationStrength ?? _metaOptNetOptions.LogisticLambda;
             var (weights, hessianInverse) = ConvexBaseLearners.SolveLogistic(
                 features, oneHot, logisticLambda,
                 _metaOptNetOptions.MaxSolverIterations, _metaOptNetOptions.SolverTolerance);
@@ -356,7 +358,7 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
 
         if (_metaOptNetOptions.SolverType == ConvexSolverType.SVM)
         {
-            double cost = _metaOptNetOptions.RegularizationStrength ?? _metaOptNetOptions.SvmCost;
+            double cost = regularizationStrength ?? _metaOptNetOptions.SvmCost;
             var alpha = ConvexBaseLearners.SolveCrammerSingerDual(
                 kernel, labels, classes, cost, _metaOptNetOptions.MaxSolverIterations, _metaOptNetOptions.SolverTolerance);
             var jacobianInverse = ConvexBaseLearners.CrammerSingerJacobianInverse(
@@ -369,7 +371,7 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
             return new Solved(Implicit(solution, residual, jacobianInverse, n, classes), solution, isDual: true);
         }
 
-        double ridge = _metaOptNetOptions.RegularizationStrength ?? _metaOptNetOptions.RidgeLambda;
+        double ridge = regularizationStrength ?? _metaOptNetOptions.RidgeLambda;
         var (dual, inverse) = ConvexBaseLearners.SolveRidgeDual(kernel, oneHot, ridge);
 
         // (K + lambda I) M - Y = 0 at the solution.

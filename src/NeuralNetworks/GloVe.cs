@@ -398,29 +398,6 @@ namespace AiDotNet.NeuralNetworks
         protected override Tensor<T> PredictEager(Tensor<T> input) => Forward(input);
 
         /// <summary>
-        /// Trains the model on a batch of word pairs and their co-occurrence counts.
-        /// </summary>
-        /// <param name="input">The word pair indices.</param>
-        /// <param name="expectedOutput">The actual co-occurrence counts from the dataset.</param>
-        /// <remarks>
-        /// <b>For Beginners:</b> This is how the model gets smarter. You show it two words and 
-        /// how often they appeared together in your data. The model then adjusts its "addresses" 
-        /// for those words so the distances between them reflect that frequency.
-        /// </remarks>
-        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-        {
-            SetTrainingMode(true);
-            try
-            {
-                TrainWithTape(input, expectedOutput, _optimizer);
-            }
-            finally
-            {
-                SetTrainingMode(false);
-            }
-        }
-
-        /// <summary>
         /// Clips gradients and uses the optimizer to update layer parameters.
         /// </summary>
         private void UpdateParameters(List<Tensor<T>> gradients)

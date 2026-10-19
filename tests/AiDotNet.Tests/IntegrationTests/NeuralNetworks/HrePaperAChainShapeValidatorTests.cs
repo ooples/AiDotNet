@@ -302,7 +302,6 @@ public partial class HrePaperAChainShapeValidatorTests
         public override void UpdateParameters(float learningRate) { }
         public override Vector<float> GetParameters() => new Vector<float>(0);
         public override void SetParameters(Vector<float> parameters) { }
-        public override Vector<float> GetParameterGradients() => new Vector<float>(0);
         public override void ResetState() { }
     }
 }

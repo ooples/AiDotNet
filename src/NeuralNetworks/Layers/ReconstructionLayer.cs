@@ -491,41 +491,6 @@ public partial class ReconstructionLayer<T> : LayerBase<T>, IShapeContract
         _fc3.UpdateParameters(learningRate);
     }
 
-    /// <summary>
-    /// Sets the trainable parameters of the reconstruction layer.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for all three fully connected layers.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets the trainable parameters of the reconstruction layer from a single vector.
-    /// It extracts the appropriate portions of the vector for each of the three fully connected layers
-    /// and sets their parameters accordingly. This is useful for loading saved model weights or for
-    /// implementing optimization algorithms that operate on all parameters at once.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the weights and biases in the reconstruction layer.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with the correct total length
-    /// - The method divides this vector into three parts, one for each internal layer
-    /// - Each internal layer gets its own specific section of parameters
-    /// 
-    /// This is useful for:
-    /// - Loading a previously saved model
-    /// - Transferring parameters from another model
-    /// - Testing different parameter values
-    /// 
-    /// An error is thrown if the input vector doesn't have the expected number of parameters.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        return Vector<T>.Concatenate(
-            _fc1.GetParameterGradients(),
-            _fc2.GetParameterGradients(),
-            _fc3.GetParameterGradients());
-    }
-
 
     public override void ClearGradients()
     {

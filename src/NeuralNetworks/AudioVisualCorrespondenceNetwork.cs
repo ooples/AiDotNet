@@ -1151,19 +1151,6 @@ public partial class AudioVisualCorrespondenceNetwork<T> : MultimodalModelLayout
     // removed and the base (correct) implementation is used.
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-    /// <inheritdoc/>
     protected override void RegisterState(ModelStateRegistry<T> state)
     {
         base.RegisterState(state);

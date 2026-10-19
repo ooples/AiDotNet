@@ -227,19 +227,16 @@ public partial class KOSMOS1<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
     }
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// <paramref name="expected"/> is either caption token ids <c>[T]</c> (next-token cross-entropy on the caption,
-    /// the pre-training objective) or a <c>[NumImageTokens + 3, VocabSize]</c> soft target over
-    /// <see cref="PredictCore"/>'s positions.
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
+    /// <remarks>The core's multimodal loss on the preprocessed image against the target.</remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> expected)
     {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        if (input is null) throw new ArgumentNullException(nameof(input));
-        if (expected is null) throw new ArgumentNullException(nameof(expected));
         var core = Core;
-        TrainWithCustomObjective(PreprocessImage(input), expected, (image, target) => core.Loss(image, target), _optimizer);
+        return new[]
+        {
+            new Training.TrainingObjective<T>(
+                new[] { PreprocessImage(input), expected },
+                data => core.Loss(data[0], data[1])),
+        };
     }
 
     /// <summary>

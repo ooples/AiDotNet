@@ -468,37 +468,6 @@ public partial class SparseLinearLayer<T> : LayerBase<T>, IShapeContract
         return metadata;
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        // Match GetParameters layout: non-zero weights (CSR order) + biases
-        var gradients = new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        int idx = 0;
-
-        if (_weightsGradient != null)
-        {
-            // Iterate non-zero positions in same CSR order as GetParameters
-            for (int nz = 0; nz < _weights.NonZeroCount; nz++)
-            {
-                int row = _weights.RowIndices[nz];
-                int col = _weights.ColumnIndices[nz];
-                gradients[idx++] = _weightsGradient[row, col];
-            }
-        }
-        else
-        {
-            idx += _weights.NonZeroCount;
-        }
-
-        if (_biasesGradient != null)
-        {
-            for (int o = 0; o < OutputFeatures; o++)
-                gradients[idx++] = _biasesGradient[o];
-        }
-
-        return gradients;
-    }
-
     /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>

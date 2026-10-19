@@ -641,47 +641,6 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
 
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <summary>
-    /// Trains the model on a single batch.
-    /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Cannot train in ONNX inference mode.");
-        }
-
-        SetTrainingMode(true);
-        try
-        {
-            // Pass the model's own non-AMSGrad AdamOptimizer explicitly.
-            // The optimizer-null branch would otherwise fall back to
-            // GetOrCreateBaseOptimizer (which builds an AMSGrad Adam),
-            // and the fused-Adam fast path bails out on AMSGrad — leaving
-            // every step on the BERT-base-scale wav2vec2 encoder running
-            // through the eager tape executor at multi-second cost per
-            // iteration.
-            //
-            // The cast goes through `as ... ?? throw` rather than plain
-            // `as` so a user passing a non-gradient optimizer fails loudly
-            // instead of silently dropping into the default-optimizer
-            // fallback (would mask intent and produce mysteriously-different
-            // training trajectories). PR #1404 review (CodeRabbit).
-            var gradientOptimizer = _optimizer
-                ?? throw new InvalidOperationException(
-                    "Wav2Vec2Model training requires an optimizer implementing IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>.");
-            // Train on the SAME preprocessed feature stream inference runs on (PredictCore ->
-            // PreprocessAudio -> Forward). Feeding raw input straight to the tape produced a
-            // different-shaped forward than Predict ([1,64,34] vs the preprocessed [.,34]), so the
-            // MSE loss shape-mismatched and every training-based invariant failed.
-            TrainWithTape(input, expectedOutput, gradientOptimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <summary>
     /// Gets metadata about the model.
     /// </summary>
     public override ModelMetadata<T> GetModelMetadata()

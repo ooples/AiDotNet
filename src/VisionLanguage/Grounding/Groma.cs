@@ -205,7 +205,8 @@ public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
             {
                 double val = NumOps.ToDouble(visualFeatures[d]);
                 double spatialX = (double)(d % gridSize) / gridSize;
-                double spatialY = (double)(d / gridSize) / gridSize;
+                int row = d / gridSize;   // the feature's integer grid row
+                double spatialY = (double)row / gridSize;
                 double weight = Math.Abs(val);
                 attnCx += spatialX * weight;
                 attnCy += spatialY * weight;
@@ -230,7 +231,8 @@ public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
             {
                 double val = NumOps.ToDouble(visualFeatures[d]);
                 double spatialX = (double)(d % gridSize) / gridSize;
-                double spatialY = (double)(d / gridSize) / gridSize;
+                int row = d / gridSize;   // the feature's integer grid row
+                double spatialY = (double)row / gridSize;
                 double weight = Math.Abs(val);
                 varX += weight * (spatialX - attnCx) * (spatialX - attnCx);
                 varY += weight * (spatialY - attnCy) * (spatialY - attnCy);
@@ -432,15 +434,6 @@ public partial class Groma<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
     }
 
     /// <inheritdoc />

@@ -983,41 +983,6 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         return diagnostics;
     }
 
-    /// <summary>
-    /// Resets the internal state of the layer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method resets the internal state of the layer by clearing the cached input and embedding gradients
-    /// from previous forward and backward passes. This is useful when starting to process a new batch of
-    /// data or when implementing stateful recurrent networks.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
-    ///
-    /// When resetting the state:
-    /// - The saved input token IDs are cleared
-    /// - The calculated gradients are cleared
-    /// - The layer forgets previous calculations it performed
-    ///
-    /// This is typically called:
-    /// - Between training batches to free up memory
-    /// - When switching from training to evaluation mode
-    /// - When starting to process completely new data
-    ///
-    /// It doesn't affect the learned embeddings themselves, just the temporary
-    /// working data used during computation.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        // No backward has run yet: preserve the framework-wide zero-gradient query contract.
-        if (_embeddingGradient == null)
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-
-        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
-        return Vector<T>.FromMemory(_embeddingGradient.Data);
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

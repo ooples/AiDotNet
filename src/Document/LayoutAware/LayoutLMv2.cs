@@ -846,32 +846,6 @@ public partial class LayoutLMv2<T> : DocumentNeuralNetworkBase<T>, ILayoutDetect
         return RunMultimodal(tokens, image);
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-
-        // TrainWithTape runs the full forward (ForwardForTraining -> the two-stream RunMultimodal),
-        // backprop through the autodiff tape, and the optimizer parameter update. The previous code
-        // ALSO ran a manual UpdateParameters(CollectGradients()) afterwards — a redundant second
-        // gradient-descent step whose hand-collected gradient vector didn't match GetParameters'
-        // length (Expected N params, got N+12288), crashing every training step. Use the tape path only.
-        SetTrainingMode(true);
-        try
-        {
-            var gradientOptimizer = _optimizer
-                ?? throw new InvalidOperationException(
-                    "LayoutLMv2 training requires an optimizer implementing " +
-                    "IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>.");
-            TrainWithTape(input, expectedOutput, gradientOptimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
 

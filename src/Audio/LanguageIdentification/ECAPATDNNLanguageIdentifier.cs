@@ -388,26 +388,6 @@ public partial class ECAPATDNNLanguageIdentifier<T> : AudioNeuralNetworkBase<T>,
     }
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!SupportsTraining)
-            throw new InvalidOperationException("Cannot train in ONNX mode.");
-
-        SetTrainingMode(true);
-        try
-        {
-            // TrainWithTape runs the forward, loss, backward and the configured optimizer step. The
-            // previous body computed a loss, discarded it, and asked the optimizer to update Layers -
-            // which was empty, and which had received no gradient.
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <inheritdoc/>
     /// <remarks>
     /// Runs the same MFCC front end prediction runs, so the objective optimizes the function
     /// inference evaluates.

@@ -501,27 +501,6 @@ public partial class VocosGeneratorLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        // Tape-based optimizers consume the registered tensors directly. Preserve the same flattened
-        // ordering for legacy callers; child-layer manual gradients are still exposed where present.
-        var values = new List<T>((int)ParameterCount);
-        foreach (var (layer, scale) in OrderedParameterParts())
-        {
-            if (layer is not null)
-            {
-                var gradients = layer.GetParameterGradients();
-                for (int i = 0; i < gradients.Length; i++) values.Add(gradients[i]);
-            }
-            else if (scale is not null)
-            {
-                for (int i = 0; i < scale.Length; i++) values.Add(NumOps.Zero);
-            }
-        }
-        return new Vector<T>(values.ToArray());
-    }
-
-    /// <inheritdoc/>
     public override void ClearGradients()
     {
         base.ClearGradients();

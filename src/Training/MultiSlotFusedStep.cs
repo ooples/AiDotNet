@@ -1,377 +1,160 @@
 using System;
 using System.Collections.Generic;
+using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
-using AiDotNet.Tensors.Engines.Compilation;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
-using OptimizerType = AiDotNet.Tensors.Engines.Compilation.OptimizerType;
+using AiDotNet.Validation;
 
 namespace AiDotNet.Training;
 
-// Local mirror of AiDotNet.Tensors.Engines.Training.MultiSlotFusedStep<T>
-// (Tensors PR ooples/AiDotNet.Tensors#763). Same API by design — when that PR
-// merges and the AiDotNet.Tensors NuGet publishes, this file gets deleted and
-// the `using AiDotNet.Training` in consumers swaps to
-// `using AiDotNet.Tensors.Engines.Training`.
-
 /// <summary>
-/// Fused-resident training step with N persistent input slots — supersedes the
-/// two-slot (input + target) mechanism in higher-level wrappers when a model's
-/// training loop needs to refresh more than two tensors per step.
-///
-/// <para><b>Motivating cases:</b></para>
-/// <list type="bullet">
-///   <item><b>Batched-per-element diffusion</b> (Ho et al. 2020, HuggingFace
-///   diffusers): each step provides <c>[clean_sample, noise, timesteps]</c> where
-///   timesteps is a per-batch-element scalar vector. The compiled plan captures
-///   references to all three; the trainer refreshes them per step so replays see
-///   fresh RNG draws without recompilation.</item>
-///   <item><b>Classifier-free-guidance</b> conditional generation: each step
-///   provides <c>[latent, text_embedding, class_embedding, timesteps]</c>.</item>
-///   <item><b>TFT-style forecasters</b> with static, historical, and future
-///   covariates as separate inputs.</item>
-///   <item><b>Stochastic training</b> (CSDI, TabDDPM): timestep index and noise
-///   sample are per-step data, not compile-time constants — this trainer feeds
-///   them as slots.</item>
-/// </list>
-///
-/// <para><b>Contract:</b> caller allocates persistent tensors OR passes fresh
-/// data per step; the trainer copies fresh data into stable-reference persistent
-/// tensors before every plan.Step() so the compiled graph re-reads current data
-/// without needing to recompile. Plan cache is keyed by the composite shapes of
-/// ALL slots — a shape change in any slot triggers a recompile.</para>
+/// A fused training step whose forward reads several per-step input slots, run on the shared
+/// <see cref="FusedTrainingSession{T}"/>.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Stochastic trainers (CSDI, TabDDPM, TabSyn, FinDiff, AutoDiffTab) feed per-step data that is not one input and
+/// one target: a noisy sample, the noise, a timestep encoding, conditioning. The session takes one input and one
+/// target, so the slots are flattened into a single <c>[1, N]</c> row and the forward narrows and reshapes them back
+/// with engine ops. A compiled plan therefore replays against every step's fresh slot data, and the session supplies
+/// the fused lifecycle every base class shares: the optimizer mapping, the committed-failure policy and the
+/// parameter-persistence probe.
+/// </para>
+/// <para>
+/// The plan owns the optimizer state from its first step, so a model whose weights are created lazily resolves them
+/// with one forward outside the tape before that step; an eager first step would leave its moments in the eager
+/// optimizer and the plan would restart them from zero.
+/// </para>
+/// </remarks>
 /// <typeparam name="T">Numeric type (float / double).</typeparam>
 public sealed class MultiSlotFusedStep<T> : IDisposable
 {
-    // Persistent slot tensors — captured by the compiled plan at trace time.
-    // Refreshed in place per step by copying fresh caller data into them.
-    // Reference stability is essential: the plan replays against these exact
-    // tensor instances, so we must never replace them (only mutate contents).
-    private Tensor<T>[]? _persistentSlots;
-
-    // Cached compiled plan. Keyed by the composite shape of all slots plus the
-    // trainable-layer set identity. A shape change or layer swap invalidates
-    // and recompiles on the next Step.
-    private ICompiledTrainingPlan<T>? _plan;
-    private int[]? _cachedShapeKey;
-    private object?[]? _cachedLayerIdentities;
-    private Tensor<T>[]? _cachedParameters;
-
-    // Optimizer configuration frozen at first Step. A different optimizer
-    // config on a subsequent Step invalidates and reconfigures.
-    private (OptimizerType Type, double Lr, double B1, double B2, double Eps, double Wd)? _configuredOptimizer;
-
+    private readonly FusedTrainingSession<T> _session;
     private bool _disposed;
+    private bool _warmed;
 
-    /// <summary>Whether the fused-resident training step is available on this thread's
-    /// current engine (T == float + DirectGpu with GPU available + compilation enabled).</summary>
-    public static bool IsAvailable =>
-        typeof(T) == typeof(float)
-        && AiDotNetEngine.Current is DirectGpuTensorEngine gpu && gpu.SupportsGpu
-        && AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation;
-
-    /// <summary>
-    /// Runs a single training step with N persistent input slots. The trainer
-    /// owns the persistent tensors internally; callers pass fresh data on every
-    /// call and the trainer copies it into the persistent tensors before running
-    /// the compiled plan.
-    /// </summary>
-    /// <param name="parameters">Trainable tensors that receive optimizer updates.
-    /// Must be a de-duplicated list (shared/tied weights collected once).</param>
-    /// <param name="zeroGradAction">Optional callback invoked before every step
-    /// to clear per-parameter gradient state (e.g. layer-owned .Grad buffers).
-    /// The Tensors library doesn't know about the caller's layer abstraction;
-    /// callers pass a closure that iterates their layers and calls their own
-    /// ZeroGrad. Pass null when no per-step grad reset is required.</param>
-    /// <param name="freshSlotData">Fresh tensor data for each slot. Length and
-    /// shapes must be stable across calls (a change triggers a recompile).</param>
-    /// <param name="forward">Forward closure — receives the persistent slots
-    /// (same references every step, refreshed data) and returns the predicted
-    /// output tensor.</param>
-    /// <param name="computeLoss">Loss closure — receives the forward output and
-    /// the same persistent slots (for target/aux access), returns the scalar
-    /// loss tensor.</param>
-    /// <param name="optimizerType">Fused optimizer kernel to configure.</param>
-    /// <param name="learningRate">Optimizer LR.</param>
-    /// <param name="beta1">Momentum β₁ for Adam-family.</param>
-    /// <param name="beta2">Momentum β₂ for Adam-family.</param>
-    /// <param name="epsilon">Adam ε.</param>
-    /// <param name="weightDecay">Optimizer weight-decay (AdamW-style).</param>
-    /// <param name="lossValue">Scalar loss value from this step.</param>
-    /// <returns>True when the fused compiled step ran successfully. Callers must
-    /// handle false by falling back to eager tape-based training.</returns>
-    public bool TryStep(
-        IReadOnlyList<Tensor<T>> parameters,
-        Action? zeroGradAction,
-        IReadOnlyList<Tensor<T>> freshSlotData,
-        Func<IReadOnlyList<Tensor<T>>, Tensor<T>> forward,
-        Func<Tensor<T>, IReadOnlyList<Tensor<T>>, Tensor<T>> computeLoss,
-        OptimizerType optimizerType,
-        double learningRate,
-        double beta1,
-        double beta2,
-        double epsilon,
-        double weightDecay,
-        out T lossValue)
-        => TryStep(parameters, zeroGradAction, freshSlotData, forward, computeLoss,
-            optimizerType, learningRate, beta1, beta2, epsilon, weightDecay, lrSchedule: null, extras: null, out lossValue);
-
-    /// <summary>
-    /// <see cref="TryStep(IReadOnlyList{Tensor{T}}, Action?, IReadOnlyList{Tensor{T}}, Func{IReadOnlyList{Tensor{T}}, Tensor{T}}, Func{Tensor{T}, IReadOnlyList{Tensor{T}}, Tensor{T}}, OptimizerType, float, float, float, float, float, out T)"/>
-    /// with the optimizer's fused LR schedule and kernel extras (from its <c>FusedOptimizerConfig</c>).
-    /// </summary>
-    public bool TryStep(
-        IReadOnlyList<Tensor<T>> parameters,
-        Action? zeroGradAction,
-        IReadOnlyList<Tensor<T>> freshSlotData,
-        Func<IReadOnlyList<Tensor<T>>, Tensor<T>> forward,
-        Func<Tensor<T>, IReadOnlyList<Tensor<T>>, Tensor<T>> computeLoss,
-        OptimizerType optimizerType,
-        double learningRate,
-        double beta1,
-        double beta2,
-        double epsilon,
-        double weightDecay,
-        LrSchedule? lrSchedule,
-        FusedOptimizerExtras? extras,
-        out T lossValue)
+    /// <summary>Creates a step for <paramref name="owner"/>, the model whose plan and optimizer state it holds.</summary>
+    public MultiSlotFusedStep(object owner)
     {
-        if (parameters is null || parameters.Count == 0)
-        {
-            lossValue = MathHelper.GetNumericOperations<T>().Zero;
-            return false;
-        }
-        return TryStep(() => parameters, zeroGradAction, freshSlotData, forward, computeLoss,
-            optimizerType, learningRate, beta1, beta2, epsilon, weightDecay, lrSchedule, extras, out lossValue);
+        Guard.NotNull(owner);
+        _session = new FusedTrainingSession<T>(owner);
     }
 
+    private static IEngine Engine => AiDotNetEngine.Current;
+
+    /// <summary>Steps that ran on the fused compiled plan.</summary>
+    internal int FusedStepCount { get; private set; }
+
+    /// <summary>Steps the plan declined, which the caller then ran eagerly.</summary>
+    internal int DeclinedStepCount { get; private set; }
+
     /// <summary>
-    /// The step with the trainable set supplied as a PROVIDER, read before the step and again right after the
-    /// first trace. Models whose layers materialize their weights lazily on the first forward (and models that
-    /// hold trainable layers outside <c>Layers</c>) otherwise hand this step a set collected before those tensors
-    /// exist: the plan compiled against placeholders, and the next call saw a different set, recompiled and
-    /// restarted the optimizer. Pass the model's full trainable set (<c>CollectModelTrainableTensors</c>) - the
-    /// set its eager step updates - or the fused step silently freezes whatever it leaves out.
+    /// Trains one step on the fused compiled plan. Returns false when the plan does not apply; the caller then runs
+    /// its eager step.
     /// </summary>
+    /// <param name="parameterProvider">The tensors to train, read every step.</param>
+    /// <param name="zeroGradAction">Optional layer gradient reset before the step.</param>
+    /// <param name="freshSlotData">This step's slot data.</param>
+    /// <param name="forward">The model forward over the slots.</param>
+    /// <param name="computeLoss">The scalar loss from the forward output and the slots.</param>
+    /// <param name="optimizer">The optimizer whose configuration the plan runs.</param>
+    /// <param name="lossValue">The step's loss when it ran.</param>
     public bool TryStep(
         Func<IReadOnlyList<Tensor<T>>> parameterProvider,
         Action? zeroGradAction,
         IReadOnlyList<Tensor<T>> freshSlotData,
         Func<IReadOnlyList<Tensor<T>>, Tensor<T>> forward,
         Func<Tensor<T>, IReadOnlyList<Tensor<T>>, Tensor<T>> computeLoss,
-        OptimizerType optimizerType,
-        double learningRate,
-        double beta1,
-        double beta2,
-        double epsilon,
-        double weightDecay,
-        LrSchedule? lrSchedule,
-        FusedOptimizerExtras? extras,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
         out T lossValue)
     {
-        ThrowIfDisposed();
+        if (_disposed) throw new ObjectDisposedException(nameof(MultiSlotFusedStep<T>));
         lossValue = MathHelper.GetNumericOperations<T>().Zero;
+        Guard.NotNull(parameterProvider);
+        Guard.NotNull(forward);
+        Guard.NotNull(computeLoss);
+        Guard.NotNull(optimizer);
+        if (freshSlotData is null || freshSlotData.Count == 0)
+            return false;
 
-        if (!IsAvailable) return false;
-        if (parameterProvider is null) throw new ArgumentNullException(nameof(parameterProvider));
+        // Lazily shaped layers create their weights on their first forward. Reading the parameter set before that
+        // forward found only part of it (not necessarily none), so the first plan compiled against the partial set,
+        // the second step saw the full set and rebuilt the plan, and the first step's optimizer moments were lost
+        // (TabDDPM's plan counted 199 steps for 200 rows). One no-grad forward before the first step resolves them.
+        if (!_warmed)
+        {
+            using (new NoGradScope<T>())
+                forward(freshSlotData);
+            _warmed = true;
+        }
+
         var parameters = parameterProvider();
-        // An empty set before any plan exists can be a lazily-built model: trace first, then read it again.
-        if (parameters is null || (parameters.Count == 0 && _plan is not null)) return false;
-        if (freshSlotData is null || freshSlotData.Count == 0) return false;
-        if (forward is null) throw new ArgumentNullException(nameof(forward));
-        if (computeLoss is null) throw new ArgumentNullException(nameof(computeLoss));
-
-        // Compute composite shape key across all slots. Rebuild persistent
-        // tensors and recompile the plan if the key changed OR the parameter
-        // set changed identity.
-        int[] shapeKey = ComputeCompositeShapeKey(freshSlotData);
-        bool shapeChanged = _cachedShapeKey is null || !ShapeKeysEqual(shapeKey, _cachedShapeKey);
-        bool paramsChanged = ParameterSetChanged(parameters);
-        bool optimizerChanged = OptimizerConfigChanged(optimizerType, learningRate, beta1, beta2, epsilon, weightDecay);
-
-        if (shapeChanged || paramsChanged)
-        {
-            InvalidateCachedPlan();
-            AllocatePersistentSlots(freshSlotData);
-            _cachedShapeKey = shapeKey;
-            RememberParameterSet(parameters);
-        }
-
-        // Copy fresh data into persistent slots BEFORE the plan runs. The plan
-        // captured references to these tensors; refreshing their data makes the
-        // plan read current-step data without recompilation.
-        if (_persistentSlots is null)
+        if (parameters is null || parameters.Count == 0)
             return false;
-        for (int i = 0; i < _persistentSlots.Length; i++)
-        {
-            var slot = _persistentSlots[i];
-            var fresh = freshSlotData[i];
-            if (fresh.Length != slot.Length)
-                return false;
-            fresh.AsSpan().CopyTo(slot.AsWritableSpan());
-            // AsWritableSpan does not bump the GPU-cache version by contract; a writer must. Without it a device
-            // copy of the previous step's slot (a resident binding) stays "current" after the host data changed.
-            slot.IncrementVersion();
-        }
 
-        // Cache the (already-deduplicated) parameter list. The caller
-        // guarantees dedup — this class doesn't know about the caller's layer
-        // structure so it can't do reference-based dedup on its own.
-        if (_cachedParameters is null)
-            CacheParameters(parameters, optimizerType);
-
-        zeroGradAction?.Invoke();
-
-        try
-        {
-            // Trace + compile on first call after invalidation.
-            if (_plan is null)
-            {
-                using var arenaSuspend = TensorArena.Suspend();
-                using var scope = GraphMode.Enable();
-                var pred = forward(_persistentSlots);
-                var loss = computeLoss(pred, _persistentSlots);
-                // The trace just ran the model's forward, which is where lazy layers create their weights:
-                // compile against the set as it is NOW, and remember it so the next call does not see a change.
-                var traced = parameterProvider();
-                if (traced is null || traced.Count == 0) return false;
-                if (ParameterSetChanged(traced))
-                {
-                    RememberParameterSet(traced);
-                    CacheParameters(traced, optimizerType);
-                }
-                _plan = scope.CompileTraining(_cachedParameters!, loss);
-            }
-
-            // Configure optimizer on first Step OR when config changed.
-            if (optimizerChanged || _configuredOptimizer is null)
-            {
-                // The schedule and extras are applied at configure time, as CompiledTapeTrainingStep does: the
-                // fused kernel evaluates the scheduled LR per step, and extras select the algorithm variant
-                // (Nesterov, decoupled AMSGrad decay, LARS/FTRL constants). Dropping either ran a different
-                // optimizer from the eager one.
-                if (lrSchedule is not null)
-                    _plan.ConfigureOptimizer(optimizerType, lrSchedule, beta1, beta2, epsilon, weightDecay, extras);
-                else
-                    _plan.ConfigureOptimizer(optimizerType, learningRate, beta1, beta2, epsilon, weightDecay, extras);
-                _configuredOptimizer = (optimizerType, learningRate, beta1, beta2, epsilon, weightDecay);
-            }
-
-            var lossTensor = _plan.Step();
-            lossValue = lossTensor.Length > 0 ? lossTensor[0] : MathHelper.GetNumericOperations<T>().Zero;
-            return true;
-        }
-        catch (NotSupportedException)
-        {
-            // The compiled plan can't execute this graph on this engine. Fall
-            // back to eager by returning false so the caller runs their eager
-            // tape path.
-            InvalidateCachedPlan();
-            return false;
-        }
-        catch (InvalidOperationException)
-        {
-            InvalidateCachedPlan();
-            return false;
-        }
-    }
-
-    private void CacheParameters(IReadOnlyList<Tensor<T>> parameters, OptimizerType optimizerType)
-    {
-        _cachedParameters = new Tensor<T>[parameters.Count];
-        for (int i = 0; i < parameters.Count; i++) _cachedParameters[i] = parameters[i];
-        // GPU-residency: mark parameters as GPU-resident so the compiled
-        // plan's optimizer branch takes the GPU Adam path (params stay
-        // on-device across steps).
-        if (typeof(T) == typeof(float)
-            && Environment.GetEnvironmentVariable("AIDOTNET_GPU_RESIDENT_PARAMS") != "0"
-            && (optimizerType == OptimizerType.Adam
-                || optimizerType == OptimizerType.AdamW
-                || optimizerType == OptimizerType.SGD))
-        {
-            foreach (var p in _cachedParameters) p.Gpu();
-        }
-    }
-
-    /// <summary>Invalidates the cached compiled plan and persistent slots. Call
-    /// when the model's layer structure changes. Data-only refreshes don't need
-    /// this — just pass fresh data on the next Step.</summary>
-    public void Invalidate() => InvalidateCachedPlan();
-
-    private void InvalidateCachedPlan()
-    {
-        _plan?.Dispose();
-        _plan = null;
-        _persistentSlots = null;
-        _cachedShapeKey = null;
-        _cachedLayerIdentities = null;
-        _cachedParameters = null;
-        _configuredOptimizer = null;
-    }
-
-    private void AllocatePersistentSlots(IReadOnlyList<Tensor<T>> freshSlotData)
-    {
-        _persistentSlots = new Tensor<T>[freshSlotData.Count];
+        var shapes = new int[freshSlotData.Count][];
+        var offsets = new int[freshSlotData.Count];
+        int total = 0;
         for (int i = 0; i < freshSlotData.Count; i++)
         {
-            _persistentSlots[i] = new Tensor<T>((int[])freshSlotData[i]._shape.Clone());
+            shapes[i] = freshSlotData[i]._shape;
+            offsets[i] = total;
+            total += freshSlotData[i].Length;
         }
-    }
+        if (total == 0)
+            return false;
 
-    private static int[] ComputeCompositeShapeKey(IReadOnlyList<Tensor<T>> slots)
-    {
-        int total = slots.Count; // one separator per slot
-        for (int i = 0; i < slots.Count; i++) total += slots[i]._shape.Length;
-        var key = new int[total];
-        int idx = 0;
-        for (int i = 0; i < slots.Count; i++)
+        var packed = new T[total];
+        for (int i = 0; i < freshSlotData.Count; i++)
+            freshSlotData[i].AsSpan().CopyTo(packed.AsSpan(offsets[i], freshSlotData[i].Length));
+
+        IReadOnlyList<Tensor<T>> Unpack(Tensor<T> row)
         {
-            var s = slots[i]._shape;
-            for (int d = 0; d < s.Length; d++) key[idx++] = s[d];
-            key[idx++] = -1 - i; // slot separator (distinct per slot index)
+            var slots = new Tensor<T>[shapes.Length];
+            for (int i = 0; i < shapes.Length; i++)
+            {
+                int length = freshSlotData[i].Length;
+                slots[i] = length == 0
+                    ? new Tensor<T>(shapes[i])
+                    : Engine.Reshape(Engine.TensorNarrow(row, 1, offsets[i], length), shapes[i]);
+            }
+            return slots;
         }
-        return key;
-    }
 
-    private static bool ShapeKeysEqual(int[] a, int[] b)
-    {
-        if (a.Length != b.Length) return false;
-        for (int i = 0; i < a.Length; i++) if (a[i] != b[i]) return false;
-        return true;
-    }
+        zeroGradAction?.Invoke();
+        var outcome = _session.TryStep(new FusedTrainingStepRequest<T>
+        {
+            Layers = Array.Empty<ITrainableLayer<T>>(),
+            Input = new Tensor<T>(new[] { 1, total }, new Vector<T>(packed)),
+            Target = new Tensor<T>(new[] { 1, total }, new Vector<T>((T[])packed.Clone())),
+            Forward = row => forward(Unpack(row)),
+            ComputeLoss = (predicted, row) => computeLoss(predicted, Unpack(row)),
+            Optimizer = optimizer,
+            ExtraParameters = parameters,
+        }, out lossValue);
 
-    private bool ParameterSetChanged(IReadOnlyList<Tensor<T>> parameters)
-    {
-        if (_cachedLayerIdentities is null) return true;
-        if (_cachedLayerIdentities.Length != parameters.Count) return true;
-        for (int i = 0; i < parameters.Count; i++)
-            if (!ReferenceEquals(_cachedLayerIdentities[i], parameters[i])) return true;
+        if (outcome == FusedStepOutcome.CommittedFailure)
+            _session.DropAfterCommittedFailure();
+        if (outcome == FusedStepOutcome.Stepped)
+        {
+            FusedStepCount++;
+            return true;
+        }
+
+        DeclinedStepCount++;
         return false;
     }
 
-    private void RememberParameterSet(IReadOnlyList<Tensor<T>> parameters)
-    {
-        _cachedLayerIdentities = new object?[parameters.Count];
-        for (int i = 0; i < parameters.Count; i++) _cachedLayerIdentities[i] = parameters[i];
-    }
+    /// <summary>Forgets the compiled plan and its optimizer state.</summary>
+    public void Invalidate() => _session.Reset(stickyDisable: false);
 
-    private bool OptimizerConfigChanged(OptimizerType type, double lr, double b1, double b2, double eps, double wd)
-    {
-        if (_configuredOptimizer is null) return true;
-        var (cType, cLr, cB1, cB2, cEps, cWd) = _configuredOptimizer.Value;
-        return cType != type || cLr != lr || cB1 != b1 || cB2 != b2 || cEps != eps || cWd != wd;
-    }
-
+    /// <inheritdoc />
     public void Dispose()
     {
         if (_disposed) return;
-        InvalidateCachedPlan();
+        _session.Reset(stickyDisable: false);
         _disposed = true;
-    }
-
-    private void ThrowIfDisposed()
-    {
-        if (_disposed) throw new ObjectDisposedException(nameof(MultiSlotFusedStep<T>));
     }
 }

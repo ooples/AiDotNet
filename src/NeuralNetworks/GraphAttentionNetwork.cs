@@ -820,44 +820,10 @@ public partial class GraphAttentionNetwork<T> : GraphModelLayoutBase<T>
         return input;
     }
 
-    /// <summary>
-    /// Trains the network on a single batch of data.
-    /// </summary>
-    /// <param name="input">The input node features.</param>
-    /// <param name="expectedOutput">The expected output (labels).</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method performs one training step.
-    /// For full training, call TrainOnGraph which handles multiple epochs and
-    /// adjacency matrix setup. If no adjacency matrix has been set, a self-loop-only
-    /// matrix is generated; provide an explicit matrix to train with graph edges.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // Route through TrainWithTape so the gradient flows back through
-        // the layer stack via GradientTape (the unified post-#1060
-        // training path). The previous implementation called
-        // GetParameterGradients() WITHOUT first running a backward pass
-        // through layers — since Backward() was removed from ILayer<T>
-        // by #b92c4d0dd, those gradients are always whatever stale value
-        // the layer's _kernelsGradient field holds (zero on a fresh
-        // network), which is why Training_ShouldChangeParameters and
-        // GradientFlow_ShouldBeNonZeroAndFinite reported "no parameters
-        // changed". ForwardForTraining is overridden below to set the
-        // adjacency matrix on graph layers before the tape-recorded
-        // forward pass.
-        SetTrainingMode(true);
-        try
-        {
-            Tensor<T> normalizedInput = NormalizeSingleNodeInput(input, out _);
-            Tensor<T> normalizedExpected = NormalizeSingleNodeInput(expectedOutput, out _);
-            TrainWithTape(normalizedInput, normalizedExpected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
+    /// <inheritdoc/>
+    /// <remarks>A single node's features and target are read as a one-node graph.</remarks>
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
+        => (NormalizeSingleNodeInput(input, out _), target is null ? null : NormalizeSingleNodeInput(target, out _));
 
     /// <inheritdoc />
     /// <remarks>

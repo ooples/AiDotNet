@@ -180,24 +180,6 @@ public partial class SpiritLM<T> : TtsModelBase<T>, ICodecTts<T>
         return c;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            // Route training through the optimizer selected by the public constructor.
-            // Calling the parameterless overload silently falls back to the base Adam
-            // optimizer and ignores Spirit-LM's configured AdamW hyperparameters.
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being

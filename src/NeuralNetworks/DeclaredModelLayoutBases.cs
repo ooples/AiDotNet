@@ -198,6 +198,44 @@ public abstract class GraphModelLayoutBase<T> : DeclaredModelLayoutBase<T>
         double maxGradNorm = 1.0) : base(architecture, lossFunction, maxGradNorm) { }
     protected GraphModelLayoutBase(ILossFunction<T> lossFunction, double maxGradNorm = 1.0)
         : base(lossFunction, maxGradNorm) { }
+
+    /// <summary>Points every graph layer at <paramref name="adjacency"/>.</summary>
+    protected void SetGraphLayerAdjacency(Tensor<T> adjacency)
+    {
+        foreach (var layer in Layers)
+        {
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
+                graphLayer.SetAdjacencyMatrix(adjacency);
+        }
+    }
+
+    /// <summary>
+    /// The training step of a model whose graph layers propagate over <paramref name="adjacency"/>: the loss of
+    /// <paramref name="forward"/> on the node features against the target.
+    /// </summary>
+    /// <remarks>
+    /// The adjacency is part of the step's data. The graph layers read it in the forward, and a compiled plan freezes
+    /// anything its forward reads other than its input, so packed with the features it reaches the layers from each
+    /// step's own data: a plan traced on one graph trains the next graph on its own structure. The layers get
+    /// <paramref name="adjacency"/> back after the step.
+    /// </remarks>
+    protected IReadOnlyList<Training.TrainingObjective<T>> GraphTrainingObjective(
+        Tensor<T> features, Tensor<T> adjacency, Tensor<T> target, Func<Tensor<T>, Tensor<T>> forward,
+        LossFunctions.LossFunctionBase<T> loss)
+        => new[]
+        {
+            new Training.TrainingObjective<T>(
+                new[] { features, adjacency, target },
+                data =>
+                {
+                    SetGraphLayerAdjacency(data[1]);
+                    return loss.ComputeTapeLoss(forward(data[0]), data[2]);
+                })
+            {
+                Parameters = () => Training.TapeTrainingStep<T>.CollectParameters(Layers, LayerStructureVersion),
+                AfterStep = () => SetGraphLayerAdjacency(adjacency),
+            },
+        };
 }
 
 [TensorLayout(TensorAxis.Batch, TensorAxis.Features,

@@ -218,6 +218,9 @@ public partial class FlagDiTPredictor<T> : NoisePredictorBase<T>
     }
 
     /// <inheritdoc />
+    public override bool SupportsBatchedTimeEmbedding => true;
+
+    /// <inheritdoc />
     public override Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
         // The flow-matching loop calls PredictNoise(sample, t); this overload is provided for
         // callers that precompute the embedding. Re-derive from the same path for consistency.

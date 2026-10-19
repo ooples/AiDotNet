@@ -233,22 +233,6 @@ public partial class HyperbolicNeuralNetwork<T> : VectorModelLayoutBase<T>
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
-    /// Trains the hyperbolic neural network using the provided input and expected output.
-    /// </summary>
-    /// <param name="input">The input tensor for training.</param>
-    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
-    /// <remarks>
-    /// <para>
-    /// Training uses Riemannian gradient descent, where parameter updates follow
-    /// geodesics (shortest paths) in hyperbolic space rather than straight lines.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        TrainWithTape(input, expectedOutput, _optimizer);
-    }
-
-    /// <summary>
     /// Retrieves metadata about the hyperbolic neural network model.
     /// </summary>
     /// <returns>A ModelMetaData object containing information about the network.</returns>

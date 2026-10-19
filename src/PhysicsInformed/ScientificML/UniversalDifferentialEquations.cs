@@ -360,7 +360,7 @@ namespace AiDotNet.PhysicsInformed.ScientificML
         /// Uses standard backpropagation like all other neural networks.
         /// The network learns to predict the derivative (dx/dt) at each state.
         /// </remarks>
-        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+        protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
         {
             if (input.Rank != 2 || input.Shape[1] != _stateDim + 1)
             {
@@ -387,7 +387,9 @@ namespace AiDotNet.PhysicsInformed.ScientificML
             {
                 SetTrainingMode(false);
             }
-        }
+
+        return true;
+    }
 
         /// <summary>
         /// Gets metadata about the UDE model.

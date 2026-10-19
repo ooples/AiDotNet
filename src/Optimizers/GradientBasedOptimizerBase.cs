@@ -2938,6 +2938,82 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         return parameterTensor.ToVector();
     }
 
+    // One stable dense view per sparse parameter, so optimizer state keyed by the parameter tensor (moments,
+    // velocities) persists across steps.
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<Tensor<T>, Tensor<T>> _sparseValueViews = new();
+
+    /// <summary>
+    /// Presents each sparse parameter to the optimizer as a dense 1-D tensor over its stored non-zeros, with its
+    /// gradient gathered at the same pattern positions.
+    /// </summary>
+    /// <remarks>
+    /// A sparse parameter (SparseLinearLayer's weights) trains only its pattern's values, which are exactly what
+    /// the parameter buffer stores for it. Every optimizer updates a parameter through a contiguous span, which a
+    /// SparseTensor cannot give, so each one failed on sparse models. The view writes straight into the
+    /// parameter's values (it shares their memory), so every optimizer handles sparse parameters without
+    /// per-optimizer code. Dense parameters pass through unchanged, and a context with no sparse parameter is
+    /// returned as is.
+    /// </remarks>
+    private TapeStepContext<T> WithSparseLeavesAsValueViews(TapeStepContext<T> context)
+    {
+        var parameters = context.Parameters;
+        bool anySparse = false;
+        for (int i = 0; i < parameters.Count && !anySparse; i++) anySparse = parameters[i] is SparseTensor<T>;
+        if (!anySparse) return context;
+
+        var mapped = new Tensor<T>[parameters.Count];
+        var gradients = new Dictionary<Tensor<T>, Tensor<T>>(
+            context.Gradients.Count, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        for (int i = 0; i < parameters.Count; i++)
+        {
+            var parameter = parameters[i];
+            if (parameter is not SparseTensor<T> sparse)
+            {
+                mapped[i] = parameter;
+                if (context.Gradients.TryGetValue(parameter, out var denseGradient)) gradients[parameter] = denseGradient;
+                continue;
+            }
+
+            var values = _sparseValueViews.GetValue(sparse, key =>
+            {
+                var leaf = (SparseTensor<T>)key;
+                return new Tensor<T>(leaf.DataVector, new[] { leaf.NonZeroCount }, new[] { 1 }, leaf._storageOffset);
+            });
+            mapped[i] = values;
+            if (context.Gradients.TryGetValue(sparse, out var gradient))
+                gradients[values] = GatherSparseGradient(sparse, gradient);
+        }
+        return new TapeStepContext<T>(mapped, gradients, context.Loss);
+    }
+
+    /// <summary>The gradient of a sparse parameter at its pattern's positions, in the order its values are stored.</summary>
+    private static Tensor<T> GatherSparseGradient(SparseTensor<T> parameter, Tensor<T> gradient)
+    {
+        var pattern = parameter.Format == SparseStorageFormat.Coo ? parameter : parameter.ToCoo();
+        int count = pattern.NonZeroCount;
+        var gathered = new T[count];
+        if (gradient is SparseTensor<T> sparseGradient)
+        {
+            var coo = sparseGradient.Format == SparseStorageFormat.Coo ? sparseGradient : sparseGradient.ToCoo();
+            if (coo.NonZeroCount == count
+                && coo.RowIndices.AsSpan().SequenceEqual(pattern.RowIndices)
+                && coo.ColumnIndices.AsSpan().SequenceEqual(pattern.ColumnIndices))
+            {
+                coo.DataVector.AsSpan().Slice(coo._storageOffset, count).CopyTo(gathered);
+                return new Tensor<T>(gathered, new[] { count });
+            }
+            gradient = sparseGradient.ToDense();
+        }
+
+        var dense = gradient.IsContiguous ? gradient : gradient.Contiguous();
+        var source = dense.DataVector.AsSpan().Slice(dense._storageOffset, dense.Length);
+        int columns = pattern.Columns;
+        var rows = pattern.RowIndices;
+        var cols = pattern.ColumnIndices;
+        for (int k = 0; k < count; k++) gathered[k] = source[rows[k] * columns + cols[k]];
+        return new Tensor<T>(gathered, new[] { count });
+    }
+
     /// <inheritdoc />
     /// <remarks>
     /// The update runs with gradient recording suppressed, as PyTorch's <c>optimizer.step()</c> runs under
@@ -2948,6 +3024,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </remarks>
     public void Step(TapeStepContext<T> context)
     {
+        context = WithSparseLeavesAsValueViews(context);
         var learningRateGroups = CaptureLearningRateGroups(context);
         _stepNoGrad = new NoGradScope<T>();
         try
@@ -3656,12 +3733,16 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // optimizer step instead of being a no-op.
         if (maxNorm <= 0.0 || double.IsNaN(maxNorm) || double.IsInfinity(maxNorm)) return;
         var numOps = MathHelper.GetNumericOperations<T>();
+        // Host engine: one parallel SIMD pass per tensor for the norm and for the scale (FusedOptimizer helpers);
+        // the per-element loops remain for other layouts.
+        bool hostFast = !AiDotNetEngine.Current.SupportsGpu;
 
         double globalNormSq = 0.0;
         foreach (var kvp in context.Gradients)
         {
             var grad = kvp.Value;
             if (grad is null) continue;
+            if (hostFast && AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.TrySumOfSquaresHost(grad, out double sq)) { globalNormSq += sq; continue; }
             var span = grad.Data.Span;
             for (int i = 0; i < span.Length; i++)
             {
@@ -3680,6 +3761,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         {
             var grad = kvp.Value;
             if (grad is null) continue;
+            if (hostFast && AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.TryScaleHost(grad, scale)) continue;
             var span = grad.Data.Span;
             for (int i = 0; i < span.Length; i++)
                 span[i] = numOps.FromDouble(numOps.ToDouble(span[i]) * scale);
@@ -3732,10 +3814,17 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     protected static bool HasAnomalousTapeGradients(TapeStepContext<T> context)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
+        bool hostFast = !AiDotNetEngine.Current.SupportsGpu;
         foreach (var kvp in context.Gradients)
         {
             var grad = kvp.Value;
             if (grad is null) continue;
+            // A double sum of squares is non-finite exactly when an element is NaN/Inf: one parallel SIMD pass.
+            if (hostFast && AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.TrySumOfSquaresHost(grad, out double sq))
+            {
+                if (double.IsNaN(sq) || double.IsInfinity(sq)) return true;
+                continue;
+            }
             var span = grad.Data.Span;
             for (int i = 0; i < span.Length; i++)
             {

@@ -792,23 +792,6 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
         _outputProjectionWeights, _outputProjectionBias
     ];
 
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_linearQueryWeightsGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        return Vector<T>.Concatenate(
-            new Vector<T>(_linearQueryWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_linearKeyWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_linearValueWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_windowQueryWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_windowKeyWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_windowValueWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_featureMapScaleGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_mixingGateWeightsGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_mixingGateBiasGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? new T[_outputProjectionWeights.Length]),
-            new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? new T[_outputProjectionBias.Length]));
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

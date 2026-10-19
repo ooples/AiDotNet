@@ -1,7 +1,9 @@
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Engines.Optimization;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -15,6 +17,8 @@ namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 /// still falls back to the per-step loop if a future/older package doesn't record (GradFn null),
 /// so training is never broken either way.
 /// </summary>
+// The compiled-training case switches TensorCodecOptions, which is process-wide state.
+[Collection("NonParallelIntegration")]
 public class LstmFusedTrainingWiringTests
 {
     private static Tensor<float> Rand(int[] shape, int seed, float scale = 0.4f)
@@ -104,5 +108,96 @@ public class LstmFusedTrainingWiringTests
 
         Assert.True(lossAfter < lossBefore,
             $"LSTM training did not reduce loss (wiring regression): {lossBefore:F5} -> {lossAfter:F5}");
+    }
+
+    /// <summary>
+    /// Compiled CPU training records the fused LSTM node into the plan (instead of the per-timestep loop). One training
+    /// step through that plan must update every parameter the way the eager tape step does: same starting weights, same
+    /// data, compilation on vs off.
+    /// </summary>
+    [Fact]
+    public void CompiledTrainingStep_MatchesEagerStep()
+    {
+        int seq = 6, features = 4, outputs = 3;
+        LSTMNeuralNetwork<float> Build() => new LSTMNeuralNetwork<float>(
+            new NeuralNetworkArchitecture<float>(
+                inputType: InputType.TwoDimensional,
+                taskType: NeuralNetworkTaskType.Regression,
+                complexity: NetworkComplexity.Simple,
+                inputHeight: seq,
+                inputWidth: features,
+                outputSize: outputs),
+            lossFunction: null, outputActivation: null);
+
+        var input = Rand(new[] { seq, features }, 21, scale: 1f);
+        var target = Rand(new[] { seq, outputs }, 22, scale: 1f);
+        var compiled = Build();
+        var eager = Build();
+        compiled.Predict(input); // materialize lazy weights before copying them across
+        eager.Predict(input);
+        eager.SetParameters(compiled.GetParameters());
+        var start = compiled.GetParameters().ToArray();
+
+        var saved = TensorCodecOptions.Current;
+        try
+        {
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = true });
+            compiled.Train(input, target);
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = false });
+            eager.Train(input, target);
+        }
+        finally
+        {
+            TensorCodecOptions.SetCurrent(saved);
+        }
+
+        var a = compiled.GetParameters().ToArray();
+        var b = eager.GetParameters().ToArray();
+        Assert.Equal(b.Length, a.Length);
+        double dot = 0, na = 0, nb = 0, maxAbs = 0, maxMag = 0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            double da = a[i] - start[i], db = b[i] - start[i];
+            dot += da * db; na += da * da; nb += db * db;
+            maxAbs = System.Math.Max(maxAbs, System.Math.Abs(a[i] - b[i]));
+            maxMag = System.Math.Max(maxMag, System.Math.Abs(db));
+        }
+        Assert.True(nb > 0, "the eager step changed no parameter");
+        double cos = dot / System.Math.Sqrt(na * nb);
+        Assert.True(cos > 0.9999, $"compiled and eager updates point different ways: cos {cos:R}");
+        Assert.True(maxAbs <= 1e-3 * maxMag + 1e-7, $"compiled vs eager parameters differ by {maxAbs:E3} (largest update {maxMag:E3})");
+    }
+
+    /// <summary>
+    /// The fused forward records no final (h, c), so a later <c>ForwardFromState</c> must still return the real final
+    /// state: it runs the per-step loop, whose last hidden state equals the output at the last timestep, and whose cell
+    /// state is a computed value rather than zeros.
+    /// </summary>
+    [Fact]
+    public void ForwardFromState_AfterFusedForward_ReturnsRealFinalState()
+    {
+        int batch = 3, seq = 5, features = 4, hidden = 6;
+        var layer = new LSTMLayer<float>(hidden, (AiDotNet.Interfaces.IActivationFunction<float>?)null);
+        layer.SetTrainingMode(true);
+        var input = Rand(new[] { batch, seq, features }, 31, scale: 1f);
+
+        var fusedOut = layer.Forward(input); // CPU float: the fused path
+        var stepped = layer.ForwardFromState(input, null, null, out var finalHidden, out var finalCell);
+
+        Assert.Equal(new[] { batch, hidden }, finalHidden.Shape.ToArray());
+        Assert.Equal(new[] { batch, hidden }, finalCell.Shape.ToArray());
+        var h = finalHidden.AsSpan();
+        var f = fusedOut.AsSpan();
+        var s = stepped.AsSpan();
+        for (int b = 0; b < batch; b++)
+            for (int j = 0; j < hidden; j++)
+            {
+                int last = (b * seq + seq - 1) * hidden + j;
+                Assert.True(System.Math.Abs(h[b * hidden + j] - s[last]) < 1e-6f, $"final h[{b},{j}] is not the last step's output");
+                Assert.True(System.Math.Abs(f[last] - s[last]) < 1e-4f, $"fused and per-step outputs differ at [{b},{seq - 1},{j}]");
+            }
+        bool anyNonZeroCell = false;
+        foreach (var v in finalCell.AsSpan()) if (v != 0f) { anyNonZeroCell = true; break; }
+        Assert.True(anyNonZeroCell, "final cell state is all zeros: a fabricated state, not the recurrence's");
     }
 }

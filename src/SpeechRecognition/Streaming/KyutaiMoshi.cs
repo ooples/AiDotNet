@@ -231,25 +231,6 @@ public partial class KyutaiMoshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
 
         return current;
     }
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            // Pass the model's own non-AMSGrad AdamW explicitly so the
-            // fused-Adam fast path engages. The optimizer-null branch falls
-            // back to GetOrCreateBaseOptimizer (AMSGrad), which the fused
-            // kernel rejects → eager tape path → ~5 s/iter on this Conformer
-            // encoder → 120 s test timeout before 30 iters finish.
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being

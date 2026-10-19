@@ -445,31 +445,6 @@ namespace AiDotNet.PhysicsInformed.ScientificML
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
         /// <summary>
-        /// Trains the Hamiltonian neural network using the provided input and expected output.
-        /// </summary>
-        /// <param name="input">The input tensor for training (state vectors [q, p]).</param>
-        /// <param name="expectedOutput">The expected output tensor (Hamiltonian values).</param>
-        /// <remarks>
-        /// <para>
-        /// <b>For Beginners:</b> This method trains the network to predict the correct Hamiltonian (energy)
-        /// for given state vectors. The training follows the standard neural network pattern:
-        /// forward pass → loss calculation → backward pass → parameter update.
-        /// </para>
-        /// </remarks>
-        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-        {
-            SetTrainingMode(true);
-            try
-            {
-                TrainWithTape(input, expectedOutput, _optimizer);
-            }
-            finally
-            {
-                SetTrainingMode(false);
-            }
-        }
-
-        /// <summary>
         /// Gets metadata about the Hamiltonian network.
         /// </summary>
         /// <returns>Model metadata.</returns>

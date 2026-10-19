@@ -175,21 +175,6 @@ public partial class VFIformer<T> : FrameInterpolationBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => modelOutput;
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <summary>
     /// Drives tape-based training with the model's configured optimizer (AdamW at the paper's
     /// 2e-4 learning rate) instead of the base class's 1e-3 AdamOptimizer default. The base

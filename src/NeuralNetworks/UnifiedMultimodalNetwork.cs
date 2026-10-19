@@ -1134,20 +1134,6 @@ public partial class UnifiedMultimodalNetwork<T> : MultimodalModelLayoutBase<T>,
         return true;
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <summary>
     /// Training-mode forward — same architecture as <see cref="Predict"/> but routes
     /// every reshape through <see cref="IEngine.Reshape{T}"/> so the gradient tape

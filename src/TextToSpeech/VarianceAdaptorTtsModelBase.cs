@@ -42,9 +42,6 @@ public abstract class VarianceAdaptorTtsModelBase<T> : TtsModelBase<T>
     /// <summary>Whether the paper scores the mel spectrogram with mean absolute error (true) or squared error.</summary>
     protected abstract bool UsesL1MelLoss { get; }
 
-    /// <summary>The optimizer training steps use; null for the base default.</summary>
-    protected abstract IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer { get; }
-
     /// <summary>
     /// Weight on each variance reconstruction loss (duration, pitch, energy): 1 for FastSpeech 2, whose paper sums them
     /// unweighted; ProDiff sets all three to 0.1 (Huang et al. 2022 §4.5).

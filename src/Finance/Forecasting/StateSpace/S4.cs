@@ -108,7 +108,7 @@ public partial class S4<T> : ForecastingModelBase<T>
     /// is null. S4 built its LAMB recipe but never returned it here, so it trained on the default optimizer and
     /// the declared recipe (and the HiPPO learning-rate cap) never ran.
     /// </remarks>
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
     /// <summary>
     /// Start index of each residual sub-block in <see cref="NeuralNetworkBase{T}.Layers"/>, or null
@@ -517,36 +517,6 @@ public partial class S4<T> : ForecastingModelBase<T>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
-    }
-
-    /// <summary>
-    /// Trains the S4 model on a batch of input-target pairs.
-    /// </summary>
-    /// <param name="input">Input tensor of shape [batch, context, features].</param>
-    /// <param name="target">Target tensor of shape [batch, forecast_horizon].</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method trains S4 using standard
-    /// backpropagation. The S4 layers learn to:
-    /// 1. Compress input history efficiently using HiPPO-like dynamics
-    /// 2. Produce accurate forecasts from the compressed state
-    ///
-    /// Only available in native mode (not ONNX).
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
-        base.Train(input, target);
     }
 
     // UpdateParameters was an empty override, silently dropping every restore. The base

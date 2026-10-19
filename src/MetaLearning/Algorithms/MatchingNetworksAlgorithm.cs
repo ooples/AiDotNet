@@ -258,11 +258,10 @@ public partial class MatchingNetworksAlgorithm<T, TInput, TOutput> : MetaLearner
         }
         else
         {
-            using var tape = new GradientTape<T>();
-            var episodeLoss = LossFunction.ComputeTapeLoss(EpisodeLogits(embeddings, episode, metric), episode.QueryTarget);
-            loss = episodeLoss[0];
-            var gradients = tape.ComputeGradients(episodeLoss, metric.Leaves.ToList());
-            metric.CopyGradients(gradients, kernelGradient, supportGradient, queryGradient);
+            loss = AiDotNet.Training.TapeGradients<T>.Of(
+                () => LossFunction.ComputeTapeLoss(EpisodeLogits(embeddings, episode, metric), episode.QueryTarget),
+                metric.Leaves.ToList(),
+                gradients => metric.CopyGradients(gradients, kernelGradient, supportGradient, queryGradient));
         }
 
         return (loss, bodyGradient, kernelGradient, supportGradient, queryGradient);

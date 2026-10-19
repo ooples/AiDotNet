@@ -506,25 +506,6 @@ public partial class DiT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>, 
         return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-
-        SetTrainingMode(true);
-        try
-        {
-            // TrainWithTape performs the backward pass and optimizer update. Applying the
-            // hand-collected gradients again treated gradients as replacement parameter values.
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <summary>
     /// Parameters cannot be written while the model is backed by a loaded ONNX graph: the weights
     /// belong to that graph, not to this instance.

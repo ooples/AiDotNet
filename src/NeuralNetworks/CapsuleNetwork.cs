@@ -401,59 +401,35 @@ public partial class CapsuleNetwork<T> : ImageClassifierModelLayoutBase<T>, IAux
         return reconstructionLoss;
     }
 
-    /// <summary>
-    /// Trains the Capsule Network using the provided input and expected output.
-    /// </summary>
-    /// <param name="input">The input tensor for training.</param>
-    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
-    /// <remarks>
-    /// <para>
-    /// This method performs one training iteration:
-    /// 1. It makes a prediction using the current network parameters.
-    /// 2. Calculates the loss between the prediction and the expected output.
-    /// 3. Computes the gradient of the loss with respect to the network parameters.
-    /// 4. Updates the network parameters based on the computed gradient.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like a practice session where the network learns from its mistakes.
-    /// 
-    /// The process is similar to learning a new skill:
-    /// 1. You try to perform the task (make a prediction)
-    /// 2. You see how far off you were (calculate the loss)
-    /// 3. You figure out what you need to change to do better (compute the gradient)
-    /// 4. You adjust your approach based on what you learned (update parameters)
-    /// 
-    /// This process is repeated many times with different inputs to improve the network's performance.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // Store input for reconstruction loss (output captured in ForwardForTraining)
-        _lastInput = input;
-
-        SetTrainingMode(true);
-        try
-        {
-            _optimizer ??= PaperOptimizerFactory.VerifyHandBuilt(this,
+    /// <inheritdoc/>
+    /// <remarks>AMSGrad Adam unless one was configured (Sabour et al. 2017 train with Adam).</remarks>
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer =>
+        _optimizer ??= PaperOptimizerFactory.VerifyHandBuilt(this,
             new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-                    this,
-                    new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = true }));
-            TrainWithTape(input, expectedOutput, _optimizer);
+                this,
+                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { UseAMSGrad = true }));
 
-            // Incorporate auxiliary reconstruction loss into diagnostics.
-            // TrainWithTape already set LastLoss to the margin loss; capture it
-            // then add the weighted reconstruction loss so diagnostics reflect both.
+    /// <inheritdoc/>
+    /// <remarks>The reconstruction decoder reads the step's input.</remarks>
+    protected override void OnTrainingStepStarting(Tensor<T> input, Tensor<T> target)
+    {
+        base.OnTrainingStepStarting(input, target);
+        _lastInput = input;
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>The reported loss adds the weighted auxiliary (reconstruction) loss to the margin loss.</remarks>
+    protected override void OnTrainingStepEnded(bool succeeded)
+    {
+        if (succeeded)
+        {
             T marginLoss = LastLoss ?? NumOps.Zero;
             _lastMarginLoss = marginLoss;
             if (UseAuxiliaryLoss)
-            {
-                T auxLoss = ComputeAuxiliaryLoss();
-                LastLoss = NumOps.Add(marginLoss, NumOps.Multiply(AuxiliaryLossWeight, auxLoss));
-            }
+                LastLoss = NumOps.Add(marginLoss, NumOps.Multiply(AuxiliaryLossWeight, ComputeAuxiliaryLoss()));
         }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+
+        base.OnTrainingStepEnded(succeeded);
     }
 
     /// <summary>

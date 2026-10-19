@@ -172,6 +172,41 @@ public sealed class MultiHeadAttentionFusedTrainingTests
         Assert.Equal(AttentionKernelPath.ScoreMaterializing, layer.LastAttentionKernelPath);
     }
 
+    /// <summary>
+    /// For float the training forward takes the head-interleaved fused kernel instead, which
+    /// also never materializes the scores; reading the scores still forces the
+    /// score-materializing kernel.
+    /// </summary>
+    [Fact(Timeout = 60000)]
+    public async Task FloatTrainingTakesTheHeadInterleavedFusedKernel()
+    {
+        await Task.Yield();
+
+        var layer = new MultiHeadAttentionLayer<float>(
+            HeadCount,
+            HeadDimension,
+            activationFunction: (IActivationFunction<float>)new IdentityActivation<float>());
+        layer.SetTrainingMode(true);
+        var input = new Tensor<float>([2, 12, Embedding]);
+        for (int i = 0; i < input.Length; i++)
+        {
+            input[i] = (float)Math.Sin(0.013 * (i + 1));
+        }
+
+        using (var tape = new GradientTape<float>())
+        {
+            layer.Forward(input);
+        }
+        Assert.Equal(AttentionKernelPath.FusedMultiHeadCore, layer.LastAttentionKernelPath);
+
+        layer.UseAuxiliaryLoss = true;
+        using (var tape = new GradientTape<float>())
+        {
+            layer.Forward(input);
+        }
+        Assert.Equal(AttentionKernelPath.ScoreMaterializing, layer.LastAttentionKernelPath);
+    }
+
 #if NET6_0_OR_GREATER // GC.GetTotalAllocatedBytes does not exist on .NET Framework (the compat build's net471)
     /// <summary>
     /// The fused kernel's point is the memory it does not spend. Both arms are measured in this

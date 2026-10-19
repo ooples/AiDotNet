@@ -230,13 +230,6 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
 
     protected override Tensor<T> PredictCore(Tensor<T> input) => Forecast(input);
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-        base.Train(input, expectedOutput);
-    }
-
     public override ModelMetadata<T> GetModelMetadata()
     {
         var o = _options;

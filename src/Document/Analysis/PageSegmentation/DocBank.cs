@@ -697,24 +697,6 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
             });
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Training is not supported in ONNX inference mode.");
-        }
-
-        SetTrainingMode(true);
-        // TrainWithTape runs the full tape-based forward/backward AND the optimizer's parameter
-        // update. The previous code then ran a SECOND, manual SGD step (CollectParameterGradients +
-        // a hand-rolled params -= grads*lr in UpdateParameters), double-updating the weights with
-        // inconsistent gradients — the cause of the training divergence (loss exploding to ~4e7).
-        // Tape-based training with the registered optimizer is the industry-standard path.
-        TrainWithTape(input, expectedOutput, _optimizer);
-        SetTrainingMode(false);
-    }
-
     /// <inheritdoc />
     /// <remarks>The weights belong to the loaded graph in this mode. The base refuses
     /// the write on every parameter surface, so the guard is stated once, here.</remarks>

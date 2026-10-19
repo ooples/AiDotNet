@@ -55,8 +55,6 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
-    /// <summary>The optimizer this model trains with, for tests that check its recipe reached it.</summary>
-    internal IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
 
@@ -175,21 +173,6 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
     }
 
     /// <inheritdoc />
