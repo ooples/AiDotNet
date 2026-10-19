@@ -754,26 +754,11 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     [ExternalState]
     private Tensor<T>? _gpuBiasOV;
 
-    // Cached forward pass state for backpropagation (per timestep arrays)
-    [ExternalState]
-    private Tensor<T>? _gpuLastInput;
-    private Tensor<T>[]? _gpuCachedForgetGates;
-    private Tensor<T>[]? _gpuCachedInputGates;
-    private Tensor<T>[]? _gpuCachedCellCandidates;
-    private Tensor<T>[]? _gpuCachedOutputGates;
-    private Tensor<T>[]? _gpuCachedCellStates;
-    private Tensor<T>[]? _gpuCachedHiddenStates;
-    [ExternalState]
-    private Tensor<T>? _gpuInitialHiddenState;
-    [ExternalState]
-    private Tensor<T>? _gpuInitialCellState;
-
     // Cached stacked weights for fused kernel (PyTorch format: i, f, g, o)
     private IGpuBuffer? _gpuStackedWeightsIh;
     private IGpuBuffer? _gpuStackedWeightsHh;
     private IGpuBuffer? _gpuStackedBiasIh;
     private IGpuBuffer? _gpuStackedBiasHh;
-    private bool _gpuStackedWeightsValid;
 
     // Cached CPU stacked weights for the fused LstmSequenceForward path (PyTorch
     // [i, f, g, o] layout). Packing the 8 split tensors into the concatenated
@@ -791,11 +776,6 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     // finite-difference probe) bumps a version without going through an invalidating method; without this the cached
     // stack kept serving the old weights, so eval-mode inference ignored every such update.
     private long _cpuStackedWeightsSourceVersion = -1;
-
-    // Fused kernel output cache buffers
-    private IGpuBuffer? _gpuFusedAllH;
-    private IGpuBuffer? _gpuFusedAllC;
-    private IGpuBuffer? _gpuFusedCacheGates;
 
     #endregion
 
@@ -1620,154 +1600,6 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Clears the cached GPU tensors used for training.
-    /// </summary>
-    private void ClearGpuTrainingCache()
-    {
-        _gpuLastInput = null;
-
-        if (_gpuCachedForgetGates != null)
-        {
-            foreach (var t in _gpuCachedForgetGates)
-                (t as IDisposable)?.Dispose();
-            _gpuCachedForgetGates = null;
-        }
-
-        if (_gpuCachedInputGates != null)
-        {
-            foreach (var t in _gpuCachedInputGates)
-                (t as IDisposable)?.Dispose();
-            _gpuCachedInputGates = null;
-        }
-
-        if (_gpuCachedCellCandidates != null)
-        {
-            foreach (var t in _gpuCachedCellCandidates)
-                (t as IDisposable)?.Dispose();
-            _gpuCachedCellCandidates = null;
-        }
-
-        if (_gpuCachedOutputGates != null)
-        {
-            foreach (var t in _gpuCachedOutputGates)
-                (t as IDisposable)?.Dispose();
-            _gpuCachedOutputGates = null;
-        }
-
-        if (_gpuCachedCellStates != null)
-        {
-            foreach (var t in _gpuCachedCellStates)
-                (t as IDisposable)?.Dispose();
-            _gpuCachedCellStates = null;
-        }
-
-        if (_gpuCachedHiddenStates != null)
-        {
-            foreach (var t in _gpuCachedHiddenStates)
-                (t as IDisposable)?.Dispose();
-            _gpuCachedHiddenStates = null;
-        }
-
-        (_gpuInitialHiddenState as IDisposable)?.Dispose();
-        _gpuInitialHiddenState = null;
-
-        (_gpuInitialCellState as IDisposable)?.Dispose();
-        _gpuInitialCellState = null;
-
-        // Note: Do NOT dispose stacked weights here - they're reusable across forward passes
-        // and are only invalidated when actual weights are updated via InvalidateGpuStackedWeights()
-
-        _gpuFusedAllH?.Dispose();
-        _gpuFusedAllH = null;
-        _gpuFusedAllC?.Dispose();
-        _gpuFusedAllC = null;
-        _gpuFusedCacheGates?.Dispose();
-        _gpuFusedCacheGates = null;
-    }
-
-    /// <summary>
-    /// Prepares stacked weights in PyTorch format (i, f, g, o order) for the fused LSTM kernel.
-    /// </summary>
-    private void PrepareStackedWeightsForGpu(IDirectGpuBackend backend)
-    {
-        if (_gpuStackedWeightsValid && _gpuStackedWeightsIh != null)
-            return;
-
-        // Stack input-to-hidden weights: [4*hiddenSize, inputSize] in order i, f, g, o
-        // Layer order: I (input), F (forget), C (cell/gate), O (output)
-        // Kernel order: i, f, g, o -> I, F, C, O
-        int weightsIhSize = 4 * _hiddenSize * _inputSize;
-        int weightsHhSize = 4 * _hiddenSize * _hiddenSize;
-        int biasSize = 4 * _hiddenSize;
-
-        var stackedIh = new float[weightsIhSize];
-        var stackedHh = new float[weightsHhSize];
-        var stackedBiasIh = new float[biasSize];
-        var stackedBiasHh = new float[biasSize]; // PyTorch uses separate ih/hh biases
-
-        // Convert weights to float arrays
-        var wIi = DirectGpuEngine.ToFloatArray<T>(_weightsIi.ToArray());
-        var wFi = DirectGpuEngine.ToFloatArray<T>(_weightsFi.ToArray());
-        var wCi = DirectGpuEngine.ToFloatArray<T>(_weightsCi.ToArray());
-        var wOi = DirectGpuEngine.ToFloatArray<T>(_weightsOi.ToArray());
-
-        var wIh = DirectGpuEngine.ToFloatArray<T>(_weightsIh.ToArray());
-        var wFh = DirectGpuEngine.ToFloatArray<T>(_weightsFh.ToArray());
-        var wCh = DirectGpuEngine.ToFloatArray<T>(_weightsCh.ToArray());
-        var wOh = DirectGpuEngine.ToFloatArray<T>(_weightsOh.ToArray());
-
-        var bI = DirectGpuEngine.ToFloatArray<T>(_biasI.ToArray());
-        var bF = DirectGpuEngine.ToFloatArray<T>(_biasF.ToArray());
-        var bC = DirectGpuEngine.ToFloatArray<T>(_biasC.ToArray());
-        var bO = DirectGpuEngine.ToFloatArray<T>(_biasO.ToArray());
-
-        // Stack weights in kernel order (i, f, g, o)
-        int inputGateOffset = 0;
-        int forgetGateOffset = _hiddenSize * _inputSize;
-        int cellGateOffset = 2 * _hiddenSize * _inputSize;
-        int outputGateOffset = 3 * _hiddenSize * _inputSize;
-
-        Array.Copy(wIi, 0, stackedIh, inputGateOffset, _hiddenSize * _inputSize);
-        Array.Copy(wFi, 0, stackedIh, forgetGateOffset, _hiddenSize * _inputSize);
-        Array.Copy(wCi, 0, stackedIh, cellGateOffset, _hiddenSize * _inputSize);
-        Array.Copy(wOi, 0, stackedIh, outputGateOffset, _hiddenSize * _inputSize);
-
-        int hhInputGateOffset = 0;
-        int hhForgetGateOffset = _hiddenSize * _hiddenSize;
-        int hhCellGateOffset = 2 * _hiddenSize * _hiddenSize;
-        int hhOutputGateOffset = 3 * _hiddenSize * _hiddenSize;
-
-        Array.Copy(wIh, 0, stackedHh, hhInputGateOffset, _hiddenSize * _hiddenSize);
-        Array.Copy(wFh, 0, stackedHh, hhForgetGateOffset, _hiddenSize * _hiddenSize);
-        Array.Copy(wCh, 0, stackedHh, hhCellGateOffset, _hiddenSize * _hiddenSize);
-        Array.Copy(wOh, 0, stackedHh, hhOutputGateOffset, _hiddenSize * _hiddenSize);
-
-        // Stack biases (put all in biasIh, biasHh will be zeros - matches PyTorch default)
-        int biasInputGateOffset = 0;
-        int biasForgetGateOffset = _hiddenSize;
-        int biasCellGateOffset = 2 * _hiddenSize;
-        int biasOutputGateOffset = 3 * _hiddenSize;
-
-        Array.Copy(bI, 0, stackedBiasIh, biasInputGateOffset, _hiddenSize);
-        Array.Copy(bF, 0, stackedBiasIh, biasForgetGateOffset, _hiddenSize);
-        Array.Copy(bC, 0, stackedBiasIh, biasCellGateOffset, _hiddenSize);
-        Array.Copy(bO, 0, stackedBiasIh, biasOutputGateOffset, _hiddenSize);
-        // stackedBiasHh stays zeros
-
-        // Allocate GPU buffers
-        _gpuStackedWeightsIh?.Dispose();
-        _gpuStackedWeightsHh?.Dispose();
-        _gpuStackedBiasIh?.Dispose();
-        _gpuStackedBiasHh?.Dispose();
-
-        _gpuStackedWeightsIh = backend.AllocateBuffer(stackedIh);
-        _gpuStackedWeightsHh = backend.AllocateBuffer(stackedHh);
-        _gpuStackedBiasIh = backend.AllocateBuffer(stackedBiasIh);
-        _gpuStackedBiasHh = backend.AllocateBuffer(stackedBiasHh);
-        _gpuStackedWeightsValid = true;
-    }
-
-    /// <summary>
     /// Invalidates and disposes the stacked GPU weight buffers.
     /// Call this after any weight modification (CPU or GPU side) to ensure
     /// PrepareStackedWeightsForGpu will rebuild the stacked buffers.
@@ -1782,7 +1614,6 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         _gpuStackedBiasIh = null;
         _gpuStackedBiasHh?.Dispose();
         _gpuStackedBiasHh = null;
-        _gpuStackedWeightsValid = false;
     }
 
     /// <summary>

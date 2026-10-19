@@ -291,10 +291,6 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
     private Tensor<T>? _resetMessageWeightsGradient;
     [Scratch]
     private Tensor<T>? _resetBiasGradient;
-
-    // GPU cache fields for backward pass
-    [ExternalState]
-    private Tensor<T>? _gpuLastInput;
     private IGpuBuffer? _gpuEdgeSrcIndices;
     private IGpuBuffer? _gpuEdgeTgtIndices;
     private IGpuBuffer? _gpuEdgeConcatCache;
@@ -304,9 +300,6 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
     private IGpuBuffer? _gpuResetGateCache;
     private IGpuBuffer? _gpuUpdateGateCache;
     private IGpuBuffer? _gpuPreActivationCache;
-    private int _gpuNumEdges;
-    private int _gpuNumNodes;
-    private int _gpuBatchSize;
 
     // GPU gradient fields
     private IGpuBuffer? _gpuMsgWeights1Gradient;
@@ -927,7 +920,6 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// </summary>
     private void ClearGpuCache()
     {
-        _gpuLastInput = null;
         _gpuEdgeSrcIndices?.Dispose();
         _gpuEdgeSrcIndices = null;
         _gpuEdgeTgtIndices?.Dispose();
