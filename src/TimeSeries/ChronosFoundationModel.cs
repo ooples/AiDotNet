@@ -684,9 +684,10 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
     /// </summary>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        if (TryPredictFromTimeIndexCalibration(input, _trainingSeries, out var calibratedPredictions))
+        // A one-column time index: the model's own forecasts (in-sample one-step, or past the training series).
+        if (TryForecastTimeIndex(input, _trainingSeries, _options.ContextLength, PredictSingle, out var forecasts, Forecast))
         {
-            return calibratedPredictions;
+            return forecasts;
         }
 
         int n = input.Rows;
@@ -797,8 +798,12 @@ public partial class ChronosFoundationModel<T> : TimeSeriesModelBase<T>
             throw new ArgumentException("Number of forecast steps must be positive.", nameof(steps));
         }
 
-        // Mean-scale computed ONCE from the observed history and held fixed for the horizon.
-        double scaleFactor = ComputeScaleFactor(history);
+        // Mean-scale computed ONCE from the observed context and held fixed for the horizon. The context is the last
+        // ContextLength values, as the official tokenizer truncates before scaling (context_input_transform).
+        int contextLength = Math.Min(history.Length, _options.ContextLength);
+        var observedContext = new Vector<T>(contextLength);
+        for (int i = 0; i < contextLength; i++) observedContext[i] = history[history.Length - contextLength + i];
+        double scaleFactor = ComputeScaleFactor(observedContext);
 
         var context = new List<T>(history.Length + steps);
         for (int i = 0; i < history.Length; i++)

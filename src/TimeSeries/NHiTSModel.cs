@@ -646,9 +646,10 @@ public partial class NHiTSModel<T> : TimeSeriesModelBase<T>, ISupportsLossFuncti
 
     public override Vector<T> Predict(Matrix<T> input)
     {
-        if (TryPredictFromTimeIndexCalibration(input, _trainingSeries, out var calibratedPredictions))
+        // A one-column time index: the model's own forecasts (in-sample one-step, or past the training series).
+        if (TryForecastTimeIndex(input, _trainingSeries, _options.LookbackWindow, PredictSingle, out var forecasts))
         {
-            return calibratedPredictions;
+            return forecasts;
         }
 
         int n = input.Rows;
