@@ -16152,6 +16152,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // objective is not monotone over MoreData's 10 steps (measured 13.54 -> 13.63); 5% of the baseline still
                 // catches divergence.
                 sb.AppendLine("    protected override double MoreDataRelativeTolerance => 0.05;");
+                // Each training step draws its own mask, noise and distractors, so the training loss is one random draw
+                // of the objective (it moved 51.4 -> 52.3 over 100 CI steps on draws alone). Memorization is judged on the
+                // fixed-seed evaluated objective instead.
+                sb.AppendLine("    protected override bool MemorizationTaskUsesDeterministicEvalLoss => true;");
             }
             else
             {
