@@ -866,11 +866,13 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
     /// are the forecasts of the steps after the training series, each appended to the history for the next. A history
     /// shorter than the window is extended to the left by repeating its first value. The input's values are not read.
     /// A model whose multi-step forecast is not that recursion (Chronos holds the context's scale over the horizon)
-    /// passes it as <paramref name="forecastSteps"/>, which then gives the rows past the training series.
+    /// passes it as <paramref name="forecastSteps"/>, which then gives the rows past the training series. A model that
+    /// reads a shorter history as it is (Chronos masks what is missing) passes <paramref name="extendShortHistory"/>
+    /// false.
     /// </summary>
     /// <returns>False when the input is a matrix of windows rather than a time index; the caller then reads its rows.</returns>
     protected bool TryForecastTimeIndex(Matrix<T> input, Vector<T> trainingSeries, int window, Func<Vector<T>, T> forecastNext,
-        out Vector<T> predictions, Func<Vector<T>, int, Vector<T>>? forecastSteps = null)
+        out Vector<T> predictions, Func<Vector<T>, int, Vector<T>>? forecastSteps = null, bool extendShortHistory = true)
     {
         if (input == null) throw new ArgumentNullException(nameof(input), "Input features matrix cannot be null.");
         if (forecastNext == null) throw new ArgumentNullException(nameof(forecastNext));
@@ -885,7 +887,8 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
             for (int i = 0; i < n; i++) mean += NumOps.ToDouble(trainingSeries[i]);
             predictions[0] = GuardPrediction(NumOps.FromDouble(mean / n));
             var observed = trainingSeries.ToArray();
-            for (int i = 1; i < n; i++) predictions[i] = GuardPrediction(forecastNext(LookbackWindow(observed, i, window)));
+            for (int i = 1; i < n; i++)
+                predictions[i] = GuardPrediction(forecastNext(LookbackWindow(observed, i, window, extendShortHistory)));
             return true;
         }
         if (forecastSteps != null)
@@ -897,7 +900,7 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
         var history = trainingSeries.ToList();
         for (int i = 0; i < n; i++)
         {
-            var value = GuardPrediction(forecastNext(LookbackWindow(history, history.Count, window)));
+            var value = GuardPrediction(forecastNext(LookbackWindow(history, history.Count, window, extendShortHistory)));
             predictions[i] = value;
             history.Add(value);
         }
@@ -922,10 +925,12 @@ public abstract partial class TimeSeriesModelBase<T> : ITimeSeriesModel<T>, ICon
         return true;
     }
 
-    /// <summary>The <paramref name="window"/> values of <paramref name="history"/> before index <paramref name="end"/>,
-    /// extended to the left by repeating the first value.</summary>
-    private static Vector<T> LookbackWindow(IReadOnlyList<T> history, int end, int window)
+    /// <summary>The <paramref name="window"/> values of <paramref name="history"/> before index <paramref name="end"/>;
+    /// when fewer precede it, those, extended to the left by repeating the first value unless <paramref name="extend"/>
+    /// is false.</summary>
+    private static Vector<T> LookbackWindow(IReadOnlyList<T> history, int end, int window, bool extend = true)
     {
+        if (!extend && end < window) window = end;
         var result = new Vector<T>(window);
         for (int t = 0; t < window; t++) result[t] = history[Math.Max(0, end - window + t)];
         return result;

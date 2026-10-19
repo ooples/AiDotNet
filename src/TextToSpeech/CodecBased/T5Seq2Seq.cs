@@ -10,7 +10,7 @@ internal sealed record T5Configuration(
     int VocabularySize, int ModelDim, int FeedForwardDim, int KeyValueDim, int Heads, int EncoderLayers,
     int DecoderLayers, int RelativeBuckets = 32, int RelativeMaxDistance = 128, double Dropout = 0.1,
     double LayerNormEpsilon = 1e-6, int DecoderStartTokenId = 0, int EndTokenId = 2, bool GatedGelu = false,
-    bool TieWordEmbeddings = true);
+    bool TieWordEmbeddings = true, int PadTokenId = 0);
 
 /// <summary>
 /// The relative position buckets of T5 (Raffel et al. 2020, §2.1; Hugging Face <c>T5Attention._relative_position_bucket</c>):
@@ -221,6 +221,22 @@ internal sealed class T5Seq2Seq<T>
     private Tensor<T> PositionBias(TiedEmbeddingLayer<T> table, int queries, int keys, bool bidirectional, bool causal) =>
         RelativeBias(_engine, Configuration, table, queries, keys, bidirectional, causal);
 
+    /// <summary>The attention mask as a score bias <c>[heads, queries, keys]</c>: -1e9 on the keys
+    /// <paramref name="keyMask"/> marks false (Hugging Face adds the dtype's minimum; either leaves them no weight).</summary>
+    private Tensor<T> MaskBias(int queries, bool[] keyMask)
+    {
+        int heads = Configuration.Heads, keys = keyMask.Length;
+        var bias = new Tensor<T>(new[] { heads, queries, keys });
+        var blocked = NumOps.FromDouble(-1e9);
+        for (int j = 0; j < keys; j++)
+        {
+            if (keyMask[j]) continue;
+            for (int h = 0; h < heads; h++)
+                for (int i = 0; i < queries; i++) bias[h, i, j] = blocked;
+        }
+        return bias;
+    }
+
     /// <summary>The relative position bias <c>[heads, queries, keys]</c> from a bucket table, with −1e9 above the
     /// diagonal when <paramref name="causal"/>.</summary>
     internal static Tensor<T> RelativeBias(IEngine engine, T5Configuration c, TiedEmbeddingLayer<T> table, int queries, int keys,
@@ -242,26 +258,29 @@ internal sealed class T5Seq2Seq<T>
         return _engine.TensorAdd(bias, mask);
     }
 
-    /// <summary>The encoder states <c>[L, d]</c> of token ids <c>[L]</c>.</summary>
-    public Tensor<T> Encode(Tensor<T> ids, bool training, Random random)
+    /// <summary>The encoder states <c>[L, d]</c> of token ids <c>[L]</c>; positions <paramref name="mask"/> marks false
+    /// (padding, missing values) receive no attention.</summary>
+    public Tensor<T> Encode(Tensor<T> ids, bool training, Random random, bool[]? mask = null)
     {
         int length = ids.Length;
         var h = Drop(Shared.Forward(ids), training, random);
         var bias = PositionBias(EncoderBias, length, length, bidirectional: true, causal: false);
+        if (mask is not null) bias = _engine.TensorAdd(bias, MaskBias(length, mask));
         foreach (var block in Encoder) h = block.Forward(h, bias, null, null, training, random);
         return Drop(EncoderFinalNorm.Forward(h), training, random);
     }
 
     /// <summary>The decoder's token logits <c>[L, vocabulary]</c> for decoder input ids <c>[L]</c> given the encoder
-    /// states.</summary>
-    public Tensor<T> Decode(Tensor<T> decoderIds, Tensor<T> memory, bool training, Random random)
+    /// states; the cross-attention skips the encoder positions <paramref name="memoryMask"/> marks false.</summary>
+    public Tensor<T> Decode(Tensor<T> decoderIds, Tensor<T> memory, bool training, Random random, bool[]? memoryMask = null)
     {
         int length = decoderIds.Length;
         var h = Drop(Shared.Forward(decoderIds), training, random);
         var decoderBias = DecoderBias ?? throw new InvalidOperationException("This T5 has no decoder.");
         var decoderNorm = DecoderFinalNorm ?? throw new InvalidOperationException("This T5 has no decoder.");
         var bias = PositionBias(decoderBias, length, length, bidirectional: false, causal: true);
-        foreach (var block in Decoder) h = block.Forward(h, bias, memory, null, training, random);
+        var crossBias = memoryMask is null ? null : MaskBias(length, memoryMask);
+        foreach (var block in Decoder) h = block.Forward(h, bias, memory, crossBias, training, random);
         h = Drop(decoderNorm.Forward(h), training, random);
         // Tied embeddings rescale the decoder output by d_model^-1/2 first; an untied lm_head does not.
         if (LanguageModelHead is not null) return LanguageModelHead.Forward(h);
@@ -272,27 +291,36 @@ internal sealed class T5Seq2Seq<T>
     /// <summary>
     /// The teacher-forced cross-entropy of <paramref name="labels"/> given <paramref name="inputIds"/>, as
     /// <c>T5ForConditionalGeneration(labels=...)</c> computes it: the decoder reads the labels shifted right behind the
-    /// start token, and the loss averages the token cross-entropies. With <paramref name="freezeEncoder"/> the encoder
-    /// runs in inference mode outside the tape, so only the decoder (and the embedding rows it reads) learn.
+    /// start token, and the loss averages the token cross-entropies. A negative label (Hugging Face's -100) is
+    /// ignored: it adds no term, and the decoder reads the pad token in its place. With
+    /// <paramref name="freezeEncoder"/> the encoder runs in inference mode outside the tape, so only the decoder (and
+    /// the embedding rows it reads) learn. <paramref name="inputMask"/> masks encoder positions as in
+    /// <see cref="Encode"/>.
     /// </summary>
-    public Tensor<T> Loss(Tensor<T> inputIds, int[] labels, bool training, Random random, bool freezeEncoder = false)
+    public Tensor<T> Loss(Tensor<T> inputIds, int[] labels, bool training, Random random, bool freezeEncoder = false,
+        bool[]? inputMask = null)
     {
         Tensor<T> memory;
         if (freezeEncoder)
         {
-            using (new NoGradScope<T>()) memory = Encode(inputIds, training: false, random);
+            using (new NoGradScope<T>()) memory = Encode(inputIds, training: false, random, inputMask);
         }
         else
         {
-            memory = Encode(inputIds, training, random);
+            memory = Encode(inputIds, training, random, inputMask);
         }
         var decoderIds = new Tensor<T>(new[] { labels.Length });
         decoderIds[0] = NumOps.FromDouble(Configuration.DecoderStartTokenId);
-        for (int i = 1; i < labels.Length; i++) decoderIds[i] = NumOps.FromDouble(labels[i - 1]);
-        var logits = Decode(decoderIds, memory, training, random);                                             // [L, V]
+        for (int i = 1; i < labels.Length; i++)
+            decoderIds[i] = NumOps.FromDouble(labels[i - 1] < 0 ? Configuration.PadTokenId : labels[i - 1]);
+        var logits = Decode(decoderIds, memory, training, random, inputMask);                                   // [L, V]
         var logProbabilities = _engine.TensorLogSoftmax(logits, axis: -1);
         var target = new Tensor<T>(logits._shape);
-        for (int i = 0; i < labels.Length; i++) target[i, labels[i]] = NumOps.FromDouble(-1.0 / labels.Length);
+        int counted = 0;
+        foreach (int label in labels) if (label >= 0) counted++;
+        if (counted == 0) throw new ArgumentException("Every label is ignored.", nameof(labels));
+        for (int i = 0; i < labels.Length; i++)
+            if (labels[i] >= 0) target[i, labels[i]] = NumOps.FromDouble(-1.0 / counted);
         return _engine.ReduceSum(_engine.TensorMultiply(logProbabilities, target), new[] { 0, 1 }, keepDims: false);
     }
 
@@ -305,21 +333,31 @@ internal sealed class T5Seq2Seq<T>
     /// <param name="allowed">When given, <c>allowed(token, step)</c> decides which tokens step <c>step</c> (0 for the first
     /// new token) may sample; the others are removed before the top-k cut, as a Hugging Face logits processor does.</param>
     public List<int> Generate(Tensor<T> inputIds, IReadOnlyList<int> decoderPrefix, double temperature, int topK,
-        int maxNewTokens, Random random, Func<int, int, bool>? allowed = null)
+        int maxNewTokens, Random random, Func<int, int, bool>? allowed = null) =>
+        Sample(Encode(inputIds, training: false, random), null, decoderPrefix, temperature, topK, 1.0, maxNewTokens, random,
+            allowed);
+
+    /// <summary>
+    /// <see cref="Generate"/> from encoder states already computed (so several samples share one encoding), with the
+    /// cross-attention mask of <see cref="Decode"/> and nucleus filtering: after the top-k cut, the smallest set of
+    /// tokens whose probability reaches <paramref name="topP"/> is kept (Hugging Face <c>TopPLogitsWarper</c>; 1 keeps
+    /// all).
+    /// </summary>
+    public List<int> Sample(Tensor<T> memory, bool[]? memoryMask, IReadOnlyList<int> decoderPrefix, double temperature,
+        int topK, double topP, int maxNewTokens, Random random, Func<int, int, bool>? allowed = null)
     {
-        var memory = Encode(inputIds, training: false, random);
         var sequence = new List<int> { Configuration.DecoderStartTokenId };
         sequence.AddRange(decoderPrefix);
         for (int step = 0; step < maxNewTokens; step++)
         {
             var ids = new Tensor<T>(new[] { sequence.Count });
             for (int i = 0; i < sequence.Count; i++) ids[i] = NumOps.FromDouble(sequence[i]);
-            var logits = Decode(ids, memory, training: false, random);
+            var logits = Decode(ids, memory, training: false, random, memoryMask);
             int vocabulary = logits.Shape[1], last = sequence.Count - 1;
             var row = new double[vocabulary];
             for (int v = 0; v < vocabulary; v++)
                 row[v] = allowed is null || allowed(v, step) ? NumOps.ToDouble(logits[last, v]) / temperature : double.NegativeInfinity;
-            int next = SampleTopK(row, topK, random);
+            int next = SampleTopK(row, topK, topP, random);
             if (next == Configuration.EndTokenId) break;
             sequence.Add(next);
         }
@@ -327,15 +365,34 @@ internal sealed class T5Seq2Seq<T>
         return sequence;
     }
 
-    private static int SampleTopK(double[] scores, int topK, Random random)
+    // Hugging Face's TopKLogitsWarper keeps every score at least the k-th largest (ties included); TopPLogitsWarper
+    // then removes the tokens whose cumulative probability, accumulated from the least likely, stays at or below
+    // 1 - topP (always keeping the most likely); the draw is from the softmax of what is left.
+    private static int SampleTopK(double[] scores, int topK, double topP, Random random)
     {
-        int k = topK <= 0 ? scores.Length : Math.Min(topK, scores.Length);
         var order = new int[scores.Length];
         for (int i = 0; i < order.Length; i++) order[i] = i;
         Array.Sort(order, (a, b) => scores[b].CompareTo(scores[a]));
+        int k = topK <= 0 ? scores.Length : Math.Min(topK, scores.Length);
+        double threshold = scores[order[k - 1]];
+        while (k < order.Length && scores[order[k]] >= threshold) k++;
         double max = scores[order[0]], total = 0;
         var weights = new double[k];
         for (int i = 0; i < k; i++) total += weights[i] = Math.Exp(scores[order[i]] - max);
+        if (topP < 1.0)
+        {
+            double removed = 0;
+            int kept = k;
+            for (int i = k - 1; i > 0; i--)
+            {
+                removed += weights[i] / total;
+                if (removed > 1.0 - topP) break;
+                kept = i;
+            }
+            k = kept;
+            total = 0;
+            for (int i = 0; i < k; i++) total += weights[i];
+        }
         double draw = random.NextDouble() * total;
         for (int i = 0; i < k; i++)
         {
@@ -352,9 +409,10 @@ internal sealed class T5Seq2Seq<T>
     /// Initializes the parameters as Hugging Face's <c>T5PreTrainedModel._init_weights</c> does (initializer factor 1):
     /// the shared embedding from N(0, 1); query N(0, (d_model · d_kv)^-1/2), key and value N(0, d_model^-1/2), output
     /// N(0, (heads · d_kv)^-1/2); the relative bias tables N(0, d_model^-1/2); wi N(0, d_model^-1/2), wo
-    /// N(0, d_ff^-1/2); layer norms at one.
+    /// N(0, d_ff^-1/2); layer norms at one. A <paramref name="factor"/> (Hugging Face's <c>initializer_factor</c>)
+    /// multiplies every standard deviation and the layer norms' starting value.
     /// </summary>
-    public void InitializeLikeHuggingFace(Random random)
+    public void InitializeLikeHuggingFace(Random random, double factor = 1.0)
     {
         var c = Configuration;
         int inner = c.Heads * c.KeyValueDim;
@@ -366,7 +424,7 @@ internal sealed class T5Seq2Seq<T>
         void Fill(BiasFreeLinearLayer<T> layer, int inputs, int outputs, double std)
         {
             var values = new Vector<T>(inputs * outputs);
-            for (int i = 0; i < values.Length; i++) values[i] = NumOps.FromDouble(Normal(std));
+            for (int i = 0; i < values.Length; i++) values[i] = NumOps.FromDouble(Normal(factor * std));
             layer.SetParameters(values);
         }
         void Attention(T5Attention<T> attention)
@@ -376,9 +434,19 @@ internal sealed class T5Seq2Seq<T>
             Fill(attention.Value, c.ModelDim, inner, Math.Pow(c.ModelDim, -0.5));
             Fill(attention.Output, inner, c.ModelDim, Math.Pow(inner, -0.5));
         }
-        Shared.Reinitialize(() => Normal(1.0));
-        EncoderBias.Reinitialize(() => Normal(Math.Pow(c.ModelDim, -0.5)));
-        DecoderBias?.Reinitialize(() => Normal(Math.Pow(c.ModelDim, -0.5)));
+        Shared.Reinitialize(() => Normal(factor));
+        EncoderBias.Reinitialize(() => Normal(factor * Math.Pow(c.ModelDim, -0.5)));
+        DecoderBias?.Reinitialize(() => Normal(factor * Math.Pow(c.ModelDim, -0.5)));
+        // T5LayerNorm weights start at the factor.
+        var norm = new Vector<T>(Enumerable.Repeat(NumOps.FromDouble(factor), c.ModelDim).ToArray());
+        foreach (var block in Encoder.Concat(Decoder))
+        {
+            block.SelfNorm.SetParameters(norm);
+            block.CrossNorm?.SetParameters(norm);
+            block.FeedForwardNorm.SetParameters(norm);
+        }
+        EncoderFinalNorm.SetParameters(norm);
+        DecoderFinalNorm?.SetParameters(norm);
         foreach (var block in Encoder.Concat(Decoder))
         {
             Attention(block.SelfAttention);
