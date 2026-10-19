@@ -60,20 +60,11 @@ public partial class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed(); var input = PreprocessText(text); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
-        // Run preprocessed text through learned layers for feature extraction
-        var features = input;
-        foreach (var l in Layers) features = l.Forward(features);
-        int textLen = Math.Min(text.Length, _options.MaxTextLength);
-        int tF = 0; int[] dur = new int[textLen]; for (int i = 0; i < textLen; i++) { dur[i] = Math.Max(2, (int)(3.0 + Math.Sin(i * 0.3) * 1.5)); tF += dur[i]; } tF = Math.Min(tF, 500);
-        double[] tc = new double[tF]; int fI = 0;
-        for (int i = 0; i < textLen && fI < tF; i++) { double cv = (text[i] % 128) / 128.0; for (int d = 0; d < dur[i] && fI < tF; d++) tc[fI++] = cv; }
-        double[] lat = new double[tF]; for (int f = 0; f < tF; f++) lat[f] = Math.Sin(f * 0.25) * 0.6;
-        for (int st = 0; st < 10; st++) { double t = 1.0 - (st + 1.0) / 10; for (int f = 0; f < tF; f++) lat[f] = Math.Tanh(tc[f] * (1.0 - t) + lat[f] * t + Math.Sin(f * 0.1 + st * 0.5) * t * 0.2); }
-        int waveLen = tF * _options.HopSize; var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++) { int fr = Math.Min(i / Math.Max(1, _options.HopSize), tF - 1); waveform[i] = NumOps.FromDouble(lat[fr] * Math.Sin(i * 0.006) * 0.85); }
-        return waveform;
+        // The synthesized audio is the network's own output. It used to run the layers, discard the result and return a
+        // waveform built from sine waves and the character codes, so the trained model never reached the caller.
+        return PostprocessAudio(Predict(input));
     }
-    protected override Tensor<T> PreprocessText(string text) { int len = Math.Min(text.Length, _options.MaxTextLength); var t = new Tensor<T>([len]); for (int i = 0; i < len; i++) t[i] = NumOps.FromDouble(text[i] / 128.0); return t; } protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
+    protected override Tensor<T> PreprocessText(string text) => OneHotCharacterFeatures(text.Length > _options.MaxTextLength ? text.Substring(0, _options.MaxTextLength) : text, _options.MelChannels); protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
     protected override void InitializeLayers() => InitializeLayersCore();
 
     // Constructors initialize this model's layers without dispatching into an unfinished derived instance.
