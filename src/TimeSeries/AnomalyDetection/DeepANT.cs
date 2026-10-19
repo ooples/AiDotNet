@@ -175,17 +175,9 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
                 TrainingCancellationToken.ThrowIfCancellationRequested();
                 int size = Math.Min(o.BatchSize, count - start);
                 var (history, target) = Batch(windows, targets, order, start, size);
-                using var tape = new Tensors.Engines.Autodiff.GradientTape<T>();
-                var prediction = _network.Forward(history, training: true, _random);
-                var lossTensor = loss.ComputeTapeLoss(prediction, target);
-                var all = tape.ComputeGradients(lossTensor, sources: null);
-                var grads = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
-                foreach (var p in parameters)
-                    if (all.TryGetValue(p, out var g)) grads[p] = g;
-                T lossValue = lossTensor[0];
-                var context = new Tensors.Engines.Autodiff.TapeStepContext<T>(parameters, grads, lossValue, history, target,
-                    (_, _) => prediction, (predicted, t) => loss.ComputeTapeLoss(predicted, t), null);
-                optimizer.Step(context);
+                // One update on the shared eager step: the network is trained directly, outside the model's Layers chain.
+                T lossValue = Training.TapeTrainingStepper<T>.EagerObjectiveStep(parameters,
+                    () => loss.ComputeTapeLoss(_network.Forward(history, training: true, _random), target), optimizer);
                 lossSum += _numOps.ToDouble(lossValue);
                 batches++;
             }

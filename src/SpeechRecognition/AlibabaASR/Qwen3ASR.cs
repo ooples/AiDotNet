@@ -96,25 +96,6 @@ public partial class Qwen3ASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<
 
     protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultLLMASRLayers(encoderDim: _options.EncoderDim, llmDim: _options.EncoderDim * 2, numEncoderLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
-
-        // TRY/FINALLY, NOT TWO STATEMENTS. TrainWithTape can throw -- a shape mismatch, a diverged
-        // loss, an OOM part-way through the tape -- and the bare call left the model stuck in
-        // training mode when it did. The next Predict then runs with dropout live and stochastic
-        // batch-norm statistics, so it silently returns a different answer for the same input, and
-        // nothing about that failure points back at the exception that caused it.
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being

@@ -51,6 +51,11 @@ class ResourceSummary:
 class TrainingResult:
     epoch_seconds: list[float]
     total_seconds: float
+    steady_state_epoch_seconds_avg: float
+    steady_state_epoch_seconds_median: float
+    steady_state_epoch_seconds_p25: float
+    steady_state_epoch_seconds_p75: float
+    steps_per_epoch: int
     gradient_seconds_avg: float
     data_loading_seconds_avg: float
     resources: ResourceSummary
@@ -62,6 +67,9 @@ class InferenceBatchResult:
     warmup_seconds_avg: float
     steady_state_latency_ms_avg: float
     steady_state_latency_ms_p95: float
+    steady_state_latency_ms_median: float
+    steady_state_latency_ms_p25: float
+    steady_state_latency_ms_p75: float
     throughput_samples_per_second: float
     memory_mb_peak: float
 
@@ -169,6 +177,11 @@ class LSTMClassifier(nn.Module):
         super().__init__()
         self.lstm = nn.LSTM(input_size=32, hidden_size=64, batch_first=True)
         self.head = nn.Linear(64, 10)
+        # AiDotNet's LSTMLayer has ONE bias per gate; PyTorch's two (bias_ih + bias_hh) are the same function but
+        # each takes its own Adam step, so the effective bias moves twice as far per step (measured: every bias
+        # update off by exactly 50%). Zeroing and freezing bias_hh makes the parameterization identical.
+        self.lstm.bias_hh_l0.data.zero_()
+        self.lstm.bias_hh_l0.requires_grad_(False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out, _ = self.lstm(x)
@@ -178,10 +191,17 @@ class LSTMClassifier(nn.Module):
 class TransformerClassifier(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        layer = nn.TransformerEncoderLayer(d_model=64, nhead=4, dim_feedforward=128, batch_first=True)
+        # Same block as AiDotNet's TransformerEncoderBlock: Pre-LN (norm_first), no dropout (the C# side runs
+        # dropoutRate 0; PyTorch's default 0.1 was extra work and a different function), and no Q/K/V bias --
+        # AiDotNet's MultiHeadAttentionLayer has only an output bias, so in_proj_bias is zeroed and frozen.
+        layer = nn.TransformerEncoderLayer(d_model=64, nhead=4, dim_feedforward=128, dropout=0.0,
+                                           batch_first=True, norm_first=True)
         self.proj = nn.Linear(32, 64)
-        self.encoder = nn.TransformerEncoder(layer, num_layers=2)
+        self.encoder = nn.TransformerEncoder(layer, num_layers=2, enable_nested_tensor=False)
         self.head = nn.Linear(64, 10)
+        for block in self.encoder.layers:
+            block.self_attn.in_proj_bias.data.zero_()
+            block.self_attn.in_proj_bias.requires_grad_(False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         encoded = self.encoder(self.proj(x))
@@ -204,6 +224,17 @@ def make_model(name: str) -> tuple[nn.Module, tuple[int, ...]]:
     raise ValueError(f"Unknown model: {name}")
 
 
+def quantile(sorted_values: list[float], q: float) -> float:
+    """Linear interpolation between order statistics (numpy's default) -- the same function
+    as BenchStats.Quantile on the AiDotNet side, so median/IQR compare like-for-like."""
+    if not sorted_values:
+        return 0.0
+    pos = q * (len(sorted_values) - 1)
+    lo = int(pos)
+    hi = min(lo + 1, len(sorted_values) - 1)
+    return sorted_values[lo] + (sorted_values[hi] - sorted_values[lo]) * (pos - lo)
+
+
 def synchronize(device: torch.device) -> None:
     if device.type == "cuda":
         torch.cuda.synchronize(device)
@@ -215,39 +246,65 @@ def synthetic_batch(batch_size: int, shape: tuple[int, ...], device: torch.devic
     return x, y
 
 
-def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.device, epochs: int, batches: int, batch_size: int) -> TrainingResult:
+def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.device, epochs: int, batches: int, batch_size: int, breakdown: bool = False) -> TrainingResult:
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
     epoch_seconds: list[float] = []
     gradient_seconds: list[float] = []
     data_seconds: list[float] = []
 
+    # Batches are generated BEFORE the timed epochs (the AiDotNet twin does the same) so epoch
+    # time is pure training, not each framework's very different synthetic-data RNG cost.
+    pool: list[tuple[torch.Tensor, torch.Tensor]] = []
+    for _ in range(batches):
+        start_data = time.perf_counter()
+        pool.append(synthetic_batch(batch_size, shape, device))
+        synchronize(device)
+        data_seconds.append(time.perf_counter() - start_data)
+
     start_total = time.perf_counter()
     with ResourceMonitor(track_gpu=device.type == "cuda") as monitor:
-        for _ in range(epochs):
-            start_epoch = time.perf_counter()
-            for _ in range(batches):
-                start_data = time.perf_counter()
-                x, y = synthetic_batch(batch_size, shape, device)
+        for epoch in range(epochs):
+            # PROFILE_RANGE=1: bracket the last epoch for `nsys --capture-range=cudaProfilerApi` (same as the C# side).
+            profile_epoch = os.environ.get("PROFILE_RANGE") == "1" and epoch == epochs - 1 and device.type == "cuda"
+            if profile_epoch:
                 synchronize(device)
-                data_seconds.append(time.perf_counter() - start_data)
+                torch.cuda.profiler.start()
+            start_epoch = time.perf_counter()
+            for x, y in pool:
 
                 optimizer.zero_grad(set_to_none=True)
                 logits = model(x)
                 loss = criterion(logits, y)
-                synchronize(device)
-                start_grad = time.perf_counter()
+                # Per-step device syncs inflate the step on GPU; they run only under --breakdown,
+                # which attributes time to the backward. Default timing matches AiDotNet's loop.
+                if breakdown:
+                    synchronize(device)
+                    start_grad = time.perf_counter()
                 loss.backward()
-                synchronize(device)
-                gradient_seconds.append(time.perf_counter() - start_grad)
+                if breakdown:
+                    synchronize(device)
+                    gradient_seconds.append(time.perf_counter() - start_grad)
+                # Same global-norm clip AiDotNet applies by default (MaxGradNorm 1.0).
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 optimizer.step()
             synchronize(device)
             epoch_seconds.append(time.perf_counter() - start_epoch)
+            if profile_epoch:
+                torch.cuda.profiler.stop()
     total = time.perf_counter() - start_total
+    # Steady state excludes epoch 0 (warmup), exactly as the AiDotNet twin does.
+    steady_epochs = epoch_seconds[1:] if len(epoch_seconds) > 1 else epoch_seconds
+    steady_sorted = sorted(steady_epochs)
     return TrainingResult(
         epoch_seconds=[round(value, 6) for value in epoch_seconds],
         total_seconds=round(total, 6),
-        gradient_seconds_avg=round(statistics.fmean(gradient_seconds), 6),
+        steady_state_epoch_seconds_avg=round(statistics.fmean(steady_epochs), 6) if steady_epochs else 0.0,
+        steady_state_epoch_seconds_median=round(quantile(steady_sorted, 0.5), 6),
+        steady_state_epoch_seconds_p25=round(quantile(steady_sorted, 0.25), 6),
+        steady_state_epoch_seconds_p75=round(quantile(steady_sorted, 0.75), 6),
+        steps_per_epoch=batches,
+        gradient_seconds_avg=round(statistics.fmean(gradient_seconds), 6) if gradient_seconds else 0.0,
         data_loading_seconds_avg=round(statistics.fmean(data_seconds), 6),
         resources=monitor.summary(),
     )
@@ -287,6 +344,9 @@ def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.
             warmup_seconds_avg=round(statistics.fmean(warmup_times), 6),
             steady_state_latency_ms_avg=round(statistics.fmean(steady) * 1000, 3),
             steady_state_latency_ms_p95=round(steady_sorted[p95_idx] * 1000, 3),
+            steady_state_latency_ms_median=round(quantile(steady_sorted, 0.5) * 1000, 3),
+            steady_state_latency_ms_p25=round(quantile(steady_sorted, 0.25) * 1000, 3),
+            steady_state_latency_ms_p75=round(quantile(steady_sorted, 0.75) * 1000, 3),
             throughput_samples_per_second=round((iterations * batch_size) / total, 3),
             memory_mb_peak=round(max(rss_peak, cuda_peak), 3),
         ))
@@ -315,7 +375,7 @@ def run(args: argparse.Namespace) -> dict[str, object]:
             # torch.compile (TorchInductor) — the "PyTorch compiled" comparison.
             # Counts params BEFORE compile (the wrapper hides .parameters()).
             model = torch.compile(model)
-        training = benchmark_training(model, shape, device, args.epochs, args.train_batches, args.batch_size)
+        training = benchmark_training(model, shape, device, args.epochs, args.train_batches, args.batch_size, args.breakdown)
         model.eval()
         inference = benchmark_inference(model, shape, device, args.inference_iterations, args.warmup_iterations)
         model_results.append(ModelResult(name, str(device), parameters, training, inference))
@@ -341,6 +401,8 @@ def main() -> None:
     parser.add_argument("--inference-iterations", type=int, default=100)
     parser.add_argument("--warmup-iterations", type=int, default=10)
     parser.add_argument("--seed", type=int, default=1234)
+    parser.add_argument("--breakdown", action="store_true",
+                        help="sync per step to attribute time to the backward (slows GPU steps)")
     parser.add_argument("--threads", type=int, default=0,
                         help="Pin CPU thread count (0 = PyTorch default = all cores). "
                              "Match the AiDotNet side's AIDOTNET_BLAS_THREADS for a fair comparison.")

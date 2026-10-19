@@ -379,16 +379,8 @@ public partial class CNNBiLSTMCRF<T> : SequenceLabelingNERBase<T>, INERModel<T>
         }
     }
 
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
-        if (_optimizer is null) throw new InvalidOperationException("Optimizer is not initialized.");
-        // Delegate to the shared CRF-aware training step on
-        // SequenceLabelingNERBase — see BiLSTMCRF.Train for the rationale.
-        RunCrfAwareTrainStep(input, expected, _options.UseCRF, _optimizer);
-    }
-
+    /// <inheritdoc/>
+    protected override bool? CrfTraining => _options.UseCRF;
     /// <inheritdoc />
     public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
     {

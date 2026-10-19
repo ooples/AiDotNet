@@ -833,31 +833,13 @@ public partial class ABINet<T> : DocumentNeuralNetworkBase<T>, ITextRecognizer<T
     }
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-
-        SetTrainingMode(true);
-        try
-        {
-            // The branched forward returns the vision, language and fusion predictions stacked
-            // along axis 0, so the target is repeated three times to line up block-for-block.
-            // ABINetMultiTaskLoss splits both and returns lambda_v * L_v + lambda_l * L_l + L_f.
-            var target = _branched
-                ? Engine.TensorConcatenate(new[] { expectedOutput, expectedOutput, expectedOutput }, axis: 0)
-                : expectedOutput;
-
-            TrainWithTape(
-                PreprocessTextImage(input),
-                target,
-                _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
+    /// <remarks>
+    /// The text image is preprocessed; with the branched (vision, language, fusion) heads the target is repeated once per
+    /// branch, so each branch is supervised (Fang et al. 2021).
+    /// </remarks>
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
+        => (PreprocessTextImage(input),
+            target is not null && _branched ? Engine.TensorConcatenate(new[] { target, target, target }, axis: 0) : target);
 
     // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 

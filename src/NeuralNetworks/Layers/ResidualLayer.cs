@@ -595,12 +595,6 @@ public partial class ResidualLayer<T> : LayerBase<T>, IShapeContract
         return metadata;
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        return _innerLayer?.GetParameterGradients() ?? new Vector<T>(0);
-    }
-
     /// <summary>
     /// Resets the internal state of the residual layer and its inner layer.
     /// </summary>

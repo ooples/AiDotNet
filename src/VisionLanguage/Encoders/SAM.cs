@@ -186,7 +186,7 @@ public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
     /// One step of SAM's training on an image and its ground-truth mask (<c>H·W</c> values): the paper's interactive
     /// prompt simulation through the full network (<see cref="SamTraining{T}"/>), the encoder trained with the decoder.
     /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
@@ -196,6 +196,7 @@ public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
         var objective = training.Objective(image, expected, _trainingRandom);
         // The objective runs the whole network itself; TrainWithCustomLoss would also run (and discard) a forward pass.
         TrainWithCustomObjective(image, expected, (_, _) => objective(), _optimizer);
+        return true;
     }
 
     /// <inheritdoc />

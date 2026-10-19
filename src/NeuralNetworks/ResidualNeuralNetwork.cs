@@ -624,54 +624,6 @@ public partial class ResidualNeuralNetwork<T> : VectorModelLayoutBase<T>, IAuxil
         return diagnostics;
     }
 
-    /// <summary>
-    /// Trains the Residual Neural Network on the provided data.
-    /// </summary>
-    /// <param name="input">The input training data.</param>
-    /// <param name="expectedOutput">The expected output for the given input.</param>
-    /// <remarks>
-    /// <para>
-    /// This method trains the Residual Neural Network on the provided data for the specified number of epochs.
-    /// It divides the data into batches and trains on each batch using backpropagation and gradient descent.
-    /// The method tracks and reports the average loss for each epoch to monitor training progress.
-    /// If deep supervision is enabled and auxiliary classifiers are configured, auxiliary losses from intermediate classifiers are included.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method teaches the ResNet to recognize patterns in your data.
-    ///
-    /// The training process works like this:
-    /// 1. Divides your data into smaller batches for efficient processing
-    /// 2. For each batch:
-    ///    - Feeds the input data through the network
-    ///    - Compares the prediction with the expected output
-    ///    - Calculates how wrong the prediction was (the "loss")
-    ///    - If deep supervision is enabled, also computes losses from intermediate classifiers
-    ///    - Adjusts the network's parameters to reduce errors
-    /// 3. Repeats this process for multiple epochs (complete passes through the data)
-    ///
-    /// The special residual connections in the ResNet help the error signals flow backward
-    /// through the network more effectively, making it possible to train very deep networks
-    /// that would otherwise suffer from the vanishing gradient problem.
-    /// </para>
-    /// </remarks>
-    /// <summary>
-    /// Performs a single training step: one forward pass, one backward pass, one parameter update.
-    /// For multi-epoch training, call this method repeatedly or use the PredictionModelBuilder facade.
-    /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        foreach (var layer in Layers)
-            layer.SetTrainingMode(true);
-try
-{
-    TrainWithTape(input, expectedOutput, _optimizer);
-}
-finally
-{
-    SetTrainingMode(false);
-}
-    }
-
 
     /// <summary>
     /// Gets metadata about the Residual Neural Network model.

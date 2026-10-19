@@ -437,37 +437,6 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
     }
 
     /// <summary>
-    /// Trains the Vision Transformer on a single input-output pair.
-    /// </summary>
-    /// <param name="input">The input image tensor.</param>
-    /// <param name="expectedOutput">The expected output (class labels or probabilities).</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method trains the Vision Transformer on one example.
-    ///
-    /// During training:
-    /// 1. Forward pass: Make a prediction using the current parameters
-    /// 2. Calculate loss: Measure how wrong the prediction is
-    /// 3. Backward pass: Calculate gradients for all parameters
-    /// 4. Update parameters: Adjust weights and biases to improve performance
-    ///
-    /// This is typically called many times with different images to train the model.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, optimizer: null);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <summary>
     /// Tape-tracked forward pass for training. Mirrors <see cref="Predict"/> but
     /// uses Engine ops (TensorConcatenate, TensorAdd, Reshape, TensorSlice)
     /// so gradients flow back through the patch embedding, transformer encoder

@@ -184,6 +184,18 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     /// </summary>
     private readonly double _learningRate;
 
+    private AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>? _sgd;
+
+    // Plain SGD at the configured rate, without the clipping the optimizer options enable by default (this step never
+    // clipped).
+    private AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>> PlainSgd()
+        => _sgd ??= new AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(null,
+            new AiDotNet.Models.Options.StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _learningRate,
+                EnableGradientClipping = false,
+            });
+
     /// <summary>
     /// Test-only hook: when true, the first-order (i±1) warped neighbour is zeroed in every propagation
     /// step, leaving ONLY the second-order (i±2) contribution. This isolates the direct two-step
@@ -497,44 +509,26 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     }
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The configured loss (Charbonnier by default) of the enhanced clip against the target, with the paper's plain
+    /// SGD.
+    /// </remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is not supported in ONNX mode.");
-
         var loss = LossFunction as LossFunctionBase<T>
             ?? throw new InvalidOperationException(
                 "BasicVSR++ tape training requires a LossFunctionBase<T> (Charbonnier by default).");
-
-        // BasicVSR++ is a RECURRENT architecture: the same alignment/propagation
-        // layers are reapplied across frames and propagation iterations, and the
-        // reconstruction is assembled by stacking per-frame outputs. The generic
-        // sequential layer-chain forward (NeuralNetworkBase.ForwardForTraining) does
-        // not model this — it would feed SPyNet a single frame and throw
-        // ("expects two stacked frames"). Instead we drive the model's real forward
-        // (EnhanceVideo) through the autodiff tape so gradients reach every
-        // trainable layer, exactly as PyTorch's loss.backward() would over the
-        // recurrent graph. This is the paper's end-to-end training of the
-        // reconstruction network under the Charbonnier objective (Chan et al. 2022).
-        SetTrainingMode(true);
-        try
+        return new[]
         {
-            var trainableLayers = Layers.OfType<ITrainableLayer<T>>().ToList();
-            T learningRate = NumOps.FromDouble(_learningRate);
-
-            LastLoss = TapeTrainingStep<T>.Step(
-                trainableLayers,
-                input,
-                expectedOutput,
-                learningRate,
-                forward: EnhanceVideo,
-                computeLoss: (prediction, target) => loss.ComputeTapeLoss(prediction, target),
-                onGradients: gradients => PublishParameterGradients(gradients));
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+            new Training.TrainingObjective<T>(
+                new[] { input, expectedOutput },
+                data => loss.ComputeTapeLoss(EnhanceVideo(data[0]), data[1]))
+            {
+                Optimizer = PlainSgd(),
+                Parameters = () => TapeTrainingStep<T>.CollectParameters(Layers),
+            },
+        };
     }
 
     /// <inheritdoc/>
@@ -636,8 +630,8 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     /// <paramref name="nextFlow"/> (i±1→i±2). At pixel p the composed displacement is
     /// baseFlow(p) + nextFlow(p + baseFlow(p)) — sample the second hop at the location the first hop lands
     /// on, then add the two hops. Flows are FIXED sampling guides (their values are not differentiated,
-    /// exactly like the single-hop flows), so composition runs on the materialized data — matching how
-    /// <see cref="BuildFlowGrid"/> already reads <c>flow.Data.Span</c> directly.
+    /// exactly like the single-hop flows; <see cref="BuildFlowGrid"/> stops their gradient), and the composition is
+    /// a recorded add, so a compiled plan composes each clip's own flows.
     /// </summary>
     private Tensor<T> ComposeFlow(Tensor<T> baseFlow, Tensor<T> nextFlow)
     {
@@ -645,14 +639,7 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
         // first-hop flow. WarpFeatureTape treats the [2, H, W] flow field exactly like a 2-channel
         // feature map, so p+baseFlow(p) sampling is reused verbatim.
         var warpedNext = WarpFeatureTape(nextFlow, baseFlow);
-        var composed = new Tensor<T>(baseFlow._shape);
-        var b = baseFlow.Data.Span;
-        var w = warpedNext.Data.Span;
-        var c = composed.Data.Span;
-        int len = c.Length;
-        for (int i = 0; i < len; i++)
-            c[i] = NumOps.Add(b[i], w[i]);
-        return composed;
+        return Engine.TensorAdd(baseFlow, warpedNext);
     }
 
     /// <summary>
@@ -778,36 +765,30 @@ public partial class BasicVSRPlusPlus<T> : VideoSuperResolutionBase<T>
     /// </summary>
     private Tensor<T> BuildFlowGrid(Tensor<T> flow, int height, int width)
     {
-        var grid = new Tensor<T>(new[] { 1, height, width, 2 });
-
-        T widthNorm = NumOps.FromDouble(width > 1 ? 2.0 / (width - 1) : 0.0);
-        T heightNorm = NumOps.FromDouble(height > 1 ? 2.0 / (height - 1) : 0.0);
-        T one = NumOps.One;
-        int plane = height * width;
-
-        // Flow channel 0 = dx, channel 1 = dy (channels-first [2, H, W]); a leading
-        // batch dim of 1 leaves these per-pixel offsets unchanged.
+        // The flow is a fixed sampling guide: StopGradient keeps it out of the gradient, and building the grid from
+        // recorded ops (the pixel grid is a constant, the displacement is not) rather than reading the flow's values
+        // on the host keeps a compiled training plan sampling along each clip's own flow. Reading them baked the
+        // first clip's flow into the plan.
+        double widthNorm = width > 1 ? 2.0 / (width - 1) : 0.0;
+        double heightNorm = height > 1 ? 2.0 / (height - 1) : 0.0;
+        var pixelValues = new T[height * width * 2];
         for (int h = 0; h < height; h++)
         {
             for (int w = 0; w < width; w++)
             {
-                int pixel = h * width + w;
-                T dx = flow.Data.Span[pixel];
-                T dy = flow.Data.Span[plane + pixel];
-
-                T srcX = NumOps.Add(NumOps.FromDouble(w), dx);
-                T srcY = NumOps.Add(NumOps.FromDouble(h), dy);
-
-                T gridX = NumOps.Subtract(NumOps.Multiply(srcX, widthNorm), one);
-                T gridY = NumOps.Subtract(NumOps.Multiply(srcY, heightNorm), one);
-
-                int gridIdx = pixel * 2;
-                grid.Data.Span[gridIdx] = gridX;
-                grid.Data.Span[gridIdx + 1] = gridY;
+                int index = (h * width + w) * 2;
+                pixelValues[index] = NumOps.FromDouble(w * widthNorm - 1.0);
+                pixelValues[index + 1] = NumOps.FromDouble(h * heightNorm - 1.0);
             }
         }
+        var pixels = new Tensor<T>(pixelValues, new[] { 1, height, width, 2 });
+        var normalization = new Tensor<T>(
+            new[] { NumOps.FromDouble(widthNorm), NumOps.FromDouble(heightNorm) }, new[] { 1, 1, 1, 2 });
 
-        return grid;
+        // Flow channel 0 = dx, channel 1 = dy (channels-first [2, H, W], or [1, 2, H, W]).
+        var guide = Engine.Reshape(Engine.StopGradient(flow), new[] { 1, 2, height, width });
+        var displacement = Engine.TensorPermute(guide, new[] { 0, 2, 3, 1 });
+        return Engine.TensorAdd(pixels, Engine.TensorMultiply(displacement, normalization));
     }
 
     #endregion

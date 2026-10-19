@@ -668,34 +668,6 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
-    /// <summary>
-    /// Resets the internal state of the layer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method resets the internal state of the layer, clearing cached values from forward and backward passes.
-    /// This includes the last input, normalized values, mean, standard deviation, and gradients.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
-    /// 
-    /// When resetting the state:
-    /// - All stored information about previous inputs is removed
-    /// - All calculated statistics (mean, standard deviation) are cleared
-    /// - All gradient information is cleared
-    /// - The layer is ready for new data without being influenced by previous data
-    /// 
-    /// This is important for:
-    /// - Processing a new, unrelated batch of data
-    /// - Preventing information from one batch affecting another
-    /// - Starting a new training episode
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_gammaGradient == null || _betaGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        return Vector<T>.Concatenate(_gammaGradient.ToVector(), _betaGradient.ToVector());
-    }
-
     public override void ClearGradients() { base.ClearGradients(); _gammaGradient = null; _betaGradient = null; }
 
     public override void ResetState()

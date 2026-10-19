@@ -712,12 +712,6 @@ public partial class REaLTabFormerGenerator<T> : NeuralSyntheticTabularGenerator
         return current;
     }
 
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // REaLTabFormer uses its own specialized training via Fit/FitAsync.
-    }
-
     // UpdateParameters redistributed the vector across Layers, which the base already folds -- and
     // did it less safely: the length guard silently left the remaining layers untouched on a short
     // vector instead of failing. Removed under AIDN082.

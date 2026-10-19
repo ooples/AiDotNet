@@ -260,18 +260,18 @@ public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
     }
 
     /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         ThrowIfDisposed();
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         if (!HasPaperLayers)
         {
-            TrainWithTape(input, expectedOutput, _optimizer);
-            return;
+            return false;
         }
         var (tokens, mel) = Prepare(input, expectedOutput);
         TrainWithCustomObjective(tokens, mel, Objective, _optimizer);
+        return true;
     }
 
     /// <inheritdoc />

@@ -859,31 +859,6 @@ public partial class AudioGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <summary>
-    /// Trains the model on input data.
-    /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Cannot train in ONNX inference mode. Use the native constructor for training.");
-        }
-
-        SetTrainingMode(true);
-        try
-        {
-            // Pass _optimizer explicitly so the fused-Adam fast path
-            // engages — the optimizer-null branch would fall back to
-            // GetOrCreateBaseOptimizer's AMSGrad-Adam which the fused
-            // kernel rejects, sending every step through the eager tape.
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <summary>
     /// Gets metadata about the model.
     /// </summary>
     public override ModelMetadata<T> GetModelMetadata()

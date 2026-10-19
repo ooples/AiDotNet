@@ -282,12 +282,13 @@ public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinte
     /// One training step on waveforms <c>[batch, samples]</c> and multi-hot labels <c>[batch, labels]</c>, as the
     /// paper trains on AudioSet: mixup, SpecAugment and binary cross-entropy.
     /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
     {
         if (!_useNativeMode)
             throw new NotSupportedException("Cannot train in ONNX inference mode.");
         var (features, targets) = Pipeline.TrainingBatch(input, expected, _trainingRandom);
         TrainWithCustomObjective(features, targets, (x, y) => Pipeline.Loss(Network.Forward(x), y), _optimizer);
+        return true;
     }
 
     /// <inheritdoc />

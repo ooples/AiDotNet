@@ -231,9 +231,6 @@ public sealed partial class RepViTBlockLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc />
-    public override Vector<T> GetParameterGradients() => Concatenate(EnumerateParameterLayers(), gradients: true);
-
-    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         foreach (var layer in EnumerateParameterLayers()) layer.UpdateParameters(learningRate);

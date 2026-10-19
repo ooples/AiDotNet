@@ -54,9 +54,6 @@ public partial class ConstantScaleLayer<T> : LayerBase<T>, IShapeContract
         Engine.TensorMultiply(input, _scaleTensor);
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients() => new Vector<T>(0);
-
-    /// <inheritdoc/>
     public override void ClearGradients() { base.ClearGradients(); }
 
     /// <inheritdoc/>

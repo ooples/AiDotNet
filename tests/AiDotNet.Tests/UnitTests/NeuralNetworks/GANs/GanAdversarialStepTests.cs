@@ -349,4 +349,32 @@ public class GanAdversarialStepTests
         AssertTrained("CycleGAN discriminator A", discriminatorABefore, cyclegan.DiscriminatorA);
         AssertTrained("CycleGAN discriminator B", discriminatorBBefore, cyclegan.DiscriminatorB);
     }
-}
+
+    [Fact(Timeout = 120000)]
+    public async Task GenerativeAdversarialNetwork_TrainStep_RunsTheAdversarialIteration()
+    {
+        // TrainStep used to train the generator with Generator.Train(noise, realLabels), regressing its images onto
+        // the [batch, 1] "real" labels. It must be the same iteration as Train: the generator learns through the
+        // discriminator.
+        await Task.Yield();
+        GenerativeAdversarialNetwork<double> Build() => new(
+            Dense(NeuralNetworkTaskType.Generative, 8, 16, 4, new TanhActivation<double>()),
+            Dense(NeuralNetworkTaskType.BinaryClassification, 4, 16, 1, new IdentityActivation<double>()),
+            InputType.OneDimensional);
+        var viaStep = Build();
+        var viaTrain = Build();
+        var generatorBefore = Snapshot(viaStep.Generator);
+        ((NeuralNetworkBase<double>)viaTrain.Generator).SetParameters(generatorBefore);
+        ((NeuralNetworkBase<double>)viaTrain.Discriminator).SetParameters(Snapshot(viaStep.Discriminator));
+
+        var real = Random(4, 4, 41);
+        var noise = Random(4, 8, 42);
+        viaStep.TrainStep(real, noise);
+        viaTrain.Train(noise, real);
+
+        AssertTrained("GAN generator", generatorBefore, viaStep.Generator);
+        var stepped = Snapshot(viaStep.Generator);
+        var trained = Snapshot(viaTrain.Generator);
+        for (int i = 0; i < stepped.Length; i++)
+            Assert.True(Math.Abs(stepped[i] - trained[i]) <= 1e-12, $"generator weight {i}: TrainStep {stepped[i]}, Train {trained[i]}");
+    }}

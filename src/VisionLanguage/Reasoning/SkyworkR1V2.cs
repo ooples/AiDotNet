@@ -248,7 +248,7 @@ public partial class SkyworkR1V2<T> : VisionLanguageModelBase<T>, IReasoningVLM<
                             NumOps.ToDouble(questionTokens[(t + g * 3) % qLen])
                             / _options.VocabSize;
                         // Trajectory-specific + step-specific attention
-                        double trajBias = Math.Sin((g + 1) * (step + 1) * (t + 1) * 0.005) * 0.25;
+                        double trajBias = Math.Sin((g + 1.0) * (step + 1) * (t + 1) * 0.005) * 0.25;
                         double w = Math.Exp((visVal + qVal * 0.3 + trajBias) * 0.3);
                         visAttn += w * visVal;
                         attnSum += w;
@@ -382,15 +382,6 @@ public partial class SkyworkR1V2<T> : VisionLanguageModelBase<T>, IReasoningVLM<
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
     }
 
     /// <inheritdoc />

@@ -540,29 +540,6 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
-    /// <summary>
-    /// Trains the model on a single example.
-    /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-        {
-            throw new NotSupportedException(
-                "Training is not supported in ONNX mode. Create a new GenreClassifier " +
-                "without modelPath parameter to train natively.");
-        }
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     #endregion
 
     #region AudioNeuralNetworkBase Implementation

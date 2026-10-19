@@ -332,20 +332,6 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
         return current;
     }
 
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     /// <inheritdoc />
 

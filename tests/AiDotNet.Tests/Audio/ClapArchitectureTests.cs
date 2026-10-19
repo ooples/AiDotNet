@@ -164,6 +164,23 @@ public class ClapArchitectureTests
         Assert.Equal(before, model.ParameterCount);
     }
 
+    // The reference build has text dropout, drop-path and SpecAugment, and every layer starts in training mode:
+    // inference must run in evaluation mode, or the same clip and caption embed differently on every call.
+    [Fact(Timeout = 120000)]
+    public async Task Inference_IsDeterministic()
+    {
+        await Task.Yield();
+        using var model = ClapReferenceTests.Build(fusion: true);
+        var audio = Audio(2, 6000);
+        var captions = Captions();
+        var audioFirst = model.EncodeAudio(audio).ToArray();
+        var audioSecond = model.EncodeAudio(audio).ToArray();
+        var textFirst = model.EncodeText(captions).ToArray();
+        var textSecond = model.EncodeText(captions).ToArray();
+        Assert.Equal(audioFirst, audioSecond);
+        Assert.Equal(textFirst, textSecond);
+    }
+
     [Fact(Timeout = 120000)]
     public async Task ContrastiveTraining_ReducesTheLoss()
     {

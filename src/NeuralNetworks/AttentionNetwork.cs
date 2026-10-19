@@ -393,34 +393,6 @@ public partial class AttentionNetwork<T> : SequenceModelLayoutBase<T>, IAuxiliar
     }
 
     /// <summary>
-    /// Trains the Attention Network using the provided input and expected output.
-    /// </summary>
-    /// <param name="input">The input tensor used for training.</param>
-    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
-    /// <remarks>
-    /// <para>
-    /// This method implements the training process for the Attention Network. It performs a forward pass,
-    /// calculates the loss between the network's prediction and the expected output, and then backpropagates
-    /// this error to adjust the network's parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is how the network learns from examples.
-    /// 
-    /// The training process:
-    /// 1. Makes a prediction using the current network state
-    /// 2. Compares the prediction to the correct answer to calculate the error
-    /// 3. Figures out how to adjust the network to reduce this error
-    /// 4. Updates the network's internal settings to improve future predictions
-    /// 
-    /// It's like a student doing practice problems, checking their answers, and learning
-    /// from their mistakes to do better next time.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        TrainWithTape(input, expectedOutput, _optimizer);
-    }
-
-    /// <summary>
     /// Gets metadata about the Attention Network model.
     /// </summary>
     /// <returns>A ModelMetaData object containing information about the model.</returns>

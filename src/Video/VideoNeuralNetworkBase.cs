@@ -75,6 +75,10 @@ public abstract partial class VideoNeuralNetworkBase<T> : NeuralNetworkBase<T>
     /// </remarks>
     public int NumFrames { get; protected set; } = 16;
 
+    /// <inheritdoc/>
+    protected override string? TrainingUnavailableReason =>
+        IsOnnxMode ? OnnxTrainingUnavailableReason : base.TrainingUnavailableReason;
+
     /// <summary>
     /// Gets whether this model is running in ONNX inference mode.
     /// </summary>

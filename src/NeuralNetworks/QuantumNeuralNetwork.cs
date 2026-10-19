@@ -236,61 +236,14 @@ public partial class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
         });
     }
 
-    /// <summary>
-    /// Trains the quantum neural network using the provided input and expected output.
-    /// </summary>
-    /// <param name="input">The input tensor for training.</param>
-    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
-    /// <remarks>
-    /// <para>
-    /// This method performs one training iteration, including forward pass, loss calculation,
-    /// backward pass, and parameter update using a quantum-inspired optimization technique.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This is how the quantum neural network learns. It processes an input,
-    /// compares its prediction to the expected output, and adjusts its internal settings to improve
-    /// future predictions. The adjustments are made using techniques inspired by quantum computing.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        foreach (var layer in Layers)
-            layer.SetTrainingMode(true);
+    /// <inheritdoc/>
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer =>
+        _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
 
-        try
-        {
-            // Use the tape-based training path like other networks. The previous
-            // imperative implementation ran Predict() and then called the
-            // optimizer's UpdateParameters(Layers), which dispatched to each
-            // layer's UpdateParameters(learningRate) — that expects a prior
-            // Backward() to have populated the per-layer gradient tensors,
-            // but none of that happens here, so every training call failed
-            // with "Backward pass must be called before updating parameters."
-            _trainOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-
-            // Train on the measured (probability) objective directly. The model's
-            // loss (BornRuleMseLoss) folds in the Born-rule square, so the tape
-            // optimises ‖layers(√input)² − target‖² — exactly the quantity Predict
-            // reports — rather than a √target amplitude surrogate. Two prior bugs are
-            // fixed by this:
-            //   1. Input-domain mismatch: Predict feeds the layers the real part of
-            //      the prepared state (PrepareQuantumState applies √ to the input),
-            //      so training must too — hence preparedInput, not the raw input.
-            //   2. Surrogate/measured misalignment: minimising amplitude MSE to
-            //      √target does NOT monotonically reduce the measured probability
-            //      MSE (the square is non-linear), so the old amplitude surrogate +
-            //      a per-step measured-loss backtracking line search reverted nearly
-            //      every step and pinned the loss flat. Optimising the measured
-            //      objective directly removes both the surrogate and the backtracking.
-            var preparedInput = ExtractRealPart(PrepareQuantumState(input));
-            TrainWithTape(preparedInput, expectedOutput, _trainOptimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
+    /// <inheritdoc/>
+    /// <remarks>The input is encoded as a quantum state; the network trains on its real part.</remarks>
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
+        => (ExtractRealPart(PrepareQuantumState(input)), target);
 
     /// <summary>
     /// Retrieves metadata about the quantum neural network model.

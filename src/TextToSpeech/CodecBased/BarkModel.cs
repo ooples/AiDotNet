@@ -558,8 +558,11 @@ public partial class BarkModel<T> : TtsModelBase<T>
     }
 
     /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-        => TrainSemantic(input, expected);
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
+    {
+        TrainSemantic(input, expected);
+        return true;
+    }
 
     protected override void InitializeLayers()
     {

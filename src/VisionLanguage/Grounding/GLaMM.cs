@@ -393,7 +393,7 @@ public partial class GLaMM<T> : VisionLanguageModelBase<T>, IGroundedConversatio
 
     /// <summary>GLaMM trains on conversations with masks, which a tensor target cannot carry.</summary>
     /// <exception cref="NotSupportedException">Always: use <see cref="TrainConversation"/>.</exception>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
         => throw new NotSupportedException("GLaMM trains on an image, a conversation and a mask per [SEG]: use TrainConversation(sample).");
 
     /// <inheritdoc />

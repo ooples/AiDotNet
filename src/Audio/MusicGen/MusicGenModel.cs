@@ -413,13 +413,14 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
     /// <remarks>The input is the description's T5 token ids (<see cref="TextToTokens"/>; empty for none) and the
     /// target the clip's codes <c>[frames, codebooks]</c> or its waveform. The step drops the condition with
     /// probability <see cref="MusicGenOptions.ConditionDropout"/>.</remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         ThrowIfDisposed();
         Guard.NotNull(expectedOutput);
         bool codes = expectedOutput.Rank == 2 && expectedOutput.Shape[1] == Core.Configuration.Codebooks;
         var c = CodesOf(codes ? expectedOutput : null, codes ? null : expectedOutput);
         TrainOnCodes(c, input, _options.MelodyConditioning ? Chroma(codes ? Decode(c) : expectedOutput) : null);
+        return true;
     }
 
     private T TrainOnCodes(int[,] codes, Tensor<T>? tokens, double[,]? chroma)

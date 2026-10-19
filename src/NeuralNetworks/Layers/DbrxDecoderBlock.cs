@@ -101,14 +101,6 @@ public partial class DbrxDecoderBlock<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        Vector<T> acc = new Vector<T>(0);
-        foreach (var l in SubLayers()) acc = Vector<T>.Concatenate(acc, l.GetParameterGradients());
-        return acc;
-    }
-
-    /// <inheritdoc/>
     public override void ClearGradients()
     {
         base.ClearGradients();

@@ -238,52 +238,13 @@ public partial class RecurrentNeuralNetwork<T> : SequenceModelLayoutBase<T>
         });
     }
 
-    /// <summary>
-    /// Trains the Recurrent Neural Network using the provided input and expected output.
-    /// </summary>
-    /// <param name="input">The input tensor used for training.</param>
-    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
-    /// <exception cref="ArgumentNullException">Thrown when either input or expectedOutput is null.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method implements the training process for the RNN. It performs a forward pass, calculates the error
-    /// between the network's prediction and the expected output, and then backpropagates this error to adjust
-    /// the network's parameters.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is how the network learns from examples.
-    /// 
-    /// The training process:
-    /// 1. Takes a sequence of inputs and their correct answers (expected outputs)
-    /// 2. Makes predictions using the current network state
-    /// 3. Compares the predictions to the correct answers to calculate the error
-    /// 4. Uses this error to adjust the network's internal settings (backpropagation through time)
-    /// 
-    /// It's like learning to predict weather patterns:
-    /// - The network looks at a series of past weather conditions (input)
-    /// - It tries to predict the next day's weather (output)
-    /// - It compares its prediction to what actually happened
-    /// - It adjusts its understanding based on its mistakes
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc/>
+    /// <remarks>Each step starts from a fresh recurrent state.</remarks>
+    protected override void OnTrainingStepStarting(Tensor<T> input, Tensor<T> target)
     {
-        if (input == null)
-        {
-            throw new ArgumentNullException(nameof(input), "Input tensor cannot be null.");
-        }
-
-        if (expectedOutput == null)
-        {
-            throw new ArgumentNullException(nameof(expectedOutput), "Expected output tensor cannot be null.");
-        }
-
-        // Reset recurrent state before each training step
         foreach (var layer in Layers)
             layer.ResetState();
-
-        TrainWithTape(input, expectedOutput);
     }
-
     /// <summary>
     /// Updates the parameters of all layers in the network based on computed gradients.
     /// </summary>

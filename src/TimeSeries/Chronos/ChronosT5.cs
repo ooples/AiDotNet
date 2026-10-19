@@ -379,20 +379,10 @@ internal sealed class ChronosT5<T>
             var windows = new List<(double[] Context, double[] Future)>(settings.BatchSize);
             while (windows.Count < settings.BatchSize) windows.Add(Window(series, settings, random));
 
-            Tensor<T> loss;
-            Dictionary<Tensor<T>, Tensor<T>> grads;
-            using (var tape = new GradientTape<T>())
-            {
-                loss = BatchLoss(windows, training: true, random);
-                var all = tape.ComputeGradients(loss, sources: null);
-                grads = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
-                foreach (var p in parameters)
-                    if (all.TryGetValue(p, out var g)) grads[p] = g;
-            }
-            T lossValue = loss[0];
-            var stepLoss = loss;
-            optimizer.Step(new TapeStepContext<T>(parameters, grads, lossValue, stepLoss, stepLoss, (_, _) => stepLoss, (p, _) => p, null));
-            optimizer.OnBatchEnd();
+            // One update on the shared eager step (which also advances the per-step schedule). The objective is built
+            // once per step; the windows are drawn before it so a re-evaluation would replay them.
+            T lossValue = Training.TapeTrainingStepper<T>.EagerObjectiveStep(parameters,
+                () => BatchLoss(windows, training: true, random), optimizer);
             if (report is not null && !report(step, NumOps.ToDouble(lossValue))) break;
         }
     }

@@ -143,19 +143,6 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
 
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <inheritdoc />
     /// <remarks>Every layer is sized at construction and <see cref="NeuralNetworkBase{T}.Layers"/> is not a chain.</remarks>
     protected override void ResolveLazyLayerShapes()

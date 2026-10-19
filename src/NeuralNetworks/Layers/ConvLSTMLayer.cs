@@ -1583,63 +1583,6 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
-    /// <summary>
-    /// Sets all trainable parameters of the ConvLSTM layer from a flattened vector.
-    /// </summary>
-    /// <param name="parameters">Vector containing all weights and biases to set</param>
-    /// <remarks>
-    /// <para>
-    /// This method updates all trainable parameters from a single vector in the following order:
-    /// </para>
-    /// <para>
-    /// 1. Input weights: _weightsFi, _weightsIi, _weightsCi, _weightsOi
-    /// 2. Hidden weights: _weightsFh, _weightsIh, _weightsCh, _weightsOh
-    /// 3. Biases: _biasF, _biasI, _biasC, _biasO
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads all learnable values from a single list.
-    /// 
-    /// It's the opposite of GetParameters():
-    /// - It takes a long list of numbers (the parameters vector)
-    /// - It distributes these numbers back into the appropriate weight and bias tensors
-    /// - It follows the same order that was used when creating the vector
-    /// 
-    /// This is useful when:
-    /// - Loading a previously saved model
-    /// - Initializing with pre-trained weights
-    /// - Testing with specific parameter values
-    /// - Implementing advanced optimization techniques
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_gradients == null || _gradients.Count == 0)
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-
-        T[] GetGrad(string key, int length)
-        {
-            if (_gradients.TryGetValue(key, out var obj) && obj is Tensor<T> t)
-                return t.ToArray();
-            return new T[length];
-        }
-
-        // Order: I, C, O, F (matching GetParameters — F last since its gradient is zero for seqLen=1)
-        var result = new List<T>();
-        result.AddRange(GetGrad("weightsIi", _weightsIi.Length));
-        result.AddRange(GetGrad("weightsCi", _weightsCi.Length));
-        result.AddRange(GetGrad("weightsOi", _weightsOi.Length));
-        result.AddRange(GetGrad("weightsFi", _weightsFi.Length));
-        result.AddRange(GetGrad("weightsIh", _weightsIh.Length));
-        result.AddRange(GetGrad("weightsCh", _weightsCh.Length));
-        result.AddRange(GetGrad("weightsOh", _weightsOh.Length));
-        result.AddRange(GetGrad("weightsFh", _weightsFh.Length));
-        result.AddRange(GetGrad("biasI", _biasI.Length));
-        result.AddRange(GetGrad("biasC", _biasC.Length));
-        result.AddRange(GetGrad("biasO", _biasO.Length));
-        result.AddRange(GetGrad("biasF", _biasF.Length));
-
-        return new Vector<T>(result.ToArray());
-    }
-
     public override void ClearGradients()
     {
         _gradients?.Clear();

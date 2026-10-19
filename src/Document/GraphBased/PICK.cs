@@ -546,7 +546,11 @@ public partial class PICK<T> : DocumentNeuralNetworkBase<T>, IFormUnderstanding<
     /// <c>[N * T, NumEntityTypes]</c> (argmax), in the same slot grid as the output; padding slots are ignored.
     /// The objective is the reference's: CRF negative log-likelihood + GraphLossWeight x graph-learning loss.
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) => TrainDocument(input, null, expectedOutput);
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        TrainDocument(input, null, expectedOutput);
+        return true;
+    }
 
     /// <summary>Trains on packed segments with an optional page image and per-slot tags (see <see cref="Train"/>).</summary>
     public void TrainDocument(Tensor<T> segments, Tensor<T>? pageImage, Tensor<T> tags)

@@ -504,7 +504,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private void InitializeParameters()
     {
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_inputCapsules * _inputCapsuleDimension)));
+        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / ((double)_inputCapsules * _inputCapsuleDimension)));
 
         // Calculate total elements for flat tensor initialization
         int totalElements = _inputCapsules * _numClasses * _inputCapsuleDimension * _outputCapsuleDimension;
@@ -872,39 +872,6 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>, IShapeContract
             throw new InvalidOperationException("Backward pass must be called before updating parameters.");
 
         _weights = _weights.Subtract(_weightsGradient.Multiply(learningRate));
-    }
-
-    /// <summary>
-    /// Sets the trainable parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets all trainable parameters (weights) of the layer from a single vector.
-    /// This is useful for loading saved model weights or for implementing optimization algorithms
-    /// that operate on all parameters at once.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the layer's learnable values from a provided list.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with the exact right length
-    /// - Each value in the vector corresponds to a specific weight in the layer
-    /// - This allows loading previously trained weights
-    /// 
-    /// Use cases include:
-    /// - Restoring a saved model
-    /// - Using pre-trained weights
-    /// - Testing specific weight configurations
-    /// 
-    /// The method throws an error if the provided vector doesn't contain exactly the right number of values.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_weightsGradient == null)
-            return new Vector<T>(_weights.Length);
-        return new Vector<T>(_weightsGradient.ToArray());
     }
 
     internal override Dictionary<string, string> GetMetadata()

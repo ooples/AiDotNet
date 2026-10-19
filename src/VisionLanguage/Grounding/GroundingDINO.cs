@@ -198,7 +198,7 @@ public partial class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroun
 
     /// <summary>Grounding DINO trains on grounded phrases, which a tensor target cannot carry.</summary>
     /// <exception cref="NotSupportedException">Always: use <see cref="TrainGrounding"/>.</exception>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
         => throw new NotSupportedException(
             "Grounding DINO trains on an image, a caption and the boxes its phrases name: use TrainGrounding(image, caption, boxes).");
 

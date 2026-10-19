@@ -417,11 +417,11 @@ public partial class PortaSpeech<T> : TtsModelBase<T>, IAcousticModel<T>
     // ---------------------------------------------------------------- training
 
     /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
+        // A token/mel pair does not carry the supervision this model trains on; Train(TtsTrainingSample) does.
         ThrowIfTokenMelTrainingUnsupported();
+        return false;
     }
 
     /// <inheritdoc />

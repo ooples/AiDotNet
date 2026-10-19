@@ -261,7 +261,7 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITraining
     }
 
     /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expected)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
     {
         ThrowIfDisposed();
         if (IsOnnxMode)
@@ -270,6 +270,7 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITraining
             ? _fineTuningOptimizer
             : _optimizer;
         TrainWithCustomObjective(input, expected, PhaseObjective, optimizer);
+        return true;
     }
 
     /// <summary>

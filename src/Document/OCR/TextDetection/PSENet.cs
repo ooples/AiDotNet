@@ -622,31 +622,6 @@ public partial class PSENet<T> : DocumentNeuralNetworkBase<T>, ITextDetector<T>
         return base.ForwardForTraining(PreprocessDocument(input));
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-
-        SetTrainingMode(true);
-        try
-        {
-            // TrainWithTape runs forward+backward, applies global-norm gradient clipping
-            // (NeuralNetworkBase.ApplyGradientClipping) and then the optimizer step. The prior
-            // code ALSO called UpdateParameters(CollectGradients()) afterward — a second, raw,
-            // UNCLIPPED SGD step (params -= grads * 1e-4) on top of the already-applied optimizer
-            // update. That double/unclipped update diverged training on the deep ResNet+FPN stack
-            // (memorization loss 0.38 -> 18615). TrainWithTape owns the whole clipped optimizer
-            // step, matching every other native model (e.g. the Finance forecasting transformers).
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            // A throwing step must not leave dropout and batch norm in training mode.
-            SetTrainingMode(false);
-        }
-    }
-
     // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 
 

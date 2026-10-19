@@ -288,19 +288,6 @@ public partial class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         return Engine.TensorConcatenate(repeats, timeAxis);
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        // Pass the configured optimizer through, as Piper and MegaTTS2 do. Calling the
-        // two-argument overload left _optimizer assigned but never read, so training silently fell
-        // back to the base default and MegaTTS's LearningRate / WeightDecay options had no effect
-        // whatsoever.
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
-    }
-
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being
