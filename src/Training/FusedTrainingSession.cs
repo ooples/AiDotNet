@@ -62,6 +62,13 @@ internal sealed class FusedTrainingStepRequest<T>
     public Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? OnGradients { get; init; }
 
     /// <summary>
+    /// Adds the optimizer's regularization to one parameter's gradient for the eager fallback (EagerStep), before
+    /// clipping as the plan adds its L2. Null = the eager fallback adds none, which matches the plan only when the
+    /// optimizer has no regularization.
+    /// </summary>
+    public Func<Tensor<T>, Tensor<T>, Tensor<T>>? RegularizeGradient { get; init; }
+
+    /// <summary>
     /// Why this step's forward cannot be compiled once and replayed, or null when it can. A non-null reason keeps the
     /// step on the eager tape: the same graph break <c>torch.compile</c> takes for a dynamic region.
     /// </summary>

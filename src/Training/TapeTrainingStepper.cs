@@ -188,7 +188,12 @@ internal sealed class TapeTrainingStepper<T>
             request.Target,
             (x, _) => request.Forward(x),
             (predicted, y) => request.ComputeLoss(predicted, y),
-            new EagerStepHooks { OnGradients = request.OnGradients, ModelGradientClip = request.ModelGradientClip });
+            new EagerStepHooks
+            {
+                OnGradients = request.OnGradients,
+                ModelGradientClip = request.ModelGradientClip,
+                RegularizeGradient = request.RegularizeGradient,
+            });
     }
 
     /// <summary>
@@ -386,6 +391,11 @@ internal sealed class TapeTrainingStepper<T>
         /// <summary>The model's own global-norm clip (0 = none), applied before the update.</summary>
         public double ModelGradientClip { get; init; }
 
+        /// <summary>Adds the optimizer's regularization to one parameter's gradient (parameter, gradient) before
+        /// clipping, where the fused plan adds its L2; null when the optimizer has none or applies it in its own
+        /// update.</summary>
+        public Func<Tensor<T>, Tensor<T>, Tensor<T>>? RegularizeGradient { get; init; }
+
         /// <summary>Runs after the gradients exist and before the update.</summary>
         public Action? BeforeUpdate { get; init; }
     }
@@ -439,6 +449,9 @@ internal sealed class TapeTrainingStepper<T>
 
         T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
         hooks?.OnGradients?.Invoke(gradients);
+        if (hooks?.RegularizeGradient is { } regularize)
+            foreach (var parameter in reached)
+                gradients[parameter] = regularize(parameter, gradients[parameter]);
         if (hooks is { ModelGradientClip: > 0.0 })
             ClipByGlobalNorm(gradients, hooks.ModelGradientClip);
         hooks?.BeforeUpdate?.Invoke();
