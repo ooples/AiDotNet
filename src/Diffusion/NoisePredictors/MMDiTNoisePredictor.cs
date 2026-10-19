@@ -446,7 +446,9 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
     public override Tensor<T> PredictNoiseWithEmbedding(Tensor<T> noisySample, Tensor<T> timeEmbedding, Tensor<T>? conditioning = null)
     {
         using var streaming = BeginWeightStreamingForward();
-        return streaming.Complete(Forward(noisySample, timeEmbedding, conditioning));
+        // The documented input is GetTimestepEmbedding's raw sinusoidal embedding, as PredictNoise builds it;
+        // project it through the time MLP exactly as PredictNoise does.
+        return streaming.Complete(Forward(noisySample, ProjectTimeEmbedding(timeEmbedding), conditioning));
     }
 
     private Tensor<T> ProjectTimeEmbedding(Tensor<T> timeEmbed)

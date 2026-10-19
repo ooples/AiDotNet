@@ -439,7 +439,7 @@ public partial class VideoGigaGANGeneratorLayer<T> : LayerBase<T>, IShapeContrac
                     new[] { batch, channels, height, width });
                 var weighted = Engine.TensorMultiplyScalar(
                     shifted,
-                    NumOps.FromDouble(kernel[y] * kernel[x] / 16.0));
+                    NumOps.FromDouble((double)kernel[y] * kernel[x] / 16.0));
                 blurred = blurred is null ? weighted : Engine.TensorAdd(blurred, weighted);
             }
         }
@@ -483,18 +483,6 @@ public partial class VideoGigaGANGeneratorLayer<T> : LayerBase<T>, IShapeContrac
         foreach (var layer in _mainPixelShuffles) yield return layer;
         foreach (var layer in _shuttlePixelShuffles) yield return layer;
         yield return _outputProjection;
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        var values = new List<T>((int)ParameterCount);
-        foreach (var layer in OrderedLayers())
-        {
-            var gradients = layer.GetParameterGradients();
-            for (int i = 0; i < gradients.Length; i++) values.Add(gradients[i]);
-        }
-        return new Vector<T>(values.ToArray());
     }
 
     /// <inheritdoc/>

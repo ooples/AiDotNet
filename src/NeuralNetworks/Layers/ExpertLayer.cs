@@ -522,44 +522,6 @@ public partial class ExpertLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
-    /// <summary>
-    /// Sets all trainable parameters in all layers from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters for all layers, concatenated in layer order.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameter vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method distributes parameters from a single vector to all layers. The parameters should be
-    /// in the same order as returned by GetParameters() - first layer's parameters, then second layer's, etc.
-    /// This is useful for loading pre-trained models or implementing advanced optimization algorithms.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method loads previously saved knowledge back into all the layers.
-    ///
-    /// When setting parameters:
-    /// - The vector must contain exactly the right number of parameters
-    /// - Parameters are distributed to layers in order (first layer first, etc.)
-    /// - Each layer receives its parameters and updates its weights and biases
-    ///
-    /// This is the opposite of GetParameters() - instead of collecting knowledge, it distributes it.
-    ///
-    /// Use cases:
-    /// - Loading a saved model from disk
-    /// - Transferring knowledge from one expert to another
-    /// - Initializing an expert with pre-trained parameters
-    /// - Implementing custom optimization algorithms
-    ///
-    /// If the parameter count doesn't match, an error will be thrown to prevent corruption.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        var gradVectors = _layers
-            .Where(l => l.ParameterCount > 0)
-            .Select(l => l.GetParameterGradients())
-            .ToArray();
-        return gradVectors.Length > 0 ? Vector<T>.Concatenate(gradVectors) : new Vector<T>(0);
-    }
-
     public override void ClearGradients()
     {
         foreach (var layer in _layers)

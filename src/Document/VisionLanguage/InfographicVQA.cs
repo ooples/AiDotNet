@@ -516,29 +516,6 @@ public partial class InfographicVQA<T> : DocumentNeuralNetworkBase<T>, IDocument
         return _useNativeMode ? Forward(preprocessed) : RunOnnxInference(preprocessed);
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-
-        if (_optimizer is not IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> gradientOptimizer)
-        {
-            throw new InvalidOperationException(
-                "InfographicVQA native training requires a gradient-based optimizer.");
-        }
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, gradientOptimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     #endregion
 

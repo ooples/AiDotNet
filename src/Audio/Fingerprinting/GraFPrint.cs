@@ -364,28 +364,10 @@ internal partial class GraFPrint<T> : AudioNeuralNetworkBase<T>, IAudioFingerpri
         }
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
-
-        // Same rank-3 → rank-4 promotion Predict applies, so the training-
-        // time ForwardForTraining walk sees the same shape sequence as
-        // inference. Without this, BN's any-rank inference path picks the
-        // wrong channel axis on rank-3 input and the broadcast mismatches.
-        var batchedInput = input.Rank == 3
-            ? Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]])
-            : input;
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(batchedInput, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
+    /// <inheritdoc/>
+    /// <remarks>A single <c>[C, H, W]</c> spectrogram is batched.</remarks>
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
+        => (input.Rank == 3 ? Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]]) : input, target);
 
     /// <summary>
     /// Trains GraFPrint on two augmented views using the paper's NT-Xent objective.

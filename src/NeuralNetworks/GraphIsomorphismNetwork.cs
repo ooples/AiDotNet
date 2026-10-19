@@ -963,39 +963,10 @@ public partial class GraphIsomorphismNetwork<T> : GraphModelLayoutBase<T>
         _cachedAdjacencyMatrix = adjacencyMatrix;
     }
 
-    /// <summary>
-    /// Trains the network on a single batch of data via tape-based autodiff.
-    /// </summary>
-    /// <remarks>
-    /// Routes through <see cref="NeuralNetworkBase{T}.TrainWithTape"/> so the
-    /// gradient flows back through the layer stack via GradientTape (the
-    /// unified post-#1060 training path). The previous implementation called
-    /// <c>GetParameterGradients()</c> WITHOUT first running a backward pass —
-    /// since manual <c>Backward()</c> was removed from <c>ILayer&lt;T&gt;</c>
-    /// in #1219, those gradients were always whatever stale value the layer's
-    /// gradient field held (zero on a fresh network), which is why
-    /// <c>Training_ShouldChangeParameters</c> reported "no parameters changed".
-    /// <see cref="ForwardForTraining"/> is overridden below to set the
-    /// adjacency matrix on graph layers before the tape-recorded forward pass.
-    /// Mirrors <c>GraphAttentionNetwork.Train</c> (line 788) which solved the
-    /// identical problem post-#1060.
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // Ensure 2D input [numNodes, features]
-        if (input.Rank == 1)
-            input = input.Reshape([1, input.Shape[0]]);
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
+    /// <inheritdoc/>
+    /// <remarks>A single feature vector is batched.</remarks>
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
+        => (input.Rank == 1 ? input.Reshape([1, input.Shape[0]]) : input, target);
 
     /// <inheritdoc />
     /// <remarks>

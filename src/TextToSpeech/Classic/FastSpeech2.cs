@@ -112,7 +112,7 @@ public partial class FastSpeech2<T> : VarianceAdaptorTtsModelBase<T>, IAcousticM
     protected override bool UsesL1MelLoss => true;
 
     /// <inheritdoc />
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
     protected override void InitializeLayers()
     {

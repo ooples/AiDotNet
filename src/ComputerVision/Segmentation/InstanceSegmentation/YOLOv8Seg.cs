@@ -168,26 +168,6 @@ public partial class YOLOv8Seg<T> : Common.InstanceSegmentationBase<T>
     // PredictCore is inherited from SegmentationModelBase and dispatches to Forward / PredictOnnx
     // exactly as the deleted override did.
 
-    /// <summary>
-    /// Performs one training step.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">Thrown when called on an ONNX-mode model.</exception>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is not supported in ONNX mode.");
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, Optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     #endregion
 
     #region Private Methods

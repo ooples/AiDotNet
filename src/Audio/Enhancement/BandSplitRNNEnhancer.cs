@@ -225,23 +225,6 @@ public partial class BandSplitRNNEnhancer<T> : AudioNeuralNetworkBase<T>, IAudio
         return base.PredictCore(input);
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            // Use the AdamW optimizer selected by the constructor. The
-            // optimizer-less overload falls back to the base Adam8Bit path,
-            // whose full-vector state clone caused the generated-test OOM.
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being

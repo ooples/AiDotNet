@@ -407,70 +407,66 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
     /// three tasks update the SHARED encoder together. Training the branches separately would give
     /// each its own view of the encoder and is not multitask learning.
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The hybrid CTC/attention objective, plus the weighted language-identification term when that head is on. All
+    /// heads read one encoding of the step's features. Without the decoder heads, the standard step trains the
+    /// network.
+    /// </remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> expected)
     {
-        if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
+        if (_ctcHead is null || _decoderLayers.Count == 0) return null;
+        if (_optimizer is null) return Array.Empty<Training.TrainingObjective<T>>();
+
+        bool withLid = _options.LidWeight > 0.0 && _lidHead is not null;
+        var lidTarget = withLid ? LanguageIdentificationTarget(LidFrames(input), expected) : null;
+        var data = lidTarget is null ? new[] { input, expected } : new[] { input, expected, lidTarget };
+        return new[]
         {
-            if (_ctcHead is null || _decoderLayers.Count == 0)
+            new Training.TrainingObjective<T>(data, step =>
             {
-                // Custom architecture without the declared partition: fall back to the base path.
-                TrainWithTape(input, expected, _optimizer);
-                return;
-            }
+                var encoded = EncodeForward(step[0]);
+                var joint = JointHeadsObjective(CtcForward(encoded), AttentionForward(encoded), step[1]);
+                if (step.Count < 3) return joint;
 
-            var parameters = TapeTrainingStep<T>.CollectParameters(Layers);
-            if (parameters.Count == 0) return;
-
-            using var tape = new GradientTape<T>();
-            var loss = JointObjective(input, expected);
-            var gradients = ComputeAndPublishParameterGradients(tape, loss, parameters);
-            T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
-
-            var context = new TapeStepContext<T>(
-                parameters, gradients, lossValue, input, expected,
-                (inp, _) => CtcForward(EncodeForward(inp)),
-                (_, __) => JointObjective(input, expected),
-                parameterBuffer: null);
-            _optimizer?.Step(context);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+                var lidLoss = MeanSquaredTo(LidForward(encoded), step[2]);
+                return Engine.TensorAdd(joint, Engine.TensorMultiplyScalar(lidLoss, NumOps.FromDouble(_options.LidWeight)));
+            })
+            {
+                Parameters = () => TapeTrainingStep<T>.CollectParameters(Layers),
+            },
+        };
     }
 
     /// <summary>
     /// The joint multitask objective, on one tape over the shared encoder.
     /// </summary>
-    private Tensor<T> JointObjective(Tensor<T> input, Tensor<T> expected)
+    private Tensor<T> JointHeadsObjective(Tensor<T> ctcLogits, Tensor<T> attLogits, Tensor<T> expected)
     {
-        var encoded = EncodeForward(input);
-
-        var ctcLogits = CtcForward(encoded);
-        var attLogits = AttentionForward(encoded);
-
         var ctcLoss = MeanSquaredTo(ctcLogits, expected);
         var attLoss = MeanSquaredTo(attLogits, expected);
 
         double ctcWeight = _options.CtcWeight;
-        var joint = Engine.TensorAdd(
+        return Engine.TensorAdd(
             Engine.TensorMultiplyScalar(attLoss, NumOps.FromDouble(1.0 - ctcWeight)),
             Engine.TensorMultiplyScalar(ctcLoss, NumOps.FromDouble(ctcWeight)));
-
-        // The third task. Its target is derived from the reference tokens' own language, which is
-        // well-defined only because the inventories are concatenated rather than unified.
-        if (_options.LidWeight > 0.0 && _lidHead is not null)
-        {
-            var lidLoss = LanguageIdentificationLoss(LidForward(encoded), expected);
-            joint = Engine.TensorAdd(joint,
-                Engine.TensorMultiplyScalar(lidLoss, NumOps.FromDouble(_options.LidWeight)));
-        }
-
-        return joint;
     }
 
+    // The LID head's frame count for an input shape, read once from a forward outside the tape.
+    private readonly Dictionary<string, int> _lidFramesByShape = new();
+
+    private int LidFrames(Tensor<T> input)
+    {
+        string key = string.Join(",", input._shape);
+        if (_lidFramesByShape.TryGetValue(key, out int frames)) return frames;
+        using (new NoGradScope<T>())
+        {
+            var lid = LidForward(EncodeForward(input));
+            frames = lid.Rank >= 2 ? lid.Shape[0] : 1;
+        }
+        _lidFramesByShape[key] = frames;
+        return frames;
+    }
     /// <summary>
     /// Mean squared error between a branch's logits and the reference, over the overlapping extent.
     /// </summary>
@@ -492,10 +488,9 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
     /// property the paper's separate-inventory choice buys, and it is why an LID task is available
     /// at all without extra annotation.
     /// </remarks>
-    private Tensor<T> LanguageIdentificationLoss(Tensor<T> lidLogits, Tensor<T> expected)
+    private Tensor<T> LanguageIdentificationTarget(int frames, Tensor<T> expected)
     {
         int classes = SupportedLanguages.Count;
-        int frames = lidLogits.Rank >= 2 ? lidLogits.Shape[0] : 1;
         int vocab = expected.Rank >= 2 ? expected.Shape[^1] : expected.Length;
 
         var targetData = new T[frames * classes];
@@ -519,11 +514,7 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
             targetData[f * classes + language] = NumOps.One;
         }
 
-        var lidTarget = new Tensor<T>(targetData, [frames, classes]);
-        var aligned = AlignTargetTo(lidLogits, lidTarget);
-        var diff = Engine.TensorSubtract(lidLogits, aligned);
-        var axes = Enumerable.Range(0, diff.Rank).ToArray();
-        return Engine.ReduceMean(Engine.TensorMultiply(diff, diff), axes, keepDims: false);
+        return new Tensor<T>(targetData, [frames, classes]);
     }
 
     /// <summary>
@@ -533,10 +524,15 @@ public partial class CodeSwitchingASR<T> : AudioNeuralNetworkBase<T>, ISpeechRec
     {
         if (expected.Rank == logits.Rank && expected._shape.SequenceEqual(logits._shape)) return expected;
 
-        var aligned = new Tensor<T>(logits._shape);
-        int n = Math.Min(aligned.Length, expected.Length);
-        for (int i = 0; i < n; i++) aligned[i] = expected[i];
-        return aligned;
+        // Engine ops only: a compiled plan replays this against each step's reference. The element-wise copy it
+        // replaced read the reference on the host, which a plan bakes in at trace time.
+        var flat = Engine.Reshape(expected, [expected.Length]);
+        int n = Math.Min(logits.Length, expected.Length);
+        var kept = n == expected.Length ? flat : Engine.TensorNarrow(flat, 0, 0, n);
+        var fitted = n == logits.Length
+            ? kept
+            : Engine.TensorConcatenate(new[] { kept, new Tensor<T>([logits.Length - n]) }, 0);
+        return Engine.Reshape(fitted, logits._shape);
     }
 
     #endregion

@@ -92,13 +92,6 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
 
     public override bool SupportsTraining => true;
 
-    public override Vector<T> GetParameterGradients()
-    {
-        return Vector<T>.Concatenate(
-            Vector<T>.Concatenate(_bn1.GetParameterGradients(), _conv1x1.GetParameterGradients()),
-            Vector<T>.Concatenate(_bn2.GetParameterGradients(), _conv3x3.GetParameterGradients()));
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

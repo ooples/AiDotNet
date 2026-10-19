@@ -662,36 +662,6 @@ public partial class FullyConnectedLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Gets the gradients of all trainable parameters in this layer.
-    /// </summary>
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_weightsGradient == null || _biasesGradient == null)
-        {
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        }
-
-        int weightCount = _weightsGradient.Shape[0] * _weightsGradient.Shape[1];
-        int biasCount = _biasesGradient.Shape[0];
-        var gradients = new Vector<T>(weightCount + biasCount);
-
-        int index = 0;
-        for (int i = 0; i < _weightsGradient.Shape[0]; i++)
-        {
-            for (int j = 0; j < _weightsGradient.Shape[1]; j++)
-            {
-                gradients[index++] = _weightsGradient[i, j];
-            }
-        }
-        for (int i = 0; i < biasCount; i++)
-        {
-            gradients[index++] = _biasesGradient[i];
-        }
-
-        return gradients;
-    }
-
-    /// <summary>
     /// Clears stored gradients for weights and biases.
     /// </summary>
     public override void ClearGradients()

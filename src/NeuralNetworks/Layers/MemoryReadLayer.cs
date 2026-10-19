@@ -862,43 +862,6 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         return GpuTensorHelper.UploadToGpu<T>(backend, outputBuffer, [batchSize, outputDim], GpuTensorRole.Activation, ownsBuffer: true);
     }
 
-    /// <summary>
-    /// Resets the internal state of the memory read layer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method resets the internal state of the memory read layer, including the cached inputs, memory,
-    /// outputs, attention scores, and all gradients. This is useful when starting to process a new sequence
-    /// or batch of data, or when implementing stateful networks.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
-    ///
-    /// When resetting the state:
-    /// - Stored inputs, memory, outputs, and attention scores from previous processing are cleared
-    /// - All calculated gradients are cleared
-    /// - The layer forgets any information from previous data batches
-    ///
-    /// This is important for:
-    /// - Processing a new, unrelated batch of data
-    /// - Ensuring clean state before a new training epoch
-    /// - Preventing information from one batch affecting another
-    ///
-    /// Resetting state helps ensure that each forward and backward pass is independent,
-    /// which is important for correct behavior in many neural network architectures.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_keyWeightsGradient == null || _valueWeightsGradient == null ||
-            _outputWeightsGradient == null || _outputBiasGradient == null)
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        return Vector<T>.Concatenate(
-            new Vector<T>(_keyWeightsGradient.ToArray()),
-            new Vector<T>(_valueWeightsGradient.ToArray()),
-            new Vector<T>(_outputWeightsGradient.ToArray()),
-            new Vector<T>(_outputBiasGradient.ToArray()));
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

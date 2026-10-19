@@ -351,7 +351,7 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
     /// This method is provided for compatibility with the NeuralNetworkBase pattern.
     /// </para>
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // CTAB-GAN+ is trained adversarially through Fit() / FitAsync (alternating
         // critic and generator updates with the auxiliary classifier and

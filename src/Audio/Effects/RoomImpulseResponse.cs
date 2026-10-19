@@ -561,28 +561,6 @@ public partial class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioE
         return eng.Reshape(mixed, [_options.RIRLength]);
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            // Pass the model's configured optimizer. The 2-arg TrainWithTape resolves
-            // optimizer: null and falls back to NeuralNetworkBase's lazily-created DEFAULT Adam at
-            // its global 1e-3 rate, so _optimizer — including any instance the CALLER supplied to
-            // the constructor — was never used for a single step, and _options.LearningRate (1e-4)
-            // had no effect on training at all. That 10x over-rate is what produced the measured
-            // first-step loss HUMP the generated audio probes had been working around with wider
-            // iteration windows (memorization 0.645785 -> 0.926694 at step 2; MoreData still rising
-            // between 2 and 5 steps).
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being

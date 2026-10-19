@@ -246,24 +246,6 @@ public partial class TemporalProcessorModule<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc/>
-    /// <remarks>
-    /// Concatenates sub-layer gradients in the same order as <see cref="GetParameters"/>. The base
-    /// implementation returns only this layer's own buffer, which for a composite is an all-zero vector
-    /// of the aggregate length.
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        var all = new List<T>();
-        foreach (var layer in AllSubLayers())
-        {
-            var g = layer.GetParameterGradients();
-            for (int i = 0; i < g.Length; i++) all.Add(g[i]);
-        }
-
-        return new Vector<T>([.. all]);
-    }
-
-    /// <inheritdoc/>
     public override void ClearGradients()
     {
         foreach (var layer in AllSubLayers()) layer.ClearGradients();

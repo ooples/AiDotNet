@@ -471,7 +471,7 @@ public partial class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
     /// afterwards, so a frozen group receives no gradient for the step regardless of optimizer.
     /// </para>
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
         EnsureBiasStageIsSupported();
@@ -525,6 +525,8 @@ public partial class SeACo<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
             foreach (var l in frozen) l.SetTrainingMode(true);
             SetTrainingMode(false);
         }
+
+        return true;
     }
 
     /// <summary>

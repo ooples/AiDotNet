@@ -331,29 +331,6 @@ namespace AiDotNet.NeuralNetworks
         protected override Tensor<T> PredictEager(Tensor<T> input) => Forward(input);
 
         /// <summary>
-        /// Trains the Word2Vec model on a single batch of target and context pairs.
-        /// </summary>
-        /// <param name="input">The input tokens (targets or context depending on architecture).</param>
-        /// <param name="expectedOutput">The expected tokens the model should predict.</param>
-        /// <remarks>
-        /// <b>For Beginners:</b> This is how the model learns. You show it a "puzzle"—a word and its 
-        /// correct neighbor—and the model adjusts its internal map so that these two words 
-        /// are placed closer together in its memory.
-        /// </remarks>
-        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-        {
-            SetTrainingMode(true);
-            try
-            {
-                TrainWithTape(input, expectedOutput, _optimizer);
-            }
-            finally
-            {
-                SetTrainingMode(false);
-            }
-        }
-
-        /// <summary>
         /// Applies gradient clipping and uses the optimizer to update layer parameters.
         /// </summary>
         private void UpdateParameters(List<Tensor<T>> gradients)

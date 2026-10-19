@@ -217,20 +217,23 @@ public partial class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         }
         else
         {
-            using var tape = new GradientTape<T>(new GradientTapeOptions { Persistent = true });
-            var objective = Objective(embeddingRows, episode, allLabels, head);
-            loss = objective[0];
-            var gradients = tape.ComputeGradients(objective, head);
-            int offset = 0;
-            foreach (var leaf in head)
-            {
-                if (gradients.TryGetValue(leaf, out var gradient))
+            loss = AiDotNet.Training.TapeGradients<T>.Of(
+                () => Objective(embeddingRows, episode, allLabels, head),
+                head,
+                gradients =>
                 {
-                    for (int i = 0; i < leaf.Length; i++) projectionGradient[offset + i] = gradient[i];
-                }
+                    int offset = 0;
+                    foreach (var leaf in head)
+                    {
+                        if (gradients.TryGetValue(leaf, out var gradient))
+                        {
+                            for (int i = 0; i < leaf.Length; i++) projectionGradient[offset + i] = gradient[i];
+                        }
 
-                offset += leaf.Length;
-            }
+                        offset += leaf.Length;
+                    }
+                },
+                persistent: true);
         }
 
         return (loss, bodyGradient, projectionGradient);

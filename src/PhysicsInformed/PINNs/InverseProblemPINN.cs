@@ -732,24 +732,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
         }
 
         /// <inheritdoc/>
-        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-        {
-            if (input == null)
-            {
-                throw new ArgumentNullException(nameof(input));
-            }
-
-            if (expectedOutput == null)
-            {
-                throw new ArgumentNullException(nameof(expectedOutput));
-            }
-
-            SetTrainingMode(true);
-            try { TrainWithTape(input, expectedOutput, _optimizer); }
-            finally { SetTrainingMode(false); }
-        }
-
-        /// <inheritdoc/>
         public override Tensor<T> ForwardWithMemory(Tensor<T> input)
         {
             foreach (var layer in Layers)

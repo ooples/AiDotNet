@@ -853,46 +853,23 @@ public partial class GraphSAGENetwork<T> : GraphModelLayoutBase<T>
         _cachedAdjacencyMatrix = adjacencyMatrix;
     }
 
-    /// <summary>
-    /// Trains the network on a single batch of data.
-    /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // Ensure 2D input [numNodes, features]
-        if (input.Rank == 1)
-            input = input.Reshape([1, input.Shape[0]]);
+    /// <inheritdoc/>
+    /// <remarks>A single feature vector is read as a one-node graph.</remarks>
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
+        => (input.Rank == 1 ? input.Reshape([1, input.Shape[0]]) : input, target);
 
-        // Set the adjacency matrix on every graph layer BEFORE the tape forward
-        // pass — TrainWithTape walks `Layers[i].Forward(current)` directly,
-        // bypassing the 2-arg Forward that ordinarily sets adjacency, so graph
-        // layers would otherwise see whatever adjacency was last installed (null
-        // on the first Train call, stale after that). Mirrors the
-        // adjacency-setup branch inside Forward(input, adjacency).
-        var adjacencyMatrix = EnsureAdjacencyMatrix(input);
+    /// <inheritdoc/>
+    /// <remarks>The graph layers aggregate over the step's adjacency (Hamilton et al. 2017).</remarks>
+    protected override void OnTrainingStepStarting(Tensor<T> input, Tensor<T> target)
+    {
+        base.OnTrainingStepStarting(input, target);
+        var nodes = input.Rank == 1 ? input.Reshape([1, input.Shape[0]]) : input;
+        var adjacencyMatrix = EnsureAdjacencyMatrix(nodes);
         _cachedAdjacencyMatrix = adjacencyMatrix;
         foreach (var layer in Layers)
         {
             if (layer is IGraphConvolutionLayer<T> graphLayer)
-            {
                 graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
-            }
-        }
-
-        // Delegate to the tape-based path that the rest of the NN base relies on
-        // — the previous implementation declared "Backward pass through all
-        // layers" in a comment but never actually called Backward, so
-        // GetParameterGradients() returned the layers' zero-initialized gradient
-        // tensors and the optimizer applied no update (Training_ShouldChangeParameters,
-        // GradientFlow_ShouldBeNonZeroAndFinite, LossStrictlyDecreasesOnMemorizationTask
-        // all failed because params didn't move).
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
         }
     }
 

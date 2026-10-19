@@ -324,16 +324,6 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
     private Tensor<T> ReduceToScalar(Tensor<T> t)
         => Engine.ReduceSum(t, Enumerable.Range(0, t.Shape.Length).ToArray(), keepDims: false);
 
-    private void TapeStepOver(GradientTape<T> tape, Tensor<T> loss, IReadOnlyList<ILayer<T>> layers)
-    {
-        var trainable = Training.TapeTrainingStep<T>.CollectParameters(layers);
-        if (trainable.Count == 0) return;
-        var grads = tape.ComputeGradients(loss, trainable);
-        T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
-        LastLoss = lossValue;
-        var ctx = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(trainable, grads, lossValue);
-        _optimizer.Step(ctx);
-    }
 
     private IReadOnlyList<ILayer<T>> BuildDenoiserLayerList()
     {
@@ -423,20 +413,6 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
         EnsureSizedForInput(input);
         var xt = TensorToVector(input, _dataWidth);
         return DenoiserForward(BuildDenoiserInput(xt, 0));
-    }
-
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
     }
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
@@ -756,15 +732,9 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
         // ooples/AiDotNet#1846.
         AiDotNet.Training.MultiSlotFusedStep<T>? multiSlotStep = null;
         var denoiserLayers = BuildDenoiserLayerList();
-        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(denoiserLayers).ToArray();
-        AiDotNet.Optimizers.Fused.FusedOptimizerConfig mfsCfg = default;
-        bool fusedEligible = false;
-        if (trainableParams.Length > 0)
-        {
-            fusedEligible = NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
-                _optimizer,
-                out mfsCfg);
-        }
+        // The fused step resolves lazily created weights itself, so it is tried from the first row: an eager first
+        // row would leave its optimizer moments behind when the plan takes over.
+        bool fusedEligible = NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(_optimizer, out _);
 
         for (int row = startRow; row < endRow; row++)
         {
@@ -782,7 +752,7 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
             // as persistent slots. The denoiser layer set replays per row with fresh slots.
             if (fusedEligible)
             {
-                multiSlotStep = _fusedMultiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>();
+                multiSlotStep = _fusedMultiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>(this);
                 var denoiserInput = BuildDenoiserInput(xt, t);
                 var targetNoiseT = VectorToTensor(noise);
                 var slots = new[] { denoiserInput, targetNoiseT };
@@ -795,25 +765,20 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
                         freshSlotData: slots,
                         forward: ForwardFromSlots,
                         computeLoss: ComputeLossFromSlots,
-                        optimizerType: mfsCfg.Type,
-                        learningRate: mfsCfg.LearningRate,
-                        beta1: mfsCfg.Beta1,
-                        beta2: mfsCfg.Beta2,
-                        epsilon: mfsCfg.Epsilon,
-                        weightDecay: mfsCfg.WeightDecay,
-                        lrSchedule: mfsCfg.Schedule,
-                        extras: mfsCfg.Extras,
+                        optimizer: _optimizer,
                         out T _))
                 {
                     continue;
                 }
             }
 
-            using var tape = new GradientTape<T>();
-            var pred = DenoiserForward(BuildDenoiserInput(xt, t));
-            var target = VectorToTensor(noise);
-            var loss = ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(pred, target)));
-            TapeStepOver(tape, loss, denoiserLayers);
+            // The fused path declined: the same objective on the shared eager step.
+            var eagerInput = BuildDenoiserInput(xt, t);
+            var eagerTarget = VectorToTensor(noise);
+            LastLoss = Training.TapeTrainingStepper<T>.EagerObjectiveStep(
+                () => Training.TapeTrainingStep<T>.CollectParameters(denoiserLayers),
+                () => ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(DenoiserForward(eagerInput), eagerTarget))),
+                _optimizer);
         }
     }
 

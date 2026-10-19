@@ -270,46 +270,6 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
     }
 
     /// <summary>
-    /// Trains the TabFlow network using the provided input and expected output.
-    /// </summary>
-    /// <param name="input">The input tensor (concatenated xt + time embedding).</param>
-    /// <param name="expectedOutput">The expected velocity tensor (x1 - x0).</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This is how the velocity field learns from examples.
-    ///
-    /// The training process:
-    /// 1. Takes a noisy data point (input) and the correct velocity direction (expected output)
-    /// 2. Predicts velocity using the current network state
-    /// 3. Compares prediction to correct velocity to calculate the error
-    /// 4. Uses this error to adjust the network's parameters (backpropagation)
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // Tape-based training. Same cascade pattern as TabTransformerNetwork /
-        // SAINTNetwork / GANDALFNetwork — the previous body computed `error`
-        // but never backpropagated, then called the layer-style
-        // _optimizer.UpdateParameters(Layers) which throws "Backward pass must
-        // be called before updating parameters" when no gradients exist.
-        // Honor the base Train contract: auto-promote an unbatched single sample
-        // ([features] / [seq, features]) to a leading unit batch dim before the tape
-        // forward, exactly as NeuralNetworkBase.Train does. Without this, callers
-        // passing single-sample tensors would bypass the canonical [B, …] promotion.
-        (input, expectedOutput) = NormalizeBatchDim(input, expectedOutput);
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <summary>
     /// Updates the parameters of all layers in the network based on computed gradients.
     /// </summary>
     /// <remarks>

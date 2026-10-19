@@ -296,49 +296,6 @@ public partial class Mask2Former<T> : Common.PanopticSegmentationBase<T>
         return output;
     }
 
-    /// <summary>
-    /// Performs one training step with Hungarian matching loss.
-    /// </summary>
-    /// <param name="input">Input image tensor.</param>
-    /// <param name="expectedOutput">Ground-truth segmentation.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Mask2Former training uses bipartite matching (Hungarian algorithm)
-    /// to assign each predicted query to a ground-truth segment, then optimizes a combination
-    /// of classification loss, binary mask loss, and dice loss.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown in ONNX mode.</exception>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is not supported in ONNX mode.");
-
-        // Promote single-sample rank-3 [C,H,W] to rank-4 [1,C,H,W] (NCHW per
-        // Cheng et al. 2022 §3) so the segmentation pipeline's batch-aware ops
-        // see a real batch axis. Train accepts ranks 4+ unchanged. The expected
-        // segmentation target follows the same per-sample → batched promotion.
-        // Mirror the MobileNetV3 / EfficientNet pattern.
-        var processedInput = input.Rank == 3 ? PromoteToBatchedTensor(input) : input;
-        var processedTarget = expectedOutput.Rank == 3 ? PromoteToBatchedTensor(expectedOutput) : expectedOutput;
-        if (processedInput.Rank < 4)
-        {
-            throw new ArgumentException(
-                $"Mask2Former training requires rank >= 3 (single sample [C,H,W]) or rank >= 4 (batched [B,C,H,W]); got rank {input.Rank}.",
-                nameof(input));
-        }
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(processedInput, processedTarget, Optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     #endregion
 
     #region Private Methods

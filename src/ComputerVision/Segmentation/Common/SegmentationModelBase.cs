@@ -198,6 +198,9 @@ public abstract partial class SegmentationModelBase<T> : NeuralNetworkBase<T>, I
     protected IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? Optimizer
         => _useNativeMode ? _optimizer ??= CreateDefaultOptimizer() : null;
 
+    /// <inheritdoc/>
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => Optimizer;
+
     /// <summary>
     /// Creates the optimizer used when the constructor was given none. Override to change the default.
     /// </summary>
@@ -313,6 +316,10 @@ public abstract partial class SegmentationModelBase<T> : NeuralNetworkBase<T>, I
     public int InputWidth => _width;
 
     /// <inheritdoc/>
+    protected override string? TrainingUnavailableReason =>
+        IsOnnxMode ? OnnxTrainingUnavailableReason : base.TrainingUnavailableReason;
+
+    /// <inheritdoc/>
     public bool IsOnnxMode => !_useNativeMode;
 
     /// <inheritdoc/>
@@ -403,6 +410,20 @@ public abstract partial class SegmentationModelBase<T> : NeuralNetworkBase<T>, I
         return Predict(image);
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Training batches a single <c>[C, H, W]</c> image the way <see cref="Forward"/> batches one for prediction, and
+    /// its <c>[classes, H, W]</c> target with it. The target is batched only together with a single image: a rank-3
+    /// target beside a batched image is already <c>[N, H, W]</c>.
+    /// </remarks>
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
+    {
+        var (preparedInput, preparedTarget) = base.PrepareTrainingPair(input, target, draw);
+        if (preparedInput.Rank != 3) return (preparedInput, preparedTarget);
+        return (AddBatchDimension(preparedInput),
+            preparedTarget is not null && preparedTarget.Rank == 3 ? AddBatchDimension(preparedTarget) : preparedTarget);
+    }
+
     /// <summary>
     /// Runs a forward pass, dispatching to ONNX or native mode.
     /// </summary>
@@ -414,29 +435,6 @@ public abstract partial class SegmentationModelBase<T> : NeuralNetworkBase<T>, I
         }
 
         return Forward(input);
-    }
-
-    /// <summary>
-    /// Performs one training step: forward pass, loss, backward pass, and parameter update.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">Thrown when called on an ONNX-mode model.</exception>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-        {
-            throw new InvalidOperationException(
-                "Training is not supported in ONNX mode. Use the native mode constructor for training.");
-        }
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
     }
 
     #endregion

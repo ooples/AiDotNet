@@ -273,55 +273,6 @@ public partial class TabTransformerNetwork<T> : TabularNeuralNetworkBase<T>
     }
 
     /// <summary>
-    /// Trains the TabTransformer network using the provided input and expected output.
-    /// </summary>
-    /// <param name="input">The input tensor for training.</param>
-    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
-    /// <remarks>
-    /// <para>
-    /// This method performs one training iteration, including forward pass, loss calculation,
-    /// backward pass, and parameter update.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This is how the network learns from examples.
-    ///
-    /// The training process:
-    /// 1. Takes input data and their correct answers (expected outputs)
-    /// 2. Makes predictions using the current network state
-    /// 3. Compares predictions to correct answers to calculate the error
-    /// 4. Uses this error to adjust the network's internal settings (backpropagation)
-    ///
-    /// This process is repeated many times with different examples to train the network.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // Tape-based training (matches the path every other NN model in the
-        // codebase uses post-#1209). The previous body computed `error` but
-        // dropped it without backpropagating, then called
-        // _optimizer.UpdateParameters(Layers) — which dispatches to each
-        // DenseLayer.UpdateParameters(learningRate), and that overload
-        // throws "Backward pass must be called before updating parameters"
-        // when no gradients exist. Surfaced as 13 TabTransformerNetworkTests
-        // failures on PR #1408's Generated Layers shard.
-        // Honor the base Train contract: auto-promote an unbatched single sample
-        // ([features] / [seq, features]) to a leading unit batch dim before the tape
-        // forward, exactly as NeuralNetworkBase.Train does. Without this, callers
-        // passing single-sample tensors would bypass the canonical [B, …] promotion.
-        (input, expectedOutput) = NormalizeBatchDim(input, expectedOutput);
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <summary>
     /// Updates the parameters of all layers in the network based on computed gradients.
     /// </summary>
     /// <remarks>

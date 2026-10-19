@@ -171,29 +171,6 @@ public partial class NODENetwork<T> : TabularNeuralNetworkBase<T>
         });
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // Tape-based training (the path every NN model uses post-#1209). The previous body computed
-        // a loss/error, dropped it, then called _optimizer.UpdateParameters(Layers) — which
-        // dispatches to DenseLayer.UpdateParameters(learningRate) and throws "Backward pass must be
-        // called before updating parameters" because no gradients were recorded. TrainWithTape runs
-        // the forward under a gradient tape, backpropagates, and steps the optimizer.
-        //
-        // Honor the base Train contract: auto-promote unbatched single samples to [1, …] first.
-        (input, expectedOutput) = NormalizeBatchDim(input, expectedOutput);
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc/>

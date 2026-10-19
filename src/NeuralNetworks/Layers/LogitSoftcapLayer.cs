@@ -54,9 +54,6 @@ public partial class LogitSoftcapLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients() => new Vector<T>(0);
-
-    /// <inheritdoc/>
     public override void ClearGradients() { }
 
     /// <inheritdoc/>

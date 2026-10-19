@@ -506,29 +506,6 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
         return metadata;
     }
 
-    /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        int centersSize = _numCenters * _inputSize;
-        var gradients = new Vector<T>(centersSize + _numCenters);
-
-        if (_centersGradient != null)
-        {
-            var centersData = _centersGradient.ToArray();
-            for (int i = 0; i < centersData.Length; i++)
-                gradients[i] = centersData[i];
-        }
-
-        if (_widthsGradient != null)
-        {
-            var widthsData = _widthsGradient.ToArray();
-            for (int i = 0; i < widthsData.Length; i++)
-                gradients[centersSize + i] = widthsData[i];
-        }
-
-        return gradients;
-    }
-
     /// <summary>
     /// Resets the internal state of the RBF layer.
     /// </summary>

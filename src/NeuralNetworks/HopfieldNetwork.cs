@@ -481,7 +481,7 @@ public partial class HopfieldNetwork<T> : VectorModelLayoutBase<T>
     /// After training, the network will be able to recognize and complete these patterns.
     /// </para>
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // Handle 1D input: treat as single pattern
         if (input.Rank == 1)
@@ -528,6 +528,8 @@ public partial class HopfieldNetwork<T> : VectorModelLayoutBase<T>
         {
             LastLoss = NumOps.Zero;
         }
+
+        return true;
     }
 
     /// <summary>

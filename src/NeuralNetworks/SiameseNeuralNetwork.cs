@@ -318,30 +318,6 @@ namespace AiDotNet.NeuralNetworks
         /// </summary>
         protected override Tensor<T> PredictEager(Tensor<T> input) => Forward(input);
 
-        /// <summary>
-        /// Trains the model on pairs of inputs using a similarity learning objective.
-        /// </summary>
-        /// <param name="input">The input tensor containing a pair of sequences [2, seq_len].</param>
-        /// <param name="expectedOutput">The target similarity label (1 for same, 0 for different) as a tensor of [1].</param>
-        /// <remarks>
-        /// <b>For Beginners:</b> This is where the twins learn. You show one twin the first input 
-        /// and the other twin the second input. You then tell them if the inputs are the same 
-        /// or different (the label). They adjust their shared brain to make similar inputs 
-        /// have nearly identical coordinate summaries.
-        /// </remarks>
-        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-        {
-            SetTrainingMode(true);
-            try
-            {
-                TrainWithTape(input, expectedOutput, _optimizer);
-            }
-            finally
-            {
-                SetTrainingMode(false);
-            }
-        }
-
         private Vector<T> PoolOutput(Tensor<T> output)
         {
             int seqLen = output.Shape[1];

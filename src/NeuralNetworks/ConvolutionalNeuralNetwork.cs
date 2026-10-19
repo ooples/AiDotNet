@@ -270,8 +270,7 @@ public partial class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutB
         if (input is null) return false;
 
         // Inference-only: the fused kernels bypass the gradient tape.
-        if (Tensors.Engines.Autodiff.GradientTape<T>.Current is not null
-            && !Tensors.Engines.Autodiff.NoGradScope<T>.IsSuppressed)
+        if (AiDotNet.Autodiff.GradientRecording.IsRecording<T>())
             return false;
 
         var layers = Layers;
@@ -441,46 +440,14 @@ public partial class ConvolutionalNeuralNetwork<T> : ImageClassifierModelLayoutB
         }
     }
 
-    /// <summary>
-    /// Trains the convolutional neural network using the provided input and expected output.
-    /// </summary>
-    /// <param name="input">The input tensor for training.</param>
-    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
-    /// <remarks>
-    /// <para>
-    /// This method performs one training iteration, including forward pass, loss calculation,
-    /// backward pass, and parameter update.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This is how the network learns. You show it an image (input) and 
-    /// tell it what should be in that image (expected output). The network makes a guess, 
-    /// compares it to the correct answer, and then adjusts its internal settings to do better next time.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc/>
+    /// <remarks>A single <c>[C, H, W]</c> image is batched for training; its target is batched with it when it is a label vector.</remarks>
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
     {
-        SetTrainingMode(true);
-        try
-        {
-            // Accept both 3D [C, H, W] and 4D [B, C, H, W] inputs — matches the
-            // Forward contract. ForwardForTraining runs the raw tensor through
-            // every layer without adjusting rank, so a 3D input would make the
-            // final FlattenLayer treat the 32-channel dimension as a batch
-            // (flatten preserves dim 0), producing a [32, 10] prediction
-            // against a [10] one-hot target — fails the loss shape check:
-            //   "Target shape dimension 0 (10) does not match predicted
-            //    shape dimension 0 (32)."
-            // Mirror ResNet/VGG/MobileNetV2's fix: expand input and target to
-            // 4D (and 2D respectively) before dispatching to TrainWithTape.
-            var (processedInput, processedTarget) = EnsureBatchForCnnTraining(input, expectedOutput);
-            TrainWithTape(processedInput, processedTarget, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        if (target is null) return (input.Rank == 3 ? PromoteToBatchedTensor(input) : input, null);
+        var (batchedInput, batchedTarget) = EnsureBatchForCnnTraining(input, target);
+        return (batchedInput, batchedTarget);
     }
-
     /// <summary>
     /// Updates the parameters of the network based on the calculated gradients.
     /// </summary>

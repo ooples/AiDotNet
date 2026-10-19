@@ -1523,24 +1523,6 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
     }
 
     /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            // TrainWithTape runs the forward, loss, backward and optimizer step. This used to pass the
-            // collected GRADIENTS to UpdateParameters(Vector) - the value setter, so a successful call
-            // would have overwritten every weight with its gradient - and that vector covered only some
-            // of the layers, so the length check threw first.
-            TrainWithTape(input, expectedOutput);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <inheritdoc/>
     /// <remarks>
     /// The function PredictCore evaluates, so training optimizes what prediction returns.
     /// </remarks>

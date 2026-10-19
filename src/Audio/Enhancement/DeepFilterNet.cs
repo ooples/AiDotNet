@@ -554,24 +554,6 @@ public partial class DeepFilterNet<T> : AudioNeuralNetworkBase<T>, IAudioEnhance
         finally { if (wasTraining) SetTrainingMode(true); }
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!SupportsTraining)
-            throw new InvalidOperationException("Cannot train in ONNX mode.");
-
-        // Fully tape-transparent training: ForwardForTraining runs the end-to-end differentiable
-        // enhancement (STFT → ERB → encoder/GRU/decoder → gains + deep filter → inverse STFT) with
-        // IEngine ops, so the framework records the graph on the gradient tape automatically (PyTorch-
-        // style), computes dLoss/dParams over the ENHANCED audio vs the CLEAN target, and the optimizer
-        // updates every layer. Both enhanced output and the clean target are waveforms of the same
-        // shape as the input, so the spectral/waveform loss compares matching representations —
-        // replacing the old hand-rolled path that never back-propagated (DenseLayer.UpdateParameters
-        // threw "Backward pass must be called before updating parameters") and compared mismatched
-        // model-output vs ERB-feature tensors via an arbitrary flatten+truncate.
-        TrainWithTape(input, expectedOutput, _optimizer);
-    }
-
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()

@@ -160,36 +160,6 @@ public partial class TransUNet<T> : Common.MedicalSegmentationBase<T>
     /// </remarks>
     protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
 
-    /// <summary>
-    /// Performs one training step.
-    /// </summary>
-    /// <param name="input">The input tensor.</param>
-    /// <param name="expectedOutput">Ground-truth segmentation tensor.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Trains the model. Only available in native mode.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown when called on an ONNX-mode model.</exception>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (input is null) throw new ArgumentNullException(nameof(input));
-        if (expectedOutput is null) throw new ArgumentNullException(nameof(expectedOutput));
-        if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
-        if (input.Shape.Length == 3) { input = input.Reshape(new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] }); }
-        else if (input.Shape.Length != 4) throw new ArgumentException($"Training requires rank 3 [C,H,W] or 4 [B,C,H,W], got rank {input.Shape.Length}.", nameof(input));
-        if (expectedOutput.Shape.Length == 3) { expectedOutput = expectedOutput.Reshape(new[] { 1, expectedOutput.Shape[0], expectedOutput.Shape[1], expectedOutput.Shape[2] }); }
-        else if (expectedOutput.Shape.Length != 4) throw new ArgumentException($"Expected output requires rank 3 [C,H,W] or 4 [B,C,H,W], got rank {expectedOutput.Shape.Length}.", nameof(expectedOutput));
-        try
-        {
-            SetTrainingMode(true);
-            TrainWithTape(input, expectedOutput, Optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
     #endregion
 
     #region Private Methods

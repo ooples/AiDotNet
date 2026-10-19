@@ -310,10 +310,7 @@ public class StreamingStepTrainingTests : IDisposable
 
         // Force the eager path: the checkpoint's Adam state lives in a compiled-plan payload the eager optimizer
         // cannot use, so training on would restart Adam silently.
-        (typeof(NeuralNetworkBase<float>).GetField(
-                "_fusedTrainingDisabled", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-            ?? throw new InvalidOperationException("NeuralNetworkBase has no _fusedTrainingDisabled field"))
-            .SetValue(model, true);
+        model.FusedSession.IsDisabled = true;
         var (x, y) = Data(1);
         var ex = Assert.Throws<InvalidOperationException>(
             () => model.Train(Stack(x.Take(BatchSize).ToArray()), Stack(y.Take(BatchSize).ToArray())));
@@ -346,10 +343,7 @@ public class StreamingStepTrainingTests : IDisposable
             }
 
             // The eager path is where a leftover pending checkpoint shows: it refuses to train.
-            (typeof(NeuralNetworkBase<float>).GetField(
-                    "_fusedTrainingDisabled", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-                ?? throw new InvalidOperationException("NeuralNetworkBase has no _fusedTrainingDisabled field"))
-                .SetValue(model, true);
+            model.FusedSession.IsDisabled = true;
             return model;
         }
 
@@ -409,15 +403,12 @@ public class StreamingStepTrainingTests : IDisposable
         var (x, y) = Data(1);
         var bx = Stack(x.Take(BatchSize).ToArray());
         var by = Stack(y.Take(BatchSize).ToArray());
-        var fusedDisabled = typeof(NeuralNetworkBase<float>).GetField(
-            "_fusedTrainingDisabled", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
-            ?? throw new InvalidOperationException("NeuralNetworkBase has no _fusedTrainingDisabled field");
 
         var sourceOptimizer = Optimizer(epochs: 100);
         var source = Model(sourceOptimizer);
         source.SetParameters(InitialWeights());
         source.SetBaseTrainOptimizer(sourceOptimizer);
-        fusedDisabled.SetValue(source, true);
+        source.FusedSession.IsDisabled = true;
         for (int i = 0; i < 5; i++) source.Train(bx, by);
         // Positive control 1: the source really trained on the eager path, so the checkpoint carries eager moments.
         Assert.True(TapeStep(sourceOptimizer) > 0, "the source optimizer never took an eager step");
@@ -431,7 +422,7 @@ public class StreamingStepTrainingTests : IDisposable
             model.SetParameters(weights.Clone());
             model.SetBaseTrainOptimizer(optimizer);
             optimizer.Deserialize(eagerState);
-            if (!fused) fusedDisabled.SetValue(model, true);
+            if (!fused) model.FusedSession.IsDisabled = true;
             return model;
         }
 

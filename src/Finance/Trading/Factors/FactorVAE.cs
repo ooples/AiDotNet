@@ -120,7 +120,7 @@ public partial class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
     /// <summary>
     /// Routes finance-base training through the optimizer configured for this FactorVAE instance.
     /// </summary>
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -737,45 +737,12 @@ public partial class FactorVAE<T> : FinancialModelBase<T>, IFactorModel<T>
             : Engine.Reshape(returns, [returns.Length]);
     }
 
-    /// <summary>
-    /// Trains the model on a batch of inputs and targets.
-    /// </summary>
-    /// <param name="input">Input tensor of market features.</param>
-    /// <param name="target">Target tensor for reconstruction.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Training teaches the VAE to reconstruct inputs while
-    /// keeping factors disentangled. The beta and gamma settings control this balance.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
+    /// <inheritdoc/>
+    /// <remarks>The posterior encoder reads the step's future returns.</remarks>
+    protected override void OnTrainingStepStarting(Tensor<T> input, Tensor<T> target) => SetPosteriorReturns(target);
 
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
-        //
-        // The realized returns are handed to the posterior branch for the duration of this step only.
-        // Clearing them afterwards matters: a later forward that reused the previous batch's returns
-        // would be conditioning on a future it should not see, which inflates apparent accuracy.
-        SetPosteriorReturns(target);
-        try
-        {
-            base.Train(input, target);
-        }
-        finally
-        {
-            SetPosteriorReturns(null);
-        }
-    }
-
+    /// <inheritdoc/>
+    protected override void OnTrainingStepEnded(bool succeeded) => SetPosteriorReturns(null);
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>

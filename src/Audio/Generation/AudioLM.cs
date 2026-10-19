@@ -361,7 +361,7 @@ public partial class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>,
     /// <paramref name="expectedOutput"/> the recording's codes <c>[frames, Q]</c> or the recording. A random crop of the
     /// stage's length is taken (30, 10 or 3 seconds, §IV-B).
     /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         ThrowIfDisposed();
         var objective = BuildObjective(input, expectedOutput, _trainingRandom, training: true);
@@ -375,6 +375,7 @@ public partial class AudioLM<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>,
         {
             SetTrainingMode(false);
         }
+        return true;
     }
 
     private Func<Tensor<T>> BuildObjective(Tensor<T> input, Tensor<T> expectedOutput, Random random, bool training)

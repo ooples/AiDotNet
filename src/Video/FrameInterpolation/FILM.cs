@@ -354,20 +354,6 @@ public partial class FILM<T> : FrameInterpolationBase<T>
         return Interpolate(frame1, frame2, 0.5);
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     #endregion
 
     #region Private Methods

@@ -208,14 +208,10 @@ public partial class DeepARModel<T> : TimeSeriesModelBase<T>
                         }
                     }
                 }
-                using var tape = new GradientTape<T>();
-                var loss = _network.Loss(window, covariates, conditioning, training: true, _random);
-                var all = tape.ComputeGradients(loss, sources: null);
-                var grads = new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-                foreach (var p in parameters)
-                    if (all.TryGetValue(p, out var g)) grads[p] = g;
-                optimizer.Step(new TapeStepContext<T>(parameters, grads, loss[0]));
-                lossSum += NumOps.ToDouble(loss[0]);
+                // The negative log-likelihood is not a forward of one input, so it takes the shared eager objective step.
+                T loss = Training.TapeTrainingStepper<T>.EagerObjectiveStep(
+                    parameters, () => _network.Loss(window, covariates, conditioning, training: true, _random), optimizer);
+                lossSum += NumOps.ToDouble(loss);
                 batches++;
             }
             if (batches == 0) continue;

@@ -96,7 +96,7 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
     private readonly TimeMachineOptions<T> _options;
 
     /// <inheritdoc/>
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
 
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
@@ -430,35 +430,6 @@ public partial class TimeMachine<T> : ForecastingModelBase<T>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
-    }
-
-    /// <summary>
-    /// Trains the TimeMachine model on a batch of input-target pairs.
-    /// </summary>
-    /// <param name="input">Input tensor of shape [batch, context, features].</param>
-    /// <param name="target">Target tensor of shape [batch, forecast_horizon].</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method trains TimeMachine using standard
-    /// backpropagation. The outer and inner Mamba branches learn complementary
-    /// channel-axis and embedding-axis dynamics before their residual/concatenation head.
-    ///
-    /// Only available in native mode (not ONNX).
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
-        base.Train(input, target);
     }
 
     // UpdateParameters was an empty override, silently dropping every restore. The base

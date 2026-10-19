@@ -199,14 +199,6 @@ public partial class RMSNormalizationLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_gammaGradient == null)
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        return _gammaGradient.ToVector();
-    }
-
-    /// <inheritdoc/>
     public override void ClearGradients()
     {
         base.ClearGradients();

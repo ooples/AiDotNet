@@ -262,21 +262,6 @@ public partial class EVACLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         return c;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(PreprocessImage(input), expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     // This forwarded to a helper the base now calls from its own
     // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 

@@ -484,30 +484,6 @@ public partial class UPRNet<T> : FrameInterpolationBase<T>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => modelOutput;
 
     /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            // Forward via Forward(), MSE loss against expected, then a single
-            // optimizer step on the collected layer parameters. We don't
-            // delegate to TrainWithTape because the UPR-Net forward isn't a
-            // simple Layers iteration — it has the pyramid recurrence and
-            // bilinear warps that can't be expressed as a flat layer chain.
-            // For the smoke-test invariants this performs one supervised step
-            // by gradient descent on the per-level Conv weights via
-            // numerical-style finite-difference handled inside the engine's
-            // tape (Layers contains the convs, so the optimizer sees them).
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>

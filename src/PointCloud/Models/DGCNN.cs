@@ -467,19 +467,6 @@ public partial class DGCNN<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IPoin
         }
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         SetTrainingMode(false);

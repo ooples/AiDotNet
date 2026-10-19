@@ -222,43 +222,6 @@ public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
         return Forward(input);
     }
 
-    /// <summary>
-    /// Performs one training step: forward pass, loss computation, backward pass, and parameter update.
-    /// </summary>
-    /// <param name="input">The input image tensor [B, C, H, W] or [C, H, W].</param>
-    /// <param name="expectedOutput">The ground-truth segmentation map tensor matching the model output shape.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Training teaches the model to produce better segmentation maps by comparing
-    /// its predictions to correct answers. Each call to Train():
-    /// 1. Runs the input through the MSCAN encoder and Hamburger decoder (forward pass)
-    /// 2. Compares prediction to ground truth to compute the error (loss)
-    /// 3. Calculates how each weight contributed to the error (backward pass)
-    /// 4. Updates weights using AdamW optimizer to reduce future errors
-    ///
-    /// Training is only available in native mode. ONNX models will throw an exception.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown when called on an ONNX-mode model.</exception>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-        {
-            throw new InvalidOperationException(
-                "Training is not supported in ONNX mode. Use the native mode constructor for training.");
-        }
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, Optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     #endregion
 
     #region Private Methods

@@ -249,7 +249,7 @@ public partial class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningV
                             NumOps.ToDouble(questionTokens[(s + step * 3) % qLen])
                             / _options.VocabSize;
                         routerScore +=
-                            (visVal * 0.6 + qVal * 0.4) * Math.Sin((e + 1) * (step + 1) * 0.3);
+                            (visVal * 0.6 + qVal * 0.4) * Math.Sin((e + 1.0) * (step + 1) * 0.3);
                     }
                     routerScore /= samples;
 
@@ -264,7 +264,7 @@ public partial class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningV
                             int vIdx = (v + e * 9 + step * 23) % visDim;
                             expertVal +=
                                 NumOps.ToDouble(visualFeatures[vIdx])
-                                * (1.0 + Math.Cos((e + 1) * (d + 1) * 0.003) * 0.25);
+                                * (1.0 + Math.Cos((e + 1.0) * (d + 1) * 0.003) * 0.25);
                         }
                         bestOutput = expertVal / patches;
                     }
@@ -396,15 +396,6 @@ public partial class KimiVLThinking<T> : VisionLanguageModelBase<T>, IReasoningV
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
     }
 
     /// <inheritdoc />

@@ -214,29 +214,6 @@ public partial class InvestLM<T> : FinancialNLPModelBase<T>
 
     #region NeuralNetworkBase Overrides
 
-    /// <summary>
-    /// Executes TrainCore for the InvestLM.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the InvestLM model, TrainCore performs a training step. This updates the InvestLM architecture so it learns from data.
-    /// </para>
-    /// </remarks>
-    /// <summary>
-    /// Tape-transparent training. The previous TrainCore computed a loss derivative and then THREW IT
-    /// AWAY, calling _optimizer.UpdateParameters(Layers) with no backward pass — so no real gradients ever
-    /// reached the layers; the optimizer stepped on stale/garbage state and CORRUPTED the weights, driving
-    /// the model to a degenerate constant output (DifferentInputs_AfterTraining collapse). TrainWithTape
-    /// runs the real forward + backward + optimizer step over the gradient tape so every decoder layer
-    /// learns from the actual loss gradient.
-    /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
-    }
-
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
 

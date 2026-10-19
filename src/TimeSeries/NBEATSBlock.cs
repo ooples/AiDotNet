@@ -419,76 +419,61 @@ internal partial class NBEATSBlock<T> : NeuralNetworks.Layers.LayerBase<T>, ISha
 
     /// <summary>
     /// Tape-tracked forward pass that returns separate backcast and forecast tensors.
-    /// Used by the NBEATSModel during training for residual block-by-block processing.
     /// Accepts rank-1 <c>[L]</c> (single sample) or rank-2 <c>[B, L]</c> (batch)
     /// input; output ranks match the input rank so the caller can thread the
     /// residual through the stack without reshaping between blocks.
     /// </summary>
+    /// <remarks>
+    /// A caller running a whole stack should use <see cref="ForwardTapeColumns"/> instead and
+    /// transpose once at each end of the stack: this entry point permutes on the way in and on
+    /// the way out, which is two strided views per block per pass, plus their backward.
+    /// </remarks>
     public (Tensor<T> backcast, Tensor<T> forecast) ForwardTape(Tensor<T> input)
     {
-        int inputRank = input.Rank;
-        int batchSize = inputRank == 2 ? input.Shape[0] : 1;
-
-        // Canonicalize to column-major form [L, B] so weight @ x maps
-        // straight to [hidden, B] without transposes per layer — this is
-        // the vectorization Oreshkin et al. 2019 §3.3 describes (batched
-        // Adam updates). For single-sample inputs we collapse to [L, 1].
-        Tensor<T> x;
-        if (inputRank == 2)
+        if (input.Rank == 2)
         {
-            // [B, L] -> [L, B] via permute so matmul (weight [hidden, L] @ x)
-            // yields [hidden, B], one column per sample.
-            x = Engine.TensorPermute(input, new[] { 1, 0 });
-        }
-        else
-        {
-            x = Engine.Reshape(input, [_lookbackWindow, 1]);
+            var (backcastColumns, forecastColumns) = ForwardTapeColumns(Engine.TensorPermute(input, new[] { 1, 0 }));
+            return (Engine.TensorPermute(backcastColumns, new[] { 1, 0 }),
+                    Engine.TensorPermute(forecastColumns, new[] { 1, 0 }));
         }
 
-        // Hidden layers: y = ReLU(W x + b). Bias broadcasts across B columns.
-        // Engine.TensorAdd handles the [hidden, 1] -> [hidden, B]
-        // broadcast natively; TensorAdd requires shapes to match exactly
-        // and would otherwise throw at the batched ([hidden, B>1]) call
-        // sites.
+        // Single sample: [L] is one column [L, 1]; results are flattened back to rank 1.
+        var (backcast, forecast) = ForwardTapeColumns(Engine.Reshape(input, [_lookbackWindow, 1]));
+        return (Engine.Reshape(backcast, [_lookbackWindow]), Engine.Reshape(forecast, [_forecastHorizon]));
+    }
+
+    /// <summary>
+    /// Tape-tracked forward pass in column-major form: input <c>[L, B]</c>, one column per
+    /// sample, returning a <c>[L, B]</c> backcast and a <c>[H, B]</c> forecast.
+    /// </summary>
+    /// <remarks>
+    /// This is the layout the block computes in (weight <c>[hidden, L]</c> @ x gives
+    /// <c>[hidden, B]</c>, the vectorization Oreshkin et al. 2019 §3.3 describes), so a stack
+    /// that keeps its residual and aggregated forecast in this layout runs every residual
+    /// subtract and forecast sum on dense tensors and transposes only at its two ends.
+    /// </remarks>
+    internal (Tensor<T> backcast, Tensor<T> forecast) ForwardTapeColumns(Tensor<T> x)
+    {
+        // Hidden layers: y = ReLU(W x + b). The [hidden, 1] bias broadcasts across the B columns.
         for (int layer = 0; layer < _numHiddenLayers; layer++)
         {
             var linear = Engine.TensorMatMul(_fcWeights[layer], x);  // [hidden, B]
-            // Biases are stored column-shaped [hidden, 1] (see CreateBiasTensor), so
-            // they feed TensorAdd directly — no per-forward Engine.Reshape.
             linear = Engine.TensorAdd(linear, _fcBiases[layer]);
             x = Engine.ReLU(linear);
         }
 
-        // theta_backcast = W_bc x + b_bc         shape [theta_bc, B]
         int backcastLayerIdx = _numHiddenLayers;
         var thetaBackcast = Engine.TensorMatMul(_fcWeights[backcastLayerIdx], x);
         thetaBackcast = Engine.TensorAdd(thetaBackcast, _fcBiases[backcastLayerIdx]);
 
-        // theta_forecast = W_fc x + b_fc        shape [theta_fc, B]
         int forecastLayerIdx = _numHiddenLayers + 1;
         var thetaForecast = Engine.TensorMatMul(_fcWeights[forecastLayerIdx], x);
         thetaForecast = Engine.TensorAdd(thetaForecast, _fcBiases[forecastLayerIdx]);
 
-        // Basis expansion (paper §3.3): backcast = V_b @ theta_bc,
-        // forecast = V_f @ theta_fc. Output shapes [L, B] and [H, B].
-        var backcastRaw = Engine.TensorMatMul(_basisBackcast, thetaBackcast);    // [L, B]
-        var forecastRaw = Engine.TensorMatMul(_basisForecast, thetaForecast);    // [H, B]
-
-        if (inputRank == 2)
-        {
-            // Restore [B, L] and [B, H] so caller sees the same rank as input.
-            var backcast = Engine.TensorPermute(backcastRaw, new[] { 1, 0 });
-            var forecast = Engine.TensorPermute(forecastRaw, new[] { 1, 0 });
-            return (backcast, forecast);
-        }
-        else
-        {
-            // Single-sample path (test / inference-via-training hooks):
-            // drop the trailing singleton dim.
-            var backcast = Engine.Reshape(backcastRaw, [_lookbackWindow]);
-            var forecast = Engine.Reshape(forecastRaw, [_forecastHorizon]);
-            return (backcast, forecast);
-        }
+        // Basis expansion: [L, theta] @ [theta, B] and [H, theta] @ [theta, B].
+        var backcast = Engine.TensorMatMul(_basisBackcast, thetaBackcast);  // [L, B]
+        var forecast = Engine.TensorMatMul(_basisForecast, thetaForecast);  // [H, B]
+        return (backcast, forecast);
     }
 
     public override bool SupportsTraining => true;

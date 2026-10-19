@@ -702,24 +702,6 @@ public partial class PatchEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         Engine.InvalidatePersistentTensor(_projectionBias);
     }
 
-    /// <summary>
-    /// Resets the internal state of the patch embedding layer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This method clears cached values to prepare for processing new data.
-    /// It keeps the learned parameters but clears temporary calculation values.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_projectionWeightsGradient == null || _projectionBiasGradient == null)
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        return Vector<T>.Concatenate(
-            new Vector<T>(_projectionWeightsGradient.ToArray()),
-            new Vector<T>(_projectionBiasGradient.ToArray()));
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

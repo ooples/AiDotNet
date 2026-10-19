@@ -219,36 +219,6 @@ public partial class InternImage<T> : Common.SemanticSegmentationBase<T>
         return !_useNativeMode ? PredictOnnx(input) : Forward(input);
     }
 
-    /// <summary>
-    /// Performs one training step with forward pass, loss computation, backward pass, and update.
-    /// </summary>
-    /// <param name="input">Input image tensor.</param>
-    /// <param name="expectedOutput">Ground-truth segmentation map.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Each training step processes an image through the DCNv3 encoder,
-    /// compares the prediction to ground truth, and updates weights to improve future predictions.
-    /// Only available in native mode.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown in ONNX mode.</exception>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException(
-                "Training is not supported in ONNX mode. Use the native mode constructor for training.");
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, Optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     #endregion
 
     #region Private Methods

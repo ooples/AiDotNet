@@ -508,28 +508,6 @@ public partial class FeedForwardNeuralNetwork<T> : SequentialVectorModelLayoutBa
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>
-    /// Trains the feed-forward neural network using the provided input and expected output.
-    /// </summary>
-    /// <param name="input">The input tensor for training.</param>
-    /// <param name="expectedOutput">The expected output tensor for the given input.</param>
-    /// <remarks>
-    /// <para>
-    /// This method performs one training iteration, including forward pass, loss calculation,
-    /// backward pass, and parameter update.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This is how the network learns. You show it some input data and
-    /// tell it what the correct output should be. The network makes a guess, compares it to
-    /// the correct answer, and then adjusts its internal settings to do better next time.
-    /// This process is repeated many times with different examples to train the network.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        TrainWithTape(input, expectedOutput, _optimizer);
-    }
-
-    /// <summary>
     /// Retrieves metadata about the feed-forward neural network model.
     /// </summary>
     /// <returns>A ModelMetaData object containing information about the network.</returns>

@@ -253,7 +253,7 @@ public partial class Chameleon<T> : VisionLanguageModelBase<T>, IUnifiedVisionMo
             for (int v = 0; v < checkRange; v++)
             {
                 double lv = NumOps.ToDouble(logits[v % logitDim]);
-                double tokenBias = Math.Sin(v * t * 0.001) * 0.1; // Position-dependent bias
+                double tokenBias = Math.Sin((double)v * t * 0.001) * 0.1; // Position-dependent bias
                 double score = lv + tokenBias;
                 if (score > maxLogit)
                 {
@@ -373,21 +373,6 @@ public partial class Chameleon<T> : VisionLanguageModelBase<T>, IUnifiedVisionMo
         // canonical executor so foundation-scale instances actually perform
         // per-layer streaming materialization/release and scratch recycling.
         return base.PredictCore(input);
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
     }
 
     /// <inheritdoc />

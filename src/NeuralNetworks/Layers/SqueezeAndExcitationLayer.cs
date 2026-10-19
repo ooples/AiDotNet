@@ -1264,50 +1264,6 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     }
 
     /// <summary>
-    /// Sets the trainable parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets the trainable parameters (weights and biases) of the layer from a single vector.
-    /// This is useful for loading saved model weights or for implementing optimization algorithms that operate on all parameters at once.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the learnable values in the layer.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with the correct length
-    /// - The values are copied back into the layer's weights and biases
-    /// 
-    /// This is useful for:
-    /// - Loading a previously saved model
-    /// - Transferring parameters from another model
-    /// - Testing different parameter values
-    /// 
-    /// An error is thrown if the input vector doesn't have the expected number of parameters.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        var gW1 = _weights1Gradient != null
-            ? (_weights1Gradient is not null ? Vector<T>.FromMemory(_weights1Gradient.Data) : new Vector<T>(0))
-            : new Vector<T>(_weights1.Length);
-        var gB1 = _bias1Gradient != null
-            ? (_bias1Gradient is not null ? Vector<T>.FromMemory(_bias1Gradient.Data) : new Vector<T>(0))
-            : new Vector<T>(_bias1.Length);
-        var gW2 = _weights2Gradient != null
-            ? (_weights2Gradient is not null ? Vector<T>.FromMemory(_weights2Gradient.Data) : new Vector<T>(0))
-            : new Vector<T>(_weights2.Length);
-        var gB2 = _bias2Gradient != null
-            ? (_bias2Gradient is not null ? Vector<T>.FromMemory(_bias2Gradient.Data) : new Vector<T>(0))
-            : new Vector<T>(_bias2.Length);
-
-        return Vector<T>.Concatenate(
-            Vector<T>.Concatenate(gW1, gB1),
-            Vector<T>.Concatenate(gW2, gB2));
-    }
-
-    /// <summary>
     /// Resets the internal state of the Squeeze-and-Excitation layer.
     /// </summary>
     /// <remarks>

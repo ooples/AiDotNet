@@ -996,20 +996,9 @@ public partial class DifferentiableNeuralComputer<T> : SequenceModelLayoutBase<T
         return ProcessInput(input, true);
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        foreach (var layer in Layers)
-            layer.SetTrainingMode(true);
-
-        // Reset memory for clean training pass
-        ResetMemoryState();
-
-        TrainWithTape(input, expectedOutput, _optimizer);
-
-        SetTrainingMode(false);
-    }
-
+    /// <inheritdoc/>
+    /// <remarks>Each step starts from an empty external memory (Graves et al. 2016).</remarks>
+    protected override void OnTrainingStepStarting(Tensor<T> input, Tensor<T> target) => ResetMemoryState();
     /// <summary>
     /// Processes an input through the DNC, updating memory state and producing an output.
     /// </summary>

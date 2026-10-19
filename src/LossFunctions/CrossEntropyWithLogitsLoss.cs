@@ -110,7 +110,6 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         // layout is channel-first ([B, C, H, W] + [B, H, W]), so infer the
         // class axis from the compact class-index target shape when present.
         int classAxis = ResolveClassAxis(predicted, target);
-        var logSoftmax = ComputeLogSoftmax(predicted, classAxis);
 
         // PyTorch's nn.CrossEntropyLoss accepts BOTH target formats and the
         // PR #1404 blanket CE→CEWithLogits swap brought models that pass
@@ -130,9 +129,42 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         // target is supervision, no gradient flows through it — so building
         // a fresh tensor here doesn't break gradient flow back through
         // predicted → logSoftmax → product.
+        // Class-index targets over the LAST axis (language models, token classifiers): gather each row's target
+        // log-probability instead of one-hot encoding the targets. The one-hot path built an [N, classes] tensor and
+        // multiplied and reduced it every step -- for a 49 152-token vocabulary at N = 1024 that is 50M floats
+        // allocated, multiplied and summed, ~20% of a Track B LM training step. TensorGatherClassValues gives 0 for
+        // an ignored row (index outside [0, classes) after rounding, or NaN), so the sum matches the one-hot
+        // numerator, and the supervised-row count below is the same "count the rows" rule, built from the
+        // target alone as tensor ops (detached) so the compiled path re-evaluates it each step.
+        if (target.Shape.Length == predicted.Shape.Length - 1 && predicted.Shape.Length >= 2
+            && classAxis == predicted.Shape.Length - 1)
+        {
+            int classes = predicted.Shape[classAxis];
+            int rows = predicted.Length / Math.Max(1, classes);
+            var flatTarget = Engine.Reshape(target, [rows]);
+            var picked = Engine.TensorGatherClassValues(
+                Engine.Reshape(ComputeLogSoftmax(predicted, classAxis), [rows, classes]), flatTarget);
+            var pickedTotal = Engine.ReduceSum(picked, new[] { 0 }, keepDims: false);
+            var inRange = Engine.TensorMultiply(
+                Engine.TensorGreaterThan(flatTarget, NumOps.FromDouble(-0.5)),
+                Engine.TensorGreaterThan(Engine.ScalarMinusTensor(NumOps.FromDouble(classes - 0.5), flatTarget), NumOps.Zero));
+            var rowCount = Engine.StopGradient(Engine.TensorClampMin(
+                Engine.ReduceSum(inRange, new[] { 0 }, keepDims: false), NumOps.One));
+            return Engine.TensorNegate(Engine.TensorDivide(pickedTotal, rowCount));
+        }
+
         if (target.Shape.Length == predicted.Shape.Length - 1)
         {
             target = ClassIndicesToOneHot(target, predicted.Shape[classAxis], classAxis, predicted.Shape.ToArray());
+        }
+
+        // Dense targets over the last axis: the engine's single softmax cross-entropy op is exactly the objective
+        // composed below (log-softmax, target-weighted sum, mean over the supervised rows), and an engine can run it as
+        // fused kernels -- on CUDA, three kernels instead of about forty per training step.
+        if (classAxis == predicted.Shape.Length - 1 && predicted.Shape.Length >= 2
+            && target.Shape.ToArray().SequenceEqual(predicted.Shape.ToArray()))
+        {
+            return Engine.TensorSoftmaxCrossEntropy(predicted, target);
         }
 
         // CE per-sample = -Σ_class target_i * log_softmax_i  (sum over class axis only).
@@ -141,7 +173,9 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         // classes. Averaging over the class axis here would silently divide gradients by the
         // class count, making tape training disagree with the CPU code path (that's the
         // exact bug noted in PR review).
-        var product = Engine.TensorMultiply(target, logSoftmax);
+        // The log-softmax is built only on the paths that read it: the dense path above is one engine op, and a
+        // log-softmax recorded ahead of it ran (and was differentiated) every step for nothing.
+        var product = Engine.TensorMultiply(target, ComputeLogSoftmax(predicted, classAxis));
         var perSample = Engine.ReduceSum(product, new[] { classAxis }, keepDims: false);
 
         // Mean over remaining (batch/sample) axes if any. For 1D inputs (logits was a single
@@ -186,7 +220,11 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         //
         // Clamped at one so an all-ignored batch yields zero instead of dividing by zero; the
         // numerator is zero in that case regardless.
-        var safeCount = Engine.TensorClampMin(supervised, NumOps.One);
+        //
+        // The count depends only on the target, which carries no gradient, so it is detached: the backward then
+        // never walks Abs/ReduceSum/Sign/ClampMin. Differentiating them was wasted work every step, and SignBackward
+        // accumulates a host zero tensor whose upload aborted CUDA graph capture of every classifier's training step.
+        var safeCount = Engine.StopGradient(Engine.TensorClampMin(supervised, NumOps.One));
 
         return Engine.TensorNegate(Engine.TensorDivide(total, safeCount));
     }
@@ -198,25 +236,12 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         if (normalizedAxis < 0 || normalizedAxis >= rank)
             throw new ArgumentOutOfRangeException(nameof(classAxis), $"Class axis {classAxis} is outside logits rank {rank}.");
 
-        // TensorLogSoftmax currently has a correct forward value, but some
-        // tape paths do not propagate the full softmax(target)-one_hot
-        // gradient across every class channel. Use primitive reductions and
-        // broadcasts for the gradient, then add a detached correction so the
-        // forward value remains the stable engine LogSoftmax result.
-        var stableForward = Engine.TensorLogSoftmax(logits, axis: normalizedAxis);
-        // The maximum is only a numerical-stability shift. Log-softmax is invariant to that shift,
-        // so differentiating through ReduceMax adds a discontinuous argmax path that must cancel
-        // algebraically and can instead contaminate the entire backward pass at ties. Detaching it is
-        // the standard stable log-sum-exp construction and leaves the exact softmax-target gradient.
-        var reducedMax = Engine.ReduceMax(logits, new[] { normalizedAxis }, keepDims: true, out _);
-        var maxLogit = Engine.StopGradient(reducedMax);
-        var shifted = Engine.TensorAdd(logits, Engine.TensorNegate(maxLogit));
-        var expShifted = Engine.TensorExp(shifted);
-        var sumExp = Engine.ReduceSum(expShifted, new[] { normalizedAxis }, keepDims: true);
-        var logSumExp = Engine.TensorLog(sumExp);
-        var primitiveGradient = Engine.TensorAdd(shifted, Engine.TensorNegate(logSumExp));
-        var detachedForwardCorrection = Engine.StopGradient(Engine.TensorSubtract(stableForward, primitiveGradient));
-        return Engine.TensorAdd(primitiveGradient, detachedForwardCorrection);
+        // One fused, numerically stable log-softmax: its recorded backward is the exact softmax(x) - target
+        // gradient. This replaced a second, primitive log-softmax (detached ReduceMax, exp, sum, log, a detached
+        // forward correction): about ten extra ops per step, and its ReduceMax recorded a host-only argmax closure
+        // that broke CUDA graph capture of every classifier's training step. The PyTorch step-1 equivalence check
+        // (benchmarks/AiDotNet.PyTorchParity --verify-step1) covers the gradient on CPU and CUDA.
+        return Engine.TensorLogSoftmax(logits, axis: normalizedAxis);
     }
 
     /// <summary>

@@ -940,23 +940,6 @@ public partial class NeuralNoiseReducer<T> : AudioNeuralNetworkBase<T>, IAudioEn
 
     #region Training
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new InvalidOperationException("Training not supported in ONNX mode.");
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input)

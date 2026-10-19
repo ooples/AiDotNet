@@ -183,11 +183,6 @@ public partial class DEVA<T> : Common.VideoSegmentationBase<T>
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
         => Optimizer ?? throw new InvalidOperationException("A native DEVA optimizer is not available in ONNX mode.");
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
-        base.Train(input, expectedOutput);
-    }
     #endregion
 
     #region Private Methods

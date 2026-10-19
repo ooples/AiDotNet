@@ -539,8 +539,8 @@ public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
         int row = index / gridSize;
         int col = index % gridSize;
 
-        double x1 = col * cellWidth;
-        double y1 = row * cellHeight;
+        double x1 = (double)col * cellWidth;
+        double y1 = (double)row * cellHeight;
         double x2 = Math.Min(imageWidth, x1 + cellWidth);
         double y2 = Math.Min(imageHeight, y1 + cellHeight);
 
@@ -1191,28 +1191,6 @@ public partial class LiLT<T> : DocumentNeuralNetworkBase<T>, ILayoutDetector<T>,
 
     /// <summary>Coordinates per box: x0, y0, x1, y1.</summary>
     private const int LayoutBoxWidth = 4;
-
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-
-        // TrainWithTape runs the forward, backprops, and applies the optimizer update itself. The
-        // earlier UpdateParameters(CollectGradients()) applied a redundant SECOND naive SGD step (lr 5e-5)
-        // over every parameter on top of the Adam update — counting each gradient twice and driving the
-        // network into a degenerate collapsed state (DifferentInputs_AfterTraining saw identical output
-        // for distinct inputs). TrainWithTape alone is the correct single update.
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
 
     // UpdateParameters applied a GRADIENT STEP, but its one-argument form is the value setter and every caller passes values -- the override corrupted the model. Removed under AIDN082.
 

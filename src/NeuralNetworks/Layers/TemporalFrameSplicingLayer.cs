@@ -125,8 +125,5 @@ public sealed partial class TemporalFrameSplicingLayer<T> : LayerBase<T>, IShape
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients() => Vector<T>.Empty();
-
-    /// <inheritdoc/>
     public override void ResetState() { }
 }

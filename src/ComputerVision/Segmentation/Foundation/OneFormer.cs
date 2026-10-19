@@ -243,47 +243,13 @@ public partial class OneFormer<T> : Common.PanopticSegmentationBase<T>
         return !_useNativeMode ? PredictOnnx(input) : Forward(input);
     }
 
-    /// <summary>
-    /// Performs one training step with panoptic multi-task learning.
-    /// </summary>
-    /// <param name="input">Input image tensor.</param>
-    /// <param name="expectedOutput">Ground-truth segmentation.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> OneFormer training uses panoptic data to simultaneously learn
-    /// semantic, instance, and panoptic segmentation. A contrastive loss between text and
-    /// visual features helps the model learn task-specific behavior.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown in ONNX mode.</exception>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc/>
+    /// <remarks>A single <c>[C, H, W]</c> image is batched, with its <c>[H, W]</c> or <c>[C, H, W]</c> target.</remarks>
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
     {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is not supported in ONNX mode.");
-
-        // Keep the training graph in the standard NCHW segmentation layout. PredictCore removes
-        // the synthetic batch dimension for a caller that supplies CHW, but doing that before the
-        // loss turns [C,H,W] into an ambiguous rank-3 tensor: a generic cross-entropy loss can then
-        // mistake W for the class axis (and W may be 1 at the final Swin stage, yielding zero loss).
-        // Batch the corresponding dense [C,H,W] or class-index [H,W] target as well so the loss sees
-        // [N,C,H,W] + [N,C,H,W]/[N,H,W], exactly like channel-first segmentation frameworks.
-        bool inputWasUnbatched = input.Rank == 3;
-        if (inputWasUnbatched)
-        {
-            input = AddBatchDimension(input);
-            if (expectedOutput.Rank is 2 or 3)
-                expectedOutput = AddLeadingBatchDimension(expectedOutput);
-        }
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
+        if (input.Rank != 3) return (input, target);
+        return (AddBatchDimension(input),
+            target is not null && target.Rank is 2 or 3 ? AddLeadingBatchDimension(target) : target);
     }
 
     #endregion

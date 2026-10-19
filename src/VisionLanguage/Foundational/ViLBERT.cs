@@ -451,21 +451,6 @@ public partial class ViLBERT<T> : VisionLanguageModelBase<T>, IVisionLanguageFus
         return c;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <summary>
     /// Same dual-stream routing as <see cref="Predict"/>, applied to the
     /// tape-recorded forward pass used by <c>TrainWithTape</c>. The base
