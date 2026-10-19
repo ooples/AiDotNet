@@ -11775,6 +11775,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             Selection = parameters,
             ModelGradientClip = MaxGradNormValue,
             ExcludesParametersFromWeightDecay = () => DecayExcludedParameters().Count > 0,
+            // The eager fallback regularizes as TrainWithTape does, sparing the parameters excluded from weight decay.
+            RegularizeGradients = (reached, gradients) => ApplyOptimizerRegularization(resolvedOptimizer, reached, gradients),
             OnGradients = ScatterFusedGradients,
         };
 
