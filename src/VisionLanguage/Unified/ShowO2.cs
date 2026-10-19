@@ -279,7 +279,7 @@ public partial class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel
                 for (int h = 0; h < Math.Min(8, hiddenDim); h++)
                     textCond +=
                         NumOps.ToDouble(textHidden[h % hiddenDim])
-                        * Math.Sin((t + 1) * (h + 1) * 0.015);
+                        * Math.Sin((t + 1.0) * (h + 1) * 0.015);
                 textCond /= 8.0;
 
                 double logit = contextVal * 0.5 + textCond * 0.5;
@@ -413,15 +413,6 @@ public partial class ShowO2<T> : VisionLanguageModelBase<T>, IUnifiedVisionModel
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
     }
 
     /// <inheritdoc />

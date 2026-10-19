@@ -171,34 +171,6 @@ public partial class DiffSeg<T> : Common.SemanticSegmentationBase<T>
         return !_useNativeMode ? PredictOnnx(input) : Forward(input);
     }
 
-    /// <summary>
-    /// Performs one training step.
-    /// </summary>
-    /// <param name="input">Input tensor.</param>
-    /// <param name="expectedOutput">Ground-truth segmentation.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Optional supervised fine-tuning for DiffSeg. The model is designed
-    /// for unsupervised use, but training can improve performance on specific domains.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown in ONNX mode.</exception>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is not supported in ONNX mode.");
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, Optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     #endregion
 
     #region Private Methods

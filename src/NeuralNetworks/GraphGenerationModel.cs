@@ -433,14 +433,26 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
         var std = Engine.TensorExp(clampedHalfLogVar);
 
         // Sample epsilon (detached): no tape needed for the noise term.
-        var epsilon = new Tensor<T>(mean._shape);
-        for (int i = 0; i < epsilon.Length; i++)
-        {
-            epsilon.SetFlat(i, NumOps.FromDouble(_random.NextGaussian()));
-        }
+        var latent = Engine.TensorAdd(mean, Engine.TensorMultiply(std, DrawEpsilon(mean._shape)));
+        _lastLatent = latent;
+        return latent;
+    }
 
-        _lastLatent = Engine.TensorAdd(mean, Engine.TensorMultiply(std, epsilon));
-        return _lastLatent;
+    /// <summary>Standard normal noise of <paramref name="shape"/> from the model's seeded generator.</summary>
+    private Tensor<T> DrawEpsilon(int[] shape)
+    {
+        var epsilon = new Tensor<T>(shape);
+        for (int i = 0; i < epsilon.Length; i++)
+            epsilon.SetFlat(i, NumOps.FromDouble(_random.NextGaussian()));
+        return epsilon;
+    }
+
+    /// <summary>The reparameterized latent for a given epsilon: mean + exp(0.5 * clamp(logVar)) * epsilon.</summary>
+    private Tensor<T> ReparameterizeWith(Tensor<T> mean, Tensor<T> logVar, Tensor<T> epsilon)
+    {
+        var halfLogVar = Engine.TensorMultiplyScalar(logVar, NumOps.FromDouble(0.5));
+        var clampedHalfLogVar = Engine.TensorClamp(halfLogVar, NumOps.FromDouble(-15.0), NumOps.FromDouble(15.0));
+        return Engine.TensorAdd(mean, Engine.TensorMultiply(Engine.TensorExp(clampedHalfLogVar), epsilon));
     }
 
     /// <summary>
@@ -607,7 +619,7 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
         {
             for (int epoch = 0; epoch < epochs; epoch++)
             {
-                TrainSingleStep(nodeFeatures, adjacencyMatrix);
+                Train(nodeFeatures, adjacencyMatrix);
             }
         }
         finally
@@ -647,7 +659,7 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
         }
 
         // Scale by number of elements
-        return Engine.TensorMultiplyScalar(gradient, NumOps.FromDouble(1.0 / (numNodes * numNodes)));
+        return Engine.TensorMultiplyScalar(gradient, NumOps.FromDouble(1.0 / ((double)numNodes * numNodes)));
     }
 
     /// <summary>
@@ -894,49 +906,23 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
     }
 
     /// <summary>
-    /// Trains the model on a single batch using tape-based backprop through
-    /// the VGAE objective (Kipf &amp; Welling 2016 §3): L = L_recon + L_KL with
-    /// L_recon = BCE(sigmoid(Z Z^T), A) and
-    /// L_KL = -0.5 Σ (1 + log σ² - μ² - exp(log σ²)).
-    /// </summary>
-    /// <remarks>
-    /// Previous implementation had a hand-rolled <c>ComputeReconstructionGradient</c>
-    /// that returned the dL/dÂ element-wise but NEVER wired it back into the
-    /// encoder / variational weight gradients — <c>GetParameterGradients</c>
-    /// read <c>_meanWeightsGradient</c> / <c>_logVarWeightsGradient</c> which
-    /// stayed at their default <c>null</c>, so Adam got an all-zero gradient
-    /// vector and no parameter ever moved (the
-    /// Training_ShouldChangeParameters failure). We now record the forward
-    /// pass under a <see cref="GradientTape{T}"/>, compute a tape-tracked
-    /// ELBO using <c>Engine</c> ops end-to-end (engine BCE, engine KL), and
-    /// let <c>tape.ComputeGradients</c> populate the real gradient dict
-    /// for every trainable tensor referenced by the forward graph.
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-        => TrainSingleStep(input, expectedOutput);
-
-    /// <summary>
     /// The single-step body behind <see cref="Train(Tensor{T}, Tensor{T})"/>, named so the
     /// multi-epoch <see cref="Train(Tensor{T}, Tensor{T}, int, double)"/> overload can run one step
     /// without the call binding back to itself. See that overload for why a bare two-argument
     /// <c>Train</c> call is not usable from inside this class.
     /// </summary>
-    private void TrainSingleStep(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The VGAE objective (Kipf and Welling 2016): the ELBO of the decoded adjacency given the node features, with the
+    /// features, the target adjacency and the reparameterization noise as the step's data, so a compiled plan replays
+    /// each graph with its own noise. The graph layers get the target graph back after the step.
+    /// </remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> expectedOutput)
     {
-        // Ensure 2D input [numNodes, features]
         if (input.Rank == 1)
             input = input.Reshape([1, input.Shape[0]]);
 
         int numNodes = input.Shape[0];
-
-        // The reconstruction target is the caller-supplied adjacency matrix.
-        // Previously this method ignored expectedOutput and silently smuggled
-        // the target through _autoAdjacencyMatrix, so direct callers ended up
-        // optimizing against an all-ones fallback. Validate the shape up front
-        // so misuse (e.g., passing per-sample labels) fails with a clear
-        // message instead of producing nonsense gradients.
-        if (expectedOutput is null)
-            throw new ArgumentNullException(nameof(expectedOutput));
         if (expectedOutput.Rank != 2
             || expectedOutput.Shape[0] != numNodes
             || expectedOutput.Shape[1] != numNodes)
@@ -946,91 +932,52 @@ public partial class GraphGenerationModel<T> : GraphModelLayoutBase<T>
                 $"got shape [{string.Join(", ", expectedOutput.Shape)}].",
                 nameof(expectedOutput));
         }
+
         var adjacencyMatrix = expectedOutput;
-
-        foreach (var layer in Layers)
-            layer.SetTrainingMode(true);
-
-        using var tape = new Tensors.Engines.Autodiff.GradientTape<T>();
-
-        // Tape-tracked forward: Encode → Reparameterize → Decode.
-        // All three helpers go through Engine ops (matmul, exp, multiply,
-        // sigmoid, etc.) so every intermediate flows into the tape.
-        var (mean, logVar) = Encode(input, adjacencyMatrix);
-        var latent = Reparameterize(mean, logVar);
-        var reconstructed = Decode(latent);
-
-        // Reconstruction loss via the configured loss function. Defaults
-        // to BinaryCrossEntropy (paper-faithful for VGAE; ε-clamp + log
-        // handled internally) when the caller didn't supply one. The
-        // constructor enforces LossFunctionBase<T> so this cast cannot
-        // fail at runtime.
-        var tapeLoss = _lossFunction;
-        var reconLoss = tapeLoss.ComputeTapeLoss(reconstructed, adjacencyMatrix);
-
-        // KL divergence to N(0, I) per Kipf & Welling 2016 §3.2:
-        //   KL = 0.5 * Σ (exp(logVar) + μ² - 1 - logVar)
-        var expLogVar = Engine.TensorExp(logVar);
-        var meanSq = Engine.TensorMultiply<T>(mean, mean);
-        var expPlusMeanSq = Engine.TensorAdd<T>(expLogVar, meanSq);
-        // Subtract 1 + logVar via (expLogVar + meanSq) - 1 - logVar using
-        // scalar shift (TensorSubtractScalar + TensorSubtract against logVar).
-        var minusOne = Engine.TensorAddScalar<T>(expPlusMeanSq, NumOps.FromDouble(-1.0));
-        var klTerms = Engine.TensorSubtract<T>(minusOne, logVar);
-        var klAxes = Enumerable.Range(0, klTerms.Shape.Length).ToArray();
-        var klSum = Engine.ReduceSum<T>(klTerms, klAxes, keepDims: false);
-        // Average per element to match ComputeKLDivergence() / ComputeLoss()
-        // which return a per-element mean. Without this normalization, larger
-        // graphs / latent sizes scale the KL term linearly while BCE stays
-        // averaged, so the training objective drifts from what the inference-
-        // path metrics report.
-        int klElements = Math.Max(1, mean.Length);
-        var klScale = NumOps.FromDouble(0.5 / klElements);
-        var klLoss = Engine.TensorMultiplyScalar<T>(klSum, klScale);
-
-        // L = L_recon + β · L_KL. β = KLWeight matches the warmup /
-        // annealing constant the paper suggests for VGAE training.
-        // Normalize shapes to [1] so BCE (which may return [1]) and the
-        // reduce-all KL (which returns []) add without a shape mismatch.
-        var kWeighted = Engine.TensorMultiplyScalar<T>(klLoss, NumOps.FromDouble(KLWeight));
-        var reconLoss1D = reconLoss.Shape.Length == 0
-            ? Engine.Reshape(reconLoss, new[] { 1 })
-            : reconLoss;
-        var kWeighted1D = kWeighted.Shape.Length == 0
-            ? Engine.Reshape(kWeighted, new[] { 1 })
-            : kWeighted;
-        var lossTensor = Engine.TensorAdd<T>(reconLoss1D, kWeighted1D);
-
-        LastLoss = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-
-        // Backward: differentiate the ELBO w.r.t. every registered param.
-        var allGrads = tape.ComputeGradients(lossTensor, sources: null);
-
-        // Publish the tape through the base gradient surface rather than walking the
-        // parameters again here. The base scatters each layer's slice by mirroring
-        // FillParameters and then folds the variational extras in the order
-        // GetExtraTrainableTensors declares them, so the gradient vector lines up
-        // scalar-for-scalar with the GetParameters() vector below.
-        //
-        // The walk this replaces enumerated ITrainableLayer.GetTrainableParameters,
-        // which is the OPTIMIZER view: it omits every declared non-trainable component.
-        // The two agreed only for as long as no encoder layer had one. The moment
-        // GraphConvolutionalLayer declared its adjacency matrix, GetParameters() grew by
-        // the graph's size and this vector did not, so the optimizer returned a vector
-        // that no longer described the model and the restore failed on the layer where
-        // the shortfall landed. That is precisely the drift FillParameterGradients exists
-        // to prevent, and why a second ordering must not be written by hand.
-        PublishParameterGradients(allGrads);
-        var parameterGradients = GetParameterGradients();
-
-        // Use the configured _optimizer so Adam momentum / scheduler state
-        // accumulates across batches. The previous code created a fresh
-        // optimizer per step, which silently reset moments to zero and made
-        // training behave like plain SGD with momentum=0.
-        var currentParameters = GetParameters();
-        var updatedParameters = _optimizer.UpdateParameters(currentParameters, parameterGradients);
-        UpdateParameters(updatedParameters);
+        int latentDim = _meanWeights.Shape[1];
+        var epsilon = DrawEpsilon(new[] { numNodes, latentDim });
+        return new[]
+        {
+            new Training.TrainingObjective<T>(
+                new[] { input, adjacencyMatrix, epsilon },
+                data =>
+                {
+                    var (mean, logVar) = Encode(data[0], data[1]);
+                    var reconstructed = Decode(ReparameterizeWith(mean, logVar, data[2]));
+                    return ElboLoss(reconstructed, data[1], mean, logVar);
+                })
+            {
+                AfterStep = () =>
+                {
+                    _cachedAdjacencyMatrix = adjacencyMatrix;
+                    foreach (var layer in Layers)
+                    {
+                        if (layer is IGraphConvolutionLayer<T> graphLayer)
+                            graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
+                    }
+                },
+            },
+        };
     }
+    /// <summary>
+    /// The tape-tracked ELBO: the configured reconstruction loss (BinaryCrossEntropy by default, paper-faithful for
+    /// VGAE) plus KLWeight times the per-element KL divergence to N(0, I) (Kipf and Welling 2016, section 3.2):
+    /// KL = 0.5 * mean(exp(logVar) + mean^2 - 1 - logVar).
+    /// </summary>
+    private Tensor<T> ElboLoss(Tensor<T> reconstructed, Tensor<T> adjacency, Tensor<T> mean, Tensor<T> logVar)
+    {
+        var reconLoss = _lossFunction.ComputeTapeLoss(reconstructed, adjacency);
+        var expPlusMeanSq = Engine.TensorAdd<T>(Engine.TensorExp(logVar), Engine.TensorMultiply<T>(mean, mean));
+        var klTerms = Engine.TensorSubtract<T>(Engine.TensorAddScalar<T>(expPlusMeanSq, NumOps.FromDouble(-1.0)), logVar);
+        var klSum = Engine.ReduceSum<T>(klTerms, Enumerable.Range(0, klTerms.Shape.Length).ToArray(), keepDims: false);
+        // Averaged per element to match ComputeKLDivergence() / ComputeLoss(); without it larger graphs scale the KL
+        // term linearly while the reconstruction term stays averaged.
+        var klLoss = Engine.TensorMultiplyScalar<T>(klSum, NumOps.FromDouble(0.5 / Math.Max(1, mean.Length)));
+        var kWeighted = Engine.TensorMultiplyScalar<T>(klLoss, NumOps.FromDouble(KLWeight));
+        // Normalize shapes to [1] so BCE (which may return [1]) and the reduce-all KL (which returns []) add.
+        var reconLoss1D = reconLoss.Shape.Length == 0 ? Engine.Reshape(reconLoss, new[] { 1 }) : reconLoss;
+        var kWeighted1D = kWeighted.Shape.Length == 0 ? Engine.Reshape(kWeighted, new[] { 1 }) : kWeighted;
+        return Engine.TensorAdd<T>(reconLoss1D, kWeighted1D);    }
 
     /// <summary>
     /// Gets the intermediate activations from each layer, ensuring adjacency is set.

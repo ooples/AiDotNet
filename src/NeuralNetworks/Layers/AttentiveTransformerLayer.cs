@@ -315,26 +315,6 @@ public partial class AttentiveTransformerLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Gets the parameter gradients.
-    /// </summary>
-    public override Vector<T> GetParameterGradients()
-    {
-        var fcGrads = _fcLayer.GetParameterGradients();
-        var bnGrads = _bnLayer.GetParameterGradients();
-        var result = new Vector<T>(fcGrads.Length + bnGrads.Length);
-
-        for (int i = 0; i < fcGrads.Length; i++)
-        {
-            result[i] = fcGrads[i];
-        }
-        for (int i = 0; i < bnGrads.Length; i++)
-        {
-            result[fcGrads.Length + i] = bnGrads[i];
-        }
-        return result;
-    }
-
-    /// <summary>
     /// Gets the input shape.
     /// </summary>
     public override int[] GetInputShape() => [_inputDim];

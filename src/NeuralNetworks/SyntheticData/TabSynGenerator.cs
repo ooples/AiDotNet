@@ -359,52 +359,17 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     }
 
     /// <summary>
-    /// Trains the TabSyn network using the provided input and expected output.
-    /// </summary>
-    /// <param name="input">The input data tensor.</param>
-    /// <param name="expectedOutput">The expected reconstruction tensor.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> This runs a single training step for the VAE.
-    /// The full two-phase training (VAE then diffusion) happens in Fit().
-    /// This method is provided for compatibility with the NeuralNetworkBase pattern.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // Single-step encoder training for NeuralNetworkBase compatibility (the
-        // full two-phase VAE + latent-diffusion training runs in Fit). The encoder
-        // is the Layers chain, so TrainWithTape backpropagates through it; the
-        // previous body called _optimizer.UpdateParameters(Layers) without a
-        // backward and threw "Backward pass must be called before updating
-        // parameters".
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <summary>
     /// Runs one optimizer step over the parameters of the given <paramref name="layers"/>
     /// using gradients from <paramref name="tape"/> for the precomputed scalar
     /// <paramref name="loss"/>. Lets the two training phases (VAE, latent diffusion)
     /// each update only their own sub-network from a tape-tracked loss.
     /// </summary>
-    private void TapeStepOver(GradientTape<T> tape, Tensor<T> loss, IEnumerable<ILayer<T>> layers)
+    private void EagerStepOver(Func<Tensor<T>> objective, IEnumerable<ILayer<T>> layers)
     {
         var layerList = layers.Where(l => l is not null).ToList();
-        var trainable = Training.TapeTrainingStep<T>.CollectParameters(layerList);
-        if (trainable.Count == 0) return;
-        var grads = tape.ComputeGradients(loss, trainable);
-        T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
-        LastLoss = lossValue;
-        var ctx = new TapeStepContext<T>(trainable, grads, lossValue);
-        _optimizer.Step(ctx);
+        if (Training.TapeTrainingStep<T>.CollectParameters(layerList).Count == 0) return;
+        LastLoss = Training.TapeTrainingStepper<T>.EagerObjectiveStep(
+            () => Training.TapeTrainingStep<T>.CollectParameters(layerList), objective, _optimizer);
     }
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
@@ -694,10 +659,15 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     {
         // z = mean + exp(0.5*logVar) ⊙ eps, computed with tape-connected Engine ops
         // (eps is a sampled constant leaf) so gradients flow into mean and logVar.
-        var eps = new Tensor<T>(mean._shape);
-        for (int i = 0; i < eps.Length; i++) eps[i] = SampleStandardNormal();
+        // A per-step draw: the fused compiled plan redraws epsilon on every replay instead of reusing the traced one.
+        var eps = AiDotNet.Training.CompiledStepRandom<T>.Draw(mean._shape, FillStandardNormal);
         var std = Engine.TensorExp(Engine.TensorMultiplyScalar(logVar, NumOps.FromDouble(0.5)));
         return Engine.TensorAdd(mean, Engine.TensorMultiply(std, eps));
+    }
+
+    private void FillStandardNormal(Tensor<T> eps)
+    {
+        for (int i = 0; i < eps.Length; i++) eps[i] = SampleStandardNormal();
     }
 
     /// <summary>
@@ -789,7 +759,7 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         // the fused plan compiles on the first row and replays across the batch
         // with refreshed input per iteration.
         var trainableVaeLayers = vaeLayers.OfType<ITrainableLayer<T>>().ToList();
-        if (trainableVaeLayers.Count > 0 && AiDotNet.Training.GpuResidentFusedStep<T>.IsGpuResidentAvailable)
+        if (trainableVaeLayers.Count > 0 && AiDotNet.Training.FusedTrainingStep<T>.IsAvailable)
         {
             // Closure-captured (mean, logVar) from Fwd's single encoder pass —
             // reused by Loss so the encoder doesn't run twice per row. Since input
@@ -826,7 +796,7 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
             for (int row = startRow; row < endRow; row++)
             {
                 var inputTensor = VectorToTensor(GetRow(transformedData, row));
-                bool ran = AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
+                bool ran = AiDotNet.Training.FusedTrainingStep<T>.TryStep(
                     trainableVaeLayers, inputTensor, inputTensor,
                     forward: Fwd, computeLoss: Loss,
                     optimizer: _optimizer,
@@ -850,15 +820,12 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         for (int row = startRow; row < endRow; row++)
         {
             var inputTensor = VectorToTensor(GetRow(transformedData, row));
-
-            using var tape = new GradientTape<T>();
-            var encoderOutput = EncoderForwardOnTape(inputTensor);
-            var (mean, logVar) = SplitEncoderOutput(encoderOutput);
-            var z = Reparameterize(mean, logVar);
-            var rawOutput = DecoderForward(z);
-            var loss = ComputeElboLossTape(rawOutput, inputTensor, mean, logVar);
-
-            TapeStepOver(tape, loss, vaeLayers);
+            EagerStepOver(() =>
+            {
+                var (mean, logVar) = SplitEncoderOutput(EncoderForwardOnTape(inputTensor));
+                var rawOutput = DecoderForward(Reparameterize(mean, logVar));
+                return ComputeElboLossTape(rawOutput, inputTensor, mean, logVar);
+            }, vaeLayers);
         }
     }
 
@@ -969,15 +936,9 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         // built once (on the first row) and replayed per subsequent row by
         // refreshing slot data. See ooples/AiDotNet#1846.
         AiDotNet.Training.MultiSlotFusedStep<T>? multiSlotStep = null;
-        var trainableParams = Training.TapeTrainingStep<T>.CollectParameters(_diffMLPLayers).ToArray();
-        AiDotNet.Optimizers.Fused.FusedOptimizerConfig mfsCfg = default;
-        bool fusedEligible = false;
-        if (trainableParams.Length > 0)
-        {
-            fusedEligible = NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(
-                _optimizer,
-                out mfsCfg);
-        }
+        // The fused step resolves lazily created weights itself, so it is tried from the first row: an eager first
+        // row would leave its optimizer moments behind when the plan takes over.
+        bool fusedEligible = NeuralNetworks.NeuralNetworkBase<T>.TryMapToFusedOptimizerConfig(_optimizer, out _);
 
         for (int row = startRow; row < endRow; row++)
         {
@@ -998,7 +959,7 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
                     VectorToTensor(actualNoise),
                     VectorToTensor(timeEmbed),
                 };
-                multiSlotStep = _fusedMultiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>();
+                multiSlotStep = _fusedMultiSlotStep ??= new AiDotNet.Training.MultiSlotFusedStep<T>(this);
                 Tensor<T> ForwardFromSlots(IReadOnlyList<Tensor<T>> s)
                 {
                     // s[0] noisyLatent, s[1] actualNoise (unused here — read
@@ -1019,26 +980,18 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
                         freshSlotData: slots,
                         forward: ForwardFromSlots,
                         computeLoss: ComputeLossFromSlots,
-                        optimizerType: mfsCfg.Type,
-                        learningRate: mfsCfg.LearningRate,
-                        beta1: mfsCfg.Beta1,
-                        beta2: mfsCfg.Beta2,
-                        epsilon: mfsCfg.Epsilon,
-                        weightDecay: mfsCfg.WeightDecay,
-                        lrSchedule: mfsCfg.Schedule,
-                        extras: mfsCfg.Extras,
+                        optimizer: _optimizer,
                         out T _))
                 {
                     continue;
                 }
             }
 
-            using var tape = new GradientTape<T>();
-            var predictedNoise = DiffusionMLPForwardOnTape(noisy, timeEmbed);
             // ε-prediction MSE (Ho et al. 2020) on the VAE latent codes (Zhang et al. 2024 TabSyn).
-            var diff2 = Engine.TensorSubtract(predictedNoise, VectorToTensor(actualNoise));
-            var loss = ReduceToScalar(Engine.TensorSquare(diff2));
-            TapeStepOver(tape, loss, _diffMLPLayers);
+            var noiseTarget = VectorToTensor(actualNoise);
+            EagerStepOver(
+                () => ReduceToScalar(Engine.TensorSquare(Engine.TensorSubtract(DiffusionMLPForwardOnTape(noisy, timeEmbed), noiseTarget))),
+                _diffMLPLayers);
         }
     }
 

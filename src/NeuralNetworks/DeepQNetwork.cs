@@ -562,14 +562,14 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
     /// </summary>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // If replay buffer is empty, fall back to standard supervised training
         // per Mnih et al. 2015 — direct input→target training still works for DQN
         if (_replayBuffer.Count < _batchSize)
         {
             TrainWithTape(input, expectedOutput, _trainOptimizer);
-            return;
+            return true;
         }
 
         // Sample random batch of experiences
@@ -643,6 +643,8 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
         {
             UpdateTargetNetwork();
         }
+
+        return true;
     }
 
     /// <summary>

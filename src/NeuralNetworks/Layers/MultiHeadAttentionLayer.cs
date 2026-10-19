@@ -1339,14 +1339,22 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _originalKeyShape = key._shape;
         _originalValueShape = value._shape;
 
+        // Self-attention passes one tensor as query, key and value. Each reshape below then happens once and is shared:
+        // separate reshapes of one tensor are separate graph nodes whose gradients each had to be added into the
+        // input's (two extra accumulation kernels per layer per training step), where one shared reshape gives the
+        // three projections one gradient buffer to accumulate into.
+        bool keyIsQuery = ReferenceEquals(key, query);
+        bool valueIsKey = ReferenceEquals(value, key);
+        bool valueIsQuery = ReferenceEquals(value, query);
+
         // Handle 1D input by reshaping to 2D [1, dim]
         bool was1D = query.Rank == 1;
         if (was1D)
         {
             // Treat 1D [dim] as single token sequence [1, dim]
             query = Engine.Reshape(query, [1, query.Shape[0]]);
-            key = Engine.Reshape(key, [1, key.Shape[0]]);
-            value = Engine.Reshape(value, [1, value.Shape[0]]);
+            key = keyIsQuery ? query : Engine.Reshape(key, [1, key.Shape[0]]);
+            value = valueIsKey ? key : valueIsQuery ? query : Engine.Reshape(value, [1, value.Shape[0]]);
         }
 
         // Flatten all batch dimensions to get 3D [batch, seq, dim]
@@ -1373,8 +1381,8 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
         // Reshape to 3D for processing
         query = Engine.Reshape(query, [batchQ, seqLenQ, dimQ]);
-        key = Engine.Reshape(key, [batchK, seqLenK, dimK]);
-        value = Engine.Reshape(value, [batchV, seqLenV, dimV]);
+        key = keyIsQuery ? query : Engine.Reshape(key, [batchK, seqLenK, dimK]);
+        value = valueIsKey ? key : valueIsQuery ? query : Engine.Reshape(value, [batchV, seqLenV, dimV]);
 
         // #1624: these _last* fields are manual-backward caches that are write-only
         // under tape autodiff (the engine ops record their own backward state, and
@@ -1407,9 +1415,12 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 $"Query shape: [{string.Join(", ", query._shape)}], Weights shape: [{string.Join(", ", _queryWeights._shape)}]");
         }
 
+        // One shared reshape where query, key and value are one tensor (see the self-attention note above).
         var q2D = Engine.Reshape(query, [batchSize * seqLengthQ, embeddingDimension]);
-        var k2D = Engine.Reshape(key, [batchSize * seqLengthKV, embeddingDimension]);
-        var v2D = Engine.Reshape(value, [batchSize * seqLengthKV, embeddingDimension]);
+        var k2D = ReferenceEquals(key, query) ? q2D : Engine.Reshape(key, [batchSize * seqLengthKV, embeddingDimension]);
+        var v2D = ReferenceEquals(value, key) ? k2D
+            : ReferenceEquals(value, query) ? q2D
+            : Engine.Reshape(value, [batchSize * seqLengthKV, embeddingDimension]);
 
         static Tensor<T> ApplyQkvTransform(Tensor<T>? produced, Tensor<T> original, string method)
         {
@@ -1453,6 +1464,33 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 $"Q_flat shape: [{string.Join(", ", Q_flat._shape)}], " +
                 $"q2D shape: [{string.Join(", ", q2D._shape)}], " +
                 $"_queryWeights shape: [{string.Join(", ", _queryWeights._shape)}]");
+        }
+
+        // Head-interleaved fused attention: Engine.MultiHeadAttentionCore reads the projected Q/K/V in their
+        // [batch, seq, heads*headDim] layout and returns the merged-head context, so the three head-split permutes,
+        // the decomposed SDPA and the merge permute become one differentiable op (on the CPU, one fused kernel each
+        // way, with no [batch, heads, seq, seq] score tensor). Taken whenever the layer needs nothing that op does not
+        // express: a positional bias (RoPE, ALiBi), grouped attention, the attention weights (auxiliary loss), or the
+        // manual backward's per-head caches (neither inference nor a compiled trace runs the manual backward).
+        // Only for float: the engine fuses this op on the host for float alone and composes it from
+        // ScaledDotProductAttention (which materializes the score matrix) for every other element type, while
+        // the FlashAttention path below is fused for every precision.
+        if (typeof(T) == typeof(float)
+            && _ropeLayer == null && _alibiLayer == null && _attentionGroupSize <= 1 && !UseAuxiliaryLoss
+            && (!cacheForManualBackward || !IsTrainingMode || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive))
+        {
+            int headsWidth = _headCount * _headDimension;
+            var fusedContext = Engine.MultiHeadAttentionCore(
+                Engine.Reshape(Q_flat, [batchSize, seqLengthQ, headsWidth]),
+                Engine.Reshape(K_flat, [batchSize, seqLengthKV, headsWidth]),
+                Engine.Reshape(V_flat, [batchSize, seqLengthKV, headsWidth]),
+                _headCount, 1.0 / Math.Sqrt(_headDimension), UseCausalMask);
+            _lastAttentionScores = null;
+            _lastHeadOutputs = null;
+            LastAttentionKernelPath = AttentionKernelPath.FusedMultiHeadCore;
+            return ProjectAttentionContext(
+                Engine.Reshape(fusedContext, [batchSize * seqLengthQ, embeddingDimension]),
+                batchSize, seqLengthQ, embeddingDimension, cacheForManualBackward);
         }
 
         // Every shape op must go through Engine so the gradient tape records the
@@ -1644,10 +1682,22 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // [B, H, S, D] -> [B, S, H, D] -> [B, S, E] (Engine op keeps tape connected)
         var context_transposed = Engine.TensorPermute(context_4D, new[] { 0, 2, 1, 3 });
         var context_flat = Engine.Reshape(context_transposed, [batchSize * seqLengthQ, embeddingDimension]);
+        return ProjectAttentionContext(context_flat, batchSize, seqLengthQ, embeddingDimension, cacheForManualBackward);
+    }
 
-        // Cache pre-projection context for the manual weight-gradient backward.
-        if (cacheForManualBackward)
-            _lastAttentionContext = Engine.Reshape(context_transposed, [batchSize, seqLengthQ, embeddingDimension]);
+    /// <summary>
+    /// Output projection of the merged-head context <paramref name="context_flat"/> ([batch * seqQ, embedding]) and
+    /// the reshape back to the caller's batch dimensions.
+    /// </summary>
+    private Tensor<T> ProjectAttentionContext(
+        Tensor<T> context_flat, int batchSize, int seqLengthQ, int embeddingDimension, bool cacheForManualBackward)
+    {
+        // Cache pre-projection context for the manual weight-gradient backward. Not under a compiled trace: no manual
+        // backward runs there, and the cache's reshape would be a second consumer of context_flat, which turns the
+        // output projection's specialized backward into the generic accumulating one (measured: 2.1 ms of a 19 ms
+        // CPU Transformer step).
+        if (cacheForManualBackward && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
+            _lastAttentionContext = Engine.Reshape(context_flat, [batchSize, seqLengthQ, embeddingDimension]);
 
         // Fused matmul+bias: collapses MatMul + Reshape + Reshape + BroadcastAdd
         // (4 engine dispatches) into FusedLinear + Reshape (2 dispatches). Same fused
@@ -1906,40 +1956,6 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             Engine.InvalidatePersistentTensor(_outputWeights);
             Engine.InvalidatePersistentTensor(_outputBias);
         }
-    }
-
-    /// <summary>
-    /// Resets the internal state of the multi-head attention layer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method clears all cached values from previous forward and backward passes,
-    /// effectively resetting the layer to its initial state but keeping the learned weights.
-    /// This is useful when starting a new training sequence or when you want to clear
-    /// any temporary data without losing the layer's learned parameters.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> Think of this like clearing your scratch paper after solving a math problem.
-    /// You're keeping all the knowledge you've gained (the weights), but you're getting rid of
-    /// all the intermediate calculations (cached values) to make room for new work.
-    /// 
-    /// This is particularly important in neural networks because:
-    /// 1. It frees up memory by removing data we no longer need
-    /// 2. It ensures that each new input is processed with a "clean slate"
-    /// 3. It prevents old calculations from affecting new ones, which could lead to incorrect results
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_queryWeightsGradient == null || _keyWeightsGradient == null || _valueWeightsGradient == null)
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
-        return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_queryWeightsGradient.Data),
-            Vector<T>.FromMemory(_keyWeightsGradient.Data),
-            Vector<T>.FromMemory(_valueWeightsGradient.Data),
-            _outputWeightsGradient != null ? Vector<T>.FromMemory(_outputWeightsGradient.Data) : new Vector<T>(_outputWeights.Length),
-            _outputBiasGradient != null ? Vector<T>.FromMemory(_outputBiasGradient.Data) : new Vector<T>(_outputBias.Length));
     }
 
     public override void ClearGradients()

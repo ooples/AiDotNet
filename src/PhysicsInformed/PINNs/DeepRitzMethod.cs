@@ -450,24 +450,6 @@ namespace AiDotNet.PhysicsInformed.PINNs
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
         /// <summary>
-        /// Performs a basic supervised training step using MSE loss.
-        /// </summary>
-        /// <param name="input">Training input tensor.</param>
-        /// <param name="expectedOutput">Expected output tensor.</param>
-        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-        {
-            SetTrainingMode(true);
-            try
-            {
-                TrainWithTape(input, expectedOutput);
-            }
-            finally
-            {
-                SetTrainingMode(false);
-            }
-        }
-
-        /// <summary>
         /// Gets metadata about the Deep Ritz model.
         /// </summary>
         /// <returns>Model metadata.</returns>

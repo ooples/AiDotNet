@@ -190,7 +190,7 @@ public partial class FerretV2<T> : VisionLanguageModelBase<T>, IVisualGroundingM
         var rawDetections = new double[maxDet, fieldsPerDet];
         int validCount = 0;
 
-        double peakThreshold = attnSum / (gridSize * gridSize) * 1.3;
+        double peakThreshold = attnSum / ((double)gridSize * gridSize) * 1.3;
         var visited = new bool[gridSize * gridSize];
 
         for (int cell = 0; cell < gridSize * gridSize && validCount < maxDet; cell++)
@@ -250,7 +250,7 @@ public partial class FerretV2<T> : VisionLanguageModelBase<T>, IVisualGroundingM
             double y2 = (double)(maxR + 1) / gridSize;
             double conf = Math.Min(
                 1.0,
-                regionConf / (regionSize * attnSum / (gridSize * gridSize))
+                regionConf / (regionSize * attnSum / ((double)gridSize * gridSize))
             );
             conf = 1.0 / (1.0 + Math.Exp(-conf + 0.8));
 
@@ -396,15 +396,6 @@ public partial class FerretV2<T> : VisionLanguageModelBase<T>, IVisualGroundingM
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
-    }
-
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        TrainWithTape(input, expected, _optimizer);
-        SetTrainingMode(false);
     }
 
     /// <inheritdoc />

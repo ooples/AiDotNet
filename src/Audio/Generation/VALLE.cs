@@ -275,24 +275,6 @@ public partial class VALLE<T> : AudioNeuralNetworkBase<T>, IAudioGenerator<T>
         var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            // Pass the configured optimizer through. The two-argument overload left _optimizer
-            // assigned and never read, so training silently used the framework default and any
-            // caller-supplied optimizer was discarded. Same dead-dependency shape already fixed on
-            // MegaTTS, LiteDVDNet, LLMTime and InstructBLIP.
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being

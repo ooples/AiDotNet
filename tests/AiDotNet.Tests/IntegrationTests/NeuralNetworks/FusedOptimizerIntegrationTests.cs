@@ -1011,7 +1011,7 @@ public class FusedOptimizerIntegrationTests
         {
         }
 
-        public bool FusedTrainingDisabled => _fusedTrainingDisabled;
+        public bool FusedTrainingDisabled => IsFusedTrainingDisabled;
     }
 
     /// <summary>

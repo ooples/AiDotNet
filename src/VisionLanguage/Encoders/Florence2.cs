@@ -414,25 +414,21 @@ public partial class Florence2<T> : VisionLanguageModelBase<T>, IVisualEncoder<T
         return _language.Decode(new[] { BartEncoderDecoderLayer<T>.DecoderStartTokenId }, memory);
     }
 
-    /// <summary>
-    /// One training step under the default task. A <c>[1, vocab]</c> target is a distribution over the first
-    /// token; any other target is token ids, trained with teacher forcing.
-    /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// With its language model, the model trains the loss of the preprocessed image for the default task; without one,
+    /// the standard step trains the network.
+    /// </remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> expected)
     {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        if (input is null) throw new ArgumentNullException(nameof(input));
-        if (expected is null) throw new ArgumentNullException(nameof(expected));
-        if (_language is null)
-        {
-            SetTrainingMode(true);
-            TrainWithTape(input, expected, _optimizer);
-            SetTrainingMode(false);
-            return;
-        }
+        if (_language is null) return null;
         var task = _options.DefaultTask;
-        TrainWithCustomObjective(PreprocessImage(input), expected, (pixels, target) => Loss(pixels, target, task, null), _optimizer);
+        return new[]
+        {
+            new Training.TrainingObjective<T>(
+                new[] { PreprocessImage(input), expected },
+                data => Loss(data[0], data[1], task, null)),
+        };
     }
 
     /// <inheritdoc/>

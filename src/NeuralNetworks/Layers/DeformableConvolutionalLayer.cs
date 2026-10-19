@@ -851,7 +851,7 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
         // Streaming-aware: route through AllocateLazyWeight so the pool
         // pre-evicts before the He-init fill.
         var weights = AllocateLazyWeight([outC, inC, kH, kW]);
-        double fan_in = inC * kH * kW;
+        double fan_in = (double)inC * kH * kW;
         double std = Math.Sqrt(2.0 / fan_in); // He initialization
 
         var random = RandomHelper.CreateSeededRandom(42);
@@ -1025,53 +1025,6 @@ public partial class DeformableConvolutionalLayer<T> : LayerBase<T>, IShapeContr
             Engine.InvalidatePersistentTensor(_maskWeights);
             Engine.InvalidatePersistentTensor(_maskBias);
         }
-    }
-
-    /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        var allGrads = new List<T>();
-
-        if (_weightGradients != null)
-        {
-            for (int i = 0; i < _weightGradients.Length; i++)
-                allGrads.Add(_weightGradients.Data.Span[i]);
-        }
-
-        if (_biasGradients != null)
-        {
-            for (int i = 0; i < _biasGradients.Length; i++)
-                allGrads.Add(_biasGradients.Data.Span[i]);
-        }
-
-        if (_offsetWeightGradients != null)
-        {
-            for (int i = 0; i < _offsetWeightGradients.Length; i++)
-                allGrads.Add(_offsetWeightGradients.Data.Span[i]);
-        }
-
-        if (_offsetBiasGradients != null)
-        {
-            for (int i = 0; i < _offsetBiasGradients.Length; i++)
-                allGrads.Add(_offsetBiasGradients.Data.Span[i]);
-        }
-
-        if (_useModulation)
-        {
-            if (_maskWeightGradients != null)
-            {
-                for (int i = 0; i < _maskWeightGradients.Length; i++)
-                    allGrads.Add(_maskWeightGradients.Data.Span[i]);
-            }
-
-            if (_maskBiasGradients != null)
-            {
-                for (int i = 0; i < _maskBiasGradients.Length; i++)
-                    allGrads.Add(_maskBiasGradients.Data.Span[i]);
-            }
-        }
-
-        return new Vector<T>([.. allGrads]);
     }
 
     /// <summary>

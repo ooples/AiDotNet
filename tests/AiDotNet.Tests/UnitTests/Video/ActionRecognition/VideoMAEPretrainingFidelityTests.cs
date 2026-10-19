@@ -91,7 +91,11 @@ public class VideoMAEPretrainingFidelityTests
     [Fact]
     public void PretrainMAE_UpdatesTheWeights_AndTheLossFallsOverStepsOnAFixedClip()
     {
-        var model = Model();
+        // Seeded, so the initial weights and the tube masks come from Options.Seed. Unseeded, the weights were drawn
+        // from the process-shared generator: the model trained on a different initialization depending on which tests
+        // ran first in the host, and the convergence bar below held only for the one it got when run alone (last/first
+        // 0.78 alone, 0.856 after any other test class). Seeded it is 0.761 in every order.
+        var model = Model(options: new VideoMAEOptions { Seed = 11 });
         var clip = TiledClip(seed: 21);
 
         // Materialise the lazy decoder layers so their parameters exist to compare.

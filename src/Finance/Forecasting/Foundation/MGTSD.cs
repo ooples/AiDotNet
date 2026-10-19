@@ -472,45 +472,43 @@ public partial class MGTSD<T> : TimeSeriesFoundationModelBase<T>
         return _optimizer ?? base.GetOrCreateBaseOptimizer();
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Each step draws its diffusion timestep and noise from the step counter's seed, and the clean target x0 is the
+    /// horizon normalized by the context's instance statistics.
+    /// </remarks>
+    protected override void OnTrainingStepStarting(Tensor<T> input, Tensor<T> target)
     {
-        if (!_useNativeMode) { base.Train(input, expected); return; }
-
-        // RevIN: normalize the target by the INPUT's instance statistics. The same statistics
-        // de-normalize the forecast in ForwardNative, so a scaled/shifted input yields a
-        // scaled/shifted forecast (ScaledInput_ShouldChangeOutput) rather than being washed out
-        // by the input-side instance normalization.
+        base.OnTrainingStepStarting(input, target);
         var (mean, std) = ComputeInstanceStats(input);
         int fh = _forecastHorizon;
         var x0 = new Tensor<T>(new[] { 1, fh });
         for (int i = 0; i < fh; i++)
         {
-            T tv = i < expected.Length ? expected[i] : NumOps.Zero;
+            T tv = i < target.Length ? target[i] : NumOps.Zero;
             x0.Data.Span[i] = NumOps.Divide(NumOps.Subtract(tv, mean), std);
         }
 
-        // Reproducible-but-varying (t, ε) per step: seed off the architecture seed plus a
-        // per-call counter so the trajectory is deterministic across runs (stable tests) yet
-        // still sweeps timesteps/noise so the denoiser learns the full reverse process.
         int baseSeed = Architecture?.RandomSeed ?? 12345;
         var trainRand = RandomHelper.CreateSeededRandom(baseSeed + _trainStepCounter);
         _trainStepCounter++;
         _trainTimestep = trainRand.Next(_diffusionSteps);
         var noise = new Tensor<T>(new[] { 1, fh });
         for (int i = 0; i < fh; i++) noise.Data.Span[i] = SampleStandardNormal(trainRand);
-
         _trainX0 = x0;
         _trainNoise = noise;
-        try
-        {
-            // base.Train compares ForwardForTraining(input) == x̂_0 against the loss target x_0.
-            base.Train(input, x0);
-        }
-        finally
-        {
-            _trainX0 = null;
-            _trainNoise = null;
-        }
+    }
+
+    /// <inheritdoc/>
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
+        => (input, _trainX0 ?? target);
+
+    /// <inheritdoc/>
+    protected override void OnTrainingStepEnded(bool succeeded)
+    {
+        _trainX0 = null;
+        _trainNoise = null;
+        base.OnTrainingStepEnded(succeeded);
     }
 
     /// <summary>

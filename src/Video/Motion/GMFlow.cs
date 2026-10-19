@@ -341,19 +341,6 @@ public partial class GMFlow<T> : OpticalFlowBase<T>
         return EstimateFlow(frame1, frame2);
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     #endregion
 
     #region Private Methods

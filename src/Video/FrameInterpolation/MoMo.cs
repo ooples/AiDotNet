@@ -154,20 +154,6 @@ public partial class MoMo<T> : FrameInterpolationBase<T>
         return Forward(input);
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
     // Identity: tape training runs the raw layer stack (no NormalizeFrames) and the sigmoid head
     // emits [0,1] frames, so /255+*255 only on inference was a train/eval mismatch (MoreData).

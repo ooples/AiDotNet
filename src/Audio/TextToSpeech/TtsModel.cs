@@ -695,32 +695,6 @@ public partial class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
     /// <summary>
-    /// Trains the model on input data.
-    /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-        {
-            throw new NotSupportedException("Cannot train in ONNX inference mode. Use the native training constructor.");
-        }
-
-        // TRY/FINALLY, NOT TWO STATEMENTS. TrainWithTape can throw -- a shape mismatch, a diverged
-        // loss, an OOM part-way through the tape -- and the bare call left the model stuck in
-        // training mode when it did. The next Predict then runs with dropout live and stochastic
-        // batch-norm statistics, so it silently returns a different answer for the same input, and
-        // nothing about that failure points back at the exception that caused it.
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <summary>
     /// Gets metadata about the model.
     /// </summary>
     public override ModelMetadata<T> GetModelMetadata()

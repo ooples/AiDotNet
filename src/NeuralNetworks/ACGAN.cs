@@ -282,17 +282,39 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
         return TrainStepCore(realImages, realLabels, noise, fakeLabels);
     }
 
-    /// <summary>
-    /// One AC-GAN step. <paramref name="realLabels"/> may be null when the real images' classes are
-    /// unknown: the real batch then trains the source term only, instead of the classifier learning
-    /// labels that were never observed.
-    /// </summary>
-    private (T discriminatorLoss, T generatorLoss) TrainStepCore(
-        Tensor<T> realImages,
-        Tensor<T>? realLabels,
-        Tensor<T> noise,
-        Tensor<T> fakeLabels)
+    private (T discriminatorLoss, T generatorLoss) TrainStepCore(Tensor<T> realImages, Tensor<T>? realLabels, Tensor<T> noise, Tensor<T> fakeLabels)
     {
+        _pendingStep = (realImages, realLabels, noise, fakeLabels);
+        try
+        {
+            Train(noise, realImages);
+        }
+        finally
+        {
+            _pendingStep = null;
+        }
+
+        return (_lastDiscriminatorLoss, _lastGeneratorLoss);
+    }
+
+    private (Tensor<T> RealImages, Tensor<T>? RealLabels, Tensor<T> Noise, Tensor<T> FakeLabels)? _pendingStep;
+    private T _lastDiscriminatorLoss = MathHelper.GetNumericOperations<T>().Zero;
+    private T _lastGeneratorLoss = MathHelper.GetNumericOperations<T>().Zero;
+
+    /// <inheritdoc/>
+    /// <remarks>
+    /// The AC-GAN step (Odena et al. 2017): the discriminator on the source and class log-likelihoods of real and
+    /// generated samples, then the generator on the same terms with the discriminator frozen. Each network steps on its
+    /// own fused session.
+    /// </remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        var (realImages, realLabels, noise, fakeLabels) = _pendingStep ?? ReadSupervisedStep(input, expectedOutput);
+        return AdversarialObjectives(realImages, realLabels, noise, fakeLabels);
+    }
+
+    private IReadOnlyList<Training.TrainingObjective<T>> AdversarialObjectives(Tensor<T> realImages, Tensor<T>? realLabels, Tensor<T> noise, Tensor<T> fakeLabels)
+{
         // ONE generator forward, recorded on the generator's tape: the pattern the base GAN uses (#1390).
         // The discriminator step trains on a detached copy of it, so that step cannot reach the
         // generator. The generator step then scores the tracked original through the frozen
@@ -305,48 +327,67 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
         Generator.SetTrainingMode(true);
         Discriminator.SetTrainingMode(true);
 
+        // Both steps run on their network's fused session. Every per-step tensor travels in the step's data, which
+        // a compiled plan rebinds on every replay: the discriminator's real and generated samples and their labels,
+        // and the generator's noise with its requested classes. The generated samples come from a training-mode
+        // forward that leaves the generator's running statistics to the generator's own step.
         var generatorInput = ConcatenateTensors(noise, fakeLabels);
-        using var generatorTape = new GradientTape<T>();
-        var fakeTracked = Generator.ForwardForTraining(generatorInput);
-        var fakeImages = new Tensor<T>(fakeTracked.Shape.ToArray());
-        fakeTracked.AsSpan().CopyTo(fakeImages.AsWritableSpan());
-
+        var fakeImages = Generator.ForwardForTrainingDetached(generatorInput);
         bool emitsProbabilities = Discriminator.FinalLayerEmitsProbabilities();
 
         // ----- Discriminator: maximise L_S + L_C (Odena et al. 2017, eqs. 2 and 3) -----
-        T discriminatorLoss;
-        using (var discriminatorTape = new GradientTape<T>())
+        int[] realShape = realImages._shape;
+        int[] fakeShape = fakeImages._shape;
+        int[] labelShape = fakeLabels._shape;
+        int realLength = realImages.Length;
+        int fakeLength = fakeImages.Length;
+        int labelLength = fakeLabels.Length;
+        bool withRealLabels = realLabels is not null;
+        var discriminatorData = realLabels is not null
+            ? Training.StepInputPacking<T>.Pack(realImages, fakeImages, fakeLabels, realLabels)
+            : Training.StepInputPacking<T>.Pack(realImages, fakeImages, fakeLabels);
+        var discriminatorObjective = new Training.TrainingObjective<T>(new[] { discriminatorData }, step =>
         {
-            var realOutput = Discriminator.ForwardForTraining(realImages);
-            var fakeOutput = Discriminator.ForwardForTraining(fakeImages);
-            var discriminatorObjective = Engine.TensorAdd(
+            var packed = step[0];
+            var real = Training.StepInputPacking<T>.Slice(packed, 0, realShape);
+            var fake = Training.StepInputPacking<T>.Slice(packed, realLength, fakeShape);
+            var fakeClasses = Training.StepInputPacking<T>.Slice(packed, realLength + fakeLength, labelShape);
+            var realOutput = Discriminator.ForwardForTraining(real);
+            var fakeOutput = Discriminator.ForwardForTraining(fake);
+            var objective = Engine.TensorAdd(
                 SourceNegativeLogLikelihood(realOutput, isReal: true),
                 Engine.TensorAdd(
                     SourceNegativeLogLikelihood(fakeOutput, isReal: false),
-                    ClassNegativeLogLikelihood(fakeOutput, fakeLabels, emitsProbabilities)));
-            if (realLabels is not null)
+                    ClassNegativeLogLikelihood(fakeOutput, fakeClasses, emitsProbabilities)));
+            if (withRealLabels)
             {
-                discriminatorObjective = Engine.TensorAdd(
-                    discriminatorObjective,
-                    ClassNegativeLogLikelihood(realOutput, realLabels, emitsProbabilities));
+                var realClasses = Training.StepInputPacking<T>.Slice(
+                    packed, realLength + fakeLength + labelLength, labelShape);
+                objective = Engine.TensorAdd(objective, ClassNegativeLogLikelihood(realOutput, realClasses, emitsProbabilities));
             }
-            discriminatorLoss = StepOnTape(discriminatorTape, discriminatorObjective, Discriminator,
-                _discriminatorOptimizer);
-        }
+            return objective;
+        })
+        { Network = Discriminator, Optimizer = _discriminatorOptimizer, OnLoss = loss => _lastDiscriminatorLoss = loss };
 
         // ----- Generator: maximise L_C - L_S -----
         // The source term is taken in its non-saturating form (Goodfellow et al. 2014, section 3): the
         // generator minimises -log P(S = real | X_fake) instead of log P(S = fake | X_fake). Both have the
         // same fixed point, but the non-saturating one does not vanish while the discriminator still
         // rejects every sample. The class term is the paper's: a generated image must be classified as
-        // the class it was asked for.
-        var generatorOutput = Discriminator.ForwardFrozenOnTape(fakeTracked);
-        var generatorObjective = Engine.TensorAdd(
-            SourceNegativeLogLikelihood(generatorOutput, isReal: true),
-            ClassNegativeLogLikelihood(generatorOutput, fakeLabels, emitsProbabilities));
-        T generatorLoss = StepOnTape(generatorTape, generatorObjective, Generator, _generatorOptimizer);
-
-        return (discriminatorLoss, generatorLoss);
+        // the class it was asked for. The requested classes are the tail of the generator's own input.
+        int batchSize = noise.Shape[0];
+        int noiseWidth = noise.Shape[1];
+        var generatorObjective = new Training.TrainingObjective<T>(new[] { generatorInput }, step =>
+        {
+            var stepInput = step[0];
+            var requestedClasses = Engine.TensorSlice(stepInput, new[] { 0, noiseWidth }, new[] { batchSize, _numClasses });
+            var generatorOutput = Discriminator.ForwardFrozenOnTape(Generator.ForwardForTraining(stepInput));
+            return Engine.TensorAdd(
+                SourceNegativeLogLikelihood(generatorOutput, isReal: true),
+                ClassNegativeLogLikelihood(generatorOutput, requestedClasses, emitsProbabilities));
+        })
+        { Network = Generator, Optimizer = _generatorOptimizer, OnLoss = loss => { _lastGeneratorLoss = loss; LastLoss = loss; } };
+        return new[] { discriminatorObjective, generatorObjective };
     }
 
     /// <summary>
@@ -503,50 +544,9 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
         return Generator.Predict(input);
     }
 
-    /// <summary>
-    /// Performs a single training iteration using the standard neural network interface.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method adapts the AC-GAN's specialized training to the standard <see cref="NeuralNetworkBase{T}.Train"/>
-    /// interface by automatically generating random class labels for both real and fake samples.
-    /// </para>
-    /// <para>
-    /// The AC-GAN training process differs from standard neural networks because it requires:
-    /// <list type="bullet">
-    /// <item><description>Real images with their class labels</description></item>
-    /// <item><description>Noise vectors for generating fake images</description></item>
-    /// <item><description>Target class labels for the generated images</description></item>
-    /// </list>
-    /// </para>
-    /// <para>
-    /// When using this simplified interface, random class labels are generated using
-    /// <see cref="RandomHelper.ThreadSafeRandom"/> for thread-safe, cryptographically-seeded
-    /// random number generation. For more control over class labels, use the
-    /// <see cref="TrainStep"/> method directly.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method lets you train an AC-GAN using the same
-    /// interface as other neural networks. Just provide:
-    /// <list type="bullet">
-    /// <item><description><paramref name="input"/>: Random noise vectors (like random seeds for image generation)</description></item>
-    /// <item><description><paramref name="expectedOutput"/>: Real images to learn from</description></item>
-    /// </list>
-    ///
-    /// The method automatically assigns random class labels (like "digit 3", "digit 7", etc.)
-    /// to both the real images and the images to generate. While this is convenient,
-    /// for best results you should use <see cref="TrainStep"/> with actual class labels
-    /// from your dataset.
-    /// </para>
-    /// </remarks>
-    /// <param name="input">The noise tensor used as input to the generator network.
-    /// Shape should be [batchSize, noiseSize] where noiseSize matches the generator's expected input.</param>
-    /// <param name="expectedOutput">The real images tensor used for discriminator training.
-    /// Shape should be [batchSize, height, width, channels] or equivalent flattened form.</param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="input"/> or
-    /// <paramref name="expectedOutput"/> is null.</exception>
-    /// <seealso cref="TrainStep"/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
+    /// <summary>Reads a supervised (noise, real images) pair as an AC-GAN step: the generator input's trailing classes, or random ones.</summary>
+    private (Tensor<T> RealImages, Tensor<T>? RealLabels, Tensor<T> Noise, Tensor<T> FakeLabels) ReadSupervisedStep(Tensor<T> input, Tensor<T> expectedOutput)
+{
         if (input is null)
         {
             throw new ArgumentNullException(nameof(input), "Noise input tensor cannot be null.");
@@ -588,7 +588,7 @@ public partial class ACGAN<T> : ImageGeneratorModelLayoutBase<T>
 
         // Train carries no labels for the real images, so they train the source term only. The previous
         // version labelled them at random, which trained the auxiliary classifier on noise.
-        TrainStepCore(realImages, realLabels: null, noise, fakeLabels);
+        return (realImages, null, noise, fakeLabels);
     }
 
     /// <summary>One-hot labels naming each row's largest entry.</summary>

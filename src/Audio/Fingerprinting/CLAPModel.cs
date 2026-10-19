@@ -324,6 +324,12 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     public Tensor<T> EncodeAudio(Tensor<T> audio)
     {
         ThrowIfDisposed();
+        return InEvaluationMode(() => EmbedAudio(audio));
+    }
+
+    // The audio embedding in the current mode: the training step's forward, and EncodeAudio's body.
+    private Tensor<T> EmbedAudio(Tensor<T> audio)
+    {
         var (features, longer) = PrepareAudio(audio);
         if (!_useNativeMode && OnnxEncoder is not null)
         {
@@ -403,6 +409,25 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     }
 
     /// <summary>
+    /// Runs <paramref name="inference"/> with the towers in evaluation mode and restores the previous mode, as PredictCore
+    /// does. Networks and layers start in training mode, so an embedding taken without this ran the text tower's dropout
+    /// and the same caption encoded differently on every call.
+    /// </summary>
+    private TResult InEvaluationMode<TResult>(Func<TResult> inference)
+    {
+        bool wasTraining = IsTrainingMode;
+        if (wasTraining) SetTrainingMode(false);
+        try
+        {
+            return inference();
+        }
+        finally
+        {
+            if (wasTraining) SetTrainingMode(true);
+        }
+    }
+
+    /// <summary>
     /// Encodes a tokenised text caption into a CLAP embedding vector.
     /// </summary>
     /// <param name="tokens">RoBERTa token IDs [batch, seqLen] or [seqLen], padded with
@@ -411,6 +436,12 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     public Tensor<T> EncodeText(Tensor<T> tokens)
     {
         ThrowIfDisposed();
+        return InEvaluationMode(() => EmbedText(tokens));
+    }
+
+    // The text embedding in the current mode: the training step's text side, and EncodeText's body.
+    private Tensor<T> EmbedText(Tensor<T> tokens)
+    {
         if (!_useNativeMode)
         {
             if (OnnxDecoder is null)
@@ -775,7 +806,7 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     /// the standard tape-based training path so all gradients (including the
     /// learnable temperature) flow correctly through every layer.
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
     {
         if (!_useNativeMode)
             throw new NotSupportedException(
@@ -821,55 +852,36 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
             var trainableLayers = new List<ITrainableLayer<T>>();
             foreach (var l in Layers) if (l is ITrainableLayer<T> t) trainableLayers.Add(t);
             foreach (var l in TextEncoderLayers) if (l is ITrainableLayer<T> t) trainableLayers.Add(t);
-            var extras = new List<Tensor<T>> { _logTemperature };
-            if (trainableLayers.Count > 0 || extras.Count > 0)
+            // The contrastive loss depends on BOTH encoders + temperature: the forward closure embeds the audio and
+            // the loss closure re-runs the text side on this step's text batch (the target), so a compiled replay
+            // reads the refreshed batch.
+            Tensor<T> FwdCLAP(Tensor<T> audioIn) => EmbedAudio(audioIn); // audio embedding — the loss closure re-runs the text side.
+            Tensor<T> LossCLAP(Tensor<T> audioEmb, Tensor<T> textBatch)
             {
-                // The contrastive loss depends on BOTH encoders + temperature, so
-                // the forward closure runs the full symmetric-alignment computation
-                // and the loss closure just reduces its output. We pass the audio
-                // input as the primary and the text batch as target so the closure
-                // signature matches TryStep's contract.
-                Tensor<T> FwdCLAP(Tensor<T> audioIn) => EncodeAudio(audioIn); // audio embedding — the loss closure re-runs the text side.
                 // Re-run the text encoder on this replay's text batch.
-                Tensor<T> LossCLAP(Tensor<T> audioEmb, Tensor<T> textBatch) => ContrastiveLoss(audioEmb, EncodeText(textBatch));
-                if (AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
-                        trainableLayers, input, expected,
-                        forward: FwdCLAP, computeLoss: LossCLAP,
-                        optimizer: optimizer,
-                        out T fusedLoss, owner: this,
-                        extraTensors: extras,
-                        onGradients: gradients => PublishParameterGradients(gradients)))
-                {
-                    LastLoss = fusedLoss;
-                    return;
-                }
+                return ContrastiveLoss(audioEmb, EmbedText(textBatch));
             }
-
-            using var tape = new GradientTape<T>();
-            // Forward both encoders inside the same tape so gradients flow
-            // through every parameter. EncodeAudio / EncodeText already
-            // L2-normalise along the last axis so the dot product below is
-            // cosine similarity.
-            var lossSum = ContrastiveLoss(EncodeAudio(input), EncodeText(expected));
-
-            // Manual gradient + optimizer step over the combined params.
-            var grads = ComputeAndPublishParameterGradients(tape, lossSum, allParams);
-
-            T lossValue = lossSum.Length > 0 ? lossSum[0] : NumOps.Zero;
-            LastLoss = lossValue;
-
-            Tensor<T> ComputeForward(Tensor<T> inp, Tensor<T> _) => EncodeAudio(inp);
-            Tensor<T> RecomputeLoss(Tensor<T> _, Tensor<T> __) => lossSum;
-
-            var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
-                allParams, grads, lossValue,
-                input, input, ComputeForward, RecomputeLoss);
-            optimizer.Step(context);
+            // One step through the shared training step: the fused plan when it applies, otherwise the shared eager
+            // tape step with the same objective. Both encoders and the temperature are trained.
+            LastLoss = AiDotNet.Training.TapeTrainingStepper<T>.ForOwner(this).Step(new AiDotNet.Training.FusedTrainingStepRequest<T>
+            {
+                Layers = trainableLayers,
+                Input = input,
+                Target = expected,
+                Forward = FwdCLAP,
+                ComputeLoss = LossCLAP,
+                Optimizer = optimizer,
+                ExtraParameters = allParams,
+                OnGradients = gradients => PublishParameterGradients(gradients),
+                VerifyReplayAgreement = true,
+            });
         }
         finally
         {
             SetTrainingMode(false);
         }
+
+        return true;
     }
 
     /// <summary>

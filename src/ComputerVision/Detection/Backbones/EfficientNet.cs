@@ -224,10 +224,6 @@ public partial class EfficientNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<
         }
     };
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput) =>
-        throw new NotSupportedException(
-            $"{GetType().Name}: detection backbones train as part of a parent detector.");
-
 
 
 

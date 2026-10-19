@@ -203,20 +203,6 @@ public partial class PANNs<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         }
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <inheritdoc />
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
         => base.ForwardForTraining(NormalizeModelInput(input));

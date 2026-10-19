@@ -185,7 +185,8 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
             options.ModelPath = mp;
         }
 
-        var labels = options.CustomLabels
+        var customLabels = options.CustomLabels;
+        var labels = customLabels
             ?? (options.TextPrompts is { Length: > 0 } tp ? tp : AudioSetLabels);
         var arch = new NeuralNetworkArchitecture<T>(
             inputFeatures: options.AudioEmbeddingDim,
@@ -392,21 +393,6 @@ public partial class CLAP<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// <inheritdoc />
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
         => _optimizer ?? base.GetOrCreateBaseOptimizer();
-
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the

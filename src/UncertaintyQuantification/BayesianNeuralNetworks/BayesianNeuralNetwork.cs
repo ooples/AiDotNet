@@ -45,7 +45,7 @@ namespace AiDotNet.UncertaintyQuantification.BayesianNeuralNetworks;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
     [ResearchPaper("Weight Uncertainty in Neural Networks", "https://arxiv.org/abs/1505.05424")]
-public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<T>
+public partial class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<T>
 {
     private readonly int _numSamples;
 
@@ -88,26 +88,6 @@ public class BayesianNeuralNetwork<T> : NeuralNetwork<T>, IUncertaintyEstimator<
         }
 
         Layers.AddRange(LayerHelper<T>.CreateDefaultBayesianNeuralNetworkLayers(Architecture));
-    }
-
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            // BayesianDenseLayer samples through its tape-tracked
-            // reparameterization inside each training Forward. Pre-sampling
-            // here left an unconsumed epsilon behind whenever the compiled
-            // fused path completed without invoking the eager layer Forward;
-            // the next evaluation Predict then consumed stale training noise
-            // and diverged from an otherwise identical clone.
-            TrainWithTape(input, expectedOutput);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
     }
 
     /// <summary>

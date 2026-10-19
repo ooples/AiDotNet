@@ -426,20 +426,6 @@ public partial class WaveNet<T> : ForecastingModelBase<T>
         return _useNativeMode ? ForecastNative(input) : ForecastOnnx(input);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In the WaveNet model, Train performs a training step. This updates the WaveNet architecture so it learns from data.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        base.Train(input, target);
-    }
-
     /// <summary>
     /// Training-mode forward: routes through <see cref="Forward"/>
     /// directly so WaveNet's dropout between dilated causal-conv blocks

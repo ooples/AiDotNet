@@ -149,9 +149,11 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
     /// The compiled plan replays off the tape and its output is cloned, which detaches it, so a training
     /// forward routed through it reached the loss with no path back to a single weight: every VAE gradient
     /// came out exactly zero. The noise predictors make the same test before their inference fast path.
+    /// A compiled training plan's trace records no tape but differentiates what it traces, so it counts as
+    /// recording too: through the inference plan, every fused VAE training step computed zero gradients and
+    /// moved no weight.
     /// </remarks>
-    private static bool IsRecordingGradients =>
-        GradientTape<T>.Current is not null && !NoGradScope<T>.IsSuppressed;
+    private static bool IsRecordingGradients => AiDotNet.Autodiff.GradientRecording.IsRecording<T>();
 
     /// <summary>
     /// Routes <paramref name="eagerDecode"/> through the decoder compile host.
@@ -484,8 +486,6 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
         if (expectedOutput is null)
             throw new ArgumentNullException(nameof(expectedOutput));
 
-        var (parameters, gradients, loss) = TapeGradients(input, expectedOutput, LossFunction);
-
         _trainingOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
             model: null,
             options: new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -499,15 +499,52 @@ public abstract partial class VAEModelBase<T> : IVAEModel<T>, IModelShape,
                 UseAMSGrad = false,
             });
 
-        Tensor<T> RecomputeForward(Tensor<T> x, Tensor<T> _) => ForwardForTraining(x);
-        Tensor<T> RecomputeLoss(Tensor<T> x, Tensor<T> target)
+        // One step on the shared fused session: the compiled plan when it applies (CPU or GPU), the eager tape with
+        // this optimizer otherwise. Lazily shaped weights are resolved first by a forward outside the tape, since a
+        // plan holds only the tensors that exist when it is built.
+        var parameters = LiveWeightTensors();
+        if (parameters.Length == 0)
         {
-            using var noGrad = new NoGradScope<T>();
-            return LossFunction.ComputeTapeLoss(ForwardForTraining(x), target);
+            using (new NoGradScope<T>())
+                ForwardForTraining(input);
+            parameters = LiveWeightTensors();
+        }
+        if (parameters.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"{GetType().Name} exposes no live weight tensors to train; register its layers as parameter components.");
         }
 
-        _trainingOptimizer.Step(new TapeStepContext<T>(
-            parameters, gradients, loss, input, expectedOutput, RecomputeForward, RecomputeLoss));
+        var lossFunction = LossFunction;
+        var stepper = _tapeStepper ??= new AiDotNet.Training.TapeTrainingStepper<T>(this);
+        stepper.Step(new AiDotNet.Training.FusedTrainingStepRequest<T>
+        {
+            Layers = Array.Empty<ITrainableLayer<T>>(),
+            Input = input,
+            Target = expectedOutput,
+            Forward = ForwardForTraining,
+            ComputeLoss = lossFunction.ComputeTapeLoss,
+            Optimizer = _trainingOptimizer,
+            ExtraParameters = parameters,
+        });
+    }
+
+    private AiDotNet.Training.TapeTrainingStepper<T>? _tapeStepper;
+
+    /// <summary>Training steps run on the fused compiled plan.</summary>
+    internal int FusedTrainingStepCount => _tapeStepper?.FusedStepCount ?? 0;
+
+    /// <summary>Training steps run on the eager tape.</summary>
+    internal int EagerTrainingStepCount => _tapeStepper?.EagerStepCount ?? 0;
+
+    // The weight tensors training updates in place: every writable chunk of the parameter registry.
+    private Tensor<T>[] LiveWeightTensors()
+    {
+        EnsureComponentsRegistered();
+        return _parameterRegistry.GetParameterStateChunks()
+            .Where(chunk => chunk.IsWritableInPlace)
+            .Select(chunk => chunk.Tensor)
+            .ToArray();
     }
 
     /// <summary>

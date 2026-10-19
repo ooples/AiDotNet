@@ -249,22 +249,18 @@ public partial class MobileNetV3Network<T> : ImageClassifierModelLayoutBase<T>
         return output;
     }
 
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc/>
+    /// <remarks>The batch-normalization statistics stay frozen during training: those layers run in inference mode.</remarks>
+    public override void SetTrainingMode(bool isTraining)
     {
-        SetTrainingMode(true);
-        // BN layers must use eval mode (running stats) for batch_size=1.
-        // Per Ioffe & Szegedy 2015: BN gradient is exactly zero for N=1
-        // in training mode (variance=0). Eval mode preserves information flow.
+        base.SetTrainingMode(isTraining);
+        if (!isTraining) return;
         foreach (var layer in Layers)
         {
             if (layer is BatchNormalizationLayer<T>)
                 layer.SetTrainingMode(false);
         }
-        TrainWithTape(input, expectedOutput, _optimizer);
-        SetTrainingMode(false);
     }
-
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc />

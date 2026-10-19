@@ -362,12 +362,6 @@ public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         return Accelerate(input, () => Forward(input));
     }
 
-    /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        TrainWithTape(input, expectedOutput, _optimizer);
-    }
-
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc />

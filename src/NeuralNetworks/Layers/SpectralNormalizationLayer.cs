@@ -638,14 +638,6 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     }
 
     /// <summary>
-    /// Gets the parameter gradients from the inner layer.
-    /// </summary>
-    public override Vector<T> GetParameterGradients()
-    {
-        return _innerLayer.GetParameterGradients();
-    }
-
-    /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
     public override void ResetState()

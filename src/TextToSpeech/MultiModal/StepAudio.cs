@@ -234,22 +234,6 @@ public partial class StepAudio<T> : TtsModelBase<T>, ICodecTts<T>, IStreamingTts
         return c;
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     /// <summary>
     /// Refuses parameter work on a disposed model, on every entry point rather than one.
     /// </summary>
