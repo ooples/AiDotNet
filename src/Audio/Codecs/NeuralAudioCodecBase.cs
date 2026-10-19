@@ -1,4 +1,7 @@
 using System.Collections.Generic;
+// File-level, as in AudioNeuralNetworkBase: it makes [TensorLayout] bind to AiDotNet's attribute rather than the
+// Tensors namespaces' type of the same name.
+using AiDotNet.Attributes;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -70,6 +73,11 @@ public class NeuralAudioCodecOptions : ModelOptions
 /// computed without updating the codebooks, then the generator; the generation is the same, as the weights have not
 /// changed in between.</para>
 /// </remarks>
+// The waveform forms AsBatch accepts. The audio base's [Batch, Features] stays the rank-2 form ([channels, samples]);
+// a batch-optional [Batch?, Channels, Time] here would give rank 2 two namings. The stack's first convolution
+// takes the rank-3 form.
+[TensorLayout(TensorAxis.Time, Direction = TensorLayoutDirection.Input)]
+[TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Time, Direction = TensorLayoutDirection.Input)]
 public abstract class NeuralAudioCodecBase<T> : AudioNeuralNetworkBase<T>, IAudioCodec<T>, ITrainingObjectiveProvider<T>
 {
     private readonly NeuralAudioCodecOptions _codec;

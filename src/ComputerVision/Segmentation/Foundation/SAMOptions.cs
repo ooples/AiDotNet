@@ -36,6 +36,10 @@ public class SAMOptions : SegmentationModelOptions
         NumClasses = other.NumClasses;
         DropRate = other.DropRate;
         ModelSize = other.ModelSize;
+        EncoderDim = other.EncoderDim;
+        EncoderDepth = other.EncoderDepth;
+        EncoderHeads = other.EncoderHeads;
+        GlobalAttentionBlocks = (int[])other.GlobalAttentionBlocks.Clone();
         MaskFocalWeight = other.MaskFocalWeight;
         MaskDiceWeight = other.MaskDiceWeight;
         FocalAlpha = other.FocalAlpha;
@@ -82,8 +86,40 @@ public class SAMOptions : SegmentationModelOptions
     /// model names its own variants with its own enum, so there is no shared type to
     /// declare.
     /// </para>
+    /// <para>Setting it writes the variant's encoder width, depth, heads and global-attention blocks into
+    /// <see cref="EncoderDim"/>, <see cref="EncoderDepth"/>, <see cref="EncoderHeads"/> and
+    /// <see cref="GlobalAttentionBlocks"/>, so the options hold the sizes they build. A value set to something other
+    /// than the previous variant's is kept, whichever order an initializer uses.</para>
     /// </remarks>
-    public SAMModelSize ModelSize { get; set; }
+    public SAMModelSize ModelSize
+    {
+        get => _modelSize;
+        set
+        {
+            var previous = SamConfiguration.For(_modelSize);
+            var next = SamConfiguration.For(value);
+            if (EncoderDim == previous.EncoderDim) EncoderDim = next.EncoderDim;
+            if (EncoderDepth == previous.EncoderDepth) EncoderDepth = next.EncoderDepth;
+            if (EncoderHeads == previous.EncoderHeads) EncoderHeads = next.EncoderHeads;
+            if (GlobalAttentionBlocks.SequenceEqual(previous.GlobalAttention)) GlobalAttentionBlocks = (int[])next.GlobalAttention.Clone();
+            _modelSize = value;
+        }
+    }
+
+    private SAMModelSize _modelSize = SAMModelSize.ViTBase;
+
+    /// <summary>Gets or sets the image encoder's width (ViT-B 768, ViT-L 1024, ViT-H 1280; set by <see cref="ModelSize"/>).</summary>
+    public int EncoderDim { get; set; } = SamConfiguration.For(SAMModelSize.ViTBase).EncoderDim;
+
+    /// <summary>Gets or sets the image encoder's blocks (12, 24, 32; set by <see cref="ModelSize"/>).</summary>
+    public int EncoderDepth { get; set; } = SamConfiguration.For(SAMModelSize.ViTBase).EncoderDepth;
+
+    /// <summary>Gets or sets the image encoder's attention heads (12, 16, 16; set by <see cref="ModelSize"/>).</summary>
+    public int EncoderHeads { get; set; } = SamConfiguration.For(SAMModelSize.ViTBase).EncoderHeads;
+
+    /// <summary>Gets or sets the encoder blocks that attend globally; the others attend within windows (set by
+    /// <see cref="ModelSize"/>; each must be below <see cref="EncoderDepth"/>).</summary>
+    public int[] GlobalAttentionBlocks { get; set; } = (int[])SamConfiguration.For(SAMModelSize.ViTBase).GlobalAttention.Clone();
 
     /// <summary>
     /// Throws when a value on this instance cannot produce a working model.

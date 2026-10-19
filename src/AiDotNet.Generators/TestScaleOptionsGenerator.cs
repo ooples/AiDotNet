@@ -521,6 +521,49 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
 
         sb.AppendLine("    };");
         sb.AppendLine();
+
+        // WIDTH ARRAYS. A paper rebuild often states per-stage widths as an int[] (WaveGrad's upsample
+        // channels [512, 512, 256, 128, 128]), which the int table cannot see, so the model stayed at paper
+        // scale under the sweep. Arrays are matched by an ALLOW-list of width words, unlike scalars: an int[]
+        // knob is as often a set of analysis windows, FFT sizes, hops or seasonal periods, where shrinking
+        // changes the meaning or the work, so only a name that says "width" is scaled.
+        sb.AppendLine("    private static readonly (global::System.Type Type, string Property)[] ArrayKnobs =");
+        sb.AppendLine("    {");
+        var arraySeen = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal);
+        int arrayKnobCount = 0;
+        foreach (var type in types)
+        {
+            if (type is null) continue;
+            var fullName = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            if (!arraySeen.Add(fullName)) continue;
+            var declaredNames = new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal);
+            var arrayKnobs = new System.Collections.Generic.List<string>();
+            for (var walk = type; walk is not null && walk.SpecialType != SpecialType.System_Object; walk = walk.BaseType)
+            {
+                foreach (var property in walk.GetMembers().OfType<IPropertySymbol>())
+                {
+                    if (!declaredNames.Add(property.Name)) continue;
+                    if (property.DeclaredAccessibility != Accessibility.Public
+                        || property.SetMethod is not { DeclaredAccessibility: Accessibility.Public }
+                        || property.IsStatic
+                        || property.Type is not IArrayTypeSymbol { Rank: 1 } array
+                        || array.ElementType.SpecialType != SpecialType.System_Int32
+                        || !IsScalable(property.Name)
+                        || !NamesAWidth(property.Name)) continue;
+                    arrayKnobs.Add(property.Name);
+                }
+            }
+            var typeOfArgument = type.IsGenericType
+                ? type.ConstructUnboundGenericType().ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)
+                : fullName;
+            foreach (var property in arrayKnobs)
+            {
+                sb.AppendLine($"        (typeof({typeOfArgument}), \"{property}\"),");
+                arrayKnobCount++;
+            }
+        }
+        sb.AppendLine("    };");
+        sb.AppendLine();
         sb.AppendLine("    private static readonly (global::System.Type Type, string Dimension, string Divisor)[] DivisibilityConstraints =");
         sb.AppendLine("    {");
 
@@ -548,7 +591,7 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         // assembly shadows the useful implementation from AiDotNet and makes every request fall
         // back to paper-scale defaults. A constraint-only type is useful even when its current
         // values already satisfy the relationship, so constraints count as supported behavior.
-        if (knobCount == 0 && synthesizedCount == 0 && constraintCount == 0) return;
+        if (knobCount == 0 && arrayKnobCount == 0 && synthesizedCount == 0 && constraintCount == 0) return;
 
         sb.AppendLine("    };");
         sb.AppendLine();
@@ -588,6 +631,8 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine("            known = true;");
         sb.AppendLine("            break;");
         sb.AppendLine("        }");
+        sb.AppendLine("        for (int i = 0; !known && i < ArrayKnobs.Length; i++)");
+        sb.AppendLine("            known = ArrayKnobs[i].Type == key;");
         sb.AppendLine("        if (!known)");
         sb.AppendLine("        {");
         sb.AppendLine("            for (int i = 0; i < DivisibilityConstraints.Length; i++)");
@@ -629,6 +674,24 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
         sb.AppendLine("            if (scaled == current) continue;");
         sb.AppendLine();
         sb.AppendLine("            property.SetValue(instance, scaled);");
+        sb.AppendLine("        }");
+        sb.AppendLine();
+        sb.AppendLine("        // Each element of a width array scales like a scalar width. A NEW array is set: the default may be a");
+        sb.AppendLine("        // shared instance, and writing into it would shrink every later default construction too.");
+        sb.AppendLine("        for (int i = 0; i < ArrayKnobs.Length; i++)");
+        sb.AppendLine("        {");
+        sb.AppendLine("            if (ArrayKnobs[i].Type != key) continue;");
+        sb.AppendLine("            var property = optionsType.GetProperty(ArrayKnobs[i].Property);");
+        sb.AppendLine("            if (property is null || !property.CanRead || !property.CanWrite) continue;");
+        sb.AppendLine("            if (property.GetValue(instance) is not int[] current || current.Length == 0) continue;");
+        sb.AppendLine("            var scaled = new int[current.Length];");
+        sb.AppendLine("            bool changed = false;");
+        sb.AppendLine("            for (int j = 0; j < current.Length; j++)");
+        sb.AppendLine("            {");
+        sb.AppendLine("                scaled[j] = ScaleDeclaredInteger(current[j]);");
+        sb.AppendLine("                changed |= scaled[j] != current[j];");
+        sb.AppendLine("            }");
+        sb.AppendLine("            if (changed) property.SetValue(instance, scaled);");
         sb.AppendLine("        }");
         sb.AppendLine();
         sb.AppendLine("        if (overrides is not null)");
@@ -836,6 +899,18 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
     /// nothing, and proportional scaling does not have either problem: ratios are preserved and
     /// anything already small is untouched.
     /// </remarks>
+    /// <summary>Whether an int[] property's name says it holds widths (channels, dimensions, filters).</summary>
+    private static bool NamesAWidth(string propertyName)
+    {
+        foreach (var word in new[] { "Channel", "Dim", "Width", "Filter", "Hidden" })
+        {
+            if (propertyName.IndexOf(word, System.StringComparison.OrdinalIgnoreCase) >= 0)
+                return true;
+        }
+
+        return false;
+    }
+
     private static bool IsScalable(string propertyName)
     {
         foreach (var fixedName in SemanticallyFixed)
