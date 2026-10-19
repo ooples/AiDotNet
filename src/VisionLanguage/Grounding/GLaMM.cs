@@ -391,11 +391,10 @@ public partial class GLaMM<T> : VisionLanguageModelBase<T>, IGroundedConversatio
         return Loss(image, ids, labels, sample.Regions, masks)[0];
     }
 
-    /// <inheritdoc />
-    /// <remarks>GLaMM trains on conversations with masks, which a tensor target cannot carry, so
-    /// <c>Train(input, target)</c> throws <see cref="NotSupportedException"/>: use <see cref="TrainConversation"/>.</remarks>
-    protected override string? TrainingUnavailableReason =>
-        "GLaMM trains on an image, a conversation and a mask per [SEG]: use TrainConversation(sample).";
+    /// <summary>GLaMM trains on conversations with masks, which a tensor target cannot carry.</summary>
+    /// <exception cref="NotSupportedException">Always: use <see cref="TrainConversation"/>.</exception>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
+        => throw new NotSupportedException("GLaMM trains on an image, a conversation and a mask per [SEG]: use TrainConversation(sample).");
 
     /// <inheritdoc />
     /// <remarks>Every layer is sized at construction and <see cref="NeuralNetworkBase{T}.Layers"/> is not a chain.</remarks>

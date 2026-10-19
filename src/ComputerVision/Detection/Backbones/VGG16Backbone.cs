@@ -208,10 +208,6 @@ public partial class VGG16Backbone<T> : NeuralNetworkBase<T>, IDetectionBackbone
     };
 
     /// <inheritdoc/>
-    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput) =>
-        throw new NotSupportedException($"{GetType().Name}: detection backbones train as part of a parent detector.");
-
-    /// <inheritdoc/>
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
         throw new NotSupportedException($"{GetType().Name}: WithParameters(Vector<T>) is unsupported on backbones.");
 }

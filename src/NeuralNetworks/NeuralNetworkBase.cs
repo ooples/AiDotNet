@@ -11782,6 +11782,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             ExtraParameters = parameters,
             Selection = parameters,
             ModelGradientClip = MaxGradNormValue,
+            ExcludesParametersFromWeightDecay = () => DecayExcludedParameters().Count > 0,
             OnGradients = ScatterFusedGradients,
         };
 
@@ -13347,7 +13348,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             ExtraParameters = fusedExtraParameters,
             Selection = selectedParameters,
             ModelGradientClip = MaxGradNormValue,
-            ExcludesParametersFromWeightDecay = DecayExcludedParameters().Count > 0,
+            ExcludesParametersFromWeightDecay = () => DecayExcludedParameters().Count > 0,
             OnGradients = ScatterFusedGradients,
         };
 
@@ -13623,7 +13624,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Tensor<T> input,
         Tensor<T> target,
         Func<Tensor<T>, Tensor<T>, Tensor<T>> recomputeForward,
-        Func<Tensor<T>, Tensor<T>, Tensor<T>> recomputeLoss)
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> recomputeLoss,
+        bool clipCustomObjective = false)
     {
         var probe = TapeReachabilityProbe<T>.Current;
         var hooks = new Training.TapeTrainingStepper<T>.EagerStepHooks
@@ -13643,11 +13645,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 probe?.Record(this, gradients);
                 PublishParameterGradients(gradients);
             },
-            // Global gradient-norm clipping at MaxGradNorm (per group where the model declares groups) and the
-            // value clip, over the same layer-owned set and order as the standard step. Custom objectives used to
-            // skip it, so a model trained through its own objective (FastSpeech 2, AlignTTS, AdaSpeech, Grad-TTS,
-            // Deep Voice 3) took unclipped steps that every other entry point would have clipped.
-            OnGradients = ClipObjectiveGradients,
         };
 
         T lossValue = Training.TapeTrainingStepper<T>.EagerTapeStep(
@@ -13655,6 +13652,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             CollectModelTrainableTensors,
             context =>
             {
+                if (clipCustomObjective) ClipCustomObjectiveGradients(context.Gradients);
                 MarkTrainMutationStarted();
                 ApplyOptimizerRegularization(opt, context);
                 opt.Step(context);
@@ -13670,10 +13668,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return lossValue;
     }
 
-    // MaxGradNorm (per declared group) and GradientValueClip on a custom objective's gradients, in place.
-    private void ClipObjectiveGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> gradients)
+    /// <summary>
+    /// Clips a custom objective's gradients the way the other entry points clip theirs: global norm at
+    /// <c>MaxGradNorm</c> over the layer-owned set (per <see cref="GradientClippingGroups"/> group when the model names
+    /// groups), then each component to <see cref="GradientValueClip"/>.
+    /// </summary>
+    /// <remarks>This path used to skip clipping, so a model trained through its own objective (FastSpeech 2, AlignTTS,
+    /// AdaSpeech) took unclipped steps that every other entry point would have clipped.</remarks>
+    private void ClipCustomObjectiveGradients(Dictionary<Tensor<T>, Tensor<T>> grads)
     {
-        if (gradients.Count == 0 || gradients is not Dictionary<Tensor<T>, Tensor<T>> grads) return;
+        if (grads.Count == 0) return;
         double maxGradNorm = MaxGradNormValue;
         if (maxGradNorm > 0.0)
         {
@@ -13688,6 +13692,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 foreach (var group in groups)
                     ApplyGradientClipping(grads, maxGradNorm, group);
             }
+            PublishParameterGradients(grads);
         }
         double clipValue = GradientValueClip;
         if (clipValue > 0.0)
@@ -13703,6 +13708,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     else if (NumOps.GreaterThan(span[i], upper)) span[i] = upper;
                 }
             }
+            PublishParameterGradients(grads);
         }
     }
 
@@ -13743,11 +13749,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 return result;
             }
 
-            // The step's own arena: the top-level tape's Dispose Resets the CURRENT arena (Tensors #1804), and without a
-            // step arena that was the caller's. A model that runs several steps on the same inputs in one Train call (a
-            // GAN's discriminator then generator step, VITS's discriminator, generator and duration steps) then had those
-            // inputs recycled between steps: the arena's tensor ring re-issued the same Tensor objects and reshaped them
-            // in place. Tensors escaping a nested arena are never re-issued.
+            // The step's own arena, as TrainWithTape has: the top-level tape's Dispose Resets the CURRENT arena
+            // (Tensors #1804), and without a step arena that was the caller's. A model that runs several steps on the
+            // same inputs in one Train call (a GAN's discriminator then generator step, VITS's discriminator, generator
+            // and duration steps) then had those inputs recycled between steps: the arena's tensor ring re-issued the
+            // same Tensor objects and reshaped them in place. Tensors escaping a nested arena are never re-issued.
             using var stepArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
             return StepOnSharedTape(
                 () => RecomputeObjective(input, expected),
@@ -13755,7 +13761,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 input,
                 expected,
                 RecomputeObjective,
-                (objective, _) => objective);
+                (objective, _) => objective,
+                clipCustomObjective: true);
         }
         finally
         {

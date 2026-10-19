@@ -15,13 +15,12 @@ namespace AiDotNet.Tests.UnitTests.TimeSeries;
 /// </summary>
 public sealed class ChronosArenaRecycleTests
 {
-    private static ChronosFoundationModel<double> Train(int rows, int epochs = 1)
+    private static ChronosFoundationModel<double> Train(int rows, int steps = 4)
     {
-        var model = new ChronosFoundationModel<double>(new ChronosOptions<double>
-        {
-            Seed = 11, ContextLength = 12, ForecastHorizon = 1, EmbeddingDim = 16, NumLayers = 2, NumHeads = 2,
-            Epochs = epochs, UseEarlyStopping = false,
-        });
+        var options = ChronosFoundationModelTests.Small(steps);
+        options.Seed = 11;
+        options.UseEarlyStopping = false;
+        var model = new ChronosFoundationModel<double>(options);
         var x = new Matrix<double>(rows, 1);
         var y = new Vector<double>(rows);
         for (int i = 0; i < rows; i++) { x[i, 0] = i; y[i] = Math.Sin(i * 0.2) + 0.01 * i; }
@@ -33,9 +32,8 @@ public sealed class ChronosArenaRecycleTests
     [Trait("category", "unit")]
     public void ArenaPeak_DoesNotGrowWithTrainingSetSize()
     {
-        // Training is batched per group of equal-length windows, and the arena keeps one ring buffer per distinct
-        // group shape across its per-group resets; the shape variety saturates once every (group size, length)
-        // combination has occurred. Past that point more data must not grow the arena: 4x the rows, same peak.
+        // Every step trains on BatchSize windows of at most ContextLength values, however long the series is, so
+        // more data must not grow the arena: 4x the rows, same peak.
         Train(240);
         long small = TensorArena.LastDisposedPeakBackingBytes;
         Train(960);
@@ -50,8 +48,8 @@ public sealed class ChronosArenaRecycleTests
     {
         // The same seed trained twice in a row must forecast identically; a recycled tensor that something still
         // referenced (an aliased accumulator, a stale cache) would corrupt the second run's updates differently.
-        var a = Train(120, epochs: 2);
-        var b = Train(120, epochs: 2);
+        var a = Train(120, steps: 6);
+        var b = Train(120, steps: 6);
         var history = new Vector<double>(24);
         for (int i = 0; i < history.Length; i++) history[i] = Math.Sin(i * 0.2);
         var fa = a.Forecast(history, 3);

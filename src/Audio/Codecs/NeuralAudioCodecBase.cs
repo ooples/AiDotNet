@@ -373,6 +373,9 @@ public abstract class NeuralAudioCodecBase<T> : AudioNeuralNetworkBase<T>, IAudi
         if (TryTrainDeclaredObjectives(input, expectedOutput)) return;
         ThrowIfDisposed();
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
+        // A codec whose step differs (SpeechTokenizer distils from a semantic teacher) declares it as a learning rule.
+        if (TryTrainDeclaredObjectives(input, expectedOutput))
+            return;
         if (!HasPaperLayers)
         {
             TrainWithTape(input, expectedOutput, _suppliedOptimizer);

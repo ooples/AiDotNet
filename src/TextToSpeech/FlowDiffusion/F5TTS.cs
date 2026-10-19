@@ -113,6 +113,8 @@ public partial class F5TTS<T> : FlowMatchingTtsModelBase<T>, IAcousticModel<T>
         _options.NumFunctionEvaluations, _options.CfgStrength, _options.SwayCoefficient, _options.FramesPerCharacter,
         _options.Speed, _options.SamplingSeed);
 
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+
     protected override bool HasPaperBackbone => _time is not null;
 
     protected override void InitializeLayers()
