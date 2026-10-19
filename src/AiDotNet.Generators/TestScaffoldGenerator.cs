@@ -9088,22 +9088,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "Chronos" && model.TypeParameterCount == 1)
             {
-                // Chronos is the paper's T5-Base tokenized forecaster: 768-wide, 12 layers,
-                // 12 heads, 3072 FFN, a 4,096-token quantization vocabulary, and NumSamples = 20
-                // sampled trajectories per forecast — so a single Predict is 20 passes through
-                // the whole stack. At that scale its memorization probe times out at 180 s.
-                //
-                // Keep the token-logit training contract but bound both public sequence extents.
-                // ForecastHorizon=8 remains below the generated 32-token discrete input after
-                // ClampDiscreteInputAxes; the old horizon of 64 rejected the fixture before the
-                // census could measure its taped forward or backward pass.
+                // Chronos defaults to Chronos-T5 (Small): d_model 512, 6 encoder and 6 decoder blocks, 4,096
+                // tokens, and NumSamples = 20 sampled paths per forecast, each decoding token by token. A
+                // fixture-scale T5 keeps the same contract: a 64-value context, the 8 values after it as the
+                // training target (PredictionLength = outputSize), and 2 sampled paths per forecast. The paper's
+                // rate of 1e-3 is for 200K steps; from scratch, 20 memorization steps at it moved the loss from
+                // 4.151 to 4.138, so the fixture trains at 0.03, as the time-series Chronos fixture does.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 64, outputSize: 8), " +
                     "new AiDotNet.Models.Options.ChronosFinanceOptions<double> { ContextLength = 64, " +
-                    "ForecastHorizon = 8, NumTokens = 64, HiddenDimension = 32, NumLayers = 2, " +
-                    "NumHeads = 4, IntermediateSize = 64, NumSamples = 2, DropoutRate = 0.0 })";
+                    "PredictionLength = 8, NumTokens = 64, ModelDim = 16, FeedForwardDim = 32, KeyValueDim = 8, " +
+                    "NumHeads = 2, NumLayers = 2, NumSamples = 2, DropoutRate = 0.0, LearningRate = 0.03 })";
             }
             else if (model.ClassName == "LLMTime" && model.TypeParameterCount == 1)
             {
