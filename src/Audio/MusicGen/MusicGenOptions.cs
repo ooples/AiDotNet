@@ -80,17 +80,42 @@ public class MusicGenOptions : AiDotNet.Models.Options.ModelOptions
         Seed = other.Seed;
     }
 
+    private MusicGenModelSize _modelSize = MusicGenModelSize.Medium;
+
     /// <summary>Gets or sets the size preset (Medium: 1.5B parameters).</summary>
-    public MusicGenModelSize ModelSize { get; set; } = MusicGenModelSize.Medium;
+    /// <remarks>Setting it writes the preset's width, heads and depth into <see cref="ModelDim"/>,
+    /// <see cref="NumHeads"/> and <see cref="NumLayers"/>, so the options hold the sizes they build. A dimension
+    /// set to something other than the previous preset's value is kept, whichever order an initializer uses.</remarks>
+    public MusicGenModelSize ModelSize
+    {
+        get => _modelSize;
+        set
+        {
+            var (oldDim, oldHeads, oldLayers) = PresetDimensions(_modelSize);
+            var (dim, heads, layers) = PresetDimensions(value);
+            if (ModelDim == oldDim) ModelDim = dim;
+            if (NumHeads == oldHeads) NumHeads = heads;
+            if (NumLayers == oldLayers) NumLayers = layers;
+            _modelSize = value;
+        }
+    }
 
-    /// <summary>Gets or sets the model width D; 0 takes the preset's (1024, 1536, 2048).</summary>
-    public int ModelDim { get; set; }
+    /// <summary>Gets or sets the model width D (the preset's: 1024, 1536, 2048); 0 also takes the preset's.</summary>
+    public int ModelDim { get; set; } = PresetDimensions(MusicGenModelSize.Medium).ModelDim;
 
-    /// <summary>Gets or sets the attention heads; 0 takes the preset's (16, 24, 32).</summary>
-    public int NumHeads { get; set; }
+    /// <summary>Gets or sets the attention heads (the preset's: 16, 24, 32); 0 also takes the preset's.</summary>
+    public int NumHeads { get; set; } = PresetDimensions(MusicGenModelSize.Medium).Heads;
 
-    /// <summary>Gets or sets the transformer layers L; 0 takes the preset's (24, 48, 48).</summary>
-    public int NumLayers { get; set; }
+    /// <summary>Gets or sets the transformer layers L (the preset's: 24, 48, 48); 0 also takes the preset's.</summary>
+    public int NumLayers { get; set; } = PresetDimensions(MusicGenModelSize.Medium).Layers;
+
+    /// <summary>The width, heads and depth of a size preset (audiocraft's model scales).</summary>
+    public static (int ModelDim, int Heads, int Layers) PresetDimensions(MusicGenModelSize size) => size switch
+    {
+        MusicGenModelSize.Small => (1024, 16, 24),
+        MusicGenModelSize.Large => (2048, 32, 48),
+        _ => (1536, 24, 48),
+    };
 
     /// <summary>Gets or sets the feed-forward width as a multiple of D (4, §2.4).</summary>
     public int FeedForwardScale { get; set; } = 4;

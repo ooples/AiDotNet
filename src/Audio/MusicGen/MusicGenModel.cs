@@ -104,12 +104,7 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
     {
         get
         {
-            var (d, h, l) = _options.ModelSize switch
-            {
-                MusicGenModelSize.Small => (1024, 16, 24),
-                MusicGenModelSize.Large => (2048, 32, 48),
-                _ => (1536, 24, 48),
-            };
+            var (d, h, l) = MusicGenOptions.PresetDimensions(_options.ModelSize);
             return (_options.ModelDim > 0 ? _options.ModelDim : d, _options.NumHeads > 0 ? _options.NumHeads : h,
                 _options.NumLayers > 0 ? _options.NumLayers : l);
         }

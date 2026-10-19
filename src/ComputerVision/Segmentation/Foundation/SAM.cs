@@ -133,7 +133,11 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
     {
         int longer = Math.Max(_height, _width);
         int imageSize = (longer + 15) / 16 * 16;
-        return SamConfiguration.For(_options.ModelSize) with { ImageSize = imageSize, Channels = _channels };
+        return SamConfiguration.For(_options.ModelSize) with
+        {
+            ImageSize = imageSize, Channels = _channels, EncoderDim = _options.EncoderDim, EncoderDepth = _options.EncoderDepth,
+            EncoderHeads = _options.EncoderHeads, GlobalAttention = _options.GlobalAttentionBlocks,
+        };
     }
 
     protected override void InitializeLayers()
