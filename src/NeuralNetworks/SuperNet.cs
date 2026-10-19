@@ -376,7 +376,9 @@ namespace AiDotNet.NeuralNetworks
                 return loss;
             }
 
-            return AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(sources, RegularizedLoss, optimizer);
+            // The objective already carries the decay, so the optimizer's own regularization is not added again.
+            return AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(sources, RegularizedLoss, optimizer,
+                applyOptimizerRegularization: false);
         }
 
         private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> ArchitectureOptimizer
