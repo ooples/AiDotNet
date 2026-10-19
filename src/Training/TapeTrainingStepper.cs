@@ -191,9 +191,36 @@ internal sealed class TapeTrainingStepper<T>
             new EagerStepHooks
             {
                 OnGradients = request.OnGradients,
+                // The fused plan adds the optimizer's L2 to the gradient ahead of its clip; the eager step it falls back
+                // to must too, or a model trains on a different objective whenever compilation declines.
+                RegularizeGradients = request.RegularizeGradients ?? OptimizerRegularization(request.Optimizer),
                 ModelGradientClip = request.ModelGradientClip,
-                RegularizeGradient = request.RegularizeGradient,
             });
+    }
+
+    /// <summary>
+    /// The optimizer's own regularization as a gradient update, applied the way its flat path applies it (L2 adds
+    /// strength * theta), or null when it has none or applies it inside its own step.
+    /// </summary>
+    private static Action<IReadOnlyList<Tensor<T>>, Dictionary<Tensor<T>, Tensor<T>>>? OptimizerRegularization(
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
+    {
+        if (FusedTrainingSession<T>.OptimizerRegularizationOf(optimizer) is not { } regularization) return null;
+        return (parameters, gradients) =>
+        {
+            var engine = AiDotNetEngine.Current;
+            // Recording off: theta is a trainable parameter, and recording g + lambda * theta would join the
+            // optimizer's arithmetic to the next step's graph.
+            using var noGrad = new NoGradScope<T>();
+            foreach (var parameter in parameters)
+            {
+                if (!gradients.TryGetValue(parameter, out var gradient) || gradient is null) continue;
+                var theta = parameter._shape.SequenceEqual(gradient._shape) ? parameter : engine.Reshape(parameter, gradient._shape);
+                gradients[parameter] = regularization is AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>> l2
+                    ? engine.TensorAdd(gradient, engine.TensorMultiplyScalar(theta, NumOps.FromDouble(l2.GetOptions().Strength)))
+                    : regularization.Regularize(gradient, theta);
+            }
+        };
     }
 
     /// <summary>
@@ -388,13 +415,11 @@ internal sealed class TapeTrainingStepper<T>
         /// <summary>Receives the parameters' gradients before clipping (the model's public gradient surface).</summary>
         public Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? OnGradients { get; init; }
 
+        /// <summary>Adds the optimizer's regularization to the reached parameters' gradients, before clipping.</summary>
+        public Action<IReadOnlyList<Tensor<T>>, Dictionary<Tensor<T>, Tensor<T>>>? RegularizeGradients { get; init; }
+
         /// <summary>The model's own global-norm clip (0 = none), applied before the update.</summary>
         public double ModelGradientClip { get; init; }
-
-        /// <summary>Adds the optimizer's regularization to one parameter's gradient (parameter, gradient) before
-        /// clipping, where the fused plan adds its L2; null when the optimizer has none or applies it in its own
-        /// update.</summary>
-        public Func<Tensor<T>, Tensor<T>, Tensor<T>>? RegularizeGradient { get; init; }
 
         /// <summary>Runs after the gradients exist and before the update.</summary>
         public Action? BeforeUpdate { get; init; }
@@ -449,9 +474,7 @@ internal sealed class TapeTrainingStepper<T>
 
         T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
         hooks?.OnGradients?.Invoke(gradients);
-        if (hooks?.RegularizeGradient is { } regularize)
-            foreach (var parameter in reached)
-                gradients[parameter] = regularize(parameter, gradients[parameter]);
+        hooks?.RegularizeGradients?.Invoke(reached, gradients);
         if (hooks is { ModelGradientClip: > 0.0 })
             ClipByGlobalNorm(gradients, hooks.ModelGradientClip);
         hooks?.BeforeUpdate?.Invoke();
