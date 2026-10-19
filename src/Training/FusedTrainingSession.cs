@@ -62,11 +62,10 @@ internal sealed class FusedTrainingStepRequest<T>
     public Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? OnGradients { get; init; }
 
     /// <summary>
-    /// Adds the optimizer's regularization to one parameter's gradient for the eager fallback (EagerStep), before
-    /// clipping as the plan adds its L2. Null = the eager fallback adds none, which matches the plan only when the
-    /// optimizer has no regularization.
+    /// Adds the optimizer's regularization to the gradients when the step runs eager, before clipping, as the fused plan
+    /// adds its L2. Null = the optimizer's plain regularization on every reached parameter.
     /// </summary>
-    public Func<Tensor<T>, Tensor<T>, Tensor<T>>? RegularizeGradient { get; init; }
+    public Action<IReadOnlyList<Tensor<T>>, Dictionary<Tensor<T>, Tensor<T>>>? RegularizeGradients { get; init; }
 
     /// <summary>
     /// Why this step's forward cannot be compiled once and replayed, or null when it can. A non-null reason keeps the
