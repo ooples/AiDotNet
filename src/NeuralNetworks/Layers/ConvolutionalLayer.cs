@@ -313,6 +313,23 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>What the caller asked for; <see cref="UseBias"/> is the resolved answer.</summary>
     private readonly BiasMode _biasMode;
 
+    /// <summary>The live kernels, for folding a following batch norm (<see cref="ConvolutionBatchNormFolding{T}"/>).</summary>
+    internal Tensor<T> KernelsForFolding => _kernels;
+
+    /// <summary>The live bias, or null without one, for folding a following batch norm.</summary>
+    internal Tensor<T>? BiasesForFolding => UseBias ? _biases : null;
+
+    /// <summary>
+    /// Whether a following batch norm can fold into this convolution: a dense (ungrouped) convolution with no
+    /// activation of its own whose kernels are allocated, [OutputDepth, InputDepth, KernelSize, KernelSize].
+    /// </summary>
+    internal bool CanFoldFollowingBatchNorm
+        => Groups == 1 && VectorActivation is null
+           && (ScalarActivation is null || ScalarActivation is IdentityActivation<T>)
+           && _kernels.Rank == 4 && OutputDepth > 0 && _kernels.Shape[0] == OutputDepth
+           && _kernels.Shape[1] == InputDepth && _kernels.Shape[2] == KernelSize && _kernels.Shape[3] == KernelSize
+           && (!UseBias || _biases.Length == OutputDepth);
+
     /// <summary>
     /// Whether this convolution carries its own additive bias.
     /// </summary>

@@ -525,6 +525,9 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     protected bool IsTrainingMode = true;
 
+    /// <summary>Whether the layer is in training mode, for an inference fusion that must leave training untouched.</summary>
+    internal bool InTrainingMode => IsTrainingMode;
+
     /// <summary>
     /// When <c>true</c>, layers that have a faster but numerically-different inference path
     /// (e.g. <see cref="DenseLayer{T}"/>'s fused matmul+activation kernel, used only in eval mode)

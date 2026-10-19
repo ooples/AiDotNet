@@ -292,9 +292,17 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
         }
 
         Tensor<T> output = processedInput;
-        foreach (var layer in Layers)
+        for (int i = 0; i < Layers.Count; i++)
         {
-            output = layer.Forward(output);
+            // Each convolution, batch norm and ReLU runs as one folded convolution in inference
+            // (InferenceFusionSettings.FoldBatchNormIntoConvolution).
+            if (ConvolutionBatchNormFolding<T>.TryForwardSequence(Layers, i, output, out var folded, out int consumed))
+            {
+                output = folded;
+                i += consumed - 1;
+                continue;
+            }
+            output = Layers[i].Forward(output);
         }
 
         // Remove batch dimension if we added it

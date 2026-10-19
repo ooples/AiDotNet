@@ -382,24 +382,52 @@ public partial class BottleneckBlock<T> : LayerBase<T>, ILayerSerializationExtra
 
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
-        // Main branch: conv1 -> bn1 -> relu -> conv2 -> bn2 -> relu -> conv3 -> bn3
-        _lastConv1Output = _conv1.Forward(input);
-        // Normalization and ReLU in one pass in inference (BatchNormalizationLayer.ForwardThenReLU).
-        _lastRelu1Output = _bn1.ForwardThenReLU(_lastConv1Output);
+        // Main branch: conv1 -> bn1 -> relu -> conv2 -> bn2 -> relu -> conv3 -> bn3. In inference each convolution and its
+        // batch norm (and the ReLU) run as one folded convolution (ConvolutionBatchNormFolding); the backward caches stay
+        // unset there.
+        if (ConvolutionBatchNormFolding<T>.TryForward(_conv1, _bn1, input, relu: true, out var relu1))
+        {
+            _lastConv1Output = null;
+            _lastRelu1Output = relu1;
+        }
+        else
+        {
+            _lastConv1Output = _conv1.Forward(input);
+            // Normalization and ReLU in one pass in inference (BatchNormalizationLayer.ForwardThenReLU).
+            _lastRelu1Output = _bn1.ForwardThenReLU(_lastConv1Output);
+        }
         _lastBn1Output = _lastRelu1Output;
 
-        _lastConv2Output = _conv2.Forward(_lastRelu1Output);
-        _lastRelu2Output = _bn2.ForwardThenReLU(_lastConv2Output);
+        if (ConvolutionBatchNormFolding<T>.TryForward(_conv2, _bn2, _lastRelu1Output, relu: true, out var relu2))
+        {
+            _lastConv2Output = null;
+            _lastRelu2Output = relu2;
+        }
+        else
+        {
+            _lastConv2Output = _conv2.Forward(_lastRelu1Output);
+            _lastRelu2Output = _bn2.ForwardThenReLU(_lastConv2Output);
+        }
         _lastBn2Output = _lastRelu2Output;
 
-        _lastConv3Output = _conv3.Forward(_lastRelu2Output);
-        _lastBn3Output = _bn3.Forward(_lastConv3Output);
+        if (ConvolutionBatchNormFolding<T>.TryForward(_conv3, _bn3, _lastRelu2Output, relu: false, out var bn3))
+        {
+            _lastConv3Output = null;
+            _lastBn3Output = bn3;
+        }
+        else
+        {
+            _lastConv3Output = _conv3.Forward(_lastRelu2Output);
+            _lastBn3Output = _bn3.Forward(_lastConv3Output);
+        }
 
         // Identity/skip branch
         if (_hasDownsample && _downsampleConv is not null && _downsampleBn is not null)
         {
-            var dsConvOut = _downsampleConv.Forward(input);
-            _lastIdentity = _downsampleBn.Forward(dsConvOut);
+            _lastIdentity = ConvolutionBatchNormFolding<T>.TryForward(_downsampleConv, _downsampleBn, input, relu: false,
+                out var downsampled)
+                ? downsampled
+                : _downsampleBn.Forward(_downsampleConv.Forward(input));
         }
         else
         {

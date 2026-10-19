@@ -339,19 +339,38 @@ public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
 
         _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
-        // Main branch: conv1 -> bn1 -> relu -> conv2 -> bn2
-        _lastConv1Output = _conv1.Forward(input);
-        // Normalization and ReLU in one pass in inference (BatchNormalizationLayer.ForwardThenReLU).
-        _lastRelu1Output = _bn1.ForwardThenReLU(_lastConv1Output);
+        // Main branch: conv1 -> bn1 -> relu -> conv2 -> bn2. In inference each convolution and its batch norm (and the
+        // ReLU) run as one folded convolution (ConvolutionBatchNormFolding); the backward caches stay unset there.
+        if (ConvolutionBatchNormFolding<T>.TryForward(_conv1, _bn1, input, relu: true, out var relu1))
+        {
+            _lastConv1Output = null;
+            _lastRelu1Output = relu1;
+        }
+        else
+        {
+            _lastConv1Output = _conv1.Forward(input);
+            // Normalization and ReLU in one pass in inference (BatchNormalizationLayer.ForwardThenReLU).
+            _lastRelu1Output = _bn1.ForwardThenReLU(_lastConv1Output);
+        }
         _lastBn1Output = _lastRelu1Output;
-        _lastConv2Output = _conv2.Forward(_lastRelu1Output);
-        _lastBn2Output = _bn2.Forward(_lastConv2Output);
+        if (ConvolutionBatchNormFolding<T>.TryForward(_conv2, _bn2, _lastRelu1Output, relu: false, out var bn2))
+        {
+            _lastConv2Output = null;
+            _lastBn2Output = bn2;
+        }
+        else
+        {
+            _lastConv2Output = _conv2.Forward(_lastRelu1Output);
+            _lastBn2Output = _bn2.Forward(_lastConv2Output);
+        }
 
         // Identity/skip branch
         if (_hasDownsample && _downsampleConv is not null && _downsampleBn is not null)
         {
-            var dsConvOut = _downsampleConv.Forward(input);
-            _lastIdentity = _downsampleBn.Forward(dsConvOut);
+            _lastIdentity = ConvolutionBatchNormFolding<T>.TryForward(_downsampleConv, _downsampleBn, input, relu: false,
+                out var downsampled)
+                ? downsampled
+                : _downsampleBn.Forward(_downsampleConv.Forward(input));
         }
         else
         {

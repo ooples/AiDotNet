@@ -8268,7 +8268,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             int lastLayer = Layers.Count - 1;
             for (int i = 0; i < Layers.Count; i++)
             {
-                c = Layers[i].Forward(c);
+                // A convolution, batch norm and optional ReLU run as one folded convolution in inference
+                // (InferenceFusionSettings.FoldBatchNormIntoConvolution); i moves to the last layer consumed.
+                if (ConvolutionBatchNormFolding<T>.TryForwardSequence(Layers, i, c, out var folded, out int consumed))
+                {
+                    c = folded;
+                    i += consumed - 1;
+                }
+                else
+                {
+                    c = Layers[i].Forward(c);
+                }
                 // #1824: recycle this layer's forward scratch before the next
                 // layer allocates, keeping the arena's live working set at
                 // ~one layer instead of the whole depth. No-op unless running
