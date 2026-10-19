@@ -324,6 +324,44 @@ internal sealed class ChronosT5<T>
     }
 
     /// <summary>
+    /// The official optimizer: AdamW (betas 0.9 and 0.999, ε 1e-8) with the given weight decay on every parameter except
+    /// the relative attention bias tables (the transformers Trainer skips parameters named "bias"), the learning rate
+    /// decayed linearly to zero over Steps, and global-norm clipping at MaxGradNorm.
+    /// </summary>
+    public AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateOptimizer(ChronosTraining settings)
+    {
+        var parameters = Training.TapeTrainingStep<T>.CollectParameters(_layers);
+        var noDecay = new HashSet<Tensor<T>>(
+            Training.TapeTrainingStep<T>.CollectParameters(new LayerBase<T>[] { Network.EncoderBias }
+                .Concat(Network.DecoderBias is null ? Array.Empty<LayerBase<T>>() : new LayerBase<T>[] { Network.DecoderBias })),
+            TensorReferenceComparer<Tensor<T>>.Instance);
+        var mask = new Vector<T>(parameters.Sum(p => p.Length));
+        int offset = 0;
+        foreach (var p in parameters)
+        {
+            var value = noDecay.Contains(p) ? NumOps.Zero : NumOps.One;
+            for (int i = 0; i < p.Length; i++) mask[offset + i] = value;
+            offset += p.Length;
+        }
+        return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = settings.LearningRate,
+            Beta1 = 0.9,
+            Beta2 = 0.999,
+            Epsilon = 1e-8,
+            WeightDecay = settings.WeightDecay,
+            WeightDecayMask = mask,
+            UseAdaptiveLearningRate = false,
+            UseAdaptiveBetas = false,
+            EnableGradientClipping = settings.MaxGradNorm > 0,
+            GradientClippingMethod = GradientClippingMethod.ByNorm,
+            MaxGradientNorm = settings.MaxGradNorm > 0 ? settings.MaxGradNorm : 1.0,
+            LearningRateScheduler = new PolynomialLRScheduler(settings.LearningRate, settings.Steps, power: 1.0, endLearningRate: 0.0),
+            SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+        });
+    }
+
+    /// <summary>
     /// Trains on <paramref name="series"/> with the official recipe: each step slices BatchSize random windows (a
     /// split point at least MinPast values in and PredictionLength from the end; the context is up to ContextLength
     /// values before it and the label the PredictionLength after), drops each value to missing with a probability
@@ -343,34 +381,7 @@ internal sealed class ChronosT5<T>
         if (settings.Steps < 1 || settings.BatchSize < 1) throw new ArgumentException("Steps and BatchSize must be positive.");
 
         var parameters = Training.TapeTrainingStep<T>.CollectParameters(_layers);
-        var noDecay = new HashSet<Tensor<T>>(
-            Training.TapeTrainingStep<T>.CollectParameters(new LayerBase<T>[] { Network.EncoderBias }
-                .Concat(Network.DecoderBias is null ? Array.Empty<LayerBase<T>>() : new LayerBase<T>[] { Network.DecoderBias })),
-            TensorReferenceComparer<Tensor<T>>.Instance);
-        var mask = new Vector<T>(parameters.Sum(p => p.Length));
-        int offset = 0;
-        foreach (var p in parameters)
-        {
-            var value = noDecay.Contains(p) ? NumOps.Zero : NumOps.One;
-            for (int i = 0; i < p.Length; i++) mask[offset + i] = value;
-            offset += p.Length;
-        }
-        var optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-        {
-            InitialLearningRate = settings.LearningRate,
-            Beta1 = 0.9,
-            Beta2 = 0.999,
-            Epsilon = 1e-8,
-            WeightDecay = settings.WeightDecay,
-            WeightDecayMask = mask,
-            UseAdaptiveLearningRate = false,
-            UseAdaptiveBetas = false,
-            EnableGradientClipping = settings.MaxGradNorm > 0,
-            GradientClippingMethod = GradientClippingMethod.ByNorm,
-            MaxGradientNorm = settings.MaxGradNorm > 0 ? settings.MaxGradNorm : 1.0,
-            LearningRateScheduler = new PolynomialLRScheduler(settings.LearningRate, settings.Steps, power: 1.0, endLearningRate: 0.0),
-            SchedulerStepMode = SchedulerStepMode.StepPerBatch,
-        });
+        var optimizer = CreateOptimizer(settings);
 
         for (int step = 0; step < settings.Steps; step++)
         {
