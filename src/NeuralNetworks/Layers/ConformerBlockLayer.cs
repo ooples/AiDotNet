@@ -335,7 +335,11 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
         metadata["FfnExpansionFactor"] = _ffnExpansionFactor.ToString(ci);
         metadata["ConvKernelSize"] = _convKernelSize.ToString(ci);
         metadata["AttentionGroupSize"] = _attentionGroupSize.ToString(ci);
-        metadata["RopeTheta"] = _attention.RopeTheta.ToString(ci);
+        // A block built without a positional encoding (ropeTheta <= 0, w2v-BERT) leaves the attention at its default
+        // theta; persisting that rebuilt the block WITH rotary encoding, so its construction state no longer matched,
+        // the clone could not restore it in place, and the model kept running its untrained constructor block.
+        metadata["RopeTheta"] = (_attention.PositionalEncoding == PositionalEncodingType.None
+            ? _ropeTheta : _attention.RopeTheta).ToString(ci);
         metadata["PositionalMaxSequenceLength"] = _attention.PositionalMaxSequenceLength.ToString(ci);
         return metadata;
     }

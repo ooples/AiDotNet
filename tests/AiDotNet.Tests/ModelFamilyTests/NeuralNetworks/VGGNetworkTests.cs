@@ -4,9 +4,10 @@ using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.ModelFamilyTests.NeuralNetworks;
 
-// HeavyTimeout (#1706): correct but too slow for the default per-test gate (VGG is GEMM-bound,
-// ~7 s/iter); runs in the nightly lane. Drop this trait once it fits the budget.
-[Xunit.Trait("Category", "HeavyTimeout")]
+// In the default gate again (#1394). It was deferred to the nightly heavy lane at ~7 s/iter (#1706); nightly
+// 38859953869 ran every invariant inside its own timeout without the lane's 4x scaling, in parallel with the rest
+// of its chunk: the longest was the memorization test at 2 m 3 s of 180 s (a fixed 120 s training budget), and
+// no other test took more than 40 s of its 120 s.
 public class VGGNetworkTests : NeuralNetworkModelTestBase<float>
 {
     // Paper-canonical VGG16-BN on ImageNet input per Simonyan & Zisserman 2014
