@@ -712,32 +712,6 @@ public partial class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
         return Forward(input);
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new NotSupportedException("Training not supported in ONNX mode.");
-
-        EnsureNativeInitialized();
-        SetTrainingMode(true);
-        try
-        {
-            // TrainWithTape is the ENTIRE training step: forward, backward, global-norm gradient
-            // clipping (NeuralNetworkBase.ApplyGradientClipping) and the optimizer update. The
-            // `UpdateParameters(CollectGradients())` that followed applied a SECOND, unclipped,
-            // hardcoded-1e-4 SGD step on top of it every call -- and threw before it could, because
-            // CollectGradients produced 1,055,424 values against GetParameters' 528,592
-            // ("Vector lengths must match"), taking six of Nougat's tests with it.
-            //
-            // Same redundant-second-step defect PSENet and DBNet already had removed.
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     // UpdateParameters restated a fold the base now derives from generated component registration.
     // Removed under AIDN082.
     private Vector<T> CollectGradients()

@@ -169,21 +169,6 @@ public partial class VFIMamba<T> : FrameInterpolationBase<T>
     /// <inheritdoc/>
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => modelOutput;
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-        TrainWithTape(input, expected, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
     /// <inheritdoc/>
     public override ModelMetadata<T> GetModelMetadata()

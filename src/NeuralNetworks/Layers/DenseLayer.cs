@@ -1363,7 +1363,8 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             // diffusion runs a tape in eval mode): the tape holds this output for backward, so reusing
             // the per-instance buffer on the next call to this layer would corrupt it. cacheBwd is false
             // under eval mode regardless of the tape, so it can't gate this — check the tape directly.
-            if (ForwardScratchGate.FusedLinear && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null)
+            if (ForwardScratchGate.FusedLinear && AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>.Current is null
+                && !AiDotNet.Autodiff.GradientRecording.IsTrainingTrace)
             {
                 int outputSize = _weights.Shape[1];
                 if (_fusedLinearScratch == null
@@ -1381,6 +1382,18 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
                 // Inference: use fused activation for maximum performance (no tape needed)
                 result = Engine.FusedLinear(flattenedInput, _weights, BiasOrNull(), fusedActivation);
             }
+        }
+        else if (fusedActivation == FusedActivationType.ReLU
+                 && (!cacheBwd || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive))
+        {
+            // Tape training keeps no pre-activation (cacheBwd is false), and a compiled-plan trace records lazy nodes no
+            // eager Backward reads (no GradientTape is active there, so cacheBwd alone reads true). Either way the ReLU
+            // goes into the one FusedLinear: the tape records a single op whose backward masks the gradient by the output, instead of a
+            // separate ReLU op and its backward (~45 us per step for the parity MLP's two hidden layers). ReLU rounds
+            // nothing, so the values equal FusedLinear followed by ApplyActivation. Other activations keep the separate
+            // op: their fused epilogues are not guaranteed to round like the layer's activation function.
+            result = Engine.FusedLinear(flattenedInput, _weights, BiasOrNull(), FusedActivationType.ReLU);
+            _lastOutput = null;
         }
         else
         {
@@ -1743,25 +1756,6 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
             Engine.InvalidatePersistentTensor(_weights);
             if (UseBias) Engine.InvalidatePersistentTensor(_biases);
         }
-    }
-
-    /// <summary>
-    /// Gets the gradients of all trainable parameters in this layer.
-    /// </summary>
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_weightsGradient == null || (UseBias && _biasesGradient == null))
-        {
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        }
-
-        if (!UseBias || _biasesGradient is null)
-            return Vector<T>.FromMemory(_weightsGradient.Data).Clone();
-
-        // Bulk copy from contiguous tensor storage — avoids ToArray() double-copy
-        return Vector<T>.Concatenate(
-            Vector<T>.FromMemory(_weightsGradient.Data),
-            Vector<T>.FromMemory(_biasesGradient.Data));
     }
 
     /// <summary>

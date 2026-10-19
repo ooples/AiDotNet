@@ -66,13 +66,20 @@ public class FusedStepPersistenceTests
             // On a GPU engine with compilation on, the fused path must engage; an eager fallback is the regression
             // this test exists to catch, not a reason to skip it.
             Assert.NotNull(step);
-            var plan = step!.GetType().GetField("_plan", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(step);
+            var multiSlot = (AiDotNet.Training.MultiSlotFusedStep<float>)step!;
+
+            // One fused step per row per epoch, none declined to the eager tape.
+            Assert.Equal(0, multiSlot.DeclinedStepCount);
+            Assert.Equal(Rows * Epochs, multiSlot.FusedStepCount);
+
+            // The plan's own optimizer step: one per row per epoch. A plan rebuilt per batch restarted it (and the Adam
+            // moments) at every batch, leaving at most one batch's worth. The multi-slot step trains through the
+            // shared fused session, whose configured plan is the compiled step's.
+            var plan = typeof(AiDotNet.Training.CompiledTapeTrainingStep<float>)
+                .GetProperty("_configuredPlan", BindingFlags.NonPublic | BindingFlags.Static)!.GetValue(null);
             Assert.NotNull(plan);
             int optimizerStep = (int)plan!.GetType()
                 .GetField("_optimizerStep", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(plan)!;
-
-            // One plan.Step per row per epoch. A step object rebuilt per batch left the counter at one
-            // batch's worth (<= BatchSize) with the moments reset each time.
             Assert.True(optimizerStep > BatchSize,
                 $"fused optimizer step counter is {optimizerStep} after {Epochs} epochs of {Rows} rows in batches of " +
                 $"{BatchSize}: the plan's optimizer state was restarted between batches.");

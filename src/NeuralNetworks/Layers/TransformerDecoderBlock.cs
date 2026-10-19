@@ -279,14 +279,6 @@ public partial class TransformerDecoderBlock<T> : LayerBase<T>, IShapeContract
         { _selfAttention, _norm1, _crossAttention, _norm2, _ffnUp, _ffnDown, _norm3 };
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        var result = Vector<T>.Empty();
-        foreach (var l in Subs) result = Vector<T>.Concatenate(result, l.GetParameterGradients());
-        return result;
-    }
-
-    /// <inheritdoc/>
     public override void ClearGradients()
     {
         base.ClearGradients();

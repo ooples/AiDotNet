@@ -251,30 +251,6 @@ public partial class TS2Vec<T> : TimeSeriesFoundationModelBase<T>
         return _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
     }
 
-    /// <inheritdoc/>
-    /// <remarks>
-    /// Currently uses supervised forecasting loss only. The TS2Vec hierarchical contrastive
-    /// objective (temporal + instance contrastive losses weighted by
-    /// <c>_temporalContrastiveWeight</c> and <c>_instanceContrastiveWeight</c>) requires
-    /// batch-level training with augmented views, which will be implemented when batch
-    /// training support is added. The contrastive weights are stored for forward compatibility.
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
-        base.Train(input, target);
-    }
-
     // UpdateParameters was an empty override, silently dropping every restore. The base
     // distributes the vector over the declared enumeration.
     /// <inheritdoc/>

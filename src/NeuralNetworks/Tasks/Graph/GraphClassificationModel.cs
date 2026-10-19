@@ -273,6 +273,8 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
     /// Sets the adjacency matrix for all graph layers in the model.
     /// </summary>
     /// <param name="adjacencyMatrix">The graph adjacency matrix.</param>
+    // Points every graph layer at an adjacency without changing the model's own: a training step's packed copy, then
+    // the model's again.
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
         _cachedAdjacencyMatrix = adjacencyMatrix;
@@ -678,79 +680,23 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
         _usesFallbackAdjacency = true;
     }
 
-    /// <summary>
-    /// Trains the network on a single batch of data.
-    /// </summary>
-    /// <param name="input">The input node features.</param>
-    /// <param name="expectedOutput">The expected output (labels).</param>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Trains over the input's graph with the configured tape loss. It needs a tape-differentiable loss: substituting one
+    /// would train a different objective than the caller configured.
+    /// </remarks>
+    protected override IReadOnlyList<Training.TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> target)
     {
         EnsureDefaultAdjacencyForInput(input);
-
-        foreach (var layer in Layers)
-        {
-            layer.SetTrainingMode(true);
-        }
-
-        // ILayer.Backward was removed in favour of GradientTape autodiff. The previous code computed a
-        // loss derivative but NEVER ran a backward pass — it read GetParameterGradients() (stale zeros)
-        // straight away — so the optimizer applied a zero step and training was a silent no-op: the loss
-        // stayed flat (2.4452 -> 2.4452) and not a single parameter moved. Record the GNN + pooling
-        // forward (raw logits) and the cross-entropy-with-logits loss on the tape, compute real gradients for every
-        // trainable parameter, then drive the update through the model's configured optimizer
-        // (default Adam) — NOT a hardcoded SGD step — so the loss actually converges on a memorization
-        // task. The loss takes raw logits (it applies LogSoftmax internally) and aligns the target
-        // shape itself, so there is no explicit Softmax (which would double-apply it) and no reshape.
-        // Match LinkPredictionModel: require a tape-differentiable loss rather than silently swapping a
-        // caller-supplied non-tape loss for CrossEntropyWithLogitsLoss (which would train a different
-        // objective than configured). The default loss is already a LossFunctionBase<T>, so this only
-        // fires when a caller passes a non-tape ILossFunction<T>.
         if (_lossFunction is not LossFunctionBase<T> tapeLoss)
             throw new InvalidOperationException(
                 $"GraphClassificationModel tape-based training requires a LossFunctionBase<T> (one that "
                 + $"implements ComputeTapeLoss); the configured loss '{_lossFunction.GetType().Name}' is "
                 + "not tape-differentiable. Supply a LossFunctionBase<T>-derived loss such as CrossEntropyWithLogitsLoss.");
-
-        // GPU-RESIDENT fast path (float + DirectGpuTensorEngine + compilation + Adam-family
-        // optimizer). Routes forward + backward + optimizer step through the compiled fused plan
-        // so weights / activations / moments stay resident on the device — no per-op host<->device
-        // round-trip. Falls through to the eager tape+optimizer path on any failure (unsupported
-        // optimizer, non-compilable graph, etc). Mirrors NeuralNetworkBase.TrainWithFusedStep and
-        // TimeSeriesModelBase.TryFusedResidentStep — same seam, applied per Train() call because
-        // GraphClassificationModel.Train is a single-batch entry (not a training loop).
-        var trainableLayers = Layers
-            .Where(l => l is ITrainableLayer<T>).Cast<ITrainableLayer<T>>()
-            .ToList();
-        if (CanTrainOnGpu
-            && AiDotNet.Training.GpuResidentFusedStep<T>.TryStep(
-                trainableLayers, input, expectedOutput,
-                forward: Forward,
-                computeLoss: tapeLoss.ComputeTapeLoss,
-                optimizer: _optimizer,
-                out T fusedLoss, owner: this))
-        {
-            LastLoss = fusedLoss;
-            return;
-        }
-
-        using (var tape = new GradientTape<T>())
-        {
-            var logits = Forward(input);
-            var lossTensor = tapeLoss.ComputeTapeLoss(logits, expectedOutput);
-            // Always record the loss that was computed, even when there are no trainable parameters to
-            // step — LastLoss must reflect the most recent Train call for consistent telemetry.
-            T lossValue = lossTensor.Length > 0 ? lossTensor[0] : NumOps.Zero;
-            var trainableParameters = Training.TapeTrainingStep<T>.CollectParameters(Layers, LayerStructureVersion);
-            if (trainableParameters.Count > 0)
-            {
-                var gradients = ComputeAndPublishParameterGradients(tape, lossTensor, trainableParameters);
-                var context = new TapeStepContext<T>(trainableParameters, gradients, lossValue);
-                _optimizer.Step(context);
-            }
-            LastLoss = lossValue;
-        }
+        var adjacency = _cachedAdjacencyMatrix ?? throw new InvalidOperationException(
+            "Adjacency matrix must be set before training. Call SetAdjacencyMatrix() first.");
+        return GraphTrainingObjective(input, adjacency, target, Forward, tapeLoss);
     }
-
 
     /// <summary>
     /// Gets metadata about this model for serialization and identification.

@@ -198,30 +198,6 @@ public partial class FTTransformerNetwork<T> : TabularNeuralNetworkBase<T>
         });
     }
 
-    /// <inheritdoc/>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        // Tape-based training (the path every NN model uses post-#1209). The previous
-        // body computed the loss gradient, dropped it without backpropagating, then
-        // called _optimizer.UpdateParameters(Layers) — which throws "Backward pass must
-        // be called before updating parameters" because no gradients exist.
-        // Honor the base Train contract: auto-promote an unbatched single sample
-        // ([features] / [seq, features]) to a leading unit batch dim before the tape
-        // forward, exactly as NeuralNetworkBase.Train does. Without this, callers
-        // passing single-sample tensors would bypass the canonical [B, …] promotion.
-        (input, expectedOutput) = NormalizeBatchDim(input, expectedOutput);
-
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc/>

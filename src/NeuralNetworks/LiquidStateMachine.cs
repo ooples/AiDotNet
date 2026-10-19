@@ -436,13 +436,15 @@ public partial class LiquidStateMachine<T> : SequenceModelLayoutBase<T>
     /// It's like learning to read ripple patterns in water without changing how water behaves.
     /// </para>
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // Default Train resets reservoir state per-call (Maass 2002 standalone
         // training contract). TrainOnTimeSeries calls TrainCore directly with
         // resetStateBeforeTrain=false to preserve cross-step temporal
         // continuity inside a sequence.
         TrainCore(input, expectedOutput, resetStateBeforeTrain: true);
+
+        return true;
     }
 
     /// <summary>

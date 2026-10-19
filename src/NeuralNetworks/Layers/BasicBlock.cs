@@ -450,21 +450,6 @@ public partial class BasicBlock<T> : LayerBase<T>, ILayerSerializationExtras<T>,
         _downsampleBn?.UpdateParameters(learningRate);
     }
 
-    public override Vector<T> GetParameterGradients()
-    {
-        var grads = new List<T>();
-        grads.AddRange(_conv1.GetParameterGradients().ToArray());
-        grads.AddRange(_bn1.GetParameterGradients().ToArray());
-        grads.AddRange(_conv2.GetParameterGradients().ToArray());
-        grads.AddRange(_bn2.GetParameterGradients().ToArray());
-        if (_downsampleConv is not null && _downsampleBn is not null)
-        {
-            grads.AddRange(_downsampleConv.GetParameterGradients().ToArray());
-            grads.AddRange(_downsampleBn.GetParameterGradients().ToArray());
-        }
-        return new Vector<T>([.. grads]);
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

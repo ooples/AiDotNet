@@ -931,53 +931,6 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         Engine.TensorSubtractInPlace(_localizationBias2, scaledB2Grad);
     }
 
-    /// <summary>
-    /// Sets the trainable parameters of the layer from a single vector.
-    /// </summary>
-    /// <param name="parameters">A vector containing all parameters to set.</param>
-    /// <exception cref="ArgumentException">Thrown when the parameters vector has incorrect length.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method sets the trainable parameters of the layer (localization network weights and biases) from a single vector.
-    /// It expects the vector to contain the parameters in the same order as they are retrieved by GetParameters().
-    /// This is useful for loading saved model weights or for implementing optimization algorithms that operate
-    /// on all parameters at once.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method updates all the learnable values in the layer from a single list.
-    /// 
-    /// When setting parameters:
-    /// - The input must be a vector with exactly the right number of values
-    /// - The values are distributed back into the weights and biases matrices and vectors
-    /// - The order must match how they were stored in GetParameters()
-    /// 
-    /// This method is useful for:
-    /// - Loading a previously saved model
-    /// - Transferring parameters from another model
-    /// - Testing different parameter values
-    /// 
-    /// An error is thrown if the input vector doesn't have the expected number of parameters.
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        var gW1 = _localizationWeights1Gradient != null
-            ? new Vector<T>(_localizationWeights1Gradient.ToArray())
-            : new Vector<T>(_localizationWeights1.Length);
-        var gB1 = _localizationBias1Gradient != null
-            ? new Vector<T>(_localizationBias1Gradient.ToArray())
-            : new Vector<T>(_localizationBias1.Length);
-        var gW2 = _localizationWeights2Gradient != null
-            ? new Vector<T>(_localizationWeights2Gradient.ToArray())
-            : new Vector<T>(_localizationWeights2.Length);
-        var gB2 = _localizationBias2Gradient != null
-            ? new Vector<T>(_localizationBias2Gradient.ToArray())
-            : new Vector<T>(_localizationBias2.Length);
-
-        return Vector<T>.Concatenate(
-            Vector<T>.Concatenate(gW1, gB1),
-            Vector<T>.Concatenate(gW2, gB2));
-    }
-
     public override void ClearGradients()
     {
         _localizationWeights1Gradient = null;

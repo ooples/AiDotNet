@@ -217,11 +217,8 @@ public partial class AdaptiveAveragePoolingLayer<T> : LayerBase<T>, IShapeContra
         // Reshape → ReduceMean → Reshape, all Engine ops, so the tape sees the
         // full chain and gradients flow through this layer correctly.
         //
-        // Irregular case (non-divisible): the sliding-window region-mean has no
-        // single Engine op and the scalar fallback below builds a raw new Tensor
-        // with no tape connection — backward through that boundary returns null.
-        // The fallback is documented as not tape-tracked; callers needing
-        // backprop must use H/W that divide evenly into outH/outW.
+        // Irregular case (non-divisible): handled below by the engine's
+        // tape-recorded AdaptiveAvgPool2D.
         int channels = input.Shape[rank - 3];
 
         bool uniformH = inputHeight % _outputHeight == 0;
@@ -248,69 +245,21 @@ public partial class AdaptiveAveragePoolingLayer<T> : LayerBase<T>, IShapeContra
             return reduced;
         }
 
-        // Irregular fallback (input H/W not divisible by output H/W). The
-        // PyTorch adaptive_avg_pool2d contract uses per-cell windows
-        //   h_start = floor(oh * H / outH),  h_end = ceil((oh+1) * H / outH)
-        //   w_start = floor(ow * W / outW),  w_end = ceil((ow+1) * W / outW)
-        // We build the output by tape-tracked TensorSlice + ReduceMean over
-        // each (oh, ow) window so gradients propagate correctly through the
-        // pooling boundary even for non-divisible shapes. The slice/mean pair
-        // is O(outH × outW) per (batch, channel) tape ops; that's a one-time
-        // graph-build cost and the tape can JIT-fuse them, so it's
-        // significantly cheaper than the previous raw-tensor copy that
-        // silently dropped gradients.
-        int hAxis = rank - 2;
-        int wAxis = rank - 1;
-
-        // Per-output-row mean: for each oh, slice the input rows
-        // [hStart:hEnd] along hAxis, mean over hAxis (keepDims=true so the
-        // result has 1 row), then collect rows. Same for the W axis.
-        var rowOutputs = new Tensor<T>[_outputHeight];
-        for (int oh = 0; oh < _outputHeight; oh++)
-        {
-            int hStart = (int)Math.Floor((double)oh * inputHeight / _outputHeight);
-            int hEnd = (int)Math.Ceiling((double)(oh + 1) * inputHeight / _outputHeight);
-            int hLen = hEnd - hStart;
-
-            int[] rowStart = new int[rank];
-            int[] rowLen = new int[rank];
-            for (int d = 0; d < rank; d++)
-            {
-                rowStart[d] = 0;
-                rowLen[d] = input.Shape[d];
-            }
-            rowStart[hAxis] = hStart;
-            rowLen[hAxis] = hLen;
-            var rowSlab = Engine.TensorSlice(input, rowStart, rowLen);
-            var rowMean = Engine.ReduceMean(rowSlab, new[] { hAxis }, keepDims: true);
-
-            // Now reduce W axis per-output-column.
-            var colOutputs = new Tensor<T>[_outputWidth];
-            for (int ow = 0; ow < _outputWidth; ow++)
-            {
-                int wStart = (int)Math.Floor((double)ow * inputWidth / _outputWidth);
-                int wEnd = (int)Math.Ceiling((double)(ow + 1) * inputWidth / _outputWidth);
-                int wLen = wEnd - wStart;
-
-                int[] colStart = new int[rank];
-                int[] colLen = new int[rank];
-                for (int d = 0; d < rank; d++)
-                {
-                    colStart[d] = 0;
-                    colLen[d] = rowMean.Shape[d];
-                }
-                colStart[wAxis] = wStart;
-                colLen[wAxis] = wLen;
-                var colSlab = Engine.TensorSlice(rowMean, colStart, colLen);
-                colOutputs[ow] = Engine.ReduceMean(colSlab, new[] { wAxis }, keepDims: true);
-            }
-
-            // Concatenate the per-column means along W to form the row.
-            rowOutputs[oh] = Engine.TensorConcatenate(colOutputs, axis: wAxis);
-        }
-
-        // Concatenate the per-row outputs along H to form the final output.
-        return Engine.TensorConcatenate(rowOutputs, axis: hAxis);
+        // Irregular case (input H/W not divisible by output H/W): PyTorch's adaptive_avg_pool2d windows
+        //   [floor(o * in / out), ceil((o + 1) * in / out))
+        // as ONE tape-recorded engine op (a dedicated kernel and backward on GPU), with the leading batch-like
+        // axes folded into the batch axis. The previous per-window TensorSlice + ReduceMean + Concatenate chain
+        // issued O(outH * outW) ops per forward and as many scatters in backward.
+        int planesBatch = 1;
+        for (int d = 0; d < rank - 3; d++) planesBatch *= input.Shape[d];
+        var input4D = rank == 4 ? input : Engine.Reshape(input, [planesBatch, channels, inputHeight, inputWidth]);
+        var pooled = Engine.AdaptiveAvgPool2D(input4D, _outputHeight, _outputWidth);
+        if (rank == 4) return pooled;
+        int[] outShape = new int[rank];
+        for (int d = 0; d < rank - 2; d++) outShape[d] = input.Shape[d];
+        outShape[rank - 2] = _outputHeight;
+        outShape[rank - 1] = _outputWidth;
+        return Engine.Reshape(pooled, outShape);
     }
 
     /// <summary>

@@ -387,15 +387,6 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
 
     public override bool SupportsTraining => true;
 
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_depthwiseKernelsGradient == null || _pointwiseKernelsGradient == null || _biasesGradient == null)
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        return Vector<T>.Concatenate(
-            Vector<T>.Concatenate(new Vector<T>(_depthwiseKernelsGradient.ToArray()), new Vector<T>(_pointwiseKernelsGradient.ToArray())),
-            new Vector<T>(_biasesGradient.ToArray()));
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();
@@ -600,7 +591,7 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
     private void InitializeParameters()
     {
         // Use He initialization for kernels
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (_kernelSize * _kernelSize * _inputDepth)));
+        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / ((double)_kernelSize * _kernelSize * _inputDepth)));
         InitializeTensor(_depthwiseKernels, scale);
         InitializeTensor(_pointwiseKernels, scale);
 

@@ -155,21 +155,10 @@ public partial class DiffCutSegmentation<T> : Common.SemanticSegmentationBase<T>
         => Optimizer ?? base.GetOrCreateBaseOptimizer();
 
     #region Public Methods
-    /// <summary>
-    /// Rejects supervised training because DiffCut is a frozen, zero-shot method.
-    /// </summary>
-    /// <param name="input">The input tensor.</param>
-    /// <param name="expectedOutput">Ground-truth segmentation tensor.</param>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> DiffCut extracts frozen diffusion features and segments
-    /// them with recursive normalized cut; it does not learn from labeled masks.</para>
-    /// </remarks>
-    /// <exception cref="NotSupportedException">Always thrown because the cited method is training-free.</exception>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        throw new NotSupportedException(
-            "DiffCut is a zero-shot, training-free segmentation method over frozen diffusion features.");
-    }
+    /// <inheritdoc/>
+    protected override string? TrainingUnavailableReason =>
+        "DiffCut is a zero-shot, training-free segmentation method over frozen diffusion features.";
+
     #endregion
 
     #region Private Methods

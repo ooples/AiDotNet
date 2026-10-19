@@ -383,79 +383,28 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             totalLoss = NumOps.Add(totalLoss, loss);
 
             // --- End-to-end training: agents → mixing → loss (Rashid et al. 2018) ---
-            // Collect ALL trainable parameters from agent networks + mixing network
-            var allParams = new List<Tensor<T>>();
-            foreach (var agentNet in _agentNetworks)
+            // One step over the agent networks and the mixing network together, on the shared training step (plain SGD
+            // at the agent's learning rate, as before). Each agent's chosen Q-value is selected with a one-hot dot
+            // product and the mixing input is a recorded concatenation, so the TD error reaches the agents: the chosen
+            // value used to be copied by host indexing into a fresh tensor, which cut the agents off and left only the
+            // mixing network training. The states, the one-hot actions, the global state and the detached TD target
+            // travel in the step's data.
+            var stepData = new List<Tensor<T>>();
+            for (int i = 0; i < _options.NumAgents; i++)
             {
-                if (agentNet is NeuralNetworkBase<T> nnBase)
-                    allParams.AddRange(Training.TapeTrainingStep<T>.CollectParameters(nnBase.Layers));
+                stepData.Add(Tensor<T>.FromVector(agentStates[i], [1, _options.StateSize]));
+                stepData.Add(Tensor<T>.FromVector(OneHotAction(agentActions[i]), [1, _options.ActionSize]));
             }
-            if (_mixingNetwork is NeuralNetworkBase<T> mixBase)
-                allParams.AddRange(Training.TapeTrainingStep<T>.CollectParameters(mixBase.Layers));
+            stepData.Add(Tensor<T>.FromVector(globalState, [1, globalState.Length]));
+            var targetScalar = new Tensor<T>([1, 1]);
+            targetScalar[0] = target;
+            stepData.Add(targetScalar);
+            var packed = Training.StepInputPacking<T>.Pack(stepData.ToArray());
+            TrainJointStep(packed, globalState.Length);
 
-            var paramArray = allParams.ToArray();
-            if (paramArray.Length > 0)
-            {
-                // Single tape recording: agents forward → mixing forward → MSE loss
-                using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<T>();
-
-                // Forward each agent under tape to get Q-values
-                var agentQTensor = new Tensor<T>([_options.NumAgents]);
-                for (int i = 0; i < _options.NumAgents; i++)
-                {
-                    var agentBase = (NeuralNetworkBase<T>)_agentNetworks[i];
-                    var stateTensor = Tensor<T>.FromVector(agentStates[i], [1, _options.StateSize]);
-                    var qOut = agentBase.ForwardForTraining(stateTensor);
-                    int actionIdx = ArgMax(agentActions[i]);
-                    agentQTensor[i] = qOut[actionIdx];
-                }
-
-                // Concatenate agent Q-values with global state for mixing input
-                var mixInput = new Tensor<T>([1, _options.NumAgents + globalState.Length]);
-                for (int i = 0; i < _options.NumAgents; i++)
-                    mixInput[0, i] = agentQTensor[i];
-                for (int i = 0; i < globalState.Length; i++)
-                    mixInput[0, _options.NumAgents + i] = globalState[i];
-
-                // Forward through mixing network under tape
-                var mixBase2 = (NeuralNetworkBase<T>)_mixingNetwork;
-                var qTotal = mixBase2.ForwardForTraining(mixInput);
-
-                // MSE loss vs TD target via engine ops. The mixing network's
-                // output qTotal is shape [batch=1, 1] (NeuralNetworkBase
-                // forward keeps a leading batch dim) so the scalar target
-                // tensor must match that rank — otherwise TensorSubtract
-                // throws "Tensor shapes must match. Got [1, 1] and [1]."
-                var targetScalar = new Tensor<T>([1, 1]);
-                targetScalar[0] = target;
-                var diff = Engine.TensorSubtract(qTotal, targetScalar);
-                var squared = Engine.TensorMultiply(diff, diff);
-                var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
-                var mseLoss = Engine.ReduceMean(squared, allAxes, keepDims: false);
-
-                // Compute gradients for ALL parameters (agents + mixing) in one pass
-                var grads = tape.ComputeGradients(mseLoss, paramArray);
-
-                // Apply gradients in-place using learning rate
-                foreach (var param in paramArray)
-                {
-                    if (grads.TryGetValue(param, out var grad))
-                    {
-                        for (int j = 0; j < param.Length && j < grad.Length; j++)
-                            param[j] = NumOps.Subtract(param[j], NumOps.Multiply(LearningRate, grad[j]));
-                    }
-                }
-            }
-
-            // Enforce QMIX monotonicity: clamp mixing network weights to non-negative
-            var mixingParams = _mixingNetwork.GetParameters();
-            for (int j = 0; j < mixingParams.Length; j++)
-            {
-                if (NumOps.LessThan(mixingParams[j], NumOps.Zero))
-                    mixingParams[j] = NumOps.Zero;
-            }
-            _mixingNetwork.UpdateParameters(mixingParams);
-        }
+            // Enforce QMIX monotonicity: the mixing weights stay non-negative. Clamped in place, in the live tensors,
+            // so the optimizer and any compiled plan keep training the same ones.
+            ClampMixingWeightsNonNegative();        }
 
         // Update target networks
         if (_stepCount % _options.TargetUpdateFrequency == 0)
@@ -470,6 +419,81 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         return NumOps.Divide(totalLoss, NumOps.FromDouble(validBatch.Count));
     }
 
+    private Training.TapeTrainingStepper<T>? _jointStepper;
+    private AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>? _jointSgd;
+
+    /// <summary>One plain-SGD step on the TD loss over the agent and mixing networks, from a packed step.</summary>
+    private void TrainJointStep(Tensor<T> packed, int globalStateLength)
+    {
+        var agentBases = _agentNetworks.Cast<NeuralNetworkBase<T>>().ToList();
+        var mixBase = (NeuralNetworkBase<T>)_mixingNetwork;
+        var layers = agentBases.SelectMany(n => n.Layers).Concat(mixBase.Layers).ToList();
+        var parameters = Training.TapeTrainingStep<T>.CollectParameters(layers);
+        if (parameters.Count == 0) return;
+
+        int stateSize = _options.StateSize;
+        int actionSize = _options.ActionSize;
+        int numAgents = _options.NumAgents;
+        Tensor<T> TdLoss(Tensor<T> step)
+        {
+            var mixingInputs = new List<Tensor<T>>(numAgents + 1);
+            int offset = 0;
+            for (int i = 0; i < numAgents; i++)
+            {
+                var state = Training.StepInputPacking<T>.Slice(step, offset, new[] { 1, stateSize });
+                offset += stateSize;
+                var oneHot = Training.StepInputPacking<T>.Slice(step, offset, new[] { 1, actionSize });
+                offset += actionSize;
+                var qOut = Engine.Reshape(agentBases[i].ForwardForTraining(state), new[] { 1, actionSize });
+                mixingInputs.Add(Engine.ReduceSum(Engine.TensorMultiply(qOut, oneHot), new[] { 1 }, keepDims: true)); // [1, 1]
+            }
+            mixingInputs.Add(Training.StepInputPacking<T>.Slice(step, offset, new[] { 1, globalStateLength }));
+            offset += globalStateLength;
+            var qTotal = Engine.Reshape(mixBase.ForwardForTraining(Engine.TensorConcatenate(mixingInputs.ToArray(), 1)), new[] { 1, 1 });
+            var diff = Engine.TensorSubtract(qTotal, Training.StepInputPacking<T>.Slice(step, offset, new[] { 1, 1 }));
+            return Engine.ReduceMean(Engine.TensorMultiply(diff, diff), new[] { 0, 1 }, keepDims: false);
+        }
+
+        _jointSgd ??= new AiDotNet.Optimizers.StochasticGradientDescentOptimizer<T, Tensor<T>, Tensor<T>>(null,
+            new StochasticGradientDescentOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = Convert.ToDouble(LearningRate),
+                EnableGradientClipping = false,
+            });
+        var stepper = _jointStepper ??= new Training.TapeTrainingStepper<T>(this);
+        stepper.Step(new Training.FusedTrainingStepRequest<T>
+        {
+            Layers = layers.OfType<ITrainableLayer<T>>().ToList(),
+            Input = packed,
+            Target = packed,
+            Forward = TdLoss,
+            ComputeLoss = (loss, _) => loss,
+            Optimizer = _jointSgd,
+            ExtraParameters = parameters,
+        });
+    }
+
+    /// <summary>The action as a one-hot row over ActionSize: the chosen index's arg-max.</summary>
+    private Vector<T> OneHotAction(Vector<T> action)
+    {
+        var oneHot = new Vector<T>(_options.ActionSize);
+        oneHot[ArgMax(action)] = NumOps.One;
+        return oneHot;
+    }
+
+    /// <summary>Clamps the mixing network's trainable weights to be non-negative, in place.</summary>
+    private void ClampMixingWeightsNonNegative()
+    {
+        var mixBase = (NeuralNetworkBase<T>)_mixingNetwork;
+        foreach (var parameter in Training.TapeTrainingStep<T>.CollectParameters(mixBase.Layers))
+        {
+            for (int j = 0; j < parameter.Length; j++)
+            {
+                if (NumOps.LessThan(parameter.GetFlat(j), NumOps.Zero))
+                    parameter.SetFlat(j, NumOps.Zero);
+            }
+        }
+    }
     private (List<Vector<T>> agentStates, Vector<T> globalState, List<Vector<T>> agentActions) DecomposeJointState(
         Vector<T> jointState, Vector<T> jointAction)
     {

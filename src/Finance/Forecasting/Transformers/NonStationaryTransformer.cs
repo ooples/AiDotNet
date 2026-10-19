@@ -626,37 +626,6 @@ public partial class NonStationaryTransformer<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Trains the network on a single batch.
-    /// </summary>
-    /// <param name="input">Input tensor.</param>
-    /// <param name="target">Target tensor.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Training adjusts the model's internal parameters to make better predictions.
-    /// This method:
-    /// 1. Makes a prediction (forward pass)
-    /// 2. Calculates how wrong it was (loss)
-    /// 3. Figures out how to improve (backward pass)
-    /// 4. Updates the model (optimizer step)
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
-        base.Train(input, target);
-    }
-
-    /// <summary>
     /// Tape-aware training forward. Calls <see cref="Forward"/> directly — the
     /// same native path <see cref="Predict"/> uses — so the training output
     /// shape matches the Predict target shape by construction.

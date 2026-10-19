@@ -33,9 +33,6 @@ public abstract class FlowMatchingTtsModelBase<T> : TtsModelBase<T>, ITrainingOb
     /// <summary>The flow-matching hyperparameters of the concrete model's options.</summary>
     protected abstract FlowMatchingSettings Settings { get; }
 
-    /// <summary>The optimizer training steps use.</summary>
-    protected abstract IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer { get; }
-
     /// <summary>Whether the paper's backbone was built (false for caller-supplied layers).</summary>
     protected abstract bool HasPaperBackbone { get; }
 

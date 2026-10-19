@@ -1244,21 +1244,6 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <inheritdoc/>
-    public override Vector<T> GetParameterGradients()
-    {
-        var allGrads = new List<T>();
-        foreach (var module in _basicModules)
-        {
-            var grads = module.GetParameterGradients();
-            for (int i = 0; i < grads.Length; i++)
-            {
-                allGrads.Add(grads[i]);
-            }
-        }
-        return new Vector<T>([.. allGrads]);
-    }
-
-    /// <inheritdoc/>
     public override void ResetState()
     {
         _lastInput1 = null;

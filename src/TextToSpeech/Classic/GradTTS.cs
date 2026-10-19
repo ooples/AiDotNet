@@ -271,19 +271,19 @@ public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
     }
 
     /// <inheritdoc />
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         ThrowIfDisposed();
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         if (!HasPaperLayers)
         {
-            TrainWithTape(input, expectedOutput, _optimizer);
-            return;
+            return false;
         }
         var (tokens, mel) = Prepare(input, expectedOutput);
         var draw = DrawTrainingRandomness(mel.Shape[0], _trainingRandom);
         TrainWithCustomObjective(tokens, mel, (x, y) => Objective(x, y, draw), _optimizer);
+        return true;
     }
 
     /// <inheritdoc />

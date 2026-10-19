@@ -178,7 +178,7 @@ public partial class AdaSpeech<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMod
     protected override bool HasAcousticConditioning => _speakerEmbedding is not null;
 
     /// <inheritdoc />
-    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer
     {
         get
         {

@@ -167,7 +167,7 @@ public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
     /// One step on the decode head's pixel cross-entropy plus 0.4 of the auxiliary head's (mmseg's loss weights),
     /// against a target <c>[B, classes, H, W]</c> of one-hot (or soft) class maps.
     /// </summary>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (!_useNativeMode) throw new InvalidOperationException("Training is not supported in ONNX mode. Use the native mode constructor for training.");
         if (input.Shape.Length == 3) input = input.Reshape(new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] });
@@ -192,6 +192,7 @@ public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
         {
             SetTrainingMode(false);
         }
+        return true;
     }
 
     /// <summary>The mean over pixels of −Σ_c t_c·log softmax(x)_c, the class axis being axis 1.</summary>

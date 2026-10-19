@@ -27,11 +27,20 @@ public class FusedOptimizerScheduleAndClipParityTests
 {
     /// <summary>
     /// How far a fused run may drift from eager, as a multiple of the drift of the same optimizer with the
-    /// feature under test turned off. The fused kernel takes the learning rate, betas and epsilon as float
-    /// (FusedOptimizerConfig), so even plain Adam differs from eager in double by that rounding (measured
-    /// 3.1e-8 over 9 steps here). The defects these tests guard differ by 1e-3 or throw.
+    /// feature under test turned off. The defects these tests guard differ by 1e-3 or throw.
     /// </summary>
     private const double ControlFloorMultiple = 4.0;
+
+    /// <summary>
+    /// The least drift the bound allows. Double training stays in double on the fused step, so the control can
+    /// drift by a single ulp or not at all, and a schedule or clip that moves the rate between steps changes the
+    /// rounding by a few more (2.4e-15 over 9 scheduled steps on CI's Linux runners, against a 2.2e-16 control).
+    /// That is far below the 1e-6 the clip test's positive control requires.
+    /// </summary>
+    private const double RoundOffFloor = 1e-12;
+
+    private static double AllowedDrift(double controlDrift) =>
+        ControlFloorMultiple * Math.Max(controlDrift, RoundOffFloor);
 
     private static NeuralNetworkArchitecture<double> MakeArch() =>
         new NeuralNetworkArchitecture<double>(
@@ -146,7 +155,7 @@ public class FusedOptimizerScheduleAndClipParityTests
         Assert.Equal(0, eager.FusedSteps);
         Assert.True(MaxAbsDifference(eager.Parameters, init) > 1e-4, "Training did not move the parameters.");
         double divergence = MaxAbsDifference(fused.Parameters, eager.Parameters);
-        Assert.True(divergence <= ControlFloorMultiple * floor,
+        Assert.True(divergence <= AllowedDrift(floor),
             $"Fused training with a per-epoch scheduler diverged from eager by {divergence:E3}; " +
             $"unscheduled Adam drifts {floor:E3}.");
     }
@@ -178,9 +187,53 @@ public class FusedOptimizerScheduleAndClipParityTests
         Assert.True(MaxAbsDifference(eager.Parameters, eagerUnclipped.Parameters) > 1e-6,
             "MaxGradientNorm did not bind; the clip comparison would be vacuous.");
         double divergence = MaxAbsDifference(fused.Parameters, eager.Parameters);
-        Assert.True(divergence <= ControlFloorMultiple * floor,
+        Assert.True(divergence <= AllowedDrift(floor),
             $"Fused training ignored the optimizer's gradient clip: diverged from eager by {divergence:E3}; " +
             $"unclipped Adam drifts {floor:E3}.");
+    }
+
+    [Fact]
+    public void OptimizerGlobalNormClip_ScalesKnownGradientsByPyTorchCoefficient()
+    {
+        // Gradients (3, 4) and (12) have global norm 13. clip_grad_norm_ scales them by max / (13 + 1e-6), giving
+        // a clipped norm of 13 * max / (13 + 1e-6). With Epsilon = 1 the first Adam step moves each parameter by
+        // lr * gc / (|gc| + 1), gc the clipped gradient, and that is not scale-invariant, so the parameters pin the
+        // applied scale: an unclipped step, or one scaled to exactly max / 13, lands elsewhere.
+        const double maxNorm = 0.5, learningRate = 1e-2, norm = 13.0;
+        var optimizer = new AdamOptimizer<double, Tensor<double>, Tensor<double>>(null,
+            new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                InitialLearningRate = learningRate,
+                Epsilon = 1.0,
+                EnableGradientClipping = true,
+                GradientClippingMethod = GradientClippingMethod.ByNorm,
+                MaxGradientNorm = maxNorm,
+            });
+
+        var first = new Tensor<double>(new[] { 2 }, new Vector<double>(new[] { 1.0, -2.0 }));
+        var second = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 0.5 }));
+        var gradients = new System.Collections.Generic.Dictionary<Tensor<double>, Tensor<double>>(
+            AiDotNet.Helpers.TensorReferenceComparer<Tensor<double>>.Instance)
+        {
+            [first] = new Tensor<double>(new[] { 2 }, new Vector<double>(new[] { 3.0, 4.0 })),
+            [second] = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 12.0 })),
+        };
+        var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<double>(
+            new[] { first, second }, gradients, 0.0, first, first,
+            (input, _) => input, (predicted, _) => predicted, parameterBuffer: null);
+
+        optimizer.Step(context);
+
+        double scale = maxNorm / (norm + 1e-6);
+        double[] raw = { 3.0, 4.0, 12.0 }, initial = { 1.0, -2.0, 0.5 };
+        double[] after = { first[0], first[1], second[0] };
+        for (int i = 0; i < raw.Length; i++)
+        {
+            double clipped = raw[i] * scale;
+            double expected = initial[i] - learningRate * clipped / (Math.Abs(clipped) + 1.0);
+            Assert.True(Math.Abs(after[i] - expected) <= 1e-12,
+                $"parameter {i}: {after[i]:R}, expected {expected:R} for a clip scale of {scale:R}.");
+        }
     }
 
     [Fact]

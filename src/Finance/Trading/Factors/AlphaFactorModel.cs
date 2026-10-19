@@ -334,33 +334,6 @@ public partial class AlphaFactorModel<T> : FinancialModelBase<T>, IFactorModel<T
         return _useNativeMode ? PredictNative(input) : PredictOnnx(input);
     }
 
-    /// <summary>
-    /// Trains the model on a batch of inputs and targets.
-    /// </summary>
-    /// <param name="input">Input tensor of market features.</param>
-    /// <param name="target">Target tensor of realized returns.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Training teaches the model which factors actually
-    /// predict returns by comparing predictions to real outcomes and adjusting weights.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> target)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        // Issue #1166: the old body computed a loss + gradient and then
-        // called _optimizer.UpdateParameters(Layers) without a backward
-        // pass, so every layer's UpdateParameters threw "Backward pass
-        // must be called before updating parameters." Delegate to
-        // FinancialModelBase.Train — it routes through the tape-based
-        // NeuralNetworkBase.TrainWithTape flow (GradientTape forward +
-        // tape.ComputeGradients + optimizer.Step) that every other
-        // NeuralNetworkBase subclass uses.
-        base.Train(input, target);
-    }
-
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
     /// <summary>

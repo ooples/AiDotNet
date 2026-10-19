@@ -50,13 +50,13 @@ if (!string.IsNullOrWhiteSpace(profileGguf))
     var profInput = new Tensor<float>(new[] { 1, profLen });
     for (int i = 0; i < profLen; i++) profInput[0, i] = (i % 100) + 5;
     Console.WriteLine("[Profile] warmup (compile kernels / JIT)...");
-    for (int w = 0; w < 3; w++) _ = profModel.Predict(profInput).Contiguous().AsSpan()[0];
+    for (int w = 0; w < 3; w++) _ = profModel.Predict(profInput).Contiguous()[0];
     Console.WriteLine("[Profile] steady-state loop — attach dotnet-trace to this PID, then kill to stop.");
     long profIter = 0;
     var profSw = System.Diagnostics.Stopwatch.StartNew();
     while (true)
     {
-        _ = profModel.Predict(profInput).Contiguous().AsSpan()[0];
+        _ = profModel.Predict(profInput).Contiguous()[0];
         if (++profIter % 20 == 0)
             Console.WriteLine($"[Profile] {profIter} forwards, {profIter * profLen / profSw.Elapsed.TotalSeconds:F0} tok/s");
     }

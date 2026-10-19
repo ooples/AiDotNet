@@ -244,27 +244,10 @@ public partial class PaLI3<T> : VisionLanguageModelBase<T>, IGenerativeVisionLan
             Engine
         );
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
-    {
-        if (IsOnnxMode)
-            throw new NotSupportedException("Training is not supported in ONNX mode.");
-        SetTrainingMode(true);
-        try
-        {
-            // Tokenize NCHW image inputs the same way Predict does so the
-            // tape-based training loop sees the patch-embedded BSC sequence
-            // the encoder layer stack expects.
-            TrainWithTape(TokenizeIfNCHW(input), expected);
-        }
-        finally
-        {
-            // try/finally so a TrainWithTape throw doesn't leave the model
-            // stuck in training mode (dropout / norm-running-stats remain on
-            // for every subsequent Predict call until something else flips
-            // it back).
-            SetTrainingMode(false);
-        }
-    }
+    /// <inheritdoc/>
+    /// <remarks>An NCHW image is tokenized into patches, as for prediction.</remarks>
+    protected override (Tensor<T> Input, Tensor<T>? Target) PrepareTrainingPair(Tensor<T> input, Tensor<T>? target, long draw)
+        => (TokenizeIfNCHW(input), target);
 
     // _patchEmbed is discovered as a single-layer member and surfaced automatically.
     // Removed under AIDN082.

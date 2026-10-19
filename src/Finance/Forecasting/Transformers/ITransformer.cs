@@ -588,38 +588,6 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
     }
 
     /// <summary>
-    /// Trains the model on a single batch of input-output pairs.
-    /// </summary>
-    /// <param name="input">Input tensor of shape [batch_size, sequence_length, num_features].</param>
-    /// <param name="expectedOutput">Target tensor of shape [batch_size, prediction_horizon, num_features].</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Training teaches the model to make better predictions.
-    /// The process involves:
-    /// </para>
-    /// <para>
-    /// <list type="number">
-    /// <item><b>Forward pass:</b> Make a prediction using the current parameters</item>
-    /// <item><b>Loss calculation:</b> Measure how wrong the prediction was</item>
-    /// <item><b>Backward pass:</b> Calculate gradients (how to improve)</item>
-    /// <item><b>Parameter update:</b> Adjust parameters to reduce error</item>
-    /// </list>
-    /// </para>
-    /// <para>
-    /// In iTransformer, the model learns which cross-variable relationships are most
-    /// useful for forecasting by adjusting attention weights during training.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="InvalidOperationException">Thrown if called in ONNX mode.</exception>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        if (!_useNativeMode)
-            throw new InvalidOperationException("Training is only supported in native mode.");
-
-        base.Train(input, expectedOutput);
-    }
-
-    /// <summary>
     /// Training-mode forward: calls <see cref="Forward"/> directly so
     /// attention dropout and the inverted-variable projection stay in
     /// training mode under the gradient tape. The default path uses

@@ -49,7 +49,16 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
     [AiDotNet.Attributes.TrainableParameter]
     private readonly Tensor<T> _meanB;              // [actionDim, 1]
     private readonly IReadOnlyList<Tensor<T>> _trainable;
-    private readonly AdamOptimizer<T, Matrix<T>, Vector<T>> _optimizer;
+    private readonly AdamOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+
+    // One episode's update on the shared fused session: the compiled plan when it applies, the eager tape otherwise.
+    private readonly Training.TapeTrainingStepper<T> _stepper;
+
+    /// <summary>Episode updates run on the fused compiled plan.</summary>
+    internal int FusedTrainingStepCount => _stepper.FusedStepCount;
+
+    /// <summary>Episode updates run on the eager tape.</summary>
+    internal int EagerTrainingStepCount => _stepper.EagerStepCount;
 
     // Per-episode recurrent state (eager act path).
     [AiDotNet.Attributes.Scratch]
@@ -90,8 +99,9 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
         trainable.Add(_meanB);
         _trainable = trainable;
 
-        _optimizer = new AdamOptimizer<T, Matrix<T>, Vector<T>>(
-            null, new AdamOptimizerOptions<T, Matrix<T>, Vector<T>> { InitialLearningRate = learningRate });
+        _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            null, new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = learningRate });
+        _stepper = new Training.TapeTrainingStepper<T>(this);
 
         ResetHidden();
     }
@@ -172,68 +182,44 @@ public sealed partial class RecurrentPolicyAgent<T> : IPortfolioAgent<T>, IDispo
             return NumOps.Zero;
         }
 
-        int n = _states.Count;
-
-        // Discounted returns, then a whitened baseline (return − mean) as the advantage. Detached constants.
-        var returns = new double[n];
-        double g = 0;
-        for (int t = n - 1; t >= 0; t--)
+        // BPTT: replay the rollout through the LSTM from a zero state; minimize Σ adv·½‖a−μ‖²/σ².
+        var weights = PolicyGradientRollout<T>.LossWeights(_rewards, _gamma, _sigma);
+        T reported = _stepper.Step(new Training.FusedTrainingStepRequest<T>
         {
-            g = _rewards[t] + _gamma * g;
-            returns[t] = g;
-        }
-        double mean = 0;
-        for (int t = 0; t < n; t++) mean += returns[t];
-        mean /= n;
-        double var = 0;
-        for (int t = 0; t < n; t++) var += (returns[t] - mean) * (returns[t] - mean);
-        double std = Math.Sqrt(var / Math.Max(1, n)) + 1e-8;
-        var advantage = new double[n];
-        for (int t = 0; t < n; t++) advantage[t] = (returns[t] - mean) / std;
-
-        // BPTT: replay the rollout through the LSTM under a tape; minimize Σ adv·½‖a−μ‖²/σ².
-        double invSigma2 = 1.0 / (_sigma * _sigma);
-        using var tape = new GradientTape<T>();
-        var h = new Tensor<T>(new[] { _hidden, 1 });
-        var c = new Tensor<T>(new[] { _hidden, 1 });
-        Tensor<T>? loss = null;
-
-        for (int t = 0; t < n; t++)
-        {
-            var xt = new Tensor<T>(new[] { _stateDim, 1 });
-            for (int i = 0; i < _stateDim; i++) xt[i, 0] = _states[t][i];
-            var (hNew, cNew) = _cell.Step(xt, h, c);
-            h = hNew;
-            c = cNew;
-
-            var meanT = Engine.Tanh(Engine.TensorAdd(Engine.TensorMatMul(_meanW, h), _meanB)); // [A,1]
-            var actionT = new Tensor<T>(new[] { _actionDim, 1 });
-            for (int a = 0; a < _actionDim; a++) actionT[a, 0] = _actions[t][a];
-
-            var diff = Engine.TensorSubtract(actionT, meanT);
-            var sq = Engine.ReduceSum(Engine.TensorMultiply(diff, diff), new[] { 0, 1 }, keepDims: false); // scalar
-            // weight = advantage_t · 0.5 / σ²  (constant w.r.t. params)
-            var term = Engine.TensorMultiplyScalar(sq, NumOps.FromDouble(0.5 * invSigma2 * advantage[t]));
-            loss = loss is null ? term : Engine.TensorAdd(loss, term);
-        }
-
-        T reported = NumOps.Zero;
-        if (loss is not null)
-        {
-            var grads = tape.ComputeGradients(loss, sources: null);
-            var picked = new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
-            foreach (var p in _trainable)
-                if (grads.TryGetValue(p, out var gr)) picked[p] = gr;
-
-            reported = loss.Length > 0 ? loss[0] : NumOps.Zero;
-            _optimizer.Step(new TapeStepContext<T>(_trainable, picked, reported));
-        }
+            Layers = Array.Empty<ITrainableLayer<T>>(),
+            Input = PolicyGradientRollout<T>.States(_states, _stateDim),
+            Target = PolicyGradientRollout<T>.Target(_actions, weights, _actionDim),
+            Forward = ReplayMeans,
+            ComputeLoss = (means, target) => PolicyGradientRollout<T>.Loss(means, target, _actionDim),
+            Optimizer = _optimizer,
+            ExtraParameters = _trainable,
+        });
 
         _states.Clear();
         _actions.Clear();
         _rewards.Clear();
         _episodeDone = false;
         return reported;
+    }
+
+    /// <summary>
+    /// The policy means [actionDim, n] over a rollout's states [stateDim, n], replayed through the LSTM from a zero
+    /// state. Each step's state is a column of the input, so a compiled plan replays each episode's own states.
+    /// </summary>
+    private Tensor<T> ReplayMeans(Tensor<T> states)
+    {
+        int n = states.Shape[1];
+        var h = new Tensor<T>(new[] { _hidden, 1 });
+        var c = new Tensor<T>(new[] { _hidden, 1 });
+        var means = new Tensor<T>[n];
+        for (int t = 0; t < n; t++)
+        {
+            var (hNew, cNew) = _cell.Step(Engine.TensorNarrow(states, 1, t, 1), h, c);
+            h = hNew;
+            c = cNew;
+            means[t] = Engine.Tanh(Engine.TensorAdd(Engine.TensorMatMul(_meanW, h), _meanB)); // [A,1]
+        }
+        return n == 1 ? means[0] : Engine.TensorConcatenate(means, axis: 1);
     }
 
     public void ResetEpisode()

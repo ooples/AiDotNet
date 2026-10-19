@@ -529,52 +529,14 @@ public partial class HopeNetwork<T> : VectorModelLayoutBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
 #pragma warning restore CS0169
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc/>
+    /// <remarks>Every 100 adaptation steps, the continuum memory is consolidated.</remarks>
+    protected override void OnTrainingStepEnded(bool succeeded)
     {
-        Guard.NotNull(input);
-        Guard.NotNull(expectedOutput);
-
-        SetTrainingMode(true);
-        foreach (var layer in Layers)
-            layer.SetTrainingMode(true);
-
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            // Restore eval mode — set both network and layer flags
-            // NeuralNetworkBase.SetTrainingMode does not propagate to layers
-            SetTrainingMode(false);
-            if (Layers != null)
-            {
-                foreach (var layer in Layers)
-                    layer.SetTrainingMode(false);
-            }
-
-            // Increment the training step counter explicitly: Hope's custom
-            // Forward at line ~243 increments _adaptationStep, but
-            // TrainWithTape calls Layers[i].Forward directly and bypasses
-            // that path entirely, so the counter would stay at 0 forever
-            // and the `_adaptationStep % 100 == 0` gate would fire on EVERY
-            // Train call. That triggered ConsolidateMemory after every
-            // single optimizer step (instead of every 100 per Behrouz et
-            // al. 2025 §3.4), mixing 1% of fast-block weights into slow
-            // blocks each step and overpowering the gradient signal —
-            // LossStrictlyDecreasesOnMemorizationTask saw a ~0.005% loss
-            // drop over 100 steps instead of the required ≥1%.
-            _adaptationStep++;
-
-            // Consolidate memory periodically — safe in eval mode. Guard
-            // against the initial step (counter was 1 when incremented from
-            // 0) so we don't consolidate on the very first Train call when
-            // there's nothing yet learned to consolidate.
-            if (_adaptationStep > 0 && _adaptationStep % 100 == 0)
-            {
-                ConsolidateMemory();
-            }
-        }
+        _adaptationStep++;
+        if (_adaptationStep > 0 && _adaptationStep % 100 == 0)
+            ConsolidateMemory();
+        base.OnTrainingStepEnded(succeeded);
     }
 
     /// <summary>

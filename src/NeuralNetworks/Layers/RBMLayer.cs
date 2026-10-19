@@ -1086,38 +1086,6 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
         return Engine.TensorMatMul(aReshaped, bReshaped);
     }
 
-    /// <summary>
-    /// Resets the internal state of the layer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This method clears the cached data used during training (both CD and backprop).
-    /// While RBMs don't maintain state between passes in the same way as recurrent networks,
-    /// this implementation does cache intermediate values for training purposes.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method clears the RBM's "memory" of previous inputs.
-    /// 
-    /// When you call this method:
-    /// - The RBM forgets the last data it saw
-    /// - It clears internal storage used during training
-    /// - This ensures each batch of data is processed independently
-    /// 
-    /// This is useful when you want to start fresh, such as when:
-    /// - Beginning training on a new dataset
-    /// - Switching from training mode to evaluation mode
-    /// - Processing unrelated sequences of data
-    /// </para>
-    /// </remarks>
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_weightsGradient == null || _visibleBiasesGradient == null || _hiddenBiasesGradient == null)
-            return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        return Vector<T>.Concatenate(
-            new Vector<T>(_weightsGradient.ToArray()),
-            new Vector<T>(_visibleBiasesGradient.ToArray()),
-            new Vector<T>(_hiddenBiasesGradient.ToArray()));
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

@@ -1155,24 +1155,6 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
 
     }
 
-    public override Vector<T> GetParameterGradients()
-    {
-        if (_aRealGradient == null) return new Vector<T>(ParameterCountHelper.ToFlatVectorSize(ParameterCount));
-        return Vector<T>.Concatenate(
-            new Vector<T>(_aRealGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_aImagGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_bRealGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_bImagGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_cRealGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_cImagGradient?.ToArray() ?? Array.Empty<T>()),
-            new Vector<T>(_dParamGradient?.ToArray() ?? Array.Empty<T>()),
-            _inputProjectionWeightsGradient != null ? new Vector<T>(_inputProjectionWeightsGradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_inputProjectionWeights.Length),
-            _inputProjectionBiasGradient != null ? new Vector<T>(_inputProjectionBiasGradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_inputProjectionBias.Length),
-            _outputProjectionWeightsGradient != null ? new Vector<T>(_outputProjectionWeightsGradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_outputProjectionWeights.Length),
-            _outputProjectionBiasGradient != null ? new Vector<T>(_outputProjectionBiasGradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_outputProjectionBias.Length),
-            _logDeltaGradient != null ? new Vector<T>(_logDeltaGradient?.ToArray() ?? Array.Empty<T>()) : new Vector<T>(_logDelta.Length));
-    }
-
     public override void ClearGradients()
     {
         base.ClearGradients();

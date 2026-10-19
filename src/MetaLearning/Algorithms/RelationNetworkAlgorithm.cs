@@ -236,11 +236,10 @@ public partial class RelationNetworkAlgorithm<T, TInput, TOutput> : MetaLearnerB
         }
         else
         {
-            using var tape = new GradientTape<T>();
-            var episodeLoss = LossFunction.ComputeTapeLoss(EpisodeScores(embeddings, episode, slots, scorer), target);
-            loss = episodeLoss[0];
-            var gradients = tape.ComputeGradients(episodeLoss, scorer.Leaves.ToList());
-            scorer.CopyGradients(gradients, relationGradient, transformGradient, poolingGradient, shotGradient);
+            loss = AiDotNet.Training.TapeGradients<T>.Of(
+                () => LossFunction.ComputeTapeLoss(EpisodeScores(embeddings, episode, slots, scorer), target),
+                scorer.Leaves.ToList(),
+                gradients => scorer.CopyGradients(gradients, relationGradient, transformGradient, poolingGradient, shotGradient));
         }
 
         return (loss, bodyGradient, relationGradient, transformGradient, poolingGradient, shotGradient);

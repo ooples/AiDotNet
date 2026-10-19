@@ -330,7 +330,7 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
         /// </summary>
         /// <param name="input">Training input tensor.</param>
         /// <param name="expectedOutput">Expected output tensor.</param>
-        public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+        protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
         {
             if (input == null)
             {
@@ -380,7 +380,9 @@ namespace AiDotNet.PhysicsInformed.NeuralOperators
             {
                 SetTrainingMode(false);
             }
-        }
+
+        return true;
+    }
 
         /// <summary>
         /// Gets metadata about the graph neural operator.

@@ -270,20 +270,13 @@ public partial class GRUNeuralNetwork<T> : SequenceModelLayoutBase<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
 #pragma warning restore CS0169
 
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    /// <inheritdoc/>
+    /// <remarks>Each step starts from a fresh recurrent state.</remarks>
+    protected override void OnTrainingStepStarting(Tensor<T> input, Tensor<T> target)
     {
-        SetTrainingMode(true);
         foreach (var layer in Layers)
-        {
             layer.ResetState();
-            layer.SetTrainingMode(true);
-        }
-
-        TrainWithTape(input, expectedOutput, _optimizer);
-
-        SetTrainingMode(false);
     }
-
     /// <summary>
     /// Performs a forward pass while storing intermediate values for backpropagation.
     /// </summary>

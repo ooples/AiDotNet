@@ -1395,7 +1395,7 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
     /// evolutionary approach to discover effective network structures.
     /// </para>
     /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // Check if input and output have compatible batch sizes
         if (input.Shape[0] != expectedOutput.Shape[0])
@@ -1498,6 +1498,8 @@ public partial class NEAT<T> : VectorModelLayoutBase<T>
             }
             LastLoss = NumOps.Divide(totalErr, NumOps.FromDouble(trainingData.Count));
         }
+
+        return true;
     }
 
     /// <summary>

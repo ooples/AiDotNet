@@ -564,44 +564,6 @@ public partial class VariationalAutoencoder<T> : VectorModelLayoutBase<T>, IAuxi
     }
 
     /// <summary>
-    /// Trains the Variational Autoencoder using the provided input data.
-    /// </summary>
-    /// <param name="input">The input tensor used for training.</param>
-    /// <param name="expectedOutput">The expected output tensor (typically the same as the input for VAEs).</param>
-    /// <remarks>
-    /// <para>
-    /// This method implements the training process for the VAE:
-    /// 1. Performs a forward pass to get the reconstructed output.
-    /// 2. Calculates the reconstruction loss and the KL divergence.
-    /// 3. Computes the total loss (reconstruction loss + KL divergence).
-    /// 4. Backpropagates the error and updates the network parameters using the specified optimizer.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method teaches the VAE to compress and reconstruct data effectively.
-    /// 
-    /// The training process:
-    /// 1. The VAE tries to reconstruct the input
-    /// 2. It measures how well it did (reconstruction error) using the specified loss function
-    /// 3. It also measures how well it's using the latent space (KL divergence)
-    /// 4. It combines these measurements into a total score
-    /// 5. It then adjusts its internal settings to do better next time, using the specified optimizer
-    /// 
-    /// This process is repeated many times with different inputs to improve the VAE's performance.
-    /// </para>
-    /// </remarks>
-    public override void Train(Tensor<T> input, Tensor<T> expectedOutput)
-    {
-        SetTrainingMode(true);
-        try
-        {
-            TrainWithTape(input, expectedOutput, _optimizer);
-        }
-        finally
-        {
-            SetTrainingMode(false);
-        }
-    }
-
-    /// <summary>
     /// Computes the auxiliary loss for the VAE, which is the KL divergence between the learned
     /// latent distribution and a standard normal distribution.
     /// </summary>

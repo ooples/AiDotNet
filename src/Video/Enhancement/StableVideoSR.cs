@@ -262,7 +262,7 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
                 "Call UpscaleWithFlows or clear PropagationSteps.");
     }
 
-    public override void Train(Tensor<T> input, Tensor<T> expected)
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expected)
     {
         if (IsOnnxMode) throw new NotSupportedException("Training is not supported in ONNX mode.");
         SetTrainingMode(true);
@@ -280,6 +280,8 @@ public partial class StableVideoSR<T> : VideoSuperResolutionBase<T>
         {
             SetTrainingMode(false);
         }
+
+        return true;
     }
 
     /// <inheritdoc />
