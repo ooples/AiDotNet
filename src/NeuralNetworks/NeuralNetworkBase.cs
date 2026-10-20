@@ -6178,14 +6178,31 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // Never let the diagnostic stand between a caller and their prediction.
         }
 
+        // The traced forward is the DIAGNOSTIC's, not the caller's. An observer suppresses
+        // convolution/batch-norm folding (ConvolutionBatchNormFolding.TryForward: a folded pair is
+        // one layer, so a trace of it would not show the dataflow being validated), and a folded
+        // convolution differs from the separate operations by rounding. Returning the observed
+        // forward therefore made a model's FIRST prediction differ from every later one by about
+        // 1e-5 - caught by PSENet's Predict_ShouldBeDeterministic, whose own message said the first
+        // inference had taken a materially different path. So the observed pass feeds the validator
+        // and is discarded, and the caller gets an unobserved forward that folds exactly as call two
+        // will. The cost is one extra forward, once per model instance: what it costs to keep this
+        // diagnostic from changing what Predict returns, which the summary above promises.
+        Tensor<T> observed;
         try
         {
-            output = InferenceArenaSettings.Enabled ? Predict(input) : PredictCore(input);
+            observed = InferenceArenaSettings.Enabled ? Predict(input) : PredictCore(input);
         }
         finally
         {
             trace?.Dispose();
         }
+
+        // Outside the trace, so folding applies here exactly as it will on every subsequent call.
+        // With no observer installed the pass above already took that path, so it is reused.
+        output = trace is null
+            ? observed
+            : (InferenceArenaSettings.Enabled ? Predict(input) : PredictCore(input));
 
         // AFTER the forward, deliberately. Measured with a probe rather than assumed: at every
         // earlier point tried - ReportLayerContractMismatches, ResolveLazyLayerShapes, and the top
