@@ -308,8 +308,6 @@
 	  Users can also install these separately to enable specific accelerators.
 	-->
 	<ItemGroup>
-	  <!-- CPU acceleration via OpenBLAS -->
-	  <PackageReference Include="AiDotNet.Native.OpenBLAS" />
 	  <!-- GPU acceleration via CLBlast (OpenCL-based) -->
 	  <PackageReference Include="AiDotNet.Native.CLBlast" />
 	  <!-- CPU acceleration via Intel OneDNN -->
