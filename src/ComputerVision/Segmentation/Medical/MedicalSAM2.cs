@@ -137,7 +137,7 @@ public partial class MedicalSAM2<T> : Common.MedicalSegmentationBase<T>, ITraini
         var frames = images.Select(Rgb).ToList();
         int h = frames[0].Shape[2], w = frames[0].Shape[3];
         if (frames.Any(f => f.Shape[2] != h || f.Shape[3] != w)) throw new ArgumentException("Every image must have the same size.", nameof(images));
-        return Runtime.TrackImageSet(frames, prompts(h, w), Seed).Select(o => Runtime.Probabilities(o.HighRes, h, w)).ToList();
+        return Runtime.TrackImageSet(frames, prompts(h, w), Seed).Select(o => Runtime.VideoProbabilities(o, h, w)).ToList();
     }
 
     /// <summary>
@@ -189,7 +189,7 @@ public partial class MedicalSAM2<T> : Common.MedicalSegmentationBase<T>, ITraini
         var ordered = reversed ? Enumerable.Reverse(slices).ToList() : slices;
         var mapped = prompts.ToDictionary(kv => reversed ? count - 1 - kv.Key : kv.Key, kv => kv.Value);
         var outputs = Runtime.Track(ordered, mapped);
-        var probabilities = outputs.Select(o => Runtime.Probabilities(o.HighRes, rows, cols)).ToList();
+        var probabilities = outputs.Select(o => Runtime.VideoProbabilities(o, rows, cols)).ToList();
         if (reversed) probabilities.Reverse();
         return Unslice(Engine.TensorStack(probabilities.ToArray(), 0), axis);
     }

@@ -67,7 +67,7 @@ public partial class SAM21<T> : Common.PromptableSegmentationBase<T>, ITrainingO
 
     // The image set by SetImage: its size and features (the embedding is also the base's field).
     private int _originalHeight, _originalWidth;
-    private (Tensor<T> Embedding, Tensor<T> HighRes0, Tensor<T> HighRes1)? _features;
+    private (Tensor<T> Embedding, Tensor<T>? HighRes0, Tensor<T>? HighRes1)? _features;
 
     public override ModelOptions GetOptions() => _options;
 
@@ -320,7 +320,7 @@ public partial class SAM21<T> : Common.PromptableSegmentationBase<T>, ITrainingO
         int height = batched[0].Shape[2], width = batched[0].Shape[3];
         if (batched.Any(f => f.Shape[2] != height || f.Shape[3] != width))
             throw new ArgumentException("Every frame must have the same size.", nameof(frames));
-        return Runtime.Track(batched, prompts(height, width)).Select(o => Runtime.Probabilities(o.HighRes, height, width)).ToList();
+        return Runtime.Track(batched, prompts(height, width)).Select(o => Runtime.VideoProbabilities(o, height, width)).ToList();
     }
 
     /// <summary>Segments an object through a video (frames <c>[3, H, W]</c>, values in 0..1) from clicks <c>[k, 2]</c> on its

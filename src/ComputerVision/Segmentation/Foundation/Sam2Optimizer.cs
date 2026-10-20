@@ -65,8 +65,9 @@ internal static class Sam2Optimizer
         double encoder = recipe.ImageEncoderLearningRate / recipe.LearningRate, decay = recipe.LayerDecay;
         int blocks = network.Blocks.Count;
         var rate = new Dictionary<LayerBase<T>, double>();
-        rate[network.BackgroundPosition] = encoder;
-        rate[network.WindowPosition] = encoder;
+        // The trunk's position tables keep the encoder rate (the official override sets their layer scale to 1).
+        foreach (var position in new LayerBase<T>?[] { network.BackgroundPosition, network.WindowPosition, network.VitPosition })
+            if (position is not null) rate[position] = encoder;
         rate[network.PatchProjection] = encoder * Math.Pow(decay, blocks + 1);
         for (int i = 0; i < blocks; i++)
         {
@@ -74,7 +75,9 @@ internal static class Sam2Optimizer
             foreach (var layer in new LayerBase<T>?[] { b.Norm1, b.Qkv, b.Projection, b.Shortcut, b.Norm2, b.Mlp1, b.Mlp2 })
                 if (layer is not null) rate[layer] = encoder * Math.Pow(decay, blocks - i);
         }
-        foreach (var neck in network.NeckConvs) rate[neck] = encoder;
+        foreach (var neck in new LayerBase<T>?[] { network.VitNeckConv1, network.VitNeckNorm1, network.VitNeckConv2, network.VitNeckNorm2 }
+                     .Concat(network.NeckConvs))
+            if (neck is not null) rate[neck] = encoder;
         var biasValues = new HashSet<LayerBase<T>>(network.BiasValueLayers());
 
         var parameters = new List<Tensor<T>>();
