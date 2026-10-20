@@ -1043,7 +1043,12 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             // ResNet-50's GPU inference time. The channel axis is folded into [outer, C, inner, 1]
             // so one rank-4 kernel serves every input rank. Under a tape the decomposition stays:
             // it carries the gradients to gamma and beta (training with batch norm in eval mode).
-            if (!tapeActive)
+            // The fused kernel reads the activation as one contiguous span, and a Reshape of a view
+            // cannot produce one either. A model that hands batch norm a permuted or sliced tensor -
+            // PANNs' mel pipeline does - therefore falls through to the decomposition below, which is
+            // what ran before this fast path existed. Copying with Contiguous() instead would stage the
+            // activation on every call, which is the cost this path exists to avoid.
+            if (!tapeActive && input.IsContiguous)
             {
                 int rank = input.Shape.Length;
                 int channelAxis = Layout == BatchNormDataLayout.ChannelsFirst && rank >= 3
