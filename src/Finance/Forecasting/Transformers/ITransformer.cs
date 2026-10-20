@@ -681,6 +681,7 @@ public partial class ITransformer<T> : ForecastingModelBase<T>
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
+        RequireArchitectureAgreesWithOptions();
 
         if (_useNativeMode)
         {

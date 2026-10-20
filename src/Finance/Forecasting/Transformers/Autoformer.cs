@@ -504,6 +504,7 @@ public partial class Autoformer<T> : ForecastingModelBase<T>
     {
         if (input is null)
             throw new ArgumentNullException(nameof(input));
+        RequireArchitectureAgreesWithOptions();
 
         return _useNativeMode ? ForecastNative(input, quantiles) : ForecastOnnx(input);
     }

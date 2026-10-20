@@ -37,6 +37,10 @@ public class ArchitectureAgreementTests
         Assert.Contains("96 x 32", wrongFeatures.Message);
         Assert.Contains("96 x 7", wrongFeatures.Message);
         Assert.Throws<ArgumentException>(() => ArchitectureAgreement.RequireSequenceInput(Grid(48, 7), "M", 96, 7));
+
+        // As many values as the window, in a different grid: still a different input.
+        var sameCount = Assert.Throws<ArgumentException>(() => ArchitectureAgreement.RequireSequenceInput(Grid(48, 14), "M", 96, 7));
+        Assert.Contains("48 x 14", sameCount.Message);
     }
 
     [Fact]
@@ -80,6 +84,22 @@ public class ArchitectureAgreementTests
         Assert.Contains("FEDformer", ex.Message);
         Assert.Contains("8 x 5", ex.Message);
         Assert.Contains("8 x 3", ex.Message);
+    }
+
+    [Fact]
+    public void Forecast_and_Train_refuse_an_architecture_describing_another_input()
+    {
+        var input = new Tensor<double>(new[] { 1, 8, 3 });
+
+        // FEDformer overrides Forecast, so this proves the override checks too, not only the base.
+        var forecast = Assert.Throws<ArgumentException>(
+            () => new FEDformer<double>(Grid(8, 5), options: SmallFedformer()).Forecast(input));
+        Assert.Contains("8 x 5", forecast.Message);
+
+        var model = new FEDformer<double>(Grid(8, 5), options: SmallFedformer());
+        var target = new Tensor<double>(new[] { 1, 2, 3 });
+        var train = Assert.Throws<ArgumentException>(() => model.Train(input, target));
+        Assert.Contains("8 x 3", train.Message);
     }
 
     [Fact]

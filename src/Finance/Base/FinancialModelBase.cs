@@ -746,12 +746,12 @@ public abstract partial class FinancialModelBase<T> : NeuralNetworkBase<T>, IFin
     {
         if (!UseNativeMode)
             throw new InvalidOperationException("Training is not supported in ONNX mode. Use native mode for training.");
-        RequireArchitectureAgreesWithOptions();
 
         if (input is null)
             throw new ArgumentNullException(nameof(input));
         if (expectedOutput is null)
             throw new ArgumentNullException(nameof(expectedOutput));
+        RequireArchitectureAgreesWithOptions();
 
         // Previously this method ran Predict() (NoGrad), computed an
         // eager loss value, and delegated to TrainCore() for the actual

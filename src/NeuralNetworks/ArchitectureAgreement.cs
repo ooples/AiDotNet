@@ -18,9 +18,12 @@ internal static class ArchitectureAgreement
     /// <para>
     /// An architecture describes such an input as a grid (<c>InputHeight</c> time steps by <c>InputWidth</c> features,
     /// as the financial models document) or as a flat <c>InputSize</c>, and it converts one into the other itself: a
-    /// two-dimensional architecture given only 96 records a 1 x 96 grid. So a grid that matches exactly agrees, and
-    /// otherwise the stated element count agrees when it is one of the three readings callers use - the feature
-    /// count, the sequence length (the generated forecasting fixtures pass the context length) or the whole window.
+    /// two-dimensional architecture given only 96 records a 1 x 96 grid, and one given 784 records 28 x 28. So a grid
+    /// that matches exactly agrees. A grid of one of those two inferred forms (1 x n, or square) is read as the flat
+    /// size it came from, which agrees when it is one of the three readings callers use - the feature count, the
+    /// sequence length (the generated forecasting fixtures pass the context length) or the whole window. Any other
+    /// grid was stated as a grid, so it must match both axes: 48 x 14 holds as many values as 96 x 7 and is still a
+    /// different input.
     /// </para>
     /// <para>
     /// An architecture whose spatial size is unstated (zero, or the lazy -1 of a three-dimensional input) is never
@@ -35,6 +38,12 @@ internal static class ArchitectureAgreement
         int height = architecture.InputHeight, width = architecture.InputWidth;
         bool grid = height > 0 && width > 0;
         if (grid && height == sequenceLength && width == numFeatures) return;
+        bool inferredGrid = grid && (height == 1 || height == width);
+        if (grid && !inferredGrid)
+            throw new ArgumentException(
+                $"{model}: the architecture describes a {height} x {width} (time steps x features) input, but the model " +
+                $"was built for {sequenceLength} x {numFeatures} from its options. State the options' sequence length and " +
+                "feature count in the architecture, or leave its input size unset.", nameof(architecture));
 
         long stated = grid ? (long)height * width * Math.Max(1, architecture.InputDepth) : architecture.InputSize;
         if (stated <= 0) return;
