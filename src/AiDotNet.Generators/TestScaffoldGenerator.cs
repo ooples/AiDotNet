@@ -4641,6 +4641,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
          : className == "MedSAM2" ? 64
          // SAM 2.1's fixture canvas: 64 px (a multiple of 32) gives a 4x4 image embedding.
          : className == "SAM21" ? 64
+         : className == "MedicalSAM2" ? 64
          : IsPatchVisionModel(className) ? 112
          : 128;
 
@@ -5961,6 +5962,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.BinaryClassification, " +
                     "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 1), " +
                     "options: new AiDotNet.ComputerVision.Segmentation.Medical.MedSAM2Options { ImageSize = 64, " +
+                    "HieraEmbeddingDimension = 16, HieraStageDepths = new[] { 1, 1, 1, 1 }, " +
+                    "HieraInitialHeadCount = 1, HieraWindowSizes = new[] { 8, 4, 2, 1 }, HieraGlobalAttentionBlockIndexes = new[] { 2 }, " +
+                    "ModelDimension = 16, MemoryDimension = 8, DecoderHeadCount = 4, MemoryAttentionLayerCount = 4, " +
+                    "MemoryAttentionFeedForwardDimension = 64, MemoryFuserDimension = 32, MaskDecoderMlpDimension = 64, " +
+                    "WarmupSteps = 0, LearningRate = 1e-3, ImageEncoderLearningRate = 1e-3, CorrectionPoints = 1, MemoryBankSize = 2 })";
+            }
+            else if (model.ClassName == "MedicalSAM2" && model.TypeParameterCount == 1)
+            {
+                // Medical SAM 2 is SAM 2 Hiera-S at 256 px; the fixture scales the capacity (and the encoder canvas, a
+                // multiple of 32) through the public options, keeping every SAM 2 module and the self-sorting bank. The
+                // recipe warms up over 7.5k steps from zero, so the fixture trains at a constant 1e-3; each corrected image
+                // gets one click (of 7).
+                pinInitSeed = true;
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.BinaryClassification, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 1), " +
+                    "options: new AiDotNet.ComputerVision.Segmentation.Medical.MedicalSAM2Options { ImageSize = 64, MemoryBankCapacity = 4, " +
                     "HieraEmbeddingDimension = 16, HieraStageDepths = new[] { 1, 1, 1, 1 }, " +
                     "HieraInitialHeadCount = 1, HieraWindowSizes = new[] { 8, 4, 2, 1 }, HieraGlobalAttentionBlockIndexes = new[] { 2 }, " +
                     "ModelDimension = 16, MemoryDimension = 8, DecoderHeadCount = 4, MemoryAttentionLayerCount = 4, " +
