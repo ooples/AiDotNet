@@ -314,7 +314,7 @@ internal static class Program
         }
 
         AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism = maxdop;
-        AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation = compile;
+        SetCompilation(compile);
 
         // Disposed on every exit path: if PredictNoise / ParameterCount / output formatting throws, the model and its
         // backing buffers would otherwise leak for the rest of the process.
@@ -338,7 +338,7 @@ internal static class Program
         var times = TimeForwards(args, reps, () => predictor.PredictNoise(input, t, cond));
         double median = times[reps / 2];
         long pc = -1;
-        try { pc = predictor.ParameterCount; } catch { }
+        pc = TryParamCount(() => predictor.ParameterCount);
         Console.WriteLine(
             $"UNET {(kandinsky ? "kandinsky " : "")}base={baseCh} resblocks={resBlocks} attn={attn} h={height} compile={compile} " +
             $"maxdop={maxdop} procs={Environment.ProcessorCount} params={pc} " +
@@ -357,6 +357,7 @@ internal static class Program
         int heads = ArgInt(args, "--heads", 16);
         int latent = ArgInt(args, "--latent", 32);
         int contextDim = ArgInt(args, "--context", 1024);
+        bool compile = ArgInt(args, "--compile", 0) != 0;
         const int patch = 2;
         if (reps <= 0)
         {
@@ -380,6 +381,7 @@ internal static class Program
         }
 
         AiDotNet.Tensors.Helpers.CpuParallelSettings.MaxDegreeOfParallelism = maxdop;
+        SetCompilation(compile);
         using var predictor = new AiDotNet.Diffusion.NoisePredictors.DiTNoisePredictor<float>(
             inputChannels: 4, hiddenSize: hidden, numLayers: layers, numHeads: heads, patchSize: patch,
             contextDim: contextDim, latentSpatialSize: latent, seed: 42);
@@ -395,7 +397,7 @@ internal static class Program
 
         var times = TimeForwards(args, reps, () => predictor.PredictNoise(input, t, cond));
         Console.WriteLine(
-            $"DIT hidden={hidden} layers={layers} heads={heads} latent={latent} maxdop={maxdop} " +
+            $"DIT hidden={hidden} layers={layers} heads={heads} latent={latent} compile={compile} maxdop={maxdop} " +
             $"procs={Environment.ProcessorCount} warmup_ms={sww.Elapsed.TotalMilliseconds:F0} " +
             $"median_ms={times[reps / 2]:F1} min_ms={times[0]:F1}");
         return 0;
@@ -469,10 +471,31 @@ internal static class Program
         }
     }
 
-    private static long SafeParamCount(IFullModel<float, Tensor<float>, Tensor<float>> model)
+    private static long SafeParamCount(IFullModel<float, Tensor<float>, Tensor<float>> model) =>
+        TryParamCount(() => ((IDiffusionModel<float>)model).ParameterCount);
+
+    // The count is informational: a model that cannot report it (not a diffusion model, or a parameter surface that is
+    // not materialised) prints -1 and says why, rather than failing the probe.
+    private static long TryParamCount(Func<long> read)
     {
-        try { return ((IDiffusionModel<float>)model).ParameterCount; }
-        catch { return -1; }
+        try
+        {
+            return read();
+        }
+        catch (Exception e) when (e is InvalidCastException or InvalidOperationException or NotSupportedException or NotImplementedException)
+        {
+            Console.Error.WriteLine($"ParameterCount unavailable: {e.GetType().Name}: {e.Message}");
+            return -1;
+        }
+    }
+
+    // TensorCodecOptions.Current is per thread; installing it through SetCurrent is the documented way to make the
+    // setting take effect for the forwards this thread runs.
+    private static void SetCompilation(bool compile)
+    {
+        var options = AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current;
+        options.EnableCompilation = compile;
+        AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.SetCurrent(options);
     }
 
     private static Tensor<float> RandomTensor(int[] shape, Random rng)
