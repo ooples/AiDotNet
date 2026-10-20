@@ -364,7 +364,10 @@ if ($serializeShard) {
 # a Start-Process child does not share the captured stdout handle.
 $memSampler = $null
 if ($heavyShard) {
-  $testTrace = Join-Path $results 'active-test.trace'
+  # Absolute for the same reason as $diagDir above: the test host runs from its output
+  # directory, so a relative path put the trace where this sampler never looked, and heavy
+  # shards that died to OOM logged no [test-start] marker at all.
+  $testTrace = Join-Path $diagDir 'active-test.trace'
   $env:AIDOTNET_TEST_TRACE_FILE = $testTrace
   $memSampler = [powershell]::Create()
   [void]$memSampler.AddScript({
