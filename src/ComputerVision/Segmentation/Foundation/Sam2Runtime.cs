@@ -115,6 +115,7 @@ internal sealed class Sam2Runtime<T>
     private readonly Sam2TrainingSettings _training;
     private readonly int _sizeIndex;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _userOptimizer;
+    private readonly Sam2BankSettings? _bank;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
 
     /// <param name="engine">The engine.</param>
@@ -124,9 +125,11 @@ internal sealed class Sam2Runtime<T>
     /// <param name="side">The encoder's square size when the settings leave it open.</param>
     /// <param name="training">The prompt simulation (the loss weights and click count come from the settings).</param>
     /// <param name="optimizer">A caller's optimizer, or null for the recipe's.</param>
+    /// <param name="bank">A self-sorting memory bank for image sets (Medical SAM 2), or null.</param>
     public Sam2Runtime(IEngine engine, ISam2Settings settings, int sizeIndex, bool sam21, int side, Sam2TrainingSettings training,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer, Sam2BankSettings? bank = null)
     {
+        _bank = bank;
         _engine = engine;
         _settings = settings;
         _sizeIndex = sizeIndex;
@@ -291,6 +294,17 @@ internal sealed class Sam2Runtime<T>
         return tracker.Propagate(frames.Count, t => Network.EncodeFeatures(Preprocess(frames[t], video: true)), prompts, freshReverse);
     }
 
+    /// <summary>Segments one object through a set of images <c>[1, 3, H, W]</c> as a pseudo-video conditioned on a fresh
+    /// self-sorting memory bank (Medical SAM 2), its draws seeded by <paramref name="seed"/>; every image's output.</summary>
+    public Sam2FrameOutput<T>[] TrackImageSet(IReadOnlyList<Tensor<T>> images, IReadOnlyDictionary<int, Sam2Prompt<T>> prompts, int seed)
+    {
+        if (_bank is null) throw new InvalidOperationException("This model has no memory bank.");
+        if (images.Count == 0) throw new ArgumentException("No images.", nameof(images));
+        using var _ = new NoGradScope<T>();
+        var tracker = new Sam2VideoTracker<T>(_engine, Network) { Bank = new Sam2SortedMemoryBank<T>(_bank), BankRandom = new Random(seed) };
+        return tracker.RunImageSet(images.Count, t => Network.EncodeFeatures(Preprocess(images[t], video: true)), prompts);
+    }
+
     /// <summary>The image predictor on one frame <c>[1, 3, H, W]</c>: the features with the no-memory embedding.</summary>
     public (Tensor<T> Embedding, Tensor<T> HighRes0, Tensor<T> HighRes1) EncodeImage(Tensor<T> frame)
     {
@@ -335,7 +349,11 @@ internal sealed class Sam2Runtime<T>
         return (images, masks);
     }
 
-    public Sam2VideoTraining<T> Trainer() => new(_engine, Network, _training);
+    public Sam2VideoTraining<T> Trainer(bool bank = false)
+    {
+        if (bank && _bank is null) throw new InvalidOperationException("This model has no memory bank.");
+        return new(_engine, Network, bank ? _training with { Bank = _bank } : _training);
+    }
 
     /// <summary>The trained parameters (read every step, as loading weights may replace them) and the optimizer: the
     /// recipe's AdamW unless one was given.</summary>
@@ -360,10 +378,11 @@ internal sealed class Sam2Runtime<T>
 
     /// <summary>One training step (the caller sets training mode) on examples (frames and their masks, see
     /// <see cref="Example"/>), minimizing their mean loss; returns it.</summary>
-    public T Train(IReadOnlyList<(Tensor<T> Input, Tensor<T> Target)> examples, Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>> onGradients)
+    public T Train(IReadOnlyList<(Tensor<T> Input, Tensor<T> Target)> examples, Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>> onGradients,
+        bool bank = false)
     {
         if (examples.Count == 0) throw new ArgumentException("No training examples.", nameof(examples));
-        var trainer = Trainer();
+        var trainer = Trainer(bank);
         var prepared = examples.Select(e => Example(e.Input, e.Target)).ToList();
         var plans = prepared.Select(e => trainer.Draw(e.Masks, TrainingRandom)).ToList();
         var (parameters, optimizer) = TrainingState();
@@ -383,11 +402,11 @@ internal sealed class Sam2Runtime<T>
 
     /// <summary>The training objective estimated with common random numbers: its mean over four prompt plans, clicks, drop
     /// path and dropout masks drawn from one fixed seed, so two evaluations compare the same objective.</summary>
-    public T Evaluate(IReadOnlyList<(Tensor<T> Input, Tensor<T> Target)> examples)
+    public T Evaluate(IReadOnlyList<(Tensor<T> Input, Tensor<T> Target)> examples, bool bank = false)
     {
         const int draws = 4;
         var prepared = examples.Select(e => Example(e.Input, e.Target)).ToList();
-        var trainer = Trainer();
+        var trainer = Trainer(bank);
         var random = new Random(_settings.Seed ?? 42);
         bool wasTraining = Network.Training;
         var previous = Network.TrainingRandom;

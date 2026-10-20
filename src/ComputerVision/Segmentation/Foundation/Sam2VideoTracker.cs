@@ -61,6 +61,13 @@ internal sealed class Sam2VideoTracker<T>
     /// <summary>The video's length (the pointer window is capped by it).</summary>
     public int Frames { get; set; }
 
+    /// <summary>A self-sorting memory bank to attend to instead of the recent frames and object pointers (Medical SAM 2's
+    /// image sets), or null.</summary>
+    public Sam2SortedMemoryBank<T>? Bank { get; set; }
+
+    /// <summary>The generator of the bank's resampling draws.</summary>
+    public Random BankRandom { get; set; } = new Random(0);
+
     private Sam2MemoryConfiguration Memory => _net.Configuration.Memory!;
 
     public void Reset()
@@ -137,6 +144,7 @@ internal sealed class Sam2VideoTracker<T>
     /// prompted frame.</summary>
     public Tensor<T> Condition(int frame, bool prompted, Tensor<T> features, bool reverse)
     {
+        if (Bank is not null) return ConditionOnBank(features);
         if (prompted) return _net.AddNoMemory(features);
         var m = Memory;
         int p = _net.Configuration.Dim, g = _net.Configuration.Grid, md = m.MemoryDim, slots = m.MaskMemories;
@@ -197,6 +205,23 @@ internal sealed class Sam2VideoTracker<T>
         return _net.AttendMemory(features, memory, memoryPositional, spatial, pointerTokens);
     }
 
+    /// <summary>
+    /// A frame's features conditioned on the self-sorting bank, as Medical SAM 2's code does for image sets: unchanged while
+    /// the bank is empty, otherwise attending to the bank's resampled memories with their spatial position encodings (no
+    /// slot encodings, no object pointers), prompted or not.
+    /// </summary>
+    private Tensor<T> ConditionOnBank(Tensor<T> features)
+    {
+        if (Bank!.Count == 0) return features;
+        int md = Memory.MemoryDim, g = _net.Configuration.Grid;
+        Tensor<T> Sequence(Tensor<T> map) => _engine.TensorPermute(_engine.Reshape(map, new[] { 1, md, g * g }), new[] { 0, 2, 1 });
+        var drawn = Bank.Resample(features, BankRandom);
+        var position = Sequence(_net.SinePositional(md, g, g));
+        var memory = _engine.TensorConcatenate(drawn.Select(e => Sequence(e.Memory)).ToArray(), 1);
+        var positions = _engine.TensorConcatenate(drawn.Select(_ => position).ToArray(), 1);
+        return _net.AttendMemory(features, memory, positions, drawn.Count, 0);
+    }
+
     /// <summary>The official selection of prompted frames for the memory: all of them, or the closest before and after the
     /// frame and then the closest others up to the limit.</summary>
     private (SortedDictionary<int, Sam2FrameOutput<T>> Selected, Dictionary<int, Sam2FrameOutput<T>> Unselected) SelectClosest(int frame)
@@ -230,7 +255,9 @@ internal sealed class Sam2VideoTracker<T>
         var (raw, s0, s1) = frameFeatures;
         if (prompt?.Mask is { } mask) return (MaskAsOutput(raw, s0, s1, mask), raw);
         var conditioned = Condition(frame, prompted, raw, reverse);
-        return (Heads(conditioned, s0, s1, prompt?.Points, prompt?.Labels, previousLogits, UseMultimask(prompt?.Labels)), conditioned);
+        // Medical SAM 2's image sets decode a single mask, as its code does.
+        bool multimask = Bank is null && UseMultimask(prompt?.Labels);
+        return (Heads(conditioned, s0, s1, prompt?.Points, prompt?.Labels, previousLogits, multimask), conditioned);
     }
 
     /// <summary>Encodes a frame's output into its memory: the mask logits (binarized when they come from clicks, outside
@@ -252,6 +279,31 @@ internal sealed class Sam2VideoTracker<T>
         }
         var input = _engine.TensorAddScalar(_engine.TensorMultiplyScalar(probability, NumOps.FromDouble(m.SigmoidScale)), NumOps.FromDouble(m.SigmoidBias));
         return _net.EncodeMemory(features, input, occluded: objectScore <= 0);
+    }
+
+    /// <summary>
+    /// Segments one object through a set of images as Medical SAM 2 does (a pseudo-video): in order, each image conditioned
+    /// on the self-sorting bank and decoded from its prompt (if any), and its memory offered to the bank. Returns every
+    /// image's output.
+    /// </summary>
+    public Sam2FrameOutput<T>[] RunImageSet(int frames, Func<int, (Tensor<T> Features, Tensor<T> HighRes0, Tensor<T> HighRes1)> features,
+        IReadOnlyDictionary<int, Sam2Prompt<T>> prompts)
+    {
+        if (Bank is null) throw new InvalidOperationException("An image set needs a memory bank.");
+        Reset();
+        Frames = frames;
+        var outputs = new Sam2FrameOutput<T>[frames];
+        for (int t = 0; t < frames; t++)
+        {
+            var frameFeatures = features(t);
+            prompts.TryGetValue(t, out var prompt);
+            var (heads, conditioned) = Step(t, prompt is not null, frameFeatures, prompt, reverse: false);
+            var output = new Sam2FrameOutput<T> { LowRes = heads.Low, HighRes = heads.High, Pointer = heads.Pointer, ObjectScore = heads.Score(NumOps) };
+            output.Memory = EncodeMemory(frameFeatures.Features, heads.High, output.ObjectScore, prompt?.Points is not null);
+            Bank.Add(output.Memory, conditioned, NumOps.ToDouble(heads.Iou[0, 0]));
+            outputs[t] = output;
+        }
+        return outputs;
     }
 
     /// <summary>

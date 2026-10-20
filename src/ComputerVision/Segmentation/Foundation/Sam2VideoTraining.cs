@@ -35,6 +35,10 @@ internal sealed record Sam2TrainingSettings
     /// <summary>Whether a frame given corrective clicks joins the prompted frames in the memory (MedSAM2's recipe).</summary>
     public bool CorrectedFramesAsPrompted { get; init; }
 
+    /// <summary>A self-sorting memory bank for the sequence instead of the recent frames (Medical SAM 2's image sets), or
+    /// null.</summary>
+    public Sam2BankSettings? Bank { get; init; }
+
     public double FocalWeight { get; init; } = 20.0;
 
     public double DiceWeight { get; init; } = 1.0;
@@ -206,6 +210,11 @@ internal sealed class Sam2VideoTraining<T>
     {
         int frames = images.Count;
         var tracker = new Sam2VideoTracker<T>(_engine, _net) { Frames = frames };
+        if (_settings.Bank is { } bank)
+        {
+            tracker.Bank = new Sam2SortedMemoryBank<T>(bank);
+            tracker.BankRandom = random;
+        }
         var processing = plan.Prompted.Concat(Enumerable.Range(0, frames).Where(t => !plan.Prompted.Contains(t))).ToList();
         Tensor<T>? total = null;
         foreach (int position in processing)
@@ -236,7 +245,7 @@ internal sealed class Sam2VideoTraining<T>
                     }
                     points = Append(points, click);
                     heads = tracker.Heads(conditioned, features.HighRes0, features.HighRes1, points!.Points, points.Labels, heads.Low,
-                        Sam2VideoTracker<T>.UseMultimask(points.Labels));
+                        tracker.Bank is null && Sam2VideoTracker<T>.UseMultimask(points.Labels));
                     predictions.Add(heads);
                 }
                 prompt = points;
@@ -245,6 +254,9 @@ internal sealed class Sam2VideoTraining<T>
             output.Memory = tracker.EncodeMemory(features.Features, heads.High, output.ObjectScore, prompt?.Points is not null);
             bool conditioning = prompted || (_settings.CorrectedFramesAsPrompted && plan.Corrected.Contains(position));
             (conditioning ? tracker.Conditioning : tracker.Tracked)[position] = output;
+            // The bank keeps detached memories, as the official code stores them.
+            if (tracker.Bank is not null)
+                tracker.Bank.Add(Detached(output.Memory), Detached(conditioned), NumOps.ToDouble(heads.Iou[0, 0]));
             foreach (var prediction in predictions)
             {
                 var loss = PredictionLoss(prediction, truth);
@@ -253,6 +265,9 @@ internal sealed class Sam2VideoTraining<T>
         }
         return total!;
     }
+
+    /// <summary>A copy of a tensor off the tape.</summary>
+    private static Tensor<T> Detached(Tensor<T> x) => new(x.Shape.ToArray(), new Vector<T>(x.ToArray()));
 
     private static Sam2Prompt<T> Append(Sam2Prompt<T>? prompt, (double X, double Y, int Label) click)
     {
