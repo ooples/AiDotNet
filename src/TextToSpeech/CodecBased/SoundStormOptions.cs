@@ -126,7 +126,7 @@ public class SoundStormOptions : TtsModelOptions
     public int NumCodebooks { get; set; } = 12;
 
     /// <summary>C, the codes per RVQ level (1024).</summary>
-    public int CodebookSize { get; set; } = 1024;
+    [AiDotNet.Attributes.NotScaled("the codec's codes per codebook, which it must equal")]    public int CodebookSize { get; set; } = 1024;
 
     /// <summary>Semantic token vocabulary (1024 w2v-BERT k-means clusters).</summary>
     public int SemanticCodes { get; set; } = 1024;

@@ -126,6 +126,33 @@ public sealed partial class ResidualVectorQuantizerLayer<T> : LayerBase<T>, IRes
         Invalidate(q);
     }
 
+    /// <inheritdoc />
+    public bool CodebooksInitialized
+    {
+        get
+        {
+            for (int q = 0; q < _quantizers; q++)
+                if (NumOps.ToDouble(_initialized[q][0]) == 0) return false;
+            return true;
+        }
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Runs the reference's k-means initialization (the first training batch's) on the residual of each
+    /// unfitted codebook in turn, and nothing else: no EMA update, no dead-code restart.</remarks>
+    public void InitializeCodebooks(Tensor<T> latent)
+    {
+        if (latent.Rank != 3 || latent.Shape[1] != _dim)
+            throw new ArgumentException($"Expected [1, {_dim}, T], got [{string.Join(", ", latent.Shape)}].", nameof(latent));
+        using var _ = new NoGradScope<T>();
+        var residual = Rows(latent);
+        for (int q = 0; q < _quantizers; q++)
+        {
+            if (NumOps.ToDouble(_initialized[q][0]) == 0) KMeansInit(residual, q);
+            residual = Engine.TensorSubtract(residual, Engine.TensorMatMul(OneHot(Nearest(residual, _embed[q])), _embed[q]));
+        }
+    }
+
     // The rows [T, dim] of [1, dim, T].
     private Tensor<T> Rows(Tensor<T> x) => Engine.TensorTranspose(Engine.Reshape(x, new[] { _dim, x.Shape[2] }));
 

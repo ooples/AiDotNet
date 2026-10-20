@@ -106,24 +106,10 @@ public partial class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
         var input = PreprocessText(text);
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
-        // The network's own output: its conv encoder, flow and HiFi-GAN decoder turn the [1, MelChannels, T] input into
-        // a waveform. This used to run the layers, discard their output and return a waveform built from sines of the
-        // character codes, so synthesis never depended on anything the model learned.
-        return PostprocessAudio(Predict(input));
-    }
-
-    // The encoder reads MelChannels channels per frame through a 1-D convolution, so text enters as one-hot characters of
-    // that width, channels first ([1, MelChannels, T]); a convolution over one-hot rows is a character embedding followed
-    // by the convolution. A rank-1 character code could not enter a convolution at all.
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        var rows = OneHotCharacterFeatures(text, base.MelChannels);                                       // [T, C]
-        int frames = rows.Shape[0], channels = rows.Shape[1];
-        var features = new Tensor<T>(new[] { 1, channels, frames });
-        for (int t = 0; t < frames; t++)
-            for (int c = 0; c < channels; c++)
-                features[0, c, t] = rows[t, c];
-        return features;
+        // The network is the synthesizer: token ids -> embedding -> encoder, flow and decoder -> the waveform
+        // [1, 1, samples]. (This used to run the layers, discard their output and return a hand-made sinusoid.)
+        var waveform = Predict(input);
+        return PostprocessAudio(waveform.Reshape(new[] { waveform.Length }));
     }
 
     public double MinReferenceDuration => 3.0;
@@ -194,7 +180,8 @@ public partial class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
                 LayerHelper<T>.CreateDefaultOpenVoiceV2Layers(
                     specChannels: base.MelChannels,
                     hiddenDim: _options.DecoderDim,
-                    numFlowBlocks: _options.NumEncoderLayers
+                    numFlowBlocks: _options.NumEncoderLayers,
+                    vocabSize: _options.VocabSize
                 )
             );
     }
@@ -205,7 +192,8 @@ public partial class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
         SetTrainingMode(false);
-        var c = input;
+        // One unbatched sequence of ids [T] (what Synthesize passes) is batch one: the convolutions read [B, C, T].
+        var c = input.Rank == 1 ? Engine.Reshape(input, new[] { 1, input.Shape[0] }) : input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;

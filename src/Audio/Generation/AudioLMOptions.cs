@@ -70,7 +70,7 @@ public class AudioLMOptions : ModelOptions
     public int CoarseCodebooks { get; set; } = 4;
 
     /// <summary>N, codes per level (1024).</summary>
-    public int CodebookSize { get; set; } = 1024;
+    [AiDotNet.Attributes.NotScaled("the codec's codes per codebook, which it must equal")]    public int CodebookSize { get; set; } = 1024;
 
     /// <summary>Transformer width (1024).</summary>
     public int ModelDim { get; set; } = 1024;

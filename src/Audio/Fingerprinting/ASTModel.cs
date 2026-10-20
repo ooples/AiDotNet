@@ -278,6 +278,9 @@ public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinte
         };
     }
 
+    /// <inheritdoc />
+    protected override string? TrainingUnavailableReason => _useNativeMode ? null : OnnxTrainingUnavailableReason;
+
     /// <summary>
     /// One training step on waveforms <c>[batch, samples]</c> and multi-hot labels <c>[batch, labels]</c>, as the
     /// paper trains on AudioSet: mixup, SpecAugment and binary cross-entropy.

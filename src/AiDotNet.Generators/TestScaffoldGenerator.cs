@@ -7414,7 +7414,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 80, outputSize: 256), " +
                     "new AiDotNet.TextToSpeech.Vocoders.WaveNetOptions { NumDilatedLayers = 4, DilationCycle = 2, " +
-                    "ResidualChannels = 8, GateChannels = 8, SkipChannels = 8 }" +
+                    "ResidualChannels = 8, GateChannels = 8, SkipChannels = 4, SegmentSamples = 256 }" +
+                    // r9y9's Adam at 1e-3, the probes' constant rate.
                     ", optimizer: new AiDotNet.Optimizers.AdamOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null))";
             }
             else if (model.ClassName == "WaveGlow" && model.TypeParameterCount == 1)
@@ -7854,6 +7855,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "numResBlocks: 1, attentionResolutions: new[] { 1 }, contextDim: 768, numHeads: 2, inputHeight: 8, seed: 42), " +
                     "vae: new AiDotNet.Diffusion.VAE.StandardVAE<double>(inputChannels: 3, latentChannels: 4, " +
                     "baseChannels: 32, channelMultipliers: new[] { 1 }, numResBlocksPerLevel: 1, seed: 42), seed: 42)";
+            }
+            else if (model.ClassName == "DiffusionAutoMLModel" && model.TypeParameterCount == 1)
+            {
+                // The default trial config is a search starting point sized for 512x512 images: a 128-channel
+                // U-Net over a 64x64 latent plus its autoencoder, 131M parameters. Each training step left about
+                // 1.4 GB of gradient-sized garbage the GC reclaimed late, so Training_ShouldReducePredictionError
+                // peaked at 15.8 GB alone and shard D ran its 16 GB runner out of memory. The bounded config keeps
+                // the same U-Net topology (every resolution level, attention and cross-attention) at the fixture's
+                // 8x8 latent.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.AutoML.DiffusionTrialConfig<double> {{ " +
+                    "BaseChannels = 16, NumHeads = 4, NumResBlocks = 1, LatentDim = 4, LatentHeight = 8, LatentWidth = 8, " +
+                    "ConditioningDim = 8, ImageChannels = 3 }, seed: 42)";
             }
             else if (model.ClassName == "UniVSTModel" && model.TypeParameterCount == 1)
             {
@@ -9753,6 +9766,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumCodebooks = 3, CoarseCodebooks = 1, CodebookSize = 16, ModelDim = 16, NumLayers = 1, NumHeads = 2, " +
                     "KeyValueDim = 8, FeedForwardDim = 32, DropoutRate = 0.0, FineCropSeconds = 0.2, LearningRate = 3e-3, Seed = 42, " +
                     "SoundStream = new AiDotNet.Audio.Generation.SoundStreamOptions { SampleRate = 16000, Filters = 4, " +
+                    // The untrained smoke codec's codebooks are fitted by k-means from the first recording AudioLM encodes
+                    // (AudioLM.CodesOf), as SoundStream's first training batch would fit them, so recordings carry codes
+                    // that differ with their content.
                     "Dimension = 8, Ratios = [8, 5, 5, 2], NumQuantizers = 3, CodebookSize = 16, TargetBandwidthKbps = 0.48 } })";
             }
             else if (model.ClassName == "StepAudio" && model.TypeParameterCount == 1)
@@ -15388,12 +15404,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "OpenVoiceV2")
             {
-                // OpenVoice V2 is VITS-based (Qin et al. 2023): a 1-D conv encoder + invertible
-                // normalizing flow + HiFi-GAN transposed-conv decoder (CreateDefaultOpenVoiceV2Layers),
-                // operating on channels-first rank-3 [B, specChannels=80, T] spectra. The decoder
-                // upsamples T by 2 (16 -> 32) and projects to a single waveform channel, so a
-                // [1, 80, 16] spectrum -> [1, 1, 32] waveform.
-                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 80, 16 };");
+                // OpenVoice V2 is VITS-based (Qin et al. 2023): a token embedding, a 1-D conv encoder + invertible
+                // normalizing flow + HiFi-GAN transposed-conv decoder (CreateDefaultOpenVoiceV2Layers), channels-first
+                // [B, hidden, T] after the embedding. The decoder upsamples T by 2 (16 -> 32) and projects to a single
+                // waveform channel, so 16 ids [1, 16] -> [1, 1, 32] waveform.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 16 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 32 };");
                 // The VITS/flow stack converges before the generic 50/200 comparison and then
                 // exhibits small finite optimizer drift. Compare its early learning trajectory.
@@ -15517,24 +15532,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 }
                 if (model.ClassName == "Bark")
                 {
-                    // Bark samples its semantic tokens (temperature 0.7) and the tiny fixture generates at most four, so two
-                    // texts can sample the same tokens under the fixed seed and decode to the same audio: a property of
-                    // sampling, not of the text path. Bark declares no typed training objective (the objective probe of
-                    // Pheme and SoundStorm would score the target against itself), so the synthesis text probe runs the
-                    // network's deterministic forward on the tokens Synthesize itself produces for each text.
-                    string tt = useFloat ? "float" : "double";
-                    sb.AppendLine("    [Xunit.Fact(Timeout = 120000)]");
+                    // Bark samples (temperature 0.7 / 0.5) from a seeded generator, so Synthesize is deterministic. At
+                    // random init its tiny semantic stage's logits are near-uniform: the same seed samples the same
+                    // tokens for any text, and greedy argmax turns on ~1e-6 differences that the engine's numerics can
+                    // flip. Whether the text reaches the model is read from the semantic stage's first-step logits,
+                    // which are continuous in the text.
+                    string element = useFloat ? "float" : "double";
                     sb.AppendLine("    public override async System.Threading.Tasks.Task Synthesize_DifferentText_DifferentOutput()");
                     sb.AppendLine("    {");
                     sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
-                    sb.AppendLine("        using var _arena = AiDotNet.Tensors.Helpers.TensorArena.Create();");
-                    sb.AppendLine("        using var network = CreateNetwork();");
-                    sb.AppendLine($"        var tts = (AiDotNet.TextToSpeech.TtsModelBase<{tt}>)network;");
-                    sb.AppendLine("        var a = network.Predict(tts.TextToTokens(\"the quick brown fox\"));");
-                    sb.AppendLine("        var b = network.Predict(tts.TextToTokens(\"a completely different sentence\"));");
-                    sb.AppendLine("        bool differs = a.Length != b.Length;");
-                    sb.AppendLine("        for (int i = 0; !differs && i < a.Length; i++) differs = a[i] != b[i];");
-                    sb.AppendLine("        Xunit.Assert.True(differs, \"Bark's forward is identical for two texts' tokens: the text never reaches the network.\");");
+                    sb.AppendLine($"        var bark = (AiDotNet.TextToSpeech.CodecBased.Bark<{element}>)CreateNetwork();");
+                    sb.AppendLine("        var a = bark.FirstSemanticLogits(\"the quick brown fox\");");
+                    sb.AppendLine("        var b = bark.FirstSemanticLogits(\"a completely different sentence\");");
+                    sb.AppendLine("        double largest = 0;");
+                    sb.AppendLine("        for (int i = 0; i < a.Length; i++) largest = System.Math.Max(largest, System.Math.Abs((double)a[i] - b[i]));");
+                    sb.AppendLine("        Xunit.Assert.True(largest > 1e-6, $\"The semantic stage's logits do not depend on the text (largest difference {largest:G4}): the text never reaches the model.\");");
                     sb.AppendLine("    }");
                     sb.AppendLine();
                 }
@@ -21142,8 +21154,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "ParallelWaveGAN" => true,
             "WaveGlow" => true,
             "WaveRNN" => true,
-            // The vocoder WaveNet (mel-conditioned, 256-way mu-law output, upsampling by the hop). Both callers also
-            // require IVocoder, so the forecasting WaveNet that shares the name never matches.
+            // The vocoder WaveNet (van den Oord et al. 2016; callers also require ImplementsVocoder, so the finance
+            // WaveNet of the same name never matches): local conditioning on the hop-upsampled mel, [B, 80, T] -> [B, 1, hop T].
             "WaveNet" => true,
             _ => false,
         };

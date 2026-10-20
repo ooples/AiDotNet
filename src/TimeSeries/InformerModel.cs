@@ -198,9 +198,11 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
                 if (timeBounded && TrainingCancellationToken.IsCancellationRequested) break;
                 TrainingCancellationToken.ThrowIfCancellationRequested();
                 var (history, target) = Batch(scaled, order, start, batchSize);
-                // One update on the shared eager step: the network is trained directly, outside the model's Layers chain.
-                T lossValue = Training.TapeTrainingStepper<T>.EagerObjectiveStep(
-                    parameters, () => loss.ComputeTapeLoss(_network.Forward(history, null, _network.DecoderInput(history), null, training: true, _random), target), optimizer);
+                // Forward, loss, backward and the Adam update: one fused compiled plan when it applies (CPU or GPU),
+                // the eager tape otherwise.
+                T lossValue = TrainTapeBatch(Array.Empty<ITrainableLayer<T>>(), history, target,
+                    step => _network.Forward(step, null, _network.DecoderInput(step), null, training: true, _random),
+                    loss.ComputeTapeLoss, optimizer, extraParameters: parameters);
                 lossSum += _numOps.ToDouble(lossValue);
                 batches++;
             }
@@ -227,25 +229,38 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
 
     // The forecast (unscaled) of the ForecastHorizon steps after a history of raw values, the last LookbackWindow of
     // them; a shorter history is extended to the left by repeating its first value.
-    private double[] ForecastFrom(IReadOnlyList<T> history)
+    private double[] ForecastFrom(IReadOnlyList<T> history) => ForecastFrom(new[] { history })[0];
+
+    // The forecasts of several histories in one forward pass. ProbSparse samples one key set per forward, shared by
+    // the batch as in the reference, from the same inference seed, so each row gets what it would get alone.
+    private double[][] ForecastFrom(IReadOnlyList<IReadOnlyList<T>> histories)
     {
-        if (history.Count == 0) throw new ArgumentException("Informer needs at least one observed value to forecast from.");
-        int lookback = _options.LookbackWindow;
-        var window = new Tensor<T>(new[] { 1, lookback, 1 });
-        int offset = history.Count - lookback;
-        for (int t = 0; t < lookback; t++) window[0, t, 0] = Scale(history[Math.Max(0, offset + t)]);
+        int lookback = _options.LookbackWindow, count = histories.Count;
+        var window = new Tensor<T>(new[] { count, lookback, 1 });
+        for (int b = 0; b < count; b++)
+        {
+            var history = histories[b];
+            if (history.Count == 0) throw new ArgumentException("Informer needs at least one observed value to forecast from.");
+            int offset = history.Count - lookback;
+            for (int t = 0; t < lookback; t++) window[b, t, 0] = Scale(history[Math.Max(0, offset + t)]);
+        }
         using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
         var forecast = _network.Forward(window, null, _network.DecoderInput(window), null, training: false,
             InformerNetwork<T>.InferenceRandom(_options.Seed));
-        var result = new double[_options.ForecastHorizon];
-        for (int h = 0; h < result.Length; h++) result[h] = _numOps.ToDouble(Unscale(_numOps.ToDouble(forecast[0, h, 0])));
+        var result = new double[count][];
+        for (int b = 0; b < count; b++)
+        {
+            result[b] = new double[_options.ForecastHorizon];
+            for (int h = 0; h < result[b].Length; h++) result[b][h] = _numOps.ToDouble(Unscale(_numOps.ToDouble(forecast[b, h, 0])));
+        }
         return result;
     }
 
     /// <summary>
     /// Predicts the series: with as many rows as the training series, the one-step forecast of each observation from
-    /// the values before it; otherwise the forecasts of the next input.Rows steps after the training series (the
-    /// input values are not used), continued past ForecastHorizon by appending the forecasts to the history.
+    /// the values before it; with one column (time steps), the forecasts of the next input.Rows steps after the
+    /// training series, continued past ForecastHorizon by appending the forecasts to the history; otherwise each row is
+    /// a history window and its prediction is <see cref="PredictSingle"/> of that row, all rows in one batched forward.
     /// </summary>
     /// <remarks>The first observation has no history to forecast from; its in-sample prediction is the training mean.
     /// Later observations with fewer than LookbackWindow predecessors use them, extended to the left by repeating the
@@ -256,26 +271,39 @@ public partial class InformerModel<T> : TimeSeriesModelBase<T>, ISupportsLossFun
         if (_trainingSeries.Length == 0) throw new InvalidOperationException("The model must be trained before predicting.");
         int n = input.Rows;
         var predictions = new Vector<T>(n);
+        if (n == 0) return predictions;
         if (n == _trainingSeries.Length)
         {
             var observed = _trainingSeries.ToArray();
             predictions[0] = GuardPrediction(Unscale(0.0));
-            for (int i = 1; i < n; i++)
-                predictions[i] = GuardPrediction(_numOps.FromDouble(ForecastFrom(new ArraySegment<T>(observed, 0, i))[0]));
+            if (n == 1) return predictions;
+            var prefixes = new IReadOnlyList<T>[n - 1];
+            for (int i = 1; i < n; i++) prefixes[i - 1] = new ArraySegment<T>(observed, 0, i);
+            var inSample = ForecastFrom(prefixes);
+            for (int i = 1; i < n; i++) predictions[i] = GuardPrediction(_numOps.FromDouble(inSample[i - 1][0]));
             return predictions;
         }
-        var history = _trainingSeries.ToList();
-        int produced = 0;
-        while (produced < n)
+        if (input.Columns == 1)
         {
-            var forecast = ForecastFrom(history);
-            for (int h = 0; h < forecast.Length && produced < n; h++)
+            // Time steps after the series: the model's own forecast, continued from its forecasts.
+            var history = _trainingSeries.ToList();
+            int produced = 0;
+            while (produced < n)
             {
-                var value = GuardPrediction(_numOps.FromDouble(forecast[h]));
-                predictions[produced++] = value;
-                history.Add(value);
+                var forecast = ForecastFrom(history);
+                for (int h = 0; h < forecast.Length && produced < n; h++)
+                {
+                    var value = GuardPrediction(_numOps.FromDouble(forecast[h]));
+                    predictions[produced++] = value;
+                    history.Add(value);
+                }
             }
+            return predictions;
         }
+        var rows = new IReadOnlyList<T>[n];
+        for (int i = 0; i < n; i++) rows[i] = input.GetRow(i).ToArray();
+        var forecasts = ForecastFrom(rows);
+        for (int i = 0; i < n; i++) predictions[i] = _numOps.FromDouble(forecasts[i][0]);
         return predictions;
     }
 

@@ -369,7 +369,11 @@ public partial class CachedMultiHeadAttention<T> : LayerBase<T>, IShapeContract
             int queryOffset = Math.Max(0, seqLenKV - seqLenQ);
 
             Tensor<T>? aliBiBias = _alibiLayer?.ComputeBias(seqLenQ, seqLenKV, _useCausalMask);
-            var (flashOutput, _) = FlashAttention<T>.Forward(queries, keys, values, config, queryOffset: queryOffset, attentionBias: aliBiBias);
+            // The head split above is a transposed view, and the cache can hand back views too. The fused kernel reads
+            // dense buffers (its double path leases each operand as one span and throws on a strided view), so it gets
+            // contiguous copies; outside a tensor arena that threw from every cached double decode (Bark's stages).
+            var (flashOutput, _) = FlashAttention<T>.Forward(queries.Contiguous(), keys.Contiguous(), values.Contiguous(),
+                config, queryOffset: queryOffset, attentionBias: aliBiBias);
             attentionOutput = flashOutput;
         }
         else

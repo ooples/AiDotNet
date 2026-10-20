@@ -57,6 +57,9 @@ namespace AiDotNet.Audio.Foundations;
     Source = "Chung et al. 2021, Section 4.2: w2v-BERT XL uses Adam with the Transformer learning-rate schedule of "
              + "Vaswani et al. 2017 Section 5.3 (beta 0.9 / 0.98, epsilon 1e-9, lr proportional to "
              + "min(step / warmup, sqrt(warmup / step))) at a peak of 2e-3 after 25k warm-up steps.")]
+[PreprocessesInput("W2vBertNetwork.Features converts the waveform to log-mel filterbanks, and Encode feeds them to "
+    + "the first convolution as a [B, 1, frames, bins] image, so Layers[0] never sees the raw samples.")]
+[StackInputLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Width)]
 public partial class W2vBert<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<T>, ITrainingObjectiveProvider<T>
 {
     private readonly W2vBertOptions _options;

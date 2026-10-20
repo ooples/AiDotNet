@@ -202,8 +202,8 @@ internal sealed class AudioLmCore<T>
         var tokens = Coarse.Generate(prefix, temperature, frames * levels, (step, v) =>
         {
             int level = step % levels;
-            return (v >= CoarseOffset + level * n && v < CoarseOffset + (level + 1) * n)
-                || (level == 0 && step > 0 && v == CoarseEnd);
+            // The end token may close a frame, but not before the first: ending at once rendered no audio at all.
+            return (v >= CoarseOffset + level * n && v < CoarseOffset + (level + 1) * n) || (level == 0 && step > 0 && v == CoarseEnd);
         }, CoarseEnd, random);
         int generated = tokens.Count / levels;
         var codes = new int[levels, generated];
