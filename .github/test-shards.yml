@@ -994,10 +994,12 @@ shard:
   # the old sweep job named only the three classes above. Verified before adding: each passes on its own
   # (LayerOverrideRedundancy 43 s, LayerParameterSurface 66 s, ContractShadowSweep 86 s, ModelBaseCoverage
   # 30 s). They construct models in-process, so their coverage needs no worker instrumentation.
+  # ModelInputMeetsFirstLayerTests joined them when its model sweep outgrew Unassigned - 01's 5-minute
+  # blame-hang limit: it builds every model in-process (10 min locally) under its own 30-minute Timeout.
   - name: Sweep - Layer and Model Contract Surveys
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
-    filter: 'FullyQualifiedName~LayerOverrideRedundancyTests|FullyQualifiedName~LayerParameterSurfaceTests|FullyQualifiedName~ContractShadowSweepTests|FullyQualifiedName~ModelBaseCoverageTests'
+    filter: 'FullyQualifiedName~LayerOverrideRedundancyTests|FullyQualifiedName~LayerParameterSurfaceTests|FullyQualifiedName~ContractShadowSweepTests|FullyQualifiedName~ModelBaseCoverageTests|FullyQualifiedName~ModelInputMeetsFirstLayerTests'
     heavy: true
     hangTimeout: 35min
   # Two more Sweep-category tests that no job ran to completion: ModelFamilyLawTests hit the 30-minute
@@ -1467,7 +1469,7 @@ shard:
   - name: Unassigned - 01
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
-    # 134 classes, about 344 s of test time measured locally.
+    # 133 classes, about 344 s of test time measured locally (before ModelInputMeetsFirstLayerTests moved to the survey shard).
     filter: >-
       Category!=GPU&Category!=Stress&Category!=Sweep&(
       FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Graph.ConformanceWindowTableTests.|
@@ -1505,7 +1507,6 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Graph.LayerForwardTracingTests.|
       FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Graph.LayerGraphTests.|
       FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Graph.LayerShapeDiscoverySweepTests.|
-      FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Graph.ModelInputMeetsFirstLayerTests.|
       FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Graph.SequentialActivationFoldContractTests.|
       FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Graph.ShapeRelationDiscoveryTests.|
       FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Graph.VocoderShapeContractTests.|
