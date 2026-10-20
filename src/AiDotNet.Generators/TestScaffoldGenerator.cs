@@ -4639,6 +4639,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
          // over-shrink that collapsed XDecoder's feature map. Its sibling MedSAM2 and MetaCLIP both
          // improved at 64px, so this is per-model, not per-family.
          : className == "MedSAM2" ? 64
+         // SAM 2.1's fixture canvas: 64 px (a multiple of 32) gives a 4x4 image embedding.
+         : className == "SAM21" ? 64
          : IsPatchVisionModel(className) ? 112
          : 128;
 
@@ -5949,25 +5951,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName == "MedSAM2" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.ComputerVision.Segmentation.Medical.", System.StringComparison.Ordinal))
             {
-                // Same treatment and same reasoning as the MedSAM branch below: float and caps are
-                // already applied and its probes still overran the gate, and its encoder was equally
-                // unreachable — even MedSAM2ModelSize.Tiny hard-coded a 96/192/384/768 Hiera stack.
-                // MedSAM2Options now exposes ChannelDims / Depths / DecoderDim (null = paper preset),
-                // so the fixture requests a smoke-scale encoder through the public API. Stage count
-                // stays at 4 so the stride math and decoder skips line up.
+                // MedSAM2 is SAM2.1-Tiny at 512 px; the fixture scales the capacity (and the encoder canvas, a
+                // multiple of 32) through the public options, keeping every SAM 2 module. Its fine-tuning rates
+                // (5e-5, 3e-5) barely move a random network in the invariants' 15-20 steps, so the fixture trains at
+                // 1e-3; each corrected frame gets one click (of 7).
                 pinInitSeed = true;
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    // 64, matching GetFixtureSpatialSize, which pins MedSAM2 to 64 as a MEASURED
-                    // choice ("MedSAM2 and MetaCLIP both improved at 64px"). This said 128, so the
-                    // architecture was a stale 2x of the fixture. Unlike the SAM/Mask2Former family
-                    // this did not crash on a declared-shape check - it degraded training instead,
-                    // failing Training_ShouldReduceLoss with 0.619212 -> 0.623634.
-                    "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 4), " +
-                    "options: new AiDotNet.ComputerVision.Segmentation.Medical.MedSAM2Options { " +
-                    "ChannelDims = new[] { 16, 32, 48, 64 }, Depths = new[] { 1, 1, 1, 1 }, " +
-                    "DecoderDim = 32 })";
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.BinaryClassification, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 1), " +
+                    "options: new AiDotNet.ComputerVision.Segmentation.Medical.MedSAM2Options { ImageSize = 64, " +
+                    "HieraEmbeddingDimension = 16, HieraStageDepths = new[] { 1, 1, 1, 1 }, " +
+                    "HieraInitialHeadCount = 1, HieraWindowSizes = new[] { 8, 4, 2, 1 }, HieraGlobalAttentionBlockIndexes = new[] { 2 }, " +
+                    "ModelDimension = 16, MemoryDimension = 8, DecoderHeadCount = 4, MemoryAttentionLayerCount = 4, " +
+                    "MemoryAttentionFeedForwardDimension = 64, MemoryFuserDimension = 32, MaskDecoderMlpDimension = 64, " +
+                    "WarmupSteps = 0, LearningRate = 1e-3, ImageEncoderLearningRate = 1e-3, CorrectionPoints = 1, MemoryBankSize = 2 })";
             }
             else if (model.ClassName == "MedSAM" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.ComputerVision.Segmentation.Medical.", System.StringComparison.Ordinal))
@@ -7048,20 +7046,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "SAM21" && model.TypeParameterCount == 1)
             {
-                // SAM 2.1 retains the paper-large Hiera backbone by default. Its generated
-                // FP32 fixture timed out in both memorization and ordinary TrainingError, so
-                // repeated-iteration caps alone are insufficient. Exercise the published Tiny
-                // variant through the public model-size selector with a bounded video memory bank;
-                // the Large production default and all user-selectable variants remain unchanged.
+                // SAM 2.1 defaults to Hiera-L at 1024 px; the fixture scales the capacity (and the encoder canvas, a
+                // multiple of 32) through the public options, keeping every SAM 2 module. The paper's schedule warms
+                // up over 7.5k steps from zero and its rates barely move a random network in the invariants' 15-20
+                // steps, so the fixture trains at a constant 1e-3; each corrected frame gets one click (of 7).
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    // 112, matching the emitted fixture. ADNTEST002 PREDICTED this one before it
-                    // failed: at 32 the stride-4 stem declared [96, 8, 8] against an actual
-                    // [96, 28, 28] (32/4 vs 112/4), taking out nine invariants. Seventh instance.
-                    "inputHeight: 112, inputWidth: 112, inputDepth: 3, outputSize: 1), " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 1), " +
                     "options: new AiDotNet.ComputerVision.Segmentation.Foundation.SAM21Options " +
-                    "{ NumClasses = 1, ModelSize = AiDotNet.Enums.SAM21ModelSize.Tiny, DropRate = 0.0, MemoryBankSize = 2 })";
+                    "{ ModelSize = AiDotNet.Enums.SAM21ModelSize.Tiny, HieraEmbeddingDimension = 16, HieraStageDepths = new[] { 1, 1, 1, 1 }, " +
+                    "HieraInitialHeadCount = 1, HieraWindowSizes = new[] { 8, 4, 2, 1 }, HieraGlobalAttentionBlockIndexes = new[] { 2 }, " +
+                    "ModelDimension = 16, MemoryDimension = 8, DecoderHeadCount = 4, MemoryAttentionLayerCount = 4, " +
+                    "MemoryAttentionFeedForwardDimension = 64, MemoryFuserDimension = 32, MaskDecoderMlpDimension = 64, " +
+                    "WarmupSteps = 0, LearningRate = 1e-3, ImageEncoderLearningRate = 1e-3, CorrectionPoints = 1, MemoryBankSize = 2 })";
             }
             else if (model.ClassName == "SAM" && model.TypeParameterCount == 1 &&
                      model.FullyQualifiedName.IndexOf(
@@ -7732,16 +7730,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 2), " +
                     "options: new AiDotNet.ComputerVision.Segmentation.Medical.MedSAMOptions { NumClasses = 2 })";
-            }
-            else if (model.ClassName == "MedSAM2" && model.TypeParameterCount == 1)
-            {
-                // MedSAM2 (Ma et al. 2024): SAM2 video/medical segmentation — same 1024px-encoder OOM as MedSAM
-                // (default modelSize is already Tiny). Exercise the full topology at a 32x32 input. (#1789)
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 2), " +
-                    "options: new AiDotNet.ComputerVision.Segmentation.Medical.MedSAM2Options { NumClasses = 2 })";
             }
             else if (model.ClassName == "MaskAdapter" && model.TypeParameterCount == 1)
             {

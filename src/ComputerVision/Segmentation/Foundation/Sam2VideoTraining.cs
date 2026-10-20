@@ -29,6 +29,12 @@ internal sealed record Sam2TrainingSettings
     /// <summary>The chance the sequence plays in reverse (paper: 50%).</summary>
     public double ReverseProbability { get; init; } = 0.5;
 
+    /// <summary>The most a box corner is moved, in pixels (SAM's 20); it is also capped at 10% of the box side.</summary>
+    public double BoxNoiseBound { get; init; } = 20.0;
+
+    /// <summary>Whether a frame given corrective clicks joins the prompted frames in the memory (MedSAM2's recipe).</summary>
+    public bool CorrectedFramesAsPrompted { get; init; }
+
     public double FocalWeight { get; init; } = 20.0;
 
     public double DiceWeight { get; init; } = 1.0;
@@ -150,8 +156,8 @@ internal sealed class Sam2VideoTraining<T>
     }
 
     /// <summary>The official <c>sample_box_points</c>: the mask's box (its pixel extent; an empty mask gives (W, H, −1, −1))
-    /// with each coordinate moved uniformly by up to 10% of the box side, at most 20 pixels, clamped to the image, as two
-    /// corner points (labels 2 and 3).</summary>
+    /// with each coordinate moved uniformly by up to 10% of the box side, at most <see cref="Sam2TrainingSettings.BoxNoiseBound"/>
+    /// pixels, clamped to the image, as two corner points (labels 2 and 3).</summary>
     private Sam2Prompt<T> Box(double[] gt, Random random)
     {
         int size = _net.Configuration.ImageSize;
@@ -162,7 +168,8 @@ internal sealed class Sam2VideoTraining<T>
                 if (gt[y * size + x] <= 0.5) continue;
                 x0 = Math.Min(x0, x); y0 = Math.Min(y0, y); x1 = Math.Max(x1, x); y1 = Math.Max(y1, y);
             }
-        double dx = Math.Min((x1 - x0) * 0.1, 20), dy = Math.Min((y1 - y0) * 0.1, 20);
+        double bound = _settings.BoxNoiseBound;
+        double dx = Math.Min((x1 - x0) * 0.1, bound), dy = Math.Min((y1 - y0) * 0.1, bound);
         double Noise(double v, double max, double bound) => Math.Min(Math.Max(v + (2 * random.NextDouble() - 1) * max, 0), bound);
         double bx0 = Noise(x0, dx, size - 1), by0 = Noise(y0, dy, size - 1), bx1 = Noise(x1, dx, size - 1), by1 = Noise(y1, dy, size - 1);
         return Points(new[] { (bx0, by0, 2), (bx1, by1, 3) });
@@ -236,7 +243,8 @@ internal sealed class Sam2VideoTraining<T>
             }
             var output = new Sam2FrameOutput<T> { LowRes = heads.Low, HighRes = heads.High, Pointer = heads.Pointer, ObjectScore = heads.Score(NumOps) };
             output.Memory = tracker.EncodeMemory(features.Features, heads.High, output.ObjectScore, prompt?.Points is not null);
-            (prompted ? tracker.Conditioning : tracker.Tracked)[position] = output;
+            bool conditioning = prompted || (_settings.CorrectedFramesAsPrompted && plan.Corrected.Contains(position));
+            (conditioning ? tracker.Conditioning : tracker.Tracked)[position] = output;
             foreach (var prediction in predictions)
             {
                 var loss = PredictionLoss(prediction, truth);

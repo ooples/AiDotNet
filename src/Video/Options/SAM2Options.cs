@@ -22,7 +22,7 @@ namespace AiDotNet.Video.Options;
 /// <para><b>For Beginners:</b> You only need <see cref="ModelSize"/>; leave everything else at its default unless you are
 /// building a smaller model to experiment with.</para>
 /// </remarks>
-public class SAM2Options : VideoHyperparameterOptions
+public class SAM2Options : VideoHyperparameterOptions, AiDotNet.ComputerVision.Segmentation.Foundation.ISam2Settings
 {
     /// <summary>The released model size (default: Base+, <see cref="SAM2ModelSize.Base"/>).</summary>
     public SAM2ModelSize ModelSize { get; set; } = SAM2ModelSize.Base;
@@ -122,31 +122,5 @@ public class SAM2Options : VideoHyperparameterOptions
     public int CorrectionPoints { get; set; } = 7;
 
     /// <summary>Throws if a setting is out of range.</summary>
-    public void Validate()
-    {
-        if (ImageSize is { } size && (size <= 0 || size % 32 != 0))
-            throw new ArgumentOutOfRangeException(nameof(ImageSize), "The image size must be a positive multiple of 32.");
-        if (MemoryBankSize < 1) throw new ArgumentOutOfRangeException(nameof(MemoryBankSize));
-        if (HieraStageDepths is { } depths && (depths.Length != 4 || depths.Any(d => d <= 0)))
-            throw new ArgumentException("HieraStageDepths must hold four positive values.", nameof(HieraStageDepths));
-        if (HieraWindowSizes is { } windows && (windows.Length != 4 || windows.Any(w => w <= 0)))
-            throw new ArgumentException("HieraWindowSizes must hold four positive values.", nameof(HieraWindowSizes));
-        if (HieraGlobalAttentionBlockIndexes is { } globals && (globals.Any(g => g < 0) || globals.Distinct().Count() != globals.Length))
-            throw new ArgumentException("The global-attention blocks must be distinct and non-negative.", nameof(HieraGlobalAttentionBlockIndexes));
-        foreach (var (value, name) in new[]
-        {
-            (HieraEmbeddingDimension, nameof(HieraEmbeddingDimension)), (HieraInitialHeadCount, nameof(HieraInitialHeadCount)),
-            (ModelDimension, nameof(ModelDimension)), (MemoryDimension, nameof(MemoryDimension)), (DecoderHeadCount, nameof(DecoderHeadCount)),
-            (MaskDecoderMlpDimension, nameof(MaskDecoderMlpDimension)), (MemoryAttentionLayerCount, nameof(MemoryAttentionLayerCount)),
-            (MemoryAttentionFeedForwardDimension, nameof(MemoryAttentionFeedForwardDimension)), (MemoryFuserDimension, nameof(MemoryFuserDimension)),
-        })
-            if (value is <= 0) throw new ArgumentOutOfRangeException(name);
-        if (LearningRate <= 0 || ImageEncoderLearningRate < 0 || WeightDecay < 0 || MaxGradientNorm < 0)
-            throw new ArgumentOutOfRangeException(nameof(LearningRate), "Learning rates, weight decay and the clip must be non-negative.");
-        if (LayerDecay is <= 0 or > 1) throw new ArgumentOutOfRangeException(nameof(LayerDecay));
-        if (DropPath is < 0 or >= 1) throw new ArgumentOutOfRangeException(nameof(DropPath));
-        if (TrainingSteps <= 0 || WarmupSteps < 0) throw new ArgumentOutOfRangeException(nameof(TrainingSteps));
-        if (MaskFocalWeight < 0 || MaskDiceWeight < 0 || IouLossWeight < 0 || OcclusionLossWeight < 0 || CorrectionPoints < 0)
-            throw new ArgumentOutOfRangeException(nameof(MaskFocalWeight), "Loss weights and the click count cannot be negative.");
-    }
+    public void Validate() => AiDotNet.ComputerVision.Segmentation.Foundation.Sam2SettingsValidation.Validate(this);
 }
